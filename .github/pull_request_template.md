@@ -18,7 +18,7 @@ Describe the user-visible change and the main implementation boundary.
 - [ ] New external HTTP client has timeout, TLS posture, redirect behavior, and credential handling reviewed, or N/A
 - [ ] New Kubernetes RBAC uses the narrowest feasible verbs/resources and documents any cluster-admin requirement, or N/A
 - [ ] Browser session, cookie, CSRF, CSP, or stream-token behavior is covered by tests when touched, or N/A
-- [ ] CRD/Postgres/ArgoCD ownership changes update `docs/control-plane-state-contract.md`, or N/A
+- [ ] CRD/Postgres/Flux delivery ownership changes update `docs/control-plane-state-contract.md`, or N/A
 - [ ] Helm/chart changes preserve NetworkPolicy, container security contexts, production preflight, and render tests, or N/A
 - [ ] New images/charts/Argo sources document pinning, registry/mirror behavior, and required runtime permissions, or N/A
 - [ ] Image, Dockerfile, or release-workflow changes preserve Trivy scan, SBOM, signature, and provenance coverage for every affected first-party image, or N/A

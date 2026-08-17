@@ -39,7 +39,6 @@ type CreateCatalogOperationIdempotentParams idempotentOperationParams
 type CreateLoggingOperationIdempotentParams idempotentOperationParams
 type CreateWorkloadOperationIdempotentParams idempotentOperationParams
 type CreateMonitoringOperationIdempotentParams idempotentOperationParams
-type CreateArgoCDOperationIdempotentParams idempotentOperationParams
 
 const createToolOperationIdempotent = `-- name: CreateToolOperationIdempotent :one
 WITH ` + operationIdempotencyClaimCTE + `,
@@ -186,49 +185,6 @@ func (q *Queries) CreateMonitoringOperationIdempotent(ctx context.Context, arg C
 	return scanMonitoringOperationForIdempotency(row)
 }
 
-const createArgoCDOperationIdempotent = `-- name: CreateArgoCDOperationIdempotent :one
-WITH ` + operationIdempotencyClaimCTE + `,
-inserted AS (
-    INSERT INTO argocd_operations (id, target_type, target_key, operation_type, payload, status, created_by_id)
-    SELECT operation_id, $3, $4, $5, $6, $7, $8
-    FROM claimed
-    WHERE operation_table = 'argocd_operations'
-    ON CONFLICT (id) DO NOTHING
-    RETURNING id, target_type, target_key, operation_type, payload, status,
-        attempt_count, started_at, completed_at, error_message, created_by_id,
-        created_at, updated_at, revision, message, operation_id, phase,
-        poll_attempts, last_polled_at
-),
-attached AS (
-    UPDATE operation_idempotency_keys
-    SET response = COALESCE((SELECT to_jsonb(inserted) FROM inserted LIMIT 1), response),
-        updated_at = now()
-    WHERE scope = $1 AND idempotency_key = $2
-)
-SELECT id, target_type, target_key, operation_type, payload, status,
-    attempt_count, started_at, completed_at, error_message, created_by_id,
-    created_at, updated_at, revision, message, operation_id, phase,
-    poll_attempts, last_polled_at
-FROM inserted
-UNION ALL
-SELECT argocd_operations.id, argocd_operations.target_type, argocd_operations.target_key,
-    argocd_operations.operation_type, argocd_operations.payload, argocd_operations.status,
-    argocd_operations.attempt_count, argocd_operations.started_at, argocd_operations.completed_at,
-    argocd_operations.error_message, argocd_operations.created_by_id, argocd_operations.created_at,
-    argocd_operations.updated_at, argocd_operations.revision, argocd_operations.message,
-    argocd_operations.operation_id, argocd_operations.phase, argocd_operations.poll_attempts,
-    argocd_operations.last_polled_at
-FROM argocd_operations
-JOIN claimed ON argocd_operations.id = claimed.operation_id
-WHERE claimed.operation_table = 'argocd_operations'
-LIMIT 1`
-
-func (q *Queries) CreateArgoCDOperationIdempotent(ctx context.Context, arg CreateArgoCDOperationIdempotentParams) (ArgocdOperation, error) {
-	row := q.db.QueryRow(ctx, createArgoCDOperationIdempotent,
-		arg.Scope, arg.IdempotencyKey, arg.TargetType, arg.TargetKey, arg.OperationType, arg.Payload, arg.Status, arg.CreatedByID, "argocd_operations")
-	return scanArgoCDOperationForIdempotency(row)
-}
-
 type operationScanRow interface {
 	Scan(dest ...any) error
 }
@@ -260,16 +216,5 @@ func scanWorkloadOperationForIdempotency(row operationScanRow) (WorkloadOperatio
 func scanMonitoringOperationForIdempotency(row operationScanRow) (MonitoringOperation, error) {
 	var i MonitoringOperation
 	err := row.Scan(&i.ID, &i.TargetType, &i.TargetKey, &i.OperationType, &i.Payload, &i.Status, &i.AttemptCount, &i.StartedAt, &i.CompletedAt, &i.ErrorMessage, &i.CreatedByID, &i.CreatedAt, &i.UpdatedAt)
-	return i, err
-}
-
-func scanArgoCDOperationForIdempotency(row operationScanRow) (ArgocdOperation, error) {
-	var i ArgocdOperation
-	err := row.Scan(
-		&i.ID, &i.TargetType, &i.TargetKey, &i.OperationType, &i.Payload, &i.Status,
-		&i.AttemptCount, &i.StartedAt, &i.CompletedAt, &i.ErrorMessage, &i.CreatedByID,
-		&i.CreatedAt, &i.UpdatedAt, &i.Revision, &i.Message, &i.OperationID,
-		&i.Phase, &i.PollAttempts, &i.LastPolledAt,
-	)
 	return i, err
 }

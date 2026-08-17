@@ -31,16 +31,10 @@ func registerCharlieRoutes(r chi.Router, deps RouterDependencies, rateLimit func
 			r.With(gate, admin, manage).Post("/admin/charlie/onboarding/consume/", deps.CharlieOnboarding.Import)
 		}
 		if deps.CharlieAdmin != nil {
-			// Status and fail-safe cleanup remain securely reachable after the
-			// feature gate is disabled. They still require admin scope,
+			// Status remains securely reachable after the feature gate is disabled.
+			// It still requires admin scope,
 			// charlie:manage, and CSRF protection.
 			r.With(admin, manage).Get("/admin/charlie/status/", deps.CharlieAdmin.Status)
-			r.With(admin, manage).Post("/admin/charlie/disconnect/", deps.CharlieAdmin.Disconnect)
-			r.With(gate, admin, manage).Post("/admin/charlie/agent/install/", deps.CharlieAdmin.Install)
-			r.With(gate, admin, manage).Post("/admin/charlie/agent/upgrade/", deps.CharlieAdmin.ReplacementAction("upgrade"))
-			r.With(gate, admin, manage).Post("/admin/charlie/agent/rollback/", deps.CharlieAdmin.ReplacementAction("rollback"))
-			r.With(gate, admin, manage).Post("/admin/charlie/agent/rotate/", deps.CharlieAdmin.ReplacementAction("rotate"))
-			r.With(admin, manage).Post("/admin/charlie/agent/uninstall/", deps.CharlieAdmin.Uninstall)
 			r.With(admin, manage).Patch("/admin/charlie/mode/", deps.CharlieAdmin.Mode)
 			r.With(gate, admin, manage).Get("/admin/charlie/kubernetes-visibility/", deps.CharlieAdmin.KubernetesVisibility)
 			r.With(gate, admin, manage).Put("/admin/charlie/kubernetes-visibility/", deps.CharlieAdmin.UpdateKubernetesVisibility)

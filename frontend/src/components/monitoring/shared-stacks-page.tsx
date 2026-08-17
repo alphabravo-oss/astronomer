@@ -3,7 +3,7 @@
 /**
  * /dashboard/settings/monitoring — lifecycle for the two SHARED monitoring
  * stacks: Thanos (long-term metrics) and Alertmanager (alert routing). Both run
- * on one management cluster and serve the whole fleet, which is why they live
+ * on one management cluster and serve every managed cluster, which is why they live
  * under settings rather than on a cluster.
  *
  * Not wrapped in SettingsAuthGate. That gate is superuser-only, and these
@@ -85,7 +85,7 @@ export function SharedMonitoringStacksPage() {
           </Link>
         }
         title="Shared monitoring stacks"
-        description="Optional fleet-wide tier: Thanos (long-term metric retention) and Alertmanager (alert routing). Per-cluster monitoring already runs in-cluster on short-lived rolling storage with no object storage — add Thanos here only to keep metrics beyond each cluster's local retention window. Every action is queued and reconciled server-side."
+        description="Optional deployment-wide tier: Thanos (long-term metric retention) and Alertmanager (alert routing). Per-cluster monitoring already runs in-cluster on short-lived rolling storage with no object storage — add Thanos here only to keep metrics beyond each cluster's local retention window. Every action is queued and reconciled server-side."
         actions={
           <Link
             href="/dashboard/monitoring"

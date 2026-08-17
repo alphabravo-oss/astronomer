@@ -17,7 +17,7 @@ describe('cluster condition noise filter', () => {
   });
 
   it('never hides a health condition — a failing one is the whole point', () => {
-    for (const type of ['Connected', 'AgentReachable', 'ArgoCDAdopted', 'MetricsAvailable']) {
+    for (const type of ['Connected', 'AgentReachable', 'DeliveryReady', 'MetricsAvailable']) {
       for (const status of ['True', 'False', 'Unknown']) {
         expect(isNoisyCapabilityCondition(cond(type, status))).toBe(false);
       }

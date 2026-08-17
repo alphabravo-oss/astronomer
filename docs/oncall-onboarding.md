@@ -10,7 +10,7 @@ takes 15 minutes and saves a 3am page from feeling worse than it is.
 Three processes, one chart:
 
 - **`astronomer-server`** — HTTP API (`/api/v1/...`), WebSocket tunnel
-  hub for connected cluster agents, Argo CD UI reverse proxy, frontend
+  hub for connected cluster agents, delivery control plane, frontend
   static-asset host (when `frontend.enabled=true`). 2 replicas in
   prod, behind a PDB. Listens on `:8000` (app) and `:9090` (metrics).
 - **`astronomer-worker`** — asynq queue consumer + scheduler for
@@ -24,14 +24,14 @@ State lives in:
 
 - **Postgres** (chart-bundled in dev, external HA in prod) — the
   source of truth for clusters, users, RBAC, audit log, SSO config,
-  ArgoCD instances, encrypted secrets. Backed up nightly via
+  delivery sources/bundles/targets/rollouts, encrypted secrets. Backed up nightly via
   `pg_dump` to S3 per `management-plane-dr-runbook.md`.
 - **Redis** — asynq queue + scheduler state. Loss of Redis loses
   in-flight tasks but doesn't lose persistent data.
 
-The chart is self-managed via an Argo CD Application
-(`astronomer-self-manage`) so most chart-level changes flow through
-Argo. See the upgrade-runbook for the manual `helm upgrade` path.
+The management plane is owned exclusively by its Helm release. Downstream Flux
+controllers are agent-managed and never reconcile the management-plane chart.
+Use the signed-release upgrader and the upgrade runbook for every chart change.
 
 ---
 
@@ -83,11 +83,13 @@ in the target cluster (`kubectl --context <cluster> -n astronomer get
 pods`). Common causes: network partition, agent OOMKilled, expired
 registration token. See the agent-disconnected runbook.
 
-### `AstronomerArgoSelfManageDrift`
-The Argo CD app that owns this install isn't Synced. Triage: check
-the Argo CD UI for the `astronomer-self-manage` Application; look at
-what differs between Git and the live state. Usually a manual
-`kubectl edit` somewhere — reconcile or revert.
+### Delivery rollout or stale-status alerts
+
+Pause an advancing rollout when the blast radius could grow. Determine whether
+the wait is placement/approval, worker/outbox, assignment acknowledgment, or
+downstream reconciliation. Use `docs/runbooks/delivery-control-plane.md`,
+`delivery-assignment-lag.md`, or `delivery-status-stale.md`; do not edit Flux
+objects, rollout rows, generation counters, or agent checkpoints by hand.
 
 ---
 
@@ -109,12 +111,11 @@ respond to real incidents.
 - **Postgres bundled StatefulSet's PVC.** Even with `bundled.enabled:
   false` in production, the chart leaves the dev PVC orphaned on
   uninstall. Don't `kubectl delete pvc` it without a current backup.
-- **The Argo CD `astronomer-self-manage` Application's source.** It
-  points at the chart used to install this very plane; changing it
-  can wedge the install into reconciling against the wrong values.
-- **`kubectl edit` on a Helm-managed resource.** It'll work for the
-  current pod cycle but Argo will fight you and the change will
-  evaporate. Use `helm upgrade --set` or the values file.
+- **Agent-owned Flux resources and checkpoints.** They are derived from a
+  generation-fenced assignment; hand edits invalidate status and prune safety.
+- **`kubectl edit` on a Helm-managed management-plane resource.** It may work
+  for the current pod cycle but the next signed Helm upgrade will replace it.
+  Change the reviewed values file and use `scripts/upgrade-release.sh`.
 - **The Fernet `secrets.encryptionKey` without following the runbook.**
   Rotating it without the multi-key transition makes every encrypted
   column unreadable.

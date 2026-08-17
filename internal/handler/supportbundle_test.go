@@ -96,22 +96,6 @@ func (f *fakeSupportBundleQuerier) GetPlatformConfig(context.Context) (sqlc.Plat
 	}, nil
 }
 
-func (f *fakeSupportBundleQuerier) ListArgoCDInstances(context.Context, sqlc.ListArgoCDInstancesParams) ([]sqlc.ArgocdInstance, error) {
-	lastSync := time.Now().UTC()
-	return []sqlc.ArgocdInstance{{
-		ID:                 uuid.New(),
-		Name:               "builtin",
-		ClusterID:          uuid.New(),
-		ApiUrl:             "https://argocd.example.test",
-		AuthTokenEncrypted: "encrypted-argocd-token-material",
-		VerifySsl:          true,
-		IsHealthy:          true,
-		LastSync:           pgtype.Timestamptz{Time: lastSync, Valid: true},
-		CreatedAt:          time.Now().UTC(),
-		UpdatedAt:          time.Now().UTC(),
-	}}, nil
-}
-
 func (f *fakeSupportBundleQuerier) ListAuditLogV1(context.Context, sqlc.ListAuditLogsParams) ([]sqlc.AuditLog, error) {
 	if len(f.auditRows) > 0 {
 		return f.auditRows, nil
@@ -165,7 +149,6 @@ func TestSupportBundleDownloadRedactsSensitiveValues(t *testing.T) {
 	for _, leaked := range []string{
 		"plain-ca-certificate",
 		"bcrypt-hash-should-not-leak",
-		"encrypted-argocd-token-material",
 		"plaintext-password",
 		"Bearer abc123",
 		"secret@example.test",
@@ -175,7 +158,7 @@ func TestSupportBundleDownloadRedactsSensitiveValues(t *testing.T) {
 			t.Fatalf("support bundle leaked %q:\n%s", leaked, combined)
 		}
 	}
-	for _, name := range []string{"meta.json", "clusters.json", "users.json", "argocd-instances.json", "audit-log-recent.json", "agent-connections.json", "README.txt"} {
+	for _, name := range []string{"meta.json", "clusters.json", "users.json", "audit-log-recent.json", "agent-connections.json", "README.txt"} {
 		if _, ok := files[name]; !ok {
 			t.Fatalf("support bundle missing %s; files=%v", name, keys(files))
 		}
@@ -205,7 +188,7 @@ func TestSupportBundleCharlieSectionIsLocalMetadataOnly(t *testing.T) {
 			CertificateExpiresAt: expiresAt, EnrollmentCredentialsExpiresAt: expiresAt,
 			ArtifactCredentialExpiresAt: expiresAt, OnboardingPackageExpiresAt: expiresAt,
 		},
-		rules:    []sqlc.CharlieTriggerRule{{Name: "agent_disconnected", Category: "agent_fleet", Enabled: true, MinimumSeverity: "warning", WindowSeconds: 300, CooldownSeconds: 1800, ModeCeiling: "read_only"}},
+		rules:    []sqlc.CharlieTriggerRule{{Name: "agent_disconnected", Category: "cluster_agents", Enabled: true, MinimumSeverity: "warning", WindowSeconds: 300, CooldownSeconds: 1800, ModeCeiling: "read_only"}},
 		findings: []sqlc.CharlieFinding{{Status: "open", Severity: "high", Title: canary, Summary: canary, CharlieFindingID: canary}},
 	}
 	h := NewSupportBundleHandler(q, nil, "")
@@ -287,10 +270,6 @@ func TestSupportBundleDownloadIncludesOperationalSummaries(t *testing.T) {
 	}
 	if strings.Contains(ingressCertificates, "private-key-should-not-leak") || strings.Contains(ingressCertificates, "BEGIN CERTIFICATE") {
 		t.Fatalf("ingress/certificate summary leaked secret material:\n%s", ingressCertificates)
-	}
-	argocdInstances := string(files["argocd-instances.json"])
-	if !strings.Contains(argocdInstances, `"is_healthy": true`) || !strings.Contains(argocdInstances, `"last_sync":`) {
-		t.Fatalf("argocd summary missing health fields:\n%s", argocdInstances)
 	}
 }
 

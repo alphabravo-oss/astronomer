@@ -10,17 +10,17 @@ import (
 )
 
 type contextSearchFake struct {
-	rows []sqlc.CharlieAgentFleetListRow
+	rows []sqlc.CharlieClusterAgentListRow
 }
 
-func (f contextSearchFake) CharlieAgentFleetList(context.Context, sqlc.CharlieAgentFleetListParams) ([]sqlc.CharlieAgentFleetListRow, error) {
+func (f contextSearchFake) CharlieClusterAgentList(context.Context, sqlc.CharlieClusterAgentListParams) ([]sqlc.CharlieClusterAgentListRow, error) {
 	return f.rows, nil
 }
 
 func TestContextSearchExposesAgentMetadataNotDownstreamResources(t *testing.T) {
 	actor, clusterID := uuid.New(), uuid.New()
 	authorizer := &sessionAuthorizerFake{use: true, incident: true}
-	service := NewContextSearchService(contextSearchFake{rows: []sqlc.CharlieAgentFleetListRow{{ClusterID: clusterID, DisplayName: "Payments", Environment: "prod", Region: "east"}}}, authorizer, func() bool { return true })
+	service := NewContextSearchService(contextSearchFake{rows: []sqlc.CharlieClusterAgentListRow{{ClusterID: clusterID, DisplayName: "Payments", Environment: "prod", Region: "east"}}}, authorizer, func() bool { return true })
 	results, err := service.Search(context.Background(), actor, "payments", 20)
 	if err != nil || len(results) != 1 {
 		t.Fatalf("search=%#v err=%v", results, err)
@@ -38,7 +38,7 @@ func TestContextSearchExposesAgentMetadataNotDownstreamResources(t *testing.T) {
 func TestContextSearchEmptyQueryReturnsManagementPlaneSuggestionsOnly(t *testing.T) {
 	actor, clusterID := uuid.New(), uuid.New()
 	service := NewContextSearchService(
-		contextSearchFake{rows: []sqlc.CharlieAgentFleetListRow{{ClusterID: clusterID, DisplayName: "Payments"}}},
+		contextSearchFake{rows: []sqlc.CharlieClusterAgentListRow{{ClusterID: clusterID, DisplayName: "Payments"}}},
 		&sessionAuthorizerFake{use: true, incident: true},
 		func() bool { return true },
 	)

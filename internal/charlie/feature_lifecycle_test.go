@@ -11,24 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type featureInstallerFake struct {
-	resumeCalls  int
-	suspendCalls int
-	order        *[]string
-}
-
-func (f *featureInstallerFake) Suspend(context.Context, AgentInstallSpec) error {
-	f.suspendCalls++
-	if f.order != nil {
-		*f.order = append(*f.order, "suspend")
-	}
-	return nil
-}
-func (f *featureInstallerFake) Resume(context.Context, AgentInstallSpec) error {
-	f.resumeCalls++
-	return nil
-}
-
 type featureRuntimeFake struct {
 	activations int
 	shutdowns   int
@@ -60,17 +42,17 @@ func (f featureModeFake) EmergencyDisable(context.Context, string) (ModeState, e
 }
 
 func TestFeatureEnableAuditFailureResumesNoRuntime(t *testing.T) {
-	installer := &featureInstallerFake{}
+	runtime := &featureRuntimeFake{}
 	lifecycle := &FeatureLifecycle{
-		installer: installer, writes: NewWriteFence(), timeout: time.Second,
+		runtime: runtime, writes: NewWriteFence(), timeout: time.Second,
 		auditor: &authorityAuditFake{err: errors.New("database-SENTINEL")},
 	}
 	err := lifecycle.Enable(context.Background(), "actor-a")
 	if err == nil || strings.Contains(err.Error(), "database-SENTINEL") {
 		t.Fatalf("feature audit failure was not bounded: %v", err)
 	}
-	if installer.resumeCalls != 0 {
-		t.Fatalf("feature audit failure resumed runtime %d times", installer.resumeCalls)
+	if runtime.activations != 0 {
+		t.Fatalf("feature audit failure activated runtime %d times", runtime.activations)
 	}
 }
 
@@ -90,40 +72,39 @@ func TestFeatureEnableMaterializesRuntimeWithoutRestart(t *testing.T) {
 	}
 }
 
-func TestFeatureDisableQuiescesBeforeAuthorizedAgentSuspension(t *testing.T) {
+func TestFeatureDisableQuiescesBeforeRuntimeShutdown(t *testing.T) {
 	order := []string{}
 	runtime := &featureRuntimeFake{order: &order}
-	installer := &featureInstallerFake{order: &order}
 	lifecycle := &FeatureLifecycle{
 		connection: func(context.Context) (sqlc.CharlieConnection, error) {
 			return sqlc.CharlieConnection{ID: uuid.New(), InstallationID: uuid.New(), Active: true, HealthState: "ready"}, nil
 		},
-		installer: installer, mode: featureModeFake{order: &order, err: errors.New("Charlie is locally disabled; remote confirmation is pending")}, runtime: runtime,
+		mode: featureModeFake{order: &order, err: errors.New("Charlie is locally disabled; remote confirmation is pending")}, runtime: runtime,
 		writes: NewWriteFence(), timeout: time.Second, auditor: &authorityAuditFake{},
 	}
 	if err := lifecycle.Disable(t.Context(), "actor-a"); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(order, ","); got != "mode,runtime,suspend" {
+	if got := strings.Join(order, ","); got != "mode,runtime" {
 		t.Fatalf("disable order=%s", got)
 	}
-	if installer.suspendCalls != 1 || runtime.shutdowns != 1 {
-		t.Fatalf("suspends=%d shutdowns=%d", installer.suspendCalls, runtime.shutdowns)
+	if runtime.shutdowns != 1 {
+		t.Fatalf("shutdowns=%d", runtime.shutdowns)
 	}
 }
 
-func TestFeatureDisableRepeatsSuspensionForInactiveInstallation(t *testing.T) {
-	installer := &featureInstallerFake{}
+func TestFeatureDisableStopsRuntimeForInactiveConnection(t *testing.T) {
+	runtime := &featureRuntimeFake{}
 	lifecycle := &FeatureLifecycle{
 		connection: func(context.Context) (sqlc.CharlieConnection, error) {
 			return sqlc.CharlieConnection{ID: uuid.New(), InstallationID: uuid.New(), Active: false, HealthState: "inactive"}, nil
 		},
-		installer: installer, runtime: &featureRuntimeFake{}, writes: NewWriteFence(), timeout: time.Second, auditor: &authorityAuditFake{},
+		runtime: runtime, writes: NewWriteFence(), timeout: time.Second, auditor: &authorityAuditFake{},
 	}
 	if err := lifecycle.Disable(t.Context(), "actor-a"); err != nil {
 		t.Fatal(err)
 	}
-	if installer.suspendCalls != 1 {
-		t.Fatalf("inactive cleanup suspends=%d", installer.suspendCalls)
+	if runtime.shutdowns != 1 {
+		t.Fatalf("inactive shutdowns=%d", runtime.shutdowns)
 	}
 }

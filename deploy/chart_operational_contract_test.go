@@ -49,6 +49,12 @@ var productionWiringSets = []string{
 	// address and 10.40.x API endpoint network. Cardinality cannot prove that;
 	// operators must inventory the target cluster's actual addresses.
 	"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
+	"delivery.artifacts.fluxDistribution.ociRepository=ghcr.io/example/astronomer/flux-distribution",
+	"delivery.artifacts.fluxDistribution.digest=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	"delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0",
+	"delivery.artifacts.builtInBundles.ociRepository=ghcr.io/example/astronomer/bundles",
+	"delivery.artifacts.builtInBundles.digest=sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+	"delivery.artifacts.builtInBundles.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0",
 }
 
 func TestEnterpriseProductionRenderCoversProductionWiringContract(t *testing.T) {
@@ -100,9 +106,8 @@ func parseRenderedDocs(t *testing.T, out string) []renderedDoc {
 func TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t))
 	allowedHooks := map[string]string{
-		"Job/astronomer-migrate":          "post-install,post-upgrade",
-		"Job/astronomer-preflight":        "pre-install,pre-upgrade",
-		"Job/astronomer-preflight-argocd": "test",
+		"Job/astronomer-migrate":   "post-install,post-upgrade",
+		"Job/astronomer-preflight": "pre-install,pre-upgrade",
 		// The preflight Job needs its own SA + RBAC created BEFORE it (earlier
 		// hook-weight) so a fresh install doesn't deadlock on the main SA not
 		// existing yet — see templates/preflight-rbac.yaml. The matching hook
@@ -128,13 +133,6 @@ func TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites(t *testing
 			continue
 		}
 		name := stringAt(doc, "metadata", "name")
-		// The bundled astro-argocd subchart vendors upstream ArgoCD, which ships
-		// its own pre-install hooks (e.g. redis-secret-init); those are outside
-		// this chart's control and are not the astronomer lifecycle Jobs this
-		// contract guards.
-		if strings.HasPrefix(name, "astro-argocd-") {
-			continue
-		}
 		key := fmt.Sprintf("%s/%s", stringValue(doc["kind"]), name)
 		want, ok := allowedHooks[key]
 		if !ok {
@@ -153,71 +151,18 @@ func TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites(t *testing
 	}
 }
 
-func TestPreflightOwnershipAndOrderingAreIsolatedByDeploymentEngine(t *testing.T) {
+func TestPreflightOwnershipUsesHelmOnly(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t))
-	argoConfig := findRenderedDoc(t, docs, "ConfigMap", "argocd-cm")
-	argoConfigData := nestedMap(argoConfig, "data")
-	if globalIgnore, found := argoConfigData["resource.customizations.ignoreResourceUpdates.all"]; found {
-		t.Fatalf("Argo global status-update suppression = %q, want key omitted so hook Job completion is observed", stringValue(globalIgnore))
-	}
-
-	for _, target := range []struct {
-		kind string
-		name string
-	}{
-		{kind: "ServiceAccount", name: "astronomer-preflight"},
-		{kind: "ClusterRole", name: "astronomer-preflight"},
-		{kind: "ClusterRoleBinding", name: "astronomer-preflight"},
-		{kind: "Role", name: "astronomer-preflight"},
-		{kind: "RoleBinding", name: "astronomer-preflight"},
-		{kind: "NetworkPolicy", name: "astronomer-preflight"},
-		{kind: "Job", name: "astronomer-preflight"},
-	} {
-		doc := findRenderedDoc(t, docs, target.kind, target.name)
+	for _, doc := range docs {
 		annotations := nestedMap(doc, "metadata", "annotations")
-		if got := stringValue(annotations["argocd.argoproj.io/hook"]); got != "Skip" {
-			t.Errorf("Helm-owned %s/%s Argo hook = %q, want Skip", target.kind, target.name, got)
-		}
-	}
-
-	for _, target := range []struct {
-		kind string
-		name string
-	}{
-		{kind: "ServiceAccount", name: "astronomer-preflight-argocd"},
-		{kind: "ClusterRole", name: "astronomer-preflight-argocd"},
-		{kind: "ClusterRoleBinding", name: "astronomer-preflight-argocd"},
-		{kind: "Role", name: "astronomer-preflight-argocd"},
-		{kind: "RoleBinding", name: "astronomer-preflight-argocd"},
-		{kind: "NetworkPolicy", name: "astronomer-preflight-argocd"},
-	} {
-		doc := findRenderedDoc(t, docs, target.kind, target.name)
-		annotations := nestedMap(doc, "metadata", "annotations")
-		if got := stringValue(annotations["argocd.argoproj.io/sync-wave"]); got != "-5" {
-			t.Errorf("Argo prerequisite %s/%s wave = %q, want -5 (same wave as Job)", target.kind, target.name, got)
-		}
-		for _, forbidden := range []string{"helm.sh/hook", "argocd.argoproj.io/hook", "argocd.argoproj.io/hook-delete-policy"} {
-			if got := stringValue(annotations[forbidden]); got != "" {
-				t.Errorf("Argo prerequisite %s/%s has lifecycle annotation %s=%q", target.kind, target.name, forbidden, got)
+		for key := range annotations {
+			if strings.HasPrefix(key, "argo"+"cd.") {
+				t.Fatalf("rendered %s/%s retains removed lifecycle annotation %q", stringValue(doc["kind"]), stringAt(doc, "metadata", "name"), key)
 			}
 		}
-	}
-
-	job := findRenderedDoc(t, docs, "Job", "astronomer-preflight-argocd")
-	annotations := nestedMap(job, "metadata", "annotations")
-	wantAnnotations := map[string]string{
-		"helm.sh/hook":                          "test",
-		"argocd.argoproj.io/hook":               "Sync",
-		"argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation,HookSucceeded",
-		"argocd.argoproj.io/sync-wave":          "-5",
-	}
-	for key, want := range wantAnnotations {
-		if got := stringValue(annotations[key]); got != want {
-			t.Errorf("Argo preflight Job %s = %q, want %q", key, got, want)
+		if strings.Contains(stringAt(doc, "metadata", "name"), "preflight-argo"+"cd") {
+			t.Fatalf("rendered obsolete preflight resource %s/%s", stringValue(doc["kind"]), stringAt(doc, "metadata", "name"))
 		}
-	}
-	if got := stringAt(podSpecFor(job), "serviceAccountName"); got != "astronomer-preflight-argocd" {
-		t.Errorf("Argo preflight Job serviceAccountName = %q, want astronomer-preflight-argocd", got)
 	}
 }
 
@@ -1026,31 +971,10 @@ func TestProductionRequiresEncryptionKeyWrapWhenBackupsEnabled(t *testing.T) {
 	_ = helmTemplateWithValueFiles(t, []string{prodValues}, okSets...)
 }
 
-// O-06: the restore-drill schema floor must track the real max migration so a
-// stale backup can't pass the drill. Fail if values.yaml is >10 versions behind.
-func TestSchemaFloorTracksMaxMigration(t *testing.T) {
+// v1 has one squashed initial migration. The chart must reject any restore
+// drill database that is not on that exact schema version.
+func TestSchemaFloorIsFreshV1(t *testing.T) {
 	root := repoRoot(t)
-	migDir := filepath.Join(root, "internal", "db", "migrations")
-	entries, err := os.ReadDir(migDir)
-	if err != nil {
-		t.Fatalf("read migrations dir: %v", err)
-	}
-	verRe := regexp.MustCompile(`^0*(\d+)_.*\.up\.sql$`)
-	maxVer := 0
-	for _, e := range entries {
-		m := verRe.FindStringSubmatch(e.Name())
-		if m == nil {
-			continue
-		}
-		v, _ := strconv.Atoi(m[1])
-		if v > maxVer {
-			maxVer = v
-		}
-	}
-	if maxVer == 0 {
-		t.Fatal("no *.up.sql migrations found")
-	}
-
 	values, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "values.yaml"))
 	if err != nil {
 		t.Fatalf("read values.yaml: %v", err)
@@ -1062,13 +986,8 @@ func TestSchemaFloorTracksMaxMigration(t *testing.T) {
 	}
 	floor, _ := strconv.Atoi(fm[1])
 
-	const maxLag = 10
-	if maxVer-floor > maxLag {
-		t.Fatalf("expectedMinSchemaVersion=%d is %d behind the max migration %d (allowed lag %d); bump it in deploy/chart/values.yaml",
-			floor, maxVer-floor, maxVer, maxLag)
-	}
-	if floor > maxVer {
-		t.Fatalf("expectedMinSchemaVersion=%d is ahead of the max migration %d", floor, maxVer)
+	if floor != 1 {
+		t.Fatalf("expectedMinSchemaVersion=%d, want the single fresh-v1 schema version 1", floor)
 	}
 }
 

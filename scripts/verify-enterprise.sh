@@ -112,7 +112,7 @@ verify_api_contract() {
 
   step "Security-sensitive route contracts"
   run_logged route-security-contracts go test ./internal/server/ -run \
-    'Test(AdminRouteRegistrationsAreAuthProtected|HighRiskRoutesDenyUnauthenticatedRequests|MutatingRoutesHaveSecurityClassification|BrowserCookieMutatingRoutesRequireCSRF|RouteInventoryCanBeGenerated|ForwardingRoutesAreDocumentedInProxyInventory|K8sProxy|ServiceProxy|RegistrationEvents|ArgoCDInternalK8sProxy)' \
+    'Test(AdminRouteRegistrationsAreAuthProtected|HighRiskRoutesDenyUnauthenticatedRequests|MutatingRoutesHaveSecurityClassification|BrowserCookieMutatingRoutesRequireCSRF|RouteInventoryCanBeGenerated|ForwardingRoutesAreDocumentedInProxyInventory|K8sProxy|ServiceProxy|RegistrationEvents)' \
     -count=1
 }
 
@@ -197,11 +197,6 @@ verify_helm() {
   # runner has no repositories.yaml, so register the locked Argo Helm repo
   # before rebuilding from Chart.lock. The committed tarball is still used
   # when it matches the lock digest.
-  if ! helm repo list 2>/dev/null | awk 'NR>1 {print $2}' | grep -qx 'https://argoproj.github.io/argo-helm'; then
-    helm repo add astronomer-argo https://argoproj.github.io/argo-helm
-  fi
-  run_logged helm-dependency-build helm dependency build deploy/chart
-
   # The chart ships no key material: secrets.secretKey / secrets.encryptionKey
   # are empty by default and every render must supply its own (the chart used to
   # default to a JWT signing key and Fernet key published in this repository).
@@ -237,6 +232,12 @@ verify_helm() {
     --set 'networkPolicy.externalPostgresEgressCIDRs={10.20.0.0/16}' \
     --set 'networkPolicy.externalRedisEgressCIDRs={10.30.0.0/16}' \
     --set 'networkPolicy.kubernetesAPIEgressCIDRs={10.40.0.0/14}' \
+    --set delivery.artifacts.fluxDistribution.ociRepository=ghcr.io/example/astronomer/flux-distribution \
+    --set delivery.artifacts.fluxDistribution.digest=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+    --set delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0 \
+    --set delivery.artifacts.builtInBundles.ociRepository=ghcr.io/example/astronomer/bundles \
+    --set delivery.artifacts.builtInBundles.digest=sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789 \
+    --set delivery.artifacts.builtInBundles.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0 \
     --set managementBackup.s3.bucket=astronomer-backups \
     --set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws \
     --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap

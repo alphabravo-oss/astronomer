@@ -2,9 +2,9 @@
 # FEATURES-051126 T23 — emit a sorted, deduplicated list of every
 # container image the astronomer chart will pull at install time.
 #
-# Used by `make images.txt` to regenerate deploy/chart/images.txt,
-# which air-gapped operators feed to `skopeo copy` (or equivalent) to
-# mirror every image into an internal registry before installing.
+# Used by `make images.txt` to regenerate deploy/chart/images.txt. Release CI
+# resolves this inventory to exact digests; air-gapped operators consume the
+# signed release manifest through scripts/mirror-release.py.
 #
 # Usage:
 #   ./scripts/extract-images.sh > deploy/chart/images.txt
@@ -17,13 +17,15 @@
 #   2) production-like optional components (Dex, management backup with a
 #      dummy S3 target + key wrap, management logging) so air-gapped prod
 #      installs don't miss dex / pgdump-s3 / fluent-bit.
-# Results are unioned. The agent image is added explicitly because it only
-# appears in the member-cluster install template the server hands out at
-# registration time — never in a management-plane Deployment.
+# Results are unioned. The agent image and digest-pinned downstream controller
+# images are added explicitly because they run only in managed clusters and do
+# not appear in a management-plane Deployment.
 
 set -euo pipefail
 
 CHART_DIR="${CHART_DIR:-deploy/chart}"
+COMPATIBILITY_FILE="${COMPATIBILITY_FILE:-deploy/release/compatibility.yaml}"
+BUNDLE_CATALOG="${BUNDLE_CATALOG:-deploy/bundles/catalog.json}"
 
 if ! command -v helm >/dev/null 2>&1; then
     echo "extract-images: helm not on PATH" >&2
@@ -31,6 +33,18 @@ if ! command -v helm >/dev/null 2>&1; then
 fi
 if [[ ! -d "$CHART_DIR" ]]; then
     echo "extract-images: chart directory not found: $CHART_DIR" >&2
+    exit 2
+fi
+if ! command -v jq >/dev/null 2>&1; then
+    echo "extract-images: jq not on PATH" >&2
+    exit 2
+fi
+if [[ ! -f "$COMPATIBILITY_FILE" ]]; then
+    echo "extract-images: compatibility file not found: $COMPATIBILITY_FILE" >&2
+    exit 2
+fi
+if [[ ! -f "$BUNDLE_CATALOG" ]]; then
+    echo "extract-images: built-in bundle catalog not found: $BUNDLE_CATALOG" >&2
     exit 2
 fi
 
@@ -49,7 +63,7 @@ extract_images() {
 }
 
 # Default (dev) render — covers server/worker/migrate/frontend/postgres/
-# redis/shell/busybox/argocd and anything else on by default.
+# redis/shell/busybox and anything else on by default.
 dev_images="$(extract_images -f "$CHART_DIR/values.yaml" || true)"
 
 # Production-like optional components. These stay off in values.yaml so a
@@ -91,23 +105,47 @@ if [[ -n "$agent_repo" && -n "$agent_tag" ]]; then
     images="$(printf '%s\n%s' "$images" "$agent_ref" | sort -u)"
 fi
 
-# Emit a stable, comment-prefixed header so the file is self-describing
-# but `grep -v '^#'` cleans it up for `xargs skopeo copy`.
+# Flux runs downstream only, so Helm cannot discover these images. The release
+# compatibility contract is authoritative and requires every component digest.
+downstream_images="$(jq -er '
+  .flux.components[] |
+  select(.digest_pin_required == true) |
+  if (.repository | test("^ghcr\\.io/fluxcd/[a-z0-9-]+$")) and
+     (.digest | test("^sha256:[a-f0-9]{64}$"))
+  then .repository + "@" + .digest
+  else error("invalid downstream controller image contract")
+  end
+' "$COMPATIBILITY_FILE")"
+[[ "$(printf '%s\n' "$downstream_images" | sed '/^$/d' | wc -l | tr -d ' ')" == 3 ]] || {
+    echo "extract-images: expected exactly three downstream controller images" >&2
+    exit 2
+}
+images="$(printf '%s\n%s' "$images" "$downstream_images" | sed '/^$/d' | sort -u)"
+
+# Built-in bundles are normal delivery artifacts and their workload images must
+# be mirrored even though they are absent from the management chart render.
+builtin_images="$(jq -er '
+  .components[].images[] |
+  if test("^[a-z0-9][a-z0-9.:-]*/[a-z0-9][a-z0-9._/-]*@sha256:[a-f0-9]{64}$")
+  then .
+  else error("invalid built-in bundle image identity")
+  end
+' "$BUNDLE_CATALOG")"
+images="$(printf '%s\n%s' "$images" "$builtin_images" | sed '/^$/d' | sort -u)"
+
+# Emit a stable, comment-prefixed header so the file is self-describing.
 cat <<EOF
 # Astronomer Helm chart image list (T23 air-gapped install)
 #
 # Regenerated via: make images.txt
-# Source:          $CHART_DIR/values.yaml + helm template
-#                  (default render ∪ production-like optional components:
-#                   dex, managementBackup/pgdump-s3, managementLogging/fluent-bit)
+# Source:          $CHART_DIR/values.yaml + helm template, plus the
+#                  digest-pinned managed-cluster controllers declared in
+#                  $COMPATIBILITY_FILE and built-ins declared in
+#                  $BUNDLE_CATALOG
 #
-# Air-gapped install procedure:
-#   1) grep -v '^#' deploy/chart/images.txt > /tmp/images.txt
-#   2) Mirror each image to your internal registry with skopeo:
-#        while read -r img; do
-#          skopeo copy --all "docker://\$img" "docker://internal.example.com/astronomer/\$img"
-#        done < /tmp/images.txt
-#   3) helm install --set image.registry=internal.example.com/astronomer ...
+# Air-gapped install procedure: verify the tagged release-manifest signature,
+# then use scripts/mirror-release.py to resolve the complete immutable copy
+# plan, verify destination digests, sign the mapping, and emit Helm overrides.
 #
 # See docs/airgapped-install.md for the full operator procedure.
 EOF

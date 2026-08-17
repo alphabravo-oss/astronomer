@@ -81,57 +81,6 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 		})
 	}
 
-	if deps.ArgoCD != nil {
-		r.With(featureGate("feature.argocd", deps.SettingsCache)).Route("/argocd", func(r chi.Router) {
-			r.Get("/controller/status/", deps.ArgoCD.ControllerStatus)
-			r.Get("/operations/", deps.ArgoCD.ListOperations)
-			r.Get("/operations/{id}/", deps.ArgoCD.GetOperation)
-			r.Post("/operations/{id}/retry/", deps.ArgoCD.RetryOperation)
-			r.Get("/instances/", deps.ArgoCD.ListInstances)
-			r.Post("/instances/", deps.ArgoCD.CreateInstance)
-			r.Get("/instances/{id}/", deps.ArgoCD.GetInstance)
-			r.Put("/instances/{id}/", deps.ArgoCD.UpdateInstance)
-			r.Delete("/instances/{id}/", deps.ArgoCD.DeleteInstance)
-			r.Get("/instances/{id}/applications/", deps.ArgoCD.LiveApplications)
-			r.Get("/instances/{id}/cached-applications/", deps.ArgoCD.ListAppsByInstance)
-			r.Get("/instances/{id}/health/", deps.ArgoCD.InstanceHealth)
-			r.Get("/instances/{id}/orphan-report/", deps.ArgoCD.InstanceOrphanReport)
-			r.Get("/applications/", deps.ArgoCD.ListAllApps)
-			r.Get("/applications/{id}/", deps.ArgoCD.GetApp)
-			r.Post("/applications/{id}/sync/", deps.ArgoCD.SyncApp)
-			r.Get("/applications/{id}/history/", deps.ArgoCD.AppHistory)
-			r.Get("/applications/{id}/manifests/", deps.ArgoCD.AppManifests)
-			r.Post("/applications/{id}/refresh/", deps.ArgoCD.RefreshApp)
-			r.Post("/instances/{id}/applications/{name}/sync/", deps.ArgoCD.SyncAppByName)
-			r.Get("/clusters/{cluster_id}/ownership/", deps.ArgoCD.ClusterOwnership)
-			r.Post("/clusters/{cluster_id}/ownership/{component_slug}/decision/", deps.ArgoCD.SetClusterOwnershipDecision)
-
-			// Phase B1 — ArgoCD lifecycle additions.
-			// Application / AppProject / ApplicationSet CRUD, cluster
-			// registration into upstream ArgoCD, and repo credential
-			// management. All endpoints write through to the upstream
-			// instance using the typed client in internal/handler/argocd.
-			r.Post("/instances/{id}/applications/", deps.ArgoCD.CreateApplication)
-			r.Patch("/instances/{id}/applications/{name}/", deps.ArgoCD.PatchApplication)
-			r.Delete("/instances/{id}/applications/{name}/", deps.ArgoCD.DeleteApplication)
-			r.Get("/instances/{id}/projects/", deps.ArgoCD.ListProjects)
-			r.Post("/instances/{id}/projects/", deps.ArgoCD.CreateProject)
-			r.Patch("/instances/{id}/projects/{name}/", deps.ArgoCD.PatchProject)
-			r.Delete("/instances/{id}/projects/{name}/", deps.ArgoCD.DeleteProject)
-			r.Get("/instances/{id}/applicationsets/", deps.ArgoCD.ListApplicationSets)
-			r.Post("/instances/{id}/applicationsets/", deps.ArgoCD.CreateApplicationSet)
-			r.Delete("/instances/{id}/applicationsets/{name}/", deps.ArgoCD.DeleteApplicationSet)
-			r.Get("/instances/{id}/clusters/", deps.ArgoCD.ListManagedClusters)
-			r.Post("/instances/{id}/clusters/{cluster_id}/register/", deps.ArgoCD.RegisterManagedCluster)
-			r.Post("/instances/{id}/clusters/{cluster_id}/refresh-labels/", deps.ArgoCD.RefreshManagedClusterLabels)
-			r.Delete("/instances/{id}/clusters/{cluster_id}/register/", deps.ArgoCD.UnregisterManagedCluster)
-			r.Get("/instances/{id}/repos/", deps.ArgoCD.ListRepos)
-			r.Post("/instances/{id}/repos/", deps.ArgoCD.CreateRepo)
-			r.Delete("/instances/{id}/repos/", deps.ArgoCD.DeleteRepo)
-			r.Post("/instances/{id}/repos/test/", deps.ArgoCD.TestRepo)
-		})
-	}
-
 	if deps.Backups != nil {
 		r.With(featureGate("feature.backups", deps.SettingsCache)).Route("/backups", func(r chi.Router) {
 			r.Get("/controller/status/", deps.Backups.ControllerStatus)
@@ -200,11 +149,15 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			r.With(catalogDelete).Delete("/repositories/{id}/", deps.Catalog.DeleteRepo)
 			r.With(catalogUpdate).Post("/repositories/{id}/sync/", deps.Catalog.SyncRepo)
 			r.With(catalogUpdate).Post("/repositories/{id}/test-connection/", deps.Catalog.TestRepoConnection)
-			r.Get("/charts/", deps.Catalog.ListCharts)
-			r.Get("/charts/{id}/", deps.Catalog.GetChart)
-			r.Get("/charts/{id}/versions/", deps.Catalog.ListChartVersions)
-			r.Get("/charts/{id}/readme/", deps.Catalog.GetChartReadme)
-			r.Get("/charts/{id}/values/", deps.Catalog.GetChartValues)
+			// Chart handlers perform object-level repository visibility checks.
+			// The collection gate admits project-scoped catalog readers so the
+			// handler can bind ?project_id to the exact tenant before returning.
+			catalogBrowse := requireCollectionPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbRead)
+			r.With(catalogBrowse).Get("/charts/", deps.Catalog.ListCharts)
+			r.With(catalogBrowse).Get("/charts/{id}/", deps.Catalog.GetChart)
+			r.With(catalogBrowse).Get("/charts/{id}/versions/", deps.Catalog.ListChartVersions)
+			r.With(catalogBrowse).Get("/charts/{id}/readme/", deps.Catalog.GetChartReadme)
+			r.With(catalogBrowse).Get("/charts/{id}/values/", deps.Catalog.GetChartValues)
 			r.Get("/installed/", deps.Catalog.ListInstalledCharts)
 			// NEW-1: helm install/upgrade/uninstall are cluster-mutating (they
 			// run helm against a managed cluster), but this Catalog subtree was
@@ -240,6 +193,7 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 	}
 
 	if deps.ChartRatings != nil {
+		catalogBrowse := requireCollectionPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbRead)
 		// Per-chart rating CRUD lives under /charts/{chart_id}/ratings/
 		// rather than nested inside the catalog block above. Reason:
 		// the catalog block is feature-gated behind feature.catalog;
@@ -255,8 +209,8 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			r.Delete("/{rating_id}/", deps.ChartRatings.DeleteRating)
 		})
 		r.Route("/catalog/recommendations", func(r chi.Router) {
-			r.Get("/popular/", deps.ChartRatings.PopularRecommendations)
-			r.Get("/similar/{chart_id}/", deps.ChartRatings.SimilarRecommendations)
+			r.With(catalogBrowse).Get("/popular/", deps.ChartRatings.PopularRecommendations)
+			r.With(catalogBrowse).Get("/similar/{chart_id}/", deps.ChartRatings.SimilarRecommendations)
 		})
 	}
 

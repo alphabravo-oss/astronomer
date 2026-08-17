@@ -36,10 +36,6 @@ import (
 type Source string
 
 const (
-	// SourceArgoCDProxy is the bundled-ArgoCD internal k8s proxy, on both the
-	// dedicated internal listener and the compatibility route on the public
-	// listener. Token-gated, no human in the request. §10.1.
-	SourceArgoCDProxy Source = "argocd-proxy"
 	// SourceSelfManage is astronomer managing its own install into
 	// AstronomerOwnedNamespaces (agent reconcile, agent RBAC, project
 	// self-management). §10.2.
@@ -59,9 +55,6 @@ const (
 	// SourceAgentLifecycle is self-upgrade, decommission, heartbeat/health,
 	// informers and the SSAR self-probes. §10.5.
 	SourceAgentLifecycle Source = "agent-lifecycle"
-	// SourceBaselineReconcile is the baseline ApplicationSet / CRD reconcile
-	// loops. §10.6.
-	SourceBaselineReconcile Source = "baseline-reconcile"
 )
 
 // Exemption is one row of the §10 list. Keeping the list as data — rather than
@@ -80,10 +73,6 @@ type Exemption struct {
 
 // exemptions is THE list. Nothing outside this table may be machine-origin.
 var exemptions = map[Source]Exemption{
-	SourceArgoCDProxy: {
-		Source: SourceArgoCDProxy,
-		Reason: "bundled ArgoCD cluster-cache/apply traffic; token-gated, no human in the request, and an impersonated identity would fail the whole cache sync",
-	},
 	SourceSelfManage: {
 		Source: SourceSelfManage,
 		Reason: "astronomer managing its own install inside AstronomerOwnedNamespaces",
@@ -100,10 +89,6 @@ var exemptions = map[Source]Exemption{
 	SourceAgentLifecycle: {
 		Source: SourceAgentLifecycle,
 		Reason: "agent self-upgrade, decommission, health, informers, SSAR self-probes",
-	},
-	SourceBaselineReconcile: {
-		Source: SourceBaselineReconcile,
-		Reason: "baseline ApplicationSet and CRD reconcile loops",
 	},
 }
 
@@ -170,7 +155,7 @@ const (
 )
 
 // WithMachine stamps a machine origin onto ctx. Call it at the site that KNOWS
-// the request has no human behind it — the ArgoCD proxy gate, a reconciler
+// the request has no human behind it — a reconciler
 // loop, shell provisioning. Never call it as a fallback for "couldn't find a
 // user".
 func WithMachine(ctx context.Context, s Source) context.Context {

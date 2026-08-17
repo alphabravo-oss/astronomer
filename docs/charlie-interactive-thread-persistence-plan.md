@@ -4,7 +4,7 @@
 **Date:** 2026-08-07  
 **Owners:** Astronomer product Charlie integration + Charlie product agent / central  
 **Related:**  
-- `astronomer/docs/charlie-agent-integration-plan.md` (A-series, `charlie_sessions` ownership)  
+- `astronomer/docs/archive/pre-v1/plans/charlie-agent-integration-plan.md` (historical A-series and `charlie_sessions` ownership)
 - `charlie/docs/product-agent-integration-platform-plan.md` (C-series, agent sessions, retention)  
 - Live UX: drawer unmount + deliberate non-restore (see `frontend/src/components/charlie/charlie-shell.tsx`)
 
@@ -821,7 +821,7 @@ When a locked decision D1–D10 changes, add a row here and update §0.5.
 | Cursor turn vs session | `internal/charlie/session_access.go` `sessionCursorState` |
 | SQL sessions | `internal/db/queries/charlie.sql` |
 | Hub conversations/investigations | `frontend/src/routes/dashboard/charlie/index.tsx` |
-| Ownership matrix | `docs/charlie-agent-integration-plan.md` §4.1a |
+| Historical ownership matrix | `docs/archive/pre-v1/plans/charlie-agent-integration-plan.md` §4.1a |
 | Charlie session states | `charlie/internal/agent/types.go`, `transitions.go` |
 | MCP model-visible tool content | `internal/charlie/mcp.go` `boundedActionContent` |
 

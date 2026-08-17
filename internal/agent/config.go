@@ -79,15 +79,6 @@ type AgentConfig struct {
 	AuditPollInterval   int    `mapstructure:"audit_poll_interval"`   // Seconds between tail polls (default 10)
 	AuditDelivery       string `mapstructure:"audit_delivery"`        // How batches are delivered: tunnel (default) | http | stub
 
-	// Fleet-style PULL reconcile (sprint: pull-reconcile). When disabled (the
-	// default) the agent does NOT start its local reconcile loop and v0.1.0
-	// behavior is unchanged. When enabled the agent periodically (and on a
-	// tunnel push) pulls its desired state and server-side-applies it into the
-	// astronomer-* owned namespaces. Env: ASTRONOMER_PULL_RECONCILE_ENABLED,
-	// ASTRONOMER_PULL_RECONCILE_INTERVAL.
-	PullReconcileEnabled  bool `mapstructure:"pull_reconcile_enabled"`  // default false
-	PullReconcileInterval int  `mapstructure:"pull_reconcile_interval"` // seconds, default 300
-
 	// Self-upgrade image policy. The agent will only ever set its own
 	// Deployment image to a reference in AgentImageRepository (an EXACT
 	// repository match, never a prefix). When empty the agent uses the
@@ -102,6 +93,12 @@ type AgentConfig struct {
 	AgentImageRepository       string `mapstructure:"agent_image_repository"`
 	AgentAllowMutableTag       bool   `mapstructure:"agent_allow_mutable_tag"`
 	AgentUpgradeRolloutTimeout int    `mapstructure:"agent_upgrade_rollout_timeout"` // seconds, default 300
+
+	// System-release trust is enrollment-pinned in the install manifest. The
+	// management plane may select a release signed by this identity, but cannot
+	// broaden trust through the delivery protocol itself.
+	SystemOIDCIssuer   string `mapstructure:"system_oidc_issuer"`
+	SystemOIDCIdentity string `mapstructure:"system_oidc_identity"`
 
 	// Server-CA pinning on the agent tunnel (Rancher CATTLE_CA_CHECKSUM
 	// semantics). Both are empty by default, in which case the tunnel dialer
@@ -157,13 +154,13 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 		envconfig.Default{Key: "audit_batch_size", Value: 100},
 		envconfig.Default{Key: "audit_poll_interval", Value: 10},
 		envconfig.Default{Key: "audit_delivery", Value: "tunnel"},
-		envconfig.Default{Key: "pull_reconcile_enabled", Value: false},
-		envconfig.Default{Key: "pull_reconcile_interval", Value: 300},
 		envconfig.Default{Key: "ca_cert", Value: ""},
 		envconfig.Default{Key: "ca_checksum", Value: ""},
 		envconfig.Default{Key: "agent_image_repository", Value: ""},
 		envconfig.Default{Key: "agent_allow_mutable_tag", Value: false},
 		envconfig.Default{Key: "agent_upgrade_rollout_timeout", Value: 300},
+		envconfig.Default{Key: "system_oidc_issuer", Value: ""},
+		envconfig.Default{Key: "system_oidc_identity", Value: ""},
 	)
 
 	cfg := &AgentConfig{}
@@ -228,6 +225,8 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	}
 	cfg.CAChecksum = strings.TrimSpace(cfg.CAChecksum)
 	cfg.AgentImageRepository = strings.TrimSpace(cfg.AgentImageRepository)
+	cfg.SystemOIDCIssuer = strings.TrimSpace(cfg.SystemOIDCIssuer)
+	cfg.SystemOIDCIdentity = strings.TrimSpace(cfg.SystemOIDCIdentity)
 
 	return cfg, nil
 }

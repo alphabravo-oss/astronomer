@@ -438,12 +438,15 @@ func (hr *HealthReporter) collectHeartbeat(ctx context.Context) (*protocol.Heart
 	if len(hb.EnabledFeatures) == 0 && len(hb.DeniedFeatures) == 0 {
 		hb.EnabledFeatures, hb.DeniedFeatures = capabilityFeaturesForProfile(hb.PrivilegeProfile)
 	}
+	applyDeliveryCapabilities(hb)
 	// Impersonation capability handshake. Appended AFTER the profile fallback
 	// above so it cannot make the lists non-empty and suppress it. The answer
 	// comes from an hourly-cached SelfSubjectAccessReview, not from the profile
 	// name — the server must gate `enforce` on what the apiserver actually
 	// grants this agent, not on what we think the manifest said.
 	applyImpersonationCapability(hb, hr.impersonation.allowedNow(ctx, hr.client))
+	sort.Strings(hb.EnabledFeatures)
+	sort.Strings(hb.DeniedFeatures)
 
 	// Inventory collection is best-effort and DECOUPLED from liveness (H11):
 	// a failed apiserver List must not suppress the heartbeat. On a partial
@@ -642,6 +645,29 @@ func capabilityFeaturesForProfile(profile string) ([]string, []string) {
 		return []string{"custom_rbac"}, []string{"capability_inference"}
 	default:
 		return []string{"cluster_admin", "exec", "helm", "logs", "mutate", "rbac", "service_proxy", "watch"}, nil
+	}
+}
+
+func applyDeliveryCapabilities(heartbeat *protocol.HeartbeatPayload) {
+	if heartbeat == nil {
+		return
+	}
+	heartbeat.EnabledFeatures = append(heartbeat.EnabledFeatures,
+		protocol.FeatureDeliveryAssignmentsV2,
+		protocol.FeatureDeliveryStatusV2,
+		protocol.FeatureDeliverySystemV2,
+		protocol.FeatureDeliverySourceGit,
+		protocol.FeatureDeliverySourceOCIArtifact,
+		protocol.FeatureDeliverySourceHelmHTTP,
+		protocol.FeatureDeliverySourceHelmOCI,
+		protocol.FeatureDeliveryRendererKustomize,
+		protocol.FeatureDeliveryRendererHelm,
+		protocol.FeatureDeliveryNamespaceScope,
+	)
+	if heartbeat.PrivilegeProfile == agenttemplate.PrivilegeProfileAdmin {
+		heartbeat.EnabledFeatures = append(heartbeat.EnabledFeatures, protocol.FeatureDeliveryPlatformScope)
+	} else {
+		heartbeat.DeniedFeatures = append(heartbeat.DeniedFeatures, protocol.FeatureDeliveryPlatformScope)
 	}
 }
 

@@ -387,7 +387,7 @@ func TestSnapshot_CreatesVeleroBackupCRD(t *testing.T) {
 	h.SetRequester(req)
 
 	body := mustSnapshotJSON(t, map[string]any{
-		"includedNamespaces": []string{"argocd"},
+		"includedNamespaces": []string{"observability"},
 		"ttl":                "168h",
 	})
 	r := snapshotReq(t, http.MethodPost, "/", body, map[string]string{"cluster_id": clusterID.String()})
@@ -435,7 +435,7 @@ func TestSnapshot_CreatesVeleroBackupCRD(t *testing.T) {
 	}
 	spec, _ := crd["spec"].(map[string]any)
 	included, _ := spec["includedNamespaces"].([]any)
-	if len(included) != 1 || included[0] != "argocd" {
+	if len(included) != 1 || included[0] != "observability" {
 		t.Fatalf("includedNamespaces not propagated to CRD: %+v", spec)
 	}
 	if spec["ttl"] != "168h" {
@@ -516,8 +516,8 @@ func TestRestore_CreatesVeleroRestoreCRD(t *testing.T) {
 
 	body := mustSnapshotJSON(t, map[string]any{
 		"spec": map[string]any{
-			"includedNamespaces": []string{"argocd"},
-			"namespaceMapping":   map[string]string{"argocd": "argocd-restored"},
+			"includedNamespaces": []string{"observability"},
+			"namespaceMapping":   map[string]string{"observability": "observability-restored"},
 		},
 	})
 	r := snapshotReq(t, http.MethodPost, "/", body, map[string]string{
@@ -562,7 +562,7 @@ func TestRestore_CreatesVeleroRestoreCRD(t *testing.T) {
 		t.Fatalf("Restore spec.backupName=%v want %q", spec["backupName"], snap.VeleroName)
 	}
 	mapping, _ := spec["namespaceMapping"].(map[string]any)
-	if mapping["argocd"] != "argocd-restored" {
+	if mapping["observability"] != "observability-restored" {
 		t.Fatalf("namespaceMapping not propagated: %+v", spec)
 	}
 }
@@ -601,7 +601,7 @@ func TestRestore_CrossClusterTarget(t *testing.T) {
 
 	body := mustSnapshotJSON(t, map[string]any{
 		"target_cluster_id": targetID.String(),
-		"spec":              map[string]any{"includedNamespaces": []string{"argocd"}},
+		"spec":              map[string]any{"includedNamespaces": []string{"observability"}},
 	})
 	r := snapshotReq(t, http.MethodPost, "/", body, map[string]string{
 		"cluster_id": sourceID.String(),
@@ -663,10 +663,10 @@ func TestSchedule_CRUD(t *testing.T) {
 
 	// CREATE
 	body := mustSnapshotJSON(t, map[string]any{
-		"name":          "daily-argocd",
+		"name":          "daily-observability",
 		"cron_schedule": "0 2 * * *",
 		"spec": map[string]any{
-			"includedNamespaces": []string{"argocd"},
+			"includedNamespaces": []string{"observability"},
 			"ttl":                "168h",
 		},
 	})
@@ -678,7 +678,7 @@ func TestSchedule_CRUD(t *testing.T) {
 	}
 	var created ScheduleResponse
 	unwrap(t, rr, &created)
-	if created.Name != "daily-argocd" {
+	if created.Name != "daily-observability" {
 		t.Fatalf("name mismatch")
 	}
 	if !created.Enabled {
@@ -707,7 +707,7 @@ func TestSchedule_CRUD(t *testing.T) {
 	// UPDATE — disable it.
 	disabled := false
 	upBody := mustSnapshotJSON(t, ScheduleRequest{
-		Name:         "daily-argocd",
+		Name:         "daily-observability",
 		CronSchedule: "0 3 * * *",
 		Enabled:      &disabled,
 	})

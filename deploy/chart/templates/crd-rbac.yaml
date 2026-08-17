@@ -4,9 +4,8 @@
 # hold a leases coordination lock (defensive — leader election is currently
 # disabled by the controller config but the bindings are harmless to grant).
 #
-# The base ServiceAccount already has `* */*` on every other resource via
-# the legacy serviceaccount.yaml template (it doubles as the local-cluster
-# agent SA). This file is additive purely so the CRD path is self-contained:
+# This file keeps the optional CRD integration's authority explicit and
+# self-contained:
 # turning crds.enabled=false leaves the role + binding out of the manifest,
 # making it easy to reason about the controller's blast radius.
 apiVersion: rbac.authorization.k8s.io/v1
@@ -22,10 +21,7 @@ rules:
     resources:
       - clusters
       - projects
-      - clusterbaselines
-      - componentbundles
       - agentprofiles
-      - gitopstargets
     verbs:
       - get
       - list
@@ -40,10 +36,7 @@ rules:
     resources:
       - clusters/status
       - projects/status
-      - clusterbaselines/status
-      - componentbundles/status
       - agentprofiles/status
-      - gitopstargets/status
     verbs:
       - get
       - update
@@ -54,10 +47,7 @@ rules:
     resources:
       - clusters/finalizers
       - projects/finalizers
-      - clusterbaselines/finalizers
-      - componentbundles/finalizers
       - agentprofiles/finalizers
-      - gitopstargets/finalizers
     verbs:
       - update
   # CRD discovery for the informer factories.
@@ -65,44 +55,6 @@ rules:
       - apiextensions.k8s.io
     resources:
       - customresourcedefinitions
-    verbs:
-      - get
-      - list
-      - watch
-  # Argo CD ApplicationSets materialized from GitOpsTarget and ClusterBaseline
-  # CRDs. This is explicit here even though the legacy ServiceAccount role is
-  # broad, so the CRD controller's required cross-namespace writes are visible
-  # in the CRD feature's own RBAC surface.
-  - apiGroups:
-      - argoproj.io
-    resources:
-      - applicationsets
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-  # Argo CD Applications are read only for status rollups. Argo owns the child
-  # Application lifecycle; Astronomer only reports sync/health back onto the
-  # management CRDs.
-  - apiGroups:
-      - argoproj.io
-    resources:
-      - applications
-    verbs:
-      - get
-      - list
-      - watch
-  # Governed GitOps template catalog. GitOpsTarget.applicationSet.templateRef
-  # resolves same-namespace ConfigMaps labeled
-  # management.astronomer.io/gitops-template=true and reads data.template.json.
-  - apiGroups:
-      - ""
-    resources:
-      - configmaps
     verbs:
       - get
       - list

@@ -113,6 +113,8 @@ type CatalogQuerier interface {
 	ListCatalogsForProject(ctx context.Context, projectID uuid.UUID) ([]sqlc.HelmRepositoryWithOwner, error)
 	ListAdminCatalogsIncludingProjectOwned(ctx context.Context, arg sqlc.ListAdminCatalogsIncludingProjectOwnedParams) ([]sqlc.HelmRepositoryWithOwner, error)
 	GetHelmRepositoryWithOwner(ctx context.Context, id uuid.UUID) (sqlc.HelmRepositoryWithOwner, error)
+	GetCatalogVisibilityForProject(ctx context.Context, projectID, catalogID uuid.UUID) (sqlc.CatalogVisibility, error)
+	GetProjectByID(ctx context.Context, id uuid.UUID) (sqlc.Project, error)
 }
 
 // CatalogHandler handles catalog endpoints (helm repositories, charts, installations).
@@ -745,7 +747,7 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 		return 0, 0, fmt.Errorf("build index request: %w", err)
 	}
 	h.applyRepoIndexAuth(req, repo)
-	client := httpclient.SafeClient(30 * time.Second)
+	client := httpclient.SafeClientWithLimit(30*time.Second, catalog.MaxIndexBytes)
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, 0, fmt.Errorf("fetch index: %w", err)
@@ -756,9 +758,12 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 	if resp.StatusCode >= http.StatusBadRequest {
 		return 0, 0, fmt.Errorf("repository returned status %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, catalog.MaxIndexBytes+1))
 	if err != nil {
 		return 0, 0, fmt.Errorf("read index body: %w", err)
+	}
+	if int64(len(body)) > catalog.MaxIndexBytes {
+		return 0, 0, fmt.Errorf("repository index exceeds %d bytes", catalog.MaxIndexBytes)
 	}
 	var index helmIndexFile
 	if err := yaml.Unmarshal(body, &index); err != nil {
@@ -904,6 +909,63 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 
 // --- Helm Charts ---
 
+func catalogProjectQuery(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("project_id"))
+	if raw == "" {
+		return uuid.Nil, false, true
+	}
+	projectID, err := uuid.Parse(raw)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project_id query param")
+		return uuid.Nil, false, false
+	}
+	return projectID, true, true
+}
+
+func catalogVisibilityAllowsRead(visibility sqlc.CatalogVisibility) bool {
+	switch visibility {
+	case sqlc.CatalogVisibilityOwn, sqlc.CatalogVisibilitySubscribedPublic, sqlc.CatalogVisibilityPublic:
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *CatalogHandler) authorizeChartRead(w http.ResponseWriter, r *http.Request, chart sqlc.HelmChart) bool {
+	projectID, projectScoped, ok := catalogProjectQuery(w, r)
+	if !ok {
+		return false
+	}
+	repository, err := h.queries.GetHelmRepositoryByID(r.Context(), chart.RepositoryID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart repository not found")
+		return false
+	}
+	if !projectScoped {
+		if repository.OwnerProjectID.Valid {
+			// A private chart is intentionally indistinguishable from a missing
+			// chart unless the caller selects and is authorized for its project.
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
+			return false
+		}
+		return h.authz.authorizeGlobalAction(w, r, rbac.ResourceCatalog, rbac.VerbRead)
+	}
+	if !h.authz.authorizeProjectAction(w, r, projectID, rbac.ResourceCatalog, rbac.VerbRead) {
+		return false
+	}
+	visibility, err := h.queries.GetCatalogVisibilityForProject(r.Context(), projectID, repository.ID)
+	if err != nil || !catalogVisibilityAllowsRead(visibility) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
+		return false
+	}
+	return true
+}
+
+func catalogVisibleToProject(ctx context.Context, queries CatalogQuerier, projectID, repositoryID uuid.UUID) bool {
+	visibility, err := queries.GetCatalogVisibilityForProject(ctx, projectID, repositoryID)
+	return err == nil && catalogVisibilityAllowsRead(visibility)
+}
+
 // ListCharts handles GET /api/v1/catalog/charts/.
 //
 // Migration 061: when ?project_id=<uuid> is present, the visible catalog
@@ -916,8 +978,22 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 	tag := strings.TrimSpace(r.URL.Query().Get("tag"))
+	pid, projectScoped, ok := catalogProjectQuery(w, r)
+	if !ok {
+		return
+	}
+	if projectScoped && !h.authz.authorizeProjectAction(w, r, pid, rbac.ResourceCatalog, rbac.VerbRead) {
+		return
+	}
+	if !projectScoped && !h.authz.authorizeGlobalAction(w, r, rbac.ResourceCatalog, rbac.VerbRead) {
+		return
+	}
 
 	if tag != "" {
+		if projectScoped {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "tag filtering is available only on the global catalog")
+			return
+		}
 		charts, err := h.queries.ListHelmChartsByTag(r.Context(), sqlc.ListHelmChartsByTagParams{
 			Tag:    tag,
 			Limit:  limit,
@@ -936,12 +1012,7 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if pidRaw := r.URL.Query().Get("project_id"); pidRaw != "" {
-		pid, err := uuid.Parse(pidRaw)
-		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project_id query param")
-			return
-		}
+	if projectScoped {
 		visibleCatalogs, err := h.queries.ListCatalogsForProject(r.Context(), pid)
 		if err != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to resolve project catalogs")
@@ -1008,6 +1079,9 @@ func (h *CatalogHandler) GetChart(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
 		return
 	}
+	if !h.authorizeChartRead(w, r, chart) {
+		return
+	}
 
 	RespondJSON(w, http.StatusOK, chart)
 }
@@ -1017,6 +1091,14 @@ func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Reques
 	chartID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid chart ID")
+		return
+	}
+	chart, err := h.queries.GetHelmChartByID(r.Context(), chartID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
+		return
+	}
+	if !h.authorizeChartRead(w, r, chart) {
 		return
 	}
 	limit := queryLimit(r, 50)
@@ -1075,7 +1157,8 @@ func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Reques
 
 // CreateInstallationRequest represents the request body for creating an installation.
 type CreateInstallationRequest struct {
-	ChartVersionID string `json:"chart_version_id"`
+	ChartVersionID string `json:"chart_version_id" validate:"required,uuid"`
+	ProjectID      string `json:"project_id" validate:"required,uuid"`
 	ReleaseName    string `json:"release_name" validate:"required"`
 	Namespace      string `json:"namespace" validate:"required"`
 	ValuesOverride string `json:"values_override"`
@@ -1134,6 +1217,19 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 	var chart sqlc.HelmChart
 	var repo sqlc.HelmRepository
 	if req.ChartVersionID != "" {
+		projectID, parseErr := uuid.Parse(req.ProjectID)
+		if parseErr != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "A valid project_id is required for catalog installation")
+			return
+		}
+		project, projectErr := h.queries.GetProjectByID(r.Context(), projectID)
+		if projectErr != nil || project.ClusterID != clusterID {
+			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Project is not assigned to the target cluster")
+			return
+		}
+		if !h.authz.authorizeProjectAction(w, r, projectID, rbac.ResourceCatalog, rbac.VerbCreate) {
+			return
+		}
 		cvID, err := uuid.Parse(req.ChartVersionID)
 		if err != nil {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid chart version ID")
@@ -1153,6 +1249,10 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		repo, err = h.queries.GetHelmRepositoryByID(r.Context(), chart.RepositoryID)
 		if err != nil {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Repository not found")
+			return
+		}
+		if !catalogVisibleToProject(r.Context(), h.queries, projectID, repo.ID) {
+			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Chart repository is not visible to this project")
 			return
 		}
 	}
@@ -1719,6 +1819,9 @@ func (h *CatalogHandler) GetChartReadme(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
 		return
 	}
+	if !h.authorizeChartRead(w, r, chart) {
+		return
+	}
 	version, err := h.resolveChartVersion(r, chart)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No versions found for this chart.")
@@ -1750,6 +1853,9 @@ func (h *CatalogHandler) GetChartValues(w http.ResponseWriter, r *http.Request) 
 	chart, err := h.queries.GetHelmChartByID(r.Context(), id)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
+		return
+	}
+	if !h.authorizeChartRead(w, r, chart) {
 		return
 	}
 	version, err := h.resolveChartVersion(r, chart)

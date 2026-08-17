@@ -178,7 +178,7 @@ function DashboardLayout() {
         <CommandPalette />
         {/*
           Mounted once at the dashboard layout level so the bottom drawer
-          persists across navigation between cluster / workload / argo pages.
+          persists across navigation between cluster, workload, and delivery pages.
           Renders nothing unless tabs are open.
         */}
         <WindowManager />
@@ -198,7 +198,6 @@ function DashboardLayout() {
 
 const featurePathPrefixes: Array<{ prefix: string; flag: FeatureFlagKey }> = [
   { prefix: '/dashboard/projects', flag: 'feature.projects' },
-  { prefix: '/dashboard/argocd', flag: 'feature.argocd' },
   { prefix: '/dashboard/backups', flag: 'feature.backups' },
   { prefix: '/dashboard/catalog', flag: 'feature.catalog' },
   { prefix: '/dashboard/tools', flag: 'feature.catalog' },

@@ -4,7 +4,7 @@ DEX-01 runtime writer authority.
 DexHandler.Apply reaches Kubernetes through the connected cluster agent, so
 this Role binds the agent ServiceAccount rather than the management server SA.
 Kubernetes RBAC supports resourceNames for existing-object verbs but cannot
-name-scope `create`, so create is intentionally absent. Helm/Argo creates the
+name-scope `create`, so create is intentionally absent. Helm creates the
 metadata-only retained Secret before the Deployment and handler are activated.
 */ -}}
 {{- if and .Values.dex.enabled .Values.dex.runtimeWriterServiceAccount.name }}
@@ -13,8 +13,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "astronomer.fullname" . }}-dex-runtime-writer
-  annotations:
-    argocd.argoproj.io/sync-wave: "-2"
   labels:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
 rules:
@@ -37,8 +35,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "astronomer.fullname" . }}-dex-runtime-writer
-  annotations:
-    argocd.argoproj.io/sync-wave: "-2"
   labels:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
 roleRef:

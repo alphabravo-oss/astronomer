@@ -19,6 +19,3 @@ rules:
     verbs: [read, list]
   - resource: alerts
     verbs: [read, list]
-  - resource: argocd
-    verbs: [read, list]
-

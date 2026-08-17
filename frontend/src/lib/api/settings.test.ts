@@ -72,7 +72,7 @@ describe('settings API client', () => {
     });
   });
 
-  it('normalizes fleet quota usage snapshots for the existing table UI', async () => {
+  it('normalizes deployment quota usage snapshots for the existing table UI', async () => {
     mockedApi.get.mockResolvedValueOnce({
       data: {
         data: {

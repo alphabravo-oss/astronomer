@@ -94,20 +94,11 @@ type ClusterQuerier interface {
 	GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterRegistryConfig, error)
 	UpsertClusterRegistryConfig(ctx context.Context, arg sqlc.UpsertClusterRegistryConfigParams) (sqlc.ClusterRegistryConfig, error)
 	DeleteClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) error
-	// Sprint 074 — auto-attach the platform-default cluster_template on
-	// Create. All three calls are best-effort: a failure in any one MUST
-	// NOT fail the cluster create. The apply worker / drift sweep is the
-	// durable retry path. GetPlatformConfig is read-only; the second two
-	// are the writes the auto-attach makes on success.
 	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
-	GetClusterTemplateByID(ctx context.Context, id uuid.UUID) (sqlc.ClusterTemplate, error)
-	UpsertClusterTemplateApplication(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error)
 	// Platform-TLS surface for the public CA-bundle endpoint
 	// (GET /api/v1/register/ca.crt) used by the Rancher-style
 	// `curl --cacert ca.crt -sfL …` registration variant.
 	GetPlatformSetting(ctx context.Context, key string) (sqlc.PlatformSetting, error)
-	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
-	ListArgoCDApplicationsByManagedClusterTargets(ctx context.Context, arg sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams) ([]sqlc.ArgocdApplication, error)
 	// Sprint 086 — cluster-condition remediation history. Read by
 	// the cluster detail page so operators can see what the
 	// reconciler has done in response to red condition pills.
@@ -169,23 +160,18 @@ type ClusterHandler struct {
 	// taskOutbox persists critical task intents before Redis delivery.
 	// Optional; when nil the handler falls back to direct enqueue and
 	// periodic sweeps.
-	taskOutbox tasks.TaskOutboxWriter
-	// argoCDRefreshQueue is the asynq client used to enqueue
-	// argocd:refresh_managed_cluster_labels tasks after a cluster Update mutates
-	// `labels`. Same interface as decommissionQueue (Enqueue only), reused on
-	// purpose so wiring stays trivial. Optional and nil-safe.
-	argoCDRefreshQueue   ClusterDecommissionEnqueuer
+	taskOutbox           tasks.TaskOutboxWriter
 	agentImage           string
-	pullReconcileEnabled bool
+	systemArtifactURL    string
+	systemArtifactDigest string
+	systemOIDCIssuer     string
+	systemOIDCIdentity   string
 	// enforcer gates Create against the fleet-wide cluster cap
 	// configured by the 'global' quota plan (migration 051).
 	// Optional; nil disables the check (test fakes, pre-migration).
 	enforcer *quota.Enforcer
 	// maintenanceGate (sprint 057) gates destructive mutations.
 	maintenanceGate *MaintenanceGate
-	// templateApplyQueue (sprint 074) enqueues cluster_template:apply
-	// after auto-attach inserts the application row.
-	templateApplyQueue ClusterDecommissionEnqueuer
 	// registration (sprint 078) is the shared phase-machine service.
 	// Create writes the initial cluster_registration_steps rows so the
 	// wizard page-3 timeline has something to render. nil-safe.
@@ -398,12 +384,18 @@ func (h *ClusterHandler) SetAgentImage(repository, tag string) {
 	h.agentImage = targetAgentImage(repository, tag)
 }
 
-// SetPullReconcileEnabled records whether rendered agent manifests should carry
-// the Fleet-pull flag, so the agent's Phase-2 self-apply preserves it.
-func (h *ClusterHandler) SetPullReconcileEnabled(enabled bool) {
-	if h != nil {
-		h.pullReconcileEnabled = enabled
+// SetDeliverySystemBootstrap configures the immutable, signed Flux system
+// artifact embedded in new-cluster registration manifests. Invalid or partial
+// values are omitted by the renderer; production startup validation rejects
+// that configuration before the API is served.
+func (h *ClusterHandler) SetDeliverySystemBootstrap(repository, digest, issuer, identity string) {
+	if h == nil {
+		return
 	}
+	h.systemArtifactURL = strings.TrimSpace(repository)
+	h.systemArtifactDigest = strings.TrimSpace(digest)
+	h.systemOIDCIssuer = strings.TrimSpace(issuer)
+	h.systemOIDCIdentity = strings.TrimSpace(identity)
 }
 
 // SetEventPublisher wires the SSE bus so cluster CRUD operations fan out
@@ -466,82 +458,12 @@ func (h *ClusterHandler) SetTaskOutbox(q tasks.TaskOutboxWriter) {
 	h.taskOutbox = q
 }
 
-// SetTemplateApplyQueue wires the asynq client used by Create's
-// auto-attach (sprint 074) to schedule the cluster_template:apply task
-// immediately after the auto-attached application row is written.
-// Optional and nil-safe; without it, the drift_check sweep picks up the
-// 'pending' row on its next pass.
-func (h *ClusterHandler) SetTemplateApplyQueue(q ClusterDecommissionEnqueuer) {
-	if h == nil {
-		return
-	}
-	h.templateApplyQueue = q
-}
-
-// SetArgoCDRefreshQueue wires the asynq client used by the Update handler to
-// schedule the argocd:refresh_managed_cluster_labels task after a labels
-// mutation. Optional: nil means changes to clusters.labels won't propagate to
-// the upstream ArgoCD cluster Secrets — operators would have to re-register
-// the cluster manually. In a normal deployment this is wired alongside
-// SetDecommissionQueue.
-func (h *ClusterHandler) SetArgoCDRefreshQueue(q ClusterDecommissionEnqueuer) {
-	if h == nil {
-		return
-	}
-	h.argoCDRefreshQueue = q
-}
-
 // publishEvent is a nil-safe wrapper around the optional publisher.
 func (h *ClusterHandler) publishEvent(eventType string, data any) {
 	if h == nil || h.publisher == nil {
 		return
 	}
 	h.publisher.Publish(eventType, data)
-}
-
-// enqueueArgoCDLabelRefresh schedules a refresh of the upstream ArgoCD cluster
-// Secret labels for this cluster across every ArgoCD instance it's registered
-// into. Best-effort: when the queue is unwired, when task construction fails,
-// or when redis is briefly unavailable we silently skip — operators can
-// re-issue the refresh by hitting PUT /api/v1/clusters/{id}/ again.
-func (h *ClusterHandler) enqueueArgoCDLabelRefresh(r *http.Request, clusterID uuid.UUID) {
-	if h == nil || h.argoCDRefreshQueue == nil {
-		return
-	}
-	task, err := tasks.NewArgoCDRefreshManagedClusterLabelsTask(clusterID)
-	if err != nil {
-		return
-	}
-	// Stamp correlation_id + W3C traceparent into the payload so worker logs
-	// tie back to the originating request. Mirrors the pattern in the
-	// decommission enqueue.
-	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
-	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
-	_, _ = h.argoCDRefreshQueue.Enqueue(task)
-}
-
-// enqueueArgoCDAutoRegister schedules a lazy, label-based ArgoCD auto-register
-// pass for this cluster after a labels mutation. This is what lets a cluster
-// that newly matches the configured auto-register selector get registered into
-// ArgoCD without a Git commit — the worker re-evaluates the selector and
-// registers when it now matches. Best-effort and nil-safe, mirroring
-// enqueueArgoCDLabelRefresh: it reuses the same queue so wiring stays trivial.
-func (h *ClusterHandler) enqueueArgoCDAutoRegister(r *http.Request, clusterID uuid.UUID) {
-	if h == nil || h.argoCDRefreshQueue == nil {
-		return
-	}
-	task, err := tasks.NewArgoCDAutoRegisterClusterTask(clusterID)
-	if err != nil {
-		return
-	}
-	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
-	// Dedup on a stable task id rather than asynq.Unique: the enriched payload
-	// carries a per-request correlation_id/traceparent, so Unique (which hashes
-	// type+payload) would treat every PUT as distinct and never collapse them.
-	// A stable TaskID keyed on the cluster makes asynq reject re-enqueues while
-	// an auto-register task for the same cluster is still active.
-	task = asynq.NewTask(task.Type(), payload)
-	_, _ = h.argoCDRefreshQueue.Enqueue(task, asynq.MaxRetry(5), asynq.TaskID("argocd-auto-register:"+clusterID.String()))
 }
 
 // The previous clusterWithMetrics struct (anonymous-embed sqlc.Cluster +
@@ -577,19 +499,8 @@ func (a metricsRequesterAdapter) Do(ctx context.Context, clusterID, method, path
 // for up to 5s × N clusters. The background metrics
 // publisher (internal/metrics/publisher.go) keeps the cache warm; stale
 // or missing entries return zero values rather than blocking.
-func (h *ClusterHandler) enrichClusterFromCache(ctx context.Context, c sqlc.Cluster, manageBaseline bool, argo *argoCDPageData) ClusterResponse {
+func (h *ClusterHandler) enrichClusterFromCache(_ context.Context, c sqlc.Cluster) ClusterResponse {
 	out := clusterToResponse(c)
-	switch {
-	case argo == nil:
-		// No pre-batched data (defensive) — fall back to the per-cluster query.
-		h.enrichClusterArgoCD(ctx, &out, c, manageBaseline)
-	case !argo.rowsOK:
-		// The batch managed-cluster query failed for the whole page; mirror the
-		// per-cluster rows-error path (baseline only, Registered stays false).
-		setArgoCDBaselineDefaults(&out, c, manageBaseline)
-	default:
-		applyArgoCDEnrichment(&out, c, argo.rowsByCluster[c.ID], argo.candidateApps, argo.appsErr, manageBaseline)
-	}
 	if h.metrics == nil {
 		return out
 	}
@@ -607,9 +518,6 @@ func (h *ClusterHandler) enrichClusterFromCache(ctx context.Context, c sqlc.Clus
 // keep a hung agent from holding the HTTP handler indefinitely.
 func (h *ClusterHandler) enrichClusterFresh(ctx context.Context, c sqlc.Cluster) ClusterResponse {
 	out := clusterToResponse(c)
-	// Single-cluster slow path: one settings read here is not an N+1, so we
-	// resolve manageBaseline inline rather than threading it from the caller.
-	h.enrichClusterArgoCD(ctx, &out, c, h.argoCDManageBaseline(ctx))
 	if h.metrics == nil {
 		return out
 	}
@@ -623,312 +531,7 @@ func (h *ClusterHandler) enrichClusterFresh(ctx context.Context, c sqlc.Cluster)
 	return out
 }
 
-// argoCDManageBaseline reads the global argocd.manage_platform_baseline
-// platform setting (default true). Hoisted out of enrichClusterArgoCD so the
-// List loop resolves it once per page instead of once per cluster. Nil-safe.
-func (h *ClusterHandler) argoCDManageBaseline(ctx context.Context) bool {
-	if h == nil || h.queries == nil {
-		return true
-	}
-	manageBaseline := true
-	if row, err := h.queries.GetPlatformSetting(ctx, "argocd.manage_platform_baseline"); err == nil && len(row.Value) > 0 {
-		var b bool
-		if err := json.Unmarshal(row.Value, &b); err == nil {
-			manageBaseline = b
-		}
-	}
-	return manageBaseline
-}
-
-// argoCDPageData carries the pre-batched ArgoCD enrichment inputs for a whole
-// page of clusters, built once by List so the per-cluster loop does zero DB
-// queries. rowsOK is false when the batch managed-cluster query failed;
-// appsErr is true when the (single, page-wide) applications query failed.
-type argoCDPageData struct {
-	rowsByCluster map[uuid.UUID][]sqlc.ArgocdManagedCluster
-	rowsOK        bool
-	candidateApps []sqlc.ArgocdApplication
-	appsErr       bool
-}
-
-// argoCDBatchQuerier is the optional batch surface used to collapse the
-// per-cluster ArgoCD N+1 into one query. Declared as an optional interface
-// (rather than folded into ClusterQuerier) so the many existing ClusterQuerier
-// test fakes keep compiling; production *sqlc.Queries satisfies it, so the
-// dashboard List path gets the batched query while callers that don't
-// implement it fall back to the per-cluster enrichment.
-type argoCDBatchQuerier interface {
-	ListArgoCDManagedClustersByClusterIDs(ctx context.Context, clusterIds []uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
-}
-
-// loadArgoCDPageData batches the two ArgoCD enrichment queries for a page:
-// one ListArgoCDManagedClustersByClusterIDs for all clusters, then one
-// ListArgoCDApplicationsByManagedClusterTargets over the union of every
-// cluster's instance-ids/targets. Replaces the ~2-queries-per-cluster N+1 the
-// List loop used to run. Best-effort: a query error is signalled via the
-// rowsOK/appsErr flags so the loop degrades exactly like the old per-cluster
-// path did (baseline-only / "drift unavailable") rather than 500-ing. Returns
-// nil when the store doesn't implement the batch query, so List falls back to
-// the per-cluster enrichClusterArgoCD path.
-func (h *ClusterHandler) loadArgoCDPageData(ctx context.Context, clusters []sqlc.Cluster) *argoCDPageData {
-	if h == nil || h.queries == nil || len(clusters) == 0 {
-		return nil
-	}
-	batchQ, ok := h.queries.(argoCDBatchQuerier)
-	if !ok {
-		return nil
-	}
-	data := &argoCDPageData{rowsByCluster: map[uuid.UUID][]sqlc.ArgocdManagedCluster{}, rowsOK: true}
-	ids := make([]uuid.UUID, len(clusters))
-	for i, c := range clusters {
-		ids[i] = c.ID
-	}
-	rows, err := batchQ.ListArgoCDManagedClustersByClusterIDs(ctx, ids)
-	if err != nil {
-		data.rowsOK = false
-		return data
-	}
-	for _, row := range rows {
-		data.rowsByCluster[row.ClusterID] = append(data.rowsByCluster[row.ClusterID], row)
-	}
-
-	instanceIDs, targets := argoCDPageApplicationTargets(clusters, data.rowsByCluster)
-	if len(instanceIDs) == 0 || len(targets) == 0 {
-		return data
-	}
-	apps, err := h.queries.ListArgoCDApplicationsByManagedClusterTargets(ctx, sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams{
-		ArgocdInstanceIds:   instanceIDs,
-		DestinationClusters: targets,
-	})
-	if err != nil {
-		data.appsErr = true
-		return data
-	}
-	data.candidateApps = apps
-	return data
-}
-
-// argoCDPageApplicationTargets unions every cluster's (instanceIDs, targets)
-// so the page can load candidate apps in a single query. Each cluster later
-// re-filters this candidate set to its own predicate via filterAppsForTargets,
-// making the per-cluster result identical to the single-cluster query.
-func argoCDPageApplicationTargets(clusters []sqlc.Cluster, rowsByCluster map[uuid.UUID][]sqlc.ArgocdManagedCluster) ([]uuid.UUID, []string) {
-	seenIDs := map[uuid.UUID]struct{}{}
-	seenTargets := map[string]struct{}{}
-	var ids []uuid.UUID
-	var targets []string
-	for _, c := range clusters {
-		cIDs, cTargets := argoCDManagedClusterApplicationTargets(c, rowsByCluster[c.ID])
-		for _, id := range cIDs {
-			if _, ok := seenIDs[id]; !ok {
-				seenIDs[id] = struct{}{}
-				ids = append(ids, id)
-			}
-		}
-		for _, t := range cTargets {
-			if _, ok := seenTargets[t]; !ok {
-				seenTargets[t] = struct{}{}
-				targets = append(targets, t)
-			}
-		}
-	}
-	return ids, targets
-}
-
-// filterAppsForTargets applies the ListArgoCDApplicationsByManagedClusterTargets
-// predicate (instance_id ∈ ids AND destination_cluster ∈ targets) in memory, so
-// a page-wide candidate set can be narrowed to one cluster without another
-// query.
-func filterAppsForTargets(apps []sqlc.ArgocdApplication, instanceIDs []uuid.UUID, targets []string) []sqlc.ArgocdApplication {
-	idSet := make(map[uuid.UUID]struct{}, len(instanceIDs))
-	for _, id := range instanceIDs {
-		idSet[id] = struct{}{}
-	}
-	targetSet := make(map[string]struct{}, len(targets))
-	for _, t := range targets {
-		targetSet[t] = struct{}{}
-	}
-	out := make([]sqlc.ArgocdApplication, 0, len(apps))
-	for _, app := range apps {
-		if _, ok := idSet[app.ArgocdInstanceID]; !ok {
-			continue
-		}
-		if _, ok := targetSet[app.DestinationCluster]; !ok {
-			continue
-		}
-		out = append(out, app)
-	}
-	return out
-}
-
-// setArgoCDBaselineDefaults sets the baseline-ownership fields that don't depend
-// on the managed-cluster rows. Shared by the rows-error fast path and the full
-// enrichment so a failed lookup still reports a sensible baseline.
-func setArgoCDBaselineDefaults(out *ClusterResponse, c sqlc.Cluster, manageBaseline bool) {
-	out.ArgoCD.BaselineManagedBy = "helm"
-	if c.IsLocal {
-		out.ArgoCD.BaselineManagedBy = "local"
-	} else if manageBaseline {
-		out.ArgoCD.BaselineManagedBy = "argocd_pending"
-	}
-	out.ArgoCD.BaselineComponents = baselineComponentOwnership(out.ArgoCD.BaselineManagedBy)
-}
-
-// applyArgoCDEnrichment fills out.ArgoCD from pre-loaded managed-cluster rows
-// and a candidate app set (which may be a page-wide superset — it is re-filtered
-// to this cluster). Mirrors the old per-cluster enrichClusterArgoCD body but
-// takes its inputs as arguments instead of querying, so List can drive it from
-// one batched fetch.
-func applyArgoCDEnrichment(out *ClusterResponse, c sqlc.Cluster, rows []sqlc.ArgocdManagedCluster, candidateApps []sqlc.ArgocdApplication, appsErr, manageBaseline bool) {
-	if out == nil {
-		return
-	}
-	setArgoCDBaselineDefaults(out, c, manageBaseline)
-	out.ArgoCD.Registered = len(rows) > 0
-	out.ArgoCD.InstanceCount = len(rows)
-	out.ArgoCD.ClusterSecretNames = make([]string, 0, len(rows))
-	for _, row := range rows {
-		if row.ClusterSecretName != "" {
-			out.ArgoCD.ClusterSecretNames = append(out.ArgoCD.ClusterSecretNames, row.ClusterSecretName)
-		}
-	}
-	if out.ArgoCD.Registered && manageBaseline && !c.IsLocal {
-		out.ArgoCD.BaselineManagedBy = "argocd"
-	}
-	out.ArgoCD.BaselineComponents = baselineComponentOwnership(out.ArgoCD.BaselineManagedBy)
-
-	instanceIDs, targets := argoCDManagedClusterApplicationTargets(c, rows)
-	if len(instanceIDs) == 0 || len(targets) == 0 {
-		return
-	}
-	if appsErr {
-		out.ArgoCD.Drift.LastError = "cached ArgoCD application drift unavailable"
-		return
-	}
-	out.ArgoCD.Drift = summarizeArgoCDDrift(filterAppsForTargets(candidateApps, instanceIDs, targets))
-}
-
-func (h *ClusterHandler) enrichClusterArgoCD(ctx context.Context, out *ClusterResponse, c sqlc.Cluster, manageBaseline bool) {
-	if h == nil || h.queries == nil || out == nil {
-		return
-	}
-	rows, err := h.queries.ListArgoCDManagedClustersByCluster(ctx, c.ID)
-	if err != nil {
-		// Preserve the original rows-error behaviour: baseline defaults set,
-		// Registered left false, no drift lookup.
-		setArgoCDBaselineDefaults(out, c, manageBaseline)
-		return
-	}
-	instanceIDs, targets := argoCDManagedClusterApplicationTargets(c, rows)
-	var apps []sqlc.ArgocdApplication
-	appsErr := false
-	if len(instanceIDs) > 0 && len(targets) > 0 {
-		fetched, ferr := h.queries.ListArgoCDApplicationsByManagedClusterTargets(ctx, sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams{
-			ArgocdInstanceIds:   instanceIDs,
-			DestinationClusters: targets,
-		})
-		if ferr != nil {
-			appsErr = true
-		} else {
-			apps = fetched
-		}
-	}
-	applyArgoCDEnrichment(out, c, rows, apps, appsErr, manageBaseline)
-}
-
-func argoCDManagedClusterApplicationTargets(c sqlc.Cluster, rows []sqlc.ArgocdManagedCluster) ([]uuid.UUID, []string) {
-	seenIDs := map[uuid.UUID]struct{}{}
-	seenTargets := map[string]struct{}{}
-	instanceIDs := make([]uuid.UUID, 0, len(rows))
-	targets := make([]string, 0, len(rows)*2+1)
-
-	addID := func(id uuid.UUID) {
-		if id == uuid.Nil {
-			return
-		}
-		if _, ok := seenIDs[id]; ok {
-			return
-		}
-		seenIDs[id] = struct{}{}
-		instanceIDs = append(instanceIDs, id)
-	}
-	addTarget := func(target string) {
-		target = strings.TrimSpace(target)
-		if target == "" {
-			return
-		}
-		if _, ok := seenTargets[target]; ok {
-			return
-		}
-		seenTargets[target] = struct{}{}
-		targets = append(targets, target)
-	}
-
-	for _, row := range rows {
-		addID(row.ArgocdInstanceID)
-		addTarget(row.ServerUrl)
-		addTarget(row.ClusterSecretName)
-	}
-	addTarget(c.Name)
-
-	return instanceIDs, targets
-}
-
-func summarizeArgoCDDrift(apps []sqlc.ArgocdApplication) ClusterArgoCDDriftSummary {
-	out := ClusterArgoCDDriftSummary{AppCount: len(apps)}
-	var latest time.Time
-	for _, app := range apps {
-		switch normalizeArgoStatus(app.SyncStatus) {
-		case "synced":
-			out.SyncedCount++
-		case "outofsync":
-			out.OutOfSyncCount++
-		default:
-			out.UnknownSyncCount++
-		}
-
-		switch normalizeArgoStatus(app.HealthStatus) {
-		case "healthy":
-			out.HealthyCount++
-		case "progressing":
-			out.ProgressingCount++
-		case "degraded":
-			out.DegradedCount++
-		default:
-			out.UnknownHealthCount++
-		}
-
-		if app.LastSynced.Valid && app.LastSynced.Time.After(latest) {
-			latest = app.LastSynced.Time
-		}
-		out.ResourceCreatedCount += int(app.ResourceCreatedCount)
-		out.ResourceChangedCount += int(app.ResourceChangedCount)
-		out.ResourcePrunedCount += int(app.ResourcePrunedCount)
-	}
-	if !latest.IsZero() {
-		s := latest.UTC().Format(time.RFC3339Nano)
-		out.LastSynced = &s
-	}
-	if out.DegradedCount > 0 {
-		out.LastError = fmt.Sprintf("%d degraded ArgoCD application%s", out.DegradedCount, pluralSuffix(out.DegradedCount))
-	} else if out.OutOfSyncCount > 0 {
-		out.LastError = fmt.Sprintf("%d out-of-sync ArgoCD application%s", out.OutOfSyncCount, pluralSuffix(out.OutOfSyncCount))
-	}
-	return out
-}
-
-func normalizeArgoStatus(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	replacer := strings.NewReplacer("_", "", "-", "", " ", "")
-	return replacer.Replace(s)
-}
-
-func pluralSuffix(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
+// --- Request / Response types ---
 
 // --- Request / Response types ---
 
@@ -1035,10 +638,6 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Hoist the global platform-setting read out of the per-cluster loop:
-	// one settings query for the whole page instead of one per cluster.
-	manageBaseline := h.argoCDManageBaseline(r.Context())
-
 	// One query for all in-flight decommissions, scoped to this page's cluster
 	// IDs → mark the matching rows Decommissioning (avoids an N+1 per cluster).
 	// Best-effort: on error we just don't flag anything.
@@ -1061,13 +660,9 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	decommissioning := h.inFlightDecommissionSet(r.Context(), pageIDs, fleetTotal)
 
-	// Batch the ArgoCD enrichment for the whole page (managed-cluster rows +
-	// their applications) into two queries instead of ~2 per cluster.
-	argo := h.loadArgoCDPageData(r.Context(), clusters)
-
 	enriched := make([]ClusterResponse, 0, len(clusters))
 	for _, c := range clusters {
-		resp := h.enrichClusterFromCache(r.Context(), c, manageBaseline, argo)
+		resp := h.enrichClusterFromCache(r.Context(), c)
 		resp.Decommissioning = decommissioning[c.ID]
 		enriched = append(enriched, resp)
 	}
@@ -1203,96 +798,8 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"distribution": req.Distribution,
 	})
 
-	// Sprint 074 — auto-attach the platform-default cluster template
-	// (typically the seeded "Platform baseline" — trivy-operator,
-	// kube-state-metrics, node-exporter, fluent-bit, ingress-nginx,
-	// cert-manager, gatekeeper).
-	// Best-effort: a failure here MUST NOT fail the cluster create.
-	// The apply worker (sprint 049) is the durable retry path; the
-	// drift_check sweep picks up any 'pending' row left behind.
-	h.autoAttachDefaultTemplate(r, cluster.ID)
-
 	w.Header().Set("Location", "/api/v1/clusters/"+cluster.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, clusterToResponse(cluster))
-}
-
-// autoAttachDefaultTemplate records a cluster_template_applications row
-// pointing at the platform's configured default template (sprint 074).
-// All steps are best-effort — every error path is a warn log + return,
-// never a failed cluster create.
-//
-// Why three separate query calls instead of a single transaction? The
-// auto-attach is logically optional and the existing sqlc Queries
-// surface doesn't expose a tx-bound batch. A partial state
-// (cluster exists, application row missing) is exactly the case the
-// reapply endpoint (this same sprint) handles — the operator can opt
-// the cluster in later without re-registering it.
-func (h *ClusterHandler) autoAttachDefaultTemplate(r *http.Request, clusterID uuid.UUID) {
-	if h == nil || h.queries == nil {
-		return
-	}
-	ctx := r.Context()
-	cfg, err := h.queries.GetPlatformConfig(ctx)
-	if err != nil {
-		// Singleton row missing or DB blip — fall through; the
-		// drift_check sweep won't help here (there's nothing to drift
-		// from yet) but the operator can still hit the reapply
-		// endpoint after the platform_configuration row materializes.
-		return
-	}
-	if !cfg.DefaultClusterTemplateID.Valid {
-		// Operator hasn't enabled the auto-attach default. Legacy
-		// behavior: clusters come up bare and the operator wires
-		// tools click-ops.
-		return
-	}
-	templateID := uuid.UUID(cfg.DefaultClusterTemplateID.Bytes)
-	tmpl, err := h.queries.GetClusterTemplateByID(ctx, templateID)
-	if err != nil {
-		// Stale default — the operator deleted the template after
-		// pointing platform_configuration at it (and the FK's
-		// ON DELETE SET NULL hasn't run yet because the row hasn't
-		// been deleted, or the FK trigger races with this read).
-		// Either way, log and move on.
-		return
-	}
-	if _, err := h.queries.UpsertClusterTemplateApplication(ctx, sqlc.UpsertClusterTemplateApplicationParams{
-		ClusterID:    clusterID,
-		TemplateID:   tmpl.ID,
-		SpecSnapshot: tmpl.Spec,
-	}); err != nil {
-		return
-	}
-	recordAudit(r, h.queries, "cluster.template.auto_attached", "cluster", clusterID.String(), "", map[string]any{
-		"template_id":   tmpl.ID.String(),
-		"template_name": tmpl.Name,
-		"source":        "platform_default",
-	})
-	h.enqueueTemplateApply(r, clusterID)
-}
-
-// enqueueTemplateApply schedules a cluster_template:apply task for the
-// freshly auto-attached row. Mirrors the pattern in
-// ClusterTemplateHandler.enqueueApply but lives here so the cluster
-// Create path doesn't need a circular dependency on the template
-// handler. Nil-safe: when templateApplyQueue is unwired, the periodic
-// sweep is the fallback.
-func (h *ClusterHandler) enqueueTemplateApply(r *http.Request, clusterID uuid.UUID) {
-	if h == nil || (h.templateApplyQueue == nil && h.taskOutbox == nil) {
-		return
-	}
-	task, err := tasks.NewClusterTemplateApplyTask(clusterID)
-	if err != nil {
-		return
-	}
-	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
-	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
-	if enqueueClusterTemplateApplyOutbox(r.Context(), h.taskOutbox, task, clusterID) {
-		return
-	}
-	if h.templateApplyQueue != nil {
-		_, _ = h.templateApplyQueue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
-	}
 }
 
 // Get handles GET /api/v1/clusters/{id}/.
@@ -1395,17 +902,6 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 		"display_name": cluster.DisplayName,
 		"status":       cluster.Status,
 	})
-
-	// Propagate the (possibly mutated) cluster.labels onto every upstream
-	// ArgoCD cluster Secret this cluster is registered into. The task is
-	// idempotent — it diffs the current Secret labels against the desired set
-	// and skips the PATCH when they match — so we enqueue on every Update
-	// rather than diffing JSONB here.
-	h.enqueueArgoCDLabelRefresh(r, cluster.ID)
-	// Labels may have changed such that the cluster now matches the
-	// auto-register selector; trigger a lazy re-evaluation so it gets
-	// registered into ArgoCD without requiring a Git commit.
-	h.enqueueArgoCDAutoRegister(r, cluster.ID)
 
 	recordAudit(r, h.queries, "cluster.update", "cluster", cluster.ID.String(), cluster.Name, map[string]any{
 		"display_name": req.DisplayName,
@@ -2518,9 +2014,6 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 	if h != nil && h.agentImage != "" {
 		agentImage = h.agentImage
 	}
-	if image := strings.TrimSpace(annotations[agenttemplate.AgentImageAnnotation]); image != "" {
-		agentImage = image
-	}
 	// Server-CA pin: populate the CA bundle + checksum from the operator-provided
 	// registration.ca_bundle. Empty when no private CA is configured, in which
 	// case the agent falls back to the OS trust store (no behavior change).
@@ -2538,35 +2031,11 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 		PrivilegeProfile:     agenttemplate.NormalizePrivilegeProfile(annotations[agenttemplate.PrivilegeProfileAnnotation]),
 		ServiceAccountName:   strings.TrimSpace(annotations[agenttemplate.AgentServiceAccountNameAnnotation]),
 		PodLabels:            clusterAgentPodLabels(annotations),
-		PullReconcileEnabled: h != nil && h.pullReconcileEnabled,
+		SystemArtifactURL:    h.systemArtifactURL,
+		SystemArtifactDigest: h.systemArtifactDigest,
+		SystemOIDCIssuer:     h.systemOIDCIssuer,
+		SystemOIDCIdentity:   h.systemOIDCIdentity,
 	})
-}
-
-// RenderAgentManifestForCluster renders the agent's own install manifest
-// (Deployment + RBAC + config) for a cluster at the management plane's central
-// agent image — without an HTTP request. It is the (a) source of the Fleet-style
-// PULL desired state: the server-side DesiredState adapter (internal/server)
-// combines this with the enabled baseline components.
-//
-// The server URL is taken from platform configuration. The registration token
-// is intentionally left as the template placeholder: the pull path targets an
-// already-connected, already-credentialed agent (its durable token Secret is
-// mounted and self-managed), so re-rendering does NOT mint or rotate a token.
-// The manifest's purpose here is the Deployment/RBAC/config shape, which the
-// agent server-side-applies over its own footprint.
-func (h *ClusterHandler) RenderAgentManifestForCluster(ctx context.Context, clusterID uuid.UUID) (string, error) {
-	if h == nil {
-		return "", fmt.Errorf("nil cluster handler")
-	}
-	cluster, err := h.queries.GetClusterByID(ctx, clusterID)
-	if err != nil {
-		return "", fmt.Errorf("get cluster %s: %w", clusterID, err)
-	}
-	serverURL := ""
-	if cfg, cerr := h.queries.GetPlatformConfig(ctx); cerr == nil {
-		serverURL = strings.TrimRight(strings.TrimSpace(cfg.ServerUrl), "/")
-	}
-	return h.renderAgentInstallManifest(cluster, "REPLACE_WITH_REGISTRATION_TOKEN", serverURL), nil
 }
 
 func clusterAgentPrivilegeProfile(raw json.RawMessage) string {

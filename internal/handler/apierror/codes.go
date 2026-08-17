@@ -181,11 +181,9 @@ const (
 	// InvalidChallenge indicates a invalid challenge condition.
 	InvalidChallenge Code = "invalid_challenge"
 
-	// InvalidClusterID indicates a invalid cluster condition. NOTE: the wire
-	// value is "invalid_cluster" (NOT "invalid_cluster_id") — preserved from
-	// the pre-codemod literal at anomaly.go and argocd.go. The Go identifier
-	// keeps the ...ID suffix for catalog consistency with the other invalid_*
-	// id codes; do not assume the constant name equals the emitted string.
+	// InvalidClusterID indicates an invalid cluster condition. The wire value is
+	// "invalid_cluster"; the Go identifier keeps the ID suffix for catalog
+	// consistency with the other invalid-ID codes.
 	InvalidClusterID Code = "invalid_cluster"
 
 	// InvalidCode indicates a invalid code condition.
@@ -336,10 +334,6 @@ const (
 
 	// UnsafeReplacementBlocked indicates a unsafe replacement blocked condition.
 	UnsafeReplacementBlocked Code = "unsafe_replacement_blocked"
-	// UnsafeLeaveLocalBlocked indicates leave_local was refused because the
-	// component is running under ArgoCD and would be orphaned by it.
-	UnsafeLeaveLocalBlocked Code = "unsafe_leave_local_blocked"
-
 	// UnsupportedProvider indicates a unsupported provider condition.
 	UnsupportedProvider Code = "unsupported_provider"
 
@@ -409,8 +403,8 @@ const (
 // --- Dependency unavailable, not configured, or not wired (typically HTTP 409 / 412 / 500 / 503) ---
 
 const (
-	// AgentFleetUnavailable indicates a agent fleet unavailable condition.
-	AgentFleetUnavailable Code = "agent_fleet_unavailable"
+	// ClusterAgentUnavailable indicates a cluster agent unavailable condition.
+	ClusterAgentUnavailable Code = "cluster_agents_unavailable"
 
 	// CatalogUnavailable indicates a catalog unavailable condition.
 	CatalogUnavailable Code = "catalog_unavailable"
@@ -532,8 +526,8 @@ const (
 	// AgentConnectionError indicates a agent connection error condition.
 	AgentConnectionError Code = "agent_connection_error"
 
-	// AgentFleetError indicates a agent fleet error condition.
-	AgentFleetError Code = "agent_fleet_error"
+	// ClusterAgentError indicates a cluster agent error condition.
+	ClusterAgentError Code = "cluster_agents_error"
 
 	// AggregateError indicates a aggregate error condition.
 	// Collapses legacy literal(s): "aggregate_failed".
@@ -544,12 +538,6 @@ const (
 
 	// ApplyError indicates a apply error condition.
 	ApplyError Code = "apply_error"
-
-	// ArgoCDError indicates a argo cd error condition.
-	ArgoCDError Code = "argocd_error"
-
-	// ArgoCDSecretError indicates a argo cd secret error condition.
-	ArgoCDSecretError Code = "argocd_secret_error"
 
 	// AsynqError indicates a asynq error condition.
 	AsynqError Code = "asynq_error"

@@ -31,7 +31,7 @@ import (
 
 // NormalizeAPITrailingSlash returns a middleware that adds a trailing
 // slash to /api/v1/* requests that don't already have one. Other
-// paths (helm-repo, /argocd, static assets) pass through untouched.
+// paths (helm-repo and static assets) pass through untouched.
 //
 // Exclusions:
 //   - WebSocket upgrade paths under /api/v1/ws/* keep their original
@@ -75,8 +75,7 @@ func shouldAddTrailingSlash(p string) bool {
 	// API path forwarded to the agent/apiserver as-is. The proxy route is a
 	// chi wildcard (…/k8s/*) that matches with or without a trailing slash, so
 	// appending one here corrupts the upstream path — e.g. /openapi/v2 ->
-	// /openapi/v2/, which the apiserver 404s (breaking ArgoCD's cluster-cache
-	// OpenAPI fetch and thus baseline provisioning).
+	// /openapi/v2/, which the apiserver 404s.
 	if strings.Contains(p, "/k8s/") {
 		return false
 	}

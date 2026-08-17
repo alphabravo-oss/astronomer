@@ -32,7 +32,7 @@ func TestScanOperationIdempotencyKey(t *testing.T) {
 	row := operationIdempotencyFakeRow{values: []any{
 		"user:user-1",
 		"idem-1",
-		"argocd_operations",
+		"tool_operations",
 		nil,
 		json.RawMessage(`{"operationId":"op-1"}`),
 		nil,
@@ -43,7 +43,7 @@ func TestScanOperationIdempotencyKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
-	if got.Scope != "user:user-1" || got.IdempotencyKey != "idem-1" || got.OperationTable != "argocd_operations" {
+	if got.Scope != "user:user-1" || got.IdempotencyKey != "idem-1" || got.OperationTable != "tool_operations" {
 		t.Fatalf("row = %+v", got)
 	}
 	if string(got.Response) != `{"operationId":"op-1"}` {
@@ -68,7 +68,6 @@ func TestAttachOperationIdempotencyKeyParamsKeepResponseJSON(t *testing.T) {
 func TestOperationIdempotencySQLClaimsWithAtomicUpsert(t *testing.T) {
 	queries := map[string]string{
 		"common":          operationIdempotencyClaimCTE,
-		"fleet":           createFleetOperationIdempotent,
 		"restore":         createRestoreOperationIdempotent,
 		"deferred":        createDeferredOperationIdempotent,
 		"agent_lifecycle": createAgentLifecycleOperationIdempotent,

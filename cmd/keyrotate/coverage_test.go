@@ -33,7 +33,9 @@ func TestRewriteTargetsCoverAllEncryptedColumns(t *testing.T) {
 	// A column definition line whose name contains "encrypted", inside a CREATE
 	// TABLE / ALTER TABLE ... ADD COLUMN context. We only care about the column
 	// name + owning table, not the full type.
-	tableRe := regexp.MustCompile(`(?i)(?:CREATE TABLE(?:\s+IF NOT EXISTS)?|ALTER TABLE(?:\s+IF EXISTS)?(?:\s+ONLY)?)\s+([a-zA-Z_][a-zA-Z0-9_]*)`)
+	// The squashed v1 schema is a normalized pg_dump and therefore qualifies
+	// objects as public.<table>. Capture the relation, not the schema name.
+	tableRe := regexp.MustCompile(`(?i)(?:CREATE TABLE(?:\s+IF NOT EXISTS)?|ALTER TABLE(?:\s+IF EXISTS)?(?:\s+ONLY)?)\s+(?:public\.)?([a-zA-Z_][a-zA-Z0-9_]*)`)
 	// Matches "colname TYPE ..." column defs and "ADD COLUMN [IF NOT EXISTS] colname TYPE".
 	colRe := regexp.MustCompile(`(?i)^\s*(?:ADD\s+COLUMN\s+(?:IF NOT EXISTS\s+)?)?([a-zA-Z_][a-zA-Z0-9_]*encrypted[a-zA-Z0-9_]*)\s+(?:TEXT|BYTEA|VARCHAR)`)
 	addColInline := regexp.MustCompile(`(?i)ADD\s+COLUMN\s+(?:IF NOT EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_]*encrypted[a-zA-Z0-9_]*)`)

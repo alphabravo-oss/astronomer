@@ -4,8 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"crypto/sha256"
-	"encoding/hex"
 	"io"
 	"os"
 	"os/exec"
@@ -69,16 +67,24 @@ func TestAstronomerChartArchiveContainsChartFiles(t *testing.T) {
 		"astronomer/values.schema.json",
 		"astronomer/DEPENDENCIES.md",
 		"astronomer/templates/server-deployment.yaml",
-		"astronomer/charts/argo-cd-9.5.21.tgz",
-		"astronomer/licenses/argo-helm-APACHE-2.0.txt",
 	} {
 		if !seen[want] {
 			t.Fatalf("archive missing %s", want)
 		}
 	}
+	for _, unwanted := range []string{
+		"astronomer/Chart.lock",
+		"astronomer/charts/",
+	} {
+		for name := range seen {
+			if strings.HasPrefix(name, unwanted) {
+				t.Fatalf("dependency-free archive unexpectedly contains %s", name)
+			}
+		}
+	}
 }
 
-func TestAstronomerChartArchiveRendersBundledArgoOffline(t *testing.T) {
+func TestAstronomerChartArchiveRendersOffline(t *testing.T) {
 	repo, err := AstronomerChartRepo()
 	if err != nil {
 		t.Fatal(err)
@@ -97,60 +103,10 @@ func TestAstronomerChartArchiveRendersBundledArgoOffline(t *testing.T) {
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("offline embedded chart render failed: %v", err)
 	}
-	if !strings.Contains(output.String(), "name: astro-argocd-application-controller") {
-		t.Fatal("embedded archive did not render the pinned bundled Argo controller")
+	if !strings.Contains(output.String(), "name: astronomer-server") {
+		t.Fatal("embedded archive did not render the management-plane server")
 	}
-}
-
-func TestPinnedArgoApplicationCRDHasNoStatusSubresource(t *testing.T) {
-	archive, err := os.ReadFile(filepath.Join("chart", "charts", "argo-cd-9.5.21.tgz"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	gz, err := gzip.NewReader(bytes.NewReader(archive))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = gz.Close() }()
-	tr := tar.NewReader(gz)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			t.Fatal("pinned argo-cd archive has no Application CRD template")
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		if hdr.Name != "argo-cd/templates/crds/crd-application.yaml" {
-			continue
-		}
-		raw, err := io.ReadAll(tr)
-		if err != nil {
-			t.Fatal(err)
-		}
-		text := string(raw)
-		if !strings.Contains(text, "subresources: {}") || strings.Contains(text, "subresources:\n      status:") {
-			t.Fatal("pinned Application CRD status semantics changed; update the scrub migration before upgrading")
-		}
-		return
-	}
-}
-
-func TestVendoredArgoArchiveChecksumMatchesProvenance(t *testing.T) {
-	const expected = "5e440d83c763360e16cd93b48f41450cc0d688ec83ee444840faa271ac536443"
-	archive, err := os.ReadFile(filepath.Join("chart", "charts", "argo-cd-9.5.21.tgz"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	digest := sha256.Sum256(archive)
-	if got := hex.EncodeToString(digest[:]); got != expected {
-		t.Fatalf("vendored argo-cd checksum = %s, want %s", got, expected)
-	}
-	provenance, err := os.ReadFile(filepath.Join("chart", "DEPENDENCIES.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(provenance), expected) {
-		t.Fatal("DEPENDENCIES.md does not record the asserted vendored archive checksum")
+	if strings.Contains(strings.ToLower(output.String()), "argoproj") {
+		t.Fatal("embedded archive unexpectedly rendered a legacy delivery controller")
 	}
 }

@@ -174,7 +174,7 @@ func syncedSummary(id, session, severity, status, block string, updated time.Tim
 
 func syncedScope(id, session, block, resourceID string) BridgeFindingScope {
 	return BridgeFindingScope{FindingID: id, SessionID: session, BlockCode: block,
-		ResourceDigest: findingResourceDigest(resourceID), RecommendedCapability: "astronomer.argocd.self_management_sync"}
+		ResourceDigest: findingResourceDigest(resourceID), RecommendedCapability: "astronomer.management.workload_restart"}
 }
 
 func TestCentralFindingSyncScopesTwoUsersSessionsAndDeployments(t *testing.T) {

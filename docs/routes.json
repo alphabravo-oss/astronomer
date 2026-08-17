@@ -40,26 +40,6 @@
     "pattern": "/api/v1/admin/charlie/action-policies/{capability}"
   },
   {
-    "method": "POST",
-    "pattern": "/api/v1/admin/charlie/agent/install"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/admin/charlie/agent/rollback"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/admin/charlie/agent/rotate"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/admin/charlie/agent/uninstall"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/admin/charlie/agent/upgrade"
-  },
-  {
     "method": "GET",
     "pattern": "/api/v1/admin/charlie/alert-deliveries"
   },
@@ -74,10 +54,6 @@
   {
     "method": "POST",
     "pattern": "/api/v1/admin/charlie/diagnostics/run"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/admin/charlie/disconnect"
   },
   {
     "method": "GET",
@@ -385,34 +361,6 @@
   },
   {
     "method": "GET",
-    "pattern": "/api/v1/agents/fleet"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/agents/fleet/{cluster_id}/diagnostics"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/agents/fleet/{cluster_id}/diagnostics/bundle"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/agents/fleet/{cluster_id}/operations"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/agents/fleet/{cluster_id}/self-test"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/agents/fleet/{cluster_id}/upgrade"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/agents/fleet/{cluster_id}/upgrade-plan"
-  },
-  {
-    "method": "GET",
     "pattern": "/api/v1/alerting/channels"
   },
   {
@@ -514,166 +462,6 @@
   {
     "method": "GET",
     "pattern": "/api/v1/anomaly-baselines/{id}"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/applications"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/applications/{id}"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/applications/{id}/history"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/applications/{id}/manifests"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/applications/{id}/refresh"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/applications/{id}/sync"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/clusters/{cluster_id}/ownership"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/clusters/{cluster_id}/ownership/{component_slug}/decision"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/controller/status"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/instances"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/instances"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/argocd/instances/{id}"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/instances/{id}"
-  },
-  {
-    "method": "PUT",
-    "pattern": "/api/v1/argocd/instances/{id}"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/instances/{id}/applications"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/instances/{id}/applications"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/argocd/instances/{id}/applications/{name}"
-  },
-  {
-    "method": "PATCH",
-    "pattern": "/api/v1/argocd/instances/{id}/applications/{name}"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/instances/{id}/applications/{name}/sync"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/instances/{id}/applicationsets"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/instances/{id}/applicationsets"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/argocd/instances/{id}/applicationsets/{name}"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/instances/{id}/cached-applications"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/instances/{id}/clusters"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/instances/{id}/clusters/{cluster_id}/refresh-labels"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/argocd/instances/{id}/clusters/{cluster_id}/register"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/instances/{id}/clusters/{cluster_id}/register"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/instances/{id}/health"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/instances/{id}/orphan-report"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/instances/{id}/projects"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/instances/{id}/projects"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/argocd/instances/{id}/projects/{name}"
-  },
-  {
-    "method": "PATCH",
-    "pattern": "/api/v1/argocd/instances/{id}/projects/{name}"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/argocd/instances/{id}/repos"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/instances/{id}/repos"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/instances/{id}/repos"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/instances/{id}/repos/test"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/operations"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/argocd/operations/{id}"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/argocd/operations/{id}/retry"
   },
   {
     "method": "GET",
@@ -1134,6 +922,38 @@
   {
     "method": "GET",
     "pattern": "/api/v1/cloud-credentials/providers"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/cluster-agents"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/cluster-agents/{cluster_id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/cluster-agents/{cluster_id}/diagnostics"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/cluster-agents/{cluster_id}/diagnostics/bundle"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/cluster-agents/{cluster_id}/operations"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/cluster-agents/{cluster_id}/self-test"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/cluster-agents/{cluster_id}/upgrade"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/cluster-agents/{cluster_id}/upgrade-plan"
   },
   {
     "method": "GET",
@@ -1889,6 +1709,170 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/delivery/bundles"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/bundles"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/delivery/bundles/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/bundles/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/delivery/bundles/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/bundles/{id}/versions"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/bundles/{id}/versions"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/bundles/{id}/versions/{versionId}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/clusters/{clusterId}/inventory"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/deployments"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/deployments/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/deployments/{id}/events"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/deployments/{id}/reconcile"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/deployments/{id}/resume"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/deployments/{id}/suspend"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/rollouts"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/rollouts/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/rollouts/{id}/abort"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/rollouts/{id}/approve"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/rollouts/{id}/clusters"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/rollouts/{id}/events"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/rollouts/{id}/pause"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/rollouts/{id}/resume"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/rollouts/{id}/retry"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/rollouts/{id}/rollback"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/sources"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/sources"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/delivery/sources/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/sources/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/delivery/sources/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/sources/{id}/rotate-credential"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/sources/{id}/verify"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/system/compatibility"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/targets"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/targets"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/delivery/targets/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/targets/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/delivery/targets/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/targets/{id}/orphan"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/targets/{id}/preview"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/targets/{id}/rollouts"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/extensions"
   },
   {
@@ -1928,76 +1912,8 @@
     "pattern": "/api/v1/extensions/{name}/token"
   },
   {
-    "method": "GET",
-    "pattern": "/api/v1/fleet-operations"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/fleet-operations"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/fleet-operations/{id}"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/fleet-operations/{id}/abort"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/fleet-operations/{id}/pause"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/fleet-operations/{id}/resume"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/fleet-operations/{id}/retry-failed"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/fleet-operations/{id}/targets"
-  },
-  {
     "method": "POST",
     "pattern": "/api/v1/gitops/sources/{id}/webhook"
-  },
-  {
-    "method": "CONNECT",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
-  },
-  {
-    "method": "HEAD",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
-  },
-  {
-    "method": "OPTIONS",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
-  },
-  {
-    "method": "PATCH",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
-  },
-  {
-    "method": "PUT",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
-  },
-  {
-    "method": "TRACE",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
   },
   {
     "method": "GET",
@@ -2778,78 +2694,6 @@
   {
     "method": "GET",
     "pattern": "/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}"
-  },
-  {
-    "method": "CONNECT",
-    "pattern": "/argocd"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/argocd"
-  },
-  {
-    "method": "GET",
-    "pattern": "/argocd"
-  },
-  {
-    "method": "HEAD",
-    "pattern": "/argocd"
-  },
-  {
-    "method": "OPTIONS",
-    "pattern": "/argocd"
-  },
-  {
-    "method": "PATCH",
-    "pattern": "/argocd"
-  },
-  {
-    "method": "POST",
-    "pattern": "/argocd"
-  },
-  {
-    "method": "PUT",
-    "pattern": "/argocd"
-  },
-  {
-    "method": "TRACE",
-    "pattern": "/argocd"
-  },
-  {
-    "method": "CONNECT",
-    "pattern": "/argocd/*"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/argocd/*"
-  },
-  {
-    "method": "GET",
-    "pattern": "/argocd/*"
-  },
-  {
-    "method": "HEAD",
-    "pattern": "/argocd/*"
-  },
-  {
-    "method": "OPTIONS",
-    "pattern": "/argocd/*"
-  },
-  {
-    "method": "PATCH",
-    "pattern": "/argocd/*"
-  },
-  {
-    "method": "POST",
-    "pattern": "/argocd/*"
-  },
-  {
-    "method": "PUT",
-    "pattern": "/argocd/*"
-  },
-  {
-    "method": "TRACE",
-    "pattern": "/argocd/*"
   },
   {
     "method": "GET",

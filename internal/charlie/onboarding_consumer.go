@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -26,11 +25,9 @@ type OnboardingTransaction interface {
 	GetCharlieAutomationRole(context.Context) (sqlc.GlobalRole, error)
 	EnsureCharlieAutomationBinding(context.Context, sqlc.EnsureCharlieAutomationBindingParams) (sqlc.GlobalRoleBinding, error)
 	CreateCharlieTriggerRule(context.Context, sqlc.CreateCharlieTriggerRuleParams) (sqlc.CharlieTriggerRule, error)
-}
-
-type OnboardingInstaller interface {
-	PrepareNamespace(context.Context, uuid.UUID) (func(context.Context) error, error)
-	Install(context.Context, AgentInstallSpec) (AgentInstallReceipt, error)
+	LockCharlieConnectionActivation(context.Context, uuid.UUID) ([]uuid.UUID, error)
+	DeactivateCharlieConnectionsForReplacement(context.Context, uuid.UUID) error
+	ActivateCharlieConnection(context.Context, sqlc.ActivateCharlieConnectionParams) (sqlc.CharlieConnection, error)
 }
 
 type OnboardingTransactionStore interface {
@@ -80,7 +77,6 @@ func (s PGOnboardingTransactionStore) WithinOnboardingTransaction(ctx context.Co
 type OnboardingConsumer struct {
 	Store           OnboardingTransactionStore
 	Secrets         AgentSecretWriter
-	Installer       OnboardingInstaller
 	Encryptor       *auth.Encryptor
 	BridgeServerDNS string
 	MCPServerDNS    string
@@ -123,14 +119,10 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 		if err != nil {
 			return failOnboarding("onboarding.local_trust_failed", err)
 		}
-		if c.Installer != nil {
-			namespaceRollback, prepareErr := c.Installer.PrepareNamespace(ctx, platform.InstanceID)
-			if prepareErr != nil {
-				return failOnboarding("onboarding.namespace_prepare_failed", prepareErr)
-			}
-			rollbacks = append(rollbacks, namespaceRollback)
-		}
-		secretName := "charlie-agent-bootstrap-" + safeSecretSuffix(validated.PackageID)
+		// Flux owns the workload and therefore needs one stable Secret reference.
+		// Replacement onboarding packages rotate this exact Secret atomically;
+		// package identity remains durable in the connection row and payload.
+		secretName := "charlie-agent-bootstrap"
 		enrollmentExpiresAt, artifactExpiresAt, expiryErr := onboardingCredentialExpiries(validated.Package)
 		if expiryErr != nil {
 			return failOnboarding("onboarding.credential_expiry_invalid", expiryErr)
@@ -178,35 +170,6 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 			return failOnboarding("onboarding.secret_materialization_failed", err)
 		}
 		rollbacks = append(rollbacks, receipt.Rollback)
-		if c.Installer != nil {
-			disclosureDigest := CapabilityDisclosureDigest()
-			installSpec := AgentInstallSpec{
-				InstallationID: platform.InstanceID, ConnectionID: connection.ID,
-				LogicalAgentID: string(validated.Package.LogicalAgentId), DeploymentID: string(validated.Package.DeploymentId), EnvironmentID: string(validated.Package.EnvironmentId), TenantID: string(validated.Package.TenantId),
-				OnboardingPackageID: validated.PackageID,
-				CentralURL:          validated.Package.Central.BaseUrl, CentralCAPEM: validated.Package.Central.CaBundlePem,
-				ChartReference: validated.Package.Artifact.Chart, ChartVersion: contract.AgentChartVersion, ChartDigest: validated.Package.Artifact.ChartDigest,
-				ImageReference: validated.Package.Artifact.Image, ImageDigest: validated.Package.Artifact.ManifestDigest,
-				OnboardingPackage: validated.RawPackage, ReplicaCount: validated.Package.ReplicaCount, ArtifactCredential: validated.ArtifactCredential,
-				SecretPrefix: secretName, DisclosureDigest: disclosureDigest, SecretIntegrityHMAC: receipt.IntegrityHMAC,
-				ActionSigningPublicKey: validated.SigningPublicKey, ActionSigningKeyFingerprint: validated.Package.Signing.PublicKeySha256,
-				Trust: trust,
-			}
-			// A replacement package revokes the old registry credential before
-			// this transaction begins. Remove owner-bound repository credentials
-			// for earlier package generations before Argo resolves the OCI source,
-			// otherwise it can nondeterministically select a revoked credential.
-			if pruner, ok := c.Installer.(supersededAgentMaterialPruner); ok {
-				if pruneErr := pruner.PruneSupersededRepositories(ctx, installSpec); pruneErr != nil {
-					return failOnboarding("onboarding.repository_prune_failed", pruneErr)
-				}
-			}
-			installReceipt, installErr := c.Installer.Install(ctx, installSpec)
-			if installErr != nil {
-				return failOnboarding("onboarding.agent_install_failed", installErr)
-			}
-			rollbacks = append(rollbacks, installReceipt.Rollback)
-		}
 		connection, err = tx.AdvanceCharlieOnboardingState(ctx, sqlc.AdvanceCharlieOnboardingStateParams{
 			ID: connection.ID, ExpectedState: "secrets_pending", NextState: "secrets_written",
 			AgentSecretHmac: receipt.IntegrityHMAC,
@@ -214,14 +177,23 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 		if err != nil {
 			return failOnboarding("onboarding.state_record_failed", err)
 		}
-		_, err = tx.AdvanceCharlieOnboardingState(ctx, sqlc.AdvanceCharlieOnboardingStateParams{
+		connection, err = tx.AdvanceCharlieOnboardingState(ctx, sqlc.AdvanceCharlieOnboardingStateParams{
 			ID: connection.ID, ExpectedState: "secrets_written", NextState: "consumed",
 			AgentSecretHmac: receipt.IntegrityHMAC,
 		})
 		if err != nil {
 			return failOnboarding("onboarding.state_consume_failed", err)
 		}
-		result = validated.SafeStatus("consumed", false)
+		if _, err := tx.LockCharlieConnectionActivation(ctx, connection.ID); err != nil {
+			return failOnboarding("onboarding.activation_lock_failed", err)
+		}
+		if err := tx.DeactivateCharlieConnectionsForReplacement(ctx, connection.ID); err != nil {
+			return failOnboarding("onboarding.replacement_deactivate_failed", err)
+		}
+		if _, err := tx.ActivateCharlieConnection(ctx, sqlc.ActivateCharlieConnectionParams{ID: connection.ID, HealthState: "installing"}); err != nil {
+			return failOnboarding("onboarding.activation_failed", err)
+		}
+		result = validated.SafeStatus("active", false)
 		return nil
 	})
 	if err != nil {
@@ -233,21 +205,6 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 		return OnboardingStatus{}, err
 	}
 	return result, nil
-}
-
-func safeSecretSuffix(packageID string) string {
-	value := strings.ToLower(packageID)
-	value = strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' {
-			return r
-		}
-		return '-'
-	}, value)
-	value = strings.Trim(value, "-")
-	if len(value) > 40 {
-		value = value[:40]
-	}
-	return value
 }
 
 func onboardingCredentialExpiries(pkg contract.OnboardingPackage) (time.Time, time.Time, error) {

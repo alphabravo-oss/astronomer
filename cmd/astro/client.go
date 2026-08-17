@@ -87,7 +87,7 @@ func writeGenericTable(w io.Writer, v any) error {
 		return err
 	}
 
-	// SDK callers pass TYPED payloads ([]Project, *AgentFleetResponse,
+	// SDK callers pass TYPED payloads ([]Project, *ClusterAgentResponse,
 	// typed structs, etc.). A Go type switch only matches exact dynamic
 	// types, so those would never hit the []any / map[string]any cases.
 	// Round-trip through JSON to normalize any typed slice/struct into the

@@ -215,8 +215,8 @@ func TestInternalK8sHandlerForwardsIdentityToAgent(t *testing.T) {
 		},
 		{
 			name:       "a machine identity from the far side survives too",
-			sent:       callerid.Machine(callerid.SourceArgoCDProxy),
-			wantUser:   callerid.MachineSubject(callerid.SourceArgoCDProxy),
+			sent:       callerid.Machine(callerid.SourceAgentLifecycle),
+			wantUser:   callerid.MachineSubject(callerid.SourceAgentLifecycle),
 			wantOrigin: protocol.OriginMachine,
 		},
 	}

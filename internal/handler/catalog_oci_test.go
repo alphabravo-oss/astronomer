@@ -107,13 +107,13 @@ func TestParseOCIAuthConfig(t *testing.T) {
 // document for operators round-trips cleanly. This guards against accidental
 // renames of the JSON tags we expose.
 func TestOCIAuthConfigJSONRoundTrip(t *testing.T) {
-	in := `{"username":"x","password":"y","charts":["argo-cd","argo-workflows"],"allow_catalog":false}`
+	in := `{"username":"x","password":"y","charts":["cert-manager","external-dns"],"allow_catalog":false}`
 	cfg := parseOCIAuthConfig([]byte(in))
 	out, err := json.Marshal(cfg)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	for _, want := range []string{`"username":"x"`, `"password":"y"`, `"argo-cd"`, `"argo-workflows"`} {
+	for _, want := range []string{`"username":"x"`, `"password":"y"`, `"cert-manager"`, `"external-dns"`} {
 		if !strings.Contains(string(out), want) {
 			t.Fatalf("round-trip lost %q: %s", want, string(out))
 		}

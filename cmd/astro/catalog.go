@@ -64,6 +64,17 @@ func catStrPtr(s string) *string {
 	return &s
 }
 
+func catalogOptionalUUID(value, flagName string) (*openapi_types.UUID, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+	id, err := catalogUUID(value)
+	if err != nil {
+		return nil, fmt.Errorf("invalid --%s: %w", flagName, err)
+	}
+	return &id, nil
+}
+
 // catalogError maps a non-2xx SDK response to a clean error. It prefers the
 // typed ErrorEnvelope when present, otherwise falls back to the HTTP status
 // and any raw body. ok reports whether the response was a success the caller
@@ -108,7 +119,7 @@ func newCatalogChartsCmd() *cobra.Command {
 }
 
 func newCatalogChartsListCmd() *cobra.Command {
-	var tag string
+	var tag, projectID string
 	var limit, offset int
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -120,6 +131,10 @@ func newCatalogChartsListCmd() *cobra.Command {
 				return err
 			}
 			params := &astroclient.GetApiV1CatalogChartsParams{Tag: catStrPtr(tag)}
+			params.ProjectId, err = catalogOptionalUUID(projectID, "project")
+			if err != nil {
+				return err
+			}
 			if cmd.Flags().Changed("limit") {
 				params.Limit = &limit
 			}
@@ -139,12 +154,14 @@ func newCatalogChartsListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&tag, "tag", "", "filter charts by tag")
+	cmd.Flags().StringVar(&projectID, "project", "", "project id whose catalog visibility to use")
 	cmd.Flags().IntVar(&limit, "limit", 0, "page size")
 	cmd.Flags().IntVar(&offset, "offset", 0, "page offset")
 	return cmd
 }
 
 func newCatalogChartsGetCmd() *cobra.Command {
+	var projectID string
 	cmd := &cobra.Command{
 		Use:   "get <id>",
 		Short: "Show one chart's details",
@@ -158,7 +175,11 @@ func newCatalogChartsGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1CatalogChartsIdWithResponse(cmd.Context(), id)
+			project, err := catalogOptionalUUID(projectID, "project")
+			if err != nil {
+				return err
+			}
+			resp, err := client.GetApiV1CatalogChartsIdWithResponse(cmd.Context(), id, &astroclient.GetApiV1CatalogChartsIdParams{ProjectId: project})
 			if err != nil {
 				return err
 			}
@@ -170,11 +191,12 @@ func newCatalogChartsGetCmd() *cobra.Command {
 			})
 		},
 	}
+	cmd.Flags().StringVar(&projectID, "project", "", "project id whose catalog visibility to use")
 	return cmd
 }
 
 func newCatalogChartReadmeCmd() *cobra.Command {
-	var version string
+	var version, projectID string
 	cmd := &cobra.Command{
 		Use:   "readme <id>",
 		Short: "Print a chart's README",
@@ -188,7 +210,11 @@ func newCatalogChartReadmeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1CatalogChartsIdReadmeParams{Version: catStrPtr(version)}
+			project, err := catalogOptionalUUID(projectID, "project")
+			if err != nil {
+				return err
+			}
+			params := &astroclient.GetApiV1CatalogChartsIdReadmeParams{Version: catStrPtr(version), ProjectId: project}
 			resp, err := client.GetApiV1CatalogChartsIdReadmeWithResponse(cmd.Context(), id, params)
 			if err != nil {
 				return err
@@ -207,11 +233,12 @@ func newCatalogChartReadmeCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&version, "version", "", "specific chart version (defaults to latest)")
+	cmd.Flags().StringVar(&projectID, "project", "", "project id whose catalog visibility to use")
 	return cmd
 }
 
 func newCatalogChartValuesCmd() *cobra.Command {
-	var version string
+	var version, projectID string
 	cmd := &cobra.Command{
 		Use:   "values <id>",
 		Short: "Print a chart's default values.yaml",
@@ -225,7 +252,11 @@ func newCatalogChartValuesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1CatalogChartsIdValuesParams{Version: catStrPtr(version)}
+			project, err := catalogOptionalUUID(projectID, "project")
+			if err != nil {
+				return err
+			}
+			params := &astroclient.GetApiV1CatalogChartsIdValuesParams{Version: catStrPtr(version), ProjectId: project}
 			resp, err := client.GetApiV1CatalogChartsIdValuesWithResponse(cmd.Context(), id, params)
 			if err != nil {
 				return err
@@ -244,10 +275,12 @@ func newCatalogChartValuesCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&version, "version", "", "specific chart version (defaults to latest)")
+	cmd.Flags().StringVar(&projectID, "project", "", "project id whose catalog visibility to use")
 	return cmd
 }
 
 func newCatalogChartVersionsCmd() *cobra.Command {
+	var projectID string
 	cmd := &cobra.Command{
 		Use:   "versions <id>",
 		Short: "List a chart's available versions",
@@ -261,7 +294,11 @@ func newCatalogChartVersionsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1CatalogChartsIdVersionsWithResponse(cmd.Context(), id, nil)
+			project, err := catalogOptionalUUID(projectID, "project")
+			if err != nil {
+				return err
+			}
+			resp, err := client.GetApiV1CatalogChartsIdVersionsWithResponse(cmd.Context(), id, &astroclient.GetApiV1CatalogChartsIdVersionsParams{ProjectId: project})
 			if err != nil {
 				return err
 			}
@@ -273,6 +310,7 @@ func newCatalogChartVersionsCmd() *cobra.Command {
 			})
 		},
 	}
+	cmd.Flags().StringVar(&projectID, "project", "", "project id whose catalog visibility to use")
 	return cmd
 }
 
@@ -702,14 +740,14 @@ func newCatalogInstalledGetValuesCmd() *cobra.Command {
 }
 
 func newCatalogInstallCmd() *cobra.Command {
-	var clusterID, namespace, releaseName, chartVersionID, valuesOverride, toolSlug, notes string
+	var projectID, clusterID, namespace, releaseName, chartVersionID, valuesOverride, toolSlug, notes string
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Install a chart (create an installed chart)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if strings.TrimSpace(clusterID) == "" || strings.TrimSpace(namespace) == "" || strings.TrimSpace(releaseName) == "" {
-				return fmt.Errorf("--cluster, --namespace and --release-name are required")
+			if strings.TrimSpace(projectID) == "" || strings.TrimSpace(clusterID) == "" || strings.TrimSpace(chartVersionID) == "" || strings.TrimSpace(namespace) == "" || strings.TrimSpace(releaseName) == "" {
+				return fmt.Errorf("--project, --cluster, --chart-version, --namespace and --release-name are required")
 			}
 			client, err := newAstroClient(cmd)
 			if err != nil {
@@ -719,20 +757,23 @@ func newCatalogInstallCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("invalid --cluster: %w", err)
 			}
+			pid, err := catalogUUID(projectID)
+			if err != nil {
+				return fmt.Errorf("invalid --project: %w", err)
+			}
+			cvid, err := catalogUUID(chartVersionID)
+			if err != nil {
+				return fmt.Errorf("invalid --chart-version: %w", err)
+			}
 			body := astroclient.PostApiV1CatalogInstalledJSONRequestBody{
+				ProjectId:      pid,
 				ClusterId:      cid,
+				ChartVersionId: cvid,
 				Namespace:      namespace,
 				ReleaseName:    releaseName,
 				ValuesOverride: catStrPtr(valuesOverride),
 				ToolSlug:       catStrPtr(toolSlug),
 				Notes:          catStrPtr(notes),
-			}
-			if strings.TrimSpace(chartVersionID) != "" {
-				cvid, err := catalogUUID(chartVersionID)
-				if err != nil {
-					return fmt.Errorf("invalid --chart-version: %w", err)
-				}
-				body.ChartVersionId = &cvid
 			}
 			resp, err := client.PostApiV1CatalogInstalledWithResponse(cmd.Context(), body)
 			if err != nil {
@@ -744,10 +785,11 @@ func newCatalogInstallCmd() *cobra.Command {
 			return renderInstallResult(cmd, resp.JSON202.Installation, resp.JSON202.Operation)
 		},
 	}
+	cmd.Flags().StringVar(&projectID, "project", "", "project id (required)")
 	cmd.Flags().StringVar(&clusterID, "cluster", "", "target cluster id (required)")
 	cmd.Flags().StringVar(&namespace, "namespace", "", "target namespace (required)")
 	cmd.Flags().StringVar(&releaseName, "release-name", "", "Helm release name (required)")
-	cmd.Flags().StringVar(&chartVersionID, "chart-version", "", "chart version id to install")
+	cmd.Flags().StringVar(&chartVersionID, "chart-version", "", "chart version id to install (required)")
 	cmd.Flags().StringVar(&valuesOverride, "values", "", "values override (raw YAML string)")
 	cmd.Flags().StringVar(&toolSlug, "tool-slug", "", "tool slug")
 	cmd.Flags().StringVar(&notes, "notes", "", "free-form notes")

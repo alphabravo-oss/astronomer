@@ -1,0 +1,6 @@
+$patch: delete
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: critical-pods-astronomer-delivery-system
+  namespace: astronomer-delivery-system

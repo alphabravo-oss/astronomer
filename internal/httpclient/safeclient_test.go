@@ -1,6 +1,7 @@
 package httpclient
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -41,6 +42,25 @@ func TestSafeClient_AllowsWhenDisabledForTest(t *testing.T) {
 		t.Fatalf("with guard disabled, loopback dial should succeed: %v", err)
 	}
 	_ = resp.Body.Close()
+}
+
+func TestSafeClientWithLimitRejectsChunkedOverflow(t *testing.T) {
+	defer DisableGuardForTest()()
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		flusher := response.(http.Flusher)
+		_, _ = response.Write([]byte("1234"))
+		flusher.Flush()
+		_, _ = response.Write([]byte("5"))
+	}))
+	defer server.Close()
+	response, err := SafeClientWithLimit(2*time.Second, 4).Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if _, err := io.ReadAll(response.Body); err == nil {
+		t.Fatal("chunked body above the hard limit was accepted")
+	}
 }
 
 // SEC-R04/R05/R06: AllowPrivate still blocks loopback and metadata.

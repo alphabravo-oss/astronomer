@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from '@/lib/navigation';
+import { useRouter, useSearchParams } from '@/lib/navigation';
 import { useAppForm, useStore } from '@/lib/form';
 import { useTabParam } from '@/lib/use-tab-param';
 import {
@@ -15,6 +15,7 @@ import {
   useUninstallChart,
   useRollbackChart,
   useClusters,
+  useProjects,
 } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -94,6 +95,29 @@ function CatalogPage() {
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'browse');
   const [selectedCategory, setSelectedCategory] = useState<HelmChartCategory | 'all'>('all');
   const initialSearchParams = useSearchParams();
+  const router = useRouter();
+  const projectsQuery = useProjects({ pageSize: 200 });
+  const projects = projectsQuery.data?.data ?? [];
+  const requestedProjectId = initialSearchParams?.get('project') ?? '';
+  const projectId = projects.some((project) => project.id === requestedProjectId)
+    ? requestedProjectId
+    : projects.length === 1
+      ? projects[0].id
+      : '';
+  const selectedProject = projects.find((project) => project.id === projectId);
+  const allowedClusterIds = [
+    selectedProject?.clusterId,
+    ...(selectedProject?.clusterIds ?? []),
+  ].filter((id): id is string => Boolean(id));
+  const setProjectId = (nextProjectId: string) => {
+    const next = new URLSearchParams(initialSearchParams);
+    if (nextProjectId) next.set('project', nextProjectId);
+    else next.delete('project');
+    router.replace(`/dashboard/catalog${next.size ? `?${next.toString()}` : ''}`);
+    setSelectedChart(null);
+    setShowInstallModal(false);
+    setInstallChart(null);
+  };
   const [searchQuery, setSearchQuery] = useState(initialSearchParams?.get('search') ?? '');
   const presetClusterIdPage = initialSearchParams?.get('cluster_id') ?? '';
   const [selectedChart, setSelectedChart] = useState<HelmChart | null>(null);
@@ -102,6 +126,7 @@ function CatalogPage() {
   const [installChart, setInstallChart] = useState<{ chart: HelmChart; version: HelmChartVersion } | null>(null);
 
   const { data: charts, isLoading: chartsLoading } = useHelmCharts({
+    projectId,
     category: selectedCategory !== 'all' ? selectedCategory : undefined,
     search: searchQuery || undefined,
   });
@@ -224,7 +249,7 @@ function CatalogPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">Catalog</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -240,7 +265,24 @@ function CatalogPage() {
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            Project visibility
+            <select
+              aria-label="Catalog project"
+              value={projectId}
+              onChange={(event) => setProjectId(event.target.value)}
+              className="h-9 min-w-56 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+              disabled={projectsQuery.isLoading}
+            >
+              <option value="">Select a project</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.displayName || project.name}
+                </option>
+              ))}
+            </select>
+          </label>
           {activeTab === 'repositories' && (
             <button
               onClick={() => setShowRepoModal(true)}
@@ -331,7 +373,13 @@ function CatalogPage() {
             </div>
 
             {/* Chart Grid */}
-            {chartsLoading ? (
+            {!projectId ? (
+              <EmptyState
+                icon={Package}
+                title="Select a project"
+                description="Chart visibility and install authorization are isolated by project."
+              />
+            ) : chartsLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {Array.from({ length: 8 }).map((_, i) => (
                   <div key={i} className="rounded-lg border border-border p-4 space-y-3">
@@ -433,6 +481,7 @@ function CatalogPage() {
       {/* Chart Detail Modal */}
       {selectedChart && (
         <ChartDetailModal
+          projectId={projectId}
           chart={selectedChart}
           onClose={() => setSelectedChart(null)}
           onInstall={(chart, version) => {
@@ -446,6 +495,8 @@ function CatalogPage() {
       {/* Install Modal */}
       {showInstallModal && installChart && (
         <InstallChartModal
+          projectId={projectId}
+          allowedClusterIds={allowedClusterIds}
           chart={installChart.chart}
           version={installChart.version}
           onClose={() => {
@@ -468,15 +519,17 @@ function CatalogPage() {
 // ============================================================
 
 function ChartDetailModal({
+  projectId,
   chart,
   onClose,
   onInstall,
 }: {
+  projectId: string;
   chart: HelmChart;
   onClose: () => void;
   onInstall: (chart: HelmChart, version: HelmChartVersion) => void;
 }) {
-  const { data: versions, isLoading: versionsLoading } = useHelmChartVersions(chart.id);
+  const { data: versions, isLoading: versionsLoading } = useHelmChartVersions(projectId, chart.id);
   const [selectedVersionId, setSelectedVersionId] = useState<string>('');
 
   const selectedVersion = versions?.find((v) => v.id === selectedVersionId) || versions?.[0];
@@ -603,17 +656,23 @@ function ChartDetailModal({
 // ============================================================
 
 function InstallChartModal({
+  projectId,
+  allowedClusterIds,
   chart,
   version,
   onClose,
 }: {
+  projectId: string;
+  allowedClusterIds: string[];
   chart: HelmChart;
   version: HelmChartVersion;
   onClose: () => void;
 }) {
   const installChart = useInstallHelmChart();
   const { data: clustersData } = useClusters({ pageSize: 100 });
-  const clusters = clustersData?.data || [];
+  const clusters = (clustersData?.data || []).filter((cluster) =>
+    allowedClusterIds.includes(cluster.id),
+  );
   const schema = useMemo(() => {
     // Inline $ref/$defs first so generator-style schemas (cert-manager etc.) render.
     const resolved = resolveSchemaRefs(version.valuesSchema);
@@ -629,7 +688,7 @@ function InstallChartModal({
 
   const form = useAppForm({
     defaultValues: {
-      clusterId: presetClusterId,
+      clusterId: allowedClusterIds.includes(presetClusterId) ? presetClusterId : '',
       releaseName: chart.name,
       namespace: 'default',
       valuesOverride: version.defaultValues || '',
@@ -637,6 +696,7 @@ function InstallChartModal({
     onSubmit: async ({ value }) => {
       try {
         await installChart.mutateAsync({
+          project_id: projectId,
           cluster_id: value.clusterId,
           chart_version_id: version.id,
           release_name: value.releaseName,

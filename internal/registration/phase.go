@@ -21,9 +21,9 @@
 //	     |
 //	     +-- install_baseline=true  ---> provisioning
 //	                                        |
-//	                                        +-- all tools applied --> ready
+//	                                        +-- Flux deliveries ready --> ready
 //	                                        |
-//	                                        +-- all retries spent  --> failed
+//	                                        +-- delivery failed       --> failed
 //
 // Any retry-exhausted failure → failed; the operator can manually retry
 // the failing step via POST /retry/.
@@ -55,9 +55,9 @@ type Event string
 const (
 	EventConfirm          Event = "confirm"           // POST /registration/confirm/
 	EventAgentConnected   Event = "agent_connected"   // first heartbeat
-	EventTemplateApplying Event = "template_applying" // cluster_template:apply task started
-	EventTemplateApplied  Event = "template_applied"  // task completed clean
-	EventTemplateFailed   Event = "template_failed"   // task ran out of retries
+	EventDeliveryApplying Event = "delivery_applying" // built-in delivery rollouts created
+	EventDeliveryApplied  Event = "delivery_applied"  // all built-in deployments are Ready
+	EventDeliveryFailed   Event = "delivery_failed"   // a built-in deployment failed
 	EventNoProvisioning   Event = "no_provisioning"   // connected w/ install_baseline=false
 	EventCancel           Event = "cancel"            // superuser abort
 	EventRetry            Event = "retry"             // operator clicked retry on a failed step
@@ -115,7 +115,7 @@ func Transition(current Phase, ev Event, baseline bool) (Phase, error) {
 		}
 	case PhaseConnected:
 		switch ev {
-		case EventTemplateApplying:
+		case EventDeliveryApplying:
 			return PhaseProvisioning, nil
 		case EventNoProvisioning:
 			return PhaseReady, nil
@@ -127,15 +127,15 @@ func Transition(current Phase, ev Event, baseline bool) (Phase, error) {
 		}
 	case PhaseProvisioning:
 		switch ev {
-		case EventTemplateApplied:
+		case EventDeliveryApplied:
 			return PhaseReady, nil
-		case EventTemplateFailed:
+		case EventDeliveryFailed:
 			return PhaseFailed, nil
 		}
 	case PhaseFailed:
 		// Self-healing edges out of `failed`. Until sprint 086 these
 		// were strictly terminal, but the orchestrator's auto-retry
-		// loop fires EventTemplateApplying again on each attempt
+		// loop fires EventDeliveryApplying again on each attempt
 		// without an explicit operator-driven retry, so a cluster
 		// whose tool install eventually succeeds would stay stuck on
 		// `failed` even though the agent finished cleanly. Treating
@@ -143,9 +143,9 @@ func Transition(current Phase, ev Event, baseline bool) (Phase, error) {
 		// track reality instead of getting frozen on the first
 		// transient.
 		switch ev {
-		case EventTemplateApplying:
+		case EventDeliveryApplying:
 			return PhaseProvisioning, nil
-		case EventTemplateApplied:
+		case EventDeliveryApplied:
 			// A success delivered while we're still PhaseFailed (the
 			// orchestrator skipped the intermediate Applying step
 			// because it had one in-flight). Jump straight to Ready.
@@ -163,7 +163,7 @@ func Transition(current Phase, ev Event, baseline bool) (Phase, error) {
 		// freeze on `ready` while the apply actually runs — the same trap the
 		// self-healing edges out of `failed` above exist to avoid. Cancel is
 		// still refused: a ready cluster is not in-flight.
-		if ev == EventTemplateApplying {
+		if ev == EventDeliveryApplying {
 			return PhaseProvisioning, nil
 		}
 	}
@@ -215,24 +215,14 @@ func StepLabel(stepName string) string {
 		return "Manifest generated"
 	case "agent_connected":
 		return "Agent connected"
-	case "template_applying":
-		return "Applying Platform Baseline"
-	case "template_applied":
-		return "Platform Baseline applied"
-	case "template_failed":
-		return "Platform Baseline failed"
-	case "argocd_registering":
-		return "Registering cluster in ArgoCD"
-	case "argocd_registered":
-		return "Cluster registered in ArgoCD"
-	case "argocd_registration_repaired":
-		return "ArgoCD registration repaired"
-	case "argocd_registration_repair_blocked":
-		return "ArgoCD registration repair blocked"
-	case "argocd_registration_failed":
-		return "ArgoCD registration failed"
-	case "baseline_appsets_matched":
-		return "Baseline ApplicationSets matched"
+	case "delivery_applying":
+		return "Applying platform components through Flux"
+	case "delivery_applied":
+		return "Platform component deliveries are ready"
+	case "delivery_failed":
+		return "Platform component delivery failed"
+	case "delivery_retry_requested":
+		return "Platform component delivery retry requested"
 	case "no_provisioning":
 		return "Skipped Platform Baseline (operator opted out)"
 	case "cancelled":
@@ -240,4 +230,3 @@ func StepLabel(stepName string) string {
 	}
 	return stepName
 }
-

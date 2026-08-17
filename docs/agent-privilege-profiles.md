@@ -6,7 +6,7 @@ Use the narrowest profile that supports the workflows the cluster needs.
 
 | Profile | Intended use | Kubernetes access | Supported workflows | Expected limitations |
 |---------|--------------|-------------------|---------------------|----------------------|
-| `viewer` | Inventory, monitoring, and read-only inspection | `get`, `list`, and `watch` for common core, apps, batch, autoscaling, networking, policy, and CRD resources; read-only non-resource health/version endpoints | Cluster overview, resource browsing, logs, health probes, discovery, ArgoCD baseline observation through Astronomer | No workload mutation, no exec/attach/port-forward, no tool installation, no registry patching, no direct remediation |
+| `viewer` | Inventory, monitoring, and read-only inspection | `get`, `list`, and `watch` for common core, apps, batch, autoscaling, networking, policy, and CRD resources; read-only non-resource health/version endpoints | Cluster overview, resource browsing, logs, health probes, discovery, and delivery-status observation through Astronomer | No workload mutation, no exec/attach/port-forward, no tool installation, no registry patching, no direct remediation |
 | `operator` (**PRIVILEGED / near-admin — H4**) | Day-to-day operations, but NOT safely contained | Viewer permissions plus create/update/patch/delete for common workload, service, namespace, **secret (cluster-wide read+write)**, ingress, NetworkPolicy, PDB, Role, and RoleBinding resources, **plus pod exec/attach/port-forward**; CRDs remain read-only | Workload lifecycle operations, common tool installs that do not need CRD creation, pod exec/attach/port-forward, namespace/service updates, service proxy for approved tools | No _direct_ self-escalation (cannot create/update CRDs, ClusterRoles, ClusterRoleBindings, admission webhooks, storage classes via rbac.authorization.k8s.io write). **HOWEVER this tier is effectively cluster-admin-equivalent via _indirect_ escalation:** cluster-wide secret read exposes every ServiceAccount token (incl. cluster-admin-bound SAs), and exec into a kube-system/control-plane pod yields that pod's identity. Treat `operator` as a privileged, audited, non-default opt-in — not a contained role. |
 | `namespace-viewer` | Namespace-scoped inventory | Read-only workload, logs, service, autoscaling, networking, batch, and policy resources in the agent namespace | Team-scoped inspection where cluster-wide inventory is not allowed | No cluster-scoped resources, no mutations, no exec/attach/port-forward, no CRDs, no node/namespace inventory |
 | `namespace-operator` | Namespace-scoped operations | Namespace-local workload mutations, logs, exec/attach/port-forward, services, NetworkPolicies, PDBs, Roles, and RoleBindings in the agent namespace | Team-scoped workload operation in locked-down clusters | No cluster-scoped resources, no CRDs, no ClusterRoles/ClusterRoleBindings, no secrets by default |
@@ -23,7 +23,7 @@ Use the narrowest profile that supports the workflows the cluster needs.
 
 ## Upgrade note: implicit admin removal
 
-The running agent, registration manifest, fleet heartbeat, self-test, and
+The running agent, registration manifest, cluster heartbeat, self-test, and
 upgrade planner now use the same effective-profile rule: a missing, blank, or
 unrecognized profile resolves to `viewer`. Older agent deployments that omitted
 `ASTRONOMER_PRIVILEGE_PROFILE` may previously have run as implicit `admin`; the
@@ -50,7 +50,6 @@ reported as denied instead of silently widening the effective profile.
 
 The Cluster reconciler stores these as reserved annotations:
 
-- `management.astronomer.io/agent-image`
 - `management.astronomer.io/agent-service-account-name`
 - `management.astronomer.io/agent-pod-labels`
 
@@ -76,11 +75,19 @@ The renderer validates supported CRD inputs before projection. Manually setting 
 
 For built-in profiles, `allowedRules` must stay inside the same permission boundary as the rendered manifest. For example, `viewer` cannot add `pods/exec`, mutating verbs, secrets, or wildcard rules, and `namespace-operator` cannot add cluster-scoped resources or secrets. `admin` can declare broad rules. `custom` can declare externally managed RBAC, and capability claims such as `exec` are accepted only when the declared rules include the matching resource and verb.
 
-## ArgoCD Baseline Interaction
+## Flux delivery interaction
 
-ArgoCD-owned platform baseline reconciliation uses the ArgoCD cluster proxy identity, not the human user's browser session. The adopted-cluster agent still needs enough Kubernetes access to serve the proxied API requests ArgoCD makes through Astronomer.
+The agent installs and operates Astronomer's exact release-pinned Flux
+distribution locally. Workload assignments are materialized only after central
+placement, policy, approval, and rollout checks. Each assignment uses a
+project-scoped control namespace and a bounded service account; Flux does not
+receive a reusable management-plane or human credential.
 
-For least privilege, start with `operator` for clusters where baseline components are already installed or where baseline components do not need cluster-admin resources. Use `admin` for clusters where Astronomer or ArgoCD must install CRDs, ClusterRoles, ClusterRoleBindings, admission webhooks, or similar cluster-scoped resources.
+Namespace-scoped bundles stay within their target namespace. Reviewed
+platform-scoped built-ins use the fixed platform-applier boundary. Select the
+agent profile for the separate day-2 proxy, tool, shell, and lifecycle workflows
+the cluster requires; do not widen the profile merely to make a workload bundle
+converge.
 
 ## Operational Guidance
 
@@ -92,7 +99,7 @@ For least privilege, start with `operator` for clusters where baseline component
 - Use `custom` only when you manage the Role/ClusterRole bindings outside the generated manifest.
 - Re-render and re-apply the agent manifest after changing the profile with
   `kubectl apply --server-side --field-manager=astronomer-bootstrap -f -`.
-- Validate important workflows after profile changes: resource browsing, logs, shell/exec, tool install, ArgoCD sync, backup, scan, and decommission.
+- Validate important workflows after profile changes: resource browsing, logs, shell/exec, tool install, delivery reconciliation, backup, scan, and decommission.
 
 ## Enforcement model (M8 — important)
 

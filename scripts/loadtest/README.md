@@ -58,7 +58,7 @@ Profiles live in `scripts/loadtest/profiles/`:
 The harness executes the synthetic-agent and HTTP portions directly. Profile
 `day2FailureDrills` are emitted into the report as planned drill evidence so
 release runs have one place to attach manual/chaos validation results for
-ArgoCD fan-out, Redis outage recovery, Postgres failover, management-plane HA,
+delivery rollout fan-out, Redis outage recovery, Postgres failover, management-plane HA,
 and browser performance budgets.
 
 ### Threshold env vars

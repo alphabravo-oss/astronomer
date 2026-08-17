@@ -101,54 +101,6 @@ func TestPublisher_BackupDeleteEmitsChanged(t *testing.T) {
 	}
 }
 
-func TestPublisher_FleetOperationPauseFansOutPerTargetCluster(t *testing.T) {
-	q := newFakeFleetOperationQuerier()
-	opID := uuid.New()
-	q.operations[opID] = sqlc.FleetOperation{ID: opID, Name: "drain", Status: "running"}
-	clusterA := uuid.New()
-	clusterB := uuid.New()
-	q.targets[opID] = map[uuid.UUID]sqlc.FleetOperationTarget{}
-	for _, cid := range []uuid.UUID{clusterA, clusterA, clusterB} {
-		tid := uuid.New()
-		q.targets[opID][tid] = sqlc.FleetOperationTarget{ID: tid, OperationID: opID, ClusterID: cid, Status: "running"}
-	}
-
-	bus := events.NewBus()
-	ch := pubSubscribe(t, bus)
-	h := NewFleetOperationHandler(q)
-	h.SetEventBus(bus)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/fleet-operations/"+opID.String()+"/pause/", nil)
-	req = withChiParam(req, "id", opID.String())
-	rec := httptest.NewRecorder()
-	h.Pause(rec, req)
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("pause status=%d body=%s", rec.Code, rec.Body.String())
-	}
-
-	// One event per DISTINCT target cluster (duplicate clusterA coalesced).
-	seen := map[string]bool{}
-	for i := 0; i < 2; i++ {
-		e := pubReceive(t, ch, events.TypeFleetOperationChanged)
-		payload := pubPayload(t, e)
-		cid, _ := payload["cluster_id"].(string)
-		if payload["id"] != opID.String() {
-			t.Fatalf("id = %v, want operation id %q", payload["id"], opID.String())
-		}
-		seen[cid] = true
-	}
-	if !seen[clusterA.String()] || !seen[clusterB.String()] {
-		t.Fatalf("expected one event per distinct target cluster, got %v", seen)
-	}
-	select {
-	case e := <-ch:
-		if e.Type == events.TypeFleetOperationChanged {
-			t.Fatalf("duplicate cluster events must be coalesced, got extra %v", e.Data)
-		}
-	case <-time.After(100 * time.Millisecond):
-	}
-}
-
 func TestPublisher_TemplateBindingDetachEmitsChanged(t *testing.T) {
 	q := newFakeClusterTemplateQuerier()
 	clusterID := uuid.New()
@@ -239,26 +191,6 @@ func TestPublisher_LoggingOperationCarriesEnvelopeClusterID(t *testing.T) {
 	}
 }
 
-func TestPublisher_ArgoCDChangedCarriesScopeAndCluster(t *testing.T) {
-	bus := events.NewBus()
-	ch := pubSubscribe(t, bus)
-	h := &ArgoCDHandler{}
-	h.SetEventBus(bus)
-
-	clusterID := uuid.New()
-	entityID := uuid.New().String()
-	h.publishArgoCDChanged(clusterID, entityID, "instance")
-
-	payload := pubPayload(t, pubReceive(t, ch, events.TypeArgoCDChanged))
-	pubAssertCluster(t, payload, clusterID.String())
-	if payload["scope"] != "instance" {
-		t.Fatalf("scope = %v, want instance", payload["scope"])
-	}
-	if payload["id"] != entityID {
-		t.Fatalf("id = %v, want %q", payload["id"], entityID)
-	}
-}
-
 func TestPublisher_CISScanCarriesCluster(t *testing.T) {
 	bus := events.NewBus()
 	ch := pubSubscribe(t, bus)
@@ -276,17 +208,17 @@ func TestPublisher_CISScanCarriesCluster(t *testing.T) {
 	}
 }
 
-func TestPublisher_AgentFleetCarriesCluster(t *testing.T) {
+func TestPublisher_ClusterAgentCarriesCluster(t *testing.T) {
 	bus := events.NewBus()
 	ch := pubSubscribe(t, bus)
-	h := &AgentFleetHandler{}
+	h := &ClusterAgentHandler{}
 	h.SetEventBus(bus)
 
 	clusterID := uuid.New()
 	opID := uuid.New().String()
-	h.publishAgentFleetChanged(clusterID, opID)
+	h.publishClusterAgentChanged(clusterID, opID)
 
-	payload := pubPayload(t, pubReceive(t, ch, events.TypeAgentFleetChanged))
+	payload := pubPayload(t, pubReceive(t, ch, events.TypeClusterAgentChanged))
 	pubAssertCluster(t, payload, clusterID.String())
 	if payload["kind"] != "lifecycle_operation" {
 		t.Fatalf("kind = %v, want lifecycle_operation", payload["kind"])
@@ -315,9 +247,8 @@ func TestPublisher_SnapshotScheduleCarriesCluster(t *testing.T) {
 func TestPublisher_NilBusIsNoOp(t *testing.T) {
 	(&ToolHandler{}).publishToolOperationChanged(sqlc.ToolOperation{ID: uuid.New()})
 	(&LoggingHandler{}).publishLoggingOperationChanged(sqlc.LoggingOperation{ID: uuid.New()})
-	(&ArgoCDHandler{}).publishArgoCDChanged(uuid.New(), "x", "instance")
 	(&SecurityHandler{}).publishCISScanChanged(uuid.New(), uuid.New())
-	(&AgentFleetHandler{}).publishAgentFleetChanged(uuid.New(), "x")
+	(&ClusterAgentHandler{}).publishClusterAgentChanged(uuid.New(), "x")
 	(&BackupHandler{}).publishBackupChanged(pgtype.UUID{}, uuid.New(), "backup")
 	(&ClusterSnapshotsHandler{}).publishSnapshotChanged(uuid.New(), uuid.New(), "snapshot")
 	(&ClusterTemplateHandler{}).publishTemplateBindingChanged(uuid.New(), "pending")

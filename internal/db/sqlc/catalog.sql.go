@@ -181,7 +181,9 @@ func (q *Queries) CountGlobalHelmRepositories(ctx context.Context) (int64, error
 }
 
 const countHelmCharts = `-- name: CountHelmCharts :one
-SELECT count(*) FROM helm_charts
+SELECT count(*) FROM helm_charts c
+JOIN helm_repositories r ON r.id = c.repository_id
+WHERE r.owner_project_id IS NULL
 `
 
 func (q *Queries) CountHelmCharts(ctx context.Context) (int64, error) {
@@ -1058,7 +1060,10 @@ func (q *Queries) ListGlobalHelmRepositories(ctx context.Context, arg ListGlobal
 }
 
 const listHelmCharts = `-- name: ListHelmCharts :many
-SELECT id, repository_id, name, display_name, description, icon_url, home_url, category, keywords, maintainers, deprecated, created_at, updated_at FROM helm_charts ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT c.id, c.repository_id, c.name, c.display_name, c.description, c.icon_url, c.home_url, c.category, c.keywords, c.maintainers, c.deprecated, c.created_at, c.updated_at FROM helm_charts c
+JOIN helm_repositories r ON r.id = c.repository_id
+WHERE r.owner_project_id IS NULL
+ORDER BY c.created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListHelmChartsParams struct {

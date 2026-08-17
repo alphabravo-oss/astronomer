@@ -6,25 +6,31 @@ import { Activity, AlertTriangle, CheckCircle2, Download, History, Loader2, Send
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { DrawerShell } from '@/components/ui/drawer-shell';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { createAgentUpgradeOperation, createAgentUpgradePlan, downloadAgentDiagnosticsBundle, getAgentDiagnostics, getAgentFleet, getAgentOperations, runAgentSelfTest } from '@/lib/api';
-import { queryKeys } from '@/lib/hooks';
+import { PermissionState } from '@/components/ui/empty-state';
+import { createAgentUpgradeOperation, createAgentUpgradePlan, downloadAgentDiagnosticsBundle, getAgentDiagnostics, getClusterAgents, getAgentOperations, runAgentSelfTest } from '@/lib/api';
+import { queryKeys, useCurrentUser } from '@/lib/hooks';
+import { can } from '@/lib/permissions';
 import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { liveFallback } from '@/lib/live/status-store';
 import { cn, formatRelativeTime, downloadBlob } from '@/lib/utils';
-import type { AgentDiagnosticsResponse, AgentFleetItem, AgentLifecycleOperation, AgentSelfTestResponse, AgentUpgradeOperationResponse, AgentUpgradePlanResponse } from '@/types';
+import type { AgentDiagnosticsResponse, ClusterAgentItem, AgentLifecycleOperation, AgentSelfTestResponse, AgentUpgradeOperationResponse, AgentUpgradePlanResponse } from '@/types';
 
-function AgentFleetPage() {
+function ClusterAgentsPage() {
+  const { data: user } = useCurrentUser();
+  const canRead = can(user, 'cluster_agents', 'read');
+  const canManage = can(user, 'cluster_agents', 'update');
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
   const [upgradePlan, setUpgradePlan] = useState<AgentUpgradePlanResponse | null>(null);
-  const { data, isLoading } = useQuery({
-    queryKey: queryKeys.agents.fleet,
-    queryFn: () => getAgentFleet({ limit: 250 }),
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: queryKeys.agents.list({ limit: 250 }),
+    queryFn: () => getClusterAgents({ limit: 250 }),
+    enabled: canRead,
     refetchInterval: liveFallback(30000),
   });
 
   useLiveQueryInvalidation(
-    ['cluster.connected', 'cluster.disconnected', 'cluster.heartbeat', 'agent.reconnecting', 'agent.failed'],
-    [queryKeys.agents.fleet],
+    ['cluster.connected', 'cluster.disconnected', 'cluster.heartbeat', 'agent.reconnecting', 'agent.failed', 'cluster_agents.changed'],
+    [queryKeys.agents.all],
   );
 
   const items = data?.items ?? [];
@@ -44,7 +50,7 @@ function AgentFleetPage() {
     refetchInterval: selectedClusterId ? liveFallback(15000) : false,
   });
 
-  const columns: Column<AgentFleetItem>[] = [
+  const columns: Column<ClusterAgentItem>[] = [
     {
       key: 'cluster',
       header: 'Cluster',
@@ -180,11 +186,13 @@ function AgentFleetPage() {
     },
   ];
 
+  if (!canRead) return <PermissionState permission="cluster_agents:read" />;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Agent Fleet</h1>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Cluster Agents</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Connected, degraded, and disconnected Astronomer agents across adopted clusters.
           </p>
@@ -212,6 +220,8 @@ function AgentFleetPage() {
         columns={columns}
         keyExtractor={(row) => row.clusterId}
         loading={isLoading}
+        isError={isError}
+        onRetry={() => void refetch()}
         searchPlaceholder="Search agents..."
         emptyMessage="No adopted-cluster agents found."
         pageSize={25}
@@ -223,6 +233,7 @@ function AgentFleetPage() {
           upgradePlan={upgradePlan}
           operations={operations.data?.items ?? []}
           operationsLoading={operations.isLoading}
+          canManage={canManage}
           onClose={() => {
             setSelectedClusterId(null);
             setUpgradePlan(null);
@@ -331,6 +342,7 @@ function AgentDiagnosticsDrawer({
   upgradePlan,
   operations,
   operationsLoading,
+  canManage,
   onClose,
   onPlan,
   onSelfTest,
@@ -342,6 +354,7 @@ function AgentDiagnosticsDrawer({
   upgradePlan: AgentUpgradePlanResponse | null;
   operations: AgentLifecycleOperation[];
   operationsLoading: boolean;
+  canManage: boolean;
   onClose: () => void;
   onPlan: () => Promise<void>;
   onSelfTest: () => Promise<AgentSelfTestResponse>;
@@ -421,7 +434,7 @@ function AgentDiagnosticsDrawer({
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-sm font-medium text-foreground">Upgrade</h3>
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
+                    {canManage && <button
                       onClick={async () => {
                         setPlanning(true);
                         setActionError(null);
@@ -438,8 +451,8 @@ function AgentDiagnosticsDrawer({
                     >
                       {planning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
                       Plan
-                    </button>
-                    <button
+                    </button>}
+                    {canManage && <button
                       onClick={async () => {
                         setQueueing(true);
                         setActionError(null);
@@ -457,7 +470,7 @@ function AgentDiagnosticsDrawer({
                     >
                       {queueing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                       Queue
-                    </button>
+                    </button>}
                   </div>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">{diagnostics.upgradeRecommendation.message}</p>
@@ -520,7 +533,7 @@ function AgentDiagnosticsDrawer({
   );
 }
 
-function OfflineBehaviorSection({ behavior }: { behavior: NonNullable<AgentFleetItem['offlineBehavior']> }) {
+function OfflineBehaviorSection({ behavior }: { behavior: NonNullable<ClusterAgentItem['offlineBehavior']> }) {
   return (
     <section className="rounded-md border border-status-warning/30 bg-status-warning/10 p-4">
       <div className="flex items-center justify-between gap-3">
@@ -736,5 +749,5 @@ function PlanList({ title, items }: { title: string; items: string[] }) {
 }
 
 export const Route = createFileRoute('/dashboard/agents/')({
-  component: AgentFleetPage,
+  component: ClusterAgentsPage,
 });

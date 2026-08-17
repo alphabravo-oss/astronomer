@@ -124,7 +124,8 @@ func classifyFrame(t protocol.MessageType) frameClass {
 		protocol.MsgK8sResponse, protocol.MsgHelmResult, protocol.MsgHelmStatusResult,
 		protocol.MsgRBACSyncResult, protocol.MsgServiceProxyResponse, protocol.MsgProxyResponse,
 		protocol.MsgDecommissionAck, protocol.MsgAgentUpgradeResult, protocol.MsgError,
-		protocol.MsgApiserverAudit, protocol.MsgDesiredStateRequest, protocol.MsgApplyStatus:
+		protocol.MsgApiserverAudit,
+		protocol.MsgDeliveryStateRequest, protocol.MsgDeliveryStatus:
 		return frameControl
 	case protocol.MsgStateUpdate, protocol.MsgMirrorEvent:
 		return frameBestEffort
@@ -309,10 +310,11 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 
 	// Send CONNECT message.
 	connectPayload := protocol.ConnectPayload{
-		ClusterID:    tc.config.ClusterID,
-		AgentID:      tc.config.AgentID,
-		AgentVersion: version.Version,
-		Token:        tc.config.AgentToken,
+		ClusterID:               tc.config.ClusterID,
+		AgentID:                 tc.config.AgentID,
+		AgentVersion:            version.Version,
+		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion,
+		Token:                   tc.config.AgentToken,
 	}
 	payloadBytes, err := json.Marshal(connectPayload)
 	if err != nil {

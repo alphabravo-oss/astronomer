@@ -28,8 +28,7 @@ const (
 	// long-running handler to stop — if they queued behind the bound those
 	// handlers hold, the only thing that could free the bound would be the
 	// messages the bound is blocking. DECOMMISSION and AGENT_UPGRADE are
-	// once-per-lifetime commands whose rejection would strand an operator, and
-	// DESIRED_STATE_RESPONSE is the answer to a request the agent itself made.
+	// once-per-lifetime commands whose rejection would strand an operator.
 	dispatchExempt dispatchClass = "exempt"
 	// dispatchStream is a long-lived, low-memory handler: a watch, an exec
 	// session, a log tail, or a Helm operation that can legitimately run for
@@ -80,7 +79,7 @@ func classifyDispatch(t protocol.MessageType) dispatchClass {
 	case protocol.MsgExecInput, protocol.MsgExecResize, protocol.MsgExecEnd,
 		protocol.MsgK8sStreamStop, protocol.MsgLogStop,
 		protocol.MsgDecommission, protocol.MsgAgentUpgrade,
-		protocol.MsgDesiredStateResponse:
+		protocol.MsgDeliveryStateResponse, protocol.MsgDeliveryReconcile:
 		return dispatchExempt
 	case protocol.MsgK8sStreamRequest, protocol.MsgExecStart, protocol.MsgLogStart,
 		protocol.MsgHelmInstall, protocol.MsgHelmUpgrade, protocol.MsgHelmUninstall,

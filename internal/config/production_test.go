@@ -9,13 +9,23 @@ import (
 // to prove that field is enforced.
 func prodBase() *Config {
 	return &Config{
-		Env:                   "production",
-		SecretKey:             "a-real-unique-secret",
-		EncryptionKey:         "a-real-unique-encryption-key",
-		DatabaseURL:           "postgres://u:p@db/astronomer?sslmode=require",
-		DexBundledEnabled:     true,
-		AuthLocalPasswordOnly: false,
-		ServerURL:             "https://astronomer.example.com",
+		Env:                                "production",
+		SecretKey:                          "a-real-unique-secret",
+		EncryptionKey:                      "a-real-unique-encryption-key",
+		DatabaseURL:                        "postgres://u:p@db/astronomer?sslmode=require",
+		DexBundledEnabled:                  true,
+		AuthLocalPasswordOnly:              false,
+		ServerURL:                          "https://astronomer.example.com",
+		DeliveryEnabled:                    true,
+		AgentImageRepository:               "registry.example.test/astronomer-agent@sha256:" + strings.Repeat("a", 64),
+		DeliveryFluxDistributionRepository: "registry.example.test/astronomer/system",
+		DeliveryFluxDistributionDigest:     "sha256:" + strings.Repeat("b", 64),
+		DeliveryFluxDistributionCertificateIdentity: "https://github.com/example/release@refs/tags/v1.0.0",
+		DeliveryFluxDistributionOIDCIssuer:          "https://token.actions.githubusercontent.com",
+		DeliveryBundleRepository:                    "registry.example.test/astronomer/bundles",
+		DeliveryBundleDigest:                        "sha256:" + strings.Repeat("c", 64),
+		DeliveryBundleCertificateIdentity:           "https://github.com/example/release@refs/tags/v1.0.0",
+		DeliveryBundleOIDCIssuer:                    "https://token.actions.githubusercontent.com",
 	}
 }
 

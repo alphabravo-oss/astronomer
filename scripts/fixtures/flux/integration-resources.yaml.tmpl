@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: __TEST_NAMESPACE__
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.33
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.33
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.33
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flux-test-reconciler
+  namespace: __TEST_NAMESPACE__
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: flux-test-reconciler
+  namespace: __TEST_NAMESPACE__
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets", "pods"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flux-test-reconciler
+  namespace: __TEST_NAMESPACE__
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: flux-test-reconciler
+subjects:
+  - kind: ServiceAccount
+    name: flux-test-reconciler
+    namespace: __TEST_NAMESPACE__
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-local-integration-fixture
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer-flux-integration
+spec:
+  podSelector:
+    matchLabels:
+      app: source-controller
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+        - ipBlock:
+            cidr: ::/0
+      ports:
+        - protocol: TCP
+          port: __FIXTURE_PORT__
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: integration-git
+  namespace: __TEST_NAMESPACE__
+  labels:
+    app.kubernetes.io/managed-by: astronomer-agent
+spec:
+  interval: 5s
+  timeout: 30s
+  url: http://host.k3d.internal:__FIXTURE_PORT__/git/repository.git
+  ref:
+    branch: main
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: integration-kustomization
+  namespace: __TEST_NAMESPACE__
+  labels:
+    app.kubernetes.io/managed-by: astronomer-agent
+spec:
+  interval: 5s
+  retryInterval: 5s
+  timeout: 1m
+  path: ./kustomize
+  targetNamespace: __TEST_NAMESPACE__
+  prune: true
+  deletionPolicy: Delete
+  wait: true
+  serviceAccountName: flux-test-reconciler
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: GitRepository
+    name: integration-git
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: integration-helm
+  namespace: __TEST_NAMESPACE__
+  labels:
+    app.kubernetes.io/managed-by: astronomer-agent
+spec:
+  interval: 5s
+  timeout: 30s
+  url: http://host.k3d.internal:__FIXTURE_PORT__/helm
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmChart
+metadata:
+  name: integration-helm
+  namespace: __TEST_NAMESPACE__
+  labels:
+    app.kubernetes.io/managed-by: astronomer-agent
+spec:
+  interval: 5s
+  chart: astronomer-flux-integration
+  version: "0.1.0"
+  sourceRef:
+    kind: HelmRepository
+    name: integration-helm
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: integration-helm
+  namespace: __TEST_NAMESPACE__
+  labels:
+    app.kubernetes.io/managed-by: astronomer-agent
+spec:
+  interval: 5s
+  timeout: 2m
+  releaseName: astronomer-flux-integration
+  targetNamespace: __TEST_NAMESPACE__
+  serviceAccountName: flux-test-reconciler
+  chartRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: HelmChart
+    name: integration-helm
+  install:
+    remediation:
+      retries: 1
+  upgrade:
+    remediation:
+      retries: 1
+  test:
+    enable: true
+  driftDetection:
+    mode: enabled
+  values:
+    image:
+      repository: astronomer-flux-fixture-server
+      tag: __IMAGE_TAG__
+      pullPolicy: Never

@@ -8,13 +8,13 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 416
-- Frontend source lines: 115884
-- Go source files under `internal/` excluding generated sqlc and tests: 578
-- Go source files scanned for sqlc query references excluding generated sqlc: 1375
-- sqlc query declarations: 1024
-- Component files scanned: 135
-- Helm top-level values scanned: 33
+- Frontend source files: 389
+- Frontend source lines: 108995
+- Go source files under `internal/` excluding generated sqlc and tests: 536
+- Go source files scanned for sqlc query references excluding generated sqlc: 1205
+- sqlc query declarations: 948
+- Component files scanned: 118
+- Helm top-level values scanned: 34
 
 ## Hard Gates
 
@@ -94,16 +94,12 @@ Owner: frontend/platform. Target abstraction: shared `queryKeys` or feature hook
 
 Owner: backend/platform. Target abstraction: shared helper package only when call sites perform the same behavior.
 
-- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:2151`](internal/server/routes.go:2151)
-- `copyStringMap` in [`internal/charlie/agent_installation.go:1467`](internal/charlie/agent_installation.go:1467), [`internal/crd/types.go:1248`](internal/crd/types.go:1248), [`internal/server/self_manage_credentials.go:324`](internal/server/self_manage_credentials.go:324)
+- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:2020`](internal/server/routes.go:2020)
 - `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
 - `decodeRoleRules` in [`internal/handler/rbac.go:1110`](internal/handler/rbac.go:1110), [`internal/server/middleware/rbac_queries.go:238`](internal/server/middleware/rbac_queries.go:238)
 - `ensureJSONEOF` in [`internal/handler/charlie_onboarding.go:117`](internal/handler/charlie_onboarding.go:117), [`internal/sessionpolicy/session_timeout.go:80`](internal/sessionpolicy/session_timeout.go:80)
 - `isEmpty` in [`internal/dexconfig/validate.go:504`](internal/dexconfig/validate.go:504), [`internal/notify/render.go:147`](internal/notify/render.go:147)
-- `isOwnedNamespace` in [`internal/agent/reconcile.go:485`](internal/agent/reconcile.go:485), [`internal/server/desired_state.go:46`](internal/server/desired_state.go:46)
-- `nullableTime` in [`internal/charlie/fleet_capability_adapter.go:198`](internal/charlie/fleet_capability_adapter.go:198), [`internal/handler/alerting.go:2144`](internal/handler/alerting.go:2144)
-- `objectMeta` in [`internal/charlie/agent_installation.go:783`](internal/charlie/agent_installation.go:783), [`internal/crd/ingest_v2.go:171`](internal/crd/ingest_v2.go:171)
-- `podReady` in [`internal/charlie/mode_ceiling_rollout.go:301`](internal/charlie/mode_ceiling_rollout.go:301), [`internal/handler/monitoring_operations.go:912`](internal/handler/monitoring_operations.go:912)
+- `podReady` in [`internal/charlie/management_kubernetes_adapter.go:30`](internal/charlie/management_kubernetes_adapter.go:30), [`internal/handler/monitoring_operations.go:912`](internal/handler/monitoring_operations.go:912)
 - `requireSuperuser` in [`internal/handler/authorization.go:88`](internal/handler/authorization.go:88), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
 - `verbMatches` in [`internal/rbac/native.go:85`](internal/rbac/native.go:85), [`internal/server/middleware/read_audit.go:166`](internal/server/middleware/read_audit.go:166)
 - `writeError` in [`internal/charlie/contract/fakebridge/fake.go:314`](internal/charlie/contract/fakebridge/fake.go:314), [`internal/charliequalification/hook.go:221`](internal/charliequalification/hook.go:221)
@@ -114,6 +110,10 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 Owner: database/backend. Classification rule: remove only after confirming no handler, worker, CLI, migration test, or planned compatibility path uses the query.
 
 - `ArchiveAuditLogsForCluster` declared at [`internal/db/queries/cluster_decommission.sql:193`](internal/db/queries/cluster_decommission.sql:193) has no non-generated Go reference
+- `CharlieAgentReconnectStats` declared at [`internal/db/queries/charlie.sql:164`](internal/db/queries/charlie.sql:164) has no non-generated Go reference
+- `CharlieClusterAgentGet` declared at [`internal/db/queries/charlie.sql:139`](internal/db/queries/charlie.sql:139) has no non-generated Go reference
+- `CharlieClusterAgentSummary` declared at [`internal/db/queries/charlie.sql:79`](internal/db/queries/charlie.sql:79) has no non-generated Go reference
+- `CharlieTunnelRecentErrors` declared at [`internal/db/queries/charlie.sql:179`](internal/db/queries/charlie.sql:179) has no non-generated Go reference
 - `ClaimDueCharlieTriggerEvents` declared at [`internal/db/queries/charlie.sql:899`](internal/db/queries/charlie.sql:899) has no non-generated Go reference
 - `ClearCharlieEmergencyDisabled` declared at [`internal/db/queries/charlie.sql:342`](internal/db/queries/charlie.sql:342) has no non-generated Go reference
 - `CompareAndSetCharlieMode` declared at [`internal/db/queries/charlie.sql:318`](internal/db/queries/charlie.sql:318) has no non-generated Go reference
@@ -124,6 +124,8 @@ Owner: database/backend. Classification rule: remove only after confirming no ha
 - `GetXClusterAnomalyBaseline` declared at [`internal/db/queries/xcluster_anomaly_baselines.sql:11`](internal/db/queries/xcluster_anomaly_baselines.sql:11) has no non-generated Go reference
 - `ListBlessedCharts` declared at [`internal/db/queries/catalog_blessed.sql:23`](internal/db/queries/catalog_blessed.sql:23) has no non-generated Go reference
 - `ListCharlieAmbiguousReceipts` declared at [`internal/db/queries/charlie.sql:630`](internal/db/queries/charlie.sql:630) has no non-generated Go reference
+- `ListConnectionsByCluster` declared at [`internal/db/queries/agents.sql:1`](internal/db/queries/agents.sql:1) has no non-generated Go reference
+- `ListLatestConnectionsByClusters` declared at [`internal/db/queries/agents.sql:7`](internal/db/queries/agents.sql:7) has no non-generated Go reference
 - `ListScansByClusterAndType` declared at [`internal/db/queries/security.sql:96`](internal/db/queries/security.sql:96) has no non-generated Go reference
 - `ListXClusterAnomalyBaselines` declared at [`internal/db/queries/xcluster_anomaly_baselines.sql:5`](internal/db/queries/xcluster_anomaly_baselines.sql:5) has no non-generated Go reference
 - `RecordTunnelLocatorEvent` declared at [`internal/db/queries/charlie.sql:71`](internal/db/queries/charlie.sql:71) has no non-generated Go reference
@@ -146,7 +148,6 @@ Owner: frontend/platform. Classification rule: verify relative imports and dynam
 - `@/components/extensions/ExtensionSlot.test` (frontend/src/components/extensions/ExtensionSlot.test.tsx) has no absolute `@/components/...` import
 - `@/components/extensions/ExtForm.test` (frontend/src/components/extensions/ExtForm.test.tsx) has no absolute `@/components/...` import
 - `@/components/extensions/SandboxedExtension.test` (frontend/src/components/extensions/SandboxedExtension.test.tsx) has no absolute `@/components/...` import
-- `@/components/fleet/selector-builder.test` (frontend/src/components/fleet/selector-builder.test.tsx) has no absolute `@/components/...` import
 - `@/components/projects/cluster-templates/template-form.test` (frontend/src/components/projects/cluster-templates/template-form.test.tsx) has no absolute `@/components/...` import
 - `@/components/resources/key-value-editor` (frontend/src/components/resources/key-value-editor.tsx) has no absolute `@/components/...` import
 - `@/components/ui/yaml-view-dialog.test` (frontend/src/components/ui/yaml-view-dialog.test.tsx) has no absolute `@/components/...` import
@@ -154,13 +155,13 @@ Owner: frontend/platform. Classification rule: verify relative imports and dynam
 
 Owner: deployment/platform. Classification rule: keep if consumed by tests, docs, subcharts, or future production overrides; otherwise remove from values and schema together.
 
-- `argo-cd` is a top-level `deploy/chart/values.yaml` key with no direct template reference
+- None.
 
 ## Summary
 
 - Hard failures: 0
-- Duplicate-code candidates: 14
-- Dead-code candidates: 36
+- Duplicate-code candidates: 10
+- Dead-code candidates: 40
 
 ## Definition Of Done For Each Candidate
 

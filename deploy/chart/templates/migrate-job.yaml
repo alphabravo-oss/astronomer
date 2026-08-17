@@ -41,7 +41,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "digest" .Values.utilities.busybox.digest "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - sh

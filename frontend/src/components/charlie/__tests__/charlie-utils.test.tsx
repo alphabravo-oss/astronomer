@@ -14,12 +14,12 @@ describe("Charlie safe UI boundary", () => {
       "agent_connection_record",
     );
     expect(contextForRoute("/dashboard/alerting")[0].type).toBe("alert");
-    expect(contextForRoute("/dashboard/agents")[0].type).toBe("agent_fleet");
+    expect(contextForRoute("/dashboard/agents")[0].type).toBe("cluster_agents");
     expect(contextForRoute("/dashboard/backups/run-1")[0]).toMatchObject({
       type: "backup",
       id: "run-1",
     });
-    expect(contextForRoute("/dashboard/settings/gitops/source-1")[0].type).toBe(
+    expect(contextForRoute("/dashboard/delivery/targets/target-1")[0].type).toBe(
       "self_management_application",
     );
     expect(contextForRoute("/dashboard/audit")).toEqual([]);
@@ -36,10 +36,10 @@ describe("Charlie safe UI boundary", () => {
         "monitoring",
         "logging",
         "backups",
-        "self_management_gitops",
+        "continuous_delivery",
         "audit",
         "agent_record",
-        "agent_fleet",
+        "cluster_agents",
         "agent_tunnel",
       ]),
     ));

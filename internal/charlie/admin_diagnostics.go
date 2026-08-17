@@ -29,7 +29,7 @@ func (s *AdminService) Diagnostics(ctx context.Context, correlationID string) (A
 	if !connection.Active || connection.EmergencyDisabled || EffectiveMode(Mode(connection.RequestedMode), Mode(connection.VerifiedMode), connection.EmergencyDisabled) == ModeDisabled {
 		// The disabled diagnostics path is network-quiesced. It remains available
 		// as a local status surface but must not initiate a request to the product
-		// agent, its bridge, Charlie central, or the Kubernetes installer. An
+		// agent, its bridge, Charlie central, or the Flux-managed workload. An
 		// enabled connection's separate signed control heartbeat is not a
 		// diagnostics request and is governed by the runtime lifecycle gate.
 		for _, check := range inactiveDiagnosticChecks() {
@@ -46,21 +46,16 @@ func (s *AdminService) Diagnostics(ctx context.Context, correlationID string) (A
 	} else {
 		add("product_bridge_mtls", "Product Bridge mTLS", "healthy", "The product-local bridge completed mutual TLS and returned bounded status.")
 	}
-	installation := AgentInstallationStatus{}
-	installErr := ErrAdminUnavailable
-	if s.installer != nil {
-		installation, installErr = s.installer.Status(ctx, adminInstallSpec(connection))
+	primaryState := "unavailable"
+	if bridgeErr == nil && bridgeStatus.LeaderInstanceID != "" && bridgeStatus.Epoch > 0 {
+		primaryState = "healthy"
 	}
-	primaryState := "healthy"
-	if installation.ReadyReplicas < 1 {
-		primaryState = "unavailable"
+	add("agent_primary", "Agent primary replica", primaryState, "Leader identity and fencing epoch are reported by the Flux-managed product agent.")
+	standbyState := "degraded"
+	if bridgeErr == nil && bridgeStatus.ReplicaCount >= 2 && bridgeStatus.InstanceID != "" {
+		standbyState = "healthy"
 	}
-	add("agent_primary", "Agent primary replica", primaryState, fmt.Sprintf("%d of %d replicas are ready.", installation.ReadyReplicas, installation.DesiredReplicas))
-	standbyState := "healthy"
-	if installation.ReadyReplicas < 2 {
-		standbyState = "degraded"
-	}
-	add("agent_standby", "Agent standby replica", standbyState, fmt.Sprintf("%d ready replicas are visible locally.", installation.ReadyReplicas))
+	add("agent_standby", "Agent standby replica", standbyState, "The product bridge reports the configured replica topology without exposing pod details.")
 	centralState := "unavailable"
 	if bridgeErr == nil && bridgeStatus.CentralHealth == "healthy" {
 		centralState = "healthy"
@@ -86,12 +81,12 @@ func (s *AdminService) Diagnostics(ctx context.Context, correlationID string) (A
 	}
 	add("mcp_tls_discovery", "MCP TLS and discovery digest", digestState, "The agent disclosure digest is compared with Astronomer's current MCP catalog.")
 	artifactState := "unavailable"
-	if installErr == nil && installation.ArtifactsVerified {
+	if bridgeErr == nil && strings.TrimSpace(bridgeStatus.ArtifactVersion) != "" && bridgeStatus.ArtifactVersion == connection.ChartVersion {
 		artifactState = "healthy"
-	} else if installation.ApplicationSynced {
+	} else if bridgeErr == nil && strings.TrimSpace(bridgeStatus.ArtifactVersion) != "" {
 		artifactState = "degraded"
 	}
-	add("oci_artifacts", "OCI chart and image", artifactState, "Argo application and immutable artifact status are checked locally and through the agent.")
+	add("oci_artifacts", "OCI chart and image", artifactState, "The agent-reported artifact version is compared with the signed onboarding metadata; Flux owns reconciliation.")
 	credentialState, credentialSummary := credentialExpiryDiagnostic(connection, now)
 	add("credential_expiry", "Certificate and credential expiry", credentialState, credentialSummary)
 	overall := "healthy"
@@ -158,13 +153,13 @@ func diagnosticNextAction(id, state string) string {
 	actions := map[string]string{
 		"local_config":        "Verify the signed onboarding package and local Charlie configuration, then rerun diagnostics.",
 		"product_bridge_mtls": "Check the Charlie agent pods and Product Bridge Service/TLS trust, then rerun diagnostics.",
-		"agent_primary":       "Inspect the Argo application and agent StatefulSet; restore at least one ready replica.",
-		"agent_standby":       "Restore the configured standby replica before enabling approval or automation.",
+		"agent_primary":       "Inspect the Charlie delivery target and Flux reconciliation; restore at least one reporting replica.",
+		"agent_standby":       "Restore the Flux-managed standby replica before enabling approval or automation.",
 		"central_via_agent":   "Check agent egress to the configured Charlie endpoint; do not add direct server egress.",
 		"leader_epoch":        "Confirm one elected agent leader and a current fencing epoch before permitting writes.",
 		"route_rag":           "Verify the Charlie route and product-version knowledge release from Charlie administration.",
 		"mcp_tls_discovery":   "Rediscover the MCP catalog and acknowledge the exact new disclosure digest.",
-		"oci_artifacts":       "Reconcile the Argo application using the immutable chart and image digests from Charlie OCI.",
+		"oci_artifacts":       "Reconcile the Charlie delivery bundle through Flux using the reviewed immutable chart and image digests.",
 		"credential_expiry":   "Rotate the Charlie agent credentials and certificates before they expire, then verify the new status.",
 	}
 	if action := actions[id]; action != "" {
@@ -203,4 +198,3 @@ func credentialExpiryDiagnostic(connection sqlc.CharlieConnection, now time.Time
 func normalizeDigest(value string) string {
 	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(value)), "sha256:")
 }
-

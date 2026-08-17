@@ -1,5 +1,4 @@
 {{- define "astronomer.preflightNetworkPolicy" -}}
-{{- $mode := .mode -}}
 {{- with .root }}
 {{- $root := . -}}
 {{- /*
@@ -42,19 +41,14 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "astronomer.fullname" . }}-preflight{{ if eq $mode "argocd" }}-argocd{{ end }}
+  name: {{ include "astronomer.fullname" . }}-preflight
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
   annotations:
-    {{- if eq $mode "helm" }}
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-10"
     "helm.sh/hook-delete-policy": before-hook-creation
-    argocd.argoproj.io/hook: Skip
-    {{- else }}
-    argocd.argoproj.io/sync-wave: "-5"
-    {{- end }}
 spec:
   podSelector:
     matchLabels:
@@ -92,7 +86,5 @@ spec:
 {{- end }}
 
 {{- if and .Values.preflight.enabled .Values.networkPolicy.enabled .Values.networkPolicy.defaultDeny }}
-{{ include "astronomer.preflightNetworkPolicy" (dict "root" . "mode" "helm") }}
----
-{{ include "astronomer.preflightNetworkPolicy" (dict "root" . "mode" "argocd") }}
+{{ include "astronomer.preflightNetworkPolicy" (dict "root" .) }}
 {{- end }}

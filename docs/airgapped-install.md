@@ -1,191 +1,294 @@
-# Air-gapped install — Astronomer Go management plane
+# Air-gapped installation and upgrade
 
-This runbook walks through installing Astronomer into a Kubernetes
-cluster that has **no outbound internet access**. The output is the
-same shape as a normal `helm install`, except every container image is
-served from an internal registry inside the airgap.
+This runbook installs one immutable Astronomer release without allowing the
+management or member clusters to reach a public registry. A release is a single
+compatibility unit: management chart and images, agent, the downstream Flux
+distribution and controllers, built-in bundles and their images, and the exact
+qualified Charlie artifact.
 
-## Audience
+Do not build from a source checkout for a production install. Use the chart,
+signed `release-manifest.json`, signature bundle, SBOMs, provenance, and
+checksums attached to the same `vX.Y.Z` GitHub release. Do not substitute a tag
+where this procedure uses `repository@sha256:...`.
 
-- Operators landing Astronomer in regulated / restricted environments
-  (DoD, healthcare, finance, classified networks).
-- Anyone who needs reproducible installs from a fixed image set rather
-  than pulling from public registries on demand.
+## Trust and network boundaries
 
-## Prerequisites on the egress side
+Use three roles:
 
-You'll need a workstation that can reach **both** the public registries
-(to pull images) **and** your internal registry (to push them). This
-machine doesn't need to reach the Kubernetes cluster itself.
+1. A release-verification host can reach GitHub and the public OCI registries.
+2. A controlled mirror host can read the verified sources and write the private
+   registry. Registry credentials stay in the normal Skopeo, ORAS, and Cosign
+   credential stores; the Astronomer utility neither accepts nor records them.
+3. The disconnected environment can reach only its private registry and
+   approved internal services such as DNS, PostgreSQL, Redis, identity, object
+   storage, and the Kubernetes API.
 
-- [`helm`](https://helm.sh/docs/intro/install/) 3.13+
-- [`skopeo`](https://github.com/containers/skopeo) (preferred) or
-  `docker buildx imagetools` / `crane`
-- An auth-credential pair for your internal registry
-- The chart source: clone `astronomer-go` so `deploy/chart/` is local
+For a physically separated environment, perform step 2 in an approved transfer
+enclave that can address the private registry. Retain the signed release and
+mapping manifests on the transferred media. Never place registry credentials,
+TLS private keys, database DSNs, bootstrap passwords, or Helm secret values on
+that media.
 
-## Step 1 — Get the image list
+Required tools are Helm 3.16+, Skopeo, ORAS 1.2.2+, Cosign 2.4.1+, `jq`, and
+`sha256sum`. The exact versions used by release CI are visible in
+`.github/workflows/release.yaml`.
 
-`deploy/chart/images.txt` is regenerated from the chart by
-`make images.txt`. The committed file is the authoritative list at the
-time of the last release; regenerate if you're tracking `main`:
+## 1. Download and verify the release unit
+
+Set an exact release; there is no `latest` release channel.
 
 ```bash
-make images.txt
-grep -v '^#' deploy/chart/images.txt > /tmp/images.txt
-cat /tmp/images.txt
+export ASTRONOMER_RELEASE=v1.0.0
+mkdir "astronomer-${ASTRONOMER_RELEASE}"
+cd "astronomer-${ASTRONOMER_RELEASE}"
+gh release download "$ASTRONOMER_RELEASE" --repo alphabravo-oss/astronomer
+sha256sum --check SHA256SUMS
 ```
 
-You should see the first-party images (server, worker, migrate, agent,
-frontend, shell) plus third-party deps used by default *and* by production
-optional components: postgres, redis/valkey, busybox, Argo CD, **Dex**,
-**pgdump-s3** (management backup / restore drill), and **fluent-bit**
-(management logging). The extractor unions a default render with a
-production-like render so air-gapped prod installs don't miss Dex/backup/
-logging images that stay off in bare `values.yaml`.
-
-## Step 2 — Mirror images into your internal registry
+Verify the signed manifest before trusting any digest in it:
 
 ```bash
-INTERNAL_REGISTRY="internal.example.com/astronomer"
+cosign verify-blob \
+  --bundle release-manifest.sigstore.json \
+  --certificate-identity \
+    "https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/${ASTRONOMER_RELEASE}" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  release-manifest.json
 
-while read -r img; do
-  echo "Mirroring $img → $INTERNAL_REGISTRY/$img"
-  skopeo copy --all \
-    "docker://$img" \
-    "docker://$INTERNAL_REGISTRY/$img"
-done < /tmp/images.txt
+jq -e --arg version "$ASTRONOMER_RELEASE" '
+  .schema_version == 1 and
+  .release.version == $version and
+  .release.install_mode == "fresh_only" and
+  (.astronomer.images | length) == 6 and
+  (.flux.controllers | length) == 3 and
+  (.built_in_bundles.components | length) > 0 and
+  (.charlie.qualified_version | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
+' release-manifest.json >/dev/null
 ```
 
-`--all` copies the full manifest list (every platform variant). Drop
-it if you only need linux/amd64.
+Review `release-manifest.json` as the authoritative bill of materials. The
+human-readable `RELEASE_SUBJECTS`, SPDX documents, and SLSA provenance files are
+supporting evidence; they do not override it.
 
-For air-gapped environments that *truly* can't reach the public
-registries even from the egress workstation, do the mirror in two
-hops:
+## 2. Check capacity before copying
+
+From the matching Astronomer source tag, run the read-only capacity guard:
 
 ```bash
-# Hop 1: workstation that can reach the public internet
-skopeo copy --all "docker://postgres:16-alpine" "dir:./postgres-16-alpine"
-# ... repeat for every image, then ship the directories on physical media
-
-# Hop 2: machine inside the airgap that can reach the internal registry
-skopeo copy --all "dir:./postgres-16-alpine" "docker://$INTERNAL_REGISTRY/postgres:16-alpine"
+./scripts/check-build-capacity.sh --path . --min-free-gib 20 --min-free-percent 20
 ```
 
-## Step 3 — Install the chart
+If it blocks, first produce an exact cleanup plan. The repository cleanup tool
+only considers untagged Docker images that no running or stopped container
+references; it never removes containers, volumes, tagged/current/rollback
+images, backups, TLS material, or workspace files.
 
 ```bash
-helm install astronomer ./deploy/chart \
-  -n astronomer --create-namespace \
-  -f ./deploy/chart/values.yaml \
-  -f ./deploy/chart/values-production.yaml \
-  --set "image.registry=$INTERNAL_REGISTRY" \
+./scripts/safe-disk-cleanup.sh plan --output ./disk-cleanup.plan
+# Review every docker-image ID before authorizing removal.
+./scripts/safe-disk-cleanup.sh apply --plan ./disk-cleanup.plan
+./scripts/check-build-capacity.sh --path . --min-free-gib 20 --min-free-percent 20
+```
+
+If that cannot recover safe headroom, add storage. Do not prune rollback or
+release-manifest-referenced content.
+
+## 3. Generate the deterministic mirror and install contracts
+
+Authenticate Skopeo and ORAS to the destination registry using their standard
+credential files, then generate a plan without writing the registry:
+
+```bash
+export PRIVATE_REGISTRY=registry.internal.example.com
+
+./scripts/mirror-release.py plan \
+  --manifest release-manifest.json \
+  --destination-registry "$PRIVATE_REGISTRY" \
+  --output mirror-mapping.json \
+  --values-output airgap-values.json
+```
+
+The plan contains only immutable source and target references. Repository paths
+are preserved while every public registry host is replaced by the private host.
+The generated Helm JSON sets every management-plane image to the mapped
+repository and digest and configures the exact Flux and built-in-bundle
+artifacts. It contains no credentials and is safe to review in source control;
+do not add operational secret values to it.
+
+Review the complete copy set before applying it:
+
+```bash
+jq -r '.entries[] | [.kind, .source, .target] | @tsv' mirror-mapping.json
+jq -e '
+  all(.entries[];
+    (.source | contains("@sha256:")) and
+    (.target | contains("@sha256:")))
+' mirror-mapping.json >/dev/null
+```
+
+## 4. Mirror, verify, and sign the mapping
+
+Use an enterprise-held Cosign key for a mapping that must be verified wholly
+offline. Keep the private key outside the release directory and provide its
+password through Cosign's documented environment mechanism.
+
+```bash
+./scripts/mirror-release.py apply \
+  --plan mirror-mapping.json \
+  --signature-output mirror-mapping.sigstore.json \
+  --cosign-key /secure/path/airgap-mirror.key
+
+./scripts/mirror-release.py verify --plan mirror-mapping.json
+
+cosign verify-blob \
+  --key /secure/path/airgap-mirror.pub \
+  --bundle mirror-mapping.sigstore.json \
+  mirror-mapping.json
+```
+
+Container images are copied with all platforms and preserved digests. Helm and
+OCI artifacts are copied recursively so OCI referrers such as signatures, SPDX
+attestations, and SLSA provenance move with the subject. Registries that reject
+a push directly to `repository@digest` receive a deterministic digest-derived
+tag; the utility accepts the copy only after `repository@digest` resolves to the
+original digest. Re-running `apply` is idempotent.
+
+Transfer these files into the disconnected environment:
+
+- `astronomer-X.Y.Z.tgz`
+- `release-manifest.json` and `release-manifest.sigstore.json`
+- `mirror-mapping.json` and `mirror-mapping.sigstore.json`
+- `airgap-values.json`, `SHA256SUMS`, `RELEASE_SUBJECTS`, SBOMs, and provenance
+
+Re-run the checksum, release-manifest signature, mirror-mapping signature, and
+`mirror-release.py verify` checks from inside the environment. Verification
+must succeed against the private registry before Helm is allowed to run.
+
+## 5. Prepare the cluster
+
+Install the supported Gateway API CRDs and an approved GatewayClass from your
+own mirrored artifacts before Astronomer. The Astronomer release does not
+silently install a public gateway controller.
+
+Pre-create all production secrets through your secret manager or external
+secrets controller. If the registry requires authentication, create a
+`kubernetes.io/dockerconfigjson` Secret from a protected Docker config file;
+do not put the password in shell history:
+
+```bash
+kubectl create namespace astronomer --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n astronomer create secret generic internal-registry-creds \
+  --type=kubernetes.io/dockerconfigjson \
+  --from-file=.dockerconfigjson=/secure/path/private-registry-config.json
+```
+
+The production values require external HA PostgreSQL and Redis, the public
+hostname/TLS source, bootstrap identity, and durable application encryption and
+token-signing keys. See `deploy/chart/README.md` for the complete preflight
+contract.
+
+## 6. Render, inspect, and install
+
+Render with the local packaged chart and the exact release contracts. The
+example assumes application and bootstrap secrets already exist:
+
+```bash
+helm template astronomer ./astronomer-1.0.0.tgz \
+  --namespace astronomer \
+  -f values-production.yaml \
+  -f airgap-values.json \
+  -f environment-values.yaml \
   --set 'image.pullSecrets[0].name=internal-registry-creds' \
-  --set 'postgres.external.dsn=postgres://...' \
-  --set 'redis.external.address=...' \
-  --set 'config.serverURL=https://astronomer.internal.example.com' \
-  --set-file secrets.secretKey=./jwt-key \
-  --set-file secrets.encryptionKey=./fernet-key \
-  # …plus the rest of the production preflight inputs (see the
-  # chart README "Dev vs. Production Posture" section).
+  --set secrets.existingSecret=astronomer-secrets \
+  --set bootstrap.existingSecret=astronomer-bootstrap \
+  --set-file release.manifest=release-manifest.json \
+  --set-file release.mirrorMapping=mirror-mapping.json \
+  > rendered.yaml
 ```
 
-The single `image.registry` flag is enough to redirect every image —
-the third-party images (postgres, redis, kubectl, busybox, frontend,
-pgdump-s3) use the same fallback prefix unless you give them an
-individual `<component>.image.registry` override.
-
-If you need different mirrored locations for different images
-(e.g. Postgres lives in `vendor-mirror.example.com` but everything
-else in `astronomer.example.com/...`), set per-image overrides:
-
-```yaml
-image:
-  registry: astronomer.example.com
-postgres:
-  image:
-    registry: vendor-mirror.example.com
-redis:
-  image:
-    registry: vendor-mirror.example.com
-```
-
-## Step 4 — Create the registry pull secret
-
-If your internal registry requires auth:
+Before installation, confirm that every rendered image is an immutable target
+in the signed mapping. For example, with `yq` v4:
 
 ```bash
-kubectl -n astronomer create secret docker-registry internal-registry-creds \
-  --docker-server="$INTERNAL_REGISTRY" \
-  --docker-username="$INTERNAL_REGISTRY_USER" \
-  --docker-password="$INTERNAL_REGISTRY_PASSWORD"
+yq -r '.. | .image? // empty' rendered.yaml | sort -u > rendered-images
+jq -r '.entries[] | select(.kind == "container_image") | .target' \
+  mirror-mapping.json | sort -u > mirrored-images
+comm -23 rendered-images mirrored-images
+test ! -s rendered-images || ! grep -Ev '@sha256:[a-f0-9]{64}$' rendered-images
 ```
 
-Reference it via `image.pullSecrets[0].name` (see Step 3).
-
-## Step 5 — Member cluster install
-
-When you onboard a new member cluster, the management plane renders
-`install.yaml.template` with the agent image's pull spec. The chart
-emits the agent image's prefix from the same `image.registry`, so the
-generated template already points at your internal registry. The
-target cluster needs to be able to pull from that registry too.
-
-If member clusters use a *different* internal registry, you can
-override the agent image specifically:
-
-```yaml
-image:
-  registry: management.internal.example.com   # used by server/worker/etc.
-  agent:
-    repository: astronomer-go-agent
-    tag: v1.0.0
-    # No per-component .registry knob today — agent uses image.registry.
-    # If you need a separate location, mirror the agent image to both
-    # registries.
-```
-
-## Step 6 — Verify
+`comm -23` and `grep -Ev` must print nothing. Then install atomically:
 
 ```bash
-# Pods should all be Ready
-kubectl -n astronomer get pods
-
-# Image refs match your internal registry
-kubectl -n astronomer get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n' | sort -u
-
-# Server health
-kubectl -n astronomer port-forward svc/astronomer-server 8080:8000 &
-curl http://localhost:8080/health/
+helm upgrade --install astronomer ./astronomer-1.0.0.tgz \
+  --namespace astronomer --create-namespace \
+  -f values-production.yaml \
+  -f airgap-values.json \
+  -f environment-values.yaml \
+  --set 'image.pullSecrets[0].name=internal-registry-creds' \
+  --set secrets.existingSecret=astronomer-secrets \
+  --set bootstrap.existingSecret=astronomer-bootstrap \
+  --set-file release.manifest=release-manifest.json \
+  --set-file release.mirrorMapping=mirror-mapping.json \
+  --atomic --cleanup-on-fail --timeout 15m
 ```
 
-Every image listed by the second command should start with
-`internal.example.com/astronomer/` (or whatever you set). Any line
-NOT prefixed is a chart bug — open an issue.
+The server and worker reject an unknown, malformed, wrong-version, or mutable
+release contract at startup. The mirror mapping is accepted only when it binds
+the exact bytes of that release manifest and preserves every digest.
 
-## Re-mirroring on upgrade
+## 7. Enroll member clusters and qualify Charlie
 
-Each chart release ships a regenerated `deploy/chart/images.txt`.
-Diff against the previous version to learn which images changed
-between releases:
+Use only the registration command generated by the installed Astronomer API/UI.
+Do not hand-edit its agent or Flux objects. Ensure the member cluster can resolve
+and authenticate to the same private registry before running the command. The
+release projection causes registration and system reconciliation to use the
+mapped agent, Flux distribution, controller, and built-in-bundle identities.
+
+For Charlie, deploy exactly `.charlie.qualified_version` and
+`.charlie.artifact.reference` from the release manifest (or its mapped target),
+then compare its disclosed capability digest with
+`.charlie.capability_disclosure_digest`. A different version or digest is not a
+qualified pair, even if it appears API-compatible.
+
+Verify management and member workloads:
 
 ```bash
-git diff v1.2.0 v1.3.0 -- deploy/chart/images.txt
+kubectl -n astronomer get pods,jobs
+kubectl -n astronomer get pods -o jsonpath='{.items[*].spec.containers[*].image}' \
+  | tr ' ' '\n' | sort -u
+helm get values astronomer -n astronomer -o yaml
 ```
 
-Then mirror only the new / changed images. The chart's image-tag
-overrides (`image.<component>.tag`) let you pin to a specific
-release-known-good even if the helm chart moved forward.
+Use firewall, DNS, or flow logs during acceptance to prove there are no public
+registry or GitHub requests. A successful cached pull alone is not evidence of
+an air-gapped installation.
 
-## Related
+## Clean upgrades and rollback
 
-- [`scripts/extract-images.sh`](../scripts/extract-images.sh) — script
-  behind `make images.txt`
-- [`deploy/chart/README.md`](../deploy/chart/README.md) — base chart
-  values reference + production posture checklist
-- [`docs/upgrade-runbook.md`](upgrade-runbook.md) — applies after the
-  air-gapped install is live
-- [`docs/verify-images.md`](verify-images.md) — cosign verification
-  after mirroring (image signatures travel with manifest copies; verify
-  against the original public key)
+Treat each upgrade as a new immutable unit:
+
+1. Download and verify the new tagged release independently.
+2. Generate a new mapping and Helm values file; never edit the prior mapping.
+3. Mirror and verify all new subjects while retaining the current and one tested
+   rollback release.
+4. Run `helm diff` or an equivalent rendered-manifest review, database backup,
+   canary/member compatibility checks, and the capacity gate.
+5. Run `helm upgrade --atomic` with both new `--set-file` contracts.
+6. Keep the old chart, manifests, mappings, images, database backup, and TLS
+   material until the acceptance/soak window closes.
+
+Helm provides transactional Kubernetes object rollout; it does not make an
+arbitrary database downgrade safe. Follow `docs/upgrade-runbook.md` for schema,
+backup, compatibility, canary, and rollback decisions. The greenfield v1 line
+does not support upgrading a pre-v1 database in place.
+
+## Related material
+
+- [`deploy/release/release-manifest.schema.json`](../deploy/release/release-manifest.schema.json)
+- [`scripts/mirror-release.py`](../scripts/mirror-release.py)
+- [`scripts/check-build-capacity.sh`](../scripts/check-build-capacity.sh)
+- [`scripts/safe-disk-cleanup.sh`](../scripts/safe-disk-cleanup.sh)
+- [`deploy/chart/README.md`](../deploy/chart/README.md)
+- [`docs/upgrade-runbook.md`](upgrade-runbook.md)
+- [`docs/runbooks/delivery-control-plane.md`](runbooks/delivery-control-plane.md)

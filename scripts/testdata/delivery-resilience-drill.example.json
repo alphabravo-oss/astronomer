@@ -1,0 +1,34 @@
+{
+  "schema_version": "astronomer-delivery-resilience-drill/v1",
+  "run_id": "example-001",
+  "context": "k3d-astronomer-qualification-example-001",
+  "namespace": "astronomer-qualification-example-001",
+  "scenarios": [
+    {
+      "id": "server-restart",
+      "steps": [
+        {
+          "action": "restart_workload",
+          "kind": "deployment",
+          "name": "astronomer-server",
+          "timeout_seconds": 600
+        }
+      ]
+    },
+    {
+      "id": "backup-restore",
+      "steps": [
+        {
+          "action": "run_cronjob",
+          "name": "astronomer-management-backup",
+          "timeout_seconds": 900
+        },
+        {
+          "action": "run_cronjob",
+          "name": "astronomer-management-restore-drill",
+          "timeout_seconds": 1200
+        }
+      ]
+    }
+  ]
+}

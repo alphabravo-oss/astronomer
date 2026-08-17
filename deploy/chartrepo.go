@@ -19,11 +19,10 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// Keep packaged dependencies in the embedded repository. Argo fetches this
-// archive without network access, so omitting chart/charts would make the
-// declared argo-cd dependency impossible to render offline.
+// Keep the complete dependency-free management-plane chart in the embedded
+// repository so it can be served and rendered without network access.
 //
-//go:embed chart/Chart.yaml chart/Chart.lock chart/DEPENDENCIES.md chart/README.md chart/values.yaml chart/values.schema.json chart/templates/* chart/charts/* chart/licenses/*
+//go:embed chart/Chart.yaml chart/DEPENDENCIES.md chart/README.md chart/values.yaml chart/values.schema.json chart/templates/*
 var chartFS embed.FS
 
 type chartMetadata struct {
@@ -66,8 +65,8 @@ func AstronomerChartRepo() (*HelmChartRepo, error) {
 }
 
 // AstronomerDefaultValuesShape returns a fresh copy of the chart's declared
-// values tree. Self-management uses it as a closed path/type vocabulary: Helm
-// release values containing unknown paths are not safe to persist in Argo.
+// values tree. Callers use it as a closed path/type vocabulary when validating
+// management-plane release values.
 func AstronomerDefaultValuesShape() (map[string]any, error) {
 	raw, err := chartFS.ReadFile("chart/values.yaml")
 	if err != nil {
@@ -77,60 +76,7 @@ func AstronomerDefaultValuesShape() (map[string]any, error) {
 	if err := yaml.Unmarshal(raw, &values); err != nil {
 		return nil, fmt.Errorf("parse embedded default values: %w", err)
 	}
-	dependency, err := chartFS.ReadFile("chart/charts/argo-cd-9.5.21.tgz")
-	if err != nil {
-		return nil, fmt.Errorf("read pinned argo-cd values shape: %w", err)
-	}
-	gz, err := gzip.NewReader(bytes.NewReader(dependency))
-	if err != nil {
-		return nil, fmt.Errorf("open pinned argo-cd chart: %w", err)
-	}
-	// Reader Close only reports a trailing checksum/length mismatch; this loop
-	// stops at the one member it wants and never reads to EOF, so there is no
-	// meaningful error to surface here.
-	defer func() { _ = gz.Close() }()
-	tr := tar.NewReader(gz)
-	argoDefaults := map[string]any{}
-	for {
-		hdr, nextErr := tr.Next()
-		if nextErr == io.EOF {
-			break
-		}
-		if nextErr != nil {
-			return nil, fmt.Errorf("read pinned argo-cd chart: %w", nextErr)
-		}
-		if hdr.Name != "argo-cd/values.yaml" {
-			continue
-		}
-		data, err := io.ReadAll(tr)
-		if err != nil {
-			return nil, fmt.Errorf("read pinned argo-cd values: %w", err)
-		}
-		if err := yaml.Unmarshal(data, &argoDefaults); err != nil {
-			return nil, fmt.Errorf("parse pinned argo-cd values: %w", err)
-		}
-		break
-	}
-	if len(argoDefaults) == 0 {
-		return nil, fmt.Errorf("pinned argo-cd chart has no values.yaml")
-	}
-	if parentArgo, ok := values["argo-cd"].(map[string]any); ok {
-		mergeValueShape(argoDefaults, parentArgo)
-	}
-	values["argo-cd"] = argoDefaults
 	return values, nil
-}
-
-func mergeValueShape(destination, overlay map[string]any) {
-	for key, value := range overlay {
-		if nested, ok := value.(map[string]any); ok {
-			if current, ok := destination[key].(map[string]any); ok {
-				mergeValueShape(current, nested)
-				continue
-			}
-		}
-		destination[key] = value
-	}
 }
 
 func buildAstronomerChartRepo() (*HelmChartRepo, error) {

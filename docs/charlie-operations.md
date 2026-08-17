@@ -104,8 +104,8 @@ Charlie discovery separates broad orientation from narrow evidence:
 2. Domain health tools cover delivery, logging, monitoring, identity,
    authentication, RBAC, live key rotation, external credential integrations,
    governance, controller policy, templates, configuration, tenancy,
-   registration, fleet-operation orchestration, catalog ingestion,
-   reconciliation bookkeeping, GitOps, extensions, alerting, dashboards, and
+   registration, delivery-rollout orchestration, catalog ingestion,
+   reconciliation bookkeeping, delivery providers, extensions, alerting, dashboards, and
    the product-local Charlie runtime.
 3. Work-pipeline tools expose durable task-outbox, scheduler, controller-alert,
    and controller-operation lifecycle state. Payload field names and byte counts

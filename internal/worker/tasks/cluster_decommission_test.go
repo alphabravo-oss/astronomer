@@ -11,10 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -49,7 +45,6 @@ type fakeDecommQuerier struct {
 	tombstoneErr     error
 	updatePhasesErr  error
 	claimErr         error
-	argocdManaged    []sqlc.ArgocdManagedCluster
 
 	// Params the agent-ingest identity retirement was called with, so the
 	// test can assert the cluster-derived username/token name.
@@ -176,11 +171,6 @@ func (f *fakeDecommQuerier) DeleteClusterAgentTokensByCluster(_ context.Context,
 	return 1, f.agentTokenErr
 }
 
-func (f *fakeDecommQuerier) DeleteArgoCDClusterProxyTokensByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
-	f.bump("DeleteArgoCDClusterProxyTokensByCluster")
-	return 1, nil
-}
-
 func (f *fakeDecommQuerier) ArchiveAndPurgeAuditLogsForCluster(_ context.Context, _ uuid.UUID) (int64, error) {
 	f.bump("ArchiveAndPurgeAuditLogsForCluster")
 	return 42, f.archiveErr
@@ -264,14 +254,6 @@ func (f *fakeDecommQuerier) DeleteAgentLifecycleOperationsByCluster(_ context.Co
 	f.bump("DeleteAgentLifecycleOperationsByCluster")
 	return 4, nil
 }
-func (f *fakeDecommQuerier) ListArgoCDManagedClustersByCluster(_ context.Context, _ uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
-	f.bump("ListArgoCDManagedClustersByCluster")
-	return f.argocdManaged, nil
-}
-func (f *fakeDecommQuerier) DeleteArgoCDManagedClustersByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
-	f.bump("DeleteArgoCDManagedClustersByCluster")
-	return int64(len(f.argocdManaged)), nil
-}
 func (f *fakeDecommQuerier) TombstoneCluster(_ context.Context, _ uuid.UUID) error {
 	f.bump("TombstoneCluster")
 	return f.tombstoneErr
@@ -350,7 +332,6 @@ func TestSuccessPath_AllPhasesRunInOrder(t *testing.T) {
 	for _, name := range []string{
 		"DeleteClusterRegistrationTokensByCluster",
 		"DeleteClusterAgentTokensByCluster",
-		"DeleteArgoCDClusterProxyTokensByCluster",
 		"ArchiveAndPurgeAuditLogsForCluster",
 		"DeleteClusterRegistryConfigsByCluster",
 		"DeleteClusterHealthStatusByCluster",
@@ -797,68 +778,6 @@ func TestNewClusterDecommissionTask(t *testing.T) {
 	}
 	if p.DecommissionID != id.String() {
 		t.Errorf("decommission_id: got %s, want %s", p.DecommissionID, id.String())
-	}
-}
-
-func TestPhaseDeleteDependentsDeletesArgoCDClusterSecrets(t *testing.T) {
-	q := newFakeDecommQuerier()
-	secretName := "cluster-prod-east"
-	q.argocdManaged = []sqlc.ArgocdManagedCluster{{
-		ArgocdInstanceID:  uuid.New(),
-		ClusterID:         q.row.ClusterID,
-		ClusterSecretName: secretName,
-		ServerUrl:         "https://prod-east.example",
-	}}
-	k8s := fake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: argoCDNamespace,
-		},
-		Data: map[string][]byte{"server": []byte("https://prod-east.example")},
-	})
-
-	detail, err := phaseDeleteDependents(context.Background(), ClusterDecommissionDeps{
-		Queries: q,
-		K8s:     k8s,
-	}, q.row)
-	if err != nil {
-		t.Fatalf("phaseDeleteDependents: %v", err)
-	}
-	if _, err := k8s.CoreV1().Secrets(argoCDNamespace).Get(context.Background(), secretName, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
-		t.Fatalf("expected ArgoCD cluster Secret to be deleted, got err=%v", err)
-	}
-	if detail["argocd_cluster_secrets_removed"] != int64(1) {
-		t.Fatalf("argocd_cluster_secrets_removed = %v, want 1", detail["argocd_cluster_secrets_removed"])
-	}
-	if detail["argocd_managed_clusters"] != int64(1) {
-		t.Fatalf("argocd_managed_clusters = %v, want 1", detail["argocd_managed_clusters"])
-	}
-	if len(q.audit) != 0 {
-		t.Fatalf("unexpected orphan audit rows: %d", len(q.audit))
-	}
-}
-
-func TestPhaseDeleteDependentsAuditsArgoCDSecretOrphanWithoutK8sClient(t *testing.T) {
-	q := newFakeDecommQuerier()
-	q.argocdManaged = []sqlc.ArgocdManagedCluster{{
-		ArgocdInstanceID:  uuid.New(),
-		ClusterID:         q.row.ClusterID,
-		ClusterSecretName: "cluster-prod-east",
-		ServerUrl:         "https://prod-east.example",
-	}}
-
-	detail, err := phaseDeleteDependents(context.Background(), ClusterDecommissionDeps{Queries: q}, q.row)
-	if err != nil {
-		t.Fatalf("phaseDeleteDependents: %v", err)
-	}
-	if detail["argocd_cluster_secrets_removed"] != int64(0) {
-		t.Fatalf("argocd_cluster_secrets_removed = %v, want 0", detail["argocd_cluster_secrets_removed"])
-	}
-	if len(q.audit) != 1 {
-		t.Fatalf("orphan audit rows = %d, want 1", len(q.audit))
-	}
-	if q.audit[0].Action != "cluster.decommission.argocd_secret_orphan" {
-		t.Fatalf("audit action = %q", q.audit[0].Action)
 	}
 }
 

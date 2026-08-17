@@ -57,7 +57,7 @@ var AuthConfigSecretKeys = []string{
 // Fernet token as a password produces an upstream 401, which reads to the
 // operator as "the repository rejected my credential" when what actually
 // happened is that ASTRONOMER_ENCRYPTION_KEY is wrong or a rotation dropped a
-// key too early. The hardened sibling is ArgoCDHandler.decryptInstanceToken.
+// key too early. Callers should use a request-scoped decryptor instead.
 //
 // It is credential.ErrUnavailable itself, not a distinct sentinel wrapping it:
 // the monitoring-backend envelope (migration 146) shares these mechanics, and

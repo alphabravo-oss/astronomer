@@ -80,8 +80,8 @@ func NewModeController(store ModeStore, bridge AgentModeBridge, auditor Authorit
 		return nil, fmt.Errorf("Charlie mode control requires local state, the product bridge, and durable audit")
 	}
 	controller := &ModeController{store: store, bridge: bridge, writes: NewWriteFence(), audit: auditor, transition: make(chan struct{}, 1), ticker: newRuntimeTicker}
-	// Test and embedded bridge implementations may own their rollout directly;
-	// production wires the Kubernetes/Argo reconciler explicitly.
+	// The production product bridge owns exact ceiling application and readback;
+	// test bridges may provide the same bounded contract directly.
 	if rollout, ok := bridge.(ModeCeilingRollout); ok {
 		controller.rollout = rollout
 	}

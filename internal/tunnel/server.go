@@ -126,11 +126,11 @@ type Hub struct {
 	// delivery). The issuer get-or-creates the reserved service identity +
 	// cluster-scoped clusters:update grant and mints a fresh scoped token.
 	ingestIssuer AuditIngestIssuer
-	// desiredState renders the Fleet-style PULL desired state for a cluster in
-	// response to a MsgDesiredStateRequest. Optional; nil-safe so installs that
-	// don't wire the pull subsystem reply with an ERROR frame ("desired state
-	// not available") and the agent falls back to its existing paths.
-	desiredState DesiredStateProvider
+	// deliveryState is the Flux-native v2 assignment provider. The authenticated
+	// connection identity is passed separately from the untrusted payload so a
+	// downstream agent cannot request another cluster's assignments.
+	deliveryState  DeliveryStateProvider
+	deliveryStatus DeliveryStatusSink
 	// connLimiter throttles tunnel CONNECT attempts by SOURCE IP after repeated
 	// auth FAILURES (A4 / M5). Optional; nil-safe so test hubs stay unthrottled.
 	// Shared with the tunnel2 /connect path so both connect surfaces present one
@@ -198,27 +198,40 @@ func ConnectClientIP(r *http.Request) (string, *netip.Addr) {
 	return "unknown", nil
 }
 
-// DesiredStateProvider renders the desired-state manifest set for a cluster.
-// Satisfied by the server-side adapter that reuses the agent manifest renderer
-// + baseline registry. Kept as an interface so the tunnel package does not
-// import internal/handler (which would create an import cycle).
-type DesiredStateProvider interface {
-	DesiredState(ctx context.Context, clusterID string, currentRevision string) (protocol.DesiredStateResponsePayload, error)
+// DeliveryStateProvider returns a complete, immutable Flux assignment snapshot
+// for an authenticated cluster. Implementations must not trust request.ClusterID
+// as authorization input.
+type DeliveryStateProvider interface {
+	Snapshot(ctx context.Context, authenticatedCluster uuid.UUID, request protocol.DeliveryStateRequestV2) (protocol.DeliveryStateResponseV2, error)
 }
 
-// SetDesiredStateProvider attaches the PULL desired-state renderer (set once at
-// startup). Nil-safe.
-func (h *Hub) SetDesiredStateProvider(p DesiredStateProvider) {
+type DeliveryStatusSink interface {
+	Ingest(ctx context.Context, authenticatedCluster, connectionID uuid.UUID, sessionID string, payload protocol.DeliveryStatusV2) error
+}
+
+// SetDeliveryStateProvider attaches the Flux-native protocol v2 provider.
+func (h *Hub) SetDeliveryStateProvider(provider DeliveryStateProvider) {
 	h.mu.Lock()
-	h.desiredState = p
+	h.deliveryState = provider
 	h.mu.Unlock()
 }
 
-// desiredStateProvider returns the wired provider (or nil) under the read lock.
-func (h *Hub) desiredStateProvider() DesiredStateProvider {
+func (h *Hub) deliveryStateProvider() DeliveryStateProvider {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	return h.desiredState
+	return h.deliveryState
+}
+
+func (h *Hub) SetDeliveryStatusSink(sink DeliveryStatusSink) {
+	h.mu.Lock()
+	h.deliveryStatus = sink
+	h.mu.Unlock()
+}
+
+func (h *Hub) deliveryStatusSink() DeliveryStatusSink {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.deliveryStatus
 }
 
 // AuditIngestIssuer mints the per-cluster scoped apiserver-audit ingest token
@@ -476,6 +489,18 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		h.recordAgentAuthFailed(ctx, payload, ipAddr, r, "invalid", "timestamp_skew")
 		h.publish("agent.failed", payload.ClusterID, "", payload.AgentVersion)
 		_ = conn.Close(websocket.StatusPolicyViolation, "connect timestamp outside allowed clock skew")
+		return
+	}
+	if payload.DeliveryProtocolVersion != protocol.DeliveryProtocolVersion {
+		body, _ := json.Marshal(protocol.ConnectAckPayload{
+			Accepted: false,
+			Reason:   "agent_reenrollment_required",
+		})
+		writeCtx, writeCancel := context.WithTimeout(ctx, writeTimeout)
+		_ = wsjson.Write(writeCtx, conn, &protocol.Message{Type: protocol.MsgConnectAck, Payload: body})
+		writeCancel()
+		h.publish("agent.failed", payload.ClusterID, "", payload.AgentVersion)
+		_ = conn.Close(websocket.StatusPolicyViolation, "agent_reenrollment_required")
 		return
 	}
 
@@ -997,7 +1022,7 @@ func downstreamOperation(msg *protocol.Message) (downstreamboundary.Operation, b
 		return downstreamboundary.OperationServiceProxy, true
 	case protocol.MsgRBACSyncRequest:
 		return downstreamboundary.OperationRBAC, true
-	case protocol.MsgDecommission, protocol.MsgAgentUpgrade, protocol.MsgDesiredStateRequest:
+	case protocol.MsgDecommission, protocol.MsgAgentUpgrade, protocol.MsgDeliveryStateRequest, protocol.MsgDeliveryReconcile:
 		return downstreamboundary.OperationAgentCommand, true
 	default:
 		return 0, false

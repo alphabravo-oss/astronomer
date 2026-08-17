@@ -311,7 +311,7 @@ func TestScheduledDispatcher_FiresOnCron(t *testing.T) {
 		CronSchedule: "* * * * *",
 		Enabled:      true,
 		LastRunAt:    pgtype.Timestamptz{Time: last, Valid: true},
-		Spec:         json.RawMessage(`{"includedNamespaces":["argocd"],"ttl":"24h"}`),
+		Spec:         json.RawMessage(`{"includedNamespaces":["observability"],"ttl":"24h"}`),
 		CreatedAt:    last,
 	}
 	q.schedules[sched.ID] = sched

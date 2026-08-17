@@ -1,21 +1,18 @@
-# Vendored chart dependencies
+# Chart dependencies
 
-`charts/argo-cd-9.5.21.tgz` is the pinned dependency declared in `Chart.yaml`
-and `Chart.lock`, downloaded from the official Argo Helm repository:
-`https://argoproj.github.io/argo-helm`.
+The Astronomer 1.0.0 management-plane chart has no Helm dependencies. A
+packaged chart can therefore be linted, rendered, and installed without Helm
+contacting a chart repository.
 
-Upstream source tag `argo-cd-9.5.21` resolves to commit
-`4c9fe87dd72dd8de1d36928546a2716d016af337`. The upstream Apache-2.0
-license is vendored at `licenses/argo-helm-APACHE-2.0.txt` and included in
-the embedded chart archive.
+Flux controllers are a managed-cluster dependency, not a management-plane
+chart dependency. The release pipeline publishes their signed, digest-pinned
+distribution alongside the chart and records the supported Flux, Kubernetes,
+and agent protocol versions in `deploy/release/compatibility.yaml`. Online
+installations resolve that release artifact through OCI; disconnected
+installations use the release's verified local asset. Neither path installs
+Flux into the management cluster.
 
-Archive SHA-256:
-
-```text
-5e440d83c763360e16cd93b48f41450cc0d688ec83ee444840faa271ac536443  argo-cd-9.5.21.tgz
-```
-
-Regenerate with `helm dependency build deploy/chart`, verify the version and
-checksum deliberately, and run `go test ./deploy -run AstronomerChartArchive`.
-The archive is committed because the management server's embedded Helm repo
-must render the bundled Argo dependency without network access.
+Release provenance, signatures, software-bill-of-materials documents, and
+third-party license notices are distributed with the release bundle. Changing
+an artifact version or digest requires rebuilding and signing the release
+bundle; it is not a chart dependency update.

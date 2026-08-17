@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router';
 /**
- * /dashboard/settings/quotas/usage — fleet-wide quota usage view.
+ * /dashboard/settings/quotas/usage — deployment-wide quota usage view.
  *
  * Two parts:
  *   - "Top offenders" — entities at >80% of any cap, surfaced by the
  *     backend's pre-computed list (we don't re-derive client-side, as the
  *     backend already applies the threshold consistently with the same
  *     formula used for alerting).
- *   - Fleet totals — aggregate sums across the entire deployment, useful
+ *   - Deployment totals — aggregate sums across the entire installation, useful
  *     for capacity planning.
  */
 import { Link } from '@/lib/link';
@@ -140,7 +140,7 @@ function UsageInner() {
 
       <div className="rounded-xl border border-border bg-card p-6 space-y-4">
         <div>
-          <h2 className="text-base font-semibold text-foreground">Fleet totals</h2>
+          <h2 className="text-base font-semibold text-foreground">Deployment totals</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             Aggregate consumption across every tenant. Useful for capacity planning.
           </p>
@@ -155,7 +155,7 @@ function UsageInner() {
             </div>
           ))}
           {Object.keys(data.fleetTotals).length === 0 && (
-            <p className="text-sm text-muted-foreground italic">No fleet data yet.</p>
+            <p className="text-sm text-muted-foreground italic">No deployment data yet.</p>
           )}
         </div>
       </div>
@@ -178,7 +178,7 @@ function QuotaUsagePage() {
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Settings · Quota usage</p>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1 flex items-center gap-2">
             <Gauge className="h-5 w-5 text-muted-foreground" />
-            Fleet quota usage
+            Deployment-wide quota usage
           </h1>
         </div>
         <UsageInner />

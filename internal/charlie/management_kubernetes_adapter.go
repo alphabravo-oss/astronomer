@@ -27,6 +27,18 @@ import (
 
 const maxManagementLogBytes = 64 << 10
 
+func podReady(pod *corev1.Pod) bool {
+	if pod == nil || pod.DeletionTimestamp != nil || pod.Status.Phase != corev1.PodRunning {
+		return false
+	}
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
 type ManagementKubernetesAdapter struct {
 	kube      kubernetes.Interface
 	namespace string

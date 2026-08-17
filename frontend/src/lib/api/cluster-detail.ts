@@ -1142,11 +1142,13 @@ export interface CatalogChartSummary {
 }
 
 export async function listCatalogCharts(params: {
+  projectId: string;
   limit?: number;
   offset?: number;
   search?: string;
-} = {}): Promise<{ items: CatalogChartSummary[]; total: number }> {
+}): Promise<{ items: CatalogChartSummary[]; total: number }> {
   const q = new URLSearchParams();
+  q.set('project_id', params.projectId);
   if (params.limit != null) q.set('limit', String(params.limit));
   if (params.offset != null) q.set('offset', String(params.offset));
   if (params.search) q.set('search', params.search);
@@ -1180,10 +1182,12 @@ export interface RecommendedChart {
 }
 
 export async function listRecommendedCharts(
+  projectId: string,
   limit = 10,
 ): Promise<RecommendedChart[]> {
   const res = await api.get<{ data: Record<string, unknown>[] }>(
-    `/catalog/recommendations/popular/?limit=${limit}`,
+    `/catalog/recommendations/popular/`,
+    { params: { project_id: projectId, limit } },
   );
   return (res.data.data ?? []).map((raw) => ({
     chartId: String(raw.chart_id ?? raw.chartId ?? ''),
@@ -1202,9 +1206,13 @@ export interface ChartVersionRow {
   createdAtUpstream: string;
 }
 
-export async function listChartVersions(chartId: string): Promise<ChartVersionRow[]> {
+export async function listChartVersions(
+  projectId: string,
+  chartId: string,
+): Promise<ChartVersionRow[]> {
   const res = await api.get<{ data: Record<string, unknown>[] }>(
-    `/catalog/charts/${chartId}/versions/?limit=50`,
+    `/catalog/charts/${chartId}/versions/`,
+    { params: { project_id: projectId, limit: 50 } },
   );
   return (res.data.data ?? []).map((raw) => ({
     id: String(raw.id ?? ''),
@@ -1218,12 +1226,13 @@ export async function listChartVersions(chartId: string): Promise<ChartVersionRo
 // First call on a given version triggers backend hydration (~1-2s);
 // subsequent calls are cached in the DB row.
 export async function getChartDefaultValues(
+  projectId: string,
   chartId: string,
   version?: string,
 ): Promise<{ chart: string; version: string; defaultValues: string }> {
-  const q = version ? `?version=${encodeURIComponent(version)}` : '';
   const res = await api.get<{ data: { chart: string; version: string; default_values: string } }>(
-    `/catalog/charts/${chartId}/values/${q}`,
+    `/catalog/charts/${chartId}/values/`,
+    { params: { project_id: projectId, ...(version ? { version } : {}) } },
   );
   return {
     chart: res.data.data.chart,
@@ -1236,6 +1245,7 @@ export async function getChartDefaultValues(
 // installed_charts row id; the helm install itself happens
 // asynchronously via the tunnel + worker queue.
 export async function installChartOnCluster(req: {
+  projectId: string;
   clusterId: string;
   chartVersionId: string;
   releaseName: string;
@@ -1243,6 +1253,7 @@ export async function installChartOnCluster(req: {
   valuesOverride: string;
 }): Promise<{ id: string }> {
   const res = await api.post<{ data: { id: string } }>(`/catalog/installed/`, {
+    project_id: req.projectId,
     cluster_id: req.clusterId,
     chart_version_id: req.chartVersionId,
     release_name: req.releaseName,

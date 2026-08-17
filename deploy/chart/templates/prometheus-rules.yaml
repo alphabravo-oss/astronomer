@@ -474,25 +474,39 @@ spec:
               metrics.
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/logging-flatlined.md
 
-        # ── Argo CD self-manage drift ───────────────────────────────────
-        # FEATURES-051126 T26 — fires when the astronomer-self-manage
-        # Application drifts. argocd_app_info is published by Argo CD's
-        # own metrics; this rule only fires when Argo CD is installed
-        # AND its metrics are scraped by the same Prometheus.
-        - alert: AstronomerArgoSelfManageDrift
+        # ── Flux-native delivery SLOs ───────────────────────────────────
+        - alert: AstronomerDeliveryAssignmentAckSlow
           expr: |
-            argocd_app_info{name="astronomer-self-manage", sync_status!="Synced"} > 0
+            histogram_quantile(0.99,
+              sum by (le) (rate(astronomer_delivery_assignment_ack_seconds_bucket[10m])))
+              > {{ .Values.delivery.monitoring.assignmentAckSecondsP99 }}
           for: 10m
           labels:
             severity: warning
-            component: gitops
+            component: delivery
           annotations:
-            summary: "Astronomer self-manage Argo CD app drifted from Git"
+            summary: "Delivery assignment acknowledgment p99 exceeds the configured SLO"
             description: |
-              The Argo CD Application that owns this install is
-              OutOfSync. Either reconcile via the Argo CD UI or
-              investigate the upstream chart values.
-            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/argocd-drift.md
+              Connected agents are taking longer than
+              {{ .Values.delivery.monitoring.assignmentAckSecondsP99 }} seconds
+              to acknowledge delivery assignments. Inspect rollout backlog,
+              tunnel health, and incompatible agent or Flux versions.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-assignment-lag.md
+
+        - alert: AstronomerDeliveryStatusStale
+          expr: astronomer_delivery_cluster_status_age_seconds > {{ .Values.delivery.monitoring.staleClusterStatusSeconds }}
+          for: 5m
+          labels:
+            severity: warning
+            component: delivery
+          annotations:
+            summary: "Delivery status from one or more connected clusters is stale"
+            description: |
+              Normalized Flux status has not reached the management plane within
+              {{ .Values.delivery.monitoring.staleClusterStatusSeconds }} seconds.
+              Inspect the agent status queue, coalescing/drop counters, tunnel,
+              and downstream controller readiness.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-status-stale.md
 
         # ── Optional Charlie SRE integration ───────────────────────────
         # Content-free series only. Charlie health is intentionally absent
@@ -618,4 +632,105 @@ spec:
               signed package. Astronomer cannot renew or widen Charlie-issued
               package authority.
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/charlie-integration.md
+
+    - name: astronomer.delivery.alerts
+      rules:
+        - alert: AstronomerDeliveryRolloutStuck
+          expr: sum(astronomer_delivery_rollouts{state=~"resolving|queued|progressing|awaiting_approval"}) > 0
+          for: 30m
+          labels:
+            severity: warning
+            component: delivery
+          annotations:
+            summary: "A delivery rollout has not left an active state"
+            description: "Inspect its frozen plan, approvals, maintenance gates, assignment acknowledgments, and downstream status before retrying."
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-control-plane.md#stuck-rollout
+
+        - alert: AstronomerDeliveryRolloutFailed
+          expr: sum(astronomer_delivery_rollouts{state="failed"}) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: delivery
+          annotations:
+            summary: "A delivery rollout exceeded its success or failure policy"
+            description: "Use the rollout timeline and per-cluster reason codes; never bypass the frozen failure budget."
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-control-plane.md#failed-rollout-or-failure-budget
+
+        - alert: AstronomerDeliveryRollbackFailed
+          expr: sum(astronomer_delivery_rollouts{state="rollback_failed"}) > 0
+          for: 1m
+          labels:
+            severity: critical
+            component: delivery
+          annotations:
+            summary: "A delivery rollback failed"
+            description: "The exact previous immutable assignment could not become Ready on one or more clusters."
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-control-plane.md#rollback-failure
+
+        - alert: AstronomerDeliveryAssignmentBacklog
+          expr: sum(astronomer_delivery_deployments{phase=~"pending|blocked|applying"}) > 0
+          for: 15m
+          labels:
+            severity: warning
+            component: delivery
+          annotations:
+            summary: "Delivery assignments are waiting for acknowledgment or readiness"
+            description: "Check cluster-agent connectivity, snapshot protocol outcomes, Flux controllers, and worker/outbox health."
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-assignment-lag.md
+
+        - alert: AstronomerDeliveryStatusStale
+          expr: astronomer_delivery_stale_deployments > 0
+          for: 10m
+          labels:
+            severity: warning
+            component: delivery
+          annotations:
+            summary: "One or more deployment status observations are stale"
+            description: "Status has not advanced for an active deployment within the bounded freshness window."
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-status-stale.md
+
+        - alert: AstronomerDeliveryFluxIncompatible
+          expr: sum(astronomer_delivery_flux_readiness{compatibility=~"incompatible|upgrade_required|degraded"}) > 0
+          for: 10m
+          labels:
+            severity: warning
+            component: delivery
+          annotations:
+            summary: "A managed cluster has an incompatible or degraded Flux distribution"
+            description: "Pause affected rollout cohorts and reconcile only through the signed system-release rollout."
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-control-plane.md#flux-distribution-or-controller-outage
+
+        - alert: AstronomerDeliveryFluxControllerOutage
+          expr: sum(astronomer_delivery_flux_readiness{ready="false"}) > 0
+          for: 5m
+          labels:
+            severity: critical
+            component: delivery
+          annotations:
+            summary: "One or more downstream Flux distributions are not Ready"
+            description: "Inspect the exact controller inventory and signed system assignment; do not install an ad-hoc controller."
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-control-plane.md#flux-distribution-or-controller-outage
+
+        - alert: AstronomerDeliverySourceVerificationFailures
+          expr: sum(increase(astronomer_delivery_source_resolutions_total{result="verification_failed"}[15m])) > 0
+          for: 1m
+          labels:
+            severity: warning
+            component: delivery
+          annotations:
+            summary: "A delivery source failed cryptographic verification"
+            description: "Confirm immutable revision, trust identity, mounted public key, proxy/CA policy, and credential rotation state."
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-control-plane.md#source-authentication-signature-or-render-failure
+
+        - alert: AstronomerDeliveryCredentialRevokedOrExpired
+          expr: sum(increase(astronomer_delivery_credential_events_total{action=~"revoked|expired"}[15m])) > 0
+          for: 1m
+          labels:
+            severity: warning
+            component: delivery
+          annotations:
+            summary: "A delivery source credential was revoked or expired"
+            description: "Rotate the source credential, increment its epoch, verify the immutable source again, and retry only the failed resolution."
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-control-plane.md#credential-rotation-and-revocation
 {{- end }}

@@ -149,8 +149,6 @@ var crdInformerKinds = []metadataKind{
 	{"Backup", "velero.io", "v1", schema.GroupVersionResource{Group: "velero.io", Version: "v1", Resource: "backups"}},
 	{"Restore", "velero.io", "v1", schema.GroupVersionResource{Group: "velero.io", Version: "v1", Resource: "restores"}},
 	{"Schedule", "velero.io", "v1", schema.GroupVersionResource{Group: "velero.io", Version: "v1", Resource: "schedules"}},
-	{"Application", "argoproj.io", "v1alpha1", schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}},
-	{"ApplicationSet", "argoproj.io", "v1alpha1", schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "applicationsets"}},
 	{"VulnerabilityReport", "aquasecurity.github.io", "v1alpha1", schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "vulnerabilityreports"}},
 }
 

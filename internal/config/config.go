@@ -4,7 +4,9 @@ import (
 	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
+	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
+	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 // Config holds all configuration for the application.
@@ -29,7 +31,10 @@ type Config struct {
 	Env       string `mapstructure:"env"`
 	Debug     bool   `mapstructure:"debug"`
 
-	CORSAllowedOrigins    string `mapstructure:"cors_allowed_origins"`
+	CORSAllowedOrigins string `mapstructure:"cors_allowed_origins"`
+	// TrustedProxyCIDRs is the explicit set of reverse-proxy networks allowed
+	// to assert X-Forwarded-For. Empty means forwarded client IPs are ignored.
+	TrustedProxyCIDRs     string `mapstructure:"trusted_proxy_cidrs"`
 	SessionTimeoutMinutes int    `mapstructure:"session_timeout_minutes"`
 	// RegistrationTokenTTLHours (task A3) is the single, documented TTL applied
 	// to every operator-facing registration-token mint path (POST /register/,
@@ -49,12 +54,10 @@ type Config struct {
 	// Empty (default) leaves the webhook endpoint disabled.
 	GitopsWebhookSecret string `mapstructure:"gitops_webhook_secret"`
 
-	// ServerURL is the externally-reachable URL of this Astronomer install
-	// (e.g. http://astronomer.example.com:8080). It seeds
-	// platform_configuration.server_url on first boot, which the local
-	// ArgoCD self-management loop reads to discover what hostname to put on
-	// the self-manage HTTPRoute. Optional — if empty, the operator can set
-	// it later from /dashboard/settings.
+	// ServerURL is the externally-reachable URL of this Astronomer install.
+	// It seeds platform_configuration.server_url on first boot and is used in
+	// signed downstream registration manifests. Operators may set it later when
+	// it is intentionally omitted from a development install.
 	ServerURL string `mapstructure:"server_url"`
 
 	EncryptionKey string `mapstructure:"astronomer_encryption_key"`
@@ -71,6 +74,39 @@ type Config struct {
 
 	AgentImageRepository string `mapstructure:"agent_image_repository"`
 	AgentImageTag        string `mapstructure:"agent_image_tag"`
+	// ReleaseManifestPath points at the signed, generated compatibility unit
+	// mounted by the packaged chart. When present it is authoritative for every
+	// artifact/version field below; mutable operator overrides cannot split the
+	// release into unqualified component combinations.
+	ReleaseManifestPath      string `mapstructure:"release_manifest_path"`
+	ReleaseMirrorMappingPath string `mapstructure:"release_mirror_mapping_path"`
+
+	// Signed, immutable downstream delivery artifacts. Production requires both
+	// artifacts and exact verification identities; disconnected installations
+	// point the repositories at their verified internal mirror while preserving
+	// the release digests and signing policy.
+	DeliveryEnabled                             bool   `mapstructure:"delivery_enabled"`
+	DeliveryKubernetesMinMinor                  string `mapstructure:"delivery_kubernetes_min_minor"`
+	DeliveryKubernetesMaxMinor                  string `mapstructure:"delivery_kubernetes_max_minor"`
+	DeliveryFluxVersion                         string `mapstructure:"delivery_flux_version"`
+	DeliveryFluxDistributionRepository          string `mapstructure:"delivery_flux_distribution_repository"`
+	DeliveryFluxDistributionDigest              string `mapstructure:"delivery_flux_distribution_digest"`
+	DeliveryFluxDistributionAssetPath           string `mapstructure:"delivery_flux_distribution_asset_path"`
+	DeliveryFluxDistributionCertificateIdentity string `mapstructure:"delivery_flux_distribution_certificate_identity"`
+	DeliveryFluxDistributionOIDCIssuer          string `mapstructure:"delivery_flux_distribution_oidc_issuer"`
+	DeliveryBundleRepository                    string `mapstructure:"delivery_bundle_repository"`
+	DeliveryBundleDigest                        string `mapstructure:"delivery_bundle_digest"`
+	DeliveryBundleCertificateIdentity           string `mapstructure:"delivery_bundle_certificate_identity"`
+	DeliveryBundleOIDCIssuer                    string `mapstructure:"delivery_bundle_oidc_issuer"`
+	DeliverySourceAllowedPrivateHosts           string `mapstructure:"delivery_source_allowed_private_hosts"`
+	DeliverySourceEgressCIDRs                   string `mapstructure:"delivery_source_egress_cidrs"`
+	DeliverySourceProxyURL                      string `mapstructure:"delivery_source_proxy_url"`
+	DeliverySourceAllowSSH                      bool   `mapstructure:"delivery_source_allow_ssh"`
+	DeliverySourceCAFile                        string `mapstructure:"delivery_source_ca_file"`
+	DeliverySourceMaxArtifactBytes              int64  `mapstructure:"delivery_source_max_artifact_bytes"`
+	DeliverySourceMaxHelmChartBytes             int64  `mapstructure:"delivery_source_max_helm_chart_bytes"`
+	DeliverySourceTrustDirectory                string `mapstructure:"delivery_source_trust_directory"`
+	DeliveryCosignPath                          string `mapstructure:"delivery_cosign_path"`
 
 	LogLevel string `mapstructure:"log_level"`
 
@@ -161,25 +197,6 @@ type Config struct {
 	KubectlShellIdleTimeoutMinutes  int    `mapstructure:"kubectl_shell_idle_timeout_minutes"`
 	KubectlShellSessionHardCapHours int    `mapstructure:"kubectl_shell_session_hard_cap_hours"`
 
-	// ArgoCDUIUpstream is the in-cluster URL of argocd-server. The /argocd/*
-	// reverse proxy mounted on the public Astronomer router forwards browser
-	// traffic here after Astronomer's JWT/cookie auth has cleared. ArgoCD
-	// must be deployed with `server.rootpath: /argocd` so its SPA emits
-	// asset and API URLs under that prefix.
-	ArgoCDUIUpstream string `mapstructure:"argocd_ui_upstream"`
-
-	// ArgoCDClusterProxyBaseURL is the base URL upstream ArgoCD should use
-	// when talking to Astronomer-managed remote clusters through the tunnel
-	// proxy. The registration handler appends the internal ArgoCD cluster path.
-	ArgoCDClusterProxyBaseURL string `mapstructure:"argocd_cluster_proxy_base_url"`
-
-	// ArgoCDInternalProxyAddr is a dedicated, non-public listen address serving
-	// ONLY the ArgoCD->adopted-cluster k8s proxy. Every request must carry the
-	// cluster-scoped bearer token stored in ArgoCD's cluster Secret. The port is
-	// not mapped by public ingress and NetworkPolicy restricts it to bundled
-	// ArgoCD pods, providing defense in depth around the application-layer token.
-	ArgoCDInternalProxyAddr string `mapstructure:"argocd_internal_proxy_addr"`
-
 	// DexBundledEnabled mirrors the chart's dex.enabled runtime switch.
 	// AuthLocalPasswordOnly is the production acknowledgement required when no
 	// bundled Dex is deployed.
@@ -191,18 +208,6 @@ type Config struct {
 	// helm_repositories + catalog_blessed_charts overlays. Empty = skip (keep
 	// whatever defaults are already seeded). Fetch failures are non-fatal.
 	CatalogURL string `mapstructure:"astronomer_catalog_url"`
-
-	// PullReconcileEnabled gates the Fleet-style PULL reconcile subsystem. When
-	// false (the default) NOTHING changes: the existing tunnel self-upgrade +
-	// Argo-baseline push paths keep owning the footprint. When true the agent
-	// runs its local reconcile loop and owns the astronomer-* footprint via
-	// pull, and the server's push path STANDS DOWN: reconcileLocalArgoSelfManagement
-	// skips ensureBaselineApplicationSets and instead calls
-	// removeBaselineApplicationSets to prune any previously-pushed baseline
-	// ApplicationSets, so the same footprint is never double-managed (H6).
-	// The DesiredState responder is read-only rendering and is unaffected by
-	// this flag — only behavior that would mutate ownership is gated.
-	PullReconcileEnabled bool `mapstructure:"pull_reconcile_enabled"`
 
 	// A4 — tunnel connect rate-limit + replay defense. The connect limiter is a
 	// FAILURE-keyed fixed-window counter (per source IP): an IP is throttled only
@@ -255,10 +260,35 @@ func Load() (*Config, error) {
 		"oidc_client_secret",
 		"agent_image_repository",
 		"agent_image_tag",
+		"release_manifest_path",
+		"release_mirror_mapping_path",
+		"delivery_enabled",
+		"delivery_kubernetes_min_minor",
+		"delivery_kubernetes_max_minor",
+		"delivery_flux_version",
+		"delivery_flux_distribution_repository",
+		"delivery_flux_distribution_digest",
+		"delivery_flux_distribution_asset_path",
+		"delivery_flux_distribution_certificate_identity",
+		"delivery_flux_distribution_oidc_issuer",
+		"delivery_bundle_repository",
+		"delivery_bundle_digest",
+		"delivery_bundle_certificate_identity",
+		"delivery_bundle_oidc_issuer",
+		"delivery_source_allowed_private_hosts",
+		"delivery_source_egress_cidrs",
+		"delivery_source_proxy_url",
+		"delivery_source_allow_ssh",
+		"delivery_source_ca_file",
+		"delivery_source_max_artifact_bytes",
+		"delivery_source_max_helm_chart_bytes",
+		"delivery_source_trust_directory",
+		"delivery_cosign_path",
 		"database_url",
 		"redis_url",
 		"event_relay_queue_capacity",
 		"secret_key",
+		"trusted_proxy_cidrs",
 		"server_url",
 		"audit_log_retention_months",
 		"cluster_tombstone_retention_days",
@@ -289,15 +319,11 @@ func Load() (*Config, error) {
 		"control_plane_snapshots_enabled",
 		"native_rbac_enabled",
 		"namespace_scoped_rbac_enabled",
-		"argocd_ui_upstream",
-		"argocd_cluster_proxy_base_url",
-		"argocd_internal_proxy_addr",
 		"manifest_signing_secret",
 		"gitops_webhook_secret",
 		"dex_bundled_enabled",
 		"auth_local_password_only",
 		"astronomer_catalog_url",
-		"pull_reconcile_enabled",
 		"tunnel_connect_auth_failure_limit",
 		"tunnel_connect_auth_failure_window_minutes",
 		"tunnel_connect_clock_skew_minutes",
@@ -315,8 +341,20 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "env", Value: "development"},
 		envconfig.Default{Key: "debug", Value: false},
 		envconfig.Default{Key: "cors_allowed_origins", Value: "http://localhost:3000"},
+		envconfig.Default{Key: "trusted_proxy_cidrs", Value: ""},
 		envconfig.Default{Key: "session_timeout_minutes", Value: sessionpolicy.DefaultMinutes},
 		envconfig.Default{Key: "registration_token_ttl_hours", Value: 1},
+		envconfig.Default{Key: "delivery_enabled", Value: true},
+		envconfig.Default{Key: "delivery_kubernetes_min_minor", Value: "1.33"},
+		envconfig.Default{Key: "delivery_kubernetes_max_minor", Value: "1.35"},
+		envconfig.Default{Key: "delivery_flux_version", Value: "v2.9.3"},
+		envconfig.Default{Key: "delivery_source_allowed_private_hosts", Value: "[]"},
+		envconfig.Default{Key: "delivery_source_egress_cidrs", Value: "[]"},
+		envconfig.Default{Key: "delivery_source_allow_ssh", Value: false},
+		envconfig.Default{Key: "delivery_source_max_artifact_bytes", Value: int64(512 << 20)},
+		envconfig.Default{Key: "delivery_source_max_helm_chart_bytes", Value: int64(100 << 20)},
+		envconfig.Default{Key: "delivery_source_trust_directory", Value: "/etc/astronomer/delivery-trust"},
+		envconfig.Default{Key: "delivery_cosign_path", Value: "/usr/local/bin/cosign"},
 		envconfig.Default{Key: "log_level", Value: "info"},
 		envconfig.Default{Key: "audit_log_retention_months", Value: 13},
 		envconfig.Default{Key: "cluster_tombstone_retention_days", Value: 90},
@@ -336,19 +374,8 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "kubectl_shell_session_hard_cap_hours", Value: 4},
 		envconfig.Default{Key: "server_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "worker_metrics_addr", Value: ":9090"},
-		envconfig.Default{Key: "argocd_ui_upstream", Value: "http://astro-argocd-server.astronomer.svc.cluster.local:80"},
-		// Adopted clusters register against the authenticated, network-isolated
-		// internal proxy port — not the public :8000 listener.
-		// https, not http: client-go's clientcmd only merges a kubeconfig's bearer
-		// token when the transport is TLS, so a plaintext base URL makes ArgoCD's
-		// kubectl path (openapi validation, `kubectl auth reconcile`) send NO
-		// Authorization header and get 401'd. See Server.StartInternalArgoCDProxy.
-		envconfig.Default{Key: "argocd_cluster_proxy_base_url", Value: "https://astronomer-server.astronomer.svc.cluster.local:8090"},
-		envconfig.Default{Key: "argocd_internal_proxy_addr", Value: ":8090"},
 		envconfig.Default{Key: "dex_bundled_enabled", Value: false},
 		envconfig.Default{Key: "auth_local_password_only", Value: false},
-		// Fleet-style PULL reconcile is OFF by default — opt-in per install.
-		envconfig.Default{Key: "pull_reconcile_enabled", Value: false},
 		// A4 — generous tunnel-connect failure limiter + lenient replay window.
 		envconfig.Default{Key: "tunnel_connect_auth_failure_limit", Value: 50},
 		envconfig.Default{Key: "tunnel_connect_auth_failure_window_minutes", Value: 5},
@@ -361,6 +388,31 @@ func Load() (*Config, error) {
 	cfg := &Config{}
 	if err := v.Unmarshal(cfg); err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(cfg.ReleaseManifestPath) != "" {
+		_, release, err := releasecontract.Load(cfg.ReleaseManifestPath, version.Version)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(cfg.ReleaseMirrorMappingPath) != "" {
+			release, err = releasecontract.ApplyMirrorMapping(cfg.ReleaseMirrorMappingPath, cfg.ReleaseManifestPath, release)
+			if err != nil {
+				return nil, err
+			}
+		}
+		cfg.AgentImageRepository = release.AgentImage
+		cfg.AgentImageTag = release.Version
+		cfg.DeliveryKubernetesMinMinor = release.MinimumKubernetesMinor
+		cfg.DeliveryKubernetesMaxMinor = release.MaximumKubernetesMinor
+		cfg.DeliveryFluxVersion = release.FluxVersion
+		cfg.DeliveryFluxDistributionRepository = release.FluxRepository
+		cfg.DeliveryFluxDistributionDigest = release.FluxDigest
+		cfg.DeliveryFluxDistributionOIDCIssuer = release.CertificateOIDCIssuer
+		cfg.DeliveryFluxDistributionCertificateIdentity = release.CertificateIdentity
+		cfg.DeliveryBundleRepository = release.BundleRepository
+		cfg.DeliveryBundleDigest = release.BundleDigest
+		cfg.DeliveryBundleOIDCIssuer = release.CertificateOIDCIssuer
+		cfg.DeliveryBundleCertificateIdentity = release.CertificateIdentity
 	}
 	return cfg, nil
 }

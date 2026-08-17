@@ -1,0 +1,323 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: astronomer-delivery-critical
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+value: 1000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Keeps Astronomer delivery controllers available during node pressure.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: astronomer-noop
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+automountServiceAccountToken: false
+---
+# The system reconciler is the only Flux identity allowed to update Flux CRDs,
+# controllers, and the Astronomer agent. Workload assignments cannot reference
+# this account or its role: the agent materializer rejects the system namespace
+# and accepts only deterministic per-deployment service-account names.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: astronomer-delivery-system-applier
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: astronomer-delivery-system-applier
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+  - nonResourceURLs: ["*"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: astronomer-delivery-system-applier
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: astronomer-delivery-system-applier
+subjects:
+  - kind: ServiceAccount
+    name: astronomer-delivery-system-applier
+    namespace: astronomer-delivery-system
+---
+# No workload assignment can provide a role name or RBAC rule. A platform-scope
+# assignment may bind its deterministic service account only to this fixed,
+# bootstrap-owned role after independent release, enrollment, and protocol
+# gates have approved the privileged scope.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: astronomer-delivery-platform-applier
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+  - nonResourceURLs: ["*"]
+    verbs: ["*"]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: source-controller
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: source-controller
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kustomize-controller
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: kustomize-controller
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: helm-controller
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: helm-controller
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: controller-metrics
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/part-of: flux
+  ports:
+    - name: http-metrics
+      port: 8080
+      protocol: TCP
+      targetPort: http-prom
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: flux
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values:
+                  - kube-dns
+                  - coredns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kubernetes-api
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: flux
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+        - ipBlock:
+            cidr: ::/0
+      ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-source-egress
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+spec:
+  podSelector:
+    matchLabels:
+      app: source-controller
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+        - ipBlock:
+            cidr: ::/0
+      ports:
+        - port: 22
+          protocol: TCP
+        - port: 80
+          protocol: TCP
+        - port: 443
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-source-artifacts
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+spec:
+  podSelector:
+    matchLabels:
+      app: source-controller
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - helm-controller
+                  - kustomize-controller
+      ports:
+        - port: 9090
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-source-artifact-client
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - helm-controller
+          - kustomize-controller
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: source-controller
+      ports:
+        - port: 9090
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-metrics
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer
+    app.kubernetes.io/part-of: astronomer-delivery
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: flux
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              monitoring.astronomer.io/scrape: "true"
+      ports:
+        - port: 8080
+          protocol: TCP

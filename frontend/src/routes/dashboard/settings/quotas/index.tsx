@@ -166,7 +166,7 @@ function QuotasPage() {
               className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Fleet usage
+              Deployment-wide usage
             </Link>
             <Link
               href="/dashboard/settings/quotas/new"

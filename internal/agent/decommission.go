@@ -128,12 +128,12 @@ type DecommissionHandler struct {
 	// deleting the agent's own Deployment. The delay gives the WS write
 	// loop time to flush the ACK frame to the server.
 	agentDeleteDelay time.Duration
-	// pause, when set, is flipped true at the start of decommission so the pull
-	// reconcile loop stops re-creating resources we're tearing down.
+	// pause, when set, is flipped true at the start of decommission so the
+	// Flux-native delivery runtime stops changing resources being torn down.
 	pause *atomic.Bool
 }
 
-// SetPauseGuard wires the shared reconcile-pause flag (see ReconcileHandler).
+// SetPauseGuard wires the shared delivery-runtime pause flag.
 func (h *DecommissionHandler) SetPauseGuard(g *atomic.Bool) {
 	if h != nil {
 		h.pause = g
@@ -170,7 +170,7 @@ func (h *DecommissionHandler) HandleDecommission(ctx context.Context, msg *proto
 	if h == nil {
 		return nil, fmt.Errorf("decommission handler not configured")
 	}
-	// Halt the pull reconcile loop FIRST so its Phase-2 self-apply can't
+	// Halt Flux-native delivery FIRST so a concurrent snapshot apply cannot
 	// re-create the agent Deployment we're about to delete.
 	if h.pause != nil {
 		h.pause.Store(true)

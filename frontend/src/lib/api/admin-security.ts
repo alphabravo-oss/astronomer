@@ -3,7 +3,7 @@
  *   - GET /admin/key-status         — live encryption + JWT key counts, for
  *     confirming a keyrotate landed (see docs/secret-rotation-runbook.md).
  *   - GET /admin/shell-sessions      — superuser view of every active kubectl
- *     shell session across the fleet.
+ *     shell session across managed clusters.
  *   - GET /admin/shell-sessions/{id}/commands — the audited command trail for
  *     one session (closes the loop on the kubectl-shell RCE surface).
  *

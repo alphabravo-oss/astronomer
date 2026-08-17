@@ -18,7 +18,7 @@ const (
 type triggerSweepQueries interface {
 	GetActiveCharlieConnection(context.Context) (sqlc.CharlieConnection, error)
 	ListEnabledCharlieTriggerRules(context.Context, uuid.UUID) ([]sqlc.CharlieTriggerRule, error)
-	CharlieAgentFleetList(context.Context, sqlc.CharlieAgentFleetListParams) ([]sqlc.CharlieAgentFleetListRow, error)
+	CharlieClusterAgentList(context.Context, sqlc.CharlieClusterAgentListParams) ([]sqlc.CharlieClusterAgentListRow, error)
 	CharlieTunnelReplicaDistribution(context.Context) ([]sqlc.CharlieTunnelReplicaDistributionRow, error)
 	CharlieTunnelHealth(context.Context, time.Time) (sqlc.CharlieTunnelHealthRow, error)
 }
@@ -57,7 +57,7 @@ func (s *TriggerSweeper) Sweep(ctx context.Context) error {
 	for _, rule := range rules {
 		byName[rule.Name] = rule
 	}
-	rows, err := s.loadFleet(ctx)
+	rows, err := s.loadClusterAgents(ctx)
 	if err != nil {
 		return err
 	}
@@ -90,8 +90,8 @@ func (s *TriggerSweeper) Sweep(ctx context.Context) error {
 		}
 	}
 
-	if rule, ok := byName["fleet_simultaneous_disconnect"]; ok && fleetDisconnectThreshold(rows) {
-		_ = s.ingestAggregate(ctx, rule, "agent_fleet", "agent-fleet", "fleet_disconnect", "simultaneous_disconnect", "critical", now)
+	if rule, ok := byName["cluster_agents_simultaneous_disconnect"]; ok && simultaneousClusterAgentDisconnectThreshold(rows) {
+		_ = s.ingestAggregate(ctx, rule, "cluster_agents", "cluster-agents", "cluster_agent_disconnect", "simultaneous_disconnect", "critical", now)
 	}
 	if rule, ok := byName["tunnel_replica_concentration"]; ok {
 		distribution, distributionErr := s.queries.CharlieTunnelReplicaDistribution(ctx)
@@ -109,29 +109,29 @@ func (s *TriggerSweeper) Sweep(ctx context.Context) error {
 	return nil
 }
 
-func (s *TriggerSweeper) loadFleet(ctx context.Context) ([]sqlc.CharlieAgentFleetListRow, error) {
-	rows := make([]sqlc.CharlieAgentFleetListRow, 0, triggerSweepPageSize)
+func (s *TriggerSweeper) loadClusterAgents(ctx context.Context) ([]sqlc.CharlieClusterAgentListRow, error) {
+	rows := make([]sqlc.CharlieClusterAgentListRow, 0, triggerSweepPageSize)
 	for offset := 0; offset < triggerSweepMaxRows; offset += triggerSweepPageSize {
-		page, err := s.queries.CharlieAgentFleetList(ctx, sqlc.CharlieAgentFleetListParams{
+		page, err := s.queries.CharlieClusterAgentList(ctx, sqlc.CharlieClusterAgentListParams{
 			Environment: pgtype.Text{}, Region: pgtype.Text{}, ConnectionState: pgtype.Text{},
 			PageOffset: int32(offset), PageLimit: triggerSweepPageSize,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("load Charlie fleet sweep: %w", err)
+			return nil, fmt.Errorf("load Charlie cluster-agent sweep: %w", err)
 		}
 		rows = append(rows, page...)
 		if len(page) < triggerSweepPageSize {
 			return rows, nil
 		}
 	}
-	return nil, fmt.Errorf("Charlie fleet sweep exceeds the reviewed row bound")
+	return nil, fmt.Errorf("Charlie cluster-agent sweep exceeds the reviewed row bound")
 }
 
 func (s *TriggerSweeper) ingestAggregate(ctx context.Context, rule sqlc.CharlieTriggerRule, resourceType, resourceID, state, failure, severity string, now time.Time) error {
 	_, _, err := s.ingestor.Ingest(ctx, rule, TriggerObservation{Signal: TriggerSignal{
 		Source: "astronomer", EventType: rule.Name, ResourceType: resourceType, ResourceID: resourceID,
 		FailureClass: failure, Severity: severity, State: state, Timestamp: now,
-		ProductVersion: currentProductDocumentationVersion(), Summary: "Astronomer management-plane fleet or tunnel state requires investigation",
+		ProductVersion: currentProductDocumentationVersion(), Summary: "Astronomer multi-cluster agent or tunnel state requires investigation",
 	}, OriginResourceRef: resourceType + ":" + resourceID, OriginEventRef: "state-sweep:" + now.Format(time.RFC3339)})
 	return err
 }
@@ -149,14 +149,14 @@ func anyFailedState(values ...string) bool {
 	return false
 }
 
-func credentialInvalid(row sqlc.CharlieAgentFleetListRow, now time.Time) bool {
+func credentialInvalid(row sqlc.CharlieClusterAgentListRow, now time.Time) bool {
 	if row.CredentialState == "expired" || row.CredentialState == "revoked" || row.CredentialState == "failed" {
 		return true
 	}
 	return row.CredentialExpiresAt.Valid && !row.CredentialExpiresAt.Time.UTC().After(now)
 }
 
-func upgradeFailedOrStalled(row sqlc.CharlieAgentFleetListRow, rule sqlc.CharlieTriggerRule, now time.Time) bool {
+func upgradeFailedOrStalled(row sqlc.CharlieClusterAgentListRow, rule sqlc.CharlieTriggerRule, now time.Time) bool {
 	if row.UpgradeState == "failed" || row.UpgradeState == "stalled" {
 		return true
 	}
@@ -166,7 +166,7 @@ func upgradeFailedOrStalled(row sqlc.CharlieAgentFleetListRow, rule sqlc.Charlie
 	return row.LastStatusAt.Valid && staleForRule(row.LastStatusAt, rule, now)
 }
 
-func fleetDisconnectThreshold(rows []sqlc.CharlieAgentFleetListRow) bool {
+func simultaneousClusterAgentDisconnectThreshold(rows []sqlc.CharlieClusterAgentListRow) bool {
 	if len(rows) < 2 {
 		return false
 	}

@@ -35,44 +35,12 @@
       "validation": "internal/server/server.go wires SetTaskOutbox(queries), and cluster_template:drift_check is also scheduled on the tunnel queue for repair."
     },
     {
-      "file": "internal/handler/clusters.go",
-      "function": "enqueueArgoCDAutoRegister",
-      "classification": "repair-backed",
-      "owner": "backend/argocd",
-      "reason": "The cluster and its label mutation are durable before this best-effort acceleration task. Missing direct delivery leaves the cluster eligible for the periodic selector-based auto-adoption reconciliation.",
-      "validation": "argocd:auto_register_cluster is registered and scheduled every five minutes; its fleet sweep pages all clusters, re-evaluates the persisted selector and labels, and repairs managed-cluster state."
-    },
-    {
-      "file": "internal/handler/clusters.go",
-      "function": "enqueueArgoCDLabelRefresh",
-      "classification": "best-effort",
-      "owner": "backend/argocd",
-      "reason": "Refreshing labels on an already-registered upstream Argo CD cluster Secret is metadata convergence, not the authoritative adoption state. A cluster update can re-issue the refresh.",
-      "validation": "The durable managed-cluster records remain in Postgres; this task only refreshes upstream Secret labels."
-    },
-    {
-      "file": "internal/handler/clusters.go",
-      "function": "enqueueTemplateApply",
-      "classification": "outbox-backed",
-      "owner": "backend/clusters",
-      "reason": "Cluster auto-attach writes durable cluster/template application state and production server wiring provides task_outbox. The direct enqueue is only the no-outbox fallback.",
-      "validation": "ClusterTemplateHandler uses the same task_outbox helper, and cluster_template:drift_check repairs missed template application delivery."
-    },
-    {
       "file": "internal/handler/control_plane.go",
       "function": "enqueueNotifications",
       "classification": "best-effort",
       "owner": "backend/notifications",
       "reason": "Notification fan-out is side-effect delivery for already-detected control-plane alerts. It should not block control-plane health responses.",
       "validation": "Failure only drops an outbound notification attempt; alert state remains queryable through control-plane status."
-    },
-    {
-      "file": "internal/handler/fleet_dispatcher.go",
-      "function": "enqueueApplyForCluster",
-      "classification": "repair-backed",
-      "owner": "backend/fleet",
-      "reason": "Fleet template application first upserts cluster_template_applications; direct enqueue only accelerates work from the durable row.",
-      "validation": "cluster_template:drift_check is registered on the tunnel queue and re-enqueues failed/stale application rows."
     },
     {
       "file": "internal/handler/network_policies.go",

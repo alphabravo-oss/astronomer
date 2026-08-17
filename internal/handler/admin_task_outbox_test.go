@@ -104,7 +104,7 @@ func makeTaskOutboxRow(status string) sqlc.TaskOutbox {
 	now := time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC)
 	return sqlc.TaskOutbox{
 		ID:                  uuid.New(),
-		TaskType:            "argocd:auto_register_cluster",
+		TaskType:            "delivery:source_resolution",
 		Payload:             []byte(`{"cluster_id":"one"}`),
 		QueueName:           "default",
 		MaxRetry:            5,

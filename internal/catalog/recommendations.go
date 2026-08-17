@@ -2,10 +2,8 @@
 // concerns: rating-aggregate recompute, the co-installation matrix, and
 // the "popular / similar" lookups consumed by the catalog browse.
 //
-// Migration 055 (chart_ratings, chart_rating_aggregates, chart_co_installation)
-// is the schema this package operates on. See
-// internal/db/migrations/055_catalog_ratings.up.sql for column-level
-// commentary.
+// The chart_ratings, chart_rating_aggregates, and chart_co_installation tables
+// in the canonical v1 initial schema are the storage this package operates on.
 package catalog
 
 import (
@@ -25,8 +23,8 @@ import (
 
 // CoInstallationWindow is the look-back window over which two charts
 // installed in the same cluster count as "co-installed". 30 days is
-// long enough to catch the typical operator workflow (install Argo,
-// then install observability the same sprint) without picking up
+// long enough to catch the typical operator workflow (install delivery
+// components, then observability the same sprint) without picking up
 // stale historical churn.
 const CoInstallationWindow = 30 * 24 * time.Hour
 

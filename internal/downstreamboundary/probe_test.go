@@ -91,12 +91,12 @@ func TestBoundaryEnumsAreCompleteBoundedAndInstrumented(t *testing.T) {
 	}
 }
 
-func TestCharlieAttributionIsTrustedAndIndependentFromFleetTraffic(t *testing.T) {
+func TestCharlieAttributionIsTrustedAndIndependentFromClusterTraffic(t *testing.T) {
 	allBefore := TakeSnapshot()
 	charlieBefore := TakeCharlieSnapshot()
 	RecordContext(context.Background(), EntrypointKubernetesProxy, OperationKubernetes)
 	if delta := TakeSnapshot().DeltaTotal(allBefore); delta != 1 {
-		t.Fatalf("fleet boundary delta=%d want=1", delta)
+		t.Fatalf("cluster boundary delta=%d want=1", delta)
 	}
 	if delta := TakeCharlieSnapshot().DeltaTotal(charlieBefore); delta != 0 {
 		t.Fatalf("unmarked boundary was attributed to Charlie: %d", delta)
@@ -106,7 +106,7 @@ func TestCharlieAttributionIsTrustedAndIndependentFromFleetTraffic(t *testing.T)
 	charlieBefore = TakeCharlieSnapshot()
 	RecordContext(WithCharlieOrigin(context.Background()), EntrypointRemoteDialer, OperationKubernetes)
 	if delta := TakeSnapshot().DeltaTotal(allBefore); delta != 1 {
-		t.Fatalf("fleet boundary delta=%d want=1", delta)
+		t.Fatalf("cluster boundary delta=%d want=1", delta)
 	}
 	if delta := TakeCharlieSnapshot().DeltaTotal(charlieBefore); delta != 1 {
 		t.Fatalf("Charlie boundary delta=%d want=1", delta)

@@ -46,7 +46,6 @@ const DEFAULTS: PlatformSettingsGrouped = {
     catalog: true,
     projects: true,
     monitoring: true,
-    argocd: true,
     security: true,
     backups: true,
   },
@@ -80,7 +79,6 @@ const FLAT_KEYS: Record<string, (g: PlatformSettingsGrouped) => unknown> = {
   'features.catalog': (g) => g.features.catalog,
   'features.projects': (g) => g.features.projects,
   'features.monitoring': (g) => g.features.monitoring,
-  'features.argocd': (g) => g.features.argocd,
   'features.security': (g) => g.features.security,
   'features.backups': (g) => g.features.backups,
   'tokens.default_ttl_seconds': (g) => g.tokens.defaultTtlSeconds,
@@ -115,7 +113,6 @@ function hydrate(flat: Array<{ key: string; value: unknown }>): PlatformSettings
       catalog: get('features.catalog', DEFAULTS.features.catalog),
       projects: get('features.projects', DEFAULTS.features.projects),
       monitoring: get('features.monitoring', DEFAULTS.features.monitoring),
-      argocd: get('features.argocd', DEFAULTS.features.argocd),
       security: get('features.security', DEFAULTS.features.security),
       backups: get('features.backups', DEFAULTS.features.backups),
     },
@@ -316,7 +313,6 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
         <form.AppField name="features.catalog">{(field) => <field.SwitchField label="Catalog" />}</form.AppField>
         <form.AppField name="features.projects">{(field) => <field.SwitchField label="Projects" />}</form.AppField>
         <form.AppField name="features.monitoring">{(field) => <field.SwitchField label="Monitoring" />}</form.AppField>
-        <form.AppField name="features.argocd">{(field) => <field.SwitchField label="ArgoCD" />}</form.AppField>
         <form.AppField name="features.security">{(field) => <field.SwitchField label="Security" />}</form.AppField>
         <form.AppField name="features.backups">{(field) => <field.SwitchField label="Backups" />}</form.AppField>
       </Section>

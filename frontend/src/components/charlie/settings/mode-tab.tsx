@@ -517,7 +517,7 @@ export function ModeTab() {
         </dl>
         {!m.workloadCeilingReady && (
           <p role="status" className="text-sm text-status-warning">
-            Charlie authority remains fail-closed until the non-pruning Argo
+            Charlie authority remains fail-closed until the non-pruning delivery
             rollout is healthy and both product-agent replicas report the exact
             requested ceiling.
           </p>

@@ -48,6 +48,9 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		{"@every 30s", tasks.ClusterConditionReconcileType, "cluster-condition remediation"},
 		{"@every 60s", TypeAlertEvaluation, "alert rule evaluation"},
 		{"@every 60s", TypeCharlieAlertReconcile, "Charlie alert delivery reconciliation"},
+		{"@every 5s", tasks.DeliveryRolloutReconcileType, "Flux-native delivery rollout reconciliation"},
+		{"@every 15s", tasks.DeliverySourceResolutionType, "immutable delivery source resolution sweep"},
+		{"@every 5s", tasks.DeliverySystemRolloutReconcileType, "signed agent and Flux system rollout reconciliation"},
 		{"@every 6h", TypeCatalogSync, "catalog sync"},
 		{"@every 5m", TypeMetricsAggregation, "metrics aggregation"},
 		{"@every 2m", TypeMonitoringReconcile, "monitoring reconciliation"},
@@ -71,14 +74,6 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// "tunnel" queue, because its managed-side cleanup phase needs the hub
 		// (server pod). Scheduling it here (default queue) would run it on the
 		// standalone worker, which has no hub.
-		// ArgoCD auto-adoption sweep. Agent connect enqueues the per-cluster
-		// task immediately; this sweep repairs missed enqueue, worker crash,
-		// or an ArgoCD cluster Secret deleted out-of-band.
-		{"@every 5m", tasks.ArgoCDAutoRegisterClusterType, "argocd managed-cluster auto-adoption sweep"},
-		// DIR-10: periodic re-stamp of astronomer.io/label-* keys on ArgoCD
-		// cluster Secrets so AppSet generators stay current even when the
-		// asynq queue was down during a labels mutation.
-		{"@every 15m", tasks.ArgoCDRefreshAllManagedClusterLabelsType, "argocd managed-cluster label re-stamp sweep"},
 		// Recompute the auth_group_bindings gauge so it doesn't go
 		// stale between SSO login runs. Cheap — three COUNT(*)s.
 		{"@every 5m", tasks.RefreshGroupSyncMetricsType, "refresh group-sync binding gauge"},
@@ -149,11 +144,6 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		//     days regardless of forwarder status.
 		{"@every 2s", tasks.SIEMDispatchType, "siem dispatch (forwarder queue drain)"},
 		{"30 4 * * *", tasks.SIEMCleanupOldType, "siem queue retention sweep (7d)"},
-		// Migration 056: fleet operations orchestrator. 10s cadence so an
-		// operator's pause/resume/abort click reaches steady state inside
-		// one screen refresh. Per-tick budget is 30s — overflow rolls
-		// into the next tick (no lease held across ticks).
-		{"@every 10s", tasks.FleetOrchestrateType, "fleet operations orchestrator"},
 		// Task A2: durable agent-token rotation policy sweep. Hourly —
 		// reads each cluster's token_rotation_days policy and flags
 		// rotation_pending_at on tokens older than the policy. The grace

@@ -1,0 +1,55 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - upstream-install.yaml
+  - system-resources.yaml
+patches:
+  - path: patches/namespace.yaml
+    target:
+      group: ""
+      version: v1
+      kind: Namespace
+      name: astronomer-delivery-system
+  - path: patches/source-controller.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: source-controller
+  - path: patches/kustomize-controller.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: kustomize-controller
+  - path: patches/helm-controller.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: helm-controller
+  - path: patches/crd-controller-role.yaml
+    target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: crd-controller-astronomer-delivery-system
+  - path: patches/crd-controller-binding.yaml
+    target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRoleBinding
+      name: crd-controller-astronomer-delivery-system
+  - path: patches/delete-allow-egress.yaml
+  - path: patches/delete-allow-scraping.yaml
+  - path: patches/delete-allow-webhooks.yaml
+  - path: patches/delete-flux-edit.yaml
+  - path: patches/delete-flux-view.yaml
+  - path: patches/delete-critical-pods-quota.yaml
+images:
+  - name: ghcr.io/fluxcd/source-controller
+    digest: sha256:ff8f3c92f1bcb433e858c948040c3a3393fe73f5dd72048a4502bfaf0a4c26cd
+  - name: ghcr.io/fluxcd/kustomize-controller
+    digest: sha256:2b8bec54ffb6caf421bd2a6c005d27f567d5dd4db7feb55794fb51fcabd69b8f
+  - name: ghcr.io/fluxcd/helm-controller
+    digest: sha256:16ada99456385100698a5d7adf90aba8a2089d987ab541c9566b6d7b0e897038

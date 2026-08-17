@@ -16,7 +16,7 @@ import (
 // nor the parity fix can silently regress.
 
 // platformOperatorRules is the exact grant set of the 'Platform Operator'
-// built-in (098_rancher_grade_role_catalog.up.sql) and of
+// built-in in the canonical initial schema and of
 // internal/rbac/templates/platform-operator.yaml. Note what it does NOT have:
 // any pods rule at all.
 func platformOperatorRules() []rbac.Rule {
@@ -34,7 +34,7 @@ func platformOperatorRules() []rbac.Rule {
 }
 
 // clusterTroubleshooterRules is the exact grant set of the 'Cluster
-// Troubleshooter' built-in (032_builtin_role_catalog.up.sql). pods:exec and
+// Troubleshooter' built-in in the canonical initial schema. pods:exec and
 // pods:logs, clusters:read — and deliberately no clusters:update.
 func clusterTroubleshooterRules() []rbac.Rule {
 	return []rbac.Rule{

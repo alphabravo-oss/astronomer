@@ -16,6 +16,7 @@ import (
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
+	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
 	"github.com/alphabravocompany/astronomer-go/internal/agent2"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
@@ -187,8 +188,8 @@ func runConnect(logger *slog.Logger) error {
 		svcProxy := agent.NewServiceProxy(logger)
 		tunnel.RegisterHandler(protocol.MsgServiceProxyRequest, svcProxy.HandleRequest)
 
-		// Shared guard so decommission can halt the pull reconcile loop before
-		// tearing down the agent (otherwise Phase-2 self-apply re-creates it).
+		// Shared guard stops protocol-v2 delivery before decommission removes the
+		// managed footprint and schedules this agent Deployment for deletion.
 		pauseGuard := &atomic.Bool{}
 
 		// Cluster decommission. Receives MsgDecommission from the server,
@@ -378,35 +379,62 @@ func runConnect(logger *slog.Logger) error {
 			health.Start(ctx, tunnel.SendFunc(ctx))
 		}()
 
-		// Fleet-style PULL reconcile loop (gated OFF by default). When the
-		// PullReconcileEnabled flag is set, the agent becomes the LOCAL applier
-		// of its own desired state: it pulls the rendered manifest set from the
-		// management plane over the existing tunnel and server-side-applies +
-		// prunes it, bounded strictly to the astronomer-* owned namespaces. When
-		// the flag is off, nothing here runs and v0.1.0 behavior is unchanged.
-		if cfg.PullReconcileEnabled {
-			if reconciler, rErr := agent.NewReconcileHandler(restConfig, cfg.ClusterID, logger); rErr != nil {
-				logger.Warn("pull reconcile: handler init failed; loop disabled", "error", rErr)
-			} else {
-				reconciler.SetPauseGuard(pauseGuard)
-				// The response handler routes server replies (and unsolicited
-				// pushes) into the reconcile loop.
-				tunnel.RegisterHandler(protocol.MsgDesiredStateResponse, reconciler.HandleDesiredStateResponse)
-				go func() {
-					pollTicker := time.NewTicker(250 * time.Millisecond)
-					defer pollTicker.Stop()
-					for !tunnel.IsConnected() {
-						select {
-						case <-ctx.Done():
-							return
-						case <-pollTicker.C:
-						}
-					}
-					interval := time.Duration(cfg.PullReconcileInterval) * time.Second
-					reconciler.Run(ctx, interval, tunnel.SendFunc(ctx))
-				}()
-			}
+		// Delivery protocol v2 is the single workload reconciliation path. The
+		// agent validates a complete typed snapshot before applying only the
+		// allowlisted Flux/RBAC/Secret graph; Flux then continues convergence if
+		// this tunnel or the management plane is unavailable.
+		deliveryDynamic, err := dynamic.NewForConfig(restConfig)
+		if err != nil {
+			return fmt.Errorf("initialize delivery dynamic client: %w", err)
 		}
+		deliveryExecutor, err := agentdelivery.NewExecutor(deliveryDynamic)
+		if err != nil {
+			return fmt.Errorf("initialize delivery executor: %w", err)
+		}
+		deliveryStore, err := agentdelivery.NewKubernetesCheckpointStore(client, agent.DefaultAgentNamespace)
+		if err != nil {
+			return fmt.Errorf("initialize delivery checkpoint: %w", err)
+		}
+		allowPlatformScope := cfg.PrivilegeProfile == "admin"
+		deliveryProbe, err := agentdelivery.NewClusterProbe(client, client.Discovery(), allowPlatformScope)
+		if err != nil {
+			return fmt.Errorf("initialize delivery capability probe: %w", err)
+		}
+		deliveryRuntime, err := agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
+			ClusterID:        cfg.ClusterID,
+			AgentVersion:     version.Version,
+			ValidationPolicy: agentdelivery.ValidationPolicy{AllowPlatformScope: allowPlatformScope},
+			Connected:        tunnel.IsConnected,
+			Logger:           logger,
+		}, deliveryExecutor, deliveryStore, deliveryProbe)
+		if err != nil {
+			return fmt.Errorf("initialize delivery runtime: %w", err)
+		}
+		systemManager, err := agentdelivery.NewSystemManager(deliveryDynamic, client, agentdelivery.SystemManagerConfig{
+			CurrentAgentVersion: version.Version,
+			AgentNamespace:      agent.DefaultAgentNamespace,
+			AgentDeployment:     "astronomer-agent",
+			TrustPolicy: agentdelivery.SystemTrustPolicy{
+				OIDCIdentities: []protocol.DeliveryOIDCIdentity{{
+					Issuer:  cfg.SystemOIDCIssuer,
+					Subject: cfg.SystemOIDCIdentity,
+				}},
+				AgentImageRepositories: []string{cfg.AgentImageRepository},
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("initialize delivery system manager: %w", err)
+		}
+		deliveryRuntime.SetSystemManager(systemManager)
+		deliveryRuntime.SetPauseGuard(pauseGuard)
+		tunnel.RegisterHandler(protocol.MsgDeliveryStateResponse, deliveryRuntime.HandleStateResponse)
+		tunnel.RegisterHandler(protocol.MsgDeliveryReconcile, deliveryRuntime.HandleReconcile)
+		go func() {
+			if err := deliveryRuntime.Run(ctx, tunnel.SendFunc(ctx)); err != nil && ctx.Err() == nil {
+				logger.Error("delivery runtime stopped", "error", err)
+				cancel()
+			}
+		}()
 
 		return runHelmAndConnect(ctx, tunnel, logger, cfg)
 	}

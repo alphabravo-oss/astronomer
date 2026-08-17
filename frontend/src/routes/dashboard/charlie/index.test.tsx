@@ -84,7 +84,7 @@ const finding: CharlieFinding = {
   },
   summary: "Three reconnects occurred inside the configured window.",
   sessionId: incident.id,
-  source: "agent_fleet",
+  source: "cluster_agents",
   repeatCount: 3,
   reasonNoAction: "authority.read_only_write",
   createdAt: "2026-08-06T10:00:00Z",
@@ -169,7 +169,7 @@ describe("Charlie hub acceptance", () => {
   });
 
   it("shows a blocked finding's exact reason and only its server-authorized lifecycle decisions", async () => {
-    search = new URLSearchParams("tab=findings&finding=finding-1&status=open&severity=high&source=agent_fleet&resource=agent-east&block=authority.read_only_write&from=2026-08-01&to=2026-08-07");
+    search = new URLSearchParams("tab=findings&finding=finding-1&status=open&severity=high&source=cluster_agents&resource=agent-east&block=authority.read_only_write&from=2026-08-01&to=2026-08-07");
     renderHub();
     expect(await screen.findByText("No action: authority.read_only_write")).toBeInTheDocument();
     expect(screen.getByText(/No Charlie action is authorized/)).toBeInTheDocument();

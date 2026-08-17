@@ -1,0 +1,27 @@
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --no-cross-namespace-refs=true
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --feature-gates=ObjectLevelWorkloadIdentity=true
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --default-service-account=astronomer-noop
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --default-kubeconfig-service-account=astronomer-noop
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --watch-label-selector=app.kubernetes.io/managed-by=astronomer-agent
+- op: replace
+  path: /spec/template/spec/priorityClassName
+  value: astronomer-delivery-critical
+- op: add
+  path: /spec/template/spec/topologySpreadConstraints
+  value:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app: helm-controller

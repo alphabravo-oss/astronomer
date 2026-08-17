@@ -1835,9 +1835,7 @@ func newDexRuntimeSecret(namespace, name string, configYAML []byte, generations 
 		"astronomer.io/backup-reconstruction": "encrypted-management-db",
 	}
 	secret.Metadata.Annotations = map[string]string{
-		"helm.sh/resource-policy":            "keep",
-		"argocd.argoproj.io/sync-options":    "Prune=false,Delete=false",
-		"argocd.argoproj.io/compare-options": "IgnoreExtraneous",
+		"helm.sh/resource-policy": "keep",
 	}
 	if len(generations) > 0 {
 		secret.Metadata.Annotations[dexRuntimeGenerationAnnotation] = strconv.FormatInt(generations[0], 10)

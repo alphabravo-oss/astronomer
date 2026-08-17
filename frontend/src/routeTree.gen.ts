@@ -20,15 +20,14 @@ import { Route as DashboardRbacIndexRouteImport } from './routes/dashboard/rbac/
 import { Route as DashboardProjectsIndexRouteImport } from './routes/dashboard/projects/index'
 import { Route as DashboardMonitoringIndexRouteImport } from './routes/dashboard/monitoring/index'
 import { Route as DashboardLoggingIndexRouteImport } from './routes/dashboard/logging/index'
-import { Route as DashboardFleetIndexRouteImport } from './routes/dashboard/fleet/index'
 import { Route as DashboardExtensionsIndexRouteImport } from './routes/dashboard/extensions/index'
+import { Route as DashboardDeliveryIndexRouteImport } from './routes/dashboard/delivery/index'
 import { Route as DashboardClustersIndexRouteImport } from './routes/dashboard/clusters/index'
 import { Route as DashboardClusterTemplatesIndexRouteImport } from './routes/dashboard/cluster-templates/index'
 import { Route as DashboardCharlieIndexRouteImport } from './routes/dashboard/charlie/index'
 import { Route as DashboardCatalogIndexRouteImport } from './routes/dashboard/catalog/index'
 import { Route as DashboardBackupsIndexRouteImport } from './routes/dashboard/backups/index'
 import { Route as DashboardAuditIndexRouteImport } from './routes/dashboard/audit/index'
-import { Route as DashboardArgocdIndexRouteImport } from './routes/dashboard/argocd/index'
 import { Route as DashboardAlertingIndexRouteImport } from './routes/dashboard/alerting/index'
 import { Route as DashboardAgentsIndexRouteImport } from './routes/dashboard/agents/index'
 import { Route as AuthLoginIndexRouteImport } from './routes/auth/login/index'
@@ -57,13 +56,16 @@ import { Route as DashboardSettingsCharlieIndexRouteImport } from './routes/dash
 import { Route as DashboardSettingsBackupDrillIndexRouteImport } from './routes/dashboard/settings/backup-drill/index'
 import { Route as DashboardSettingsAuthIndexRouteImport } from './routes/dashboard/settings/auth/index'
 import { Route as DashboardProjectsIdIndexRouteImport } from './routes/dashboard/projects/$id/index'
-import { Route as DashboardFleetIdIndexRouteImport } from './routes/dashboard/fleet/$id/index'
+import { Route as DashboardDeliveryTargetsIndexRouteImport } from './routes/dashboard/delivery/targets/index'
+import { Route as DashboardDeliverySourcesIndexRouteImport } from './routes/dashboard/delivery/sources/index'
+import { Route as DashboardDeliveryRolloutsIndexRouteImport } from './routes/dashboard/delivery/rollouts/index'
+import { Route as DashboardDeliveryDeploymentsIndexRouteImport } from './routes/dashboard/delivery/deployments/index'
+import { Route as DashboardDeliveryBundlesIndexRouteImport } from './routes/dashboard/delivery/bundles/index'
 import { Route as DashboardClustersRegisterIndexRouteImport } from './routes/dashboard/clusters/register/index'
 import { Route as DashboardClustersIdIndexRouteImport } from './routes/dashboard/clusters/$id/index'
 import { Route as DashboardClusterTemplatesNewIndexRouteImport } from './routes/dashboard/cluster-templates/new/index'
 import { Route as DashboardClusterTemplatesIdIndexRouteImport } from './routes/dashboard/cluster-templates/$id/index'
 import { Route as DashboardAuditShellSessionsIndexRouteImport } from './routes/dashboard/audit/shell-sessions/index'
-import { Route as DashboardArgocdInstanceIdIndexRouteImport } from './routes/dashboard/argocd/$instanceId/index'
 import { Route as DashboardAlertingBaselinesIndexRouteImport } from './routes/dashboard/alerting/baselines/index'
 import { Route as DashboardAccountSecurityIndexRouteImport } from './routes/dashboard/account/security/index'
 import { Route as AuthLoginResetPasswordIndexRouteImport } from './routes/auth/login/reset-password/index'
@@ -87,6 +89,10 @@ import { Route as DashboardProjectsIdQuotaIndexRouteImport } from './routes/dash
 import { Route as DashboardProjectsIdPolicyIndexRouteImport } from './routes/dashboard/projects/$id/policy/index'
 import { Route as DashboardProjectsIdCloudCredentialsIndexRouteImport } from './routes/dashboard/projects/$id/cloud-credentials/index'
 import { Route as DashboardProjectsIdCatalogsIndexRouteImport } from './routes/dashboard/projects/$id/catalogs/index'
+import { Route as DashboardDeliveryTargetsTargetIdIndexRouteImport } from './routes/dashboard/delivery/targets/$targetId/index'
+import { Route as DashboardDeliveryRolloutsRolloutIdIndexRouteImport } from './routes/dashboard/delivery/rollouts/$rolloutId/index'
+import { Route as DashboardDeliveryDeploymentsDeploymentIdIndexRouteImport } from './routes/dashboard/delivery/deployments/$deploymentId/index'
+import { Route as DashboardDeliveryBundlesBundleIdIndexRouteImport } from './routes/dashboard/delivery/bundles/$bundleId/index'
 import { Route as DashboardClustersIdWorkloadsIndexRouteImport } from './routes/dashboard/clusters/$id/workloads/index'
 import { Route as DashboardClustersIdToolsIndexRouteImport } from './routes/dashboard/clusters/$id/tools/index'
 import { Route as DashboardClustersIdTemplateIndexRouteImport } from './routes/dashboard/clusters/$id/template/index'
@@ -100,6 +106,7 @@ import { Route as DashboardClustersIdNetworkAccessIndexRouteImport } from './rou
 import { Route as DashboardClustersIdMonitoringStackIndexRouteImport } from './routes/dashboard/clusters/$id/monitoring-stack/index'
 import { Route as DashboardClustersIdImageScansIndexRouteImport } from './routes/dashboard/clusters/$id/image-scans/index'
 import { Route as DashboardClustersIdGatekeeperIndexRouteImport } from './routes/dashboard/clusters/$id/gatekeeper/index'
+import { Route as DashboardClustersIdDeliveryIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/index'
 import { Route as DashboardClustersIdCustomResourcesIndexRouteImport } from './routes/dashboard/clusters/$id/custom-resources/index'
 import { Route as DashboardClustersIdControlPlaneSnapshotsIndexRouteImport } from './routes/dashboard/clusters/$id/control-plane-snapshots/index'
 import { Route as DashboardClustersIdAppsIndexRouteImport } from './routes/dashboard/clusters/$id/apps/index'
@@ -120,8 +127,6 @@ import { Route as DashboardClustersRegisterIdProgressIndexRouteImport } from './
 import { Route as DashboardClustersRegisterIdConnectIndexRouteImport } from './routes/dashboard/clusters/register/$id/connect/index'
 import { Route as DashboardClustersIdServiceMeshMtlsIndexRouteImport } from './routes/dashboard/clusters/$id/service-mesh/mtls/index'
 import { Route as DashboardClustersIdNodesNodeNameIndexRouteImport } from './routes/dashboard/clusters/$id/nodes/$nodeName/index'
-import { Route as DashboardArgocdInstanceIdApplicationsetsNewIndexRouteImport } from './routes/dashboard/argocd/$instanceId/applicationsets/new/index'
-import { Route as DashboardArgocdInstanceIdApplicationsAppIdIndexRouteImport } from './routes/dashboard/argocd/$instanceId/applications/$appId/index'
 import { Route as DashboardProjectsIdCloudCredentialsCredIdEditIndexRouteImport } from './routes/dashboard/projects/$id/cloud-credentials/$credId/edit/index'
 import { Route as DashboardClustersIdWorkloadsKindNamespaceNameIndexRouteImport } from './routes/dashboard/clusters/$id/workloads/$kind/$namespace/$name/index'
 
@@ -181,17 +186,17 @@ const DashboardLoggingIndexRoute = DashboardLoggingIndexRouteImport.update({
   path: '/logging/',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
-const DashboardFleetIndexRoute = DashboardFleetIndexRouteImport.update({
-  id: '/fleet/',
-  path: '/fleet/',
-  getParentRoute: () => DashboardRouteRoute,
-} as any)
 const DashboardExtensionsIndexRoute =
   DashboardExtensionsIndexRouteImport.update({
     id: '/extensions/',
     path: '/extensions/',
     getParentRoute: () => DashboardRouteRoute,
   } as any)
+const DashboardDeliveryIndexRoute = DashboardDeliveryIndexRouteImport.update({
+  id: '/delivery/',
+  path: '/delivery/',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
 const DashboardClustersIndexRoute = DashboardClustersIndexRouteImport.update({
   id: '/clusters/',
   path: '/clusters/',
@@ -221,11 +226,6 @@ const DashboardBackupsIndexRoute = DashboardBackupsIndexRouteImport.update({
 const DashboardAuditIndexRoute = DashboardAuditIndexRouteImport.update({
   id: '/audit/',
   path: '/audit/',
-  getParentRoute: () => DashboardRouteRoute,
-} as any)
-const DashboardArgocdIndexRoute = DashboardArgocdIndexRouteImport.update({
-  id: '/argocd/',
-  path: '/argocd/',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
 const DashboardAlertingIndexRoute = DashboardAlertingIndexRouteImport.update({
@@ -392,11 +392,36 @@ const DashboardProjectsIdIndexRoute =
     path: '/',
     getParentRoute: () => DashboardProjectsIdRouteRoute,
   } as any)
-const DashboardFleetIdIndexRoute = DashboardFleetIdIndexRouteImport.update({
-  id: '/fleet/$id/',
-  path: '/fleet/$id/',
-  getParentRoute: () => DashboardRouteRoute,
-} as any)
+const DashboardDeliveryTargetsIndexRoute =
+  DashboardDeliveryTargetsIndexRouteImport.update({
+    id: '/delivery/targets/',
+    path: '/delivery/targets/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardDeliverySourcesIndexRoute =
+  DashboardDeliverySourcesIndexRouteImport.update({
+    id: '/delivery/sources/',
+    path: '/delivery/sources/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardDeliveryRolloutsIndexRoute =
+  DashboardDeliveryRolloutsIndexRouteImport.update({
+    id: '/delivery/rollouts/',
+    path: '/delivery/rollouts/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardDeliveryDeploymentsIndexRoute =
+  DashboardDeliveryDeploymentsIndexRouteImport.update({
+    id: '/delivery/deployments/',
+    path: '/delivery/deployments/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardDeliveryBundlesIndexRoute =
+  DashboardDeliveryBundlesIndexRouteImport.update({
+    id: '/delivery/bundles/',
+    path: '/delivery/bundles/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
 const DashboardClustersRegisterIndexRoute =
   DashboardClustersRegisterIndexRouteImport.update({
     id: '/clusters/register/',
@@ -425,12 +450,6 @@ const DashboardAuditShellSessionsIndexRoute =
   DashboardAuditShellSessionsIndexRouteImport.update({
     id: '/audit/shell-sessions/',
     path: '/audit/shell-sessions/',
-    getParentRoute: () => DashboardRouteRoute,
-  } as any)
-const DashboardArgocdInstanceIdIndexRoute =
-  DashboardArgocdInstanceIdIndexRouteImport.update({
-    id: '/argocd/$instanceId/',
-    path: '/argocd/$instanceId/',
     getParentRoute: () => DashboardRouteRoute,
   } as any)
 const DashboardAlertingBaselinesIndexRoute =
@@ -571,6 +590,30 @@ const DashboardProjectsIdCatalogsIndexRoute =
     path: '/catalogs/',
     getParentRoute: () => DashboardProjectsIdRouteRoute,
   } as any)
+const DashboardDeliveryTargetsTargetIdIndexRoute =
+  DashboardDeliveryTargetsTargetIdIndexRouteImport.update({
+    id: '/delivery/targets/$targetId/',
+    path: '/delivery/targets/$targetId/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardDeliveryRolloutsRolloutIdIndexRoute =
+  DashboardDeliveryRolloutsRolloutIdIndexRouteImport.update({
+    id: '/delivery/rollouts/$rolloutId/',
+    path: '/delivery/rollouts/$rolloutId/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardDeliveryDeploymentsDeploymentIdIndexRoute =
+  DashboardDeliveryDeploymentsDeploymentIdIndexRouteImport.update({
+    id: '/delivery/deployments/$deploymentId/',
+    path: '/delivery/deployments/$deploymentId/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardDeliveryBundlesBundleIdIndexRoute =
+  DashboardDeliveryBundlesBundleIdIndexRouteImport.update({
+    id: '/delivery/bundles/$bundleId/',
+    path: '/delivery/bundles/$bundleId/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
 const DashboardClustersIdWorkloadsIndexRoute =
   DashboardClustersIdWorkloadsIndexRouteImport.update({
     id: '/workloads/',
@@ -647,6 +690,12 @@ const DashboardClustersIdGatekeeperIndexRoute =
   DashboardClustersIdGatekeeperIndexRouteImport.update({
     id: '/gatekeeper/',
     path: '/gatekeeper/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdDeliveryIndexRoute =
+  DashboardClustersIdDeliveryIndexRouteImport.update({
+    id: '/delivery/',
+    path: '/delivery/',
     getParentRoute: () => DashboardClustersIdRouteRoute,
   } as any)
 const DashboardClustersIdCustomResourcesIndexRoute =
@@ -769,18 +818,6 @@ const DashboardClustersIdNodesNodeNameIndexRoute =
     path: '/nodes/$nodeName/',
     getParentRoute: () => DashboardClustersIdRouteRoute,
   } as any)
-const DashboardArgocdInstanceIdApplicationsetsNewIndexRoute =
-  DashboardArgocdInstanceIdApplicationsetsNewIndexRouteImport.update({
-    id: '/argocd/$instanceId/applicationsets/new/',
-    path: '/argocd/$instanceId/applicationsets/new/',
-    getParentRoute: () => DashboardRouteRoute,
-  } as any)
-const DashboardArgocdInstanceIdApplicationsAppIdIndexRoute =
-  DashboardArgocdInstanceIdApplicationsAppIdIndexRouteImport.update({
-    id: '/argocd/$instanceId/applications/$appId/',
-    path: '/argocd/$instanceId/applications/$appId/',
-    getParentRoute: () => DashboardRouteRoute,
-  } as any)
 const DashboardProjectsIdCloudCredentialsCredIdEditIndexRoute =
   DashboardProjectsIdCloudCredentialsCredIdEditIndexRouteImport.update({
     id: '/cloud-credentials/$credId/edit/',
@@ -804,15 +841,14 @@ export interface FileRoutesByFullPath {
   '/auth/login/': typeof AuthLoginIndexRoute
   '/dashboard/agents/': typeof DashboardAgentsIndexRoute
   '/dashboard/alerting/': typeof DashboardAlertingIndexRoute
-  '/dashboard/argocd/': typeof DashboardArgocdIndexRoute
   '/dashboard/audit/': typeof DashboardAuditIndexRoute
   '/dashboard/backups/': typeof DashboardBackupsIndexRoute
   '/dashboard/catalog/': typeof DashboardCatalogIndexRoute
   '/dashboard/charlie/': typeof DashboardCharlieIndexRoute
   '/dashboard/cluster-templates/': typeof DashboardClusterTemplatesIndexRoute
   '/dashboard/clusters/': typeof DashboardClustersIndexRoute
+  '/dashboard/delivery/': typeof DashboardDeliveryIndexRoute
   '/dashboard/extensions/': typeof DashboardExtensionsIndexRoute
-  '/dashboard/fleet/': typeof DashboardFleetIndexRoute
   '/dashboard/logging/': typeof DashboardLoggingIndexRoute
   '/dashboard/monitoring/': typeof DashboardMonitoringIndexRoute
   '/dashboard/projects/': typeof DashboardProjectsIndexRoute
@@ -825,13 +861,16 @@ export interface FileRoutesByFullPath {
   '/auth/login/reset-password/': typeof AuthLoginResetPasswordIndexRoute
   '/dashboard/account/security/': typeof DashboardAccountSecurityIndexRoute
   '/dashboard/alerting/baselines/': typeof DashboardAlertingBaselinesIndexRoute
-  '/dashboard/argocd/$instanceId/': typeof DashboardArgocdInstanceIdIndexRoute
   '/dashboard/audit/shell-sessions/': typeof DashboardAuditShellSessionsIndexRoute
   '/dashboard/cluster-templates/$id/': typeof DashboardClusterTemplatesIdIndexRoute
   '/dashboard/cluster-templates/new/': typeof DashboardClusterTemplatesNewIndexRoute
   '/dashboard/clusters/$id/': typeof DashboardClustersIdIndexRoute
   '/dashboard/clusters/register/': typeof DashboardClustersRegisterIndexRoute
-  '/dashboard/fleet/$id/': typeof DashboardFleetIdIndexRoute
+  '/dashboard/delivery/bundles/': typeof DashboardDeliveryBundlesIndexRoute
+  '/dashboard/delivery/deployments/': typeof DashboardDeliveryDeploymentsIndexRoute
+  '/dashboard/delivery/rollouts/': typeof DashboardDeliveryRolloutsIndexRoute
+  '/dashboard/delivery/sources/': typeof DashboardDeliverySourcesIndexRoute
+  '/dashboard/delivery/targets/': typeof DashboardDeliveryTargetsIndexRoute
   '/dashboard/projects/$id/': typeof DashboardProjectsIdIndexRoute
   '/dashboard/settings/auth/': typeof DashboardSettingsAuthIndexRoute
   '/dashboard/settings/backup-drill/': typeof DashboardSettingsBackupDrillIndexRoute
@@ -867,6 +906,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/clusters/$id/apps/': typeof DashboardClustersIdAppsIndexRoute
   '/dashboard/clusters/$id/control-plane-snapshots/': typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
   '/dashboard/clusters/$id/custom-resources/': typeof DashboardClustersIdCustomResourcesIndexRoute
+  '/dashboard/clusters/$id/delivery/': typeof DashboardClustersIdDeliveryIndexRoute
   '/dashboard/clusters/$id/gatekeeper/': typeof DashboardClustersIdGatekeeperIndexRoute
   '/dashboard/clusters/$id/image-scans/': typeof DashboardClustersIdImageScansIndexRoute
   '/dashboard/clusters/$id/monitoring-stack/': typeof DashboardClustersIdMonitoringStackIndexRoute
@@ -880,6 +920,10 @@ export interface FileRoutesByFullPath {
   '/dashboard/clusters/$id/template/': typeof DashboardClustersIdTemplateIndexRoute
   '/dashboard/clusters/$id/tools/': typeof DashboardClustersIdToolsIndexRoute
   '/dashboard/clusters/$id/workloads/': typeof DashboardClustersIdWorkloadsIndexRoute
+  '/dashboard/delivery/bundles/$bundleId/': typeof DashboardDeliveryBundlesBundleIdIndexRoute
+  '/dashboard/delivery/deployments/$deploymentId/': typeof DashboardDeliveryDeploymentsDeploymentIdIndexRoute
+  '/dashboard/delivery/rollouts/$rolloutId/': typeof DashboardDeliveryRolloutsRolloutIdIndexRoute
+  '/dashboard/delivery/targets/$targetId/': typeof DashboardDeliveryTargetsTargetIdIndexRoute
   '/dashboard/projects/$id/catalogs/': typeof DashboardProjectsIdCatalogsIndexRoute
   '/dashboard/projects/$id/cloud-credentials/': typeof DashboardProjectsIdCloudCredentialsIndexRoute
   '/dashboard/projects/$id/policy/': typeof DashboardProjectsIdPolicyIndexRoute
@@ -899,8 +943,6 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings/templates/$key/': typeof DashboardSettingsTemplatesKeyIndexRoute
   '/dashboard/settings/webhooks/$id/': typeof DashboardSettingsWebhooksIdIndexRoute
   '/dashboard/settings/webhooks/new/': typeof DashboardSettingsWebhooksNewIndexRoute
-  '/dashboard/argocd/$instanceId/applications/$appId/': typeof DashboardArgocdInstanceIdApplicationsAppIdIndexRoute
-  '/dashboard/argocd/$instanceId/applicationsets/new/': typeof DashboardArgocdInstanceIdApplicationsetsNewIndexRoute
   '/dashboard/clusters/$id/nodes/$nodeName/': typeof DashboardClustersIdNodesNodeNameIndexRoute
   '/dashboard/clusters/$id/service-mesh/mtls/': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
   '/dashboard/clusters/register/$id/connect/': typeof DashboardClustersRegisterIdConnectIndexRoute
@@ -918,15 +960,14 @@ export interface FileRoutesByTo {
   '/auth/login': typeof AuthLoginIndexRoute
   '/dashboard/agents': typeof DashboardAgentsIndexRoute
   '/dashboard/alerting': typeof DashboardAlertingIndexRoute
-  '/dashboard/argocd': typeof DashboardArgocdIndexRoute
   '/dashboard/audit': typeof DashboardAuditIndexRoute
   '/dashboard/backups': typeof DashboardBackupsIndexRoute
   '/dashboard/catalog': typeof DashboardCatalogIndexRoute
   '/dashboard/charlie': typeof DashboardCharlieIndexRoute
   '/dashboard/cluster-templates': typeof DashboardClusterTemplatesIndexRoute
   '/dashboard/clusters': typeof DashboardClustersIndexRoute
+  '/dashboard/delivery': typeof DashboardDeliveryIndexRoute
   '/dashboard/extensions': typeof DashboardExtensionsIndexRoute
-  '/dashboard/fleet': typeof DashboardFleetIndexRoute
   '/dashboard/logging': typeof DashboardLoggingIndexRoute
   '/dashboard/monitoring': typeof DashboardMonitoringIndexRoute
   '/dashboard/projects': typeof DashboardProjectsIndexRoute
@@ -939,13 +980,16 @@ export interface FileRoutesByTo {
   '/auth/login/reset-password': typeof AuthLoginResetPasswordIndexRoute
   '/dashboard/account/security': typeof DashboardAccountSecurityIndexRoute
   '/dashboard/alerting/baselines': typeof DashboardAlertingBaselinesIndexRoute
-  '/dashboard/argocd/$instanceId': typeof DashboardArgocdInstanceIdIndexRoute
   '/dashboard/audit/shell-sessions': typeof DashboardAuditShellSessionsIndexRoute
   '/dashboard/cluster-templates/$id': typeof DashboardClusterTemplatesIdIndexRoute
   '/dashboard/cluster-templates/new': typeof DashboardClusterTemplatesNewIndexRoute
   '/dashboard/clusters/$id': typeof DashboardClustersIdIndexRoute
   '/dashboard/clusters/register': typeof DashboardClustersRegisterIndexRoute
-  '/dashboard/fleet/$id': typeof DashboardFleetIdIndexRoute
+  '/dashboard/delivery/bundles': typeof DashboardDeliveryBundlesIndexRoute
+  '/dashboard/delivery/deployments': typeof DashboardDeliveryDeploymentsIndexRoute
+  '/dashboard/delivery/rollouts': typeof DashboardDeliveryRolloutsIndexRoute
+  '/dashboard/delivery/sources': typeof DashboardDeliverySourcesIndexRoute
+  '/dashboard/delivery/targets': typeof DashboardDeliveryTargetsIndexRoute
   '/dashboard/projects/$id': typeof DashboardProjectsIdIndexRoute
   '/dashboard/settings/auth': typeof DashboardSettingsAuthIndexRoute
   '/dashboard/settings/backup-drill': typeof DashboardSettingsBackupDrillIndexRoute
@@ -981,6 +1025,7 @@ export interface FileRoutesByTo {
   '/dashboard/clusters/$id/apps': typeof DashboardClustersIdAppsIndexRoute
   '/dashboard/clusters/$id/control-plane-snapshots': typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
   '/dashboard/clusters/$id/custom-resources': typeof DashboardClustersIdCustomResourcesIndexRoute
+  '/dashboard/clusters/$id/delivery': typeof DashboardClustersIdDeliveryIndexRoute
   '/dashboard/clusters/$id/gatekeeper': typeof DashboardClustersIdGatekeeperIndexRoute
   '/dashboard/clusters/$id/image-scans': typeof DashboardClustersIdImageScansIndexRoute
   '/dashboard/clusters/$id/monitoring-stack': typeof DashboardClustersIdMonitoringStackIndexRoute
@@ -994,6 +1039,10 @@ export interface FileRoutesByTo {
   '/dashboard/clusters/$id/template': typeof DashboardClustersIdTemplateIndexRoute
   '/dashboard/clusters/$id/tools': typeof DashboardClustersIdToolsIndexRoute
   '/dashboard/clusters/$id/workloads': typeof DashboardClustersIdWorkloadsIndexRoute
+  '/dashboard/delivery/bundles/$bundleId': typeof DashboardDeliveryBundlesBundleIdIndexRoute
+  '/dashboard/delivery/deployments/$deploymentId': typeof DashboardDeliveryDeploymentsDeploymentIdIndexRoute
+  '/dashboard/delivery/rollouts/$rolloutId': typeof DashboardDeliveryRolloutsRolloutIdIndexRoute
+  '/dashboard/delivery/targets/$targetId': typeof DashboardDeliveryTargetsTargetIdIndexRoute
   '/dashboard/projects/$id/catalogs': typeof DashboardProjectsIdCatalogsIndexRoute
   '/dashboard/projects/$id/cloud-credentials': typeof DashboardProjectsIdCloudCredentialsIndexRoute
   '/dashboard/projects/$id/policy': typeof DashboardProjectsIdPolicyIndexRoute
@@ -1013,8 +1062,6 @@ export interface FileRoutesByTo {
   '/dashboard/settings/templates/$key': typeof DashboardSettingsTemplatesKeyIndexRoute
   '/dashboard/settings/webhooks/$id': typeof DashboardSettingsWebhooksIdIndexRoute
   '/dashboard/settings/webhooks/new': typeof DashboardSettingsWebhooksNewIndexRoute
-  '/dashboard/argocd/$instanceId/applications/$appId': typeof DashboardArgocdInstanceIdApplicationsAppIdIndexRoute
-  '/dashboard/argocd/$instanceId/applicationsets/new': typeof DashboardArgocdInstanceIdApplicationsetsNewIndexRoute
   '/dashboard/clusters/$id/nodes/$nodeName': typeof DashboardClustersIdNodesNodeNameIndexRoute
   '/dashboard/clusters/$id/service-mesh/mtls': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
   '/dashboard/clusters/register/$id/connect': typeof DashboardClustersRegisterIdConnectIndexRoute
@@ -1036,15 +1083,14 @@ export interface FileRoutesById {
   '/auth/login/': typeof AuthLoginIndexRoute
   '/dashboard/agents/': typeof DashboardAgentsIndexRoute
   '/dashboard/alerting/': typeof DashboardAlertingIndexRoute
-  '/dashboard/argocd/': typeof DashboardArgocdIndexRoute
   '/dashboard/audit/': typeof DashboardAuditIndexRoute
   '/dashboard/backups/': typeof DashboardBackupsIndexRoute
   '/dashboard/catalog/': typeof DashboardCatalogIndexRoute
   '/dashboard/charlie/': typeof DashboardCharlieIndexRoute
   '/dashboard/cluster-templates/': typeof DashboardClusterTemplatesIndexRoute
   '/dashboard/clusters/': typeof DashboardClustersIndexRoute
+  '/dashboard/delivery/': typeof DashboardDeliveryIndexRoute
   '/dashboard/extensions/': typeof DashboardExtensionsIndexRoute
-  '/dashboard/fleet/': typeof DashboardFleetIndexRoute
   '/dashboard/logging/': typeof DashboardLoggingIndexRoute
   '/dashboard/monitoring/': typeof DashboardMonitoringIndexRoute
   '/dashboard/projects/': typeof DashboardProjectsIndexRoute
@@ -1057,13 +1103,16 @@ export interface FileRoutesById {
   '/auth/login/reset-password/': typeof AuthLoginResetPasswordIndexRoute
   '/dashboard/account/security/': typeof DashboardAccountSecurityIndexRoute
   '/dashboard/alerting/baselines/': typeof DashboardAlertingBaselinesIndexRoute
-  '/dashboard/argocd/$instanceId/': typeof DashboardArgocdInstanceIdIndexRoute
   '/dashboard/audit/shell-sessions/': typeof DashboardAuditShellSessionsIndexRoute
   '/dashboard/cluster-templates/$id/': typeof DashboardClusterTemplatesIdIndexRoute
   '/dashboard/cluster-templates/new/': typeof DashboardClusterTemplatesNewIndexRoute
   '/dashboard/clusters/$id/': typeof DashboardClustersIdIndexRoute
   '/dashboard/clusters/register/': typeof DashboardClustersRegisterIndexRoute
-  '/dashboard/fleet/$id/': typeof DashboardFleetIdIndexRoute
+  '/dashboard/delivery/bundles/': typeof DashboardDeliveryBundlesIndexRoute
+  '/dashboard/delivery/deployments/': typeof DashboardDeliveryDeploymentsIndexRoute
+  '/dashboard/delivery/rollouts/': typeof DashboardDeliveryRolloutsIndexRoute
+  '/dashboard/delivery/sources/': typeof DashboardDeliverySourcesIndexRoute
+  '/dashboard/delivery/targets/': typeof DashboardDeliveryTargetsIndexRoute
   '/dashboard/projects/$id/': typeof DashboardProjectsIdIndexRoute
   '/dashboard/settings/auth/': typeof DashboardSettingsAuthIndexRoute
   '/dashboard/settings/backup-drill/': typeof DashboardSettingsBackupDrillIndexRoute
@@ -1099,6 +1148,7 @@ export interface FileRoutesById {
   '/dashboard/clusters/$id/apps/': typeof DashboardClustersIdAppsIndexRoute
   '/dashboard/clusters/$id/control-plane-snapshots/': typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
   '/dashboard/clusters/$id/custom-resources/': typeof DashboardClustersIdCustomResourcesIndexRoute
+  '/dashboard/clusters/$id/delivery/': typeof DashboardClustersIdDeliveryIndexRoute
   '/dashboard/clusters/$id/gatekeeper/': typeof DashboardClustersIdGatekeeperIndexRoute
   '/dashboard/clusters/$id/image-scans/': typeof DashboardClustersIdImageScansIndexRoute
   '/dashboard/clusters/$id/monitoring-stack/': typeof DashboardClustersIdMonitoringStackIndexRoute
@@ -1112,6 +1162,10 @@ export interface FileRoutesById {
   '/dashboard/clusters/$id/template/': typeof DashboardClustersIdTemplateIndexRoute
   '/dashboard/clusters/$id/tools/': typeof DashboardClustersIdToolsIndexRoute
   '/dashboard/clusters/$id/workloads/': typeof DashboardClustersIdWorkloadsIndexRoute
+  '/dashboard/delivery/bundles/$bundleId/': typeof DashboardDeliveryBundlesBundleIdIndexRoute
+  '/dashboard/delivery/deployments/$deploymentId/': typeof DashboardDeliveryDeploymentsDeploymentIdIndexRoute
+  '/dashboard/delivery/rollouts/$rolloutId/': typeof DashboardDeliveryRolloutsRolloutIdIndexRoute
+  '/dashboard/delivery/targets/$targetId/': typeof DashboardDeliveryTargetsTargetIdIndexRoute
   '/dashboard/projects/$id/catalogs/': typeof DashboardProjectsIdCatalogsIndexRoute
   '/dashboard/projects/$id/cloud-credentials/': typeof DashboardProjectsIdCloudCredentialsIndexRoute
   '/dashboard/projects/$id/policy/': typeof DashboardProjectsIdPolicyIndexRoute
@@ -1131,8 +1185,6 @@ export interface FileRoutesById {
   '/dashboard/settings/templates/$key/': typeof DashboardSettingsTemplatesKeyIndexRoute
   '/dashboard/settings/webhooks/$id/': typeof DashboardSettingsWebhooksIdIndexRoute
   '/dashboard/settings/webhooks/new/': typeof DashboardSettingsWebhooksNewIndexRoute
-  '/dashboard/argocd/$instanceId/applications/$appId/': typeof DashboardArgocdInstanceIdApplicationsAppIdIndexRoute
-  '/dashboard/argocd/$instanceId/applicationsets/new/': typeof DashboardArgocdInstanceIdApplicationsetsNewIndexRoute
   '/dashboard/clusters/$id/nodes/$nodeName/': typeof DashboardClustersIdNodesNodeNameIndexRoute
   '/dashboard/clusters/$id/service-mesh/mtls/': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
   '/dashboard/clusters/register/$id/connect/': typeof DashboardClustersRegisterIdConnectIndexRoute
@@ -1155,15 +1207,14 @@ export interface FileRouteTypes {
     | '/auth/login/'
     | '/dashboard/agents/'
     | '/dashboard/alerting/'
-    | '/dashboard/argocd/'
     | '/dashboard/audit/'
     | '/dashboard/backups/'
     | '/dashboard/catalog/'
     | '/dashboard/charlie/'
     | '/dashboard/cluster-templates/'
     | '/dashboard/clusters/'
+    | '/dashboard/delivery/'
     | '/dashboard/extensions/'
-    | '/dashboard/fleet/'
     | '/dashboard/logging/'
     | '/dashboard/monitoring/'
     | '/dashboard/projects/'
@@ -1176,13 +1227,16 @@ export interface FileRouteTypes {
     | '/auth/login/reset-password/'
     | '/dashboard/account/security/'
     | '/dashboard/alerting/baselines/'
-    | '/dashboard/argocd/$instanceId/'
     | '/dashboard/audit/shell-sessions/'
     | '/dashboard/cluster-templates/$id/'
     | '/dashboard/cluster-templates/new/'
     | '/dashboard/clusters/$id/'
     | '/dashboard/clusters/register/'
-    | '/dashboard/fleet/$id/'
+    | '/dashboard/delivery/bundles/'
+    | '/dashboard/delivery/deployments/'
+    | '/dashboard/delivery/rollouts/'
+    | '/dashboard/delivery/sources/'
+    | '/dashboard/delivery/targets/'
     | '/dashboard/projects/$id/'
     | '/dashboard/settings/auth/'
     | '/dashboard/settings/backup-drill/'
@@ -1218,6 +1272,7 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/apps/'
     | '/dashboard/clusters/$id/control-plane-snapshots/'
     | '/dashboard/clusters/$id/custom-resources/'
+    | '/dashboard/clusters/$id/delivery/'
     | '/dashboard/clusters/$id/gatekeeper/'
     | '/dashboard/clusters/$id/image-scans/'
     | '/dashboard/clusters/$id/monitoring-stack/'
@@ -1231,6 +1286,10 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/template/'
     | '/dashboard/clusters/$id/tools/'
     | '/dashboard/clusters/$id/workloads/'
+    | '/dashboard/delivery/bundles/$bundleId/'
+    | '/dashboard/delivery/deployments/$deploymentId/'
+    | '/dashboard/delivery/rollouts/$rolloutId/'
+    | '/dashboard/delivery/targets/$targetId/'
     | '/dashboard/projects/$id/catalogs/'
     | '/dashboard/projects/$id/cloud-credentials/'
     | '/dashboard/projects/$id/policy/'
@@ -1250,8 +1309,6 @@ export interface FileRouteTypes {
     | '/dashboard/settings/templates/$key/'
     | '/dashboard/settings/webhooks/$id/'
     | '/dashboard/settings/webhooks/new/'
-    | '/dashboard/argocd/$instanceId/applications/$appId/'
-    | '/dashboard/argocd/$instanceId/applicationsets/new/'
     | '/dashboard/clusters/$id/nodes/$nodeName/'
     | '/dashboard/clusters/$id/service-mesh/mtls/'
     | '/dashboard/clusters/register/$id/connect/'
@@ -1269,15 +1326,14 @@ export interface FileRouteTypes {
     | '/auth/login'
     | '/dashboard/agents'
     | '/dashboard/alerting'
-    | '/dashboard/argocd'
     | '/dashboard/audit'
     | '/dashboard/backups'
     | '/dashboard/catalog'
     | '/dashboard/charlie'
     | '/dashboard/cluster-templates'
     | '/dashboard/clusters'
+    | '/dashboard/delivery'
     | '/dashboard/extensions'
-    | '/dashboard/fleet'
     | '/dashboard/logging'
     | '/dashboard/monitoring'
     | '/dashboard/projects'
@@ -1290,13 +1346,16 @@ export interface FileRouteTypes {
     | '/auth/login/reset-password'
     | '/dashboard/account/security'
     | '/dashboard/alerting/baselines'
-    | '/dashboard/argocd/$instanceId'
     | '/dashboard/audit/shell-sessions'
     | '/dashboard/cluster-templates/$id'
     | '/dashboard/cluster-templates/new'
     | '/dashboard/clusters/$id'
     | '/dashboard/clusters/register'
-    | '/dashboard/fleet/$id'
+    | '/dashboard/delivery/bundles'
+    | '/dashboard/delivery/deployments'
+    | '/dashboard/delivery/rollouts'
+    | '/dashboard/delivery/sources'
+    | '/dashboard/delivery/targets'
     | '/dashboard/projects/$id'
     | '/dashboard/settings/auth'
     | '/dashboard/settings/backup-drill'
@@ -1332,6 +1391,7 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/apps'
     | '/dashboard/clusters/$id/control-plane-snapshots'
     | '/dashboard/clusters/$id/custom-resources'
+    | '/dashboard/clusters/$id/delivery'
     | '/dashboard/clusters/$id/gatekeeper'
     | '/dashboard/clusters/$id/image-scans'
     | '/dashboard/clusters/$id/monitoring-stack'
@@ -1345,6 +1405,10 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/template'
     | '/dashboard/clusters/$id/tools'
     | '/dashboard/clusters/$id/workloads'
+    | '/dashboard/delivery/bundles/$bundleId'
+    | '/dashboard/delivery/deployments/$deploymentId'
+    | '/dashboard/delivery/rollouts/$rolloutId'
+    | '/dashboard/delivery/targets/$targetId'
     | '/dashboard/projects/$id/catalogs'
     | '/dashboard/projects/$id/cloud-credentials'
     | '/dashboard/projects/$id/policy'
@@ -1364,8 +1428,6 @@ export interface FileRouteTypes {
     | '/dashboard/settings/templates/$key'
     | '/dashboard/settings/webhooks/$id'
     | '/dashboard/settings/webhooks/new'
-    | '/dashboard/argocd/$instanceId/applications/$appId'
-    | '/dashboard/argocd/$instanceId/applicationsets/new'
     | '/dashboard/clusters/$id/nodes/$nodeName'
     | '/dashboard/clusters/$id/service-mesh/mtls'
     | '/dashboard/clusters/register/$id/connect'
@@ -1386,15 +1448,14 @@ export interface FileRouteTypes {
     | '/auth/login/'
     | '/dashboard/agents/'
     | '/dashboard/alerting/'
-    | '/dashboard/argocd/'
     | '/dashboard/audit/'
     | '/dashboard/backups/'
     | '/dashboard/catalog/'
     | '/dashboard/charlie/'
     | '/dashboard/cluster-templates/'
     | '/dashboard/clusters/'
+    | '/dashboard/delivery/'
     | '/dashboard/extensions/'
-    | '/dashboard/fleet/'
     | '/dashboard/logging/'
     | '/dashboard/monitoring/'
     | '/dashboard/projects/'
@@ -1407,13 +1468,16 @@ export interface FileRouteTypes {
     | '/auth/login/reset-password/'
     | '/dashboard/account/security/'
     | '/dashboard/alerting/baselines/'
-    | '/dashboard/argocd/$instanceId/'
     | '/dashboard/audit/shell-sessions/'
     | '/dashboard/cluster-templates/$id/'
     | '/dashboard/cluster-templates/new/'
     | '/dashboard/clusters/$id/'
     | '/dashboard/clusters/register/'
-    | '/dashboard/fleet/$id/'
+    | '/dashboard/delivery/bundles/'
+    | '/dashboard/delivery/deployments/'
+    | '/dashboard/delivery/rollouts/'
+    | '/dashboard/delivery/sources/'
+    | '/dashboard/delivery/targets/'
     | '/dashboard/projects/$id/'
     | '/dashboard/settings/auth/'
     | '/dashboard/settings/backup-drill/'
@@ -1449,6 +1513,7 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/apps/'
     | '/dashboard/clusters/$id/control-plane-snapshots/'
     | '/dashboard/clusters/$id/custom-resources/'
+    | '/dashboard/clusters/$id/delivery/'
     | '/dashboard/clusters/$id/gatekeeper/'
     | '/dashboard/clusters/$id/image-scans/'
     | '/dashboard/clusters/$id/monitoring-stack/'
@@ -1462,6 +1527,10 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/template/'
     | '/dashboard/clusters/$id/tools/'
     | '/dashboard/clusters/$id/workloads/'
+    | '/dashboard/delivery/bundles/$bundleId/'
+    | '/dashboard/delivery/deployments/$deploymentId/'
+    | '/dashboard/delivery/rollouts/$rolloutId/'
+    | '/dashboard/delivery/targets/$targetId/'
     | '/dashboard/projects/$id/catalogs/'
     | '/dashboard/projects/$id/cloud-credentials/'
     | '/dashboard/projects/$id/policy/'
@@ -1481,8 +1550,6 @@ export interface FileRouteTypes {
     | '/dashboard/settings/templates/$key/'
     | '/dashboard/settings/webhooks/$id/'
     | '/dashboard/settings/webhooks/new/'
-    | '/dashboard/argocd/$instanceId/applications/$appId/'
-    | '/dashboard/argocd/$instanceId/applicationsets/new/'
     | '/dashboard/clusters/$id/nodes/$nodeName/'
     | '/dashboard/clusters/$id/service-mesh/mtls/'
     | '/dashboard/clusters/register/$id/connect/'
@@ -1582,18 +1649,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardLoggingIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
-    '/dashboard/fleet/': {
-      id: '/dashboard/fleet/'
-      path: '/fleet'
-      fullPath: '/dashboard/fleet/'
-      preLoaderRoute: typeof DashboardFleetIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
-    }
     '/dashboard/extensions/': {
       id: '/dashboard/extensions/'
       path: '/extensions'
       fullPath: '/dashboard/extensions/'
       preLoaderRoute: typeof DashboardExtensionsIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/delivery/': {
+      id: '/dashboard/delivery/'
+      path: '/delivery'
+      fullPath: '/dashboard/delivery/'
+      preLoaderRoute: typeof DashboardDeliveryIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/clusters/': {
@@ -1636,13 +1703,6 @@ declare module '@tanstack/react-router' {
       path: '/audit'
       fullPath: '/dashboard/audit/'
       preLoaderRoute: typeof DashboardAuditIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
-    }
-    '/dashboard/argocd/': {
-      id: '/dashboard/argocd/'
-      path: '/argocd'
-      fullPath: '/dashboard/argocd/'
-      preLoaderRoute: typeof DashboardArgocdIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/alerting/': {
@@ -1841,11 +1901,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardProjectsIdIndexRouteImport
       parentRoute: typeof DashboardProjectsIdRouteRoute
     }
-    '/dashboard/fleet/$id/': {
-      id: '/dashboard/fleet/$id/'
-      path: '/fleet/$id'
-      fullPath: '/dashboard/fleet/$id/'
-      preLoaderRoute: typeof DashboardFleetIdIndexRouteImport
+    '/dashboard/delivery/targets/': {
+      id: '/dashboard/delivery/targets/'
+      path: '/delivery/targets'
+      fullPath: '/dashboard/delivery/targets/'
+      preLoaderRoute: typeof DashboardDeliveryTargetsIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/delivery/sources/': {
+      id: '/dashboard/delivery/sources/'
+      path: '/delivery/sources'
+      fullPath: '/dashboard/delivery/sources/'
+      preLoaderRoute: typeof DashboardDeliverySourcesIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/delivery/rollouts/': {
+      id: '/dashboard/delivery/rollouts/'
+      path: '/delivery/rollouts'
+      fullPath: '/dashboard/delivery/rollouts/'
+      preLoaderRoute: typeof DashboardDeliveryRolloutsIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/delivery/deployments/': {
+      id: '/dashboard/delivery/deployments/'
+      path: '/delivery/deployments'
+      fullPath: '/dashboard/delivery/deployments/'
+      preLoaderRoute: typeof DashboardDeliveryDeploymentsIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/delivery/bundles/': {
+      id: '/dashboard/delivery/bundles/'
+      path: '/delivery/bundles'
+      fullPath: '/dashboard/delivery/bundles/'
+      preLoaderRoute: typeof DashboardDeliveryBundlesIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/clusters/register/': {
@@ -1881,13 +1969,6 @@ declare module '@tanstack/react-router' {
       path: '/audit/shell-sessions'
       fullPath: '/dashboard/audit/shell-sessions/'
       preLoaderRoute: typeof DashboardAuditShellSessionsIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
-    }
-    '/dashboard/argocd/$instanceId/': {
-      id: '/dashboard/argocd/$instanceId/'
-      path: '/argocd/$instanceId'
-      fullPath: '/dashboard/argocd/$instanceId/'
-      preLoaderRoute: typeof DashboardArgocdInstanceIdIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/alerting/baselines/': {
@@ -2051,6 +2132,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardProjectsIdCatalogsIndexRouteImport
       parentRoute: typeof DashboardProjectsIdRouteRoute
     }
+    '/dashboard/delivery/targets/$targetId/': {
+      id: '/dashboard/delivery/targets/$targetId/'
+      path: '/delivery/targets/$targetId'
+      fullPath: '/dashboard/delivery/targets/$targetId/'
+      preLoaderRoute: typeof DashboardDeliveryTargetsTargetIdIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/delivery/rollouts/$rolloutId/': {
+      id: '/dashboard/delivery/rollouts/$rolloutId/'
+      path: '/delivery/rollouts/$rolloutId'
+      fullPath: '/dashboard/delivery/rollouts/$rolloutId/'
+      preLoaderRoute: typeof DashboardDeliveryRolloutsRolloutIdIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/delivery/deployments/$deploymentId/': {
+      id: '/dashboard/delivery/deployments/$deploymentId/'
+      path: '/delivery/deployments/$deploymentId'
+      fullPath: '/dashboard/delivery/deployments/$deploymentId/'
+      preLoaderRoute: typeof DashboardDeliveryDeploymentsDeploymentIdIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/delivery/bundles/$bundleId/': {
+      id: '/dashboard/delivery/bundles/$bundleId/'
+      path: '/delivery/bundles/$bundleId'
+      fullPath: '/dashboard/delivery/bundles/$bundleId/'
+      preLoaderRoute: typeof DashboardDeliveryBundlesBundleIdIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
     '/dashboard/clusters/$id/workloads/': {
       id: '/dashboard/clusters/$id/workloads/'
       path: '/workloads'
@@ -2140,6 +2249,13 @@ declare module '@tanstack/react-router' {
       path: '/gatekeeper'
       fullPath: '/dashboard/clusters/$id/gatekeeper/'
       preLoaderRoute: typeof DashboardClustersIdGatekeeperIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/delivery/': {
+      id: '/dashboard/clusters/$id/delivery/'
+      path: '/delivery'
+      fullPath: '/dashboard/clusters/$id/delivery/'
+      preLoaderRoute: typeof DashboardClustersIdDeliveryIndexRouteImport
       parentRoute: typeof DashboardClustersIdRouteRoute
     }
     '/dashboard/clusters/$id/custom-resources/': {
@@ -2282,20 +2398,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardClustersIdNodesNodeNameIndexRouteImport
       parentRoute: typeof DashboardClustersIdRouteRoute
     }
-    '/dashboard/argocd/$instanceId/applicationsets/new/': {
-      id: '/dashboard/argocd/$instanceId/applicationsets/new/'
-      path: '/argocd/$instanceId/applicationsets/new'
-      fullPath: '/dashboard/argocd/$instanceId/applicationsets/new/'
-      preLoaderRoute: typeof DashboardArgocdInstanceIdApplicationsetsNewIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
-    }
-    '/dashboard/argocd/$instanceId/applications/$appId/': {
-      id: '/dashboard/argocd/$instanceId/applications/$appId/'
-      path: '/argocd/$instanceId/applications/$appId'
-      fullPath: '/dashboard/argocd/$instanceId/applications/$appId/'
-      preLoaderRoute: typeof DashboardArgocdInstanceIdApplicationsAppIdIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
-    }
     '/dashboard/projects/$id/cloud-credentials/$credId/edit/': {
       id: '/dashboard/projects/$id/cloud-credentials/$credId/edit/'
       path: '/cloud-credentials/$credId/edit'
@@ -2322,6 +2424,7 @@ interface DashboardClustersIdRouteRouteChildren {
   DashboardClustersIdAppsIndexRoute: typeof DashboardClustersIdAppsIndexRoute
   DashboardClustersIdControlPlaneSnapshotsIndexRoute: typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
   DashboardClustersIdCustomResourcesIndexRoute: typeof DashboardClustersIdCustomResourcesIndexRoute
+  DashboardClustersIdDeliveryIndexRoute: typeof DashboardClustersIdDeliveryIndexRoute
   DashboardClustersIdGatekeeperIndexRoute: typeof DashboardClustersIdGatekeeperIndexRoute
   DashboardClustersIdImageScansIndexRoute: typeof DashboardClustersIdImageScansIndexRoute
   DashboardClustersIdMonitoringStackIndexRoute: typeof DashboardClustersIdMonitoringStackIndexRoute
@@ -2356,6 +2459,8 @@ const DashboardClustersIdRouteRouteChildren: DashboardClustersIdRouteRouteChildr
       DashboardClustersIdControlPlaneSnapshotsIndexRoute,
     DashboardClustersIdCustomResourcesIndexRoute:
       DashboardClustersIdCustomResourcesIndexRoute,
+    DashboardClustersIdDeliveryIndexRoute:
+      DashboardClustersIdDeliveryIndexRoute,
     DashboardClustersIdGatekeeperIndexRoute:
       DashboardClustersIdGatekeeperIndexRoute,
     DashboardClustersIdImageScansIndexRoute:
@@ -2429,15 +2534,14 @@ interface DashboardRouteRouteChildren {
   DashboardProjectsIdRouteRoute: typeof DashboardProjectsIdRouteRouteWithChildren
   DashboardAgentsIndexRoute: typeof DashboardAgentsIndexRoute
   DashboardAlertingIndexRoute: typeof DashboardAlertingIndexRoute
-  DashboardArgocdIndexRoute: typeof DashboardArgocdIndexRoute
   DashboardAuditIndexRoute: typeof DashboardAuditIndexRoute
   DashboardBackupsIndexRoute: typeof DashboardBackupsIndexRoute
   DashboardCatalogIndexRoute: typeof DashboardCatalogIndexRoute
   DashboardCharlieIndexRoute: typeof DashboardCharlieIndexRoute
   DashboardClusterTemplatesIndexRoute: typeof DashboardClusterTemplatesIndexRoute
   DashboardClustersIndexRoute: typeof DashboardClustersIndexRoute
+  DashboardDeliveryIndexRoute: typeof DashboardDeliveryIndexRoute
   DashboardExtensionsIndexRoute: typeof DashboardExtensionsIndexRoute
-  DashboardFleetIndexRoute: typeof DashboardFleetIndexRoute
   DashboardLoggingIndexRoute: typeof DashboardLoggingIndexRoute
   DashboardMonitoringIndexRoute: typeof DashboardMonitoringIndexRoute
   DashboardProjectsIndexRoute: typeof DashboardProjectsIndexRoute
@@ -2448,12 +2552,15 @@ interface DashboardRouteRouteChildren {
   DashboardToolsIndexRoute: typeof DashboardToolsIndexRoute
   DashboardAccountSecurityIndexRoute: typeof DashboardAccountSecurityIndexRoute
   DashboardAlertingBaselinesIndexRoute: typeof DashboardAlertingBaselinesIndexRoute
-  DashboardArgocdInstanceIdIndexRoute: typeof DashboardArgocdInstanceIdIndexRoute
   DashboardAuditShellSessionsIndexRoute: typeof DashboardAuditShellSessionsIndexRoute
   DashboardClusterTemplatesIdIndexRoute: typeof DashboardClusterTemplatesIdIndexRoute
   DashboardClusterTemplatesNewIndexRoute: typeof DashboardClusterTemplatesNewIndexRoute
   DashboardClustersRegisterIndexRoute: typeof DashboardClustersRegisterIndexRoute
-  DashboardFleetIdIndexRoute: typeof DashboardFleetIdIndexRoute
+  DashboardDeliveryBundlesIndexRoute: typeof DashboardDeliveryBundlesIndexRoute
+  DashboardDeliveryDeploymentsIndexRoute: typeof DashboardDeliveryDeploymentsIndexRoute
+  DashboardDeliveryRolloutsIndexRoute: typeof DashboardDeliveryRolloutsIndexRoute
+  DashboardDeliverySourcesIndexRoute: typeof DashboardDeliverySourcesIndexRoute
+  DashboardDeliveryTargetsIndexRoute: typeof DashboardDeliveryTargetsIndexRoute
   DashboardSettingsAuthIndexRoute: typeof DashboardSettingsAuthIndexRoute
   DashboardSettingsBackupDrillIndexRoute: typeof DashboardSettingsBackupDrillIndexRoute
   DashboardSettingsCharlieIndexRoute: typeof DashboardSettingsCharlieIndexRoute
@@ -2481,6 +2588,10 @@ interface DashboardRouteRouteChildren {
   DashboardBackupsSchedulesNewIndexRoute: typeof DashboardBackupsSchedulesNewIndexRoute
   DashboardBackupsStorageNewIndexRoute: typeof DashboardBackupsStorageNewIndexRoute
   DashboardClusterTemplatesIdEditIndexRoute: typeof DashboardClusterTemplatesIdEditIndexRoute
+  DashboardDeliveryBundlesBundleIdIndexRoute: typeof DashboardDeliveryBundlesBundleIdIndexRoute
+  DashboardDeliveryDeploymentsDeploymentIdIndexRoute: typeof DashboardDeliveryDeploymentsDeploymentIdIndexRoute
+  DashboardDeliveryRolloutsRolloutIdIndexRoute: typeof DashboardDeliveryRolloutsRolloutIdIndexRoute
+  DashboardDeliveryTargetsTargetIdIndexRoute: typeof DashboardDeliveryTargetsTargetIdIndexRoute
   DashboardSecurityScansScanIdIndexRoute: typeof DashboardSecurityScansScanIdIndexRoute
   DashboardSecurityScansNewIndexRoute: typeof DashboardSecurityScansNewIndexRoute
   DashboardSettingsAuthInstallIndexRoute: typeof DashboardSettingsAuthInstallIndexRoute
@@ -2496,8 +2607,6 @@ interface DashboardRouteRouteChildren {
   DashboardSettingsTemplatesKeyIndexRoute: typeof DashboardSettingsTemplatesKeyIndexRoute
   DashboardSettingsWebhooksIdIndexRoute: typeof DashboardSettingsWebhooksIdIndexRoute
   DashboardSettingsWebhooksNewIndexRoute: typeof DashboardSettingsWebhooksNewIndexRoute
-  DashboardArgocdInstanceIdApplicationsAppIdIndexRoute: typeof DashboardArgocdInstanceIdApplicationsAppIdIndexRoute
-  DashboardArgocdInstanceIdApplicationsetsNewIndexRoute: typeof DashboardArgocdInstanceIdApplicationsetsNewIndexRoute
   DashboardClustersRegisterIdConnectIndexRoute: typeof DashboardClustersRegisterIdConnectIndexRoute
   DashboardClustersRegisterIdProgressIndexRoute: typeof DashboardClustersRegisterIdProgressIndexRoute
   DashboardSettingsAuthConnectorsIdIndexRoute: typeof DashboardSettingsAuthConnectorsIdIndexRoute
@@ -2510,15 +2619,14 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardProjectsIdRouteRoute: DashboardProjectsIdRouteRouteWithChildren,
   DashboardAgentsIndexRoute: DashboardAgentsIndexRoute,
   DashboardAlertingIndexRoute: DashboardAlertingIndexRoute,
-  DashboardArgocdIndexRoute: DashboardArgocdIndexRoute,
   DashboardAuditIndexRoute: DashboardAuditIndexRoute,
   DashboardBackupsIndexRoute: DashboardBackupsIndexRoute,
   DashboardCatalogIndexRoute: DashboardCatalogIndexRoute,
   DashboardCharlieIndexRoute: DashboardCharlieIndexRoute,
   DashboardClusterTemplatesIndexRoute: DashboardClusterTemplatesIndexRoute,
   DashboardClustersIndexRoute: DashboardClustersIndexRoute,
+  DashboardDeliveryIndexRoute: DashboardDeliveryIndexRoute,
   DashboardExtensionsIndexRoute: DashboardExtensionsIndexRoute,
-  DashboardFleetIndexRoute: DashboardFleetIndexRoute,
   DashboardLoggingIndexRoute: DashboardLoggingIndexRoute,
   DashboardMonitoringIndexRoute: DashboardMonitoringIndexRoute,
   DashboardProjectsIndexRoute: DashboardProjectsIndexRoute,
@@ -2529,13 +2637,17 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardToolsIndexRoute: DashboardToolsIndexRoute,
   DashboardAccountSecurityIndexRoute: DashboardAccountSecurityIndexRoute,
   DashboardAlertingBaselinesIndexRoute: DashboardAlertingBaselinesIndexRoute,
-  DashboardArgocdInstanceIdIndexRoute: DashboardArgocdInstanceIdIndexRoute,
   DashboardAuditShellSessionsIndexRoute: DashboardAuditShellSessionsIndexRoute,
   DashboardClusterTemplatesIdIndexRoute: DashboardClusterTemplatesIdIndexRoute,
   DashboardClusterTemplatesNewIndexRoute:
     DashboardClusterTemplatesNewIndexRoute,
   DashboardClustersRegisterIndexRoute: DashboardClustersRegisterIndexRoute,
-  DashboardFleetIdIndexRoute: DashboardFleetIdIndexRoute,
+  DashboardDeliveryBundlesIndexRoute: DashboardDeliveryBundlesIndexRoute,
+  DashboardDeliveryDeploymentsIndexRoute:
+    DashboardDeliveryDeploymentsIndexRoute,
+  DashboardDeliveryRolloutsIndexRoute: DashboardDeliveryRolloutsIndexRoute,
+  DashboardDeliverySourcesIndexRoute: DashboardDeliverySourcesIndexRoute,
+  DashboardDeliveryTargetsIndexRoute: DashboardDeliveryTargetsIndexRoute,
   DashboardSettingsAuthIndexRoute: DashboardSettingsAuthIndexRoute,
   DashboardSettingsBackupDrillIndexRoute:
     DashboardSettingsBackupDrillIndexRoute,
@@ -2570,6 +2682,14 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardBackupsStorageNewIndexRoute: DashboardBackupsStorageNewIndexRoute,
   DashboardClusterTemplatesIdEditIndexRoute:
     DashboardClusterTemplatesIdEditIndexRoute,
+  DashboardDeliveryBundlesBundleIdIndexRoute:
+    DashboardDeliveryBundlesBundleIdIndexRoute,
+  DashboardDeliveryDeploymentsDeploymentIdIndexRoute:
+    DashboardDeliveryDeploymentsDeploymentIdIndexRoute,
+  DashboardDeliveryRolloutsRolloutIdIndexRoute:
+    DashboardDeliveryRolloutsRolloutIdIndexRoute,
+  DashboardDeliveryTargetsTargetIdIndexRoute:
+    DashboardDeliveryTargetsTargetIdIndexRoute,
   DashboardSecurityScansScanIdIndexRoute:
     DashboardSecurityScansScanIdIndexRoute,
   DashboardSecurityScansNewIndexRoute: DashboardSecurityScansNewIndexRoute,
@@ -2594,10 +2714,6 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardSettingsWebhooksIdIndexRoute: DashboardSettingsWebhooksIdIndexRoute,
   DashboardSettingsWebhooksNewIndexRoute:
     DashboardSettingsWebhooksNewIndexRoute,
-  DashboardArgocdInstanceIdApplicationsAppIdIndexRoute:
-    DashboardArgocdInstanceIdApplicationsAppIdIndexRoute,
-  DashboardArgocdInstanceIdApplicationsetsNewIndexRoute:
-    DashboardArgocdInstanceIdApplicationsetsNewIndexRoute,
   DashboardClustersRegisterIdConnectIndexRoute:
     DashboardClustersRegisterIdConnectIndexRoute,
   DashboardClustersRegisterIdProgressIndexRoute:

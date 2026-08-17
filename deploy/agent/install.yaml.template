@@ -13,9 +13,12 @@
 #   REGISTRATION_TOKEN           - Bearer token for agent authentication
 #   CA_CERT                      - Base64-encoded CA certificate (optional)
 #   AGENT_IMAGE                  - Full agent container image reference
+#   SYSTEM_OIDC_ISSUER           - Enrollment-pinned system artifact issuer
+#   SYSTEM_OIDC_IDENTITY         - Enrollment-pinned system artifact subject
 #   AGENT_SERVICE_ACCOUNT_NAME   - Agent ServiceAccount name
 #   AGENT_POD_LABELS             - Additional Deployment pod-template labels
 #   AGENT_RBAC_RULES             - ClusterRole rules selected by privilege profile
+#   AGENT_DELIVERY_CLUSTER_RULES - Typed Flux delivery object permissions
 #   AGENT_RBAC_BINDING_KIND      - ClusterRoleBinding or RoleBinding
 #   AGENT_RBAC_BINDING_NAMESPACE - Optional namespace line for RoleBinding
 #   AGENT_SELF_MANAGEMENT_NAMESPACED_RULES  - Self-management Role rules (all profiles)
@@ -84,6 +87,38 @@ subjects:
     namespace: astronomer-system
 
 ---
+# Dedicated delivery permissions are independent of the user-facing proxy
+# profile. They cover only the closed Flux/Secret/RBAC graph materialized by the
+# agent; no generic workload API is writable through this role.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: astronomer-agent-delivery
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: delivery
+    app.kubernetes.io/part-of: astronomer
+rules:
+{{AGENT_DELIVERY_CLUSTER_RULES}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: astronomer-agent-delivery
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: delivery
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: astronomer-agent-delivery
+subjects:
+  - kind: ServiceAccount
+    name: {{AGENT_SERVICE_ACCOUNT_NAME}}
+    namespace: astronomer-system
+
+---
 # Namespaced Role: all credential access is exact-name scoped. The installer
 # pre-creates the empty identity container because Kubernetes RBAC cannot scope
 # Secret CREATE by name. The agent reads bootstrap/new/legacy identity and may
@@ -143,26 +178,26 @@ subjects:
 # strictly read-only there.
 #
 # Axis 2 (here): namespaced Roles giving the agent WRITE over Astronomer's OWN
-# footprint — agent, logging stack, and baseline platform components — bounded to
-# the astronomer-* namespaces ONLY. These are emitted for EVERY profile (viewer
-# included) so ArgoCD, which applies through the tunnel as the agent
-# ServiceAccount, can always manage Astronomer's components regardless of how
-# little the user profile grants. They are namespaced Roles (never a ClusterRole)
-# so this write surface can never reach the customer's namespaces.
+# footprint — agent, logging stack, delivery control namespaces, and baseline
+# platform components — bounded to the astronomer-* namespaces ONLY. These are
+# emitted for EVERY profile (viewer included) so the agent can manage its exact
+# release-pinned Flux distribution and accepted delivery assignments regardless
+# of how little the user-facing proxy profile grants. The workload grants below
+# are namespaced; reviewed platform bundles use the separate fixed
+# astronomer-delivery-platform-applier boundary.
 #
-# Plus a resourceName-scoped grant on the agent's OWN Deployment so an
-# Argo-driven version bump can roll the agent (mirrors the token Role pattern).
+# Plus a resourceName-scoped grant on the agent's OWN Deployment so an accepted
+# system-release update can roll the agent (mirrors the token Role pattern).
 # ============================================================================
 
 ---
 # Astronomer-owned namespaces for the logging stack and the relocated baseline
 # platform components (monitoring, trivy, ingress-nginx, cert-manager,
 # gatekeeper). Pre-created here as static Namespace objects so the
-# self-management RoleBindings below have a namespace to land in even before the
-# baseline reconcilers / ArgoCD ApplicationSets run — which also removes any need
-# for a cluster-wide "namespaces" create verb (the appsets' CreateNamespace=true
-# becomes a harmless no-op). All are fully Astronomer-managed (the decommission
-# flow removes them).
+# self-management RoleBindings below have a namespace to land in before the
+# delivery materializer and baseline reconcilers run. This removes the need for
+# a generic cluster-wide namespace-creation grant. All are fully
+# Astronomer-managed and the decommission flow removes them.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -643,12 +678,6 @@ spec:
                 configMapKeyRef:
                   name: astronomer-agent-config
                   key: PRIVILEGE_PROFILE
-            # Fleet-pull reconcile flag. Rendered into the Deployment (not just
-            # set out-of-band) so the agent's own Phase-2 self-apply preserves it
-            # — otherwise self-applying the Deployment would wipe the flag and
-            # disable the reconcile loop on the next restart.
-            - name: ASTRONOMER_PULL_RECONCILE_ENABLED
-              value: "{{AGENT_PULL_RECONCILE_ENABLED}}"
             # Server-CA pin (Rancher CATTLE_CA_CHECKSUM semantics). Rendered into
             # the Deployment — alongside the mounted CA Secret at
             # /etc/astronomer/tls/ca.crt — so a Phase-2 self-apply preserves the
@@ -666,6 +695,13 @@ spec:
             # to the repository of the image it is currently running.
             - name: ASTRONOMER_AGENT_IMAGE_REPOSITORY
               value: "{{AGENT_IMAGE_REPOSITORY}}"
+            # These values are immutable trust roots from enrollment, not from
+            # a desired-state response. They constrain which signed system
+            # release may update the agent and Flux controllers.
+            - name: ASTRONOMER_SYSTEM_OIDC_ISSUER
+              value: "{{SYSTEM_OIDC_ISSUER}}"
+            - name: ASTRONOMER_SYSTEM_OIDC_IDENTITY
+              value: "{{SYSTEM_OIDC_IDENTITY}}"
           ports:
             - name: health
               containerPort: 8081
@@ -821,15 +857,12 @@ spec:
 # ============================================================================
 # Baseline component cluster-scoped RBAC (bootstrap-only, operator-applied once)
 #
-# The pull-reconcile applier is NAMESPACED-ONLY: it refuses cluster-scoped
-# resources and is granted no cluster RBAC. The DefaultEnabled baseline
-# component kube-state-metrics, however, must read cluster-wide inventory to
-# produce its metrics. That cluster-scoped READ-ONLY grant therefore lives HERE
-# in the bootstrap manifest (applied once by the operator's kubectl at
-# adoption), NOT in the pulled desired state.
+# The kube-state-metrics baseline component must read cluster-wide inventory to
+# produce its metrics. Its cluster-scoped read-only grant therefore lives in
+# this operator-applied bootstrap manifest.
 #
-# This ClusterRole binds the kube-state-metrics ServiceAccount that the PULL
-# applier creates namespaced in astronomer-monitoring. It is the ONLY
+# This ClusterRole binds the kube-state-metrics ServiceAccount in
+# astronomer-monitoring. It is the only
 # cluster-scoped component grant besides the agent's own privilege-profile
 # ClusterRole. It is get/list/watch ONLY (zero write). HONEST SCOPE (L8): this
 # DOES grant cluster-wide secret READ — ksm only renders metadata-derived metrics
@@ -839,8 +872,8 @@ spec:
 # the standard upstream kube-state-metrics posture; to remove it entirely, drop
 # `secrets` from the rule below AND set the ksm `--resources` allowlist to exclude
 # secrets (else ksm logs RBAC-forbidden noise on its secret collector). It is
-# harmless when pull reconcile is disabled — just an unused read-only ClusterRole
-# bound to a ServiceAccount that may not yet exist.
+# It is harmless before the baseline is installed: the binding simply targets a
+# ServiceAccount that does not yet exist.
 # ============================================================================
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -901,8 +934,8 @@ roleRef:
   kind: ClusterRole
   name: astronomer-kube-state-metrics
 subjects:
-  # The ServiceAccount itself is created by the PULL applier (namespaced) in
-  # astronomer-monitoring; this binding pre-exists it harmlessly.
+  # The ServiceAccount is created with the monitoring baseline in
+  # astronomer-monitoring; this binding may pre-exist it harmlessly.
   - kind: ServiceAccount
     name: kube-state-metrics
     namespace: astronomer-monitoring

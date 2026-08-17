@@ -36,7 +36,7 @@ type claimedOp struct {
 // success path (mark completed/in-flight, emit the completion event).
 // Exactly one of OnComplete/OnFailure runs per row.
 //
-// For handlers whose success path is non-trivial (e.g. argocd's
+// For handlers whose success path is non-trivial (for example, a
 // async/sync split where Run needs to write the right terminal state
 // into the DB itself), Run may do the bookkeeping inline and
 // OnComplete can be a no-op.

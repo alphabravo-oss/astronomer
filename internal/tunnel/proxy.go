@@ -167,7 +167,7 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 	// requests — so reassemble both shapes. Reading only the first frame here
 	// (the old behaviour) returned status+headers with a zero-length body for
 	// every chunked response, e.g. a 398 KiB secrets list -> HTTP 200 + empty,
-	// which broke ArgoCD's cluster-cache discovery and any large user list.
+	// which broke large discovery and user list responses.
 	ctx, cancel := context.WithTimeout(r.Context(), k8sProxyTimeout)
 	defer cancel()
 
@@ -204,7 +204,7 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 }
 
 // isWatchRequest reports whether r is a Kubernetes Watch request that needs
-// streaming proxy semantics. Matches what kubectl/client-go and ArgoCD's
+// streaming proxy semantics. Matches what kubectl/client-go and other
 // live-state controller emit.
 func isWatchRequest(r *http.Request) bool {
 	q := r.URL.Query()
@@ -490,7 +490,7 @@ func buildK8sRequestPayload(r *http.Request) (*protocol.K8sRequestPayload, error
 		Headers: headers,
 		Body:    body,
 		// Typed caller identity, resolved from the authenticated session (or
-		// from the positive machine marker the ArgoCD proxy gate stamps) — never
+		// from a positive machine marker stamped by a trusted gate — never
 		// from a header. Note this runs AFTER the allowlist loop above, which
 		// has already dropped any Impersonate-* / X-Remote-* the client sent, so
 		// there is no path by which a caller-supplied header can influence it.

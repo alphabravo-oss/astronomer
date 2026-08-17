@@ -42,7 +42,7 @@ const routeLabels: Record<string, string> = {
   logging: 'Logging',
   storage: 'Storage',
   networking: 'Networking',
-  argocd: 'ArgoCD',
+  delivery: 'Continuous Delivery',
   rbac: 'RBAC',
   projects: 'Projects',
   settings: 'Settings',

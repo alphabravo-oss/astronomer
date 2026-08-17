@@ -6,11 +6,20 @@ package catalog
 // internal/handler/catalog_oci_test.go against the handler-side wrappers.
 
 import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/registry"
 )
+
+type ociRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f ociRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
 
 func TestSelectOCITags(t *testing.T) {
 	t.Parallel()
@@ -42,12 +51,12 @@ func TestOCIMetadataFromPull(t *testing.T) {
 		Manifest: &registry.DescriptorPullSummary{Digest: "sha256:abcd"},
 		Chart: &registry.DescriptorPullSummaryWithMeta{
 			Meta: &chart.Metadata{
-				Name:        "argo-cd",
+				Name:        "cert-manager",
 				Version:     "5.51.0",
 				AppVersion:  "v2.9.3",
 				Description: "A GitOps continuous delivery tool.",
-				Icon:        "https://argo-cd.example/icon.png",
-				Home:        "https://argo-cd.example",
+				Icon:        "https://cert-manager.example/icon.png",
+				Home:        "https://cert-manager.example",
 				Keywords:    []string{"gitops", "cd"},
 				Maintainers: []*chart.Maintainer{
 					{Name: "alice", Email: "a@example.com"},
@@ -60,10 +69,10 @@ func TestOCIMetadataFromPull(t *testing.T) {
 	if got.Description != "A GitOps continuous delivery tool." {
 		t.Fatalf("description: %q", got.Description)
 	}
-	if got.Icon != "https://argo-cd.example/icon.png" {
+	if got.Icon != "https://cert-manager.example/icon.png" {
 		t.Fatalf("icon: %q", got.Icon)
 	}
-	if got.Home != "https://argo-cd.example" {
+	if got.Home != "https://cert-manager.example" {
 		t.Fatalf("home: %q", got.Home)
 	}
 	if len(got.Keywords) != 2 || got.Keywords[0] != "gitops" {
@@ -79,5 +88,52 @@ func TestOCIMetadataFromPull(t *testing.T) {
 	}
 	if zero := OCIMetadataFromPull(&registry.PullResult{}); zero.Description != "" {
 		t.Fatalf("expected zero meta for empty pull, got %+v", zero)
+	}
+}
+
+func TestListOCIRegistryTagsRejectsTotalOverflow(t *testing.T) {
+	tags := make([]string, 0, ociTagMaxTotal+1)
+	for index := 0; index <= ociTagMaxTotal; index++ {
+		tags = append(tags, fmt.Sprintf("1.0.%d", index))
+	}
+	body := `{"name":"team/widget","tags":["` + strings.Join(tags, `","`) + `"]}`
+	client := &http.Client{Transport: ociRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	})}
+	if _, err := listOCIRegistryTags(context.Background(), "registry.example.test/team/widget", OCIAuthConfig{}, client); err == nil || !strings.Contains(err.Error(), "total limit") {
+		t.Fatalf("oversized tag set was accepted: %v", err)
+	}
+}
+
+func TestListOCIRegistryTagsRejectsExcessivePagination(t *testing.T) {
+	requests := 0
+	client := &http.Client{Transport: ociRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		header := make(http.Header)
+		header.Set("Link", `</v2/team/widget/tags/list?n=100&last=1.0.0>; rel="next"`)
+		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(`{"name":"team/widget","tags":["1.0.0"]}`)), Request: request}, nil
+	})}
+	if _, err := listOCIRegistryTags(context.Background(), "registry.example.test/team/widget", OCIAuthConfig{}, client); err == nil || !strings.Contains(err.Error(), "pages") {
+		t.Fatalf("endless tag pagination was accepted: %v", err)
+	}
+	if requests != ociTagMaxPages {
+		t.Fatalf("registry requests=%d, want hard cap %d", requests, ociTagMaxPages)
+	}
+}
+
+func TestNormalizeOCIChartNamesBoundsAndValidatesInput(t *testing.T) {
+	got, err := normalizeOCIChartNames([]string{" team/widget ", "team/widget", "metrics.v2"})
+	if err != nil || len(got) != 2 || got[0] != "team/widget" || got[1] != "metrics.v2" {
+		t.Fatalf("normalizeOCIChartNames() = %v, %v", got, err)
+	}
+	if _, err := normalizeOCIChartNames([]string{"../metadata"}); err == nil {
+		t.Fatal("unsafe OCI chart name was accepted")
+	}
+	tooMany := make([]string, ociChartMaxCount+1)
+	for index := range tooMany {
+		tooMany[index] = fmt.Sprintf("chart-%d", index)
+	}
+	if _, err := normalizeOCIChartNames(tooMany); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("oversized OCI chart list was accepted: %v", err)
 	}
 }

@@ -160,12 +160,10 @@ func TestWithMachineRejectsUnknownSource(t *testing.T) {
 // too — which is the point of holding it as data.
 func TestExemptionListMatchesDesignSection10(t *testing.T) {
 	want := map[Source]bool{
-		SourceArgoCDProxy:       false,
 		SourceSelfManage:        false,
 		SourceCrossPodTransport: true, // transport, not origin (§10.3)
 		SourceKubectlShell:      false,
 		SourceAgentLifecycle:    false,
-		SourceBaselineReconcile: false,
 	}
 	if len(Exemptions()) != len(want) {
 		t.Fatalf("exemption count = %d, want %d", len(Exemptions()), len(want))
@@ -214,7 +212,7 @@ func TestSubjectMinters(t *testing.T) {
 	if !protocol.IsUserSubject(UserSubject(id)) || protocol.IsMachineSubject(UserSubject(id)) {
 		t.Fatal("subject classification is wrong")
 	}
-	if !protocol.IsMachineSubject(MachineSubject(SourceArgoCDProxy)) {
+	if !protocol.IsMachineSubject(MachineSubject(SourceAgentLifecycle)) {
 		t.Fatal("machine subject classification is wrong")
 	}
 }

@@ -127,7 +127,7 @@ func TestMCPToolsExposeOnlyBoundedManagementCapabilities(t *testing.T) {
 			t.Fatalf("catalog disclosed prohibited capability %q", prohibited)
 		}
 	}
-	for _, required := range []string{"astronomer.agent_fleet.summary", "astronomer.tunnel.health", "astronomer.queue.retry_task"} {
+	for _, required := range []string{"astronomer.cluster_agents.summary", "astronomer.tunnel.health", "astronomer.queue.retry_task"} {
 		if !strings.Contains(body, required) {
 			t.Fatalf("catalog omitted %q", required)
 		}

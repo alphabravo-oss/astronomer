@@ -17,30 +17,6 @@ var (
 		Version: "v1",
 		Kind:    "ConfigMap",
 	}
-
-	ArgoApplicationGVK = schema.GroupVersionKind{
-		Group:   "argoproj.io",
-		Version: "v1alpha1",
-		Kind:    "Application",
-	}
-
-	ArgoApplicationSetGVK = schema.GroupVersionKind{
-		Group:   "argoproj.io",
-		Version: "v1alpha1",
-		Kind:    "ApplicationSet",
-	}
-
-	ArgoApplicationGVR = schema.GroupVersionResource{
-		Group:    "argoproj.io",
-		Version:  "v1alpha1",
-		Resource: "applications",
-	}
-
-	ArgoApplicationSetGVR = schema.GroupVersionResource{
-		Group:    "argoproj.io",
-		Version:  "v1alpha1",
-		Resource: "applicationsets",
-	}
 )
 
 func NamespacedNameFromMeta(meta metav1.Object) types.NamespacedName {

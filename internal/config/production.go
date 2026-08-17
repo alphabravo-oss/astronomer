@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 )
+
+var immutableDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 // Known development sentinel values. A production deployment that still carries
 // either of these has not been configured with real secrets and must fail fast
@@ -143,6 +146,38 @@ func ValidateProductionSecurity(cfg *Config, encryptorReady bool) error {
 			errs = append(errs, "server_url is empty")
 		} else if u, err := url.Parse(serverURL); err != nil || u.Scheme != "https" || u.Host == "" {
 			errs = append(errs, "server_url must be an external https URL")
+		}
+		if !cfg.DeliveryEnabled {
+			errs = append(errs, "delivery_enabled must be true")
+		}
+		validateSignedArtifact := func(name, repository, digest, identity, issuer string) {
+			repository = strings.TrimSpace(repository)
+			if repository == "" {
+				errs = append(errs, name+" repository is empty")
+			} else {
+				candidate := repository
+				if !strings.HasPrefix(candidate, "oci://") {
+					candidate = "oci://" + candidate
+				}
+				if parsed, err := url.Parse(candidate); err != nil || parsed.Scheme != "oci" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+					errs = append(errs, name+" repository must be a credential-free OCI URL")
+				}
+			}
+			if !immutableDigestPattern.MatchString(strings.TrimSpace(digest)) {
+				errs = append(errs, name+" digest must be an immutable sha256")
+			}
+			if strings.TrimSpace(identity) == "" {
+				errs = append(errs, name+" certificate identity is empty")
+			}
+			parsedIssuer, err := url.Parse(strings.TrimSpace(issuer))
+			if err != nil || parsedIssuer.Scheme != "https" || parsedIssuer.Host == "" {
+				errs = append(errs, name+" OIDC issuer must be https")
+			}
+		}
+		validateSignedArtifact("delivery flux distribution", cfg.DeliveryFluxDistributionRepository, cfg.DeliveryFluxDistributionDigest, cfg.DeliveryFluxDistributionCertificateIdentity, cfg.DeliveryFluxDistributionOIDCIssuer)
+		validateSignedArtifact("delivery built-in bundle", cfg.DeliveryBundleRepository, cfg.DeliveryBundleDigest, cfg.DeliveryBundleCertificateIdentity, cfg.DeliveryBundleOIDCIssuer)
+		if !strings.Contains(strings.TrimSpace(cfg.AgentImageRepository), "@sha256:") {
+			errs = append(errs, "agent_image_repository must be digest-pinned")
 		}
 	}
 	if len(errs) > 0 {

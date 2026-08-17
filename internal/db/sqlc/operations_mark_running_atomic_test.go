@@ -6,9 +6,9 @@ import (
 )
 
 // pinAtomicClaimSQL asserts a Mark*OperationRunning statement uses the
-// CORR-R01 atomic claim predicate (pending or stale running), matching
-// MarkArgoCDOperationRunning. There is no live-Postgres unit harness in this
-// package, so the generated statement string is the contract.
+// CORR-R01 atomic claim predicate (pending or stale running). There is no
+// live-Postgres unit harness in this package, so the generated statement string
+// is the contract.
 func pinAtomicClaimSQL(t *testing.T, name, sql string) {
 	t.Helper()
 	if !strings.Contains(sql, "status = 'pending'") {

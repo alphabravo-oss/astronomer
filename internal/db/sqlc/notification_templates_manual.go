@@ -6,7 +6,7 @@
 // queries here in the same `_manual.go` style established by the
 // audit_v1, compliance, and cluster_registry_configs_ext files.
 //
-// Schema definition: internal/db/migrations/059_notification_templates.up.sql
+// Schema definition: internal/db/migrations/001_initial.up.sql
 // Registry of built-in templates: internal/notify/templates.go.
 
 package sqlc

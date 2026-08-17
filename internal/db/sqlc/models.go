@@ -225,112 +225,6 @@ type ApiserverAuditEvent struct {
 	CreatedAt  time.Time       `json:"created_at"`
 }
 
-type ArgocdApplication struct {
-	ID                   uuid.UUID          `json:"id"`
-	ArgocdInstanceID     uuid.UUID          `json:"argocd_instance_id"`
-	Name                 string             `json:"name"`
-	Project              string             `json:"project"`
-	RepoUrl              string             `json:"repo_url"`
-	Path                 string             `json:"path"`
-	TargetRevision       string             `json:"target_revision"`
-	DestinationCluster   string             `json:"destination_cluster"`
-	DestinationNamespace string             `json:"destination_namespace"`
-	SyncStatus           string             `json:"sync_status"`
-	HealthStatus         string             `json:"health_status"`
-	ResourceCreatedCount int32              `json:"resource_created_count"`
-	ResourceChangedCount int32              `json:"resource_changed_count"`
-	ResourcePrunedCount  int32              `json:"resource_pruned_count"`
-	LastSynced           pgtype.Timestamptz `json:"last_synced"`
-	CreatedAt            time.Time          `json:"created_at"`
-	UpdatedAt            time.Time          `json:"updated_at"`
-	// Non-secret upstream Kubernetes UID used to bind durable operations to one Application incarnation.
-	UpstreamUid string `json:"upstream_uid"`
-	// Non-secret upstream Application object namespace; never stores Application spec or credentials.
-	ApplicationNamespace string `json:"application_namespace"`
-}
-
-type ArgocdBaselineOwnershipDecision struct {
-	ID            uuid.UUID          `json:"id"`
-	ClusterID     uuid.UUID          `json:"cluster_id"`
-	ComponentSlug string             `json:"component_slug"`
-	Decision      string             `json:"decision"`
-	Reason        string             `json:"reason"`
-	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
-	DecidedByID   pgtype.UUID        `json:"decided_by_id"`
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     time.Time          `json:"updated_at"`
-}
-
-type ArgocdClusterProxyToken struct {
-	ID             uuid.UUID          `json:"id"`
-	ClusterID      uuid.UUID          `json:"cluster_id"`
-	Purpose        string             `json:"purpose"`
-	TokenHash      string             `json:"token_hash"`
-	TokenPrefix    string             `json:"token_prefix"`
-	TokenEncrypted string             `json:"token_encrypted"`
-	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
-	LastUsedAt     pgtype.Timestamptz `json:"last_used_at"`
-	IsRevoked      bool               `json:"is_revoked"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      time.Time          `json:"updated_at"`
-}
-
-type ArgocdInstance struct {
-	ID                 uuid.UUID          `json:"id"`
-	Name               string             `json:"name"`
-	ClusterID          uuid.UUID          `json:"cluster_id"`
-	ApiUrl             string             `json:"api_url"`
-	AuthTokenEncrypted string             `json:"auth_token_encrypted"`
-	VerifySsl          bool               `json:"verify_ssl"`
-	IsHealthy          bool               `json:"is_healthy"`
-	LastSync           pgtype.Timestamptz `json:"last_sync"`
-	CreatedAt          time.Time          `json:"created_at"`
-	UpdatedAt          time.Time          `json:"updated_at"`
-}
-
-type ArgocdManagedCluster struct {
-	ID                uuid.UUID       `json:"id"`
-	ArgocdInstanceID  uuid.UUID       `json:"argocd_instance_id"`
-	ClusterID         uuid.UUID       `json:"cluster_id"`
-	ClusterSecretName string          `json:"cluster_secret_name"`
-	ServerUrl         string          `json:"server_url"`
-	Labels            json.RawMessage `json:"labels"`
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
-}
-
-type ArgocdOperation struct {
-	ID            uuid.UUID          `json:"id"`
-	TargetType    string             `json:"target_type"`
-	TargetKey     string             `json:"target_key"`
-	OperationType string             `json:"operation_type"`
-	Payload       json.RawMessage    `json:"payload"`
-	Status        string             `json:"status"`
-	AttemptCount  int32              `json:"attempt_count"`
-	StartedAt     pgtype.Timestamptz `json:"started_at"`
-	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
-	ErrorMessage  string             `json:"error_message"`
-	CreatedByID   pgtype.UUID        `json:"created_by_id"`
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     time.Time          `json:"updated_at"`
-	Revision      string             `json:"revision"`
-	Message       string             `json:"message"`
-	OperationID   string             `json:"operation_id"`
-	Phase         string             `json:"phase"`
-	PollAttempts  int32              `json:"poll_attempts"`
-	LastPolledAt  pgtype.Timestamptz `json:"last_polled_at"`
-}
-
-type ArgocdOperationEvent struct {
-	ID          uuid.UUID       `json:"id"`
-	OperationID uuid.UUID       `json:"operation_id"`
-	Level       string          `json:"level"`
-	Stage       string          `json:"stage"`
-	Message     string          `json:"message"`
-	Detail      json.RawMessage `json:"detail"`
-	CreatedAt   time.Time       `json:"created_at"`
-}
-
 type AuditArchive struct {
 	ID                uuid.UUID       `json:"id"`
 	CreatedAt         time.Time       `json:"created_at"`
@@ -398,6 +292,9 @@ type AuditLogDefault struct {
 	IpAddress       *netip.Addr     `json:"ip_address"`
 	UserAgent       string          `json:"user_agent"`
 	Detail          json.RawMessage `json:"detail"`
+	Source          string          `json:"source"`
+	CorrelationID   string          `json:"correlation_id"`
+	ActionClass     string          `json:"action_class"`
 }
 
 type AuthoredConstraint struct {
@@ -1034,6 +931,52 @@ type ClusterDecommission struct {
 	Force         bool               `json:"force"`
 }
 
+type ClusterDeployment struct {
+	ID                      uuid.UUID          `json:"id"`
+	TargetID                uuid.UUID          `json:"target_id"`
+	ClusterID               uuid.UUID          `json:"cluster_id"`
+	CurrentRolloutID        pgtype.UUID        `json:"current_rollout_id"`
+	DesiredBundleVersionID  pgtype.UUID        `json:"desired_bundle_version_id"`
+	PreviousBundleVersionID pgtype.UUID        `json:"previous_bundle_version_id"`
+	DesiredGeneration       int64              `json:"desired_generation"`
+	ObservedGeneration      int64              `json:"observed_generation"`
+	DesiredSpecDigest       string             `json:"desired_spec_digest"`
+	ObservedSpecDigest      string             `json:"observed_spec_digest"`
+	DesiredRevision         string             `json:"desired_revision"`
+	ObservedRevision        string             `json:"observed_revision"`
+	Action                  string             `json:"action"`
+	Phase                   string             `json:"phase"`
+	Conditions              json.RawMessage    `json:"conditions"`
+	SourceKind              string             `json:"source_kind"`
+	SourceName              string             `json:"source_name"`
+	ReconcilerKind          string             `json:"reconciler_kind"`
+	ReconcilerName          string             `json:"reconciler_name"`
+	Inventory               json.RawMessage    `json:"inventory"`
+	AgentSessionID          string             `json:"agent_session_id"`
+	AgentSequence           int64              `json:"agent_sequence"`
+	LastErrorCode           string             `json:"last_error_code"`
+	LastMessage             string             `json:"last_message"`
+	LastObservedAt          pgtype.Timestamptz `json:"last_observed_at"`
+	CreatedAt               time.Time          `json:"created_at"`
+	UpdatedAt               time.Time          `json:"updated_at"`
+}
+
+// Coalesced state transitions and warnings only; never raw Flux objects, values, manifests, or credentials.
+type ClusterDeploymentEvent struct {
+	ID           uuid.UUID   `json:"id"`
+	DeploymentID uuid.UUID   `json:"deployment_id"`
+	RolloutID    pgtype.UUID `json:"rollout_id"`
+	EventType    string      `json:"event_type"`
+	FromPhase    string      `json:"from_phase"`
+	ToPhase      string      `json:"to_phase"`
+	Generation   int64       `json:"generation"`
+	SpecDigest   string      `json:"spec_digest"`
+	ReasonCode   string      `json:"reason_code"`
+	Message      string      `json:"message"`
+	ObservedAt   time.Time   `json:"observed_at"`
+	CreatedAt    time.Time   `json:"created_at"`
+}
+
 type ClusterGroup struct {
 	ID          uuid.UUID   `json:"id"`
 	Name        string      `json:"name"`
@@ -1315,6 +1258,43 @@ type ComplianceBaselineApplication struct {
 	Notes         string             `json:"notes"`
 }
 
+type ComponentBundle struct {
+	ID          uuid.UUID   `json:"id"`
+	ProjectID   uuid.UUID   `json:"project_id"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	CreatedBy   pgtype.UUID `json:"created_by"`
+	UpdatedBy   pgtype.UUID `json:"updated_by"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type ComponentBundleVersion struct {
+	ID                   uuid.UUID       `json:"id"`
+	BundleID             uuid.UUID       `json:"bundle_id"`
+	SourceID             uuid.UUID       `json:"source_id"`
+	Version              string          `json:"version"`
+	Renderer             string          `json:"renderer"`
+	Scope                string          `json:"scope"`
+	RequestedRevision    string          `json:"requested_revision"`
+	ResolvedRevision     string          `json:"resolved_revision"`
+	ArtifactDigest       string          `json:"artifact_digest"`
+	SourceSpec           json.RawMessage `json:"source_spec"`
+	RendererSpec         json.RawMessage `json:"renderer_spec"`
+	ReconciliationPolicy json.RawMessage `json:"reconciliation_policy"`
+	HealthPolicy         json.RawMessage `json:"health_policy"`
+	Requirements         json.RawMessage `json:"requirements"`
+	DependencyBundleIds  json.RawMessage `json:"dependency_bundle_ids"`
+	// Canonical digest over credential-free immutable delivery intent.
+	SpecDigest           string      `json:"spec_digest"`
+	VerificationStatus   string      `json:"verification_status"`
+	VerificationIdentity string      `json:"verification_identity"`
+	State                string      `json:"state"`
+	LastErrorCode        string      `json:"last_error_code"`
+	CreatedBy            pgtype.UUID `json:"created_by"`
+	CreatedAt            time.Time   `json:"created_at"`
+}
+
 type ControlPlaneAlert struct {
 	ID               uuid.UUID          `json:"id"`
 	Controller       string             `json:"controller"`
@@ -1334,15 +1314,15 @@ type ControlPlanePolicy struct {
 	ID                               uuid.UUID `json:"id"`
 	Name                             string    `json:"name"`
 	MonitoringQueueDepthThreshold    int32     `json:"monitoring_queue_depth_threshold"`
-	ArgocdQueueDepthThreshold        int32     `json:"argocd_queue_depth_threshold"`
+	DeliveryQueueDepthThreshold      int32     `json:"delivery_queue_depth_threshold"`
 	ToolsQueueDepthThreshold         int32     `json:"tools_queue_depth_threshold"`
 	CatalogQueueDepthThreshold       int32     `json:"catalog_queue_depth_threshold"`
 	MonitoringStaleRunningThreshold  int32     `json:"monitoring_stale_running_threshold"`
-	ArgocdStaleRunningThreshold      int32     `json:"argocd_stale_running_threshold"`
+	DeliveryStaleRunningThreshold    int32     `json:"delivery_stale_running_threshold"`
 	ToolsStaleRunningThreshold       int32     `json:"tools_stale_running_threshold"`
 	CatalogStaleRunningThreshold     int32     `json:"catalog_stale_running_threshold"`
 	MonitoringRecentFailureThreshold int32     `json:"monitoring_recent_failure_threshold"`
-	ArgocdRecentFailureThreshold     int32     `json:"argocd_recent_failure_threshold"`
+	DeliveryRecentFailureThreshold   int32     `json:"delivery_recent_failure_threshold"`
 	ToolsRecentFailureThreshold      int32     `json:"tools_recent_failure_threshold"`
 	CatalogRecentFailureThreshold    int32     `json:"catalog_recent_failure_threshold"`
 	RecentFailureWindowMinutes       int32     `json:"recent_failure_window_minutes"`
@@ -1411,6 +1391,276 @@ type DeferredOperation struct {
 	UpdatedAt       time.Time          `json:"updated_at"`
 }
 
+type DeliveryAssignmentReceipt struct {
+	ClusterID                      uuid.UUID          `json:"cluster_id"`
+	DesiredSnapshotGeneration      int64              `json:"desired_snapshot_generation"`
+	DesiredContentDigest           string             `json:"desired_content_digest"`
+	DesiredSnapshotEtag            string             `json:"desired_snapshot_etag"`
+	AcknowledgedSnapshotGeneration int64              `json:"acknowledged_snapshot_generation"`
+	AcknowledgedSnapshotEtag       string             `json:"acknowledged_snapshot_etag"`
+	CredentialContentDigest        string             `json:"credential_content_digest"`
+	CredentialEpoch                int64              `json:"credential_epoch"`
+	AgentSessionID                 string             `json:"agent_session_id"`
+	AgentSequence                  int64              `json:"agent_sequence"`
+	LastProtocolErrorCode          string             `json:"last_protocol_error_code"`
+	AcknowledgedAt                 pgtype.Timestamptz `json:"acknowledged_at"`
+	UpdatedAt                      time.Time          `json:"updated_at"`
+}
+
+type DeliveryControllerInventory struct {
+	ClusterID           uuid.UUID          `json:"cluster_id"`
+	AgentVersion        string             `json:"agent_version"`
+	FluxVersion         string             `json:"flux_version"`
+	Components          json.RawMessage    `json:"components"`
+	ApiVersions         json.RawMessage    `json:"api_versions"`
+	DistributionDigest  string             `json:"distribution_digest"`
+	KubernetesVersion   string             `json:"kubernetes_version"`
+	Ready               bool               `json:"ready"`
+	CompatibilityStatus string             `json:"compatibility_status"`
+	ErrorCode           string             `json:"error_code"`
+	ObservedAt          pgtype.Timestamptz `json:"observed_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+}
+
+type DeliveryRollout struct {
+	ID                  uuid.UUID          `json:"id"`
+	TargetID            uuid.UUID          `json:"target_id"`
+	TargetGeneration    int64              `json:"target_generation"`
+	FromBundleVersionID pgtype.UUID        `json:"from_bundle_version_id"`
+	ToBundleVersionID   uuid.UUID          `json:"to_bundle_version_id"`
+	PlacementDigest     string             `json:"placement_digest"`
+	PlacementSnapshot   json.RawMessage    `json:"placement_snapshot"`
+	Strategy            json.RawMessage    `json:"strategy"`
+	StrategyDigest      string             `json:"strategy_digest"`
+	ApprovalPolicy      json.RawMessage    `json:"approval_policy"`
+	RequestDigest       string             `json:"request_digest"`
+	PlanDigest          string             `json:"plan_digest"`
+	FrozenPlan          json.RawMessage    `json:"frozen_plan"`
+	State               string             `json:"state"`
+	FencingGeneration   int64              `json:"fencing_generation"`
+	LeaseOwner          string             `json:"lease_owner"`
+	LeaseExpiresAt      pgtype.Timestamptz `json:"lease_expires_at"`
+	LastDecisionDigest  string             `json:"last_decision_digest"`
+	IdempotencyKey      string             `json:"idempotency_key"`
+	TotalClusters       int32              `json:"total_clusters"`
+	ReadyClusters       int32              `json:"ready_clusters"`
+	FailedClusters      int32              `json:"failed_clusters"`
+	BlockedClusters     int32              `json:"blocked_clusters"`
+	ReleasedClusters    int32              `json:"released_clusters"`
+	ProgressDeadline    pgtype.Timestamptz `json:"progress_deadline"`
+	StartedAt           pgtype.Timestamptz `json:"started_at"`
+	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+	LastErrorCode       string             `json:"last_error_code"`
+	InitiatedBy         pgtype.UUID        `json:"initiated_by"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+}
+
+type DeliveryRolloutApproval struct {
+	ID            uuid.UUID   `json:"id"`
+	RolloutID     uuid.UUID   `json:"rollout_id"`
+	Cohort        int32       `json:"cohort"`
+	BindingDigest string      `json:"binding_digest"`
+	Decision      string      `json:"decision"`
+	DecidedBy     pgtype.UUID `json:"decided_by"`
+	DecidedAt     time.Time   `json:"decided_at"`
+	ExpiresAt     time.Time   `json:"expires_at"`
+	CreatedAt     time.Time   `json:"created_at"`
+}
+
+type DeliveryRolloutCluster struct {
+	ID                      uuid.UUID          `json:"id"`
+	RolloutID               uuid.UUID          `json:"rollout_id"`
+	ClusterID               uuid.UUID          `json:"cluster_id"`
+	Cohort                  int32              `json:"cohort"`
+	ReleaseOrder            int32              `json:"release_order"`
+	PreviousBundleVersionID pgtype.UUID        `json:"previous_bundle_version_id"`
+	DesiredBundleVersionID  uuid.UUID          `json:"desired_bundle_version_id"`
+	DesiredSpecDigest       string             `json:"desired_spec_digest"`
+	State                   string             `json:"state"`
+	AssignmentAction        string             `json:"assignment_action"`
+	Attempt                 int32              `json:"attempt"`
+	Fence                   int64              `json:"fence"`
+	ReleasedAt              pgtype.Timestamptz `json:"released_at"`
+	AcknowledgedAt          pgtype.Timestamptz `json:"acknowledged_at"`
+	ReadyAt                 pgtype.Timestamptz `json:"ready_at"`
+	CompletedAt             pgtype.Timestamptz `json:"completed_at"`
+	Deadline                pgtype.Timestamptz `json:"deadline"`
+	LastErrorCode           string             `json:"last_error_code"`
+	CreatedAt               time.Time          `json:"created_at"`
+	UpdatedAt               time.Time          `json:"updated_at"`
+}
+
+type DeliveryRolloutEvent struct {
+	ID             uuid.UUID   `json:"id"`
+	RolloutID      uuid.UUID   `json:"rollout_id"`
+	ClusterID      pgtype.UUID `json:"cluster_id"`
+	DecisionDigest string      `json:"decision_digest"`
+	EventType      string      `json:"event_type"`
+	FromState      string      `json:"from_state"`
+	ToState        string      `json:"to_state"`
+	ReasonCode     string      `json:"reason_code"`
+	Fence          int64       `json:"fence"`
+	OccurredAt     time.Time   `json:"occurred_at"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type DeliverySource struct {
+	ID          uuid.UUID `json:"id"`
+	ProjectID   uuid.UUID `json:"project_id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	SourceType  string    `json:"source_type"`
+	Url         string    `json:"url"`
+	AuthMode    string    `json:"auth_mode"`
+	// Encrypted source credential envelope. Never select into list/detail/status/audit APIs.
+	CredentialEncrypted  string `json:"credential_encrypted"`
+	CredentialKeyVersion int32  `json:"credential_key_version"`
+	CredentialEpoch      int64  `json:"credential_epoch"`
+	// Encrypted private CA bundle. Never expose through read APIs or agent status.
+	CaBundleEncrypted string             `json:"ca_bundle_encrypted"`
+	ProxyRef          string             `json:"proxy_ref"`
+	TrustPolicy       json.RawMessage    `json:"trust_policy"`
+	Status            string             `json:"status"`
+	LastResolvedAt    pgtype.Timestamptz `json:"last_resolved_at"`
+	LastErrorCode     string             `json:"last_error_code"`
+	CreatedBy         pgtype.UUID        `json:"created_by"`
+	UpdatedBy         pgtype.UUID        `json:"updated_by"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+}
+
+type DeliverySourceResolution struct {
+	ID                   uuid.UUID          `json:"id"`
+	SourceID             uuid.UUID          `json:"source_id"`
+	BundleVersionID      pgtype.UUID        `json:"bundle_version_id"`
+	RequestedRevision    string             `json:"requested_revision"`
+	ChartName            string             `json:"chart_name"`
+	ResolvedRevision     string             `json:"resolved_revision"`
+	ArtifactDigest       string             `json:"artifact_digest"`
+	VerificationStatus   string             `json:"verification_status"`
+	VerificationIdentity string             `json:"verification_identity"`
+	Status               string             `json:"status"`
+	ErrorCode            string             `json:"error_code"`
+	ResolutionAttempt    int32              `json:"resolution_attempt"`
+	LeaseOwner           string             `json:"lease_owner"`
+	LeaseExpiresAt       pgtype.Timestamptz `json:"lease_expires_at"`
+	Fence                int64              `json:"fence"`
+	NextAttemptAt        time.Time          `json:"next_attempt_at"`
+	StartedAt            pgtype.Timestamptz `json:"started_at"`
+	CompletedAt          pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt            time.Time          `json:"created_at"`
+}
+
+type DeliverySystemClusterAssignment struct {
+	ClusterID                  uuid.UUID          `json:"cluster_id"`
+	DesiredReleaseID           uuid.UUID          `json:"desired_release_id"`
+	PreviousReleaseID          pgtype.UUID        `json:"previous_release_id"`
+	RolloutID                  pgtype.UUID        `json:"rollout_id"`
+	Generation                 int64              `json:"generation"`
+	Cohort                     int32              `json:"cohort"`
+	ReleaseOrder               int32              `json:"release_order"`
+	Phase                      string             `json:"phase"`
+	Fence                      int64              `json:"fence"`
+	ReleasedAt                 pgtype.Timestamptz `json:"released_at"`
+	AcknowledgedAt             pgtype.Timestamptz `json:"acknowledged_at"`
+	ReadyAt                    pgtype.Timestamptz `json:"ready_at"`
+	Deadline                   pgtype.Timestamptz `json:"deadline"`
+	ObservedDistributionDigest string             `json:"observed_distribution_digest"`
+	ObservedAgentVersion       string             `json:"observed_agent_version"`
+	LastErrorCode              string             `json:"last_error_code"`
+	LastObservedAt             pgtype.Timestamptz `json:"last_observed_at"`
+	CreatedAt                  time.Time          `json:"created_at"`
+	UpdatedAt                  time.Time          `json:"updated_at"`
+}
+
+type DeliverySystemEvent struct {
+	ID             uuid.UUID   `json:"id"`
+	RolloutID      pgtype.UUID `json:"rollout_id"`
+	ClusterID      pgtype.UUID `json:"cluster_id"`
+	ReleaseID      uuid.UUID   `json:"release_id"`
+	Generation     int64       `json:"generation"`
+	EventType      string      `json:"event_type"`
+	FromPhase      string      `json:"from_phase"`
+	ToPhase        string      `json:"to_phase"`
+	ReasonCode     string      `json:"reason_code"`
+	DecisionDigest string      `json:"decision_digest"`
+	OccurredAt     time.Time   `json:"occurred_at"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type DeliverySystemRelease struct {
+	ID                     uuid.UUID       `json:"id"`
+	ReleaseSequence        int64           `json:"release_sequence"`
+	Version                string          `json:"version"`
+	ArtifactUrl            string          `json:"artifact_url"`
+	ArtifactDigest         string          `json:"artifact_digest"`
+	DistributionDigest     string          `json:"distribution_digest"`
+	AgentVersion           string          `json:"agent_version"`
+	AgentImage             string          `json:"agent_image"`
+	MinimumKubernetes      string          `json:"minimum_kubernetes"`
+	MaximumKubernetes      string          `json:"maximum_kubernetes"`
+	CrdStorageVersion      string          `json:"crd_storage_version"`
+	PreviousStorageVersion string          `json:"previous_storage_version"`
+	Interval               string          `json:"interval"`
+	Timeout                string          `json:"timeout"`
+	VerificationPolicy     json.RawMessage `json:"verification_policy"`
+	// Encrypted private-registry credential. Never expose through release, status, audit, or event APIs.
+	RegistryCredentialEncrypted string             `json:"registry_credential_encrypted"`
+	CredentialKeyVersion        int32              `json:"credential_key_version"`
+	CredentialEpoch             int64              `json:"credential_epoch"`
+	SpecDigest                  string             `json:"spec_digest"`
+	State                       string             `json:"state"`
+	ReleasedAt                  pgtype.Timestamptz `json:"released_at"`
+	RetiredAt                   pgtype.Timestamptz `json:"retired_at"`
+	CreatedBy                   pgtype.UUID        `json:"created_by"`
+	CreatedAt                   time.Time          `json:"created_at"`
+}
+
+type DeliverySystemRollout struct {
+	ID                uuid.UUID          `json:"id"`
+	ReleaseID         uuid.UUID          `json:"release_id"`
+	PreviousReleaseID pgtype.UUID        `json:"previous_release_id"`
+	Strategy          json.RawMessage    `json:"strategy"`
+	StrategyDigest    string             `json:"strategy_digest"`
+	State             string             `json:"state"`
+	FencingGeneration int64              `json:"fencing_generation"`
+	LeaseOwner        string             `json:"lease_owner"`
+	LeaseExpiresAt    pgtype.Timestamptz `json:"lease_expires_at"`
+	TotalClusters     int32              `json:"total_clusters"`
+	ReadyClusters     int32              `json:"ready_clusters"`
+	FailedClusters    int32              `json:"failed_clusters"`
+	ReleasedClusters  int32              `json:"released_clusters"`
+	IdempotencyKey    string             `json:"idempotency_key"`
+	ProgressDeadline  pgtype.Timestamptz `json:"progress_deadline"`
+	StartedAt         pgtype.Timestamptz `json:"started_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
+	LastErrorCode     string             `json:"last_error_code"`
+	InitiatedBy       pgtype.UUID        `json:"initiated_by"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+}
+
+type DeliveryTarget struct {
+	ID                      uuid.UUID       `json:"id"`
+	ProjectID               uuid.UUID       `json:"project_id"`
+	Name                    string          `json:"name"`
+	Description             string          `json:"description"`
+	BundleVersionID         uuid.UUID       `json:"bundle_version_id"`
+	Placement               json.RawMessage `json:"placement"`
+	RolloutPolicy           json.RawMessage `json:"rollout_policy"`
+	ReconciliationPolicy    json.RawMessage `json:"reconciliation_policy"`
+	MaintenanceWindowPolicy json.RawMessage `json:"maintenance_window_policy"`
+	Suspended               bool            `json:"suspended"`
+	Generation              int64           `json:"generation"`
+	ResourceVersion         int64           `json:"resource_version"`
+	DeletionState           string          `json:"deletion_state"`
+	CreatedBy               pgtype.UUID     `json:"created_by"`
+	UpdatedBy               pgtype.UUID     `json:"updated_by"`
+	CreatedAt               time.Time       `json:"created_at"`
+	UpdatedAt               time.Time       `json:"updated_at"`
+}
+
 type DexConnector struct {
 	ID          uuid.UUID       `json:"id"`
 	Name        string          `json:"name"`
@@ -1442,7 +1692,7 @@ type DexSetting struct {
 	PublicClientsEncrypted string `json:"public_clients_encrypted"`
 	// Durable cutover marker; non-null means old writers are prohibited and public_clients is scrubbed.
 	PublicClientsCutoverAt pgtype.Timestamptz `json:"public_clients_cutover_at"`
-	// Immutable Helm/Argo release identity for bundled Dex; empty for operator-managed Dex.
+	// Immutable Helm release identity for bundled Dex; empty for operator-managed Dex.
 	ChartReleaseName string `json:"chart_release_name"`
 	// Exact Kubernetes Deployment name reconciled by DexHandler.
 	DeploymentName string `json:"deployment_name"`
@@ -1475,44 +1725,6 @@ type EmailMessage struct {
 	SentAt    pgtype.Timestamptz `json:"sent_at"`
 	CreatedAt time.Time          `json:"created_at"`
 	UpdatedAt time.Time          `json:"updated_at"`
-}
-
-type FleetOperation struct {
-	ID                        uuid.UUID          `json:"id"`
-	Name                      string             `json:"name"`
-	Description               string             `json:"description"`
-	OperationType             string             `json:"operation_type"`
-	OperationSpec             json.RawMessage    `json:"operation_spec"`
-	Selector                  json.RawMessage    `json:"selector"`
-	Strategy                  string             `json:"strategy"`
-	MaxConcurrent             int32              `json:"max_concurrent"`
-	OnError                   string             `json:"on_error"`
-	RespectMaintenanceWindows bool               `json:"respect_maintenance_windows"`
-	Status                    string             `json:"status"`
-	TotalClusters             int32              `json:"total_clusters"`
-	CompletedClusters         int32              `json:"completed_clusters"`
-	FailedClusters            int32              `json:"failed_clusters"`
-	SkippedClusters           int32              `json:"skipped_clusters"`
-	StartedAt                 pgtype.Timestamptz `json:"started_at"`
-	CompletedAt               pgtype.Timestamptz `json:"completed_at"`
-	LastError                 string             `json:"last_error"`
-	CreatedBy                 pgtype.UUID        `json:"created_by"`
-	CreatedAt                 time.Time          `json:"created_at"`
-	UpdatedAt                 time.Time          `json:"updated_at"`
-}
-
-type FleetOperationTarget struct {
-	ID               uuid.UUID          `json:"id"`
-	OperationID      uuid.UUID          `json:"operation_id"`
-	ClusterID        uuid.UUID          `json:"cluster_id"`
-	Status           string             `json:"status"`
-	SubOperationID   pgtype.UUID        `json:"sub_operation_id"`
-	SubOperationType string             `json:"sub_operation_type"`
-	StartedAt        pgtype.Timestamptz `json:"started_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	LastError        string             `json:"last_error"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        time.Time          `json:"updated_at"`
 }
 
 type GitopsRegisteredCluster struct {
@@ -2523,10 +2735,10 @@ type XclusterAnomalyBaseline struct {
 	MetricName        string          `json:"metric_name"`
 	WindowSeconds     int32           `json:"window_seconds"`
 	ClusterCount      int32           `json:"cluster_count"`
-	FleetMean         float64         `json:"fleet_mean"`
-	FleetStddev       float64         `json:"fleet_stddev"`
-	FleetMin          float64         `json:"fleet_min"`
-	FleetMax          float64         `json:"fleet_max"`
+	PopulationMean    float64         `json:"population_mean"`
+	PopulationStddev  float64         `json:"population_stddev"`
+	PopulationMin     float64         `json:"population_min"`
+	PopulationMax     float64         `json:"population_max"`
 	StddevMult        float64         `json:"stddev_mult"`
 	OutlierClusterIds json.RawMessage `json:"outlier_cluster_ids"`
 	UpdatedAt         time.Time       `json:"updated_at"`

@@ -25,9 +25,8 @@ data:
   DEBUG: {{ .Values.config.debug | quote }}
   LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   CORS_ALLOWED_ORIGINS: {{ .Values.config.corsAllowedOrigins | quote }}
-  # External URL of this install; seeds platform_configuration.server_url
-  # on first boot so the Argo self-management loop can render the right
-  # hostname on the self-manage HTTPRoute.
+  TRUSTED_PROXY_CIDRS: {{ join "," .Values.config.trustedProxyCIDRs | quote }}
+  # External URL of this install; seeds platform_configuration.server_url.
   SERVER_URL: {{ .Values.config.serverURL | default "" | quote }}
   # Agent image the server renders into install.yaml for adopted clusters.
   # Derives from image.agent (registry-aware: GHCR online, mirror in air-gap) so
@@ -35,10 +34,48 @@ data:
   # explicit config.agentImage* still overrides.
   AGENT_IMAGE_REPOSITORY: {{ .Values.config.agentImageRepository | default (include "astronomer.agentImageRepository" .) | quote }}
   AGENT_IMAGE_TAG: {{ .Values.config.agentImageTag | default .Values.image.agent.tag | quote }}
-  # Fleet-style PULL reconcile feature flag. OFF by default — when false the
-  # agent's local GitOps reconcile loop is not started and the existing
-  # self-upgrade + Argo-baseline push paths keep owning the footprint.
-  PULL_RECONCILE_ENABLED: {{ .Values.config.pullReconcileEnabled | default false | quote }}
+  # Flux-native delivery v2 is unconditional in v1. These are bounded runtime
+  # controls and immutable artifact references, never inline credentials.
+  DELIVERY_ENABLED: {{ .Values.delivery.enabled | quote }}
+  DELIVERY_KUBERNETES_MIN_MINOR: {{ .Values.delivery.compatibility.kubernetes.minimumMinor | quote }}
+  DELIVERY_KUBERNETES_MAX_MINOR: {{ .Values.delivery.compatibility.kubernetes.maximumMinor | quote }}
+  DELIVERY_AGENT_PROTOCOL_MIN: {{ .Values.delivery.compatibility.agentProtocol.minimum | quote }}
+  DELIVERY_AGENT_PROTOCOL_MAX: {{ .Values.delivery.compatibility.agentProtocol.maximum | quote }}
+  DELIVERY_FLUX_VERSION: {{ .Values.delivery.compatibility.flux.version | quote }}
+  DELIVERY_PUBLIC_REGISTRY: {{ .Values.delivery.artifacts.publicRegistry | quote }}
+  DELIVERY_PRIVATE_REGISTRY: {{ .Values.delivery.artifacts.privateRegistry | quote }}
+  DELIVERY_REGISTRY_REWRITES: {{ toJson .Values.delivery.artifacts.registryRewrites | quote }}
+  DELIVERY_FLUX_DISTRIBUTION_REPOSITORY: {{ .Values.delivery.artifacts.fluxDistribution.ociRepository | quote }}
+  DELIVERY_FLUX_DISTRIBUTION_DIGEST: {{ .Values.delivery.artifacts.fluxDistribution.digest | quote }}
+  DELIVERY_FLUX_DISTRIBUTION_ASSET_PATH: {{ .Values.delivery.artifacts.fluxDistribution.disconnectedAssetPath | quote }}
+  DELIVERY_FLUX_DISTRIBUTION_REQUIRE_SIGNATURE: {{ .Values.delivery.artifacts.fluxDistribution.trustPolicy.requireSignature | quote }}
+  DELIVERY_FLUX_DISTRIBUTION_CERTIFICATE_IDENTITY: {{ .Values.delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity | quote }}
+  DELIVERY_FLUX_DISTRIBUTION_OIDC_ISSUER: {{ .Values.delivery.artifacts.fluxDistribution.trustPolicy.oidcIssuer | quote }}
+  DELIVERY_BUNDLE_REPOSITORY: {{ .Values.delivery.artifacts.builtInBundles.ociRepository | quote }}
+  DELIVERY_BUNDLE_DIGEST: {{ .Values.delivery.artifacts.builtInBundles.digest | quote }}
+  DELIVERY_BUNDLE_ASSET_PATH: {{ .Values.delivery.artifacts.builtInBundles.disconnectedAssetPath | quote }}
+  DELIVERY_BUNDLE_REQUIRE_SIGNATURE: {{ .Values.delivery.artifacts.builtInBundles.trustPolicy.requireSignature | quote }}
+  DELIVERY_BUNDLE_CERTIFICATE_IDENTITY: {{ .Values.delivery.artifacts.builtInBundles.trustPolicy.certificateIdentity | quote }}
+  DELIVERY_BUNDLE_OIDC_ISSUER: {{ .Values.delivery.artifacts.builtInBundles.trustPolicy.oidcIssuer | quote }}
+  DELIVERY_SOURCE_RESOLUTION_CONCURRENCY: {{ .Values.delivery.sourceResolution.workerConcurrency | quote }}
+  DELIVERY_SOURCE_MAX_ARTIFACT_BYTES: {{ .Values.delivery.sourceResolution.maxArtifactBytes | int64 | quote }}
+  DELIVERY_SOURCE_MAX_HELM_CHART_BYTES: {{ .Values.delivery.sourceResolution.maxHelmChartBytes | int64 | quote }}
+  DELIVERY_SOURCE_EGRESS_CIDRS: {{ toJson .Values.delivery.sourceResolution.egressCIDRs | quote }}
+  DELIVERY_SOURCE_ALLOWED_PRIVATE_HOSTS: {{ toJson .Values.delivery.sourceResolution.allowedPrivateHosts | quote }}
+
+  DELIVERY_SOURCE_ALLOW_SSH: {{ .Values.delivery.sourceResolution.allowSSH | quote }}
+  DELIVERY_ROLLOUT_CONCURRENCY: {{ .Values.delivery.rollout.workerConcurrency | quote }}
+  DELIVERY_ROLLOUT_MAX_ACTIVE: {{ .Values.delivery.rollout.maxActiveRollouts | quote }}
+  DELIVERY_ROLLOUT_MAX_CLUSTERS: {{ .Values.delivery.rollout.maxClustersPerRollout | quote }}
+  DELIVERY_ROLLOUT_MAX_CONCURRENT_CLUSTERS: {{ .Values.delivery.rollout.maxConcurrentClustersGlobal | quote }}
+  DELIVERY_ROLLOUT_DEFAULT_FAILURE_BUDGET: {{ .Values.delivery.rollout.defaultFailureBudget | quote }}
+  DELIVERY_STATUS_RETENTION_DAYS: {{ .Values.delivery.status.retentionDays | quote }}
+  DELIVERY_STATUS_HISTORY_PER_DEPLOYMENT: {{ .Values.delivery.status.historyPerDeployment | quote }}
+  DELIVERY_STATUS_COALESCE_WINDOW_SECONDS: {{ .Values.delivery.status.coalesceWindowSeconds | quote }}
+  DELIVERY_SLO_ASSIGNMENT_ACK_SECONDS_P99: {{ .Values.delivery.monitoring.assignmentAckSecondsP99 | quote }}
+  DELIVERY_SLO_FLUX_VISIBILITY_SECONDS_P99: {{ .Values.delivery.monitoring.fluxTransitionVisibilitySecondsP99 | quote }}
+  DELIVERY_SLO_ROLLOUT_SCHEDULER_SECONDS_P99: {{ .Values.delivery.monitoring.rolloutSchedulerSecondsP99 | quote }}
+  DELIVERY_STATUS_STALE_SECONDS: {{ .Values.delivery.monitoring.staleClusterStatusSeconds | quote }}
   # Auth hardening (migration 039). Empty / unset == binary defaults
   # (5 attempts / 15 minutes).
   {{- if .Values.config.loginFailureThreshold }}

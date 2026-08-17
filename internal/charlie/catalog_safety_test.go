@@ -62,10 +62,10 @@ func validReadArguments(name string) map[string]any {
 		return map[string]any{"outbox_id": id}
 	case "astronomer.controllers.alerts":
 		return map[string]any{"status": "active", "controller": "catalog", "page": 2, "page_size": 10}
-	case "astronomer.catalog.operations", "astronomer.argocd.operations", "astronomer.tools.operations",
+	case "astronomer.catalog.operations", "astronomer.tools.operations",
 		"astronomer.monitoring.operations", "astronomer.logging.operations", "astronomer.workloads.operations":
 		return map[string]any{"status": "failed", "page": 2, "page_size": 10}
-	case "astronomer.catalog.operation_get", "astronomer.argocd.operation_get", "astronomer.tools.operation_get",
+	case "astronomer.catalog.operation_get", "astronomer.tools.operation_get",
 		"astronomer.monitoring.operation_get", "astronomer.logging.operation_get", "astronomer.workloads.operation_get":
 		return map[string]any{"record_id": id}
 	case "astronomer.observability.health":
@@ -80,13 +80,33 @@ func validReadArguments(name string) map[string]any {
 		return map[string]any{"resource_type": "platform_setting", "resource_id": "feature.charlie", "action": "settings.updated", "action_class": "mutation", "result": "success", "source": "http", "correlation_id": "request-a", "since": "1h", "page": 2, "page_size": 10}
 	case "astronomer.catalog.repositories":
 		return map[string]any{"page": 2, "page_size": 10}
-	case "astronomer.agent_fleet.summary":
+	case "astronomer.delivery.overview":
+		return map[string]any{"project_id": id}
+	case "astronomer.delivery.sources":
+		return map[string]any{"project_id": id, "status": "ready", "page": 2, "page_size": 10}
+	case "astronomer.delivery.source_get":
+		return map[string]any{"project_id": id, "source_id": "22222222-2222-4222-8222-222222222222"}
+	case "astronomer.delivery.bundles", "astronomer.delivery.targets":
+		return map[string]any{"project_id": id, "page": 2, "page_size": 10}
+	case "astronomer.delivery.bundle_get":
+		return map[string]any{"project_id": id, "bundle_id": "22222222-2222-4222-8222-222222222222", "page": 1, "page_size": 10}
+	case "astronomer.delivery.target_preview":
+		return map[string]any{"project_id": id, "target_id": "22222222-2222-4222-8222-222222222222"}
+	case "astronomer.delivery.rollouts":
+		return map[string]any{"project_id": id, "state": "progressing", "page": 2, "page_size": 10}
+	case "astronomer.delivery.rollout_get":
+		return map[string]any{"project_id": id, "rollout_id": "22222222-2222-4222-8222-222222222222"}
+	case "astronomer.delivery.deployments":
+		return map[string]any{"project_id": id, "cluster_id": "22222222-2222-4222-8222-222222222222", "phase": "ready", "page": 2, "page_size": 10}
+	case "astronomer.delivery.deployment_get":
+		return map[string]any{"project_id": id, "deployment_id": "22222222-2222-4222-8222-222222222222"}
+	case "astronomer.cluster_agents.summary":
 		return map[string]any{"stale_after_seconds": 300}
-	case "astronomer.agent_fleet.list":
+	case "astronomer.cluster_agents.list":
 		return map[string]any{"environment": "prod", "region": "us-east", "state": "connected", "page": 2, "page_size": 10}
-	case "astronomer.agent_fleet.get", "astronomer.agent_fleet.upgrade_status", "astronomer.agent_fleet.ingestion_health":
+	case "astronomer.cluster_agents.get":
 		return map[string]any{"cluster_id": id}
-	case "astronomer.agent_fleet.connection_history":
+	case "astronomer.cluster_agents.connection_history":
 		return map[string]any{"cluster_id": id, "since": "1h", "limit": 10}
 	case "astronomer.tunnel.recent_errors":
 		return map[string]any{"since": "1h", "limit": 10, "connection_id": "connection-a"}
@@ -113,8 +133,8 @@ func executeReadFixture(t *testing.T, descriptor CapabilityDescriptor, result js
 	return guard.Execute(ctx, signedTestAction(t, key, descriptor.Name, validReadArguments(descriptor.Name)))
 }
 
-// Adapter-specific tests pin the safe fields for Kubernetes, queue, Argo,
-// operational, and fleet data. This matrix pins the common non-mutating
+// Adapter-specific tests pin the safe fields for Kubernetes, queue,
+// operational, and cross-cluster agent data. This matrix pins the common non-mutating
 // boundary around every disclosed read so a newly added tool cannot silently
 // omit timeout, response, scope, RBAC, or exact-schema enforcement.
 func TestEveryReadCapabilityUsesCompleteBoundedEnvelope(t *testing.T) {

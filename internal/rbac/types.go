@@ -16,7 +16,6 @@ const (
 	ResourceSecurity       Resource = "security"
 	ResourceRBAC           Resource = "rbac"
 	ResourceSettings       Resource = "settings"
-	ResourceArgoCD         Resource = "argocd"
 	ResourceSSO            Resource = "sso"
 	ResourceUsers          Resource = "users"
 	ResourceAuditLogs      Resource = "audit_logs"
@@ -29,17 +28,24 @@ const (
 	ResourceNodes          Resource = "nodes"
 	ResourceServiceMesh    Resource = "service_mesh"
 	ResourceSupportBundles Resource = "support_bundles"
+	// Delivery sources and bundles are separate project-scoped authority
+	// boundaries: holding project metadata access must not implicitly reveal
+	// source locations or permit credential rotation/version publication.
+	ResourceDeliverySources     Resource = "delivery_sources"
+	ResourceDeliveryBundles     Resource = "delivery_bundles"
+	ResourceDeliveryTargets     Resource = "delivery_targets"
+	ResourceDeliveryRollouts    Resource = "delivery_rollouts"
+	ResourceDeliveryDeployments Resource = "delivery_deployments"
+	ResourceDeliveryInventory   Resource = "delivery_inventory"
+	ResourceDeliveryApprovals   Resource = "delivery_approvals"
+	ResourceDeliveryRollbacks   Resource = "delivery_rollbacks"
+	ResourceDeliveryOrphans     Resource = "delivery_orphans"
+	ResourceDeliveryPlatform    Resource = "delivery_platform"
 	// ResourceClusterTemplates gates the /api/v1/cluster-templates/* CRUD
 	// (migration 049). The cluster bind/detach endpoints reuse
 	// ResourceClusters + VerbUpdate so an operator who can already update a
 	// cluster doesn't need a second permission to apply a template to it.
 	ResourceClusterTemplates Resource = "cluster_templates"
-	// ResourceFleetOperations gates /api/v1/fleet-operations/* (migration
-	// 056). A coordinated multi-cluster action (drain, tool upgrade,
-	// apply-template fanout) has blast radius up to every matched cluster;
-	// the dedicated resource lets operators grant "fleet runbook author"
-	// without also granting clusters:* or cluster_templates:*.
-	ResourceFleetOperations Resource = "fleet_operations"
 	// ResourceNetworkPolicies gates the /api/v1/admin/network-policy-templates/*
 	// CRUD (migration 068). The per-cluster apply endpoints reuse
 	// ResourceClusters + VerbUpdate so an operator who can already update
@@ -79,7 +85,6 @@ var canonicalResources = []Resource{
 	ResourceSecurity,
 	ResourceRBAC,
 	ResourceSettings,
-	ResourceArgoCD,
 	ResourceSSO,
 	ResourceUsers,
 	ResourceAuditLogs,
@@ -92,8 +97,17 @@ var canonicalResources = []Resource{
 	ResourceNodes,
 	ResourceServiceMesh,
 	ResourceSupportBundles,
+	ResourceDeliverySources,
+	ResourceDeliveryBundles,
+	ResourceDeliveryTargets,
+	ResourceDeliveryRollouts,
+	ResourceDeliveryDeployments,
+	ResourceDeliveryInventory,
+	ResourceDeliveryApprovals,
+	ResourceDeliveryRollbacks,
+	ResourceDeliveryOrphans,
+	ResourceDeliveryPlatform,
 	ResourceClusterTemplates,
-	ResourceFleetOperations,
 	ResourceNetworkPolicies,
 	ResourceCustomResources,
 	ResourceAuditIngest,
@@ -121,6 +135,8 @@ const (
 	// VerbApprove authorizes deciding one exact, expiring Charlie action. The
 	// target resource verb remains independently mandatory at dispatch time.
 	VerbApprove  Verb = "approve"
+	VerbRollback Verb = "rollback"
+	VerbOrphan   Verb = "orphan"
 	VerbWildcard Verb = "*"
 )
 
@@ -139,6 +155,8 @@ var canonicalVerbs = []Verb{
 	VerbSync,
 	VerbManage,
 	VerbApprove,
+	VerbRollback,
+	VerbOrphan,
 	VerbWildcard,
 }
 

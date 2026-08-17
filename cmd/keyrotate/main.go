@@ -163,7 +163,6 @@ type target struct {
 var rewriteTargets = []target{
 	{"sso_configurations", "id", "client_secret_encrypted"},
 	{"dex_settings", "id", "public_clients_encrypted"},
-	{"argocd_instances", "id", "auth_token_encrypted"},
 	{"backup_storage_configs", "id", "encrypted_credentials"},
 	{"vault_connections", "id", "auth_encrypted"},
 	{"gitops_registration_sources", "id", "auth_encrypted"},
@@ -173,7 +172,6 @@ var rewriteTargets = []target{
 	{"smtp_settings", "id", "password_encrypted"},
 	{"cluster_registry_configs", "id", "registry_password_encrypted"},
 	{"webhook_subscriptions", "id", "secret_encrypted"},
-	{"argocd_cluster_proxy_tokens", "id", "token_encrypted"},
 	{"user_totp_enrollments", "user_id", "secret_encrypted"},
 	{"sso_sessions", "jti", "upstream_id_token_encrypted"},
 	{"helm_repositories", "id", "auth_config_encrypted"},
@@ -181,6 +179,9 @@ var rewriteTargets = []target{
 	{"charlie_connections", "id", "local_trust_material_encrypted"},
 	{"charlie_action_receipts", "id", "arguments_encrypted"},
 	{"charlie_action_receipts", "id", "result_encrypted"},
+	{"delivery_sources", "id", "ca_bundle_encrypted"},
+	{"delivery_sources", "id", "credential_encrypted"},
+	{"delivery_system_releases", "id", "registry_credential_encrypted"},
 }
 
 // jsonbExemptColumns are encrypted columns that keyrotate deliberately does NOT

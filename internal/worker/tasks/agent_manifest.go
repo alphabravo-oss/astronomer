@@ -85,13 +85,17 @@ func renderAgentManifest(ctx context.Context, clusterID, agentToken, serverURL, 
 	// the agent stays on the default OS-trust path with no behavior change.
 	caPEM := registrationCABundleForTask(ctx)
 	return agenttemplate.RenderInstallYAML(agenttemplate.InstallTemplateData{
-		ServerURL:         serverURL,
-		ClusterID:         clusterID,
-		RegistrationToken: agentToken,
-		CACert:            caPEM,
-		CAChecksum:        agenttemplate.CAChecksumFromPEM(caPEM),
-		AgentImage:        agentImageReference(imageRepository, imageTag),
-		PrivilegeProfile:  profile,
+		ServerURL:            serverURL,
+		ClusterID:            clusterID,
+		RegistrationToken:    agentToken,
+		CACert:               caPEM,
+		CAChecksum:           agenttemplate.CAChecksumFromPEM(caPEM),
+		AgentImage:           agentImageReference(imageRepository, imageTag),
+		PrivilegeProfile:     profile,
+		SystemArtifactURL:    runtimeDeps.SystemArtifactURL,
+		SystemArtifactDigest: runtimeDeps.SystemArtifactDigest,
+		SystemOIDCIssuer:     runtimeDeps.SystemOIDCIssuer,
+		SystemOIDCIdentity:   runtimeDeps.SystemOIDCIdentity,
 	})
 }
 

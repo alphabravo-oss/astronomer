@@ -203,7 +203,7 @@ function InventoryPanel({
           </TableHeader>
           <TableBody>
             {inventory.resources.map((resource) => {
-              const argoOwned = resource.items.filter((item) => item.readOnly).length;
+              const gitOpsOwned = resource.items.filter((item) => item.readOnly).length;
               const preview = resource.items.slice(0, 3);
               return (
                 <TableRow key={resource.kind} className="border-t border-border">
@@ -242,10 +242,10 @@ function InventoryPanel({
                     )}
                   </TableCell>
                   <TableCell className="px-5 py-3 whitespace-nowrap">
-                    {argoOwned > 0 ? (
+                    {gitOpsOwned > 0 ? (
                       <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-1 text-xs text-amber-500">
                         <Shield className="h-3 w-3" />
-                        {argoOwned} GitOps owned
+                        {gitOpsOwned} GitOps owned
                       </span>
                     ) : (
                       <span className="text-xs text-muted-foreground">Direct edit allowed</span>
@@ -373,7 +373,7 @@ function ClusterServiceMeshPage() {
     enabled: !!clusterId,
     // KEEP (P4.9): mesh state is cluster-side truth read through the agent
     // at request time (no server write to publish on) — same shape as the
-    // D8 argocd trio, deliberately NOT converted to liveFallback.
+    // This direct-read trio is deliberately not converted to liveFallback.
     refetchInterval: 60000,
     refetchIntervalInBackground: false,
   });

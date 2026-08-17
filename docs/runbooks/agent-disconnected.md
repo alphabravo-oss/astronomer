@@ -17,7 +17,7 @@
 ## Triage
 
 1. **One cluster or many?** The metric carries `cluster_id`; if many
-   clusters dropped at once, jump to [agent-fleet-depair.md](agent-fleet-depair.md).
+   clusters dropped at once, jump to [cluster-agent-mass-disconnect.md](cluster-agent-mass-disconnect.md).
 
 2. **Agent pod healthy?**
    ```bash
@@ -89,7 +89,7 @@ agent's connection.
 
 ## Related
 
-- [agent-fleet-depair.md](agent-fleet-depair.md) — multi-cluster version
+- [cluster-agent-mass-disconnect.md](cluster-agent-mass-disconnect.md) — multi-cluster version
 - `internal/tunnel/server.go` — Hub lifecycle
 - `internal/agent/tunnel.go` `Send` / `failClose` — T33 eager-close
 - `internal/handler/cluster_breaker.go` — T19 circuit breaker

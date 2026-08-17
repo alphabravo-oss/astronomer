@@ -94,10 +94,6 @@ const (
 	// written (payload `kind` field: backup|restore|schedule).
 	TypeBackupChanged Type = "backup.changed"
 
-	// TypeFleetOperationChanged fires per fleet-operation target with the
-	// target's cluster_id.
-	TypeFleetOperationChanged Type = "fleet_operation.changed"
-
 	// TypeLoggingOperationChanged fires when a logging stack operation row
 	// is written.
 	TypeLoggingOperationChanged Type = "logging_operation.changed"
@@ -112,10 +108,6 @@ const (
 	// written.
 	TypeImageScanChanged Type = "image_scan.changed"
 
-	// TypeArgoCDChanged fires on own ArgoCD writes and at the end of each
-	// server-side reconcile pass (payload `scope` field).
-	TypeArgoCDChanged Type = "argocd.changed"
-
 	// TypeAdminQueueChanged fires when the admin task queue mutates.
 	// Unscoped (no cluster_id): superuser-only by fail-closed drop.
 	TypeAdminQueueChanged Type = "admin_queue.changed"
@@ -124,8 +116,8 @@ const (
 	// Unscoped (no cluster_id): superuser-only by fail-closed drop.
 	TypeSIEMForwarderChanged Type = "siem_forwarder.changed"
 
-	// TypeAgentFleetChanged fires when an agent fleet row is written.
-	TypeAgentFleetChanged Type = "agent_fleet.changed"
+	// TypeClusterAgentChanged fires when cluster-agent lifecycle state changes.
+	TypeClusterAgentChanged Type = "cluster_agents.changed"
 
 	// TypeTemplateBindingChanged fires when a template binding row is
 	// written.

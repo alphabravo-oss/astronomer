@@ -26,8 +26,8 @@ import (
 //   - response.go: the RespondRequestError definition itself (param `code`).
 //   - authorization.go: requireSuperuser forwards cfg.InvalidUserCode /
 //     cfg.StoreUnavailableCode (each falling back to a catalog string).
-//   - agent_fleet.go: respondAgentFleetError forwards handlerErr.code from a
-//     typed *agentFleetHandlerError.
+//   - cluster_agents.go: respondClusterAgentError forwards handlerErr.code from a
+//     typed *clusterAgentHandlerError.
 //
 // Those arguments are not string literals, so they are inherently outside this
 // lint (it only flags *bare literal* code args) and need no allowlist. If one

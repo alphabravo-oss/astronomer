@@ -210,7 +210,7 @@ function DexSettingsPage() {
             <div className="space-y-3">
               {field.state.value.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  No clients configured. Add one to allow OIDC RPs (Astronomer, Argo CD, etc.) to
+                  No clients configured. Add one to allow OIDC relying parties to
                   authenticate.
                 </p>
               ) : (

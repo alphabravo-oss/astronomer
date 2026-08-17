@@ -7,7 +7,7 @@
 >
 > **Scope:** `astronomer/frontend` (mostly composition) + a couple of small backend filters.
 > **Sequencing:** implement **after** the agent‑authz security fixes
-> (`docs/agent-authz-security-review.md`) land. WS‑E depends on that plan's **F2** (CRD RBAC policy).
+> (`docs/archive/pre-v1/plans/agent-authz-security-review.md`) land. WS-E depends on that historical plan's **F2** (CRD RBAC policy).
 >
 > **Status:** DRAFT v1.
 

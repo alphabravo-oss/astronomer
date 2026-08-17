@@ -229,6 +229,14 @@ func (f *fakeRatingsQuerier) GetHelmChartByID(_ context.Context, id uuid.UUID) (
 	return sqlc.HelmChart{}, pgx.ErrNoRows
 }
 
+func (f *fakeRatingsQuerier) GetHelmRepositoryByID(_ context.Context, id uuid.UUID) (sqlc.HelmRepository, error) {
+	return sqlc.HelmRepository{ID: id}, nil
+}
+
+func (f *fakeRatingsQuerier) GetCatalogVisibilityForProject(_ context.Context, _, catalogID uuid.UUID) (sqlc.CatalogVisibility, error) {
+	return sqlc.CatalogVisibilityPublic, nil
+}
+
 func (f *fakeRatingsQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.User, error) {
 	if u, ok := f.users[id]; ok {
 		return u, nil

@@ -25,9 +25,6 @@ type workPipelineQueries interface {
 	ListCatalogOperations(context.Context, sqlc.ListCatalogOperationsParams) ([]sqlc.CatalogOperation, error)
 	GetCatalogOperation(context.Context, uuid.UUID) (sqlc.CatalogOperation, error)
 	ListCatalogOperationEvents(context.Context, uuid.UUID) ([]sqlc.CatalogOperationEvent, error)
-	ListArgoCDOperations(context.Context, sqlc.ListArgoCDOperationsParams) ([]sqlc.ArgocdOperation, error)
-	GetArgoCDOperation(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error)
-	ListArgoCDOperationEvents(context.Context, uuid.UUID) ([]sqlc.ArgocdOperationEvent, error)
 	ListToolOperations(context.Context, sqlc.ListToolOperationsParams) ([]sqlc.ToolOperation, error)
 	GetToolOperation(context.Context, uuid.UUID) (sqlc.ToolOperation, error)
 	ListToolOperationEvents(context.Context, uuid.UUID) ([]sqlc.ToolOperationEvent, error)
@@ -62,7 +59,6 @@ func WorkPipelineCapabilityAdapters(adapter CapabilityExecutor) map[string]Capab
 		"astronomer.task_outbox.summary", "astronomer.task_outbox.list", "astronomer.task_outbox.get", "astronomer.task_outbox.retry_delivery",
 		"astronomer.scheduler.health", "astronomer.controllers.summary", "astronomer.controllers.alerts",
 		"astronomer.catalog.operations", "astronomer.catalog.operation_get",
-		"astronomer.argocd.operations", "astronomer.argocd.operation_get",
 		"astronomer.tools.operations", "astronomer.tools.operation_get",
 		"astronomer.monitoring.operations", "astronomer.monitoring.operation_get",
 		"astronomer.logging.operations", "astronomer.logging.operation_get",
@@ -124,7 +120,7 @@ func (a *WorkPipelineCapabilityAdapter) Verify(ctx context.Context, capability C
 }
 
 func pipelineOperationCapability(name string) (string, bool) {
-	for _, domain := range []string{"catalog", "argocd", "tools", "monitoring", "logging", "workloads"} {
+	for _, domain := range []string{"catalog", "tools", "monitoring", "logging", "workloads"} {
 		if name == "astronomer."+domain+".operations" {
 			return domain, false
 		}
@@ -277,7 +273,7 @@ func (a *WorkPipelineCapabilityAdapter) schedulerHealth(ctx context.Context) (ma
 
 func (a *WorkPipelineCapabilityAdapter) controllerSummary(ctx context.Context) (map[string]any, error) {
 	controllers := map[string]any{}
-	for _, domain := range []string{"catalog", "argocd", "tools", "monitoring", "logging", "workloads"} {
+	for _, domain := range []string{"catalog", "tools", "monitoring", "logging", "workloads"} {
 		items, err := a.listOperations(ctx, domain, "", 1, 100)
 		if err != nil {
 			return nil, err
@@ -351,14 +347,6 @@ func (a *WorkPipelineCapabilityAdapter) listOperations(ctx context.Context, doma
 		for _, row := range rows {
 			items = append(items, safeOperation(row.ID, domain, row.TargetType, row.TargetKey, row.OperationType, row.Status, row.AttemptCount, row.Payload, row.ErrorMessage, row.StartedAt, row.CompletedAt, row.CreatedAt, row.UpdatedAt))
 		}
-	case "argocd":
-		rows, err := a.queries.ListArgoCDOperations(ctx, sqlc.ListArgoCDOperationsParams{Limit: limit, Offset: offset, Status: filter})
-		if err != nil {
-			return nil, err
-		}
-		for _, row := range rows {
-			items = append(items, safeOperation(row.ID, domain, row.TargetType, row.TargetKey, row.OperationType, row.Status, row.AttemptCount, row.Payload, row.ErrorMessage, row.StartedAt, row.CompletedAt, row.CreatedAt, row.UpdatedAt))
-		}
 	case "tools":
 		rows, err := a.queries.ListToolOperations(ctx, sqlc.ListToolOperationsParams{Limit: limit, Offset: offset, Status: filter})
 		if err != nil {
@@ -412,21 +400,6 @@ func (a *WorkPipelineCapabilityAdapter) operationGet(ctx context.Context, domain
 		}
 		operation = safeOperation(row.ID, domain, row.TargetType, row.TargetKey, row.OperationType, row.Status, row.AttemptCount, row.Payload, row.ErrorMessage, row.StartedAt, row.CompletedAt, row.CreatedAt, row.UpdatedAt)
 		rows, err := a.queries.ListCatalogOperationEvents(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		for _, row := range rows {
-			events = append(events, safeEvent(row.Level, row.Stage, row.Message, row.Detail, row.CreatedAt))
-		}
-	case "argocd":
-		row, err := a.queries.GetArgoCDOperation(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		operation = safeOperation(row.ID, domain, row.TargetType, row.TargetKey, row.OperationType, row.Status, row.AttemptCount, row.Payload, row.ErrorMessage, row.StartedAt, row.CompletedAt, row.CreatedAt, row.UpdatedAt)
-		operation["phase"] = boundedDiagnosticText(row.Phase, 64)
-		operation["poll_attempts"] = row.PollAttempts
-		rows, err := a.queries.ListArgoCDOperationEvents(ctx, id)
 		if err != nil {
 			return nil, err
 		}

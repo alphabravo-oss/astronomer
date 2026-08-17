@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 
 /**
  * Shell sessions audit view (F-05). Superuser-only surface listing every
- * active kubectl shell session across the fleet, with drill-down to the
+ * active kubectl shell session across managed clusters, with drill-down to the
  * per-session audited command trail — closing the loop on the kubectl-shell
  * RCE surface. Wired to GET /admin/shell-sessions[/{id}/commands].
  */

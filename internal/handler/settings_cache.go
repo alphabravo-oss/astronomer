@@ -3,7 +3,7 @@
 //
 // The cache exists because every authenticated API request that lands
 // under a feature-gated route (/catalog/*, /projects/*, /monitoring/*,
-// /argocd/*, /security/*, /backups/*) would otherwise hit the DB to
+// /delivery/*, /security/*, /backups/*) would otherwise hit the DB to
 // check whether the feature is enabled. Settings change rarely —
 // caching for 30s makes the gate effectively free in the hot path
 // while keeping operator changes visible within a configuration round.

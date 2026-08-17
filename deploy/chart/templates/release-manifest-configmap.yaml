@@ -1,0 +1,31 @@
+{{- if .Values.release.manifest }}
+{{- $manifest := mustFromJson .Values.release.manifest -}}
+{{- if ne (int $manifest.schema_version) 1 -}}
+{{- fail "release.manifest must use schema_version 1" -}}
+{{- end -}}
+{{- $expectedVersion := printf "v%s" .Chart.Version -}}
+{{- if ne $manifest.release.version $expectedVersion -}}
+{{- fail (printf "release.manifest version %s does not match chart %s" $manifest.release.version $expectedVersion) -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "astronomer.fullname" . }}-release-manifest
+  labels:
+    {{- include "astronomer.labels" . | nindent 4 }}
+immutable: true
+data:
+  release-manifest.json: |
+    {{- .Values.release.manifest | nindent 4 }}
+  {{- if .Values.release.mirrorMapping }}
+  {{- $mapping := mustFromJson .Values.release.mirrorMapping }}
+  {{- if ne (int $mapping.schema_version) 1 }}
+  {{- fail "release.mirrorMapping must use schema_version 1" }}
+  {{- end }}
+  {{- if ne $mapping.release_version $expectedVersion }}
+  {{- fail (printf "release.mirrorMapping version %s does not match chart %s" $mapping.release_version $expectedVersion) }}
+  {{- end }}
+  mirror-mapping.json: |
+    {{- .Values.release.mirrorMapping | nindent 4 }}
+  {{- end }}
+{{- end }}

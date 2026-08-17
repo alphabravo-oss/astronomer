@@ -354,7 +354,7 @@ func TestServiceMeshHandler_MTLSPullsPerNamespaceWhenRequesterAvailable(t *testi
 	}
 }
 
-func TestServiceMeshHandler_InventoryListsIstioResourcesAndMarksArgoOwned(t *testing.T) {
+func TestServiceMeshHandler_InventoryListsIstioResourcesAndMarksFluxOwned(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeServiceMeshQuerier(clusterID, "c1")
 	q.rows[clusterID] = sqlc.ClusterServiceMesh{
@@ -371,8 +371,8 @@ func TestServiceMeshHandler_InventoryListsIstioResourcesAndMarksArgoOwned(t *tes
 					"metadata": map[string]any{
 						"name":      "payments",
 						"namespace": "payments",
-						"annotations": map[string]any{
-							"argocd.argoproj.io/instance": "baseline-payments",
+						"labels": map[string]any{
+							"kustomize.toolkit.fluxcd.io/name": "baseline-payments",
 						},
 					},
 				},
@@ -412,18 +412,18 @@ func TestServiceMeshHandler_InventoryListsIstioResourcesAndMarksArgoOwned(t *tes
 		for _, item := range resource.Items {
 			if item.Name == "payments" {
 				found = true
-				if !item.ReadOnly || item.ManagedBy != "argocd" {
+				if !item.ReadOnly || item.ManagedBy != "flux" {
 					t.Fatalf("payments ownership = managed_by=%q readonly=%v", item.ManagedBy, item.ReadOnly)
 				}
 			}
 		}
 	}
 	if !found {
-		t.Fatalf("Argo-owned payments VirtualService was not returned")
+		t.Fatalf("Flux-owned payments VirtualService was not returned")
 	}
 }
 
-func TestServiceMeshHandler_ValidatePolicyFlagsBadWeightsAndArgoOwned(t *testing.T) {
+func TestServiceMeshHandler_ValidatePolicyFlagsBadWeightsAndFluxOwned(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeServiceMeshQuerier(clusterID, "c1")
 	h := NewServiceMeshHandler(q)
@@ -434,7 +434,7 @@ func TestServiceMeshHandler_ValidatePolicyFlagsBadWeightsAndArgoOwned(t *testing
 		"metadata":{
 			"name":"payments",
 			"namespace":"payments",
-			"labels":{"app.kubernetes.io/managed-by":"argocd"}
+			"labels":{"kustomize.toolkit.fluxcd.io/name":"payments"}
 		},
 		"spec":{
 			"hosts":["payments.example.com"],
@@ -454,16 +454,16 @@ func TestServiceMeshHandler_ValidatePolicyFlagsBadWeightsAndArgoOwned(t *testing
 		t.Fatalf("valid=true, want false for bad weights")
 	}
 	if resp.ApplyAllowed {
-		t.Fatalf("apply_allowed=true, want false for invalid Argo-owned resource")
+		t.Fatalf("apply_allowed=true, want false for invalid Flux-owned resource")
 	}
-	if !resp.ReadOnly || resp.ManagedBy != "argocd" {
+	if !resp.ReadOnly || resp.ManagedBy != "flux" {
 		t.Fatalf("ownership = managed_by=%q readonly=%v", resp.ManagedBy, resp.ReadOnly)
 	}
 	if len(resp.Errors) == 0 {
 		t.Fatalf("expected route weight error, got none")
 	}
 	if len(resp.Warnings) == 0 {
-		t.Fatalf("expected Argo ownership warning, got none")
+		t.Fatalf("expected Flux ownership warning, got none")
 	}
 	q.mu.Lock()
 	audits := append([]sqlc.CreateAuditLogV1Params(nil), q.audits...)
@@ -477,7 +477,7 @@ func TestServiceMeshHandler_ValidatePolicyFlagsBadWeightsAndArgoOwned(t *testing
 	}
 	assertAuditDetail(t, row.Detail, "kind", "VirtualService")
 	assertAuditDetail(t, row.Detail, "namespace", "payments")
-	assertAuditDetail(t, row.Detail, "managed_by", "argocd")
+	assertAuditDetail(t, row.Detail, "managed_by", "flux")
 }
 
 func TestServiceMeshHandler_RequiresClusterRead(t *testing.T) {

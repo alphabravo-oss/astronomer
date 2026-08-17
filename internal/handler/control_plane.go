@@ -38,7 +38,6 @@ type ControlPlaneQuerier interface {
 type ControlPlaneHandler struct {
 	queries    ControlPlaneQuerier
 	Monitoring *MonitoringHandler
-	ArgoCD     *ArgoCDHandler
 	Tools      *ToolHandler
 	Catalog    *CatalogHandler
 	Backups    *BackupHandler
@@ -58,15 +57,15 @@ func (h *ControlPlaneHandler) SetEmailNotifier(n EmailNotifier) { h.emails = n }
 
 type UpdateControlPlanePolicyRequest struct {
 	MonitoringQueueDepthThreshold    int32 `json:"monitoringQueueDepthThreshold"`
-	ArgoCDQueueDepthThreshold        int32 `json:"argocdQueueDepthThreshold"`
+	DeliveryQueueDepthThreshold      int32 `json:"deliveryQueueDepthThreshold"`
 	ToolsQueueDepthThreshold         int32 `json:"toolsQueueDepthThreshold"`
 	CatalogQueueDepthThreshold       int32 `json:"catalogQueueDepthThreshold"`
 	MonitoringStaleRunningThreshold  int32 `json:"monitoringStaleRunningThreshold"`
-	ArgoCDStaleRunningThreshold      int32 `json:"argocdStaleRunningThreshold"`
+	DeliveryStaleRunningThreshold    int32 `json:"deliveryStaleRunningThreshold"`
 	ToolsStaleRunningThreshold       int32 `json:"toolsStaleRunningThreshold"`
 	CatalogStaleRunningThreshold     int32 `json:"catalogStaleRunningThreshold"`
 	MonitoringRecentFailureThreshold int32 `json:"monitoringRecentFailureThreshold"`
-	ArgoCDRecentFailureThreshold     int32 `json:"argocdRecentFailureThreshold"`
+	DeliveryRecentFailureThreshold   int32 `json:"deliveryRecentFailureThreshold"`
 	ToolsRecentFailureThreshold      int32 `json:"toolsRecentFailureThreshold"`
 	CatalogRecentFailureThreshold    int32 `json:"catalogRecentFailureThreshold"`
 	RecentFailureWindowMinutes       int32 `json:"recentFailureWindowMinutes"`
@@ -79,11 +78,10 @@ type CreateControlPlaneSilenceRequest struct {
 	Duration      string `json:"duration"`
 }
 
-func NewControlPlaneHandler(queries ControlPlaneQuerier, monitoring *MonitoringHandler, argocd *ArgoCDHandler, tools *ToolHandler, catalog *CatalogHandler, backups *BackupHandler, logging *LoggingHandler, security *SecurityHandler, queue *asynq.Client) *ControlPlaneHandler {
+func NewControlPlaneHandler(queries ControlPlaneQuerier, monitoring *MonitoringHandler, tools *ToolHandler, catalog *CatalogHandler, backups *BackupHandler, logging *LoggingHandler, security *SecurityHandler, queue *asynq.Client) *ControlPlaneHandler {
 	return &ControlPlaneHandler{
 		queries:    queries,
 		Monitoring: monitoring,
-		ArgoCD:     argocd,
 		Tools:      tools,
 		Catalog:    catalog,
 		Backups:    backups,
@@ -137,15 +135,15 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 	}
 	policy, err := h.queries.UpsertDefaultControlPlanePolicy(r.Context(), sqlc.UpsertDefaultControlPlanePolicyParams{
 		MonitoringQueueDepthThreshold:    atLeastOne(req.MonitoringQueueDepthThreshold),
-		ArgocdQueueDepthThreshold:        atLeastOne(req.ArgoCDQueueDepthThreshold),
+		DeliveryQueueDepthThreshold:      atLeastOne(req.DeliveryQueueDepthThreshold),
 		ToolsQueueDepthThreshold:         atLeastOne(req.ToolsQueueDepthThreshold),
 		CatalogQueueDepthThreshold:       atLeastOne(req.CatalogQueueDepthThreshold),
 		MonitoringStaleRunningThreshold:  atLeastOne(req.MonitoringStaleRunningThreshold),
-		ArgocdStaleRunningThreshold:      atLeastOne(req.ArgoCDStaleRunningThreshold),
+		DeliveryStaleRunningThreshold:    atLeastOne(req.DeliveryStaleRunningThreshold),
 		ToolsStaleRunningThreshold:       atLeastOne(req.ToolsStaleRunningThreshold),
 		CatalogStaleRunningThreshold:     atLeastOne(req.CatalogStaleRunningThreshold),
 		MonitoringRecentFailureThreshold: atLeastOne(req.MonitoringRecentFailureThreshold),
-		ArgocdRecentFailureThreshold:     atLeastOne(req.ArgoCDRecentFailureThreshold),
+		DeliveryRecentFailureThreshold:   atLeastOne(req.DeliveryRecentFailureThreshold),
 		ToolsRecentFailureThreshold:      atLeastOne(req.ToolsRecentFailureThreshold),
 		CatalogRecentFailureThreshold:    atLeastOne(req.CatalogRecentFailureThreshold),
 		RecentFailureWindowMinutes:       atLeastOne(req.RecentFailureWindowMinutes),
@@ -157,7 +155,7 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 	go h.evaluate(context.Background())
 	recordAudit(r, h.queries, "controlplane.policy.update", "control_plane_policy", policy.ID.String(), "", map[string]any{
 		"monitoring_queue_depth_threshold": policy.MonitoringQueueDepthThreshold,
-		"argocd_queue_depth_threshold":     policy.ArgocdQueueDepthThreshold,
+		"delivery_queue_depth_threshold":   policy.DeliveryQueueDepthThreshold,
 		"tools_queue_depth_threshold":      policy.ToolsQueueDepthThreshold,
 		"catalog_queue_depth_threshold":    policy.CatalogQueueDepthThreshold,
 		"recent_failure_window_minutes":    policy.RecentFailureWindowMinutes,
@@ -314,11 +312,6 @@ func (h *ControlPlaneHandler) collectSummaries(ctx context.Context) map[string]m
 			out["monitoring"] = summary
 		}
 	}
-	if h.ArgoCD != nil {
-		if summary, err := h.ArgoCD.controllerSummary(ctx); err == nil {
-			out["argocd"] = summary
-		}
-	}
 	if h.Tools != nil {
 		if summary, err := h.Tools.controllerSummary(ctx); err == nil {
 			out["tools"] = summary
@@ -408,7 +401,7 @@ func (h *ControlPlaneHandler) evaluate(ctx context.Context) {
 
 func policyManagedController(name string) bool {
 	switch name {
-	case "monitoring", "argocd", "tools", "catalog":
+	case "monitoring", "delivery", "tools", "catalog":
 		return true
 	default:
 		return false
@@ -523,15 +516,15 @@ func isSilenced(controller, condition string, silences []sqlc.ControlPlaneSilenc
 func controlPlanePolicyResponse(policy sqlc.ControlPlanePolicy) map[string]any {
 	return map[string]any{
 		"monitoringQueueDepthThreshold":    policy.MonitoringQueueDepthThreshold,
-		"argocdQueueDepthThreshold":        policy.ArgocdQueueDepthThreshold,
+		"deliveryQueueDepthThreshold":      policy.DeliveryQueueDepthThreshold,
 		"toolsQueueDepthThreshold":         policy.ToolsQueueDepthThreshold,
 		"catalogQueueDepthThreshold":       policy.CatalogQueueDepthThreshold,
 		"monitoringStaleRunningThreshold":  policy.MonitoringStaleRunningThreshold,
-		"argocdStaleRunningThreshold":      policy.ArgocdStaleRunningThreshold,
+		"deliveryStaleRunningThreshold":    policy.DeliveryStaleRunningThreshold,
 		"toolsStaleRunningThreshold":       policy.ToolsStaleRunningThreshold,
 		"catalogStaleRunningThreshold":     policy.CatalogStaleRunningThreshold,
 		"monitoringRecentFailureThreshold": policy.MonitoringRecentFailureThreshold,
-		"argocdRecentFailureThreshold":     policy.ArgocdRecentFailureThreshold,
+		"deliveryRecentFailureThreshold":   policy.DeliveryRecentFailureThreshold,
 		"toolsRecentFailureThreshold":      policy.ToolsRecentFailureThreshold,
 		"catalogRecentFailureThreshold":    policy.CatalogRecentFailureThreshold,
 		"recentFailureWindowMinutes":       policy.RecentFailureWindowMinutes,
@@ -576,8 +569,8 @@ func thresholdQueue(name string, policy sqlc.ControlPlanePolicy) int32 {
 	switch name {
 	case "monitoring":
 		return policy.MonitoringQueueDepthThreshold
-	case "argocd":
-		return policy.ArgocdQueueDepthThreshold
+	case "delivery":
+		return policy.DeliveryQueueDepthThreshold
 	case "tools":
 		return policy.ToolsQueueDepthThreshold
 	default:
@@ -589,8 +582,8 @@ func thresholdStale(name string, policy sqlc.ControlPlanePolicy) int32 {
 	switch name {
 	case "monitoring":
 		return policy.MonitoringStaleRunningThreshold
-	case "argocd":
-		return policy.ArgocdStaleRunningThreshold
+	case "delivery":
+		return policy.DeliveryStaleRunningThreshold
 	case "tools":
 		return policy.ToolsStaleRunningThreshold
 	default:
@@ -602,8 +595,8 @@ func thresholdFailures(name string, policy sqlc.ControlPlanePolicy) int32 {
 	switch name {
 	case "monitoring":
 		return policy.MonitoringRecentFailureThreshold
-	case "argocd":
-		return policy.ArgocdRecentFailureThreshold
+	case "delivery":
+		return policy.DeliveryRecentFailureThreshold
 	case "tools":
 		return policy.ToolsRecentFailureThreshold
 	default:

@@ -89,7 +89,7 @@ func TestRenderAgentInstallManifestHonorsPrivilegeProfileAnnotation(t *testing.T
 	}
 }
 
-func TestRenderAgentInstallManifestHonorsAgentInstallMetadataAnnotations(t *testing.T) {
+func TestRenderAgentInstallManifestHonorsSafeAgentInstallMetadataAnnotations(t *testing.T) {
 	h := NewClusterHandler(nil)
 	h.SetAgentImage("example.com/default-agent", "v1.2.3")
 
@@ -98,7 +98,9 @@ func TestRenderAgentInstallManifestHonorsAgentInstallMetadataAnnotations(t *test
 		t.Fatalf("marshal pod labels: %v", err)
 	}
 	annotations, err := json.Marshal(map[string]string{
-		agenttemplate.AgentImageAnnotation:              "registry.example.com/agent:v9",
+		// Image selection is release-controlled; this retired annotation must
+		// not bypass the digest-pinned system-release trust boundary.
+		"management.astronomer.io/agent-image":          "registry.example.com/agent:v9",
 		agenttemplate.AgentServiceAccountNameAnnotation: "team-agent",
 		agenttemplate.AgentPodLabelsAnnotation:          string(podLabels),
 	})
@@ -113,7 +115,7 @@ func TestRenderAgentInstallManifestHonorsAgentInstallMetadataAnnotations(t *test
 
 	manifest := h.renderAgentInstallManifest(cluster, "reg-token", "https://astro.example.com")
 	for _, want := range []string{
-		`image: "registry.example.com/agent:v9"`,
+		`image: "example.com/default-agent:v1.2.3"`,
 		"name: team-agent",
 		"serviceAccountName: team-agent",
 		`team: "platform"`,
@@ -122,7 +124,7 @@ func TestRenderAgentInstallManifestHonorsAgentInstallMetadataAnnotations(t *test
 			t.Fatalf("manifest missing %q:\n%s", want, manifest)
 		}
 	}
-	if strings.Contains(manifest, "example.com/default-agent:v1.2.3") {
-		t.Fatalf("manifest did not use image annotation override:\n%s", manifest)
+	if strings.Contains(manifest, "registry.example.com/agent:v9") {
+		t.Fatal("deprecated cluster annotation overrode release-controlled agent image")
 	}
 }

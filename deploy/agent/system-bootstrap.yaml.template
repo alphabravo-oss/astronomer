@@ -1,0 +1,48 @@
+---
+# Bootstrap creates the signed system source in a suspended state. The agent
+# validates enrollment, compatibility, rollout cohort, immutable digest, and
+# signing identity before it unsuspends these fixed-name resources.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: astronomer-system-release
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer-agent
+    app.kubernetes.io/part-of: astronomer-delivery
+    delivery.astronomer.io/system: "true"
+spec:
+  interval: 5m
+  url: "{{SYSTEM_ARTIFACT_URL}}"
+  ref:
+    digest: "{{SYSTEM_ARTIFACT_DIGEST}}"
+  verify:
+    provider: cosign
+    matchOIDCIdentity:
+      - issuer: "{{SYSTEM_OIDC_ISSUER}}"
+        subject: "{{SYSTEM_OIDC_IDENTITY}}"
+  suspend: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: astronomer-system-release
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer-agent
+    app.kubernetes.io/part-of: astronomer-delivery
+    delivery.astronomer.io/system: "true"
+spec:
+  interval: 5m
+  retryInterval: 1m
+  timeout: 15m
+  path: ./
+  prune: true
+  wait: true
+  force: false
+  suspend: true
+  serviceAccountName: astronomer-delivery-system-applier
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: astronomer-system-release

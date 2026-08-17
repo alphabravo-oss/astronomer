@@ -115,7 +115,7 @@ export type StackFormValues = Record<string, string>;
  *     resolveAutoRollbackPolicy (internal/handler/monitoring_operations.go:731-734)
  *     checks `if override != nil` BEFORE consulting
  *     operationPolicies.defaultAutoRollbackOnFailure, so an admin who set that
- *     to false fleet-wide (to leave failed releases in place for forensics)
+ *     to false across all clusters (to leave failed releases in place for forensics)
  *     finds this UI rolling back anyway.
  *
  * None of the five are replace triggers (clusterMonitoringReplaceRequired,
@@ -253,7 +253,7 @@ export const SHARED_THANOS_FAMILY: StackFamilySpec = {
   key: 'thanos',
   title: 'Shared Thanos',
   description:
-    'The fleet-wide long-term metrics tier: query, query-frontend, store gateway and compactor, reading the blocks every cluster stack ships to object storage.',
+    'The deployment-wide long-term metrics tier: query, query-frontend, store gateway and compactor, reading the blocks every cluster stack ships to object storage.',
   destroys:
     'the Thanos Helm release on the management cluster. Every cluster’s long-term metrics and the platform’s Thanos query endpoint go away with it; the blocks in object storage are NOT deleted',
   fields: [
@@ -323,7 +323,7 @@ export const SHARED_ALERTMANAGER_FAMILY: StackFamilySpec = {
   key: 'alertmanager',
   title: 'Shared Alertmanager',
   description:
-    'The fleet-wide alert router. Platform alert rules and notification channels deliver through this release.',
+    'The deployment-wide alert router. Platform alert rules and notification channels deliver through this release.',
   destroys:
     'the Alertmanager Helm release on the management cluster and its notification silences. Platform alerts stop being delivered until it is reinstalled',
   fields: [

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "release": {
+    "certificate_identity_template": "https://github.com/fluxcd/flux2/.github/workflows/release.yaml@refs/tags/{version}",
+    "certificate_oidc_issuer": "https://token.actions.githubusercontent.com"
+  },
+  "controller_images": {
+    "certificate_identity": "https://github.com/fluxcd/gha-workflows/.github/workflows/controller-release.yaml@refs/tags/v0.11.0",
+    "certificate_oidc_issuer": "https://token.actions.githubusercontent.com"
+  },
+  "qualification": {
+    "documentation_reviewed_at": "2026-08-17",
+    "installation_documentation": "https://fluxcd.io/flux/installation/",
+    "minimum_kubernetes_version": "v1.33.0"
+  }
+}

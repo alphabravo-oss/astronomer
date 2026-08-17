@@ -32,6 +32,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	deliveryhandler "github.com/alphabravocompany/astronomer-go/internal/handler/delivery"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -52,43 +53,6 @@ func (routeSecurityCharlieContextSearcher) Search(context.Context, uuid.UUID, st
 
 func (q routeSecurityRBACQuerier) GetUserBindings(_ context.Context, _ string) ([]rbac.RoleBinding, error) {
 	return q.bindings, nil
-}
-
-type routeSecurityArgoTokenQuerier struct {
-	tokenHash string
-	clusterID uuid.UUID
-	row       *sqlc.ArgocdClusterProxyToken
-	mu        sync.Mutex
-	touched   int
-}
-
-func (q *routeSecurityArgoTokenQuerier) GetArgoCDClusterProxyTokenByHash(_ context.Context, tokenHash string) (sqlc.ArgocdClusterProxyToken, error) {
-	if tokenHash != q.tokenHash {
-		return sqlc.ArgocdClusterProxyToken{}, errRouteSecurityNotFound{}
-	}
-	if q.row != nil {
-		return *q.row, nil
-	}
-	return sqlc.ArgocdClusterProxyToken{
-		ID:        uuid.New(),
-		ClusterID: q.clusterID,
-		Purpose:   "argocd_cluster_proxy",
-		TokenHash: q.tokenHash,
-		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
-	}, nil
-}
-
-func (q *routeSecurityArgoTokenQuerier) TouchArgoCDClusterProxyToken(_ context.Context, _ uuid.UUID) error {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.touched++
-	return nil
-}
-
-func (q *routeSecurityArgoTokenQuerier) touchCount() int {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	return q.touched
 }
 
 type errRouteSecurityNotFound struct{}
@@ -332,12 +296,6 @@ func (routeSecurityClusterQuerier) UpsertClusterTemplateApplication(context.Cont
 func (routeSecurityClusterQuerier) GetPlatformSetting(context.Context, string) (sqlc.PlatformSetting, error) {
 	return sqlc.PlatformSetting{}, pgx.ErrNoRows
 }
-func (routeSecurityClusterQuerier) ListArgoCDManagedClustersByCluster(context.Context, uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
-	return nil, nil
-}
-func (routeSecurityClusterQuerier) ListArgoCDApplicationsByManagedClusterTargets(context.Context, sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams) ([]sqlc.ArgocdApplication, error) {
-	return nil, nil
-}
 func (routeSecurityClusterQuerier) ListClusterConditionRemediationByCluster(context.Context, uuid.UUID) ([]sqlc.ClusterConditionRemediationAttempt, error) {
 	return nil, nil
 }
@@ -459,8 +417,7 @@ func TestHighRiskRoutesDenyUnauthenticatedRequests(t *testing.T) {
 //
 // The allow-set is the union of the two existing public predicates plus the
 // non-/api/v1 surfaces that authenticate by other means (the agent CONNECT
-// handshake, the PSK-guarded internal tunnel listeners, the ArgoCD UI proxy,
-// and the health probes).
+// handshake, the PSK-guarded internal tunnel listeners, and the health probes).
 func TestEveryRouteDeniesUnauthenticatedRequests(t *testing.T) {
 	router, _ := newRouteSecurityRouter(t)
 
@@ -507,7 +464,6 @@ func isRouterAnonymousReachablePattern(pattern string) bool {
 	for _, prefix := range []string{
 		"/health",
 		"/readyz",
-		"/argocd",
 		"/helm-repo",
 		"/api/v1/openapi.yaml",
 		"/api/v1/docs",
@@ -898,10 +854,6 @@ func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) 
 	execConsumer.SetAuth(jwtMgr, nil)
 	logsConsumer := tunnel.NewLogsConsumer(hub, slog.Default())
 	logsConsumer.SetAuth(jwtMgr, nil)
-	argoUIProxy, err := handler.NewArgoCDUIProxy("http://127.0.0.1:65535", slog.Default())
-	if err != nil {
-		t.Fatalf("create argocd ui proxy: %v", err)
-	}
 	shellHandler := handler.NewKubectlShellHandler(routeSecurityShellQuerier{}, nil, rbac.NewEngine(), kubectl.Deps{})
 	shellHandler.SetStreamAuth(jwtMgr, nil)
 	return RouterDependencies{
@@ -922,35 +874,38 @@ func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) 
 		Webhooks:            handler.NewWebhookHandler(nil, nil, nil),
 		DexConfig:           handler.NewDexHandler(nil),
 		Projects:            handler.NewProjectHandler(nil),
+		DeliverySources:     deliveryhandler.NewSourceHandler(nil, nil, 1),
+		DeliveryBundles:     deliveryhandler.NewBundleHandler(nil),
+		DeliveryTargets:     deliveryhandler.NewTargetHandler(nil, nil, nil),
+		DeliveryRollouts:    deliveryhandler.NewRolloutHandler(nil, nil, nil, nil),
+		DeliveryDeployments: deliveryhandler.NewDeploymentHandler(nil, nil, nil),
+		DeliveryInventory:   deliveryhandler.NewInventoryHandler(nil),
 		RBAC:                handler.NewRBACHandler(nil),
 		Backups:             handler.NewBackupHandler(nil),
 		ClusterSnapshots:    handler.NewClusterSnapshotsHandler(nil),
 		Catalog:             handler.NewCatalogHandler(nil),
 		ProjectCatalogs:     handler.NewProjectCatalogHandler(nil),
 		ClusterGroups:       handler.NewClusterGroupHandler(nil),
-		FleetOperations:     handler.NewFleetOperationHandler(nil),
-		AgentFleet:          handler.NewAgentFleetHandler(nil),
+		ClusterAgent:        handler.NewClusterAgentHandler(nil),
 		ApiserverAudit:      handler.NewApiserverAuditHandler(nil),
 		ApiserverAllowlist:  handler.NewApiserverAllowlistHandler(nil),
 		ClusterTemplates:    handler.NewClusterTemplateHandler(nil),
 		// Wired so the monitoring surface — including the /settings/monitoring
 		// routes that answered unauthenticated reads until the 2026-07-28 fix —
 		// is visible to the registry-driven route security tests at all.
-		Monitoring:        handler.NewMonitoringHandler(),
-		NetworkPolicies:   handler.NewNetworkPolicyHandler(nil),
-		Workloads:         handler.NewWorkloadHandler(),
-		ServiceMesh:       handler.NewServiceMeshHandler(nil),
-		Proxy:             tunnel.NewProxyHandler(hub, slog.Default()),
-		ArgoCDProxyTokens: &routeSecurityArgoTokenQuerier{clusterID: clusterID},
-		ServiceProxy:      routeSecurityServiceProxy(),
-		InternalK8s:       tunnel.NewInternalK8sHandler(hub, "route-security-psk", slog.Default()),
-		InternalHelm:      tunnel.NewInternalHelmHandler(hub, "route-security-psk", slog.Default()),
-		Exec:              execConsumer,
-		Logs:              logsConsumer,
-		RemoteServer:      tunnel2.NewRemoteServer(slog.Default(), nil),
-		ArgoCDUIProxy:     argoUIProxy,
-		KubectlShell:      shellHandler,
-		SCIMTokenAdmin:    handler.NewSCIMTokenAdminHandler(routeSecuritySCIMTokenQuerier{}),
+		Monitoring:      handler.NewMonitoringHandler(),
+		NetworkPolicies: handler.NewNetworkPolicyHandler(nil),
+		Workloads:       handler.NewWorkloadHandler(),
+		ServiceMesh:     handler.NewServiceMeshHandler(nil),
+		Proxy:           tunnel.NewProxyHandler(hub, slog.Default()),
+		ServiceProxy:    routeSecurityServiceProxy(),
+		InternalK8s:     tunnel.NewInternalK8sHandler(hub, "route-security-psk", slog.Default()),
+		InternalHelm:    tunnel.NewInternalHelmHandler(hub, "route-security-psk", slog.Default()),
+		Exec:            execConsumer,
+		Logs:            logsConsumer,
+		RemoteServer:    tunnel2.NewRemoteServer(slog.Default(), nil),
+		KubectlShell:    shellHandler,
+		SCIMTokenAdmin:  handler.NewSCIMTokenAdminHandler(routeSecuritySCIMTokenQuerier{}),
 		// Every handler-typed dep below gates a whole route group behind a
 		// `deps.X != nil` check. While they were nil, those groups were
 		// invisible to EVERY registry-driven test in this file — the route
@@ -963,7 +918,6 @@ func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) 
 		// honest.
 		Alerting:          handler.NewAlertingHandler(nil),
 		Anomaly:           handler.NewAnomalyHandler(nil),
-		ArgoCD:            handler.NewArgoCDHandler(nil),
 		ChartRatings:      handler.NewChartRatingsHandler(nil),
 		CharlieOnboarding: handler.NewCharlieOnboardingHandler(nil),
 		CharlieAdmin:      handler.NewCharlieAdminHandler(nil, nil),
@@ -976,7 +930,7 @@ func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) 
 		ClusterResources:  handler.NewClusterResourcesHandler(nil),
 		Compliance:        handler.NewComplianceHandler(nil, nil),
 		CompliancePosture: handler.NewCompliancePostureHandler(nil, 0),
-		ControlPlane:      handler.NewControlPlaneHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil),
+		ControlPlane:      handler.NewControlPlaneHandler(nil, nil, nil, nil, nil, nil, nil, nil),
 		Dashboards:        handler.NewDashboardHandler(nil),
 		Extensions:        handler.NewExtensionHandler(nil),
 		Gatekeeper:        handler.NewGatekeeperConstraintsHandler(nil, nil),
@@ -2316,252 +2270,6 @@ func TestServiceProxyRejectsTargetsOutsideAllowlist(t *testing.T) {
 	}
 }
 
-func TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier(t *testing.T) {
-	clusterID := uuid.New()
-	handler := NewInternalArgoCDProxyRouter(RouterDependencies{
-		Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-	})
-	base := "/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s"
-	// Cover the Kubernetes traffic shapes ArgoCD emits: discovery, resource
-	// cache reads, Secret lists, apply, and upgrade-style CONNECT requests.
-	for _, tc := range []struct {
-		method, path string
-	}{
-		{http.MethodGet, base + "/api"},
-		{http.MethodGet, base + "/apis"},
-		{http.MethodGet, base + "/openapi/v2"},
-		{http.MethodGet, base + "/api/v1/secrets"},
-		{http.MethodPatch, base + "/api/v1/namespaces/trivy-system"},
-		{http.MethodConnect, base + "/api/v1/namespaces/default/pods/example/exec"},
-	} {
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("%s %s: status = %d, want %d; body=%s", tc.method, tc.path, rec.Code, http.StatusUnauthorized, rec.Body.String())
-		}
-	}
-}
-
-func TestInternalArgoCDProxyRouterRejectsInvalidTokenForms(t *testing.T) {
-	clusterID := uuid.New()
-	validToken := auth.ArgoCDClusterProxyTokenPrefix + "valid-token"
-	tokens := &routeSecurityArgoTokenQuerier{
-		tokenHash: auth.HashArgoCDClusterProxyToken(validToken),
-		clusterID: clusterID,
-	}
-	handler := NewInternalArgoCDProxyRouter(RouterDependencies{
-		Proxy:             tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-		ArgoCDProxyTokens: tokens,
-	})
-	path := "/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s/apis/apps/v1/deployments"
-
-	for _, tc := range []struct {
-		name, authorization string
-	}{
-		{name: "missing"},
-		{name: "wrong scheme", authorization: "Basic " + validToken},
-		{name: "wrong prefix", authorization: "Bearer user-token"},
-		{name: "unknown hash", authorization: "Bearer " + auth.ArgoCDClusterProxyTokenPrefix + "unknown"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, path, nil)
-			if tc.authorization != "" {
-				req.Header.Set("Authorization", tc.authorization)
-			}
-			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, req)
-			if rec.Code != http.StatusUnauthorized {
-				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
-			}
-		})
-	}
-	if tokens.touchCount() != 0 {
-		t.Fatalf("invalid tokens touched %d rows, want 0", tokens.touchCount())
-	}
-}
-
-func TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows(t *testing.T) {
-	clusterID := uuid.New()
-	otherClusterID := uuid.New()
-	token := auth.ArgoCDClusterProxyTokenPrefix + "row-validation-token"
-	tokenHash := auth.HashArgoCDClusterProxyToken(token)
-	baseRow := sqlc.ArgocdClusterProxyToken{
-		ID:        uuid.New(),
-		ClusterID: clusterID,
-		Purpose:   "argocd_cluster_proxy",
-		TokenHash: tokenHash,
-		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
-	}
-	tests := []struct {
-		name   string
-		mutate func(*sqlc.ArgocdClusterProxyToken)
-	}{
-		{name: "cross cluster", mutate: func(row *sqlc.ArgocdClusterProxyToken) { row.ClusterID = otherClusterID }},
-		{name: "expired", mutate: func(row *sqlc.ArgocdClusterProxyToken) { row.ExpiresAt.Time = time.Now().Add(-time.Minute) }},
-		{name: "revoked", mutate: func(row *sqlc.ArgocdClusterProxyToken) { row.IsRevoked = true }},
-		{name: "wrong purpose", mutate: func(row *sqlc.ArgocdClusterProxyToken) { row.Purpose = "different" }},
-		{name: "hash mismatch", mutate: func(row *sqlc.ArgocdClusterProxyToken) {
-			row.TokenHash = auth.HashArgoCDClusterProxyToken(token + "-other")
-		}},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			row := baseRow
-			tc.mutate(&row)
-			tokens := &routeSecurityArgoTokenQuerier{tokenHash: tokenHash, clusterID: clusterID, row: &row}
-			handler := NewInternalArgoCDProxyRouter(RouterDependencies{
-				Proxy:             tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-				ArgoCDProxyTokens: tokens,
-			})
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/internal/argocd/clusters/"+clusterID.String()+"/k8s/api/v1/pods", nil)
-			req.Header.Set("Authorization", "Bearer "+token)
-			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, req)
-			if rec.Code != http.StatusUnauthorized {
-				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
-			}
-			if tokens.touchCount() != 0 {
-				t.Fatalf("touch count = %d, want 0", tokens.touchCount())
-			}
-		})
-	}
-}
-
-func TestInternalArgoCDProxyRouterAcceptsValidClusterToken(t *testing.T) {
-	clusterID := uuid.New()
-	token := auth.ArgoCDClusterProxyTokenPrefix + "valid-internal-token"
-	tokens := &routeSecurityArgoTokenQuerier{tokenHash: auth.HashArgoCDClusterProxyToken(token), clusterID: clusterID}
-	handler := NewInternalArgoCDProxyRouter(RouterDependencies{
-		Proxy:             tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-		ArgoCDProxyTokens: tokens,
-	})
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/internal/argocd/clusters/"+clusterID.String()+"/k8s/openapi/v2", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want proxy handler %d; body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-	}
-	if tokens.touchCount() != 1 {
-		t.Fatalf("touch count = %d, want 1", tokens.touchCount())
-	}
-}
-
-func TestInternalArgoCDProxyRouterRetainsRateLimit(t *testing.T) {
-	clusterID := uuid.New()
-	token := auth.ArgoCDClusterProxyTokenPrefix + "rate-limit-token"
-	tokens := &routeSecurityArgoTokenQuerier{tokenHash: auth.HashArgoCDClusterProxyToken(token), clusterID: clusterID}
-	handler := NewInternalArgoCDProxyRouter(RouterDependencies{
-		Proxy:             tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-		ArgoCDProxyTokens: tokens,
-	})
-	path := "/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s/api/v1/pods"
-	for i := 0; i < 1200; i++ {
-		req := httptest.NewRequest(http.MethodGet, path, nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
-		if rec.Code == http.StatusTooManyRequests {
-			if i < 1000 {
-				t.Fatalf("rate limit tripped after %d requests, before the documented burst of 1000", i)
-			}
-			if rec.Header().Get("Retry-After") == "" {
-				t.Fatal("rate-limited response must include Retry-After")
-			}
-			return
-		}
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("request %d status = %d, want %d; body=%s", i+1, rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-		}
-	}
-	t.Fatal("ArgoCD proxy did not enforce its rate limit within 1200 immediate requests")
-}
-
-func TestArgoCDInternalK8sProxyRequiresClusterScopedToken(t *testing.T) {
-	clusterID := uuid.New()
-	otherClusterID := uuid.New()
-	token := auth.ArgoCDClusterProxyTokenPrefix + "test-token"
-	tokens := &routeSecurityArgoTokenQuerier{
-		tokenHash: auth.HashArgoCDClusterProxyToken(token),
-		clusterID: clusterID,
-	}
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		Proxy:             tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-		ArgoCDProxyTokens: tokens,
-	})
-	path := "/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s/api/v1/pods"
-
-	unauthReq := httptest.NewRequest(http.MethodGet, path, nil)
-	unauthRec := httptest.NewRecorder()
-	router.ServeHTTP(unauthRec, unauthReq)
-	if unauthRec.Code != http.StatusUnauthorized {
-		t.Fatalf("unauth status = %d, want %d; body=%s", unauthRec.Code, http.StatusUnauthorized, unauthRec.Body.String())
-	}
-
-	wrongClusterReq := httptest.NewRequest(http.MethodGet, "/api/v1/internal/argocd/clusters/"+otherClusterID.String()+"/k8s/api/v1/pods", nil)
-	wrongClusterReq.Header.Set("Authorization", "Bearer "+token)
-	wrongClusterRec := httptest.NewRecorder()
-	router.ServeHTTP(wrongClusterRec, wrongClusterReq)
-	if wrongClusterRec.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong-cluster status = %d, want %d; body=%s", wrongClusterRec.Code, http.StatusUnauthorized, wrongClusterRec.Body.String())
-	}
-
-	validReq := httptest.NewRequest(http.MethodGet, path, nil)
-	validReq.Header.Set("Authorization", "Bearer "+token)
-	validRec := httptest.NewRecorder()
-	router.ServeHTTP(validRec, validReq)
-	if validRec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("valid status = %d, want proxy handler %d; body=%s", validRec.Code, http.StatusServiceUnavailable, validRec.Body.String())
-	}
-	if tokens.touchCount() != 1 {
-		t.Fatalf("touch count = %d, want 1", tokens.touchCount())
-	}
-}
-
-func TestArgoCDInternalK8sProxyMutationsAreAudited(t *testing.T) {
-	clusterID := uuid.New()
-	token := auth.ArgoCDClusterProxyTokenPrefix + "audit-test-token"
-	audit := &routeSecurityAuditWriter{}
-	router := NewInternalArgoCDProxyRouter(RouterDependencies{
-		AuditWriter: audit,
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-		ArgoCDProxyTokens: &routeSecurityArgoTokenQuerier{
-			tokenHash: auth.HashArgoCDClusterProxyToken(token),
-			clusterID: clusterID,
-		},
-	})
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v1/internal/argocd/clusters/"+clusterID.String()+"/k8s/api/v1/namespaces/default/secrets/example", strings.NewReader(`{}`))
-	req.Header.Set("Authorization", "Bearer "+token)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want proxy handler %d; body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-	}
-	if len(audit.rows) != 1 {
-		t.Fatalf("audit rows = %d, want 1", len(audit.rows))
-	}
-	row := audit.rows[0]
-	if row.Action != "argocd.k8s_proxy.forwarded" {
-		t.Fatalf("audit action = %q", row.Action)
-	}
-	if row.ResourceType != "cluster" || row.ResourceID != clusterID.String() {
-		t.Fatalf("audit resource = %q/%q, want cluster/%s", row.ResourceType, row.ResourceID, clusterID.String())
-	}
-	var detail map[string]any
-	if err := json.Unmarshal(row.Detail, &detail); err != nil {
-		t.Fatalf("unmarshal audit detail: %v", err)
-	}
-	if detail["method"] != http.MethodPatch ||
-		detail["k8s_path"] != "/api/v1/namespaces/default/secrets/example" ||
-		detail["namespace"] != "default" ||
-		detail["resource"] != "secrets" ||
-		detail["name"] != "example" ||
-		detail["proxy"] != "argocd_internal" {
-		t.Fatalf("audit detail = %#v", detail)
-	}
-}
-
 func routeSecurityAdminBindings() []rbac.RoleBinding {
 	return []rbac.RoleBinding{{
 		RoleRules: []rbac.Rule{{Resource: "*", Verbs: []string{"*"}}},
@@ -2642,8 +2350,6 @@ func routeRequiresBrowserCSRF(entry securitySensitiveRoute) bool {
 
 func routeRequiresProxyInventory(pattern string) bool {
 	switch {
-	case pattern == "/argocd" || strings.HasPrefix(pattern, "/argocd/"):
-		return true
 	case pattern == "/api/v1/connect/{cluster_id}":
 		return true
 	case strings.Contains(pattern, "/v2/pods"):
@@ -2906,7 +2612,6 @@ func routeHandlerOwner(pattern string) string {
 		match string
 		owner string
 	}{
-		{"/argocd", "internal/handler.ArgoCDUIProxy"},
 		{"/helm-repo", "handler.PlatformChartRepoHandler"},
 		{"/health", "internal/server health handler"},
 		{"/readyz", "internal/server readiness handler"},
@@ -2916,7 +2621,6 @@ func routeHandlerOwner(pattern string) string {
 		{"/api/v1/ws/clusters", "handler.KubectlShellHandler"},
 		{"/api/v1/ws/exec", "internal/tunnel.ExecConsumer"},
 		{"/api/v1/ws/logs", "internal/tunnel.LogsConsumer"},
-		{"/api/v1/internal/argocd", "handler.ArgoCD internal Kubernetes proxy"},
 		{"/api/v1/internal/k8s", "internal/tunnel.InternalK8sHandler"},
 		{"/api/v1/internal/helm", "internal/tunnel.InternalHelmHandler"},
 		{"/internal/tunnel/k8s", "internal/tunnel.InternalK8sHandler"},
@@ -2926,7 +2630,7 @@ func routeHandlerOwner(pattern string) string {
 		{"/api/v1/auth", "handler.AuthHandler / handler.SSOHandler"},
 		{"/api/v1/register", "handler.ClusterRegistrationHandler"},
 		{"/api/v1/audit", "handler.AuditHandler"},
-		{"/api/v1/agents/fleet", "handler.AgentFleetHandler"},
+		{"/api/v1/cluster-agents", "handler.ClusterAgentHandler"},
 		{"/api/v1/admin/network-policy-templates", "handler.NetworkPolicyHandler"},
 		{"/api/v1/admin/vault-connections", "handler.VaultHandler"},
 		{"/api/v1/admin/webhooks", "handler.WebhookHandler"},
@@ -2967,7 +2671,6 @@ func routeHandlerOwner(pattern string) string {
 		{"/api/v1/clusters/{id}/registration", "handler.ClusterRegistrationHandler"},
 		{"/api/v1/clusters/{id}", "handler.ClusterHandler"},
 		{"/api/v1/clusters", "handler.ClusterHandler"},
-		{"/api/v1/fleet-operations", "handler.FleetOperationHandler"},
 		{"/api/v1/nodes", "handler.ResourceHandler"},
 		{"/api/v1/projects/{project_id}/catalogs", "handler.ProjectCatalogHandler"},
 		{"/api/v1/projects/{project_id}/cloud-credentials", "handler.CloudCredentialHandler"},
@@ -2993,9 +2696,6 @@ func routeHandlerOwner(pattern string) string {
 			return rule.owner
 		}
 	}
-	if strings.HasPrefix(pattern, "/api/v1/argocd") {
-		return "handler.ArgoCDHandler"
-	}
 	return "internal/server route owner requires explicit classification"
 }
 
@@ -3007,8 +2707,6 @@ func routeSurface(pattern string) string {
 		return "public Helm chart repository"
 	case pattern == "/api/v1/openapi.yaml" || strings.HasPrefix(pattern, "/api/v1/docs"):
 		return "API documentation"
-	case strings.HasPrefix(pattern, "/argocd"):
-		return "browser reverse proxy for the Argo CD UI"
 	case strings.HasPrefix(pattern, "/api/v1/internal/"):
 		return "internal machine-to-machine tunnel surface"
 	case strings.HasPrefix(pattern, "/internal/tunnel/"):
@@ -3044,8 +2742,6 @@ func routeAuthPosture(pattern string) string {
 		return "public read endpoint"
 	case pattern == "/readyz":
 		return "public readiness endpoint; response must avoid secrets"
-	case strings.HasPrefix(pattern, "/argocd"):
-		return "browser session or bearer auth via AuthBrowserOrBearer"
 	case strings.HasPrefix(pattern, "/api/v1/connect"):
 		return "agent bearer token"
 	case strings.HasPrefix(pattern, "/api/v1/internal/"):
@@ -3069,14 +2765,10 @@ func routeRBACPosture(method string, pattern string) string {
 		return "not applicable: public endpoint"
 	case strings.HasPrefix(pattern, "/api/v1/connect"):
 		return "not user RBAC: valid cluster agent token identifies the tunnel"
-	case strings.HasPrefix(pattern, "/api/v1/internal/argocd"):
-		return "not user RBAC: cluster-scoped Argo proxy token"
 	case strings.HasPrefix(pattern, "/api/v1/internal/"):
 		return "not user RBAC: internal shared-secret route"
 	case strings.HasPrefix(pattern, "/internal/tunnel/"):
 		return "not user RBAC: internal shared-secret route"
-	case strings.HasPrefix(pattern, "/argocd"):
-		return "authenticated Astronomer users; upstream Argo CD RBAC still applies"
 	case strings.HasPrefix(pattern, "/api/v1/ws/"):
 		return "stream ticket is issued only after the matching resource permission check"
 	case strings.HasPrefix(pattern, "/api/v1/rbac"):
@@ -3109,8 +2801,6 @@ func routeCSRFPosture(method string, pattern string) string {
 
 func routeAuditPosture(method string, pattern string) string {
 	switch {
-	case strings.HasPrefix(pattern, "/api/v1/internal/argocd"):
-		return "explicit proxy audit for mutating forwarded Kubernetes calls"
 	case strings.HasPrefix(pattern, "/internal/tunnel/"):
 		return "server-to-server forwarding route; upstream user action audit is recorded before forwarding"
 	case strings.HasPrefix(pattern, "/api/v1/ws/exec"):
@@ -3133,7 +2823,7 @@ func routeRepresentativeTests(method string, pattern string) []string {
 	if isMutatingHTTPMethod(method) {
 		tests = append(tests, "TestMutatingRoutesHaveSecurityClassification")
 	}
-	if strings.HasPrefix(pattern, "/api/v1/internal/") || strings.HasPrefix(pattern, "/internal/tunnel/") || strings.Contains(pattern, "/k8s") || strings.Contains(pattern, "/proxy/") || strings.HasPrefix(pattern, "/argocd") || strings.HasPrefix(pattern, "/api/v1/ws/") {
+	if strings.HasPrefix(pattern, "/api/v1/internal/") || strings.HasPrefix(pattern, "/internal/tunnel/") || strings.Contains(pattern, "/k8s") || strings.Contains(pattern, "/proxy/") || strings.HasPrefix(pattern, "/api/v1/ws/") {
 		tests = append(tests, "TestForwardingRoutesAreDocumentedInProxyInventory")
 	}
 	return tests

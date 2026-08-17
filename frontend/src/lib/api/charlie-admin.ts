@@ -300,22 +300,6 @@ async function getCharlieAdminStatus(): Promise<CharlieAdminStatusView> {
 export async function getCharlieConnection(): Promise<CharlieConnectionView> {
   return (await getCharlieAdminStatus()).connection;
 }
-export async function disconnectCharlie(): Promise<void> {
-  await api.post("/admin/charlie/disconnect/", {
-    confirmation: "DISCONNECT CHARLIE",
-  });
-}
-export async function uninstallCharlieAgent(): Promise<void> {
-  await api.post("/admin/charlie/agent/uninstall/", {
-    confirmation: "UNINSTALL CHARLIE",
-  });
-}
-export async function runCharlieAgentAction(
-  action: "install" | "upgrade" | "rollback" | "rotate",
-): Promise<CharlieAgentView> {
-  const { data } = await api.post(`/admin/charlie/agent/${action}/`, {});
-  return payload(data);
-}
 export async function getCharlieAgent(): Promise<CharlieAgentView> {
   return (await getCharlieAdminStatus()).agent;
 }

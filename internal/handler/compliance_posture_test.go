@@ -4,7 +4,7 @@ package handler
 //
 // What we pin here is the scoring math, not the HTTP wiring (the
 // routes file is the contract for the latter). The fake querier
-// returns a small, hand-curated fleet so the expected scores are
+// returns a small, hand-curated cluster set so the expected scores are
 // computable on a pocket calculator: any future weight tweak or
 // formula change will fail this test loudly.
 
@@ -130,8 +130,8 @@ func TestPosture_DeterministicScore(t *testing.T) {
 	// Per-cluster overall scores:
 	//   alpha = 80*0.30 + 90*0.30 + 100*0.25 +   100*0.15 = 24 + 27 + 25 + 15 = 91.0
 	//   bravo = 50*0.30 + 80*0.30 +   0*0.25 +   100*0.15 = 15 + 24 +  0 + 15 = 54.0
-	// Fleet sub-scores (unweighted mean): cis=65, vulns=85, netpol=50.
-	// Fleet overall = 65*0.30 + 85*0.30 + 50*0.25 + 100*0.15
+	// Cluster-set sub-scores (unweighted mean): cis=65, vulns=85, netpol=50.
+	// Overall score = 65*0.30 + 85*0.30 + 50*0.25 + 100*0.15
 	//               = 19.5 + 25.5 + 12.5 + 15.0 = 72.5
 	wantOverall := 72.5
 	if math.Abs(out.OverallScore-wantOverall) > 1e-6 {
@@ -154,12 +154,12 @@ func TestPosture_DeterministicScore(t *testing.T) {
 	}
 }
 
-func TestPosture_EmptyFleet(t *testing.T) {
+func TestPosture_EmptyClusterSet(t *testing.T) {
 	q := &fakePostureQuerier{clusters: nil}
 	h := NewCompliancePostureHandler(q, 13)
 	out := h.compute(context.Background(), nil)
 	if out.ClusterCount != 0 || len(out.Clusters) != 0 {
-		t.Errorf("expected empty fleet, got %+v", out)
+		t.Errorf("expected empty cluster set, got %+v", out)
 	}
 	// audit-only contribution: 100 × 0.15 = 15.
 	if math.Abs(out.OverallScore-15.0) > 1e-6 {
@@ -193,7 +193,7 @@ func TestPosture_StaleCISFallsBackTo50(t *testing.T) {
 // TestPosture_NetpolPolicyPastPageBoundary is the regression test for the
 // >10-policy bug: the old per-cluster path paged security policies with
 // LIMIT 10 and scanned that page for a match, so a cluster whose policy
-// sorted past row 10 fleet-wide was mis-scored. The batch DISTINCT set is
+// sorted past row 10 across the cluster set was mis-scored. The batch DISTINCT set is
 // unbounded, so the target cluster must now score netpol=100.
 func TestPosture_NetpolPolicyPastPageBoundary(t *testing.T) {
 	now := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
@@ -212,9 +212,9 @@ func TestPosture_NetpolPolicyPastPageBoundary(t *testing.T) {
 	h := NewCompliancePostureHandler(q, 13).withNow(func() time.Time { return now })
 	out := h.compute(context.Background(), clusters)
 
-	// Every cluster has a policy → fleet netpol sub-score is a clean 100.
+	// Every cluster has a policy → cluster-set netpol sub-score is a clean 100.
 	if math.Abs(out.NetPolScore-100.0) > 1e-6 {
-		t.Errorf("fleet netpol_score = %v, want 100", out.NetPolScore)
+		t.Errorf("cluster-set netpol_score = %v, want 100", out.NetPolScore)
 	}
 	// The target cluster (would-be past row 10) must score 100 individually.
 	for _, cp := range out.Clusters {

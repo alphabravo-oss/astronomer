@@ -74,7 +74,7 @@ kubectl -n astronomer exec -it deploy/astronomer-worker -- \
 ## Prevention
 
 - Scale workers proactively before known event-heavy windows
-  (mass cluster onboard, large argocd app sync)
+  (mass cluster onboarding, large delivery rollout)
 - Watch `astronomer_worker_job_duration_seconds` p95 per job — a step
   change is your earliest signal
 

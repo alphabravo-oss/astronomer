@@ -1,7 +1,7 @@
 // Tool drift reconciliation sweep (P1 item 16/22).
 //
-// ArgoCD applications ship with built-in drift detection; helm-installed
-// tools did not. This periodic sweep compares the desired state Astronomer
+// This periodic sweep gives directly Helm-installed tools the same explicit
+// drift evidence as delivery-managed resources. It compares the desired state Astronomer
 // recorded on each installed_charts row (status + revision) against the
 // live helm release and stamps installed_charts.drift_detected / drift_detail
 // so the catalog UI can surface a drift badge.

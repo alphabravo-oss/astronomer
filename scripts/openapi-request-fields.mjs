@@ -116,7 +116,6 @@ const PLACEHOLDER_REQUEST_SCHEMAS = new Set([
   'ClusterRegistryRequest',
   'CreateClusterGroupRequest',
   'CreateClusterTemplateRequest',
-  'CreateFleetOperationRequest',
   'CreateNetworkPolicyTemplateRequest',
   'MoveClustersRequest',
   'UpdateClusterGroupRequest',
@@ -136,7 +135,7 @@ const PLACEHOLDER_REQUEST_SCHEMAS = new Set([
 // has to be argued for. It also fails when the count DROPS — lower this line in
 // the same commit that promotes a body to a named schema, so the budget cannot
 // leave slack for the next unverified body to fill.
-const EXPECTED_INLINE_REQUEST_BODIES = 70;
+const EXPECTED_INLINE_REQUEST_BODIES = 61;
 
 const specPath = path.join(repoRoot, 'docs/openapi.yaml');
 const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));

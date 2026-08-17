@@ -32,7 +32,7 @@ func AdminVisibilityCapabilityAdapters(adapter CapabilityExecutor) map[string]Ca
 		"astronomer.delivery.summary", "astronomer.delivery.email_health", "astronomer.delivery.webhook_health", "astronomer.delivery.siem_health",
 		"astronomer.logging.health", "astronomer.monitoring.health", "astronomer.identity.health", "astronomer.authentication.health", "astronomer.rbac.health",
 		"astronomer.security.posture", "astronomer.external_integrations.health", "astronomer.governance.health", "astronomer.policy_engine.health", "astronomer.templates.health",
-		"astronomer.configuration.overview", "astronomer.tenancy.summary", "astronomer.registration.health", "astronomer.fleet_operations.health", "astronomer.gitops.health",
+		"astronomer.configuration.overview", "astronomer.tenancy.summary", "astronomer.registration.health", "astronomer.gitops.health",
 		"astronomer.extensions.health", "astronomer.alerting.health", "astronomer.catalog.health", "astronomer.reconciliation.health", "astronomer.dashboard.health", "astronomer.platform.inventory",
 		"astronomer.charlie.runtime_health",
 	} {
@@ -79,8 +79,6 @@ func (a *AdminVisibilityCapabilityAdapter) Execute(ctx context.Context, capabili
 		value, err = a.databaseJSON(ctx, tenancySummaryQuery)
 	case "astronomer.registration.health":
 		value, err = a.databaseJSON(ctx, registrationHealthQuery)
-	case "astronomer.fleet_operations.health":
-		value, err = a.databaseJSON(ctx, fleetOperationsHealthQuery)
 	case "astronomer.gitops.health":
 		value, err = a.databaseJSON(ctx, gitOpsHealthQuery)
 	case "astronomer.extensions.health":
@@ -395,18 +393,6 @@ SELECT jsonb_build_object(
   'decommission_attempts_total', COALESCE((SELECT sum(attempts)::bigint FROM cluster_decommissions), 0)
 )`
 
-const fleetOperationsHealthQuery = `
-SELECT jsonb_build_object(
-  'operations_by_status', COALESCE((SELECT jsonb_object_agg(status, total) FROM (SELECT status, count(*)::bigint total FROM fleet_operations GROUP BY status) grouped), '{}'::jsonb),
-  'operations_by_type', COALESCE((SELECT jsonb_object_agg(operation_type, total) FROM (SELECT operation_type, count(*)::bigint total FROM fleet_operations GROUP BY operation_type) grouped), '{}'::jsonb),
-  'running_operations', (SELECT count(*)::bigint FROM fleet_operations WHERE status = 'running'),
-  'stalled_running_operations', (SELECT count(*)::bigint FROM fleet_operations WHERE status = 'running' AND updated_at < now() - interval '30 minutes'),
-  'maximum_configured_concurrency', COALESCE((SELECT max(max_concurrent)::bigint FROM fleet_operations), 0),
-  'failed_cluster_targets_total', COALESCE((SELECT sum(failed_clusters)::bigint FROM fleet_operations), 0),
-  'targets_by_status', COALESCE((SELECT jsonb_object_agg(status, total) FROM (SELECT status, count(*)::bigint total FROM fleet_operation_targets GROUP BY status) grouped), '{}'::jsonb),
-  'stalled_running_targets', (SELECT count(*)::bigint FROM fleet_operation_targets WHERE status = 'running' AND updated_at < now() - interval '30 minutes')
-)`
-
 const gitOpsHealthQuery = `
 SELECT jsonb_build_object(
   'sources', (SELECT count(*)::bigint FROM gitops_registration_sources),
@@ -487,12 +473,12 @@ SELECT jsonb_build_object(
   'identity', jsonb_build_object('users', (SELECT count(*)::bigint FROM users), 'sso_providers', (SELECT count(*)::bigint FROM sso_configurations), 'dex_connectors', (SELECT count(*)::bigint FROM dex_connectors), 'active_sso_sessions', (SELECT count(*)::bigint FROM sso_sessions WHERE expires_at > now()), 'totp_enrollments', (SELECT count(*)::bigint FROM user_totp_enrollments)),
   'tenancy', jsonb_build_object('cluster_registrations', (SELECT count(*)::bigint FROM clusters), 'projects', (SELECT count(*)::bigint FROM projects), 'quota_plans', (SELECT count(*)::bigint FROM quota_plans)),
   'catalog', jsonb_build_object('repositories', (SELECT count(*)::bigint FROM helm_repositories), 'charts', (SELECT count(*)::bigint FROM helm_charts), 'chart_versions', (SELECT count(*)::bigint FROM helm_chart_versions), 'tools', (SELECT count(*)::bigint FROM cluster_tools)),
-  'operations', jsonb_build_object('catalog', (SELECT count(*)::bigint FROM catalog_operations), 'argocd', (SELECT count(*)::bigint FROM argocd_operations), 'tools', (SELECT count(*)::bigint FROM tool_operations), 'monitoring', (SELECT count(*)::bigint FROM monitoring_operations), 'logging', (SELECT count(*)::bigint FROM logging_operations), 'workloads', (SELECT count(*)::bigint FROM workload_operations)),
+  'operations', jsonb_build_object('catalog', (SELECT count(*)::bigint FROM catalog_operations), 'tools', (SELECT count(*)::bigint FROM tool_operations), 'monitoring', (SELECT count(*)::bigint FROM monitoring_operations), 'logging', (SELECT count(*)::bigint FROM logging_operations), 'workloads', (SELECT count(*)::bigint FROM workload_operations)),
   'observability', jsonb_build_object('monitoring_backends', (SELECT count(*)::bigint FROM monitoring_backends), 'logging_outputs', (SELECT count(*)::bigint FROM logging_outputs), 'logging_pipelines', (SELECT count(*)::bigint FROM logging_pipelines), 'dashboard_widgets', (SELECT count(*)::bigint FROM dashboard_widgets)),
   'delivery', jsonb_build_object('notification_channels', (SELECT count(*)::bigint FROM notification_channels), 'webhook_subscriptions', (SELECT count(*)::bigint FROM webhook_subscriptions), 'siem_forwarders', (SELECT count(*)::bigint FROM siem_forwarders), 'email_messages', (SELECT count(*)::bigint FROM email_messages)),
   'governance', jsonb_build_object('alert_rules', (SELECT count(*)::bigint FROM alert_rules), 'maintenance_windows', (SELECT count(*)::bigint FROM maintenance_windows), 'read_audit_policies', (SELECT count(*)::bigint FROM read_audit_policies), 'compliance_baselines', (SELECT count(*)::bigint FROM compliance_baselines), 'cluster_templates', (SELECT count(*)::bigint FROM cluster_templates), 'network_policy_templates', (SELECT count(*)::bigint FROM network_policy_templates)),
   'integrations', jsonb_build_object('cloud_credentials', (SELECT count(*)::bigint FROM cloud_credentials), 'vault_connections', (SELECT count(*)::bigint FROM vault_connections), 'gitops_sources', (SELECT count(*)::bigint FROM gitops_registration_sources), 'ui_extensions', (SELECT count(*)::bigint FROM ui_extensions)),
-  'reliability', jsonb_build_object('backups', (SELECT count(*)::bigint FROM backups), 'task_outbox', (SELECT count(*)::bigint FROM task_outbox), 'queue_alerts', (SELECT count(*)::bigint FROM control_plane_alerts), 'repair_jobs', (SELECT count(*)::bigint FROM repair_job_states), 'fleet_operations', (SELECT count(*)::bigint FROM fleet_operations)),
+  'reliability', jsonb_build_object('backups', (SELECT count(*)::bigint FROM backups), 'task_outbox', (SELECT count(*)::bigint FROM task_outbox), 'queue_alerts', (SELECT count(*)::bigint FROM control_plane_alerts), 'repair_jobs', (SELECT count(*)::bigint FROM repair_job_states)),
   'charlie', jsonb_build_object('connections', (SELECT count(*)::bigint FROM charlie_connections), 'sessions', (SELECT count(*)::bigint FROM charlie_sessions), 'findings', (SELECT count(*)::bigint FROM charlie_findings))
 )`
 

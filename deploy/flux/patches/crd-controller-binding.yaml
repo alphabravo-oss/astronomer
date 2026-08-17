@@ -1,0 +1,12 @@
+- op: replace
+  path: /subjects
+  value:
+    - kind: ServiceAccount
+      name: kustomize-controller
+      namespace: astronomer-delivery-system
+    - kind: ServiceAccount
+      name: helm-controller
+      namespace: astronomer-delivery-system
+    - kind: ServiceAccount
+      name: source-controller
+      namespace: astronomer-delivery-system

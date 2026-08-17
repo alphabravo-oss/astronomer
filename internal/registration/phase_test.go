@@ -34,18 +34,18 @@ func TestRegistrationWizard_PhaseTransitionsCreatedToReady(t *testing.T) {
 // TestRegistrationWizard_PhaseTransitionsWithBaseline walks the path
 // that exercises the apply worker: connected → provisioning → ready.
 func TestRegistrationWizard_PhaseTransitionsWithBaseline(t *testing.T) {
-	if got, err := Transition(PhaseConnected, EventTemplateApplying, true); err != nil || got != PhaseProvisioning {
-		t.Fatalf("connected+template_applying: got=%s err=%v", got, err)
+	if got, err := Transition(PhaseConnected, EventDeliveryApplying, true); err != nil || got != PhaseProvisioning {
+		t.Fatalf("connected+delivery_applying: got=%s err=%v", got, err)
 	}
-	if got, err := Transition(PhaseProvisioning, EventTemplateApplied, true); err != nil || got != PhaseReady {
-		t.Fatalf("provisioning+template_applied: got=%s err=%v", got, err)
+	if got, err := Transition(PhaseProvisioning, EventDeliveryApplied, true); err != nil || got != PhaseReady {
+		t.Fatalf("provisioning+delivery_applied: got=%s err=%v", got, err)
 	}
 }
 
 // TestRegistrationWizard_FailedStepTransitionsToFailed checks that the
 // terminal failure edge is wired.
 func TestRegistrationWizard_FailedStepTransitionsToFailed(t *testing.T) {
-	got, err := Transition(PhaseProvisioning, EventTemplateFailed, true)
+	got, err := Transition(PhaseProvisioning, EventDeliveryFailed, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -75,8 +75,8 @@ func TestRegistrationWizard_IllegalTransitionsRejected(t *testing.T) {
 		from Phase
 		ev   Event
 	}{
-		{PhaseCreated, EventTemplateApplying},      // template before agent
-		{PhaseAwaitingAgent, EventTemplateApplied}, // template before connect
+		{PhaseCreated, EventDeliveryApplying},      // template before agent
+		{PhaseAwaitingAgent, EventDeliveryApplied}, // template before connect
 		{PhaseReady, EventConfirm},                 // re-confirming a ready cluster
 		{PhaseFailed, EventConfirm},                // re-confirming a failed cluster
 		{PhaseReady, EventCancel},                  // cancel from terminal
@@ -93,7 +93,7 @@ func TestRegistrationWizard_IllegalTransitionsRejected(t *testing.T) {
 // be re-invoked.
 // TestRegistrationWizard_SelfHealFromFailed covers the sprint-086
 // recovery edges out of `failed`. The orchestrator's auto-retry loop
-// can fire EventTemplateApplying or EventTemplateApplied directly
+// can fire EventDeliveryApplying or EventDeliveryApplied directly
 // (without an explicit operator-driven Retry first); before the fix
 // these self-recovery signals were silently rejected and the cluster
 // stayed pinned on `failed` even after the tool eventually installed.
@@ -102,8 +102,8 @@ func TestRegistrationWizard_SelfHealFromFailed(t *testing.T) {
 		ev   Event
 		want Phase
 	}{
-		{EventTemplateApplying, PhaseProvisioning},
-		{EventTemplateApplied, PhaseReady},
+		{EventDeliveryApplying, PhaseProvisioning},
+		{EventDeliveryApplied, PhaseReady},
 		{EventAgentConnected, PhaseConnected},
 	}
 	for _, c := range cases {
@@ -185,19 +185,16 @@ func TestRegistrationWizard_IsTerminal(t *testing.T) {
 // copy consistent between wizard page 3 and the Provisioning tab.
 func TestRegistrationWizard_StepLabel(t *testing.T) {
 	cases := map[string]string{
-		"cluster_created":                    "Cluster created",
-		"manifest_generated":                 "Manifest generated",
-		"agent_connected":                    "Agent connected",
-		"template_applying":                  "Applying Platform Baseline",
-		"template_applied":                   "Platform Baseline applied",
-		"template_failed":                    "Platform Baseline failed",
-		"argocd_registration_repaired":       "ArgoCD registration repaired",
-		"argocd_registration_repair_blocked": "ArgoCD registration repair blocked",
-		"argocd_registration_failed":         "ArgoCD registration failed",
-		"no_provisioning":                    "Skipped Platform Baseline (operator opted out)",
-		"tool_installing:trivy-operator":     "Installing tool: trivy-operator",
-		"tool_installed:fluent-bit":          "Installed tool: fluent-bit",
-		"tool_failed:cert-manager":           "Failed to install tool: cert-manager",
+		"cluster_created":                "Cluster created",
+		"manifest_generated":             "Manifest generated",
+		"agent_connected":                "Agent connected",
+		"delivery_applying":              "Applying platform components through Flux",
+		"delivery_applied":               "Platform component deliveries are ready",
+		"delivery_failed":                "Platform component delivery failed",
+		"no_provisioning":                "Skipped Platform Baseline (operator opted out)",
+		"tool_installing:trivy-operator": "Installing tool: trivy-operator",
+		"tool_installed:fluent-bit":      "Installed tool: fluent-bit",
+		"tool_failed:cert-manager":       "Failed to install tool: cert-manager",
 	}
 	for k, want := range cases {
 		if got := StepLabel(k); got != want {
@@ -211,16 +208,16 @@ func TestRegistrationWizard_StepLabel(t *testing.T) {
 // the apply actually runs, and the operator watches a "ready" cluster that is
 // mid-provision.
 func TestPhaseReadyAcceptsLaterTemplateApply(t *testing.T) {
-	next, err := Transition(PhaseReady, EventTemplateApplying, false)
+	next, err := Transition(PhaseReady, EventDeliveryApplying, false)
 	if err != nil {
-		t.Fatalf("ready + template_applying: %v", err)
+		t.Fatalf("ready + delivery_applying: %v", err)
 	}
 	if next != PhaseProvisioning {
 		t.Fatalf("phase = %s, want %s", next, PhaseProvisioning)
 	}
 	// ...and on through to ready again.
-	if next, err = Transition(next, EventTemplateApplied, false); err != nil || next != PhaseReady {
-		t.Fatalf("provisioning + template_applied = (%s, %v), want ready", next, err)
+	if next, err = Transition(next, EventDeliveryApplied, false); err != nil || next != PhaseReady {
+		t.Fatalf("provisioning + delivery_applied = (%s, %v), want ready", next, err)
 	}
 	// Ready is still not in-flight: cancel stays refused.
 	if _, err := Transition(PhaseReady, EventCancel, false); err == nil {

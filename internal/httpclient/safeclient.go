@@ -2,7 +2,9 @@ package httpclient
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"syscall"
@@ -18,10 +20,13 @@ type ClientOptions struct {
 	TLSConfig *tls.Config
 	// AllowPrivate permits RFC 1918 and CGNAT destinations while still
 	// blocking loopback, link-local (including cloud metadata 169.254.169.254),
-	// unspecified, and multicast. Use for in-cluster Prometheus, Argo CD, and
+	// unspecified, and multicast. Use for in-cluster Prometheus, delivery, and
 	// Vault only — never for operator-supplied public webhook/catalog URLs.
 	// Prefer DisableGuardForTest only in unit tests that dial httptest.
 	AllowPrivate bool
+	// MaxResponseBytes bounds every response body, including chunked responses.
+	// Zero leaves body sizing to the caller.
+	MaxResponseBytes int64
 }
 
 // SafeClient returns an HTTP client for fetching operator/DB-supplied URLs
@@ -78,7 +83,7 @@ func SafeClientWithTLS(timeout time.Duration, tlsConfig *tls.Config) *http.Clien
 }
 
 // SafeClientAllowPrivate is SafeClient with AllowPrivate dial policy for
-// in-cluster backends (Prometheus, Argo CD, Vault). Loopback, link-local, and
+// in-cluster backends (Prometheus, delivery controllers, Vault). Loopback, link-local, and
 // cloud metadata remain blocked — see ClientOptions.AllowPrivate.
 func SafeClientAllowPrivate(timeout time.Duration) *http.Client {
 	return NewSafeClient(ClientOptions{Timeout: timeout, AllowPrivate: true})
@@ -95,10 +100,60 @@ func NewSafeClient(opts ClientOptions) *http.Client {
 	if timeout <= 0 {
 		timeout = DefaultExternalTimeout
 	}
+	var transport http.RoundTripper = safeTransport(opts.TLSConfig, opts.AllowPrivate)
+	if opts.MaxResponseBytes > 0 {
+		transport = &responseLimitTransport{base: transport, maximum: opts.MaxResponseBytes}
+	}
 	return &http.Client{
 		Timeout:   timeout,
-		Transport: safeTransport(opts.TLSConfig, opts.AllowPrivate),
+		Transport: transport,
 	}
+}
+
+// SafeClientWithLimit is the default public-network client with a hard body
+// limit enforced before a protocol decoder can allocate attacker-sized input.
+func SafeClientWithLimit(timeout time.Duration, maximum int64) *http.Client {
+	return NewSafeClient(ClientOptions{Timeout: timeout, MaxResponseBytes: maximum})
+}
+
+var errResponseBodyLimit = errors.New("external response exceeds configured size limit")
+
+type responseLimitTransport struct {
+	base    http.RoundTripper
+	maximum int64
+}
+
+func (t *responseLimitTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	response, err := t.base.RoundTrip(request)
+	if err != nil {
+		return nil, err
+	}
+	if response.ContentLength > t.maximum {
+		_ = response.Body.Close()
+		return nil, errResponseBodyLimit
+	}
+	response.Body = &limitedResponseBody{ReadCloser: response.Body, remaining: t.maximum + 1}
+	return response, nil
+}
+
+type limitedResponseBody struct {
+	io.ReadCloser
+	remaining int64
+}
+
+func (b *limitedResponseBody) Read(buffer []byte) (int, error) {
+	if b.remaining <= 0 {
+		return 0, errResponseBodyLimit
+	}
+	if int64(len(buffer)) > b.remaining {
+		buffer = buffer[:b.remaining]
+	}
+	read, err := b.ReadCloser.Read(buffer)
+	b.remaining -= int64(read)
+	if b.remaining <= 0 && read > 0 {
+		return read, errResponseBodyLimit
+	}
+	return read, err
 }
 
 // guardDialControl returns a dial Control hook that enforces isDialAllowed

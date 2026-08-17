@@ -75,6 +75,13 @@ func (e *APIError) Error() string {
 // middleware (shipped this session for the cluster-delete bug) now
 // makes either form work.
 func (c *Client) Do(ctx context.Context, method, path string, body any, out any) error {
+	return c.DoWithHeaders(ctx, method, path, body, nil, out)
+}
+
+// DoWithHeaders is Do with a small caller-supplied header set. It is used by
+// mutation commands that must provide an idempotency key while retaining the
+// shared authentication, timeout, and error-envelope behavior.
+func (c *Client) DoWithHeaders(ctx context.Context, method, path string, body any, headers map[string]string, out any) error {
 	var bodyReader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -92,6 +99,9 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, out any)
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Accept", "application/json")
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}

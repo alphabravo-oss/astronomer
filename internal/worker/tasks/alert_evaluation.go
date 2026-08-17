@@ -221,8 +221,8 @@ func dispatchAlertNotifications(ctx context.Context, rule sqlc.AlertRule, event 
 }
 
 // alertEvalSweepPageSize bounds each ListClusters/ListAlertRules/ListAlertSilences
-// batch when the evaluator pages a full fleet. Mirrors
-// argoCDAutoRegisterSweepPageSize so a fleet/rule set larger than one page is
+// batch when the evaluator pages all clusters so an installation or rule set
+// larger than one page is
 // fully evaluated instead of silently truncated at the first 500 rows.
 const alertEvalSweepPageSize int32 = 500
 
@@ -582,7 +582,7 @@ const (
 // round-trips end-to-end, blowing the 60s tick at fleet scale, and a single
 // slow/disconnected backend stalled (or, on error, aborted) the whole tick.
 //
-// F6: fan out at fleetSweepConcurrency, time-box each cluster, and
+// Fan out at clusterSweepConcurrency, time-box each cluster, and
 // skip-with-log a cluster whose evaluation errors or times out — its events
 // converge on the next tick — rather than failing the sweep. Results are
 // written into a pre-sized slice by index (each goroutine owns its slot, no
@@ -600,7 +600,7 @@ func evaluateGlobalRuleClusters(
 	ok := make([]bool, len(clusters))
 
 	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(fleetSweepConcurrency)
+	g.SetLimit(clusterSweepConcurrency)
 	for i, cluster := range clusters {
 		i, cluster := i, cluster
 		if gctx.Err() != nil {

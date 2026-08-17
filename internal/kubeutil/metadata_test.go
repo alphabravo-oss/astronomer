@@ -15,8 +15,8 @@ func TestNamespacedNameFromMeta(t *testing.T) {
 }
 
 func TestListGVK(t *testing.T) {
-	list := ListGVK(ArgoApplicationSetGVK)
-	if list.Group != "argoproj.io" || list.Version != "v1alpha1" || list.Kind != "ApplicationSetList" {
+	list := ListGVK(ConfigMapGVK)
+	if list.Group != "" || list.Version != "v1" || list.Kind != "ConfigMapList" {
 		t.Fatalf("unexpected list GVK: %#v", list)
 	}
 }

@@ -5,13 +5,13 @@
 </p>
 
 <p align="center">
-  Adopt the clusters you already run. Govern them with policy. Deploy through Argo CD. Operate everything from one control plane.
+  Adopt the clusters you already run. Govern them with policy. Deliver through Flux. Operate everything from one control plane.
 </p>
 
 <p align="center">
   <a href="#license"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue" alt="License: AGPL-3.0"></a>
   <a href="#platform-capabilities"><img src="https://img.shields.io/badge/Kubernetes-Multi--Cluster-326CE5" alt="Kubernetes multi-cluster"></a>
-  <a href="#gitops-delivery"><img src="https://img.shields.io/badge/GitOps-Argo%20CD-EF7B4D" alt="Argo CD GitOps"></a>
+  <a href="#gitops-delivery"><img src="https://img.shields.io/badge/GitOps-Flux-5468FF" alt="Flux-native delivery"></a>
   <a href="#declarative-management"><img src="https://img.shields.io/badge/API-CRD%20Native-5B5FC7" alt="CRD native API"></a>
   <a href="#enterprise-foundation"><img src="https://img.shields.io/badge/Built%20For-Day--2%20Operations-111827" alt="Day-2 operations"></a>
 </p>
@@ -28,9 +28,9 @@ Astronomer is intentionally day-2 focused:
 - No machine drivers.
 - No forced infrastructure workflow.
 - No inbound access required to managed clusters.
-- Argo CD, not Fleet, is the deployment engine.
+- Local, release-pinned Flux controllers are the downstream reconciliation engine.
 - Postgres stores product state, audit history, identity, credentials, and durable operations.
-- Kubernetes, CRDs, and Argo CD handle declarative desired state and reconciliation.
+- PostgreSQL owns product intent and rollout history; Kubernetes and Flux own downstream convergence.
 
 ## Product Promise
 
@@ -39,7 +39,7 @@ Astronomer gives platform teams one trusted operating layer for every cluster af
 | Outcome | What Astronomer Delivers |
 | --- | --- |
 | Adopt clusters safely | Rancher-style cluster registration, agent install manifests, privilege profiles, registration timelines, and health state. |
-| Standardize every cluster | Built-in platform baselines, Argo CD ApplicationSets, curated tools, policy bundles, and consistent labels across the fleet. |
+| Standardize every cluster | Signed platform bundles, immutable source revisions, rollout policies, curated tools, and consistent labels across the managed estate. |
 | Operate with confidence | Cluster explorer, workload actions, logs, shell, service proxy, health summaries, events, and live resource views. |
 | Govern at scale | Projects, RBAC, SSO/OIDC, TOTP, API tokens, group mappings, audit logs, compliance baselines, and scoped permissions. |
 | Secure the control plane | Secret redaction, encrypted credentials, token hashing, NetworkPolicy, TLS posture, least-privilege agents, and high-risk route controls. |
@@ -51,9 +51,13 @@ Astronomer gives platform teams one trusted operating layer for every cluster af
 
 Astronomer starts where cluster provisioning ends. Teams keep the infrastructure workflow they already trust, then adopt clusters into Astronomer for governance, visibility, deployment, and day-2 operations.
 
-### Argo-Native Delivery
+### Flux-Native Delivery
 
-Astronomer uses the built-in Argo CD installation as the fleet deployment layer. New clusters can be registered into Argo CD automatically, labeled with Astronomer-owned targeting metadata, and managed through ApplicationSets for baseline components, tools, and GitOps-driven workloads.
+Astronomer owns delivery sources, immutable bundles, placement snapshots,
+approvals, rollout state, audit history, and normalized health. Each managed
+cluster runs the exact signed Flux distribution shipped with the Astronomer
+release. The outbound agent materializes a closed set of project-scoped Flux
+objects locally, so no central controller needs a remote cluster credential.
 
 ### Secure Agent Connectivity
 
@@ -65,7 +69,7 @@ Astronomer treats policy, RBAC, audit, identity, and secret handling as core pro
 
 ### Dense Operator Experience
 
-The UI is designed for people who live in Kubernetes every day: fast navigation, deep resource views, cluster context, workload controls, Argo CD state, compliance posture, and operational settings without a marketing landing page between the user and the work.
+The UI is designed for people who live in Kubernetes every day: fast navigation, deep resource views, cluster context, workload controls, delivery rollouts, compliance posture, and operational settings without a marketing landing page between the user and the work.
 
 ## Platform Capabilities
 
@@ -81,12 +85,12 @@ The UI is designed for people who live in Kubernetes every day: fast navigation,
 
 ### GitOps Delivery
 
-- Built-in Argo CD integration for applications, projects, repositories, syncs, health, resources, and operational state.
-- Automatic Argo CD managed-cluster registration for adopted clusters.
-- Argo CD cluster Secret labeling contract for deterministic ApplicationSet targeting.
-- Platform baseline fan-out through Argo CD ApplicationSets.
-- Sync-wave conventions for namespaces, CRDs, operators, policies, workloads, and health checks.
-- Drift, orphan, stale resource, and ownership visibility for Argo-managed components.
+- Project-scoped delivery sources with write-only credentials and explicit verification policy.
+- Immutable bundle versions for Helm and Kustomize renderers with digest-pinned revisions.
+- Label and group selectors resolved centrally into frozen, reviewable placement snapshots.
+- Rolling, canary, blue/green, and all-at-once strategies with approval, maintenance-window, failure-budget, retry, and rollback controls.
+- Agent-managed, release-pinned Flux source, Kustomize, and Helm controllers in every adopted cluster.
+- Drift, orphan, stale-status, event, and ownership visibility normalized from local Flux conditions and inventory.
 - GitOps registration sources for declarative cluster onboarding.
 - Helm catalog, OCI catalog, curated tools, and baseline component installation paths.
 
@@ -97,10 +101,10 @@ The UI is designed for people who live in Kubernetes every day: fast navigation,
 - TOTP enrollment, recovery codes, API tokens, token revocation, password reset, and account security workflows.
 - Project and cluster-scoped RBAC with permission-aware UI behavior.
 - Agent privilege profiles: `viewer`, `operator`, `namespace-viewer`, `namespace-operator`, `custom`, and `admin`.
-- Audit logging for material reads, writes, secret access, service proxy mutations, Argo operations, RBAC changes, and admin actions.
+- Audit logging for material reads, writes, secret access, service proxy mutations, delivery operations, RBAC changes, and admin actions.
 - Read-audit policy surfaces for sensitive access monitoring.
 - Compliance baseline workflows for common enterprise profiles.
-- Secret-handling policy covering hashing, encryption, external references, redaction, support bundles, CRDs, and Argo resources.
+- Secret-handling policy covering hashing, encryption, external references, redaction, support bundles, CRDs, and delivery resources.
 - Vault connection surfaces for externally managed secret material.
 - Network policy, pod security, image vulnerability, CIS, registry, and service mesh posture surfaces.
 
@@ -122,12 +126,9 @@ Astronomer exposes Kubernetes-native management APIs under `management.astronome
 
 | CRD | Purpose |
 | --- | --- |
-| `Cluster` | Declarative adopted-cluster metadata, project refs, Argo adoption intent, baseline profile, agent settings, and ownership metadata. |
+| `Cluster` | Declarative adopted-cluster metadata, project refs, baseline profile, agent settings, and ownership metadata. |
 | `Project` | Project policy intent, resource quotas, network-policy posture, pod-security posture, and cluster membership. |
-| `ClusterBaseline` | Desired baseline profile, target selectors, bundle list, version pins, sync policy, and Argo CD fan-out. |
-| `ComponentBundle` | Reusable component definitions, source references, default namespaces, values schema references, health checks, and upgrade policy. |
 | `AgentProfile` | Agent privilege, namespace scope, install metadata, capability claims, and RBAC posture. |
-| `GitOpsTarget` | Declarative ApplicationSet generation, cluster selectors, project selectors, bundle references, parameters, sync windows, and status. |
 
 The CRD layer is intentionally not a database mirror. It is a Kubernetes-native intent and reconciliation surface for operators who want `kubectl apply` workflows, GitOps-managed platform state, and status conditions without losing the product history and auditability stored in Postgres.
 
@@ -137,12 +138,12 @@ Astronomer is designed around a clean split of responsibility:
 
 - Postgres is the durable product database for users, sessions, RBAC, audit history, projects, cluster inventory, credentials, and operation records.
 - Redis/asynq is the queue and scheduler layer, not the durable source of operator intent.
-- Kubernetes and Argo CD own declarative deployment convergence.
+- Local Kubernetes APIs and Flux controllers own downstream deployment convergence.
 - Target clusters remain the source of truth for live Kubernetes objects.
 - CRDs expose operator intent where Kubernetes-native workflows are the right fit.
 - Agents execute cluster-local work through authenticated, scoped, audited channels.
 
-That split matters. It lets Astronomer deliver enterprise UX, history, identity, and audit controls without pretending that Postgres should replace etcd or that Argo CD should become an account database.
+That split matters. It lets Astronomer deliver enterprise UX, history, identity, and audit controls without pretending that Postgres should replace etcd or that Flux should become an account database or placement engine.
 
 ## Deployment Posture
 
@@ -200,7 +201,7 @@ helm upgrade --install ngf \
 
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 0.3.9 \
+  --version 1.0.0 \
   --namespace astronomer \
   --create-namespace \
   --set-file secrets.secretKey=./jwt-key \
@@ -210,12 +211,12 @@ helm upgrade --install astronomer \
 For production, layer the production values file and provide external Postgres, external Redis, TLS, bootstrap credentials, encryption keys, and backup settings:
 
 ```bash
-git clone --branch v0.3.9 --depth 1 \
+git clone --branch v1.0.0 --depth 1 \
   https://github.com/alphabravo-oss/astronomer.git astronomer-release
 
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 0.3.9 \
+  --version 1.0.0 \
   --namespace astronomer \
   --create-namespace \
   -f astronomer-release/deploy/chart/values-production.yaml \
@@ -238,8 +239,8 @@ Typical first workflows:
 2. Configure external identity, SSO providers, group mappings, and RBAC.
 3. Register an existing cluster and apply the generated agent manifest.
 4. Choose the right agent privilege profile for the cluster.
-5. Enable Argo CD adoption for baseline and GitOps delivery.
-6. Apply a platform baseline or declarative `ClusterBaseline`.
+5. Confirm the signed Flux distribution and built-in platform bundles become healthy.
+6. Create a delivery source, publish an immutable bundle version, preview a target, and start a rollout.
 7. Use the cluster explorer, workload actions, logs, shell, tools, security, monitoring, and audit surfaces for day-2 operations.
 
 ## Repository Map

@@ -13,7 +13,7 @@ func TestClusterAnnotationsWithAdoptionPolicy(t *testing.T) {
 		Annotations: map[string]string{"existing": "kept"},
 		AdoptionPolicy: crd.ClusterAdoptionPolicySpec{
 			Mode:                   "auto",
-			AllowedManagementModes: []string{"helm", "", "argocd"},
+			AllowedManagementModes: []string{"helm", "", "flux"},
 		},
 	}, nil)
 
@@ -23,7 +23,7 @@ func TestClusterAnnotationsWithAdoptionPolicy(t *testing.T) {
 	if got["management.astronomer.io/adoption-policy-mode"] != "auto" {
 		t.Fatalf("adoption policy mode = %q", got["management.astronomer.io/adoption-policy-mode"])
 	}
-	if got["management.astronomer.io/allowed-management-modes"] != "argocd,helm" {
+	if got["management.astronomer.io/allowed-management-modes"] != "flux,helm" {
 		t.Fatalf("allowed management modes = %q", got["management.astronomer.io/allowed-management-modes"])
 	}
 }

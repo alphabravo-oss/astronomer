@@ -1,484 +1,266 @@
-# Astronomer upgrade + rollback runbook
+# Astronomer v1 upgrade and rollback
 
-This document is the operator-facing procedure for upgrading an Astronomer
-install and rolling one back if needed. It is the counterpart to
-[`management-plane-dr-runbook.md`](./management-plane-dr-runbook.md) (when
-the database itself is corrupt) and
-[`secret-rotation-runbook.md`](./secret-rotation-runbook.md) (when the keys
-are compromised). Use this one when the install is healthy but you want to
-move to a newer chart or roll back from a release that misbehaves.
+This runbook upgrades an existing, healthy Astronomer v1 Helm release to one
+exact tagged v1 release. The supported path is ordinary Helm ownership of the
+dependency-free management-plane chart. Flux controllers remain agent-managed
+inside managed clusters and are unaffected by a management-plane chart upgrade.
 
-It assumes the reader is comfortable with `kubectl`, `helm`, and the
-shape of the chart (`deploy/chart/`).
+## Boundaries
 
----
+- A pre-v1 installation is not upgradeable to v1. Install v1 with a new Helm
+  release and an empty database, validate it, and retain the old installation
+  and backup for rollback/audit.
+- Upgrade only between stable v1 tags. Use `helm rollback` for a rollback; do
+  not pass an older tag to the upgrade helper.
+- Do not use mutable image tags, skip hooks, disable signature checks, or bypass
+  the database preflight.
+- An application rollback does not automatically reverse a database change.
+  Review release notes and restore the matching database snapshot when a
+  release declares that rollback requires it.
 
-## TL;DR
-
-```bash
-# 1) Back up, resolve the exact OCI chart, and run a server-side dry run.
-./scripts/upgrade-release.sh v0.3.8
-
-# 2) After reviewing the private backup/dry-run directory, upgrade atomically.
-./scripts/upgrade-release.sh --yes v0.3.8
-
-# 3) Verify (see "Post-upgrade verification")
-curl -s $URL/health/                              # 200
-curl -s $URL/readyz                               # 200
-curl -s -H "Authorization: Bearer $TOKEN" $URL/api/v1/platform/health-summary/
-
-# Rollback if needed
-helm history astronomer -n astronomer
-helm rollback astronomer <PREVIOUS_REV> -n astronomer
-```
-
-The helper follows the same exact-version pattern used by Rancher upgrades. It
-downloads the GitHub release manifest and checksum file, verifies the chart's
-GitHub provenance attestation and every image's keyless Sigstore signature,
-then proves the OCI chart is byte-for-byte the release asset. It captures
-Helm values/history/manifests and Secret recovery material with mode `0600`,
-backs up bundled Postgres (or requires confirmation of an external backup),
-uses `--reset-then-reuse-values` to merge new chart defaults with live operator
-overrides, replaces local/development first-party image pins with exact
-`repository@sha256:digest` identities, and runs Helm with
-`--atomic --cleanup-on-fail`. It never follows the mutable `latest` channel.
-
----
-
-## When to use this runbook
-
-Use this procedure when:
-
-- Bumping image tags to a new SHA / version
-- Rolling out a chart change (template edits, new values, new resources)
-- Recovering from a failed `helm upgrade` (rollback section)
-
-Do **not** use this runbook for:
-
-- DB-level corruption → see
-  [`management-plane-dr-runbook.md`](./management-plane-dr-runbook.md)
-- Key rotation → see
-  [`secret-rotation-runbook.md`](./secret-rotation-runbook.md)
-- An emergency that needs a full plane redeploy → that's a re-install,
-  not an upgrade
-
----
-
-## Pre-upgrade checklist
-
-Run these checks before invoking `helm upgrade`. The chart's preflight
-Job will catch most of them at install time, but spotting failures here
-saves the round trip.
-
-### 1. Postgres + schema state
-
-Production installs use **external** Postgres (`postgres.bundled.enabled=false`
-in `values-production.yaml`). Do **not** assume a pod named
-`astronomer-postgres-0` exists — that StatefulSet is dev/k3d only.
+## Fast path
 
 ```bash
-# Backups: confirm last good nightly pg_dump landed
-kubectl -n astronomer logs -l app.kubernetes.io/component=management-backup \
-  --tail=200 | grep -i 'completed\|error' | tail -10
+# Back up and render the exact signed release without changing the cluster.
+./scripts/upgrade-release.sh v1.0.1
 
-# Schema state: should be clean (dirty=false).
-# Prefer the server's DATABASE_URL (works for external Postgres and bundled).
-DB_URL="$(kubectl -n astronomer get secret astronomer-postgres-dsn \
-  -o jsonpath='{.data.dsn}' 2>/dev/null | base64 -d)"
-# Fallback when the chart still manages a literal secret key name:
-if [[ -z "$DB_URL" ]]; then
-  DB_URL="$(kubectl -n astronomer get deploy astronomer-server \
-    -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="DATABASE_URL")].value}')"
-fi
+# Review the reported private backup directory, then perform the upgrade.
+./scripts/upgrade-release.sh --yes v1.0.1
 
-# External Postgres (production): run psql from a throwaway pod that can
-# reach the managed DB, OR use your provider's SQL console.
-kubectl -n astronomer run psql-check --rm -it --restart=Never \
-  --image=postgres:16-alpine -- \
-  psql "$DB_URL" -c 'SELECT version, dirty FROM schema_migrations;'
-
-# Bundled Postgres only (dev / k3d — skip this on production installs):
-# kubectl -n astronomer exec astronomer-postgres-0 -- \
-#   psql -U astronomer -d astronomer -c \
-#   'SELECT version, dirty FROM schema_migrations;'
+# Verify externally.
+curl --fail https://astronomer.example.com/health/
+curl --fail https://astronomer.example.com/readyz
 ```
 
-If `dirty=true`, **stop**. A previous migration crashed midway and the
-schema is in an indeterminate state. Recover with:
+The first command is intentionally non-mutating. It verifies release assets and
+images, captures recovery material, backs up bundled PostgreSQL (or requires
+external-backup confirmation), and runs a server-side Helm dry run.
+
+## What the helper enforces
+
+The helper fails closed unless all of these are true:
+
+1. the target and installed charts are exact stable v1 semantic versions and
+   the target is newer;
+2. the Helm release is deployed and all selected deployments are observed,
+   updated, and available;
+3. the configured minimum number of schedulable nodes are Ready and every
+   selected PodDisruptionBudget permits at least one disruption;
+4. the backup filesystem has at least `MIN_BACKUP_FREE_KIB` free;
+5. the release chart checksum and GitHub provenance attestation verify;
+6. all six first-party image references are digest-pinned and their keyless
+   signatures match the tagged release workflow identity;
+7. the OCI chart is byte-for-byte identical to the verified release asset;
+8. bundled PostgreSQL has exactly one clean migration row at version 1, or the
+   operator confirms an external v1 schema and backup; and
+9. Helm's server-side dry run accepts the preserved values and v1 preflight.
+
+The live operation uses:
+
+```text
+helm upgrade --reset-then-reuse-values --atomic --cleanup-on-fail \
+  --wait --wait-for-jobs --timeout <TIMEOUT>
+```
+
+After Helm succeeds, the helper verifies the rendered image digests, waits for
+the deployments it observed before the upgrade, and calls `/readyz` through a
+temporary local port-forward. If post-upgrade verification fails, it performs a
+bounded Helm rollback to the captured previous revision.
+
+## Prerequisites
+
+Install and authenticate:
+
+- Helm with `--reset-then-reuse-values` support;
+- `kubectl` with read access to the release and its Secrets, plus the normal
+  Helm upgrade permissions;
+- GitHub CLI authenticated to read the release and verify attestations;
+- Cosign configured for outbound transparency-log and certificate checks; and
+- `curl`, `jq`, `sha256sum`, `awk`, `sort`, `cmp`, `df`, and `grep`.
+
+Confirm the release compatibility contract covers the management Kubernetes
+minor, agent protocol, and downstream Flux version. Resolve any compatibility
+warning before the upgrade.
+
+The supported Gateway stack is Gateway API v1.5.1 paired with NGINX Gateway
+Fabric 2.6.0. The chart preflight verifies CRD and GatewayClass existence; it does not
+     validate controller-owned status conditions. Confirm the GatewayClass is
+Accepted and supports the installed bundle before upgrading.
+
+## Capacity and disk
+
+The helper requires at least one schedulable Ready node by default. Set a
+higher enterprise floor when the release spans failure domains:
 
 ```bash
-# Inspect the offending migration's down/up SQL
-ls internal/db/migrations/<NN>_*.{up,down}.sql
-
-# Decide: roll forward (re-run the up) or roll back (run the down)
-# Then mark clean (DATABASE_URL from the same secret/env as above):
-kubectl -n astronomer run migrate --rm -it \
-  --image=astronomer-go-migrate:<TAG> --restart=Never -- \
-  migrate -database "$DB_URL" -path /migrations force <NN-1>
+MIN_READY_NODES=3 ./scripts/upgrade-release.sh v1.0.1
 ```
 
-### 2. In-flight tasks
+It also refuses to begin when an Astronomer deployment is not fully available
+or a selected PodDisruptionBudget reports zero allowed disruptions. Fix the
+underlying capacity or health issue; do not delete the PDB to make the gate
+pass.
 
-There is no shell-side asynq CLI in the worker image. Use the real signals:
+The backup reserve defaults to 1 GiB of free space. For bundled PostgreSQL the
+helper adds the live database size to that reserve before running `pg_dump`:
 
 ```bash
-# Prometheus metrics on the worker (port 9090). >100 pending is a yellow
-# flag — the upgrade will work but in-flight visibility dips mid-roll.
-kubectl -n astronomer port-forward deploy/astronomer-worker 9090:9090 &
-curl -s http://127.0.0.1:9090/metrics | grep '^astronomer_worker_queue_depth'
-# Look at state="pending" / state="active" / state="retry".
-
-# Or scrape the support bundle (includes asynq-queues.json):
-curl -sH "Authorization: Bearer $ADMIN_TOKEN" $URL/api/v1/support-bundle/ \
-  -o /tmp/bundle.zip
-unzip -p /tmp/bundle.zip asynq-queues.json | jq '.'
+MIN_BACKUP_FREE_KIB=4194304 \
+BACKUP_ROOT=/var/lib/astronomer-upgrade-backups \
+./scripts/upgrade-release.sh v1.0.1
 ```
 
-See [`metrics-v1.md`](./metrics-v1.md) for the full
-`astronomer_worker_queue_depth{...,state=...}` series.
+Choose a private filesystem large enough for the chart assets, manifests,
+Secrets, and a full custom-format database dump. The helper uses `umask 077`.
+It never automatically deletes recovery backups. Move verified old backup
+directories to your retention system after the release is accepted so the
+management host cannot fill its disk.
 
-### 3. Agent fleet versions
+Useful checks:
 
 ```bash
-# When server bumps a major version, every agent must be re-rolled too
-# (the wire protocol may have changed). Confirm current agent versions
-# against the same Postgres the management plane uses (see §1 for DB_URL).
-kubectl -n astronomer run psql-agents --rm -it --restart=Never \
-  --image=postgres:16-alpine -- \
-  psql "$DB_URL" -c \
-  "SELECT cluster_id, agent_version, last_ping FROM agent_connections WHERE status='connected';"
-
-# Bundled Postgres only (dev / k3d):
-# kubectl -n astronomer exec astronomer-postgres-0 -- \
-#   psql -U astronomer -d astronomer -c \
-#   "SELECT cluster_id, agent_version, last_ping FROM agent_connections WHERE status='connected';"
+df -h /var/lib/astronomer-upgrade-backups
+kubectl get nodes
+kubectl -n astronomer get deploy,pdb,pods
+kubectl -n astronomer top pods  # when Metrics Server is available
 ```
 
-### 4. Disk + node capacity
+## Database safety
+
+For bundled PostgreSQL, the helper queries `schema_migrations`, requires the
+exact clean v1 state, then captures a custom-format `pg_dump`.
+
+For managed PostgreSQL, create and verify a provider snapshot or PITR restore
+point. Independently query:
+
+```sql
+SELECT count(*), max(version), bool_or(dirty)
+FROM schema_migrations;
+```
+
+The expected result is one row, version `1`, dirty `false`. Then invoke:
 
 ```bash
-# Helm upgrade rolls deployments one pod at a time. Need ≥1 pod-worth
-# of free CPU+RAM on each scheduling target.
-kubectl top nodes
-kubectl -n astronomer get pdb
+EXTERNAL_DB_BACKUP_CONFIRMED=1 \
+EXTERNAL_DB_V1_SCHEMA_CONFIRMED=1 \
+./scripts/upgrade-release.sh v1.0.1
 ```
 
-### 5. Capture current values
+These confirmations do not disable validation. During the real upgrade, the
+chart's read-only preflight hook connects using the configured Secret and
+independently rejects dirty, unknown, pre-v1, or malformed schemas. It never
+deletes, reformats, or upgrades an old database.
+
+## Preview and approval
+
+Run without `--yes`:
 
 ```bash
-# The release helper captures both computed and user-supplied values with a
-# private umask. If inspecting manually, do not put literal Secret values in a
-# world-readable temporary file.
-umask 077
-helm get values astronomer -n astronomer --all > ./astronomer-values-before.yaml
-
-# Print which image tags are live:
-kubectl -n astronomer get deploy -o jsonpath='{range .items[*]}{.metadata.name}={.spec.template.spec.containers[0].image}{"\n"}{end}'
+./scripts/upgrade-release.sh v1.0.1
 ```
 
----
+Review at least:
 
-## The upgrade itself
+- `target-chart.yaml` — exact chart metadata;
+- `values-user.yaml` and `values-all.yaml` — retained operator values;
+- `manifest-before.yaml` and `dry-run.yaml` — resource changes;
+- `history.json` — rollback revision;
+- `RELEASE_IMAGES` and `SHA256SUMS` — immutable release identities; and
+- database backup/snapshot evidence.
 
-### Step 1 — back up and preview
+Treat the directory as Secret material. Do not attach it to tickets or chat.
+Confirm the dry-run contains no mutable first-party image references and no
+unexpected cluster-wide RBAC or CRD changes.
+
+Use `--dry-run-only` in automation when a successful preview should exit zero
+without displaying the interactive handoff message:
 
 ```bash
-./scripts/upgrade-release.sh v0.3.8
+./scripts/upgrade-release.sh --dry-run-only v1.0.1
 ```
 
-This resolves the exact OCI chart, captures state and recovery material, and
-writes the server-side dry-run render into the reported private backup
-directory. Review `target-chart.yaml`, `history.yaml`, and `dry-run.yaml` there.
-
-Read every change. Common surprises:
-
-- **New required values** — production preflight may add gates (e.g.
-  `tls.source` cannot be `none`, `postgres.external.dsn` must use TLS).
-  The render fails with a clear list of what's missing.
-- **CRD changes** — new chart versions sometimes add new CRDs as
-  dependencies. Confirm the cluster has them or install separately.
-
-### Step 2 — run the upgrade
+## Execute
 
 ```bash
-./scripts/upgrade-release.sh --yes v0.3.8
+./scripts/upgrade-release.sh --yes v1.0.1
 ```
 
-What happens:
+Do not run two release operations concurrently. Watch the command until it
+prints the final exact tag and backup directory. Helm waits for the preflight,
+migration, workloads, and jobs; its atomic mode restores the prior Helm revision
+if the upgrade itself fails.
 
-1. **Preflight prerequisites** are replaced first (`pre-upgrade` hooks, weight
-   `-10`). The dedicated ServiceAccount, Role/ClusterRole, bindings, and
-   default-deny allow NetworkPolicy intentionally use only
-   `before-hook-creation`, so they remain available to the later Job.
-   Do not add `hook-succeeded` or manually delete these resources during an
-   install/upgrade: Helm treats non-Job hooks as immediately successful and
-   would remove the authorization before the Job starts. The retained rules
-   allow only `get`, constrained by `resourceNames` to the exact CRDs,
-   GatewayClass, referenced namespace-local Secrets, and legacy PVC rendered
-   for enabled checks. Rules for disabled checks are omitted.
-
-   The NetworkPolicy selects only preflight pods. It permits DNS on TCP/UDP 53,
-   the external Postgres check on the configured database port, and Kubernetes
-   API access on TCP 443/6443. Before production upgrades, ensure
-   `networkPolicy.kubernetesAPIEgressCIDRs` covers both the
-   `kubernetes.default` Service ClusterIP and API endpoint/node networks. CNIs
-   differ on whether policy sees Service traffic before or after DNAT. One
-   appropriately scoped CIDR may cover both address classes; array length does
-   not prove coverage, and Helm cannot inspect the live cluster to validate it.
-
-   Inventory both address classes before setting the CIDRs:
-
-   ```bash
-   kubectl -n default get service kubernetes \
-     -o jsonpath='{.spec.clusterIP}{"\n"}'
-   kubectl -n default get endpointslice \
-     -l kubernetes.io/service-name=kubernetes -o wide
-   kubectl get nodes -o wide
-   ```
-
-   Prefer an exact `/32` (`/128` for IPv6) for the Service address and the
-   narrowest provider-supported endpoint or node ranges. Confirm managed
-   control-plane addresses with the provider when they are not exposed by the
-   EndpointSlice.
-
-   Dex migration hooks follow the same fail-closed model. In `prepare`, the
-   `dex-legacy-prepare` policy is created at weight / sync wave `-10`, before
-   its Job at `-5`. In `cutover`, the `dex-legacy-cleanup` policy is created at
-   weight / sync wave `5`, before its Job at `10`. Both allow only DNS TCP/UDP
-   53 and API TCP 443/6443 to the de-duplicated union of
-   `kubernetesAPIEgressCIDRs` and the legacy development
-   `externalEgressCIDRs`. The phase-specific policy renders even when the new
-   values disable NetworkPolicy/default deny, because the old release's
-   default-deny can still select pre-upgrade pods and can remain through Argo
-   PostSync pruning. The cleanup ServiceAccount, Role, RoleBinding, and policy
-   are retained until replacement at wave `5`; only the Job at wave `10` uses
-   success deletion. All non-Job hook prerequisites deliberately omit
-   `hook-succeeded` so Helm and Argo cannot delete authorization or network
-   access before the Job runs. Retain valid API CIDRs through both migration
-   releases and verify their live destination coverage before either phase.
-2. **Preflight Job** runs next (`pre-upgrade` hook, weight `-5`). This
-   includes:
-   - Gateway API CRDs present
-   - Gateway API standard CRDs pinned to the controller-supported bundle. The
-     chart preflight verifies CRD and GatewayClass existence; it does not
-     validate controller-owned status conditions. The supported local
-     bootstrap separately binds Gateway API `v1.5.1` to NGINX Gateway Fabric
-     `2.6.0` and fails closed unless the `nginx` GatewayClass reports
-     generation-current `Accepted=True` and `SupportedVersion=True`. Operators
-     using an externally installed controller must perform that same status
-     check before invoking the upgrade. `Accepted=True` alone does not prove
-     the CRD bundle is supported, and stale True conditions do not prove the
-     current class spec is ready.
-   - cert-manager CRDs present (if `tls.source` needs them)
-   - Postgres DSN enforces TLS (production only)
-   - `schema_migrations` connectivity + dirty-flag check
-   - Bundled-Postgres PVC absence (when externalised)
-   - Any additional `tls.additionalTrustedCAs` Secret exists
-
-   Every Kubernetes API read is limited to 10 attempts, one second apart, so
-   newly replaced hook RBAC can propagate before preflight decides the result.
-   Only an explicit Kubernetes `NotFound` response is treated as absence.
-   `Forbidden`, API discovery, and transport failures preserve the API
-   diagnostic, retry, and then stop the upgrade as an authorization or API
-   availability failure. The legacy bundled-Postgres PVC is the only resource
-   whose genuine absence is a successful result. Preflight never prints
-   Secret data or the Postgres DSN.
-
-3. **Migrate Job** runs next, applying any new schema migrations. Helm
-   waits for completion before proceeding (init container in the server
-   Deployment also runs migrate, but the Job is the canonical owner).
-4. **Server / worker / frontend rolling restart**. PDBs enforce
-   quorum-safe drains.
-5. **Argo CD self-manage** picks up any chart values changes that affect
-   it, sometime within its next sync window.
-
-### Step 3 — verify
+For a slow but healthy environment, increase the bound explicitly:
 
 ```bash
-# All pods running, no CrashLoopBackOff
-kubectl -n astronomer get pods
-
-# Health endpoints
-curl -s $URL/health/
-curl -s $URL/readyz
-
-# Authenticated API
-TOKEN=$(curl -sX POST $URL/api/v1/auth/login/ -d "$LOGIN_JSON" | jq -r '.data.token')
-curl -sH "Authorization: Bearer $TOKEN" $URL/api/v1/platform/health-summary/
-
-# Confirm no DLQ growth from the upgrade
-unzip -p <(curl -sH "Authorization: Bearer $TOKEN" $URL/api/v1/support-bundle/) asynq-queues.json | jq '.'
-
-# Confirm agents reconnected after server pods rolled (same DB_URL as §1)
-kubectl -n astronomer run psql-agents --rm -it --restart=Never \
-  --image=postgres:16-alpine -- \
-  psql "$DB_URL" -c \
-  "SELECT cluster_id, agent_version, last_ping FROM agent_connections WHERE status='connected';"
+TIMEOUT=30m ./scripts/upgrade-release.sh --yes v1.0.1
 ```
 
-Wait at least one heartbeat interval (default 30s) before declaring
-victory — agents reconnecting on a stale tunnel re-register and bump
-`last_ping`.
+## Post-upgrade verification
 
----
+The helper verifies workload rollout and `/readyz`; operators must also verify
+the externally routed and delivery paths:
+
+```bash
+helm -n astronomer status astronomer
+helm -n astronomer history astronomer
+kubectl -n astronomer get pods,jobs
+kubectl -n astronomer rollout status deployment/astronomer-server --timeout=10m
+kubectl -n astronomer rollout status deployment/astronomer-worker --timeout=10m
+curl --fail https://astronomer.example.com/health/
+curl --fail https://astronomer.example.com/readyz
+```
+
+Then:
+
+1. confirm management API and worker error rates remain normal;
+2. enroll or reconnect a canary cluster and verify its Kubernetes, agent, and
+   Flux versions are admitted by the release compatibility contract;
+3. publish one canary assignment and verify acknowledgement within the SLO;
+4. verify downstream reconciliation status reaches the management UI;
+5. confirm source resolution through the configured proxy/CA/egress policy;
+6. verify backup, audit, identity, and alerting integrations; and
+7. hold the release until normal latency and error budgets remain stable for
+   the enterprise observation window.
 
 ## Rollback
 
-`helm rollback` is the right tool for most failed upgrades. It re-renders
-the previous release revision and applies it. Three rules:
-
-### Rule 1: schema migrations are best-effort on rollback
-
-`helm rollback` does NOT auto-run a `migrate down`. If the new release
-ran an `up` migration, that schema change is **still in place** after
-the rollback. The old binary may or may not work against the new schema:
-
-- **Additive migrations** (new columns, new tables) — old binary keeps
-  working because it doesn't reference the new columns. Safe.
-- **Renames / drops / non-null adds** — old binary likely breaks. Not
-  safe; you need a `pg_restore` from the nightly dump
-  (`management-plane-dr-runbook.md`).
-
-Always test the rollback path in staging before relying on it in
-production.
-
-### Rule 2: rollback to the IMMEDIATE prior release
-
-`helm rollback <N>` works best when N is the revision right before the
-failed one. Jumping back multiple revisions in one shot occasionally
-trips on intermediate schema state — do it one step at a time.
-
-### Rule 3: agents survive a rollback if the tunnel protocol didn't change
-
-The chart's agent image tag is part of the rollback. Agents restart with
-their previous image; existing tunnel sessions reset and reconnect.
-
-### The procedure
+If Helm fails during the upgrade, `--atomic` handles the release rollback. If a
+post-upgrade verification fails, the helper invokes:
 
 ```bash
-# Find the previous release revision
-helm history astronomer -n astronomer
-
-# Output:
-# REVISION  UPDATED      STATUS      CHART          ...
-# 14        ...          superseded  astronomer-0.1.0 ...   <- want this
-# 15        ...          failed      astronomer-0.1.0 ...   <- the bad one
-
-# Roll back
-helm rollback astronomer 14 -n astronomer --timeout 10m
-
-# Verify (same checks as the upgrade verification section)
-kubectl -n astronomer get pods
-curl -s $URL/health/
+helm rollback astronomer <captured-previous-revision> \
+  --namespace astronomer --wait --cleanup-on-fail --timeout 15m
 ```
 
-### When rollback ISN'T enough
-
-If `schema_migrations.dirty=true` after the failed upgrade, or you
-reached this section because the schema rolled forward but the binary
-won't start against it:
-
-1. Restore from the most recent nightly pg_dump per
-   [`management-plane-dr-runbook.md`](./management-plane-dr-runbook.md).
-2. Confirm the restored DB version matches the binary you want to run.
-3. Re-run `helm rollback` (or `helm upgrade` to a different version).
-
-This is **the only known case** where the upgrade runbook alone isn't
-enough.
-
----
-
-## Agent version skew matrix
-
-The server and agent must speak a compatible wire protocol. We follow a
-strict policy: **agents support at most N-1 server versions**. A release chart
-pins its management-plane images and the agent image to the same exact tag;
-do not mix independently chosen tags.
-
-When server adds a wire-protocol message (e.g. `MsgDecommission` in
-2026-05-11), the agent must be re-rolled at the same time. The agent's
-`HandleX` registrations are additive — old agents just ignore unknown
-message types and log a warning — so a brief skew during a rollout is
-tolerable but should be measured in minutes, not days.
-
-To bump every connected agent in one shot:
+If an operator initiates rollback later:
 
 ```bash
-# Re-roll every agent Deployment in every managed cluster:
-kubectl --context <each-managed-cluster> -n astronomer \
-  rollout restart deploy/astronomer-agent
+helm -n astronomer history astronomer
+helm -n astronomer rollback astronomer <previous-revision> \
+  --wait --cleanup-on-fail --timeout 15m
 ```
 
----
+After rollback, repeat readiness, rollout, authentication, assignment, and
+status checks. If the target release changed the database incompatibly, stop
+the application first and restore the pre-upgrade database snapshot plus the
+matching encryption-key custody material. Never force the migration version or
+delete delivery rows as a rollback shortcut.
 
-## Worked example: exact patch-release upgrade
+If automatic rollback fails, preserve the namespace and recovery directory,
+stop further mutations, and escalate with Helm history, redacted event/log
+output, release tag, chart digest, image digests, database snapshot ID, and the
+failed step. Do not include Secret payloads.
 
-The supported simple path upgrades the chart and all first-party images as one
-versioned compatibility unit.
+## Acceptance record
 
-```bash
-# Capture, resolve, and dry-run
-./scripts/upgrade-release.sh v0.3.8
+Record:
 
-# Upgrade only after reviewing the generated backup directory
-./scripts/upgrade-release.sh --yes v0.3.8
-
-# Verify
-kubectl -n astronomer rollout status deploy/astronomer-server --timeout=5m
-kubectl -n astronomer rollout status deploy/astronomer-worker --timeout=5m
-kubectl -n astronomer rollout status deploy/astronomer-frontend --timeout=5m
-curl -s $URL/health/
-```
-
----
-
-## Worked example: rollback after a failed migration
-
-The migrate Job failed mid-release with this error:
-
-```
-error: Dirty database version 38. Fix and force version.
-```
-
-1. Look at the offending migration:
-
-   ```bash
-   ls deploy/chart/../../internal/db/migrations/038_*.up.sql
-   cat deploy/chart/../../internal/db/migrations/038_cluster_decommission.up.sql
-   ```
-
-2. Decide: roll forward or roll back?
-   - **Forward**: figure out what failed (logs from the migrate Job),
-     hand-apply the rest of the up SQL, then `migrate force 38`.
-   - **Back**: run the down SQL by hand, then `migrate force 37`.
-
-   For 038 specifically, the up creates `cluster_decommissions` and
-   `audit_archive` plus an `ALTER TABLE clusters ADD COLUMN
-   decommissioned_at`. If it failed mid-way, the down SQL is the path
-   of least resistance.
-
-3. Mark clean once schema state matches the chosen target:
-
-   ```bash
-   kubectl -n astronomer run migrate-fix --rm -it \
-     --image=astronomer-go-migrate:<TAG> --restart=Never -- \
-     migrate -database "$DATABASE_URL" -path /migrations force <N>
-   ```
-
-4. Now `helm rollback` can proceed cleanly to the previous good
-   revision, OR re-run `helm upgrade` to retry the same release.
-
----
-
-## What this runbook deliberately doesn't cover
-
-- **Cross-major-version upgrades** (e.g. `v0.x → v1.0`). Those carry
-  their own migration scripts and are version-specific. Document them as
-  `docs/upgrade-vX.Y-to-vA.B.md` alongside this file when they ship.
-- **Cluster rebuild** (rebuilding the management cluster from scratch
-  and restoring state). That's the DR runbook, not the upgrade runbook.
-- **Operator-initiated agent re-pairing** at scale. The agent registration
-  token rotation procedure lives in `docs/secret-rotation-runbook.md`.
-
-If you find yourself reaching for those, you're not upgrading — you're
-recovering. Use the right runbook.
+- source and target chart versions and Helm revisions;
+- chart checksum/attestation result and six image digests;
+- compatibility manifest version;
+- database backup/snapshot ID and restore-test date;
+- capacity-gate results;
+- preflight, migration, rollout, readiness, and canary delivery results;
+- alert observation window; and
+- the retained backup directory or archival object reference.

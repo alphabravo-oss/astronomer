@@ -14,7 +14,7 @@ below:
 
 | Secret                                | Encryption surface                       | Online rotation? | Forces re-pairing? |
 |---------------------------------------|------------------------------------------|------------------|--------------------|
-| `secrets.encryptionKey` (Fernet)      | At-rest column secrets (SSO client secret, ArgoCD auth token, backup creds, Dex connector secrets) | **yes**, with `keyrotate` | no |
+| `secrets.encryptionKey` (Fernet)      | At-rest column secrets (SSO and delivery-source credentials, backup credentials, Charlie local trust, Dex connector secrets) | **yes**, with `keyrotate` | no |
 | `secrets.secretKey` (JWT HMAC)        | Every issued access + refresh JWT        | **yes**, two-key window for one refresh-token lifetime (7d) | no |
 | Durable agent tokens                  | Per-cluster adopted-agent identity       | **yes**, ACK-delivered rotation with grace | no |
 | Admin bootstrap password              | First-login admin account                | n/a — change via the normal password-change UI | n/a |
@@ -39,9 +39,9 @@ What survives `pg_restore` from the nightly dump (cross-reference with
 
 ## 1. Rotating `secrets.encryptionKey` (Fernet)
 
-The encryption key wraps every column-stored secret: SSO client
-secrets, ArgoCD repo auth tokens, S3 backup credentials, Dex connector
-secrets (LDAP bind password, OIDC client secret, etc.).
+The encryption key wraps every column-stored reusable secret: SSO and delivery
+source credentials, S3 backup credentials, Charlie local trust/receipts, and
+Dex connector secrets (LDAP bind password, OIDC client secret, and similar).
 
 The chart and binary support **multi-key** Fernet from
 [`internal/auth/crypto.go`](../internal/auth/crypto.go): `encryptionKey`
@@ -104,7 +104,6 @@ writing that is:
 
 - `sso_configurations.client_secret_encrypted`
 - `dex_settings.public_clients_encrypted`
-- `argocd_instances.auth_token_encrypted`
 - `backup_storage_configs.encrypted_credentials`
 - `vault_connections.auth_encrypted`
 - `gitops_registration_sources.auth_encrypted`
@@ -114,9 +113,16 @@ writing that is:
 - `smtp_settings.password_encrypted`
 - `cluster_registry_configs.registry_password_encrypted`
 - `webhook_subscriptions.secret_encrypted`
-- `argocd_cluster_proxy_tokens.token_encrypted`
 - `user_totp_enrollments.secret_encrypted` (TOTP/MFA secrets)
 - `sso_sessions.upstream_id_token_encrypted`
+- `helm_repositories.auth_config_encrypted`
+- `monitoring_backends.auth_config_encrypted`
+- `charlie_connections.local_trust_material_encrypted`
+- `charlie_action_receipts.arguments_encrypted`
+- `charlie_action_receipts.result_encrypted`
+- `delivery_sources.ca_bundle_encrypted`
+- `delivery_sources.credential_encrypted`
+- `delivery_system_releases.registry_credential_encrypted`
 
 The authoritative list is `rewriteTargets` in `cmd/keyrotate/main.go`; a build
 test (`cmd/keyrotate/coverage_test.go`) fails if a migration adds an encrypted
@@ -307,7 +313,7 @@ When you restore from the nightly dump per
 |----------------------|----------------------------------------|
 | `users` (password hashes) | `secrets.encryptionKey` — the Fernet key that decrypts the columns the dump contains |
 | `sso_configurations` (with `client_secret_encrypted` ciphertext) | `secrets.secretKey` — the JWT signing key |
-| `argocd_instances` (with `auth_token_encrypted` ciphertext) | `bootstrap.password` (irrelevant once an admin exists) |
+| `delivery_sources` (with write-only credential ciphertext) | `bootstrap.password` (irrelevant once an admin exists) |
 | `cluster_registration_tokens` | Agent-side Secret in each managed cluster (the agent reads the token from its own Secret, not from the dump) |
 | `dex_connectors` (with encrypted JSONB fields) | TLS certificate Secret (if `tls.source=secret`) — operator owns the cert lifecycle |
 

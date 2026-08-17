@@ -20,6 +20,16 @@ import (
 type authContextKey string
 
 const (
+	// SessionCookieName carries the browser access JWT.
+	SessionCookieName = "astronomer_session"
+	// RefreshCookieName carries the browser refresh JWT.
+	RefreshCookieName = "astronomer_refresh"
+	// CSRFCookieName is the readable double-submit token used for unsafe
+	// browser requests; it carries no authentication authority by itself.
+	CSRFCookieName = "astronomer_csrf"
+)
+
+const (
 	userContextKey     authContextKey = "authenticated_user"
 	apiTokenContextKey authContextKey = "authenticated_api_token"
 )

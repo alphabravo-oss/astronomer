@@ -19,7 +19,7 @@ func TestShouldAddTrailingSlash(t *testing.T) {
 		// not under /api/v1/
 		{"/helm-repo/astronomer/index.yaml", false},
 		{"/healthz", false},
-		{"/argocd/applications", false},
+		{"/static/app.js", false},
 
 		// WS routes — chi.URLParam parses {cluster_id} as the last
 		// path component, so the trailing slash would break the
@@ -35,7 +35,7 @@ func TestShouldAddTrailingSlash(t *testing.T) {
 		// (e.g. /openapi/v2 -> /openapi/v2/ which the apiserver 404s).
 		{"/api/v1/clusters/abc/k8s/openapi/v2", false},
 		{"/api/v1/clusters/abc/k8s/api/v1/namespaces", false},
-		{"/api/v1/internal/argocd/clusters/abc/k8s/openapi/v2", false},
+		{"/api/v1/internal/k8s/clusters/abc/k8s/openapi/v2", false},
 	}
 	for _, tc := range cases {
 		if got := shouldAddTrailingSlash(tc.path); got != tc.want {

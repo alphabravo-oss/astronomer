@@ -81,15 +81,14 @@ export const charlieContextRegistry: CharlieRouteContextAdapter[] = [
     ],
   },
   {
-    id: "self_management_gitops",
-    match: (p) =>
-      p[1] === "argocd" || (p[1] === "settings" && p[2] === "gitops"),
+    id: "continuous_delivery",
+    match: (p) => p[1] === "delivery",
     contexts: (p) => [
       item(
         "self_management_application",
-        p[3] || p[2] || "gitops",
-        "GitOps",
-        "Self-management GitOps scope",
+        p[3] || p[2] || "overview",
+        "Continuous delivery",
+        "Flux-native delivery scope",
       ),
     ],
   },
@@ -118,14 +117,14 @@ export const charlieContextRegistry: CharlieRouteContextAdapter[] = [
     ],
   },
   {
-    id: "agent_fleet",
-    match: (p) => p[1] === "agents" || p[1] === "fleet",
+    id: "cluster_agents",
+    match: (p) => p[1] === "agents",
     contexts: (p) => [
       item(
-        "agent_fleet",
-        p[2] || "fleet",
-        "Agent fleet",
-        "Agent fleet and connection health",
+        "cluster_agents",
+        p[2] || "all",
+        "Cluster agents",
+        "Cluster agent connection health",
       ),
     ],
   },

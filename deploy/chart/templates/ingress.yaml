@@ -5,7 +5,7 @@ preferred path. Both paths read TLS config from the shared top-level
 `tls:` block, so flipping between them requires no TLS edits.
 
 Path layout mirrors the Gateway HTTPRoutes: /api/* + /health + /readyz
-+ /argocd go to the server; everything else routes to the frontend
+go to the server; everything else routes to the frontend
 when frontend.enabled, otherwise the server.
 */ -}}
 {{- if .Values.ingress.enabled }}
@@ -46,13 +46,6 @@ spec:
                 port:
                   number: {{ .Values.server.service.port }}
           - path: /readyz
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "astronomer.fullname" . }}-server
-                port:
-                  number: {{ .Values.server.service.port }}
-          - path: /argocd
             pathType: Prefix
             backend:
               service:

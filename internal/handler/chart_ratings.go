@@ -33,6 +33,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
@@ -61,6 +62,8 @@ type ChartRatingsQuerier interface {
 
 	// Chart resolution + superuser check.
 	GetHelmChartByID(ctx context.Context, id uuid.UUID) (sqlc.HelmChart, error)
+	GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (sqlc.HelmRepository, error)
+	GetCatalogVisibilityForProject(ctx context.Context, projectID, catalogID uuid.UUID) (sqlc.CatalogVisibility, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 }
 
@@ -72,6 +75,7 @@ type ChartRatingsQuerier interface {
 type ChartRatingsHandler struct {
 	queries ChartRatingsQuerier
 	log     *slog.Logger
+	authz   authorizationSupport
 }
 
 // NewChartRatingsHandler returns a handler bound to the given querier.
@@ -88,6 +92,10 @@ func (h *ChartRatingsHandler) SetLogger(log *slog.Logger) {
 	if log != nil {
 		h.log = log
 	}
+}
+
+func (h *ChartRatingsHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+	h.authz.SetAuthorization(engine, querier)
 }
 
 // --- request / response payloads -------------------------------------
@@ -502,13 +510,25 @@ func (h *ChartRatingsHandler) PopularRecommendations(w http.ResponseWriter, r *h
 	if limit <= 0 || limit > 50 {
 		limit = 6
 	}
-	results, err := catalog.TopCharts(r.Context(), h.queries, limit)
+	projectID, projectScoped, ok := catalogProjectQuery(w, r)
+	if !ok {
+		return
+	}
+	if projectScoped {
+		if !h.authz.authorizeProjectAction(w, r, projectID, rbac.ResourceCatalog, rbac.VerbRead) {
+			return
+		}
+	} else if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceCatalog, rbac.VerbRead) {
+		return
+	}
+	results, err := catalog.TopCharts(r.Context(), h.queries, 50)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
 		return
 	}
 	// TopCharts returns a ranked, limit-capped slice with no COUNT query, so
 	// Total is the page length. // TODO(total)
+	results = h.filterVisibleRecommendations(r.Context(), results, projectID, projectScoped, limit)
 	RespondList(w, results, NewPagination(len(results), limit, 0, len(results)))
 }
 
@@ -519,18 +539,66 @@ func (h *ChartRatingsHandler) SimilarRecommendations(w http.ResponseWriter, r *h
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
 		return
 	}
+	projectID, projectScoped, ok := catalogProjectQuery(w, r)
+	if !ok || !h.authorizeRecommendationChart(w, r, chartID, projectID, projectScoped) {
+		return
+	}
 	limit := queryLimit(r, 5)
 	if limit <= 0 || limit > 20 {
 		limit = 5
 	}
-	results, err := catalog.SimilarCharts(r.Context(), h.queries, chartID, limit)
+	results, err := catalog.SimilarCharts(r.Context(), h.queries, chartID, 20)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
 		return
 	}
 	// SimilarCharts returns a similarity-ranked, limit-capped slice with no
 	// COUNT query, so Total is the page length. // TODO(total)
+	results = h.filterVisibleRecommendations(r.Context(), results, projectID, projectScoped, limit)
 	RespondList(w, results, NewPagination(len(results), limit, 0, len(results)))
+}
+
+func (h *ChartRatingsHandler) authorizeRecommendationChart(w http.ResponseWriter, r *http.Request, chartID, projectID uuid.UUID, projectScoped bool) bool {
+	if projectScoped {
+		if !h.authz.authorizeProjectAction(w, r, projectID, rbac.ResourceCatalog, rbac.VerbRead) {
+			return false
+		}
+	} else if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceCatalog, rbac.VerbRead) {
+		return false
+	}
+	chart, err := h.queries.GetHelmChartByID(r.Context(), chartID)
+	if err != nil || !h.recommendationChartVisible(r.Context(), chart, projectID, projectScoped) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "chart not found")
+		return false
+	}
+	return true
+}
+
+func (h *ChartRatingsHandler) filterVisibleRecommendations(ctx context.Context, scores []catalog.ChartScore, projectID uuid.UUID, projectScoped bool, limit int) []catalog.ChartScore {
+	visible := make([]catalog.ChartScore, 0, min(limit, len(scores)))
+	for _, score := range scores {
+		chart, err := h.queries.GetHelmChartByID(ctx, score.ChartID)
+		if err != nil || !h.recommendationChartVisible(ctx, chart, projectID, projectScoped) {
+			continue
+		}
+		visible = append(visible, score)
+		if len(visible) == limit {
+			break
+		}
+	}
+	return visible
+}
+
+func (h *ChartRatingsHandler) recommendationChartVisible(ctx context.Context, chart sqlc.HelmChart, projectID uuid.UUID, projectScoped bool) bool {
+	repository, err := h.queries.GetHelmRepositoryByID(ctx, chart.RepositoryID)
+	if err != nil {
+		return false
+	}
+	if !projectScoped {
+		return !repository.OwnerProjectID.Valid
+	}
+	visibility, err := h.queries.GetCatalogVisibilityForProject(ctx, projectID, repository.ID)
+	return err == nil && catalogVisibilityAllowsRead(visibility)
 }
 
 // --- shared helpers --------------------------------------------------

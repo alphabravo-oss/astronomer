@@ -331,7 +331,11 @@ function operationTables() {
   for (const file of files) {
     const lines = read(file).split(/\r?\n/);
     lines.forEach((line, index) => {
-      const match = /CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z0-9_]*operations)\b/i.exec(line);
+      // Hand-written migrations used unqualified table names, while the
+      // greenfield pg_dump migration emits public.<table>. Accept both so the
+      // durability inventory does not silently report zero operation tables
+      // after a migration squash.
+      const match = /CREATE TABLE(?: IF NOT EXISTS)?\s+(?:[a-z0-9_]+\.)?([a-z0-9_]*operations)\b/i.exec(line);
       if (!match) return;
       if (match[1].endsWith('_operation_events')) return;
       rows.push({ table: match[1], file: rel(file), line: index + 1 });

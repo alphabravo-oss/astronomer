@@ -190,7 +190,7 @@ export function useDeleteCluster() {
       // STAYS in the list, flagged `decommissioning`, so the dashboard shows a
       // stable "Decommissioning" badge — no optimistic hide/re-show flicker. It
       // drops out on its own once tombstoned: `cluster.deleted` +
-      // `fleet_operation.changed` events cover the tombstone window (P4.5),
+      // cluster lifecycle events cover the tombstone window,
       // so a single refresh here just makes the badge appear immediately.
       toastSuccess('Cluster decommissioning started');
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
@@ -514,40 +514,6 @@ export function useWorkloadMetrics(
     // (routed through the per-cluster workloads prefix) and on stream
     // transitions.
     refetchInterval: liveFallback(60000),
-  });
-}
-
-// ============================================================
-// ArgoCD Hooks
-// ============================================================
-
-export function useArgoInstances(clusterId?: string) {
-  return useQuery({
-    queryKey: queryKeys.argocd.instances(clusterId),
-    queryFn: () => apiClient.getArgoInstances(clusterId),
-  });
-}
-
-export function useArgoApplications(params?: { clusterId?: string; project?: string; search?: string }) {
-  return useQuery({
-    queryKey: queryKeys.argocd.applications(params),
-    queryFn: () => apiClient.getArgoApplications(params),
-    refetchInterval: liveFallback(30000),
-  });
-}
-
-export function useSyncArgoApp() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (params: { instanceId: string; appName: string }) =>
-      apiClient.syncArgoApplication(params.instanceId, params.appName),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.all });
-      toastSuccess('Sync initiated');
-    },
-    onError: (error: Error) => {
-      toastApiError('Sync failed', error);
-    },
   });
 }
 
@@ -1502,18 +1468,24 @@ export function useDeleteHelmRepository() {
   });
 }
 
-export function useHelmCharts(params?: { repository?: string; category?: string; search?: string }) {
+export function useHelmCharts(params: {
+  projectId: string;
+  repository?: string;
+  category?: string;
+  search?: string;
+}) {
   return useQuery({
     queryKey: queryKeys.catalog.charts(params),
     queryFn: () => apiClient.getHelmCharts(params),
+    enabled: !!params.projectId,
   });
 }
 
-export function useHelmChartVersions(chartId: string) {
+export function useHelmChartVersions(projectId: string, chartId: string) {
   return useQuery({
-    queryKey: queryKeys.catalog.chartVersions(chartId),
-    queryFn: () => apiClient.getHelmChartVersions(chartId),
-    enabled: !!chartId,
+    queryKey: queryKeys.catalog.chartVersions(projectId, chartId),
+    queryFn: () => apiClient.getHelmChartVersions(projectId, chartId),
+    enabled: !!projectId && !!chartId,
   });
 }
 
@@ -1531,6 +1503,7 @@ export function useInstallHelmChart() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: {
+      project_id: string;
       cluster_id: string;
       chart_version_id: string;
       release_name: string;

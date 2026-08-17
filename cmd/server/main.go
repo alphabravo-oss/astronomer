@@ -10,11 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/systemrelease"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
@@ -93,6 +95,33 @@ func main() {
 	// case of an early exit.
 	var auditWriter *audit.Writer
 	if srv.DB() != nil {
+		distributionDigest, digestErr := fluxdistribution.ControllerSetDigest()
+		if digestErr != nil {
+			logger.Error("failed to identify embedded Flux distribution", "error", digestErr)
+			os.Exit(1)
+		}
+		if configured := cfg.DeliveryFluxVersion; configured != "" && configured != fluxdistribution.Version() {
+			logger.Error("configured Flux version differs from embedded distribution", "configured", configured, "embedded", fluxdistribution.Version())
+			os.Exit(1)
+		}
+		changed, releaseErr := systemrelease.Ensure(context.Background(), srv.DB().Pool(), systemrelease.Config{
+			Enabled: cfg.DeliveryEnabled, Version: version.Version,
+			ArtifactRepository: cfg.DeliveryFluxDistributionRepository,
+			ArtifactDigest:     cfg.DeliveryFluxDistributionDigest,
+			DistributionDigest: distributionDigest,
+			AgentVersion:       version.Version, AgentImage: cfg.AgentImageRepository,
+			MinimumKubernetes:   cfg.DeliveryKubernetesMinMinor,
+			MaximumKubernetes:   cfg.DeliveryKubernetesMaxMinor,
+			CertificateIssuer:   cfg.DeliveryFluxDistributionOIDCIssuer,
+			CertificateIdentity: cfg.DeliveryFluxDistributionCertificateIdentity,
+		})
+		if releaseErr != nil {
+			logger.Error("failed to ensure signed delivery system release", "error", releaseErr)
+			os.Exit(1)
+		}
+		if changed {
+			logger.Info("signed delivery system release promoted", "version", version.Version, "distribution_digest", distributionDigest)
+		}
 		queries := sqlc.New(srv.DB().Pool())
 		if _, err := observability.EnsureInstanceID(context.Background(), queries); err != nil {
 			logger.Error("failed to ensure observability instance id", "error", err)
@@ -119,9 +148,8 @@ func main() {
 			logger.Error("failed to ensure bootstrap admin", "error", err)
 			os.Exit(1)
 		}
-		// Seed platform_configuration.server_url from the Helm value so the
-		// local Argo self-management loop knows what hostname to put on the
-		// self-manage Application without requiring a manual settings step.
+		// Seed platform_configuration.server_url from the Helm value so internal
+		// controllers can build stable public URLs without manual setup.
 		if err := auth.EnsurePlatformConfig(context.Background(), queries, cfg.ServerURL, "", logger); err != nil {
 			logger.Error("failed to ensure platform config", "error", err)
 			os.Exit(1)
@@ -139,16 +167,6 @@ func main() {
 	go func() {
 		if err := srv.Start(":8000"); err != nil {
 			observability.WithEvent(logger, "server_runtime_error").Error("server error", "error", err)
-			os.Exit(1)
-		}
-	}()
-	go func() {
-		// Dedicated network-isolated listener for the ArgoCD->cluster proxy
-		// (see config.ArgoCDInternalProxyAddr). ArgoCD's apply path is
-		// anonymous, so this port relies on NetworkPolicy isolation rather
-		// than a per-request token.
-		if err := srv.StartInternalArgoCDProxy(cfg.ArgoCDInternalProxyAddr); err != nil {
-			observability.WithEvent(logger, "server_internal_argocd_listener_error").Error("internal argocd proxy listener error", "error", err)
 			os.Exit(1)
 		}
 	}()

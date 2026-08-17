@@ -319,7 +319,7 @@ func TestCheckPermission(t *testing.T) {
 			bindings: []RoleBinding{
 				{UserID: "u1", IsSuperuser: true},
 			},
-			resource:  ResourceArgoCD,
+			resource:  ResourceDeliveryBundles,
 			verb:      VerbSync,
 			clusterID: clusterA,
 			projectID: projectA,

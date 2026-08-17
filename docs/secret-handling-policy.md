@@ -28,7 +28,7 @@ and `docs/control-plane-state-contract.md`.
 | --- | --- | --- | --- |
 | Password verifier | One-way password hash | `users.password` | Store bcrypt or approved legacy hash during migration only; never expose in API/export. |
 | One-time or bearer token | Hash only | API tokens, password reset tokens, registration tokens after migration, agent tokens | Display plaintext once, store hash, compare by hash, audit lifecycle without token value. |
-| Reusable integration credential | Fernet ciphertext | Argo CD auth token, SMTP password, SSO client secret, Vault auth blob, cluster registry password, cloud credentials | Encrypt before persistence, decrypt only at the consumer boundary, redact on read. |
+| Reusable integration credential | Fernet ciphertext | Delivery source credential, SMTP password, SSO client secret, Vault auth blob, cluster registry password, cloud credentials | Encrypt before persistence, decrypt only at the consumer boundary, redact on read. |
 | External reference | Reference string | `${vault://connection/mount/path#key}` | Persist the reference, resolve at execution/install time, never write resolved value back to Postgres. |
 | Kubernetes Secret | Kubernetes Secret object | Helm bootstrap Secret, chart-managed TLS Secret, pull secret | Prefer existing/external Secret in production; do not copy raw data into support bundles or CRD status. |
 | Public certificate metadata | Metadata only | TLS certificate subject, DNS names, not-after date | Certificate PEM bytes and private keys stay out of bundles; status can include bounded public metadata. |
@@ -145,31 +145,31 @@ Current specialized owners:
 - Audit detail: `internal/audit` owns deterministic JSONB audit sanitization.
   Audit rows need stable, queryable detail shape and should not inherit future
   broad log-line heuristics without an audit migration review.
-- Argo API/UI payloads: `internal/argosecurity` owns recursive Application
-  source, history, operation, manifest, and URL-credential sanitation plus the
-  matching reference-only mutation policy.
+- Delivery sources: `internal/delivery` owns write-only provider credential
+  projection, immutable source resolution, bounded provider diagnostics, and
+  value-free rollout/status events. API reads expose lifecycle metadata only.
 
 New diagnostic/export surfaces must use `internal/redaction` by default. New
 credential APIs must either reuse an existing domain-specific sentinel contract
 or document a new one in this policy and cover create, read, update, audit, and
 support-bundle behavior with tests.
 
-## CRD and Argo Rules
+## CRD and delivery rules
 
 - CRD specs must use `secretRef` or external references for secret material.
 - CRD status must never include rendered secret values or raw Secret data.
-- Generated Argo `ApplicationSet` and `Application` resources must not embed
-  inline credentials.
-- Argo cluster Secret labels may include bounded non-secret targeting metadata
-  only.
-- Support bundles can include Argo health and label metadata, but never Argo
-  auth tokens or raw cluster Secret data.
-- The `/argocd/api/*` proxy sanitizes complete JSON and `+json` documents,
-  including gzip responses. Protocol upgrades and non-empty SSE, NDJSON, log,
-  and other non-JSON API responses fail closed: opaque streaming would bypass
-  source and legacy-log redaction, while unbounded buffering is unsafe. Static
-  HTML/assets outside the API prefix remain pass-through. Restoring an Argo API
-  stream requires a bounded, format-aware streaming sanitizer and canary tests.
+- Delivery source credentials are write-only and encrypted before persistence.
+  Listing, detail, verification, rollout, event, and inventory responses expose
+  only bounded lifecycle/verification metadata.
+- Assignment snapshots may project only the credential required by the exact
+  cluster-bound source. They must never place credentials in intent digests,
+  rollout rows, event text, logs, support bundles, or status payloads.
+- The agent stores provider credentials only in deterministic, project-scoped
+  Kubernetes Secrets referenced by the accepted Flux source object. Secret
+  values are excluded from object inventory and observation.
+- Support bundles may include normalized delivery health, controller versions,
+  generation, reason codes, and ownership labels, never raw source URLs with
+  userinfo, rendered values, Flux Secret data, or provider output.
 
 ## Backup and Restore Rules
 

@@ -227,7 +227,7 @@ func TestDexPrepareTemplatePreservesLiveDataAndOldMount(t *testing.T) {
 	root := repoRoot(t)
 	configTemplate, _ := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "dex-legacy-prepare.yaml"))
 	deploymentTemplate, _ := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "dex-deployment.yaml"))
-	for _, required := range []string{"pre-upgrade", "dex-config-retained", "--patch-file", "helm.sh/resource-policy", "argocd.argoproj.io/sync-options", "Prune=false,Delete=false", "astronomer.io/dex-migration-phase", "umask 077"} {
+	for _, required := range []string{"pre-upgrade", "dex-config-retained", "--patch-file", "helm.sh/resource-policy", "astronomer.io/dex-migration-phase", "umask 077"} {
 		if !bytes.Contains(configTemplate, []byte(required)) {
 			t.Fatalf("prepare template missing %q", required)
 		}
@@ -239,7 +239,7 @@ func TestDexPrepareTemplatePreservesLiveDataAndOldMount(t *testing.T) {
 		t.Fatal("prepare hook must metadata-retain the original exact-name ConfigMap before copying it")
 	}
 	if bytes.Contains(configTemplate, []byte(".Release.IsUpgrade")) {
-		t.Fatal("prepare phase must not depend on imperative Helm upgrade state; Argo CD does not reliably provide it")
+		t.Fatal("prepare phase must not depend on imperative Helm upgrade state")
 	}
 	if !bytes.Contains(deploymentTemplate, []byte(`eq .Values.dex.migration.phase "prepare"`)) || !bytes.Contains(deploymentTemplate, []byte("configMap:")) {
 		t.Fatal("prepare release does not keep the Deployment on the legacy ConfigMap")
@@ -260,7 +260,7 @@ func TestDexMigrationLifecycleFailsClosedAcrossPrepareCutoverAndRollback(t *test
 	if retain < 0 || copyLive <= retain || copyRetained <= copyLive {
 		t.Fatal("prepare must retain original before reading and copying its live data")
 	}
-	for _, required := range []string{`helm.sh/resource-policy":"keep`, `Prune=false,Delete=false`, `argocd.argoproj.io/hook" "PreSync`, `exit 1`} {
+	for _, required := range []string{`helm.sh/resource-policy":"keep`, `exit 1`} {
 		if !strings.Contains(p, required) {
 			t.Fatalf("prepare rollback/failure contract missing %q", required)
 		}
@@ -275,8 +275,8 @@ func TestDexMigrationLifecycleFailsClosedAcrossPrepareCutoverAndRollback(t *test
 	if ready < 0 || ownership <= ready || deleteOriginal <= ownership || deleteRetained <= deleteOriginal {
 		t.Fatal("cleanup may delete recovery ConfigMaps before Secret-backed readiness and ownership proof")
 	}
-	if !strings.Contains(c, `argocd.argoproj.io/hook" "PostSync`) {
-		t.Fatal("cutover cleanup is not an explicit Argo PostSync hook")
+	if strings.Contains(strings.ToLower(p+c), "argo"+"cd") {
+		t.Fatal("Dex migration hooks retain removed deployment-engine annotations")
 	}
 }
 

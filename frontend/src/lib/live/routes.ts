@@ -18,24 +18,24 @@
  *    and the reconnect bulk invalidation when it reopens.
  */
 
-import type { QueryKey } from '@tanstack/react-query';
-import { queryKeys as qk } from '@/lib/query-keys';
+import type { QueryKey } from "@tanstack/react-query";
+import { queryKeys as qk } from "@/lib/query-keys";
 
 /** Camelized event payload (envelope.ts camelizes centrally). */
 export type LiveEventData = Record<string, unknown>;
 
 /** Prefix key for the `audit.*` family (see module doc for RBAC caveat). */
-export const AUDIT_PREFIX = 'audit.';
+export const AUDIT_PREFIX = "audit.";
 
 function clusterIdOf(d: LiveEventData): string | null {
   const v = d.clusterId;
-  return typeof v === 'string' && v !== '' ? v : null;
+  return typeof v === "string" && v !== "" ? v : null;
 }
 
-/** Cluster lifecycle/liveness events: list rows + detail + agent fleet. */
+/** Cluster lifecycle/liveness events: list rows + detail + cluster agents. */
 function clusterLivenessRoute(d: LiveEventData): QueryKey[] {
   const cid = clusterIdOf(d);
-  const keys: QueryKey[] = [qk.clusters.listAll, qk.agents.fleet];
+  const keys: QueryKey[] = [qk.clusters.listAll, qk.agents.all];
   if (cid) keys.push(qk.clusters.detail(cid));
   return keys;
 }
@@ -66,44 +66,44 @@ export const K8S_KIND_ROUTES: Record<
   // so workload pods are covered by the per-cluster workloads prefix.
   Pod: (cid) => [qk.clusters.podsAll(cid), qk.workloads.byCluster(cid)],
   Deployment: (cid) => [
-    qk.clusterPages.workloadKind(cid, 'deployments'),
+    qk.clusterPages.workloadKind(cid, "deployments"),
     qk.workloads.byCluster(cid),
   ],
   StatefulSet: (cid) => [
-    qk.clusterPages.workloadKind(cid, 'statefulsets'),
+    qk.clusterPages.workloadKind(cid, "statefulsets"),
     qk.workloads.byCluster(cid),
   ],
   DaemonSet: (cid) => [
-    qk.clusterPages.workloadKind(cid, 'daemonsets'),
+    qk.clusterPages.workloadKind(cid, "daemonsets"),
     qk.workloads.byCluster(cid),
   ],
   // ReplicaSet churn is the rollout-progress signal for workload detail.
   ReplicaSet: (cid) => [
-    qk.generic.resources(cid, 'replicasets'),
+    qk.generic.resources(cid, "replicasets"),
     qk.workloads.byCluster(cid),
   ],
   Service: (cid) => [qk.networking.services(cid)],
   Node: (cid) => [qk.clusters.nodes(cid)],
   Event: (cid) => [qk.clusters.eventsAll(cid)],
-  ConfigMap: (cid) => [qk.generic.resources(cid, 'configmaps')],
+  ConfigMap: (cid) => [qk.generic.resources(cid, "configmaps")],
   // Helm release storage churn also refreshes the installed-apps views —
   // the agent only forwards `helm.sh/release.v1` Secrets (P4.6 filter), so
   // every Secret frame IS a release change (P4.9).
   Secret: (cid) => [
-    qk.generic.resources(cid, 'secrets'),
+    qk.generic.resources(cid, "secrets"),
     qk.catalog.installedAll,
     qk.clusterPages.appsInstalled(cid),
   ],
   // ── P4.6 informer expansion (agent metadata informers) ──
   Namespace: (cid) => [qk.clusters.namespaces(cid)],
   Job: (cid) => [
-    qk.clusterPages.workloadKind(cid, 'jobs'),
-    qk.generic.resources(cid, 'jobs'),
+    qk.clusterPages.workloadKind(cid, "jobs"),
+    qk.generic.resources(cid, "jobs"),
     qk.workloads.byCluster(cid),
   ],
   CronJob: (cid) => [
-    qk.clusterPages.workloadKind(cid, 'cronjobs'),
-    qk.generic.resources(cid, 'cronjobs'),
+    qk.clusterPages.workloadKind(cid, "cronjobs"),
+    qk.generic.resources(cid, "cronjobs"),
     qk.workloads.byCluster(cid),
   ],
   Ingress: (cid) => [qk.networking.ingresses(cid)],
@@ -112,19 +112,18 @@ export const K8S_KIND_ROUTES: Record<
   PersistentVolumeClaim: (cid) => [qk.storage.pvcs(cid)],
   StorageClass: (cid) => [qk.storage.storageClasses(cid)],
   // Explorer path segment is 'hpa', not the pluralized kind.
-  HorizontalPodAutoscaler: (cid) => [qk.generic.resources(cid, 'hpa')],
+  HorizontalPodAutoscaler: (cid) => [qk.generic.resources(cid, "hpa")],
   // RBAC kinds render under 'k8s-'-prefixed explorer segments.
-  Role: (cid) => [qk.generic.resources(cid, 'k8s-roles')],
-  RoleBinding: (cid) => [qk.generic.resources(cid, 'k8s-rolebindings')],
-  ClusterRole: (cid) => [qk.generic.resources(cid, 'k8s-clusterroles')],
-  ClusterRoleBinding: (cid) => [qk.generic.resources(cid, 'k8s-clusterrolebindings')],
+  Role: (cid) => [qk.generic.resources(cid, "k8s-roles")],
+  RoleBinding: (cid) => [qk.generic.resources(cid, "k8s-rolebindings")],
+  ClusterRole: (cid) => [qk.generic.resources(cid, "k8s-clusterroles")],
+  ClusterRoleBinding: (cid) => [
+    qk.generic.resources(cid, "k8s-clusterrolebindings"),
+  ],
   // ── P4.6 CRD informers (discover-if-present) ──
   Backup: veleroKindRoute,
   Restore: veleroKindRoute,
   Schedule: veleroKindRoute,
-  // Coarse by design, matching `argocd.changed` (see EVENT_ROUTES note).
-  Application: () => [qk.argocd.all],
-  ApplicationSet: () => [qk.argocd.all],
   VulnerabilityReport: (cid) => [
     qk.clusterPages.imageVulnsAll(cid),
     qk.clusterPages.vulnerabilitySummary(cid),
@@ -138,8 +137,11 @@ export const K8S_KIND_ROUTES: Record<
  * Fallback for kinds without an explicit row: invalidate the generic
  * resource list the explorer renders for that kind.
  */
-export function defaultK8sRoute(clusterId: string, d: LiveEventData): QueryKey[] {
-  const kind = typeof d.kind === 'string' ? d.kind : '';
+export function defaultK8sRoute(
+  clusterId: string,
+  d: LiveEventData,
+): QueryKey[] {
+  const kind = typeof d.kind === "string" ? d.kind : "";
   if (!kind) return [];
   return [qk.generic.resources(clusterId, genericResourceType(kind))];
 }
@@ -147,7 +149,7 @@ export function defaultK8sRoute(clusterId: string, d: LiveEventData): QueryKey[]
 /** Kind → explorer resource-type segment (lowercase plural). */
 function genericResourceType(kind: string): string {
   const lower = kind.toLowerCase();
-  if (lower.endsWith('y')) return `${lower.slice(0, -1)}ies`;
+  if (lower.endsWith("y")) return `${lower.slice(0, -1)}ies`;
   if (/(?:s|x|z|ch|sh)$/.test(lower)) return `${lower}es`;
   return `${lower}s`;
 }
@@ -155,7 +157,7 @@ function genericResourceType(kind: string): string {
 function k8sChangedRoute(d: LiveEventData): QueryKey[] {
   const cid = clusterIdOf(d);
   if (!cid) return [];
-  const kind = typeof d.kind === 'string' ? d.kind : '';
+  const kind = typeof d.kind === "string" ? d.kind : "";
   const route = K8S_KIND_ROUTES[kind];
   return route ? route(cid, d) : defaultK8sRoute(cid, d);
 }
@@ -167,7 +169,7 @@ function registrationRoute(d: LiveEventData): QueryKey[] {
 
 function entityIdOf(d: LiveEventData): string | null {
   const v = d.id;
-  return typeof v === 'string' && v !== '' ? v : null;
+  return typeof v === "string" && v !== "" ? v : null;
 }
 
 /**
@@ -176,56 +178,59 @@ function entityIdOf(d: LiveEventData): string | null {
  * per domain as publishers land.
  */
 export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
-  'cluster.connected': clusterLivenessRoute,
-  'cluster.disconnected': clusterLivenessRoute,
+  "cluster.connected": clusterLivenessRoute,
+  "cluster.disconnected": clusterLivenessRoute,
   // Heartbeats also refresh the conditions surface (P4.9): the health-check
   // worker reconciles cluster conditions on the same signal that bumps
   // last_heartbeat, and there is no dedicated conditions event.
-  'cluster.heartbeat': (d) => {
+  "cluster.heartbeat": (d) => {
     const keys = clusterLivenessRoute(d);
     const cid = clusterIdOf(d);
-    if (cid) keys.push(qk.clusters.conditions(cid), qk.clusters.conditionRemediation(cid));
+    if (cid)
+      keys.push(
+        qk.clusters.conditions(cid),
+        qk.clusters.conditionRemediation(cid),
+      );
     return keys;
   },
   // Merger-owned for list/detail rows: status is patched in place,
   // deliberately without an invalidate (see cluster-merger.ts). Conditions +
   // remediation history are separate queries written by the same status
   // reconciler, so transitions refresh them here (P4.9).
-  'cluster.status_changed': (d) => {
+  "cluster.status_changed": (d) => {
     const cid = clusterIdOf(d);
-    return cid ? [qk.clusters.conditions(cid), qk.clusters.conditionRemediation(cid)] : [];
+    return cid
+      ? [qk.clusters.conditions(cid), qk.clusters.conditionRemediation(cid)]
+      : [];
   },
   // Merger patches list/detail percentages; only the metrics history +
   // summary for the ticking cluster refetch (paced).
-  'cluster.metrics': (d) => {
+  "cluster.metrics": (d) => {
     const cid = clusterIdOf(d);
     return cid ? [qk.clusters.metricsAll(cid)] : [];
   },
-  'cluster.created': () => [qk.clusters.listAll],
-  'cluster.updated': (d) => {
+  "cluster.created": () => [qk.clusters.listAll],
+  "cluster.updated": (d) => {
     const cid = clusterIdOf(d);
     const keys: QueryKey[] = [qk.clusters.listAll];
     if (cid) keys.push(qk.clusters.detail(cid));
     return keys;
   },
-  'cluster.deleted': clusterLivenessRoute,
-  'agent.reconnecting': clusterLivenessRoute,
-  'agent.failed': clusterLivenessRoute,
-  'cluster.k8s_changed': k8sChangedRoute,
-  'cluster.registration.step': registrationRoute,
-  'cluster.registration.phase': registrationRoute,
+  "cluster.deleted": clusterLivenessRoute,
+  "agent.reconnecting": clusterLivenessRoute,
+  "agent.failed": clusterLivenessRoute,
+  "cluster.k8s_changed": k8sChangedRoute,
+  "cluster.registration.step": registrationRoute,
+  "cluster.registration.phase": registrationRoute,
   // Heartbeat only — nothing to refresh.
-  'sys.ping': () => [],
+  "sys.ping": () => [],
   // ── P4.5 domain publishers — metadata-only `<resource>.changed` events ──
   // Velero backups/restores/schedules (payload kind: backup|restore|schedule).
   // Both key families cover the legacy backups hooks and the B2 engine hooks.
-  'backup.changed': () => [qk.backups.all, qk.backups.b2All],
-  // Published per distinct target cluster; the deleted-cluster tombstone
-  // window also heals through the clusters list here (see useDeleteCluster).
-  'fleet_operation.changed': () => [qk.fleetOperations.all, qk.clusters.listAll],
+  "backup.changed": () => [qk.backups.all, qk.backups.b2All],
   // Prefix covers every list variant + the detail rows.
-  'logging_operation.changed': () => [qk.logging.operationsAll],
-  'tool_operation.changed': (d) => {
+  "logging_operation.changed": () => [qk.logging.operationsAll],
+  "tool_operation.changed": (d) => {
     const keys: QueryKey[] = [];
     const id = entityIdOf(d);
     if (id) keys.push(qk.tools.operation(id));
@@ -234,45 +239,74 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
     return keys;
   },
   // Prefix covers the paginated scan list variants + the detail rows.
-  'cis_scan.changed': () => [qk.cis.scansAll],
-  'image_scan.changed': (d) => {
+  "cis_scan.changed": () => [qk.cis.scansAll],
+  "image_scan.changed": (d) => {
     const cid = clusterIdOf(d);
     return cid
-      ? [qk.clusterPages.imageVulnsAll(cid), qk.clusterPages.vulnerabilitySummary(cid)]
+      ? [
+          qk.clusterPages.imageVulnsAll(cid),
+          qk.clusterPages.vulnerabilitySummary(cid),
+        ]
       : [];
   },
-  // Coarse by design: the payload's scope (instance|operation|health|
-  // ownership) doesn't map to per-instance keys without a lookup, and the
-  // paced invalidator only refetches mounted argocd queries. The D8 trio
-  // (manifests/history/orphan report) keeps its plain polls regardless.
-  'argocd.changed': () => [qk.argocd.all],
   // Unscoped (superuser-only via the SEC-R07 fail-closed drop, D9);
   // payload id is the queue name.
-  'admin_queue.changed': (d) => {
+  "admin_queue.changed": (d) => {
     const keys: QueryKey[] = [qk.adminOperations.queues];
     const queue = entityIdOf(d);
     if (queue) keys.push(qk.adminOperations.dlq(queue));
     return keys;
   },
   // Unscoped (superuser-only, D9); prefix covers list/detail/status.
-  'siem_forwarder.changed': () => [qk.siemForwarders.all],
-  'agent_fleet.changed': (d) => {
+  "siem_forwarder.changed": () => [qk.siemForwarders.all],
+  "cluster_agents.changed": (d) => {
     const cid = clusterIdOf(d);
-    const keys: QueryKey[] = [qk.agents.fleet];
+    const keys: QueryKey[] = [qk.agents.all];
     if (cid) keys.push(qk.agents.operations(cid));
     return keys;
   },
-  'template_binding.changed': (d) => {
+  "delivery_source.changed": (d) => {
+    const projectId = typeof d.projectId === "string" ? d.projectId : "";
+    return projectId ? [qk.delivery.sourcesAll(projectId)] : [qk.delivery.all];
+  },
+  "component_bundle.changed": (d) => {
+    const projectId = typeof d.projectId === "string" ? d.projectId : "";
+    return projectId ? [qk.delivery.bundlesAll(projectId)] : [qk.delivery.all];
+  },
+  "delivery_target.changed": (d) => {
+    const projectId = typeof d.projectId === "string" ? d.projectId : "";
+    return projectId ? [qk.delivery.targetsAll(projectId)] : [qk.delivery.all];
+  },
+  "delivery_rollout.changed": (d) => {
+    const projectId = typeof d.projectId === "string" ? d.projectId : "";
+    return projectId
+      ? [
+          qk.delivery.rolloutsAll(projectId),
+          qk.delivery.deploymentsAll(projectId),
+        ]
+      : [qk.delivery.all];
+  },
+  "cluster_deployment.changed": (d) => {
+    const projectId = typeof d.projectId === "string" ? d.projectId : "";
+    const cid = clusterIdOf(d);
+    const keys: QueryKey[] = projectId
+      ? [qk.delivery.deploymentsAll(projectId)]
+      : [qk.delivery.all];
+    if (projectId && cid)
+      keys.push(qk.delivery.clusterInventory(projectId, cid));
+    return keys;
+  },
+  "template_binding.changed": (d) => {
     const cid = clusterIdOf(d);
     return cid ? [qk.clusterPages.templateBinding(cid)] : [];
   },
-  'registry.changed': (d) => {
+  "registry.changed": (d) => {
     const cid = clusterIdOf(d);
     return cid ? [qk.clusterPages.registries(cid)] : [];
   },
   // Cluster snapshots/restores/schedules (payload kind discriminates; all
   // three views live on one page so they refresh together).
-  'snapshot.changed': (d) => {
+  "snapshot.changed": (d) => {
     const cid = clusterIdOf(d);
     return cid
       ? [
@@ -285,15 +319,15 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
   // ── P4.9 coverage completion ──
   // Payload kind discriminates rule|event|silence|baseline; unknown kinds
   // refresh the whole domain.
-  'alerting.changed': (d) => {
+  "alerting.changed": (d) => {
     switch (d.kind) {
-      case 'rule':
+      case "rule":
         return [qk.alerting.rules];
-      case 'event':
+      case "event":
         return [qk.alerting.eventsAll];
-      case 'silence':
+      case "silence":
         return [qk.alerting.silences];
-      case 'baseline':
+      case "baseline":
         return [qk.anomalyBaselines.all];
       default:
         return [qk.alerting.all, qk.anomalyBaselines.all];
@@ -303,7 +337,7 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
   // durable. Refresh both the global notification list and the selected
   // detail immediately; the API still performs live authorization before
   // returning either view.
-  'charlie_finding.changed': (d) => {
+  "charlie_finding.changed": (d) => {
     const keys: QueryKey[] = [qk.charlie.findings, qk.charlie.overview];
     const id = entityIdOf(d);
     if (id) keys.push(qk.charlie.finding(id));
@@ -311,11 +345,14 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
   },
   // Trigger/investigation state is represented in Charlie's session and
   // overview surfaces. This event contains bounded state/error codes only.
-  'charlie_investigation.changed': () => [qk.charlie.sessions, qk.charlie.overview],
-  'security_policy.changed': () => [qk.security.policies],
+  "charlie_investigation.changed": () => [
+    qk.charlie.sessions,
+    qk.charlie.overview,
+  ],
+  "security_policy.changed": () => [qk.security.policies],
   // Prefix covers every params variant of the generic scans list.
-  'security_scan.changed': () => [qk.security.scansAll],
-  'network_access.changed': (d) => {
+  "security_scan.changed": () => [qk.security.scansAll],
+  "network_access.changed": (d) => {
     const cid = clusterIdOf(d);
     return cid
       ? [
@@ -326,7 +363,7 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
   },
   // Server-initiated Helm release changes; the agent's Helm-Secret informer
   // covers cluster-side churn via the Secret kind route above.
-  'catalog_release.changed': (d) => {
+  "catalog_release.changed": (d) => {
     const keys: QueryKey[] = [qk.catalog.installedAll];
     const cid = clusterIdOf(d);
     if (cid) keys.push(qk.clusterPages.appsInstalled(cid));

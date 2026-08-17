@@ -1,9 +1,8 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { GitBranch, Loader2 } from "lucide-react";
+import { Link } from "@/lib/link";
 import { StatePanel } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Table,
   TableBody,
@@ -13,58 +12,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { queryKeys } from "@/lib/query-keys";
-import { toastApiError, toastSuccess } from "@/lib/toast";
 import { formatRelativeTime } from "@/lib/utils";
-import {
-  getCharlieAgent,
-  getCharlieConnection,
-  runCharlieAgentAction,
-  uninstallCharlieAgent,
-} from "@/lib/api/charlie-admin";
+import { getCharlieAgent } from "@/lib/api/charlie-admin";
 import { Meta, Section, Unavailable, button } from "./shared";
 
-export function agentActionsForState(
-  state: string,
-): Array<"install" | "upgrade" | "rollback" | "rotate"> {
-  if (["not_installed", "inactive", "disconnected"].includes(state))
-    return ["install"];
-  if (["ready", "degraded"].includes(state))
-    return ["upgrade", "rollback", "rotate"];
-  return [];
-}
-
 export function AgentTab() {
-  const qc = useQueryClient();
   const q = useQuery({
     queryKey: queryKeys.charlie.adminAgent,
     queryFn: getCharlieAgent,
     retry: false,
     refetchInterval: 15000,
-  });
-  const connection = useQuery({
-    queryKey: queryKeys.charlie.adminConnection,
-    queryFn: getCharlieConnection,
-    retry: false,
-    refetchInterval: 15000,
-  });
-  const [confirm, setConfirm] = useState(false);
-  const action = useMutation({
-    mutationFn: (a: "install" | "upgrade" | "rollback" | "rotate") =>
-      runCharlieAgentAction(a),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminAgent });
-      toastSuccess("Charlie agent lifecycle request accepted");
-    },
-    onError: (e) => toastApiError("Agent action failed", e),
-  });
-  const uninstall = useMutation({
-    mutationFn: uninstallCharlieAgent,
-    onSuccess: () => {
-      setConfirm(false);
-      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminAgent });
-      toastSuccess("Charlie agent uninstall requested");
-    },
-    onError: (e) => toastApiError("Uninstall failed", e),
   });
   if (q.isLoading)
     return (
@@ -77,16 +34,10 @@ export function AgentTab() {
   if (q.isError || !q.data)
     return <Unavailable name="Agent status" retry={() => void q.refetch()} />;
   const a = q.data;
-  const trustReady = Boolean(
-    connection.data?.connected &&
-      connection.data.signingFingerprint &&
-      connection.data.packageDigest,
-  );
-  const actions = agentActionsForState(a.applicationState);
   return (
     <Section
       title="Charlie product agent"
-      description="Astronomer manages the product-side agent; Charlie central remains a separate service."
+      description="Read-only product-agent status reported by the management plane. Charlie central remains a separate service."
     >
       <div aria-live="polite">
         <StatusBadge
@@ -95,7 +46,7 @@ export function AgentTab() {
         />
       </div>
       <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Meta label="Argo application" value={a.applicationState} />
+        <Meta label="Delivery assignment" value={a.applicationState} />
         <Meta
           label="Replicas"
           value={`${a.readyReplicas}/${a.desiredReplicas} ready`}
@@ -159,45 +110,17 @@ export function AgentTab() {
           </TableBody>
         </Table>
       </div>
-      <div className="flex flex-wrap gap-2">
-        {actions.map((v) => (
-          <button
-            key={v}
-            disabled={action.isPending || (v === "install" && !trustReady)}
-            onClick={() => action.mutate(v)}
-            className={button}
-          >
-            <RefreshCw className="h-4 w-4" />
-            {v[0].toUpperCase() + v.slice(1)}
-          </button>
-        ))}
-        <button
-          disabled={action.isPending || uninstall.isPending || a.applicationState === "not_installed"}
-          onClick={() => setConfirm(true)}
-          className={`${button} text-status-error`}
-        >
-          <Trash2 className="h-4 w-4" />
-          Uninstall
-        </button>
-      </div>
-      {actions.includes("install") && !trustReady && (
-        <p role="status" className="text-sm text-status-warning">
-          Install is unavailable until a signed Charlie onboarding package has
-          been validated and consumed into an active connection with recorded
-          signing and package digests.
+      <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm">
+        <p className="font-medium text-foreground">Lifecycle is managed by Flux delivery</p>
+        <p className="mt-1 text-muted-foreground">
+          Install, upgrade, rollback, credential rotation, and removal are declared through
+          versioned delivery bundles and targets, with preview and rollout controls.
         </p>
-      )}
-      <ConfirmDialog
-        open={confirm}
-        onClose={() => setConfirm(false)}
-        onConfirm={() => uninstall.mutate()}
-        title="Uninstall Charlie agent"
-        description="This removes the Astronomer-side Charlie agent. It does not delete Charlie central data or Astronomer audit history."
-        confirmText="Uninstall"
-        confirmValue="UNINSTALL CHARLIE"
-        variant="destructive"
-        loading={uninstall.isPending}
-      />
+        <Link href="/dashboard/delivery" className={`${button} mt-3 inline-flex`}>
+          <GitBranch className="h-4 w-4" />
+          Open Continuous Delivery
+        </Link>
+      </div>
     </Section>
   );
 }

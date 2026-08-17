@@ -24,7 +24,7 @@ func GenerateSCIMToken() (string, error) {
 }
 
 // HashSCIMToken returns the stored hash form of a SCIM token. Shares the
-// opaque-token SHA-256 contract used by the cluster-agent / argocd-proxy
+// opaque-token SHA-256 contract used by cluster-agent and other machine-token
 // tokens so a DB compromise never yields a usable credential.
 func HashSCIMToken(token string) string {
 	return HashOpaqueToken(token)

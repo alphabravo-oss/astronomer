@@ -5,16 +5,9 @@ export interface OpenAPIComponents {
   schemas: {
     AgentDiagnostics: {
           "generated_at"?: string;
-          "agent"?: OpenAPIComponents['schemas']['AgentFleetItem'];
+          "agent"?: OpenAPIComponents['schemas']['ClusterAgentItem'];
           "recent_connections"?: Record<string, unknown>[];
           "conditions"?: Record<string, unknown>[];
-          "argocd"?: {
-            "registered"?: boolean;
-            "instance_count"?: number;
-            "cluster_secret_names"?: string[];
-            "server_urls"?: string[];
-            "last_updated_at"?: string | null;
-          };
           "live"?: Record<string, unknown>;
           "recommendations"?: string[];
           "redactions"?: string[];
@@ -27,53 +20,6 @@ export interface OpenAPIComponents {
           "cluster_name"?: string;
           "diagnostics"?: OpenAPIComponents['schemas']['AgentDiagnostics'];
           "notes"?: string[];
-        };
-    AgentFleetItem: {
-          "cluster_id"?: string;
-          "cluster_name"?: string;
-          "cluster_display_name"?: string;
-          "cluster_status"?: string;
-          "is_local"?: boolean;
-          "agent_status"?: "connected" | "degraded" | "disconnected";
-          "agent_id"?: string;
-          "session_id"?: string;
-          "agent_version"?: string;
-          "kubernetes_version"?: string;
-          "distribution"?: string;
-          "node_count"?: number;
-          "connected_at"?: string | null;
-          "last_ping"?: string | null;
-          "last_heartbeat"?: string | null;
-          "disconnected_at"?: string | null;
-          "pod_name"?: string;
-          "node_name"?: string;
-          "channel_name"?: string;
-          "privilege_profile"?: "viewer" | "operator" | "namespace-viewer" | "namespace-operator" | "custom" | "admin";
-          "capabilities"?: Record<string, boolean>;
-          "compatibility_status"?: "supported" | "deprecated" | "blocked" | "unknown";
-          "compatibility_message"?: string;
-          "degraded_reasons"?: string[];
-          "recommended_action"?: string;
-          "offline_behavior"?: OpenAPIComponents['schemas']['AgentOfflineBehavior'];
-        };
-    AgentFleetResponse: {
-          "summary"?: {
-            "total_clusters"?: number;
-            "connected"?: number;
-            "degraded"?: number;
-            "disconnected"?: number;
-            "versions"?: Record<string, number>;
-            "profiles"?: Record<string, number>;
-            "statuses"?: Record<string, number>;
-            "compatibility"?: Record<string, number>;
-            "server_version"?: string;
-            "minimum_supported_agent_version"?: string;
-            "minimum_compatible_agent_version"?: string;
-            "generated_at"?: string;
-          };
-          "items"?: OpenAPIComponents['schemas']['AgentFleetItem'][];
-          "limit"?: number;
-          "offset"?: number;
         };
     AgentLifecycleOperation: {
           "id"?: string;
@@ -178,60 +124,6 @@ export interface OpenAPIComponents {
         };
     ApplyClusterTemplateRequest: Record<string, unknown>;
     ApplyNetworkPolicyRequest: Record<string, unknown>;
-    ArgoOperation: {
-          "id": string;
-          "targetType": "application";
-          "targetKey": string;
-          "operationType": "sync";
-          "status": "pending" | "running" | "completed" | "failed" | "superseded";
-          "attemptCount": number;
-          "startedAt"?: string | null;
-          "completedAt"?: string | null;
-          "errorMessage"?: string;
-          "createdAt": string;
-          "updatedAt": string;
-          "events"?: OpenAPIComponents['schemas']['ArgoOperationEvent'][];
-        };
-    ArgoOperationEnvelope: {
-          "data": OpenAPIComponents['schemas']['ArgoOperation'];
-        };
-    ArgoOperationEvent: {
-          "id": string;
-          "level": string;
-          "stage": string;
-          "message": string;
-          "detail"?: Record<string, unknown>;
-          "createdAt": string;
-        };
-    ArgoOrphanApplication: {
-          "id"?: string;
-          "name"?: string;
-          "component_slug"?: string;
-          "application_set_name"?: string;
-          "destination_cluster"?: string;
-          "destination_namespace"?: string;
-          "reason"?: "missing_destination" | "stale_destination_cluster" | "live_missing_destination" | "live_stale_destination_cluster" | "stale_applicationset_metadata";
-          "source"?: "cache" | "live";
-          "message"?: string;
-        };
-    ArgoOrphanReport: {
-          "instance_id"?: string;
-          "application_count"?: number;
-          "cached_application_count"?: number;
-          "live_application_count"?: number;
-          "managed_target_count"?: number;
-          "orphan_application_count"?: number;
-          "orphan_applications"?: OpenAPIComponents['schemas']['ArgoOrphanApplication'][];
-          "live_error"?: string;
-          "generated_at"?: string;
-        };
-    ArgoSyncRequest: {
-          "revision"?: string;
-          "prune"?: boolean;
-          "dry_run"?: boolean;
-          "reason"?: string;
-          "sync_window_override"?: boolean;
-        };
     AuditLogEntry: {
           "id"?: string;
           "user_id"?: string | null;
@@ -684,7 +576,7 @@ export interface OpenAPIComponents {
           "arguments": Record<string, string>;
         };
     CharlieContextSearchResult: {
-          "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "agent_fleet" | "tunnel";
+          "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "cluster_agents" | "tunnel";
           "id": string;
           "required_verb": string;
           "label": string;
@@ -717,7 +609,7 @@ export interface OpenAPIComponents {
           "verification": OpenAPIComponents['schemas']['CharlieFindingVerification'];
         };
     CharlieFindingResource: {
-          "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "agent_fleet" | "tunnel";
+          "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "cluster_agents" | "tunnel";
           "id": string;
           "required_verb": "read";
         };
@@ -846,7 +738,7 @@ export interface OpenAPIComponents {
           "updated_at": string;
         };
     CharlieSessionResource: {
-          "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "agent_fleet" | "tunnel";
+          "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "cluster_agents" | "tunnel";
           "id": string;
           "required_verb": string;
         };
@@ -869,6 +761,13 @@ export interface OpenAPIComponents {
         };
     CharlieTriggerRetryRequest: {
           "request_id": string;
+        };
+    ChartRecommendation: {
+          "chart_id": string;
+          "rating_count": number;
+          "avg_stars": number;
+          "bayesian_score": number;
+          "weight"?: number;
         };
     CloudCredential: {
           "id"?: string;
@@ -914,31 +813,128 @@ export interface OpenAPIComponents {
           "cpu_percentage"?: number;
           "memory_percentage"?: number;
           "pod_count"?: number;
-          "argocd"?: {
-            "registered"?: boolean;
-            "instance_count"?: number;
-            "cluster_secret_names"?: string[];
-            "baseline_managed_by"?: "argocd" | "argocd_pending" | "helm" | "local" | "unknown";
-            "drift"?: {
-              "app_count"?: number;
-              "synced_count"?: number;
-              "out_of_sync_count"?: number;
-              "unknown_sync_count"?: number;
-              "healthy_count"?: number;
-              "progressing_count"?: number;
-              "degraded_count"?: number;
-              "unknown_health_count"?: number;
-              "resource_created_count"?: number;
-              "resource_changed_count"?: number;
-              "resource_pruned_count"?: number;
-              "last_synced"?: string | null;
-              "last_error"?: string;
-            };
-          };
           "created_at"?: string;
           "updated_at"?: string;
         };
+    ClusterAgentItem: {
+          "cluster_id"?: string;
+          "cluster_name"?: string;
+          "cluster_display_name"?: string;
+          "cluster_status"?: string;
+          "is_local"?: boolean;
+          "agent_status"?: "connected" | "degraded" | "disconnected";
+          "agent_id"?: string;
+          "session_id"?: string;
+          "agent_version"?: string;
+          "kubernetes_version"?: string;
+          "distribution"?: string;
+          "node_count"?: number;
+          "connected_at"?: string | null;
+          "last_ping"?: string | null;
+          "last_heartbeat"?: string | null;
+          "disconnected_at"?: string | null;
+          "pod_name"?: string;
+          "node_name"?: string;
+          "channel_name"?: string;
+          "privilege_profile"?: "viewer" | "operator" | "namespace-viewer" | "namespace-operator" | "custom" | "admin";
+          "capabilities"?: Record<string, boolean>;
+          "compatibility_status"?: "supported" | "deprecated" | "blocked" | "unknown";
+          "compatibility_message"?: string;
+          "degraded_reasons"?: string[];
+          "recommended_action"?: string;
+          "offline_behavior"?: OpenAPIComponents['schemas']['AgentOfflineBehavior'];
+        };
+    ClusterAgentResponse: {
+          "summary"?: {
+            "total_clusters"?: number;
+            "connected"?: number;
+            "degraded"?: number;
+            "disconnected"?: number;
+            "versions"?: Record<string, number>;
+            "profiles"?: Record<string, number>;
+            "statuses"?: Record<string, number>;
+            "compatibility"?: Record<string, number>;
+            "server_version"?: string;
+            "minimum_supported_agent_version"?: string;
+            "minimum_compatible_agent_version"?: string;
+            "generated_at"?: string;
+          };
+          "items"?: OpenAPIComponents['schemas']['ClusterAgentItem'][];
+          "limit"?: number;
+          "offset"?: number;
+        };
     ClusterConditionResponse: Record<string, unknown>;
+    ClusterDeployment: {
+          "id": string;
+          "target_id": string;
+          "cluster_id": string;
+          "current_rollout_id"?: string | null;
+          "desired_bundle_version_id"?: string | null;
+          "previous_bundle_version_id"?: string | null;
+          "desired_generation": number;
+          "observed_generation": number;
+          "desired_spec_digest": string;
+          "observed_spec_digest": string;
+          "desired_revision": string;
+          "observed_revision": string;
+          "action": "apply" | "delete" | "suspend";
+          "phase": "pending" | "blocked" | "applying" | "ready" | "degraded" | "failed" | "suspended" | "deleting" | "removed" | "unknown";
+          "conditions": Record<string, unknown>[];
+          "source_kind": string;
+          "source_name": string;
+          "reconciler_kind": string;
+          "reconciler_name": string;
+          "inventory": Record<string, unknown>;
+          "agent_session_id": string;
+          "agent_sequence": number;
+          "last_error_code": string;
+          "last_message": string;
+          "last_observed_at"?: string | null;
+          "created_at": string;
+          "updated_at": string;
+        };
+    ClusterDeploymentControl: {
+          "deployment": OpenAPIComponents['schemas']['ClusterDeployment'];
+          "event": OpenAPIComponents['schemas']['ClusterDeploymentEvent'];
+        };
+    ClusterDeploymentControlEnvelope: {
+          "data": OpenAPIComponents['schemas']['ClusterDeploymentControl'];
+        };
+    ClusterDeploymentDetail: {
+          "deployment": OpenAPIComponents['schemas']['ClusterDeployment'];
+          "events": OpenAPIComponents['schemas']['ClusterDeploymentEvent'][];
+        };
+    ClusterDeploymentDetailEnvelope: {
+          "data": OpenAPIComponents['schemas']['ClusterDeploymentDetail'];
+        };
+    ClusterDeploymentEvent: {
+          "id": string;
+          "deployment_id": string;
+          "rollout_id"?: string | null;
+          "event_type": string;
+          "from_phase": string;
+          "to_phase": string;
+          "generation": number;
+          "spec_digest": string;
+          "reason_code": string;
+          "message": string;
+          "observed_at": string;
+          "created_at": string;
+        };
+    ClusterDeploymentEventPage: {
+          "data": OpenAPIComponents['schemas']['ClusterDeploymentEvent'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+          "total_known": boolean;
+        };
+    ClusterDeploymentPage: {
+          "data": OpenAPIComponents['schemas']['ClusterDeployment'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+          "total_known": boolean;
+        };
     ClusterEvent: {
           "id"?: string;
           "type"?: string;
@@ -982,7 +978,6 @@ export interface OpenAPIComponents {
           "distribution"?: string;
         };
     CreateClusterTemplateRequest: Record<string, unknown>;
-    CreateFleetOperationRequest: Record<string, unknown>;
     CreateNetworkPolicyTemplateRequest: Record<string, unknown>;
     CreateProjectCatalogRequest: {
           "name": string;
@@ -1002,6 +997,472 @@ export interface OpenAPIComponents {
           "data": unknown;
         };
     DecommissionStatusResponse: Record<string, unknown>;
+    DeliveryBundle: {
+          "id": string;
+          "project_id": string;
+          "name": string;
+          "description"?: string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    DeliveryBundleEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryBundle'];
+        };
+    DeliveryBundlePage: {
+          "data": OpenAPIComponents['schemas']['DeliveryBundle'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+          "total_known": boolean;
+        };
+    DeliveryBundleVersion: {
+          "id": string;
+          "bundle_id": string;
+          "source_id": string;
+          "version": string;
+          "renderer": "kustomize" | "helm";
+          "scope": "namespace" | "platform";
+          "requested_revision": string;
+          "resolved_revision"?: string;
+          "artifact_digest"?: string;
+          "renderer_spec": Record<string, unknown>;
+          "reconciliation_policy": Record<string, unknown>;
+          "required_capabilities": Record<string, unknown>[];
+          "dependency_bundle_ids": string[];
+          "spec_digest": string;
+          "verification_status": "pending" | "verified" | "failed" | "unsigned";
+          "verification_identity"?: string;
+          "state": "resolving" | "ready" | "failed" | "revoked";
+          "last_error_code"?: string;
+          "created_at": string;
+        };
+    DeliveryBundleVersionEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryBundleVersion'];
+        };
+    DeliveryBundleVersionPage: {
+          "data": OpenAPIComponents['schemas']['DeliveryBundleVersion'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+          "total_known": boolean;
+        };
+    DeliveryBundleVersionWrite: {
+          "project_id"?: string;
+          "version": string;
+          "spec": Record<string, unknown>;
+          "dependency_bundle_ids"?: string[];
+        };
+    DeliveryBundleWrite: {
+          "project_id"?: string;
+          "name": string;
+          "description"?: string;
+        };
+    DeliveryClusterInventory: {
+          "controller_inventory": OpenAPIComponents['schemas']['DeliveryControllerInventory'];
+          "deployments": OpenAPIComponents['schemas']['ClusterDeployment'][];
+          "deployment_count": number;
+        };
+    DeliveryClusterInventoryEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryClusterInventory'];
+        };
+    DeliveryCompatibilityContract: {
+          "summary": string;
+          "flux_version": string;
+          "flux_components": Record<string, string>;
+          "flux_apis": string[];
+          "kubernetes_minimum": string;
+          "kubernetes_maximum": string;
+          "agent_protocol": string;
+          "required_capabilities": string[];
+        };
+    DeliveryCompatibilityCount: {
+          "compatibility_status": string;
+          "cluster_count": number;
+        };
+    DeliveryControllerInventory: {
+          "cluster_id": string;
+          "agent_version": string;
+          "flux_version": string;
+          "components": Record<string, string>;
+          "api_versions": string[];
+          "distribution_digest": string;
+          "kubernetes_version": string;
+          "ready": boolean;
+          "compatibility_status": "compatible" | "incompatible" | "upgrade_required" | "degraded";
+          "error_code": string;
+          "observed_at"?: string | null;
+          "updated_at": string;
+        };
+    DeliveryFrozenRollout: {
+          "id": string;
+          "target_id": string;
+          "project_id": string;
+          "target_generation": number;
+          "desired": Record<string, unknown>;
+          "placement_digest": string;
+          "strategy": Record<string, unknown>;
+          "strategy_digest": string;
+          "approval": Record<string, unknown>;
+          "actor": string;
+          "idempotency_key": string;
+          "request_digest": string;
+          "created_at": string;
+          "deadline": string;
+          "cohorts": Record<string, unknown>[];
+          "clusters": Record<string, unknown>[];
+          "plan_digest": string;
+        };
+    DeliveryFrozenRolloutEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryFrozenRollout'];
+        };
+    DeliveryPreviewDecision: {
+          "cluster_id": string;
+          "project_id"?: string;
+          "cluster_name"?: string;
+          "reason": "selected" | "excluded_by_selector" | "excluded_explicitly" | "unauthorized" | "disconnected" | "incompatible" | "missing_capability" | "decommissioning";
+          "match_reasons"?: Array<"explicit_cluster" | "all_clusters" | "cluster_group" | "match_labels" | "match_expressions">;
+          "matched_group_ids"?: string[];
+          "missing_capabilities"?: string[];
+          "compatibility_reason"?: string;
+        };
+    DeliveryRollout: {
+          "id": string;
+          "target_id": string;
+          "target_generation": number;
+          "from_bundle_version_id"?: string | null;
+          "to_bundle_version_id": string;
+          "placement_digest": string;
+          "placement_snapshot"?: Record<string, unknown>;
+          "strategy": Record<string, unknown>;
+          "strategy_digest"?: string;
+          "approval_policy"?: Record<string, unknown>;
+          "request_digest"?: string;
+          "plan_digest": string;
+          "frozen_plan"?: Record<string, unknown>;
+          "state": string;
+          "fencing_generation": number;
+          "total_clusters": number;
+          "ready_clusters": number;
+          "failed_clusters": number;
+          "blocked_clusters": number;
+          "released_clusters": number;
+          "progress_deadline"?: string | null;
+          "started_at"?: string | null;
+          "completed_at"?: string | null;
+          "last_error_code"?: string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    DeliveryRolloutAction: {
+          "project_id"?: string;
+          "reason_code"?: string;
+        };
+    DeliveryRolloutApproval: {
+          "project_id"?: string;
+          "cohort": number;
+          "binding_digest": string;
+          "decision": "approved" | "rejected";
+          "expires_at": string;
+        };
+    DeliveryRolloutApprovalRecord: {
+          "id": string;
+          "rollout_id": string;
+          "cohort": number;
+          "binding_digest": string;
+          "decision": "approved" | "rejected";
+          "decided_by"?: string | null;
+          "decided_at": string;
+          "expires_at": string;
+          "created_at": string;
+        };
+    DeliveryRolloutCluster: {
+          "id": string;
+          "rollout_id": string;
+          "cluster_id": string;
+          "cohort": number;
+          "release_order": number;
+          "previous_bundle_version_id"?: string | null;
+          "desired_bundle_version_id": string;
+          "desired_spec_digest": string;
+          "state": string;
+          "assignment_action": "apply" | "rollback";
+          "attempt": number;
+          "fence": number;
+          "released_at"?: string | null;
+          "acknowledged_at"?: string | null;
+          "ready_at"?: string | null;
+          "completed_at"?: string | null;
+          "deadline"?: string | null;
+          "last_error_code": string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    DeliveryRolloutClusterPage: {
+          "data": OpenAPIComponents['schemas']['DeliveryRolloutCluster'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+          "total_known": boolean;
+        };
+    DeliveryRolloutControl: {
+          "rollout": OpenAPIComponents['schemas']['DeliveryRollout'];
+          "event": OpenAPIComponents['schemas']['DeliveryRolloutEvent'];
+          "approval"?: OpenAPIComponents['schemas']['DeliveryRolloutApprovalRecord'];
+        };
+    DeliveryRolloutControlEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryRolloutControl'];
+        };
+    DeliveryRolloutDetail: {
+          "rollout": OpenAPIComponents['schemas']['DeliveryRollout'];
+          "frozen_plan": Record<string, unknown>;
+          "approvals": OpenAPIComponents['schemas']['DeliveryRolloutApprovalRecord'][];
+          "timeline": OpenAPIComponents['schemas']['DeliveryRolloutEvent'][];
+        };
+    DeliveryRolloutDetailEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryRolloutDetail'];
+        };
+    DeliveryRolloutEvent: {
+          "id": string;
+          "rollout_id": string;
+          "cluster_id"?: string | null;
+          "decision_digest"?: string;
+          "event_type": string;
+          "from_state": string;
+          "to_state": string;
+          "reason_code": string;
+          "fence": number;
+          "occurred_at": string;
+          "created_at": string;
+        };
+    DeliveryRolloutEventPage: {
+          "data": OpenAPIComponents['schemas']['DeliveryRolloutEvent'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+          "total_known": boolean;
+        };
+    DeliveryRolloutPage: {
+          "data": OpenAPIComponents['schemas']['DeliveryRollout'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+          "total_known": boolean;
+        };
+    DeliveryRolloutStart: {
+          "project_id"?: string;
+          "preview_digest": string;
+          "confirm_all_clusters": boolean;
+          "strategy": Record<string, unknown>;
+        };
+    DeliverySource: {
+          "id": string;
+          "project_id": string;
+          "name": string;
+          "description"?: string;
+          "type": "git" | "oci_artifact" | "helm_http" | "helm_oci";
+          "url": string;
+          "auth_mode": "none" | "basic" | "bearer" | "ssh" | "workload_identity";
+          "credential": {
+            "configured": boolean;
+            "key_version": number;
+            "epoch": number;
+          };
+          "proxy_ref"?: string;
+          "trust_policy": OpenAPIComponents['schemas']['DeliveryTrustPolicy'];
+          "status": "pending" | "ready" | "degraded" | "revoked";
+          "last_resolved_at"?: string | null;
+          "last_error_code"?: string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    DeliverySourceCredentialInput: {
+          "username"?: string;
+          "password"?: string;
+          "token"?: string;
+          "private_key"?: string;
+          "known_hosts"?: string;
+          "passphrase"?: string;
+        };
+    DeliverySourceCredentialRotate: {
+          "project_id"?: string;
+          "auth_mode": "basic" | "bearer" | "ssh";
+          "credential": OpenAPIComponents['schemas']['DeliverySourceCredentialInput'];
+        };
+    DeliverySourceEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliverySource'];
+        };
+    DeliverySourcePage: {
+          "data": OpenAPIComponents['schemas']['DeliverySource'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+          "total_known": boolean;
+        };
+    DeliverySourcePatch: {
+          "project_id"?: string;
+          "description"?: string;
+          "url"?: string;
+          "proxy_ref"?: string;
+          "trust_policy"?: OpenAPIComponents['schemas']['DeliveryTrustPolicy'];
+          "ca_bundle"?: string;
+        };
+    DeliverySourceVerify: {
+          "project_id"?: string;
+          "requested_revision": string;
+          "chart"?: string;
+        };
+    DeliverySourceWrite: {
+          "project_id"?: string;
+          "name": string;
+          "description"?: string;
+          "type": "git" | "oci_artifact" | "helm_http" | "helm_oci";
+          "url": string;
+          "auth_mode": "none" | "basic" | "bearer" | "ssh" | "workload_identity";
+          "credential"?: OpenAPIComponents['schemas']['DeliverySourceCredentialInput'];
+          "ca_bundle"?: string;
+          "proxy_ref"?: string;
+          "trust_policy": OpenAPIComponents['schemas']['DeliveryTrustPolicy'];
+        };
+    DeliverySystemCompatibility: {
+          "contract": OpenAPIComponents['schemas']['DeliveryCompatibilityContract'];
+          "current_release": OpenAPIComponents['schemas']['DeliverySystemRelease'] | null;
+          "current_rollout": OpenAPIComponents['schemas']['DeliverySystemRollout'] | null;
+          "observed_inventory": OpenAPIComponents['schemas']['DeliveryCompatibilityCount'][];
+        };
+    DeliverySystemCompatibilityEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliverySystemCompatibility'];
+        };
+    DeliverySystemRelease: {
+          "id"?: string;
+          "release_sequence"?: number;
+          "version"?: string;
+          "artifact_url"?: string;
+          "artifact_digest"?: string;
+          "distribution_digest"?: string;
+          "agent_version"?: string;
+          "agent_image"?: string;
+          "minimum_kubernetes"?: string;
+          "maximum_kubernetes"?: string;
+          "crd_storage_version"?: string;
+          "previous_storage_version"?: string;
+          "interval"?: string;
+          "timeout"?: string;
+          "verification_policy"?: Record<string, unknown>;
+          "credential_key_version"?: number;
+          "credential_epoch"?: number;
+          "spec_digest"?: string;
+          "state"?: string;
+          "released_at"?: string | null;
+          "retired_at"?: string | null;
+          "created_by"?: string | null;
+          "created_at"?: string;
+        };
+    DeliverySystemRollout: {
+          "id"?: string;
+          "release_id"?: string;
+          "previous_release_id"?: string | null;
+          "strategy"?: Record<string, unknown>;
+          "strategy_digest"?: string;
+          "state"?: string;
+          "fencing_generation"?: number;
+          "total_clusters"?: number;
+          "ready_clusters"?: number;
+          "failed_clusters"?: number;
+          "released_clusters"?: number;
+          "progress_deadline"?: string | null;
+          "started_at"?: string | null;
+          "completed_at"?: string | null;
+          "last_error_code"?: string;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    DeliveryTarget: {
+          "id": string;
+          "project_id": string;
+          "name": string;
+          "description"?: string;
+          "bundle_version_id": string;
+          "placement": Record<string, unknown>;
+          "rollout_policy": Record<string, unknown>;
+          "reconciliation_policy": Record<string, unknown>;
+          "maintenance_window_policy": Record<string, unknown>;
+          "suspended": boolean;
+          "generation": number;
+          "resource_version": number;
+          "deletion_state": "active" | "deleting" | "deleted";
+          "created_at": string;
+          "updated_at": string;
+        };
+    DeliveryTargetDeletion: {
+          "id": string;
+          "deletion_state": "deleting" | "deleted";
+          "resource_version": number;
+          "deployment_count"?: number;
+        };
+    DeliveryTargetDeletionEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryTargetDeletion'];
+        };
+    DeliveryTargetEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryTarget'];
+        };
+    DeliveryTargetPage: {
+          "data": OpenAPIComponents['schemas']['DeliveryTarget'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+          "total_known": boolean;
+        };
+    DeliveryTargetPatch: {
+          "project_id"?: string;
+          "description"?: string;
+          "bundle_version_id"?: string;
+          "placement"?: Record<string, unknown>;
+          "rollout_policy"?: {
+            "approval_required"?: boolean;
+          };
+          "reconciliation_policy"?: Record<string, unknown>;
+          "maintenance_window_policy"?: Record<string, unknown>;
+          "suspended"?: boolean;
+        };
+    DeliveryTargetPreview: {
+          "target_id": string;
+          "target_generation": number;
+          "bundle_version_id": string;
+          "preview_digest": string;
+          "selected_count": number;
+          "excluded_count": number;
+          "requires_all_confirmation": boolean;
+          "decisions": OpenAPIComponents['schemas']['DeliveryPreviewDecision'][];
+          "decision_count": number;
+          "decision_offset": number;
+          "decision_page_size": number;
+          "has_more_decisions": boolean;
+          "next_cursor": string;
+          "risks": string[];
+        };
+    DeliveryTargetPreviewEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryTargetPreview'];
+        };
+    DeliveryTargetWrite: {
+          "project_id"?: string;
+          "name": string;
+          "description"?: string;
+          "bundle_version_id": string;
+          "placement": Record<string, unknown>;
+          "rollout_policy": {
+            "approval_required"?: boolean;
+          };
+          "reconciliation_policy": Record<string, unknown>;
+          "maintenance_window_policy"?: Record<string, unknown>;
+          "suspended"?: boolean;
+        };
+    DeliveryTrustPolicy: {
+          "allow_unsigned": boolean;
+          "provider"?: "cosign_key" | "cosign_keyless" | "git";
+          "identity"?: string;
+          "issuer"?: string;
+          "key_ref"?: string;
+        };
     DexConnector: {
           "id"?: string;
           "name"?: string;
@@ -1187,13 +1648,10 @@ export interface OpenAPIComponents {
           "feature.catalog"?: boolean;
           "feature.projects"?: boolean;
           "feature.monitoring"?: boolean;
-          "feature.argocd"?: boolean;
           "feature.security"?: boolean;
           "feature.backups"?: boolean;
           "feature.charlie"?: boolean;
         };
-    FleetOperationResponse: Record<string, unknown>;
-    FleetOperationTargetResponse: Record<string, unknown>;
     HelmChart: {
           "id"?: string;
           "repository_id"?: string;
@@ -1437,7 +1895,7 @@ export interface OpenAPIComponents {
         };
     OwnershipTransferResponse: {
           "id"?: string;
-          "managed_by"?: "api" | "ui" | "crd" | "system" | "argocd";
+          "managed_by"?: "api" | "ui" | "crd" | "system";
           "transferred"?: boolean;
         };
     PaginatedClusters: {
@@ -2084,8 +2542,6 @@ export type OpenAPISchemaName = keyof OpenAPIComponents['schemas'];
 
 export type AgentDiagnostics = OpenAPIComponents['schemas']['AgentDiagnostics'];
 export type AgentDiagnosticsBundle = OpenAPIComponents['schemas']['AgentDiagnosticsBundle'];
-export type AgentFleetItem = OpenAPIComponents['schemas']['AgentFleetItem'];
-export type AgentFleetResponse = OpenAPIComponents['schemas']['AgentFleetResponse'];
 export type AgentLifecycleOperation = OpenAPIComponents['schemas']['AgentLifecycleOperation'];
 export type AgentLifecycleOperationsResponse = OpenAPIComponents['schemas']['AgentLifecycleOperationsResponse'];
 export type AgentOfflineBehavior = OpenAPIComponents['schemas']['AgentOfflineBehavior'];
@@ -2100,12 +2556,6 @@ export type ApiTokenCreated = OpenAPIComponents['schemas']['ApiTokenCreated'];
 export type ApiTokenListItem = OpenAPIComponents['schemas']['ApiTokenListItem'];
 export type ApplyClusterTemplateRequest = OpenAPIComponents['schemas']['ApplyClusterTemplateRequest'];
 export type ApplyNetworkPolicyRequest = OpenAPIComponents['schemas']['ApplyNetworkPolicyRequest'];
-export type ArgoOperation = OpenAPIComponents['schemas']['ArgoOperation'];
-export type ArgoOperationEnvelope = OpenAPIComponents['schemas']['ArgoOperationEnvelope'];
-export type ArgoOperationEvent = OpenAPIComponents['schemas']['ArgoOperationEvent'];
-export type ArgoOrphanApplication = OpenAPIComponents['schemas']['ArgoOrphanApplication'];
-export type ArgoOrphanReport = OpenAPIComponents['schemas']['ArgoOrphanReport'];
-export type ArgoSyncRequest = OpenAPIComponents['schemas']['ArgoSyncRequest'];
 export type AuditLogEntry = OpenAPIComponents['schemas']['AuditLogEntry'];
 export type BackupControllerStatus = OpenAPIComponents['schemas']['BackupControllerStatus'];
 export type BackupCreateRequest = OpenAPIComponents['schemas']['BackupCreateRequest'];
@@ -2169,11 +2619,22 @@ export type CharlieSessionResource = OpenAPIComponents['schemas']['CharlieSessio
 export type CharlieThreadMessageRequest = OpenAPIComponents['schemas']['CharlieThreadMessageRequest'];
 export type CharlieThreadMetadata = OpenAPIComponents['schemas']['CharlieThreadMetadata'];
 export type CharlieTriggerRetryRequest = OpenAPIComponents['schemas']['CharlieTriggerRetryRequest'];
+export type ChartRecommendation = OpenAPIComponents['schemas']['ChartRecommendation'];
 export type CloudCredential = OpenAPIComponents['schemas']['CloudCredential'];
 export type CloudCredentialRequest = OpenAPIComponents['schemas']['CloudCredentialRequest'];
 export type CloudProviderSpec = OpenAPIComponents['schemas']['CloudProviderSpec'];
 export type Cluster = OpenAPIComponents['schemas']['Cluster'];
+export type ClusterAgentItem = OpenAPIComponents['schemas']['ClusterAgentItem'];
+export type ClusterAgentResponse = OpenAPIComponents['schemas']['ClusterAgentResponse'];
 export type ClusterConditionResponse = OpenAPIComponents['schemas']['ClusterConditionResponse'];
+export type ClusterDeployment = OpenAPIComponents['schemas']['ClusterDeployment'];
+export type ClusterDeploymentControl = OpenAPIComponents['schemas']['ClusterDeploymentControl'];
+export type ClusterDeploymentControlEnvelope = OpenAPIComponents['schemas']['ClusterDeploymentControlEnvelope'];
+export type ClusterDeploymentDetail = OpenAPIComponents['schemas']['ClusterDeploymentDetail'];
+export type ClusterDeploymentDetailEnvelope = OpenAPIComponents['schemas']['ClusterDeploymentDetailEnvelope'];
+export type ClusterDeploymentEvent = OpenAPIComponents['schemas']['ClusterDeploymentEvent'];
+export type ClusterDeploymentEventPage = OpenAPIComponents['schemas']['ClusterDeploymentEventPage'];
+export type ClusterDeploymentPage = OpenAPIComponents['schemas']['ClusterDeploymentPage'];
 export type ClusterEvent = OpenAPIComponents['schemas']['ClusterEvent'];
 export type ClusterGroupResponse = OpenAPIComponents['schemas']['ClusterGroupResponse'];
 export type ClusterRegistryConfigLegacy = OpenAPIComponents['schemas']['ClusterRegistryConfigLegacy'];
@@ -2188,12 +2649,63 @@ export type ConstraintYAMLRequest = OpenAPIComponents['schemas']['ConstraintYAML
 export type CreateClusterGroupRequest = OpenAPIComponents['schemas']['CreateClusterGroupRequest'];
 export type CreateClusterRequest = OpenAPIComponents['schemas']['CreateClusterRequest'];
 export type CreateClusterTemplateRequest = OpenAPIComponents['schemas']['CreateClusterTemplateRequest'];
-export type CreateFleetOperationRequest = OpenAPIComponents['schemas']['CreateFleetOperationRequest'];
 export type CreateNetworkPolicyTemplateRequest = OpenAPIComponents['schemas']['CreateNetworkPolicyTemplateRequest'];
 export type CreateProjectCatalogRequest = OpenAPIComponents['schemas']['CreateProjectCatalogRequest'];
 export type CreateProjectRequest = OpenAPIComponents['schemas']['CreateProjectRequest'];
 export type DataEnvelope = OpenAPIComponents['schemas']['DataEnvelope'];
 export type DecommissionStatusResponse = OpenAPIComponents['schemas']['DecommissionStatusResponse'];
+export type DeliveryBundle = OpenAPIComponents['schemas']['DeliveryBundle'];
+export type DeliveryBundleEnvelope = OpenAPIComponents['schemas']['DeliveryBundleEnvelope'];
+export type DeliveryBundlePage = OpenAPIComponents['schemas']['DeliveryBundlePage'];
+export type DeliveryBundleVersion = OpenAPIComponents['schemas']['DeliveryBundleVersion'];
+export type DeliveryBundleVersionEnvelope = OpenAPIComponents['schemas']['DeliveryBundleVersionEnvelope'];
+export type DeliveryBundleVersionPage = OpenAPIComponents['schemas']['DeliveryBundleVersionPage'];
+export type DeliveryBundleVersionWrite = OpenAPIComponents['schemas']['DeliveryBundleVersionWrite'];
+export type DeliveryBundleWrite = OpenAPIComponents['schemas']['DeliveryBundleWrite'];
+export type DeliveryClusterInventory = OpenAPIComponents['schemas']['DeliveryClusterInventory'];
+export type DeliveryClusterInventoryEnvelope = OpenAPIComponents['schemas']['DeliveryClusterInventoryEnvelope'];
+export type DeliveryCompatibilityContract = OpenAPIComponents['schemas']['DeliveryCompatibilityContract'];
+export type DeliveryCompatibilityCount = OpenAPIComponents['schemas']['DeliveryCompatibilityCount'];
+export type DeliveryControllerInventory = OpenAPIComponents['schemas']['DeliveryControllerInventory'];
+export type DeliveryFrozenRollout = OpenAPIComponents['schemas']['DeliveryFrozenRollout'];
+export type DeliveryFrozenRolloutEnvelope = OpenAPIComponents['schemas']['DeliveryFrozenRolloutEnvelope'];
+export type DeliveryPreviewDecision = OpenAPIComponents['schemas']['DeliveryPreviewDecision'];
+export type DeliveryRollout = OpenAPIComponents['schemas']['DeliveryRollout'];
+export type DeliveryRolloutAction = OpenAPIComponents['schemas']['DeliveryRolloutAction'];
+export type DeliveryRolloutApproval = OpenAPIComponents['schemas']['DeliveryRolloutApproval'];
+export type DeliveryRolloutApprovalRecord = OpenAPIComponents['schemas']['DeliveryRolloutApprovalRecord'];
+export type DeliveryRolloutCluster = OpenAPIComponents['schemas']['DeliveryRolloutCluster'];
+export type DeliveryRolloutClusterPage = OpenAPIComponents['schemas']['DeliveryRolloutClusterPage'];
+export type DeliveryRolloutControl = OpenAPIComponents['schemas']['DeliveryRolloutControl'];
+export type DeliveryRolloutControlEnvelope = OpenAPIComponents['schemas']['DeliveryRolloutControlEnvelope'];
+export type DeliveryRolloutDetail = OpenAPIComponents['schemas']['DeliveryRolloutDetail'];
+export type DeliveryRolloutDetailEnvelope = OpenAPIComponents['schemas']['DeliveryRolloutDetailEnvelope'];
+export type DeliveryRolloutEvent = OpenAPIComponents['schemas']['DeliveryRolloutEvent'];
+export type DeliveryRolloutEventPage = OpenAPIComponents['schemas']['DeliveryRolloutEventPage'];
+export type DeliveryRolloutPage = OpenAPIComponents['schemas']['DeliveryRolloutPage'];
+export type DeliveryRolloutStart = OpenAPIComponents['schemas']['DeliveryRolloutStart'];
+export type DeliverySource = OpenAPIComponents['schemas']['DeliverySource'];
+export type DeliverySourceCredentialInput = OpenAPIComponents['schemas']['DeliverySourceCredentialInput'];
+export type DeliverySourceCredentialRotate = OpenAPIComponents['schemas']['DeliverySourceCredentialRotate'];
+export type DeliverySourceEnvelope = OpenAPIComponents['schemas']['DeliverySourceEnvelope'];
+export type DeliverySourcePage = OpenAPIComponents['schemas']['DeliverySourcePage'];
+export type DeliverySourcePatch = OpenAPIComponents['schemas']['DeliverySourcePatch'];
+export type DeliverySourceVerify = OpenAPIComponents['schemas']['DeliverySourceVerify'];
+export type DeliverySourceWrite = OpenAPIComponents['schemas']['DeliverySourceWrite'];
+export type DeliverySystemCompatibility = OpenAPIComponents['schemas']['DeliverySystemCompatibility'];
+export type DeliverySystemCompatibilityEnvelope = OpenAPIComponents['schemas']['DeliverySystemCompatibilityEnvelope'];
+export type DeliverySystemRelease = OpenAPIComponents['schemas']['DeliverySystemRelease'];
+export type DeliverySystemRollout = OpenAPIComponents['schemas']['DeliverySystemRollout'];
+export type DeliveryTarget = OpenAPIComponents['schemas']['DeliveryTarget'];
+export type DeliveryTargetDeletion = OpenAPIComponents['schemas']['DeliveryTargetDeletion'];
+export type DeliveryTargetDeletionEnvelope = OpenAPIComponents['schemas']['DeliveryTargetDeletionEnvelope'];
+export type DeliveryTargetEnvelope = OpenAPIComponents['schemas']['DeliveryTargetEnvelope'];
+export type DeliveryTargetPage = OpenAPIComponents['schemas']['DeliveryTargetPage'];
+export type DeliveryTargetPatch = OpenAPIComponents['schemas']['DeliveryTargetPatch'];
+export type DeliveryTargetPreview = OpenAPIComponents['schemas']['DeliveryTargetPreview'];
+export type DeliveryTargetPreviewEnvelope = OpenAPIComponents['schemas']['DeliveryTargetPreviewEnvelope'];
+export type DeliveryTargetWrite = OpenAPIComponents['schemas']['DeliveryTargetWrite'];
+export type DeliveryTrustPolicy = OpenAPIComponents['schemas']['DeliveryTrustPolicy'];
 export type DexConnector = OpenAPIComponents['schemas']['DexConnector'];
 export type DexConnectorRequest = OpenAPIComponents['schemas']['DexConnectorRequest'];
 export type DexConnectorType = OpenAPIComponents['schemas']['DexConnectorType'];
@@ -2210,8 +2722,6 @@ export type ExtensionMountsResponse = OpenAPIComponents['schemas']['ExtensionMou
 export type ExtensionRecord = OpenAPIComponents['schemas']['ExtensionRecord'];
 export type ExtensionValidation = OpenAPIComponents['schemas']['ExtensionValidation'];
 export type FeatureFlags = OpenAPIComponents['schemas']['FeatureFlags'];
-export type FleetOperationResponse = OpenAPIComponents['schemas']['FleetOperationResponse'];
-export type FleetOperationTargetResponse = OpenAPIComponents['schemas']['FleetOperationTargetResponse'];
 export type HelmChart = OpenAPIComponents['schemas']['HelmChart'];
 export type HelmChartVersion = OpenAPIComponents['schemas']['HelmChartVersion'];
 export type HelmRepository = OpenAPIComponents['schemas']['HelmRepository'];

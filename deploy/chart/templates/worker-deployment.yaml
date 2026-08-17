@@ -36,7 +36,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "digest" .Values.utilities.busybox.digest "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - sh
@@ -52,7 +52,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "digest" .Values.utilities.busybox.digest "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - sh
@@ -90,6 +90,19 @@ spec:
                 secretKeyRef:
                   name: {{ include "astronomer.secretsSecretName" . }}
                   key: {{ .Values.secrets.encryptionKeyKey | quote }}
+            {{- if .Values.delivery.sourceResolution.proxy.enabled }}
+            - name: DELIVERY_SOURCE_PROXY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.delivery.sourceResolution.proxy.urlSecretRef.name | quote }}
+                  key: {{ .Values.delivery.sourceResolution.proxy.urlSecretRef.key | quote }}
+            {{- end }}
+            {{- if .Values.delivery.sourceResolution.ca.existingSecret }}
+            - name: DELIVERY_SOURCE_CA_FILE
+              value: /var/run/secrets/astronomer/delivery-source-ca/ca.pem
+            {{- end }}
+            - name: DELIVERY_SOURCE_TRUST_DIRECTORY
+              value: /etc/astronomer/delivery-trust
             {{- if .Values.postgres.external.dsnSecretRef.name }}
             - name: DATABASE_URL
               valueFrom:
@@ -120,6 +133,32 @@ spec:
               value: {{ $v | quote }}
             {{- end }}
             {{- end }}
+            {{- if .Values.release.manifest }}
+            - name: RELEASE_MANIFEST_PATH
+              value: /etc/astronomer/release/release-manifest.json
+            {{- if .Values.release.mirrorMapping }}
+            - name: RELEASE_MIRROR_MAPPING_PATH
+              value: /etc/astronomer/release/mirror-mapping.json
+            {{- end }}
+            {{- end }}
+          {{- if or .Values.delivery.sourceResolution.ca.existingSecret .Values.delivery.sourceResolution.trustKeys.existingSecret .Values.release.manifest }}
+          volumeMounts:
+            {{- if .Values.release.manifest }}
+            - name: release-manifest
+              mountPath: /etc/astronomer/release
+              readOnly: true
+            {{- end }}
+            {{- if .Values.delivery.sourceResolution.ca.existingSecret }}
+            - name: delivery-source-ca
+              mountPath: /var/run/secrets/astronomer/delivery-source-ca
+              readOnly: true
+            {{- end }}
+            {{- if .Values.delivery.sourceResolution.trustKeys.existingSecret }}
+            - name: delivery-source-trust
+              mountPath: /etc/astronomer/delivery-trust
+              readOnly: true
+            {{- end }}
+          {{- end }}
           {{- if .Values.worker.probes.enabled }}
           # The worker exposes /healthz on the same server as /metrics (9090).
           # Liveness restarts a wedged consumer; readiness gates rollouts on
@@ -143,6 +182,35 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
+      {{- if or .Values.delivery.sourceResolution.ca.existingSecret .Values.delivery.sourceResolution.trustKeys.existingSecret .Values.release.manifest }}
+      volumes:
+        {{- if .Values.release.manifest }}
+        - name: release-manifest
+          configMap:
+            name: {{ include "astronomer.fullname" . }}-release-manifest
+            items:
+              - key: release-manifest.json
+                path: release-manifest.json
+              {{- if .Values.release.mirrorMapping }}
+              - key: mirror-mapping.json
+                path: mirror-mapping.json
+              {{- end }}
+        {{- end }}
+        {{- if .Values.delivery.sourceResolution.ca.existingSecret }}
+        - name: delivery-source-ca
+          secret:
+            secretName: {{ .Values.delivery.sourceResolution.ca.existingSecret | quote }}
+            items:
+              - key: {{ .Values.delivery.sourceResolution.ca.key | quote }}
+                path: ca.pem
+        {{- end }}
+        {{- if .Values.delivery.sourceResolution.trustKeys.existingSecret }}
+        - name: delivery-source-trust
+          secret:
+            secretName: {{ .Values.delivery.sourceResolution.trustKeys.existingSecret | quote }}
+            defaultMode: 0444
+        {{- end }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

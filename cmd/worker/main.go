@@ -16,8 +16,12 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	deliveryresolver "github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
+	deliveryrollout "github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/systemrollout"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
+	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
@@ -26,9 +30,18 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
+
+// unavailableDeliveryDecryptor keeps public, credential-free source
+// resolution usable in development while failing closed if an encrypted
+// source is encountered. Production already refuses to start without the
+// platform encryption key.
+type unavailableDeliveryDecryptor struct{}
+
+func (unavailableDeliveryDecryptor) DecryptBytes(string) ([]byte, error) {
+	return nil, fmt.Errorf("platform encryption key is unavailable")
+}
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -48,8 +61,8 @@ func main() {
 
 	// C-01: enforce the same production fail-fast the server runs. Without this
 	// the worker stays Running with a typo'd ASTRONOMER_ENCRYPTION_KEY / bad
-	// secret / plaintext DSN — silently no-op'ing its credential-migration,
-	// argocd auto-register, and email tasks — hiding exactly the misconfiguration
+	// secret / plaintext DSN — silently no-op'ing its credential-migration
+	// and email tasks — hiding exactly the misconfiguration
 	// the check exists to surface. warn-only in dev (ValidateProductionSecurity
 	// is a no-op outside production).
 	encryptorReady := false
@@ -165,6 +178,10 @@ func main() {
 		Log:                           log,
 		AgentImageRepo:                cfg.AgentImageRepository,
 		AgentImageTag:                 cfg.AgentImageTag,
+		SystemArtifactURL:             cfg.DeliveryFluxDistributionRepository,
+		SystemArtifactDigest:          cfg.DeliveryFluxDistributionDigest,
+		SystemOIDCIssuer:              cfg.DeliveryFluxDistributionOIDCIssuer,
+		SystemOIDCIdentity:            cfg.DeliveryFluxDistributionCertificateIdentity,
 		PlatformName:                  "Astronomer",
 		AuditLogRetentionMonths:       cfg.AuditLogRetentionMonths,
 		ClusterTombstoneRetentionDays: cfg.ClusterTombstoneRetentionDays,
@@ -175,12 +192,65 @@ func main() {
 		CatalogDecryptor:              tasks.CatalogDecryptorFor(platformEncryptor),
 		MonitoringCipher:              tasks.MonitoringCipherFor(platformEncryptor),
 	})
-	var controlPlaneK8s kubernetes.Interface
+	deliveryQueries := sqlc.New(database.Pool())
+	deliveryVerifier, deliveryVerifierErr := deliveryresolver.NewExecVerifier(cfg.DeliveryCosignPath, cfg.DeliverySourceTrustDirectory)
+	if deliveryVerifierErr != nil {
+		log.Error("failed to configure delivery source signature verifier", "error", deliveryVerifierErr)
+		os.Exit(1)
+	}
+	deliverySourcePolicies, deliverySourcePoliciesErr := deliveryresolver.NewStaticPolicyProvider(
+		cfg.DeliverySourceAllowedPrivateHosts, cfg.DeliverySourceEgressCIDRs, cfg.DeliverySourceProxyURL,
+	)
+	if deliverySourcePoliciesErr != nil {
+		log.Error("failed to configure delivery source network policy", "error", deliverySourcePoliciesErr)
+		os.Exit(1)
+	}
+	deliverySourceService := deliveryresolver.New(deliveryVerifier)
+	deliverySourceService.SetSSHAllowed(cfg.DeliverySourceAllowSSH)
+	var deliveryDecryptor deliveryresolver.ByteDecryptor = unavailableDeliveryDecryptor{}
+	if platformEncryptor != nil {
+		deliveryDecryptor = platformEncryptor
+	} else {
+		log.Warn("delivery resolver has no encryption key; credentialed sources will be rejected")
+	}
+	deliverySourceWorker, deliverySourceWorkerErr := deliveryresolver.NewPostgresWorker(
+		database.Pool(), deliverySourceService, deliveryDecryptor,
+		deliverySourcePolicies, "",
+	)
+	if deliverySourceWorkerErr != nil {
+		log.Error("failed to configure delivery source resolver", "error", deliverySourceWorkerErr)
+		os.Exit(1)
+	}
+	deliverySourceWorker.SetLimits(deliveryresolver.Limits{
+		MaxArtifactBytes:  cfg.DeliverySourceMaxArtifactBytes,
+		MaxHelmChartBytes: cfg.DeliverySourceMaxHelmChartBytes,
+	})
+	if cfg.DeliverySourceCAFile != "" {
+		caBundle, caErr := os.ReadFile(cfg.DeliverySourceCAFile)
+		if caErr != nil || len(caBundle) == 0 || len(caBundle) > 1<<20 {
+			log.Error("failed to load bounded delivery source CA bundle", "error", caErr)
+			os.Exit(1)
+		}
+		deliverySourceWorker.SetBaseCABundle(caBundle)
+		clear(caBundle)
+	}
+	tasks.ConfigureDeliverySourceResolver(deliverySourceWorker)
+	deliveryReconciler, deliveryReconcilerErr := deliveryrollout.NewPostgresReconciler(
+		database.Pool(), maintenance.NewEvaluator(deliveryQueries), "",
+	)
+	if deliveryReconcilerErr != nil {
+		log.Error("failed to configure delivery rollout reconciler", "error", deliveryReconcilerErr)
+		os.Exit(1)
+	}
+	tasks.ConfigureDeliveryRolloutReconciler(deliveryReconciler)
+	deliverySystemReconciler, deliverySystemReconcilerErr := systemrollout.New(database.Pool())
+	if deliverySystemReconcilerErr != nil {
+		log.Error("failed to configure delivery system rollout reconciler", "error", deliverySystemReconcilerErr)
+		os.Exit(1)
+	}
+	tasks.ConfigureDeliverySystemRolloutReconciler(deliverySystemReconciler)
 	var controlPlaneDyn dynamic.Interface
 	if restCfg, kErr := rest.InClusterConfig(); kErr == nil {
-		if cs, kErr := kubernetes.NewForConfig(restCfg); kErr == nil {
-			controlPlaneK8s = cs
-		}
 		if dyn, dErr := dynamic.NewForConfig(restCfg); dErr == nil {
 			controlPlaneDyn = dyn
 		}
@@ -200,7 +270,6 @@ func main() {
 	// hub, so the full flow including tunnel ops works there.
 	tasks.ConfigureClusterDecommission(tasks.ClusterDecommissionDeps{
 		Queries: sqlc.New(database.Pool()),
-		K8s:     controlPlaneK8s,
 		// TODO(rbac-invalidation): the standalone worker process has no
 		// in-process RBAC cache to flush, but when it runs the decommission
 		// phase from here, the server pod's cache still holds stale per-user
@@ -208,37 +277,10 @@ func main() {
 		// invalidation (pub/sub or a notify channel) would close this gap.
 		RBACCache: nil,
 	})
-	// ArgoCD managed-cluster label refresh. The standalone worker pod runs
-	// in the same control-plane cluster as the server (both are Deployments
-	// in the astronomer namespace), so an in-cluster k8s client targets the
-	// same argocd namespace where the Argo cluster Secrets live. When
-	// in-cluster config isn't available (laptop dev) the task degrades to a
-	// logged warning and the operator re-registers manually.
-	{
-		refreshK8s := controlPlaneK8s
-		tasks.ConfigureArgoCDRefresh(tasks.ArgoCDRefreshDeps{
-			Queries: sqlc.New(database.Pool()),
-			K8s:     refreshK8s,
-		})
-		var enc *auth.Encryptor
-		if cfg.EncryptionKey != "" {
-			if e, encErr := auth.NewEncryptor(cfg.EncryptionKey); encErr == nil {
-				enc = e
-			} else {
-				log.Warn("argocd auto-register encryptor init failed; task will skip remote proxy tokens", "error", encErr)
-			}
-		}
-		tasks.ConfigureArgoCDAutoRegister(tasks.ArgoCDAutoRegisterDeps{
-			Queries:             sqlc.New(database.Pool()),
-			Encryptor:           enc,
-			K8s:                 refreshK8s,
-			ClusterProxyBaseURL: cfg.ArgoCDClusterProxyBaseURL,
-		})
-		tasks.ConfigurePlaintextCredentialMigration(tasks.PlaintextCredentialMigrationDeps{
-			Queries:   sqlc.New(database.Pool()),
-			Encryptor: enc,
-		})
-	}
+	tasks.ConfigurePlaintextCredentialMigration(tasks.PlaintextCredentialMigrationDeps{
+		Queries:   sqlc.New(database.Pool()),
+		Encryptor: platformEncryptor,
+	})
 
 	// Email dispatch (migration 047). Wired only when the encryptor
 	// is available — the SMTP password is Fernet-encrypted and the

@@ -16,7 +16,7 @@ resources:
 eventsPerSecond: 500
 day2FailureDrills:
   - agent_reconnect_storm
-  - argo_applicationset_fanout
+  - delivery_rollout_fanout
   - postgres_pool_pressure
   - redis_outage_outbox_recovery
   - browser_resource_list_budget

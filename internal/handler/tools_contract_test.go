@@ -26,7 +26,7 @@ func TestCertManagerToolMigrationContract(t *testing.T) {
 	if !ok {
 		t.Fatal("failed to resolve caller path")
 	}
-	path := filepath.Join(filepath.Dir(file), "..", "db", "migrations", "033_cert_manager_tool.up.sql")
+	path := filepath.Join(filepath.Dir(file), "..", "db", "migrations", "001_initial.up.sql")
 	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read migration: %v", err)
@@ -36,7 +36,7 @@ func TestCertManagerToolMigrationContract(t *testing.T) {
 		"'cert-manager'",
 		"https://charts.jetstack.io",
 		"cert-manager-webhook",
-		`"crds:\n  enabled: true\nprometheus:\n  enabled: true\n"`,
+		`crds:\n  enabled: true\nprometheus:\n  enabled: true\n`,
 	} {
 		if !strings.Contains(sql, want) {
 			t.Fatalf("migration missing %q", want)

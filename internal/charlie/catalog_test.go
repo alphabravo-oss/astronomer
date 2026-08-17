@@ -30,18 +30,23 @@ func TestCapabilityCatalogPinsSRESurfaceAndManagedTargetBoundary(t *testing.T) {
 	}
 
 	for _, required := range []string{
-		"astronomer.agent_fleet.summary", "astronomer.agent_fleet.list",
-		"astronomer.agent_fleet.get", "astronomer.agent_fleet.connection_history",
-		"astronomer.agent_fleet.upgrade_status", "astronomer.agent_fleet.ingestion_health",
+		"astronomer.delivery.overview", "astronomer.delivery.sources", "astronomer.delivery.source_get",
+		"astronomer.delivery.bundles", "astronomer.delivery.bundle_get", "astronomer.delivery.targets",
+		"astronomer.delivery.target_preview", "astronomer.delivery.rollouts", "astronomer.delivery.rollout_get",
+		"astronomer.delivery.deployments", "astronomer.delivery.deployment_get", "astronomer.delivery.system_health",
+		"astronomer.cluster_agents.summary", "astronomer.cluster_agents.list",
+		"astronomer.cluster_agents.get", "astronomer.cluster_agents.connection_history",
 		"astronomer.tunnel.health", "astronomer.tunnel.replica_distribution",
 		"astronomer.tunnel.recent_errors",
 		"astronomer.management.pods", "astronomer.management.rollout_status",
 		"astronomer.installation.summary", "astronomer.management.pod_logs",
 		"astronomer.authentication.health", "astronomer.external_integrations.health",
-		"astronomer.registration.health", "astronomer.fleet_operations.health",
+		"astronomer.registration.health",
 		"astronomer.policy_engine.health", "astronomer.templates.health",
 		"astronomer.catalog.health", "astronomer.reconciliation.health",
-		"astronomer.security.key_status",
+		"astronomer.security.key_status", "astronomer.delivery.rollout_pause", "astronomer.delivery.rollout_resume",
+		"astronomer.delivery.rollout_approve", "astronomer.delivery.rollout_retry_failed",
+		"astronomer.delivery.rollout_rollback", "astronomer.delivery.deployment_reconcile",
 	} {
 		if !seen[required] {
 			t.Errorf("required management-plane capability %s is missing", required)
@@ -139,9 +144,9 @@ func TestDestructiveCatalogFactAlwaysWinsOverAutomationMetadata(t *testing.T) {
 	}
 }
 
-func TestAgentFleetCatalogUsesDatabaseOrServerTelemetryOnly(t *testing.T) {
+func TestClusterAgentCatalogUsesDatabaseOrServerTelemetryOnly(t *testing.T) {
 	for _, capability := range ReadCapabilityCatalog() {
-		if !strings.Contains(capability.Name, "agent_fleet") && !strings.Contains(capability.Name, "tunnel") {
+		if !strings.Contains(capability.Name, "cluster_agents") && !strings.Contains(capability.Name, "tunnel") {
 			continue
 		}
 		if capability.Source != SourceAstronomerDatabase && capability.Source != SourceAstronomerServer {

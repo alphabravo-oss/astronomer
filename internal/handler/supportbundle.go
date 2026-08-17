@@ -47,7 +47,6 @@ type SupportBundleQuerier interface {
 	ListUsers(ctx context.Context, arg sqlc.ListUsersParams) ([]sqlc.User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
-	ListArgoCDInstances(ctx context.Context, arg sqlc.ListArgoCDInstancesParams) ([]sqlc.ArgocdInstance, error)
 	ListAuditLogV1(ctx context.Context, arg sqlc.ListAuditLogsParams) ([]sqlc.AuditLog, error)
 	// ListActiveConnections drives the agent-connections bundle section —
 	// last-seen + cluster_id are exactly what an
@@ -161,7 +160,6 @@ func (h *SupportBundleHandler) Download(w http.ResponseWriter, r *http.Request) 
 	h.writePlatformConfig(r.Context(), zw, collected)
 	h.writeClusters(r.Context(), zw, collected)
 	h.writeUsers(r.Context(), zw, collected)
-	h.writeArgoCDInstances(r.Context(), zw, collected)
 	h.writeAuditLog(r.Context(), zw, collected)
 	h.writePods(r.Context(), zw, collected)
 	h.writePodLogs(r.Context(), zw, collected)
@@ -345,30 +343,6 @@ func (h *SupportBundleHandler) writeUsers(ctx context.Context, zw *zip.Writer, l
 		redacted = append(redacted, entry)
 	}
 	log.section("users.json", writeBundleJSON(zw, "users.json", redacted))
-}
-
-func (h *SupportBundleHandler) writeArgoCDInstances(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	rows, err := h.queries.ListArgoCDInstances(ctx, sqlc.ListArgoCDInstancesParams{Limit: 100, Offset: 0})
-	if err != nil {
-		log.section("argocd-instances.json", err)
-		return
-	}
-	redacted := make([]map[string]any, 0, len(rows))
-	for _, a := range rows {
-		redacted = append(redacted, map[string]any{
-			"id":                   a.ID.String(),
-			"name":                 a.Name,
-			"cluster_id":           a.ClusterID.String(),
-			"api_url":              a.ApiUrl,
-			"verify_ssl":           a.VerifySsl,
-			"is_healthy":           a.IsHealthy,
-			"auth_token_encrypted": redaction.ByteCount(a.AuthTokenEncrypted),
-			"last_sync":            timestamptzString(a.LastSync),
-			"created_at":           a.CreatedAt,
-			"updated_at":           a.UpdatedAt,
-		})
-	}
-	log.section("argocd-instances.json", writeBundleJSON(zw, "argocd-instances.json", redacted))
 }
 
 func (h *SupportBundleHandler) writeAuditLog(ctx context.Context, zw *zip.Writer, log *sectionLog) {

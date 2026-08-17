@@ -113,7 +113,6 @@ export interface PlatformSettingsGrouped {
     catalog: boolean;
     projects: boolean;
     monitoring: boolean;
-    argocd: boolean;
     security: boolean;
     backups: boolean;
   };

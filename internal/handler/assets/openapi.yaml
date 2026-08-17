@@ -39,14 +39,6 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Alias of bearerJWT; session JWT or personal API token.
-    argoCDClusterProxyToken:
-      type: http
-      scheme: bearer
-      bearerFormat: opaque
-      description: |
-        Dedicated `astro_argocd_*` machine credential stored in the bundled
-        ArgoCD cluster Secret. It is hash-validated, expiration/revocation
-        checked, and bound to the cluster ID in the request path.
   schemas:
     CharlieOnboardingRequest:
       type: object
@@ -144,7 +136,7 @@ components:
       properties:
         type:
           type: string
-          enum: [installation, management_component, alert, backup, self_management_application, agent_connection_record, agent_fleet, tunnel]
+          enum: [installation, management_component, alert, backup, self_management_application, agent_connection_record, cluster_agents, tunnel]
         id:
           type: string
           maxLength: 255
@@ -239,10 +231,10 @@ components:
         id: {type: string, format: uuid}
         title: {type: string, maxLength: 120}
         state: {type: string, enum: [active, archived]}
-        current_session_id: {type: [string, 'null'], format: uuid}
+        current_session_id: {type: string, format: uuid, nullable: true}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
-        archived_at: {type: [string, 'null'], format: date-time}
+        archived_at: {type: string, format: date-time, nullable: true}
     CharlieAbortRequest:
       type: object
       additionalProperties: false
@@ -271,7 +263,7 @@ components:
       additionalProperties: false
       required: [type, id, required_verb]
       properties:
-        type: {type: string, enum: [installation, management_component, alert, backup, self_management_application, agent_connection_record, agent_fleet, tunnel]}
+        type: {type: string, enum: [installation, management_component, alert, backup, self_management_application, agent_connection_record, cluster_agents, tunnel]}
         id: {type: string, minLength: 1, maxLength: 255}
         required_verb: {type: string, enum: [read]}
     CharlieFindingSummary:
@@ -435,7 +427,7 @@ components:
         acknowledged_disclosure_digest: {type: string}
         effects: {type: array, items: {type: string}}
         auto_readiness: {$ref: '#/components/schemas/CharlieAdminAutoReadiness'}
-        workload_ceiling: {type: string, enum: [disabled, read_only, approval, auto], description: Product-owned ceiling currently rendered in the agent Argo workload.}
+        workload_ceiling: {type: string, enum: [disabled, read_only, approval, auto], description: Product-owned ceiling currently rendered in the agent's Flux delivery workload.}
         workload_ceiling_ready: {type: boolean, description: True only after a non-pruning rollout and exact readback from both ready product-agent replicas.}
     CharlieKubernetesVisibility:
       type: object
@@ -735,7 +727,7 @@ components:
       additionalProperties: false
       required: [type, id, required_verb, label, summary]
       properties:
-        type: {type: string, enum: [installation, management_component, alert, backup, self_management_application, agent_connection_record, agent_fleet, tunnel]}
+        type: {type: string, enum: [installation, management_component, alert, backup, self_management_application, agent_connection_record, cluster_agents, tunnel]}
         id: {type: string, minLength: 1, maxLength: 255}
         required_verb: {type: string, const: read}
         label: {type: string, maxLength: 256}
@@ -833,105 +825,6 @@ components:
             - message
       required:
         - error
-    ArgoSyncRequest:
-      type: object
-      description: |
-        Bounded manual-sync options. Application source/spec and credential
-        material are never accepted by this operation endpoint.
-      additionalProperties: false
-      properties:
-        revision:
-          type: string
-          maxLength: 256
-        prune:
-          type: boolean
-          default: false
-        dry_run:
-          type: boolean
-          default: false
-        reason:
-          type: string
-          maxLength: 500
-        sync_window_override:
-          type: boolean
-          default: false
-          description: Audit intent only; does not bypass ArgoCD AppProject sync windows.
-    ArgoOperation:
-      type: object
-      required:
-        - id
-        - targetType
-        - targetKey
-        - operationType
-        - status
-        - attemptCount
-        - createdAt
-        - updatedAt
-      properties:
-        id:
-          type: string
-          format: uuid
-        targetType:
-          type: string
-          enum: [application]
-        targetKey:
-          type: string
-          description: Stable Astronomer-local Application UUID.
-        operationType:
-          type: string
-          enum: [sync]
-        status:
-          type: string
-          enum: [pending, running, completed, failed, superseded]
-        attemptCount:
-          type: integer
-          minimum: 0
-        startedAt:
-          type: string
-          format: date-time
-          nullable: true
-        completedAt:
-          type: string
-          format: date-time
-          nullable: true
-        errorMessage:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-        events:
-          type: array
-          description: Present on operation detail responses.
-          items:
-            $ref: '#/components/schemas/ArgoOperationEvent'
-    ArgoOperationEvent:
-      type: object
-      required: [id, level, stage, message, createdAt]
-      properties:
-        id:
-          type: string
-          format: uuid
-        level:
-          type: string
-        stage:
-          type: string
-        message:
-          type: string
-        detail:
-          type: object
-          additionalProperties: true
-        createdAt:
-          type: string
-          format: date-time
-    ArgoOperationEnvelope:
-      type: object
-      required: [data]
-      properties:
-        data:
-          $ref: '#/components/schemas/ArgoOperation'
     PaginatedEnvelope:
       type: object
       description: DRF-style paginated list envelope. `data` is the page of items.
@@ -1112,56 +1005,6 @@ components:
           type: number
         pod_count:
           type: integer
-        argocd:
-          type: object
-          properties:
-            registered:
-              type: boolean
-            instance_count:
-              type: integer
-            cluster_secret_names:
-              type: array
-              items:
-                type: string
-            baseline_managed_by:
-              type: string
-              enum:
-                - argocd
-                - argocd_pending
-                - helm
-                - local
-                - unknown
-            drift:
-              type: object
-              properties:
-                app_count:
-                  type: integer
-                synced_count:
-                  type: integer
-                out_of_sync_count:
-                  type: integer
-                unknown_sync_count:
-                  type: integer
-                healthy_count:
-                  type: integer
-                progressing_count:
-                  type: integer
-                degraded_count:
-                  type: integer
-                unknown_health_count:
-                  type: integer
-                resource_created_count:
-                  type: integer
-                resource_changed_count:
-                  type: integer
-                resource_pruned_count:
-                  type: integer
-                last_synced:
-                  type: string
-                  format: date-time
-                  nullable: true
-                last_error:
-                  type: string
         created_at:
           type: string
           format: date-time
@@ -1256,62 +1099,6 @@ components:
         step_order:
           type: integer
         created_at:
-          type: string
-          format: date-time
-    ArgoOrphanApplication:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        component_slug:
-          type: string
-        application_set_name:
-          type: string
-        destination_cluster:
-          type: string
-        destination_namespace:
-          type: string
-        reason:
-          type: string
-          enum:
-            - missing_destination
-            - stale_destination_cluster
-            - live_missing_destination
-            - live_stale_destination_cluster
-            - stale_applicationset_metadata
-        source:
-          type: string
-          enum:
-            - cache
-            - live
-        message:
-          type: string
-    ArgoOrphanReport:
-      type: object
-      properties:
-        instance_id:
-          type: string
-          format: uuid
-        application_count:
-          type: integer
-        cached_application_count:
-          type: integer
-        live_application_count:
-          type: integer
-        managed_target_count:
-          type: integer
-        orphan_application_count:
-          type: integer
-        orphan_applications:
-          type: array
-          items:
-            $ref: '#/components/schemas/ArgoOrphanApplication'
-        live_error:
-          type: string
-        generated_at:
           type: string
           format: date-time
     SetOptionsRequest:
@@ -1440,7 +1227,6 @@ components:
             - ui
             - crd
             - system
-            - argocd
         transferred:
           type: boolean
     FeatureFlags:
@@ -1452,8 +1238,6 @@ components:
         feature.projects:
           type: boolean
         feature.monitoring:
-          type: boolean
-        feature.argocd:
           type: boolean
         feature.security:
           type: boolean
@@ -1704,7 +1488,7 @@ components:
           type: array
           items:
             type: string
-    AgentFleetItem:
+    ClusterAgentItem:
       type: object
       properties:
         cluster_id:
@@ -1788,7 +1572,7 @@ components:
           type: string
         offline_behavior:
           $ref: '#/components/schemas/AgentOfflineBehavior'
-    AgentFleetResponse:
+    ClusterAgentResponse:
       type: object
       properties:
         summary:
@@ -1830,7 +1614,7 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/AgentFleetItem'
+            $ref: '#/components/schemas/ClusterAgentItem'
         limit:
           type: integer
         offset:
@@ -1842,7 +1626,7 @@ components:
           type: string
           format: date-time
         agent:
-          $ref: '#/components/schemas/AgentFleetItem'
+          $ref: '#/components/schemas/ClusterAgentItem'
         recent_connections:
           type: array
           items:
@@ -1853,25 +1637,6 @@ components:
           items:
             type: object
             additionalProperties: true
-        argocd:
-          type: object
-          properties:
-            registered:
-              type: boolean
-            instance_count:
-              type: integer
-            cluster_secret_names:
-              type: array
-              items:
-                type: string
-            server_urls:
-              type: array
-              items:
-                type: string
-            last_updated_at:
-              type: string
-              format: date-time
-              nullable: true
         live:
           type: object
           additionalProperties: true
@@ -2992,6 +2757,28 @@ components:
         updated_at:
           type: string
           format: date-time
+    ChartRecommendation:
+      type: object
+      additionalProperties: false
+      required: [chart_id, rating_count, avg_stars, bayesian_score]
+      properties:
+        chart_id:
+          type: string
+          format: uuid
+        rating_count:
+          type: integer
+          format: int32
+          minimum: 0
+        avg_stars:
+          type: number
+          format: double
+        bayesian_score:
+          type: number
+          format: double
+        weight:
+          type: integer
+          format: int32
+          minimum: 0
     InstalledChart:
       type: object
       properties:
@@ -4915,12 +4702,6 @@ components:
         Schema not yet fully enumerated; shape is the handler's JSON payload.
         Permissive object placeholder so every $ref in this spec resolves.
       additionalProperties: true
-    CreateFleetOperationRequest:
-      type: object
-      description: >-
-        Schema not yet fully enumerated; shape is the handler's JSON payload.
-        Permissive object placeholder so every $ref in this spec resolves.
-      additionalProperties: true
     CreateNetworkPolicyTemplateRequest:
       type: object
       description: >-
@@ -4928,18 +4709,6 @@ components:
         Permissive object placeholder so every $ref in this spec resolves.
       additionalProperties: true
     DecommissionStatusResponse:
-      type: object
-      description: >-
-        Schema not yet fully enumerated; shape is the handler's JSON payload.
-        Permissive object placeholder so every $ref in this spec resolves.
-      additionalProperties: true
-    FleetOperationResponse:
-      type: object
-      description: >-
-        Schema not yet fully enumerated; shape is the handler's JSON payload.
-        Permissive object placeholder so every $ref in this spec resolves.
-      additionalProperties: true
-    FleetOperationTargetResponse:
       type: object
       description: >-
         Schema not yet fully enumerated; shape is the handler's JSON payload.
@@ -5052,6 +4821,758 @@ components:
         Schema not yet fully enumerated; shape is the handler's JSON payload.
         Permissive object placeholder so every $ref in this spec resolves.
       additionalProperties: true
+    DeliveryTargetWrite:
+      type: object
+      additionalProperties: false
+      required: [name, bundle_version_id, placement, rollout_policy, reconciliation_policy]
+      properties:
+        project_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 4096}
+        bundle_version_id: {type: string, format: uuid}
+        placement: {type: object, additionalProperties: true}
+        rollout_policy:
+          type: object
+          additionalProperties: false
+          properties:
+            approval_required: {type: boolean}
+        reconciliation_policy: {type: object, additionalProperties: true}
+        maintenance_window_policy: {type: object, additionalProperties: true}
+        suspended: {type: boolean}
+    DeliveryTargetPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        project_id: {type: string, format: uuid}
+        description: {type: string, maxLength: 4096}
+        bundle_version_id: {type: string, format: uuid}
+        placement: {type: object, additionalProperties: true}
+        rollout_policy: {type: object, additionalProperties: false, properties: {approval_required: {type: boolean}}}
+        reconciliation_policy: {type: object, additionalProperties: true}
+        maintenance_window_policy: {type: object, additionalProperties: true}
+        suspended: {type: boolean}
+    DeliveryRolloutStart:
+      type: object
+      additionalProperties: false
+      required: [preview_digest, confirm_all_clusters, strategy]
+      properties:
+        project_id: {type: string, format: uuid}
+        preview_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        confirm_all_clusters: {type: boolean}
+        strategy: {type: object, additionalProperties: true}
+    DeliveryRolloutAction:
+      type: object
+      additionalProperties: false
+      properties:
+        project_id: {type: string, format: uuid}
+        reason_code: {type: string, maxLength: 96}
+    DeliveryRolloutApproval:
+      type: object
+      additionalProperties: false
+      required: [cohort, binding_digest, decision, expires_at]
+      properties:
+        project_id: {type: string, format: uuid}
+        cohort: {type: integer, minimum: -1}
+        binding_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        decision: {type: string, enum: [approved, rejected]}
+        expires_at: {type: string, format: date-time}
+    DeliveryTrustPolicy:
+      type: object
+      additionalProperties: false
+      required: [allow_unsigned]
+      properties:
+        allow_unsigned: {type: boolean}
+        provider: {type: string, enum: [cosign_key, cosign_keyless, git]}
+        identity: {type: string, maxLength: 2048}
+        issuer: {type: string, maxLength: 2048}
+        key_ref: {type: string, maxLength: 253}
+    DeliverySourceCredentialInput:
+      type: object
+      description: Write-only credential material; never returned by the API.
+      additionalProperties: false
+      properties:
+        username: {type: string, writeOnly: true, maxLength: 262144}
+        password: {type: string, writeOnly: true, maxLength: 262144}
+        token: {type: string, writeOnly: true, maxLength: 262144}
+        private_key: {type: string, writeOnly: true, maxLength: 262144}
+        known_hosts: {type: string, writeOnly: true, maxLength: 262144}
+        passphrase: {type: string, writeOnly: true, maxLength: 262144}
+    DeliverySourceWrite:
+      type: object
+      additionalProperties: false
+      required: [name, type, url, auth_mode, trust_policy]
+      properties:
+        project_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 4096}
+        type: {type: string, enum: [git, oci_artifact, helm_http, helm_oci]}
+        url: {type: string, format: uri, maxLength: 2048}
+        auth_mode: {type: string, enum: [none, basic, bearer, ssh, workload_identity]}
+        credential: {$ref: '#/components/schemas/DeliverySourceCredentialInput'}
+        ca_bundle: {type: string, writeOnly: true, maxLength: 262144}
+        proxy_ref: {type: string, maxLength: 128}
+        trust_policy: {$ref: '#/components/schemas/DeliveryTrustPolicy'}
+    DeliverySourcePatch:
+      type: object
+      additionalProperties: false
+      properties:
+        project_id: {type: string, format: uuid}
+        description: {type: string, maxLength: 4096}
+        url: {type: string, format: uri, maxLength: 2048}
+        proxy_ref: {type: string, maxLength: 128}
+        trust_policy: {$ref: '#/components/schemas/DeliveryTrustPolicy'}
+        ca_bundle: {type: string, writeOnly: true, maxLength: 262144}
+    DeliverySourceCredentialRotate:
+      type: object
+      additionalProperties: false
+      required: [auth_mode, credential]
+      properties:
+        project_id: {type: string, format: uuid}
+        auth_mode: {type: string, enum: [basic, bearer, ssh]}
+        credential: {$ref: '#/components/schemas/DeliverySourceCredentialInput'}
+    DeliverySource:
+      type: object
+      additionalProperties: false
+      required: [id, project_id, name, type, url, auth_mode, credential, trust_policy, status, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        type: {type: string, enum: [git, oci_artifact, helm_http, helm_oci]}
+        url: {type: string, format: uri}
+        auth_mode: {type: string, enum: [none, basic, bearer, ssh, workload_identity]}
+        credential:
+          type: object
+          additionalProperties: false
+          required: [configured, key_version, epoch]
+          properties:
+            configured: {type: boolean}
+            key_version: {type: integer, format: int32, minimum: 0}
+            epoch: {type: integer, format: int64, minimum: 0}
+        proxy_ref: {type: string}
+        trust_policy: {$ref: '#/components/schemas/DeliveryTrustPolicy'}
+        status: {type: string, enum: [pending, ready, degraded, revoked]}
+        last_resolved_at: {type: string, format: date-time, nullable: true}
+        last_error_code: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    DeliverySourceEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties: {data: {$ref: '#/components/schemas/DeliverySource'}}
+    DeliverySourcePage:
+      type: object
+      additionalProperties: false
+      required: [data, count, next, previous, total_known]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/DeliverySource'}}
+        count: {type: integer, format: int64, minimum: 0}
+        next: {type: string, nullable: true}
+        previous: {type: string, nullable: true}
+        total_known: {type: boolean}
+    DeliveryBundleWrite:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        project_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 4096}
+    DeliveryBundleVersionWrite:
+      type: object
+      additionalProperties: false
+      required: [version, spec]
+      properties:
+        project_id: {type: string, format: uuid}
+        version: {type: string, minLength: 1, maxLength: 128}
+        spec:
+          type: object
+          description: Credential-free immutable renderer, source revision, scope, reconciliation, and capability draft.
+          additionalProperties: true
+        dependency_bundle_ids: {type: array, maxItems: 128, uniqueItems: true, items: {type: string, format: uuid}}
+    DeliveryBundle:
+      type: object
+      additionalProperties: false
+      required: [id, project_id, name, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    DeliveryBundleVersion:
+      type: object
+      additionalProperties: false
+      required: [id, bundle_id, source_id, version, renderer, scope, requested_revision, renderer_spec, reconciliation_policy, required_capabilities, dependency_bundle_ids, spec_digest, verification_status, state, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        bundle_id: {type: string, format: uuid}
+        source_id: {type: string, format: uuid}
+        version: {type: string}
+        renderer: {type: string, enum: [kustomize, helm]}
+        scope: {type: string, enum: [namespace, platform]}
+        requested_revision: {type: string}
+        resolved_revision: {type: string}
+        artifact_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        renderer_spec: {type: object, additionalProperties: true}
+        reconciliation_policy: {type: object, additionalProperties: true}
+        required_capabilities: {type: array, items: {type: object, additionalProperties: true}}
+        dependency_bundle_ids: {type: array, items: {type: string, format: uuid}}
+        spec_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        verification_status: {type: string, enum: [pending, verified, failed, unsigned]}
+        verification_identity: {type: string}
+        state: {type: string, enum: [resolving, ready, failed, revoked]}
+        last_error_code: {type: string}
+        created_at: {type: string, format: date-time}
+    DeliveryBundleEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties: {data: {$ref: '#/components/schemas/DeliveryBundle'}}
+    DeliveryBundleVersionEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties: {data: {$ref: '#/components/schemas/DeliveryBundleVersion'}}
+    DeliveryBundlePage:
+      type: object
+      additionalProperties: false
+      required: [data, count, next, previous, total_known]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/DeliveryBundle'}}
+        count: {type: integer, format: int64, minimum: 0}
+        next: {type: string, nullable: true}
+        previous: {type: string, nullable: true}
+        total_known: {type: boolean}
+    DeliveryBundleVersionPage:
+      type: object
+      additionalProperties: false
+      required: [data, count, next, previous, total_known]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/DeliveryBundleVersion'}}
+        count: {type: integer, format: int64, minimum: 0}
+        next: {type: string, nullable: true}
+        previous: {type: string, nullable: true}
+        total_known: {type: boolean}
+    DeliverySourceVerify:
+      type: object
+      additionalProperties: false
+      required: [requested_revision]
+      properties:
+        project_id: {type: string, format: uuid}
+        requested_revision: {type: string, minLength: 1, maxLength: 256}
+        chart: {type: string, maxLength: 253}
+    DeliveryTarget:
+      type: object
+      additionalProperties: false
+      required: [id, project_id, name, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        bundle_version_id: {type: string, format: uuid}
+        placement: {type: object, additionalProperties: true}
+        rollout_policy: {type: object, additionalProperties: true}
+        reconciliation_policy: {type: object, additionalProperties: true}
+        maintenance_window_policy: {type: object, additionalProperties: true}
+        suspended: {type: boolean}
+        generation: {type: integer, format: int64, minimum: 1}
+        resource_version: {type: integer, format: int64, minimum: 1}
+        deletion_state: {type: string, enum: [active, deleting, deleted]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    DeliveryTargetEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/DeliveryTarget'}
+    DeliveryTargetPage:
+      type: object
+      additionalProperties: false
+      required: [data, count, next, previous, total_known]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/DeliveryTarget'}}
+        count: {type: integer, format: int64, minimum: 0}
+        next: {type: string, nullable: true}
+        previous: {type: string, nullable: true}
+        total_known: {type: boolean}
+    DeliveryTargetDeletion:
+      type: object
+      additionalProperties: false
+      required: [id, deletion_state, resource_version]
+      properties:
+        id: {type: string, format: uuid}
+        deletion_state: {type: string, enum: [deleting, deleted]}
+        resource_version: {type: integer, format: int64, minimum: 1}
+        deployment_count: {type: integer, format: int64, minimum: 0}
+    DeliveryTargetDeletionEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/DeliveryTargetDeletion'}
+    DeliveryPreviewDecision:
+      type: object
+      additionalProperties: false
+      required: [cluster_id, reason]
+      properties:
+        cluster_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        cluster_name: {type: string}
+        reason: {type: string, enum: [selected, excluded_by_selector, excluded_explicitly, unauthorized, disconnected, incompatible, missing_capability, decommissioning]}
+        match_reasons:
+          type: array
+          items: {type: string, enum: [explicit_cluster, all_clusters, cluster_group, match_labels, match_expressions]}
+        matched_group_ids: {type: array, items: {type: string, format: uuid}}
+        missing_capabilities: {type: array, items: {type: string}}
+        compatibility_reason: {type: string}
+    DeliveryTargetPreview:
+      type: object
+      additionalProperties: false
+      required: [target_id, target_generation, bundle_version_id, preview_digest, selected_count, excluded_count, requires_all_confirmation, decisions, decision_count, decision_offset, decision_page_size, has_more_decisions, next_cursor, risks]
+      properties:
+        target_id: {type: string, format: uuid}
+        target_generation: {type: integer, format: int64, minimum: 1}
+        bundle_version_id: {type: string, format: uuid}
+        preview_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        selected_count: {type: integer, minimum: 0}
+        excluded_count: {type: integer, minimum: 0}
+        requires_all_confirmation: {type: boolean}
+        decisions: {type: array, items: {$ref: '#/components/schemas/DeliveryPreviewDecision'}}
+        decision_count: {type: integer, minimum: 0, maximum: 10000}
+        decision_offset: {type: integer, minimum: 0, maximum: 10000}
+        decision_page_size: {type: integer, minimum: 1, maximum: 500}
+        has_more_decisions: {type: boolean}
+        next_cursor:
+          type: string
+          description: Digest-bound opaque cursor; empty on the final page.
+        risks: {type: array, items: {type: string}}
+    DeliveryTargetPreviewEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/DeliveryTargetPreview'}
+    DeliveryRollout:
+      type: object
+      required: [id, target_id, target_generation, to_bundle_version_id, placement_digest, strategy, plan_digest, state, fencing_generation, total_clusters, ready_clusters, failed_clusters, blocked_clusters, released_clusters, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        target_id: {type: string, format: uuid}
+        target_generation: {type: integer, format: int64, minimum: 1}
+        from_bundle_version_id: {type: string, format: uuid, nullable: true}
+        to_bundle_version_id: {type: string, format: uuid}
+        placement_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        placement_snapshot: {type: object, additionalProperties: true}
+        strategy: {type: object, additionalProperties: true}
+        strategy_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        approval_policy: {type: object, additionalProperties: true}
+        request_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        plan_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        frozen_plan: {type: object, additionalProperties: true}
+        state: {type: string}
+        fencing_generation: {type: integer, format: int64, minimum: 1}
+        total_clusters: {type: integer, format: int32, minimum: 0}
+        ready_clusters: {type: integer, format: int32, minimum: 0}
+        failed_clusters: {type: integer, format: int32, minimum: 0}
+        blocked_clusters: {type: integer, format: int32, minimum: 0}
+        released_clusters: {type: integer, format: int32, minimum: 0}
+        progress_deadline: {type: string, format: date-time, nullable: true}
+        started_at: {type: string, format: date-time, nullable: true}
+        completed_at: {type: string, format: date-time, nullable: true}
+        last_error_code: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    DeliveryFrozenRollout:
+      type: object
+      additionalProperties: false
+      required: [id, target_id, project_id, target_generation, desired, placement_digest, strategy, strategy_digest, approval, actor, idempotency_key, request_digest, created_at, deadline, cohorts, clusters, plan_digest]
+      properties:
+        id: {type: string, format: uuid}
+        target_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        target_generation: {type: integer, format: int64, minimum: 1}
+        desired: {type: object, additionalProperties: true}
+        placement_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        strategy: {type: object, additionalProperties: true}
+        strategy_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        approval: {type: object, additionalProperties: true}
+        actor: {type: string}
+        idempotency_key: {type: string}
+        request_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        created_at: {type: string, format: date-time}
+        deadline: {type: string, format: date-time}
+        cohorts: {type: array, items: {type: object, additionalProperties: true}}
+        clusters: {type: array, items: {type: object, additionalProperties: true}}
+        plan_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+    DeliveryFrozenRolloutEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/DeliveryFrozenRollout'}
+    DeliveryRolloutEvent:
+      type: object
+      additionalProperties: false
+      required: [id, rollout_id, event_type, from_state, to_state, reason_code, fence, occurred_at, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        rollout_id: {type: string, format: uuid}
+        cluster_id: {type: string, format: uuid, nullable: true}
+        decision_digest: {type: string}
+        event_type: {type: string}
+        from_state: {type: string}
+        to_state: {type: string}
+        reason_code: {type: string}
+        fence: {type: integer, format: int64}
+        occurred_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+    DeliveryRolloutApprovalRecord:
+      type: object
+      additionalProperties: false
+      required: [id, rollout_id, cohort, binding_digest, decision, decided_at, expires_at, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        rollout_id: {type: string, format: uuid}
+        cohort: {type: integer, format: int32}
+        binding_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        decision: {type: string, enum: [approved, rejected]}
+        decided_by: {type: string, format: uuid, nullable: true}
+        decided_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+    DeliveryRolloutCluster:
+      type: object
+      additionalProperties: false
+      required: [id, rollout_id, cluster_id, cohort, release_order, desired_bundle_version_id, desired_spec_digest, state, assignment_action, attempt, fence, last_error_code, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        rollout_id: {type: string, format: uuid}
+        cluster_id: {type: string, format: uuid}
+        cohort: {type: integer, format: int32}
+        release_order: {type: integer, format: int32, minimum: 0}
+        previous_bundle_version_id: {type: string, format: uuid, nullable: true}
+        desired_bundle_version_id: {type: string, format: uuid}
+        desired_spec_digest: {type: string}
+        state: {type: string}
+        assignment_action: {type: string, enum: [apply, rollback]}
+        attempt: {type: integer, format: int32, minimum: 0}
+        fence: {type: integer, format: int64, minimum: 0}
+        released_at: {type: string, format: date-time, nullable: true}
+        acknowledged_at: {type: string, format: date-time, nullable: true}
+        ready_at: {type: string, format: date-time, nullable: true}
+        completed_at: {type: string, format: date-time, nullable: true}
+        deadline: {type: string, format: date-time, nullable: true}
+        last_error_code: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    DeliveryRolloutPage:
+      type: object
+      additionalProperties: false
+      required: [data, count, next, previous, total_known]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/DeliveryRollout'}}
+        count: {type: integer, format: int64, minimum: 0}
+        next: {type: string, nullable: true}
+        previous: {type: string, nullable: true}
+        total_known: {type: boolean}
+    DeliveryRolloutClusterPage:
+      type: object
+      additionalProperties: false
+      required: [data, count, next, previous, total_known]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/DeliveryRolloutCluster'}}
+        count: {type: integer, format: int64, minimum: 0}
+        next: {type: string, nullable: true}
+        previous: {type: string, nullable: true}
+        total_known: {type: boolean}
+    DeliveryRolloutEventPage:
+      type: object
+      additionalProperties: false
+      required: [data, count, next, previous, total_known]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/DeliveryRolloutEvent'}}
+        count: {type: integer, format: int64, minimum: 0}
+        next: {type: string, nullable: true}
+        previous: {type: string, nullable: true}
+        total_known: {type: boolean}
+    DeliveryRolloutDetail:
+      type: object
+      additionalProperties: false
+      required: [rollout, frozen_plan, approvals, timeline]
+      properties:
+        rollout: {$ref: '#/components/schemas/DeliveryRollout'}
+        frozen_plan: {type: object, additionalProperties: true}
+        approvals: {type: array, items: {$ref: '#/components/schemas/DeliveryRolloutApprovalRecord'}}
+        timeline: {type: array, items: {$ref: '#/components/schemas/DeliveryRolloutEvent'}}
+    DeliveryRolloutDetailEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/DeliveryRolloutDetail'}
+    DeliveryRolloutControl:
+      type: object
+      additionalProperties: false
+      required: [rollout, event]
+      properties:
+        rollout: {$ref: '#/components/schemas/DeliveryRollout'}
+        event: {$ref: '#/components/schemas/DeliveryRolloutEvent'}
+        approval: {$ref: '#/components/schemas/DeliveryRolloutApprovalRecord'}
+    DeliveryRolloutControlEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/DeliveryRolloutControl'}
+    ClusterDeployment:
+      type: object
+      additionalProperties: false
+      required: [id, target_id, cluster_id, desired_generation, observed_generation, desired_spec_digest, observed_spec_digest, desired_revision, observed_revision, action, phase, conditions, source_kind, source_name, reconciler_kind, reconciler_name, inventory, agent_session_id, agent_sequence, last_error_code, last_message, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        target_id: {type: string, format: uuid}
+        cluster_id: {type: string, format: uuid}
+        current_rollout_id: {type: string, format: uuid, nullable: true}
+        desired_bundle_version_id: {type: string, format: uuid, nullable: true}
+        previous_bundle_version_id: {type: string, format: uuid, nullable: true}
+        desired_generation: {type: integer, format: int64, minimum: 0}
+        observed_generation: {type: integer, format: int64, minimum: 0}
+        desired_spec_digest: {type: string}
+        observed_spec_digest: {type: string}
+        desired_revision: {type: string}
+        observed_revision: {type: string}
+        action: {type: string, enum: [apply, delete, suspend]}
+        phase: {type: string, enum: [pending, blocked, applying, ready, degraded, failed, suspended, deleting, removed, unknown]}
+        conditions: {type: array, items: {type: object, additionalProperties: true}}
+        source_kind: {type: string}
+        source_name: {type: string}
+        reconciler_kind: {type: string}
+        reconciler_name: {type: string}
+        inventory: {type: object, additionalProperties: true}
+        agent_session_id: {type: string}
+        agent_sequence: {type: integer, format: int64, minimum: 0}
+        last_error_code: {type: string}
+        last_message: {type: string}
+        last_observed_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ClusterDeploymentEvent:
+      type: object
+      additionalProperties: false
+      required: [id, deployment_id, event_type, from_phase, to_phase, generation, spec_digest, reason_code, message, observed_at, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        deployment_id: {type: string, format: uuid}
+        rollout_id: {type: string, format: uuid, nullable: true}
+        event_type: {type: string}
+        from_phase: {type: string}
+        to_phase: {type: string}
+        generation: {type: integer, format: int64, minimum: 0}
+        spec_digest: {type: string}
+        reason_code: {type: string}
+        message: {type: string}
+        observed_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+    ClusterDeploymentPage:
+      type: object
+      additionalProperties: false
+      required: [data, count, next, previous, total_known]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/ClusterDeployment'}}
+        count: {type: integer, format: int64, minimum: 0}
+        next: {type: string, nullable: true}
+        previous: {type: string, nullable: true}
+        total_known: {type: boolean}
+    ClusterDeploymentEventPage:
+      type: object
+      additionalProperties: false
+      required: [data, count, next, previous, total_known]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/ClusterDeploymentEvent'}}
+        count: {type: integer, format: int64, minimum: 0}
+        next: {type: string, nullable: true}
+        previous: {type: string, nullable: true}
+        total_known: {type: boolean}
+    ClusterDeploymentDetail:
+      type: object
+      additionalProperties: false
+      required: [deployment, events]
+      properties:
+        deployment: {$ref: '#/components/schemas/ClusterDeployment'}
+        events: {type: array, items: {$ref: '#/components/schemas/ClusterDeploymentEvent'}}
+    ClusterDeploymentControl:
+      type: object
+      additionalProperties: false
+      required: [deployment, event]
+      properties:
+        deployment: {$ref: '#/components/schemas/ClusterDeployment'}
+        event: {$ref: '#/components/schemas/ClusterDeploymentEvent'}
+    ClusterDeploymentDetailEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/ClusterDeploymentDetail'}
+    ClusterDeploymentControlEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/ClusterDeploymentControl'}
+    DeliveryControllerInventory:
+      type: object
+      additionalProperties: false
+      required: [cluster_id, agent_version, flux_version, components, api_versions, distribution_digest, kubernetes_version, ready, compatibility_status, error_code, updated_at]
+      properties:
+        cluster_id: {type: string, format: uuid}
+        agent_version: {type: string}
+        flux_version: {type: string}
+        components: {type: object, additionalProperties: {type: string}}
+        api_versions: {type: array, items: {type: string}}
+        distribution_digest: {type: string}
+        kubernetes_version: {type: string}
+        ready: {type: boolean}
+        compatibility_status: {type: string, enum: [compatible, incompatible, upgrade_required, degraded]}
+        error_code: {type: string}
+        observed_at: {type: string, format: date-time, nullable: true}
+        updated_at: {type: string, format: date-time}
+    DeliveryClusterInventory:
+      type: object
+      additionalProperties: false
+      required: [controller_inventory, deployments, deployment_count]
+      properties:
+        controller_inventory: {$ref: '#/components/schemas/DeliveryControllerInventory'}
+        deployments: {type: array, items: {$ref: '#/components/schemas/ClusterDeployment'}}
+        deployment_count: {type: integer, format: int64, minimum: 0}
+    DeliveryClusterInventoryEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/DeliveryClusterInventory'}
+    DeliveryCompatibilityCount:
+      type: object
+      additionalProperties: false
+      required: [compatibility_status, cluster_count]
+      properties:
+        compatibility_status: {type: string}
+        cluster_count: {type: integer, format: int64, minimum: 0}
+    DeliveryCompatibilityContract:
+      type: object
+      additionalProperties: false
+      required: [summary, flux_version, flux_components, flux_apis, kubernetes_minimum, kubernetes_maximum, agent_protocol, required_capabilities]
+      properties:
+        summary: {type: string}
+        flux_version: {type: string}
+        flux_components: {type: object, additionalProperties: {type: string}}
+        flux_apis: {type: array, items: {type: string}}
+        kubernetes_minimum: {type: string}
+        kubernetes_maximum: {type: string}
+        agent_protocol: {type: string}
+        required_capabilities: {type: array, items: {type: string}}
+    DeliverySystemRelease:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        release_sequence: {type: integer, format: int64}
+        version: {type: string}
+        artifact_url: {type: string}
+        artifact_digest: {type: string}
+        distribution_digest: {type: string}
+        agent_version: {type: string}
+        agent_image: {type: string}
+        minimum_kubernetes: {type: string}
+        maximum_kubernetes: {type: string}
+        crd_storage_version: {type: string}
+        previous_storage_version: {type: string}
+        interval: {type: string}
+        timeout: {type: string}
+        verification_policy: {type: object, additionalProperties: true}
+        credential_key_version: {type: integer, format: int32}
+        credential_epoch: {type: integer, format: int64}
+        spec_digest: {type: string}
+        state: {type: string}
+        released_at: {type: string, format: date-time, nullable: true}
+        retired_at: {type: string, format: date-time, nullable: true}
+        created_by: {type: string, format: uuid, nullable: true}
+        created_at: {type: string, format: date-time}
+    DeliverySystemRollout:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        release_id: {type: string, format: uuid}
+        previous_release_id: {type: string, format: uuid, nullable: true}
+        strategy: {type: object, additionalProperties: true}
+        strategy_digest: {type: string}
+        state: {type: string}
+        fencing_generation: {type: integer, format: int64}
+        total_clusters: {type: integer, format: int32, minimum: 0}
+        ready_clusters: {type: integer, format: int32, minimum: 0}
+        failed_clusters: {type: integer, format: int32, minimum: 0}
+        released_clusters: {type: integer, format: int32, minimum: 0}
+        progress_deadline: {type: string, format: date-time, nullable: true}
+        started_at: {type: string, format: date-time, nullable: true}
+        completed_at: {type: string, format: date-time, nullable: true}
+        last_error_code: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    DeliverySystemCompatibility:
+      type: object
+      additionalProperties: false
+      required: [contract, current_release, current_rollout, observed_inventory]
+      properties:
+        contract: {$ref: '#/components/schemas/DeliveryCompatibilityContract'}
+        current_release:
+          allOf: [{$ref: '#/components/schemas/DeliverySystemRelease'}]
+          nullable: true
+        current_rollout:
+          allOf: [{$ref: '#/components/schemas/DeliverySystemRollout'}]
+          nullable: true
+        observed_inventory: {type: array, items: {$ref: '#/components/schemas/DeliveryCompatibilityCount'}}
+    DeliverySystemCompatibilityEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/DeliverySystemCompatibility'}
+  x-delivery-rollout-action:
+    tags: [Delivery]
+    summary: Apply a CAS-protected typed rollout transition
+    x-rbac: delivery_rollouts:update
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[1-9][0-9]*"$'}}
+      - {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}}
+    requestBody:
+      content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutAction'}}}
+    responses:
+      '202':
+        description: Transition, durable event, and worker wake-up committed
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutControlEnvelope'}}}
+      '412': {description: Stale fencing generation}
+      '428': {description: If-Match required}
+  x-delivery-deployment-action:
+    tags: [Delivery]
+    summary: Apply a CAS-protected deployment reconcile or suspend intent
+    x-rbac: delivery_deployments:update
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+      - {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}}
+    requestBody:
+      content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutAction'}}}
+    responses:
+      '202':
+        description: Deployment generation and durable event committed
+        content: {application/json: {schema: {$ref: '#/components/schemas/ClusterDeploymentControlEnvelope'}}}
+      '412': {description: Stale desired generation}
+      '428': {description: If-Match required}
   responses:
     BadRequest:
       description: Request validation failed
@@ -5114,15 +5635,487 @@ tags:
     description: Tunnel-passthrough to managed cluster's k8s API
   - name: Tools
     description: Cluster tool catalog + installs
-  - name: ArgoCD
-    description: ArgoCD instances, applications, and cluster registration
+  - name: Platform
+    description: Platform health, diagnostics, and internal transport endpoints
   - name: Extensions
     description: UI extension manifest validation and registry controls
   - name: ServiceMesh
     description: Service mesh detection, inventory, and policy validation
   - name: Alerting
     description: Alert rules + notification channels (Slack/PagerDuty/MS Teams/webhook/email)
+  - name: Delivery
+    description: Flux-native targets, authoritative placement, rollouts, deployments, and compatibility
 paths:
+  /api/v1/delivery/sources/:
+    get:
+      tags: [Delivery]
+      summary: List reusable project-scoped delivery sources
+      x-rbac: delivery_sources:list
+      parameters:
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: status, in: query, schema: {type: string, enum: [pending, ready, degraded, revoked]}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0}}
+      responses:
+        '200': {description: Paginated source metadata with no credential material, content: {application/json: {schema: {$ref: '#/components/schemas/DeliverySourcePage'}}}}
+    post:
+      tags: [Delivery]
+      summary: Create a reusable delivery source and seal write-only credentials
+      x-rbac: delivery_sources:create
+      parameters:
+        - {name: Idempotency-Key, in: header, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliverySourceWrite'}}}
+      responses:
+        '201': {description: Source created, content: {application/json: {schema: {$ref: '#/components/schemas/DeliverySourceEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+  /api/v1/delivery/sources/{id}/:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [Delivery]
+      summary: Get credential-free delivery source metadata
+      x-rbac: delivery_sources:read
+      responses:
+        '200': {description: Source metadata, content: {application/json: {schema: {$ref: '#/components/schemas/DeliverySourceEnvelope'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [Delivery]
+      summary: Update credential-free delivery source metadata
+      x-rbac: delivery_sources:update
+      parameters:
+        - {name: Idempotency-Key, in: header, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliverySourcePatch'}}}
+      responses:
+        '200': {description: Source metadata updated, content: {application/json: {schema: {$ref: '#/components/schemas/DeliverySourceEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [Delivery]
+      summary: Delete an unreferenced delivery source
+      x-rbac: delivery_sources:delete
+      responses:
+        '204': {description: Source deleted}
+        '409': {description: Source is still referenced}
+  /api/v1/delivery/sources/{id}/rotate-credential/:
+    post:
+      tags: [Delivery]
+      summary: Replace write-only credentials and increment the source epoch
+      x-rbac: delivery_sources:update
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliverySourceCredentialRotate'}}}
+      responses:
+        '200': {description: Credential metadata updated, content: {application/json: {schema: {$ref: '#/components/schemas/DeliverySourceEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+  /api/v1/delivery/sources/{id}/verify/:
+    post:
+      tags: [Delivery]
+      summary: Queue an authenticated source resolution and trust verification
+      x-rbac: delivery_sources:update
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliverySourceVerify'}}}
+      responses:
+        '202': {description: Verification queued}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/delivery/bundles/:
+    get:
+      tags: [Delivery]
+      summary: List stable component bundle identities
+      x-rbac: delivery_bundles:list
+      parameters:
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0}}
+      responses:
+        '200': {description: Paginated bundles, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryBundlePage'}}}}
+    post:
+      tags: [Delivery]
+      summary: Create a stable component bundle identity
+      x-rbac: delivery_bundles:create
+      parameters:
+        - {name: Idempotency-Key, in: header, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryBundleWrite'}}}
+      responses:
+        '201': {description: Bundle created, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryBundleEnvelope'}}}}
+  /api/v1/delivery/bundles/{id}/:
+    get:
+      tags: [Delivery]
+      summary: Get one component bundle identity
+      x-rbac: delivery_bundles:read
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Bundle metadata, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryBundleEnvelope'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [Delivery]
+      summary: Update stable component bundle metadata
+      x-rbac: delivery_bundles:update
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryBundleWrite'}}}
+      responses:
+        '200': {description: Bundle metadata updated, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryBundleEnvelope'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [Delivery]
+      summary: Delete an unreferenced component bundle
+      x-rbac: delivery_bundles:delete
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '204': {description: Bundle deleted}
+        '409': {description: Bundle is still referenced}
+  /api/v1/delivery/bundles/{id}/versions/:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [Delivery]
+      summary: List immutable versions of one component bundle
+      x-rbac: delivery_bundles:list
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0}}
+      responses:
+        '200': {description: Paginated immutable versions, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryBundleVersionPage'}}}}
+    post:
+      tags: [Delivery]
+      summary: Append a credential-free version and queue immutable source resolution
+      x-rbac: delivery_bundles:create
+      parameters:
+        - {name: Idempotency-Key, in: header, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryBundleVersionWrite'}}}
+      responses:
+        '201': {description: Resolving version created, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryBundleVersionEnvelope'}}}}
+        '409': {description: Source is revoked or immutable version identity conflicts}
+  /api/v1/delivery/bundles/{id}/versions/{versionId}/:
+    get:
+      tags: [Delivery]
+      summary: Get one immutable component bundle version
+      x-rbac: delivery_bundles:read
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: versionId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Immutable version, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryBundleVersionEnvelope'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/delivery/targets/:
+    get:
+      tags: [Delivery]
+      summary: List delivery targets in one project
+      x-rbac: delivery_targets:list
+      parameters:
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: name, in: query, schema: {type: string, minLength: 1, maxLength: 128}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0}}
+      responses:
+        '200':
+          description: Stable paginated target list
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryTargetPage'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Delivery]
+      summary: Create a project-scoped delivery target
+      x-rbac: delivery_targets:create
+      parameters:
+        - {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryTargetWrite'}}}
+      responses:
+        '201':
+          description: Target created, with a strong resource-version ETag
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryTargetEnvelope'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/delivery/targets/{id}/:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [Delivery]
+      summary: Get a delivery target
+      x-rbac: delivery_targets:read
+      responses:
+        '200':
+          description: Target and strong resource-version ETag
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryTargetEnvelope'}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [Delivery]
+      summary: Compare-and-swap target configuration
+      x-rbac: delivery_targets:update
+      parameters:
+        - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+        - {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryTargetPatch'}}}
+      responses:
+        '200':
+          description: Updated target and new ETag
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryTargetEnvelope'}}}
+        '412': {description: Stale resource version}
+        '428': {description: If-Match required}
+    delete:
+      tags: [Delivery]
+      summary: Begin downstream target deletion
+      x-rbac: delivery_targets:delete
+      parameters:
+        - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+      responses:
+        '202':
+          description: Deletion intent persisted and deployment tombstones created
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryTargetDeletionEnvelope'}}}
+        '412': {description: Stale resource version}
+        '428': {description: If-Match required}
+  /api/v1/delivery/targets/{id}/preview/:
+    post:
+      tags: [Delivery]
+      summary: Evaluate authoritative placement and capability blockers
+      x-rbac: delivery_targets:read
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 100}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 4096}}
+      responses:
+        '200':
+          description: Stable decisions, risks, counts, and preview digest
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryTargetPreviewEnvelope'}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {description: Cursor digest no longer matches the authoritative preview}
+  /api/v1/delivery/targets/{id}/rollouts/:
+    post:
+      tags: [Delivery]
+      summary: Freeze a preview and start a rollout
+      x-rbac: delivery_rollouts:create
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[1-9][0-9]*"$'}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutStart'}}}
+      responses:
+        '202':
+          description: Immutable rollout plan created and queued
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryFrozenRolloutEnvelope'}}}
+        '409': {description: Preview stale, target changed, or idempotency conflict}
+        '428': {description: If-Match required}
+  /api/v1/delivery/targets/{id}/orphan/:
+    post:
+      tags: [Delivery]
+      summary: Finalize deletion while retaining downstream resources
+      x-rbac: delivery_orphans:orphan
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+      responses:
+        '200':
+          description: Orphan decision persisted
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryTargetDeletionEnvelope'}}}
+        '412': {description: Stale resource version}
+  /api/v1/delivery/rollouts/:
+    get:
+      tags: [Delivery]
+      summary: List project rollouts
+      x-rbac: delivery_rollouts:list
+      parameters:
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: state, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0}}
+      responses:
+        '200':
+          description: Stable paginated rollout list
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutPage'}}}
+  /api/v1/delivery/rollouts/{id}/:
+    get:
+      tags: [Delivery]
+      summary: Get frozen rollout, counters, approvals, and timeline
+      x-rbac: delivery_rollouts:read
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Rollout detail and strong fencing-generation ETag
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutDetailEnvelope'}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/delivery/rollouts/{id}/clusters/:
+    get:
+      tags: [Delivery]
+      summary: List frozen per-cluster rollout state
+      x-rbac: delivery_rollouts:read
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Paginated rollout cluster state
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutClusterPage'}}}
+  /api/v1/delivery/rollouts/{id}/events/:
+    get:
+      tags: [Delivery]
+      summary: List durable rollout events
+      x-rbac: delivery_rollouts:read
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Paginated rollout timeline
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutEventPage'}}}
+  /api/v1/delivery/rollouts/{id}/pause/:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post: {$ref: '#/components/x-delivery-rollout-action'}
+  /api/v1/delivery/rollouts/{id}/resume/:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post: {$ref: '#/components/x-delivery-rollout-action'}
+  /api/v1/delivery/rollouts/{id}/abort/:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post: {$ref: '#/components/x-delivery-rollout-action'}
+  /api/v1/delivery/rollouts/{id}/retry/:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post: {$ref: '#/components/x-delivery-rollout-action'}
+  /api/v1/delivery/rollouts/{id}/rollback/:
+    post:
+      tags: [Delivery]
+      summary: Roll back to every cluster's frozen previous known-good version
+      x-rbac: delivery_rollbacks:rollback
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[1-9][0-9]*"$'}}
+      requestBody:
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutAction'}}}
+      responses:
+        '202':
+          description: Rollback transition and outbox intent committed
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutControlEnvelope'}}}
+        '412': {description: Stale fencing generation}
+  /api/v1/delivery/rollouts/{id}/approve/:
+    post:
+      tags: [Delivery]
+      summary: Decide one exact expiring frozen approval gate
+      x-rbac: delivery_approvals:approve
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[1-9][0-9]*"$'}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutApproval'}}}
+      responses:
+        '202':
+          description: Approval decision, event, and wake-up intent committed
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutControlEnvelope'}}}
+        '412': {description: Stale fencing generation}
+  /api/v1/delivery/deployments/:
+    get:
+      tags: [Delivery]
+      summary: List current project target-by-cluster deployments
+      x-rbac: delivery_deployments:list
+      parameters:
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: cluster_id, in: query, schema: {type: string, format: uuid}}
+        - {name: phase, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: Stable paginated deployment list
+          content: {application/json: {schema: {$ref: '#/components/schemas/ClusterDeploymentPage'}}}
+  /api/v1/delivery/deployments/{id}/:
+    get:
+      tags: [Delivery]
+      summary: Get normalized deployment status and recent events
+      x-rbac: delivery_deployments:read
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Deployment and strong desired-generation ETag
+          content: {application/json: {schema: {$ref: '#/components/schemas/ClusterDeploymentDetailEnvelope'}}}
+  /api/v1/delivery/deployments/{id}/events/:
+    get:
+      tags: [Delivery]
+      summary: List coalesced deployment status events
+      x-rbac: delivery_deployments:read
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Paginated deployment events
+          content: {application/json: {schema: {$ref: '#/components/schemas/ClusterDeploymentEventPage'}}}
+  /api/v1/delivery/deployments/{id}/reconcile/:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post: {$ref: '#/components/x-delivery-deployment-action'}
+  /api/v1/delivery/deployments/{id}/suspend/:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post: {$ref: '#/components/x-delivery-deployment-action'}
+  /api/v1/delivery/deployments/{id}/resume/:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post: {$ref: '#/components/x-delivery-deployment-action'}
+  /api/v1/delivery/clusters/{clusterId}/inventory/:
+    get:
+      tags: [Delivery]
+      summary: Get project-scoped Flux inventory and cluster deployments
+      x-rbac: delivery_inventory:read
+      parameters:
+        - {name: clusterId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: project_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Controller inventory and deployment summary
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryClusterInventoryEnvelope'}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/delivery/system/compatibility/:
+    get:
+      tags: [Delivery]
+      summary: Get the supported release matrix and observed inventory counts
+      x-rbac: delivery_platform:read
+      responses:
+        '200':
+          description: Runtime compatibility contract and observed status counts
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliverySystemCompatibilityEnvelope'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /scim/v2/Users:
     post:
       tags:
@@ -5924,7 +6917,7 @@ paths:
                       additionalProperties: true
                   total:
                     type: integer
-  /api/v1/agents/fleet/:
+  /api/v1/cluster-agents/:
     get:
       tags:
         - Agents
@@ -5943,15 +6936,33 @@ paths:
             default: 0
       responses:
         '200':
-          description: Agent fleet summary and rows
+          description: Cluster-agent health summary and rows
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    $ref: '#/components/schemas/AgentFleetResponse'
-  /api/v1/agents/fleet/{cluster_id}/diagnostics/:
+                    $ref: '#/components/schemas/ClusterAgentResponse'
+  /api/v1/cluster-agents/{cluster_id}/:
+    parameters:
+      - name: cluster_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Agents
+      summary: Get one Cluster Agent
+      x-rbac: agents:read
+      responses:
+        '200':
+          description: Cluster Agent identity, connection, and compatibility
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/cluster-agents/{cluster_id}/diagnostics/:
     parameters:
       - name: cluster_id
         in: path
@@ -5975,7 +6986,7 @@ paths:
                     $ref: '#/components/schemas/AgentDiagnostics'
         '404':
           $ref: '#/components/responses/NotFound'
-  /api/v1/agents/fleet/{cluster_id}/diagnostics/bundle/:
+  /api/v1/cluster-agents/{cluster_id}/diagnostics/bundle/:
     parameters:
       - name: cluster_id
         in: path
@@ -6000,7 +7011,7 @@ paths:
                 $ref: '#/components/schemas/AgentDiagnosticsBundle'
         '404':
           $ref: '#/components/responses/NotFound'
-  /api/v1/agents/fleet/{cluster_id}/operations/:
+  /api/v1/cluster-agents/{cluster_id}/operations/:
     parameters:
       - name: cluster_id
         in: path
@@ -6034,7 +7045,7 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/AgentLifecycleOperationsResponse'
-  /api/v1/agents/fleet/{cluster_id}/self-test/:
+  /api/v1/cluster-agents/{cluster_id}/self-test/:
     parameters:
       - name: cluster_id
         in: path
@@ -6058,7 +7069,7 @@ paths:
                     $ref: '#/components/schemas/AgentSelfTest'
         '404':
           $ref: '#/components/responses/NotFound'
-  /api/v1/agents/fleet/{cluster_id}/upgrade-plan/:
+  /api/v1/cluster-agents/{cluster_id}/upgrade-plan/:
     parameters:
       - name: cluster_id
         in: path
@@ -6086,7 +7097,7 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/AgentUpgradePlan'
-  /api/v1/agents/fleet/{cluster_id}/upgrade/:
+  /api/v1/cluster-agents/{cluster_id}/upgrade/:
     parameters:
       - name: cluster_id
         in: path
@@ -6151,165 +7162,6 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
-  /api/v1/argocd/instances/:
-    get:
-      tags:
-        - ArgoCD
-      summary: List configured ArgoCD instances
-      responses:
-        '200':
-          description: ArgoCD instances
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-  /api/v1/argocd/operations/:
-    get:
-      tags: [ArgoCD]
-      summary: List durable ArgoCD operations
-      parameters:
-        - name: targetType
-          in: query
-          schema: {type: string}
-        - name: targetKey
-          in: query
-          schema: {type: string}
-        - name: status
-          in: query
-          schema: {type: string}
-        - name: limit
-          in: query
-          schema: {type: integer, minimum: 1, maximum: 200, default: 50}
-        - name: offset
-          in: query
-          schema: {type: integer, minimum: 0, default: 0}
-      responses:
-        '200':
-          description: Durable operation page
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-  /api/v1/argocd/operations/{id}/:
-    get:
-      tags: [ArgoCD]
-      summary: Get a durable ArgoCD operation
-      description: A 404 means the durable operation row does not exist; it never indicates completion.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: {type: string, format: uuid}
-      responses:
-        '200':
-          description: Durable operation state, including terminal completed operations
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ArgoOperationEnvelope'
-        '404':
-          description: Durable operation row not found
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
-  /api/v1/argocd/applications/{id}/sync/:
-    post:
-      tags: [ArgoCD]
-      summary: Queue a bounded sync for a cached Application UUID
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: {type: string, format: uuid}
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/ArgoSyncRequest'}
-      responses:
-        '202':
-          description: Durable sync operation accepted
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ArgoOperationEnvelope'}
-        '404':
-          description: Application not found locally or upstream
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
-  /api/v1/argocd/instances/{id}/applications/{name}/sync/:
-    post:
-      tags: [ArgoCD]
-      summary: Live-resolve an Application by exact instance/name and queue a bounded sync
-      description: |
-        Authorizes the instance before upstream discovery, atomically caches a
-        reference-only metadata projection, and binds the durable operation to
-        the upstream Application UID. No Application spec payload is accepted.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: {type: string, format: uuid}
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
-            minLength: 1
-            maxLength: 253
-            pattern: '^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$'
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/ArgoSyncRequest'}
-      responses:
-        '202':
-          description: Durable sync operation accepted
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ArgoOperationEnvelope'}
-        '404':
-          description: Application not found upstream
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
-        '409':
-          description: Instance was removed while discovery was in progress
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
-  /api/v1/argocd/instances/{id}/orphan-report/:
-    get:
-      tags:
-        - ArgoCD
-      summary: Report cached Astronomer baseline Applications with stale ArgoCD targets
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 5000
-            default: 1000
-      responses:
-        '200':
-          description: Orphaned baseline Application report
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/ArgoOrphanReport'
   /api/v1/alerting/events/:
     get:
       tags:
@@ -6438,7 +7290,7 @@ paths:
         Explicitly clears CRD ownership metadata from a cluster row so future
         UI/API updates can mutate fields that ordinary PUT/PATCH otherwise
         reject with `ownership_conflict`. Only CRD-owned rows can be taken
-        over by this endpoint; system and ArgoCD-owned rows remain protected.
+        over by this endpoint; system-owned rows remain protected.
       responses:
         '200':
           description: Ownership transfer result
@@ -6473,7 +7325,7 @@ paths:
         Explicitly clears CRD ownership metadata from a project row so future
         UI/API updates can mutate fields that ordinary PUT/PATCH otherwise
         reject with `ownership_conflict`. Only CRD-owned rows can be taken
-        over by this endpoint; system and ArgoCD-owned rows remain protected.
+        over by this endpoint; system-owned rows remain protected.
       responses:
         '200':
           description: Ownership transfer result
@@ -8040,7 +8892,7 @@ paths:
 
         Auth: bearer JWT/API-token; requires `clusters:read` RBAC.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       parameters:
@@ -9201,275 +10053,6 @@ paths:
                   - properties:
                       data:
                         $ref: '#/components/schemas/MTLSBreakdownResponse'
-  /api/v1/fleet-operations:
-    get:
-      summary: List fleet operations
-      tags:
-        - clusters
-      security:
-        - bearerJWT: []
-      description: fleet-operations:list RBAC.
-      parameters:
-        - name: status
-          in: query
-          required: false
-          schema:
-            type: string
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 20
-        - name: offset
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 0
-      responses:
-        '200':
-          description: Paginated fleet operations.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
-                  - properties:
-                      data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/FleetOperationResponse'
-    post:
-      summary: Create a fleet operation
-      tags:
-        - clusters
-      security:
-        - bearerJWT: []
-      description: clusters:write api-token scope + fleet-operations:create RBAC.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateFleetOperationRequest'
-      responses:
-        '201':
-          description: Created fleet operation.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/FleetOperationResponse'
-        '400':
-          description: Invalid body
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/fleet-operations/{id}:
-    get:
-      summary: Get a fleet operation
-      tags:
-        - clusters
-      security:
-        - bearerJWT: []
-      description: fleet-operations:read RBAC.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Fleet operation.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/FleetOperationResponse'
-        '404':
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/fleet-operations/{id}/targets:
-    get:
-      summary: List per-cluster targets of a fleet operation
-      tags:
-        - clusters
-      security:
-        - bearerJWT: []
-      description: fleet-operations:read RBAC.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 50
-        - name: offset
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 0
-      responses:
-        '200':
-          description: Paginated targets.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
-                  - properties:
-                      data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/FleetOperationTargetResponse'
-  /api/v1/fleet-operations/{id}/abort:
-    post:
-      summary: Abort a fleet operation
-      tags:
-        - clusters
-      security:
-        - bearerJWT: []
-      description: clusters:write api-token scope + fleet-operations:update RBAC.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '202':
-          description: Abort accepted.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/FleetOperationResponse'
-        '404':
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/fleet-operations/{id}/pause:
-    post:
-      summary: Pause a fleet operation
-      tags:
-        - clusters
-      security:
-        - bearerJWT: []
-      description: clusters:write api-token scope + fleet-operations:update RBAC.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '202':
-          description: Pause accepted.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/FleetOperationResponse'
-        '404':
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/fleet-operations/{id}/resume:
-    post:
-      summary: Resume a paused fleet operation
-      tags:
-        - clusters
-      security:
-        - bearerJWT: []
-      description: clusters:write api-token scope + fleet-operations:update RBAC.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '202':
-          description: Resume accepted.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/FleetOperationResponse'
-        '404':
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/fleet-operations/{id}/retry-failed:
-    post:
-      summary: Retry the failed targets of a fleet operation
-      tags:
-        - clusters
-      security:
-        - bearerJWT: []
-      description: clusters:write api-token scope + fleet-operations:update RBAC.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '202':
-          description: Retry accepted.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/FleetOperationResponse'
-        '404':
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
   /api/v1/admin/network-policy-templates:
     get:
       summary: List network-policy templates
@@ -11130,7 +11713,7 @@ paths:
           schema:
             type: string
             format: uuid
-          description: Narrow to the project-scoped catalog union.
+          description: Select the project-scoped catalog union. Omit only for the globally managed catalog view.
       responses:
         '200':
           description: Paginated page of charts.
@@ -11170,6 +11753,13 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Select the project's catalog visibility. Omit only for a globally managed chart.
       responses:
         '200':
           description: The chart.
@@ -11210,6 +11800,13 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Select the project's catalog visibility. Omit only for a globally managed chart.
         - name: version
           in: query
           required: false
@@ -11259,6 +11856,13 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Select the project's catalog visibility. Omit only for a globally managed chart.
         - name: version
           in: query
           required: false
@@ -11311,6 +11915,13 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Select the project's catalog visibility. Omit only for a globally managed chart.
         - name: limit
           in: query
           schema:
@@ -11342,6 +11953,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/catalog/recommendations/popular/:
+    get:
+      summary: List popular visible charts
+      description: Returns ranked recommendations from the selected project's visible catalogs. Omit project_id only for the globally managed catalog view.
+      tags: [catalog]
+      security: [{bearerJWT: []}]
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 50, default: 6}
+      responses:
+        '200':
+          description: Ranked visible chart recommendations.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: {$ref: '#/components/schemas/ChartRecommendation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/catalog/recommendations/similar/{chart_id}/:
+    get:
+      summary: List similar visible charts
+      description: Returns co-installation recommendations only when the source chart and results are visible in the selected project. Omit project_id only for the globally managed catalog view.
+      tags: [catalog]
+      security: [{bearerJWT: []}]
+      parameters:
+        - name: chart_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: project_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 20, default: 5}
+      responses:
+        '200':
+          description: Ranked visible chart recommendations.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: {$ref: '#/components/schemas/ChartRecommendation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/catalog/controller/status/:
     get:
       summary: Catalog reconciler controller status
@@ -11458,10 +12132,15 @@ paths:
               type: object
               required:
                 - cluster_id
+                - project_id
+                - chart_version_id
                 - release_name
                 - namespace
               properties:
                 cluster_id:
+                  type: string
+                  format: uuid
+                project_id:
                   type: string
                   format: uuid
                 chart_version_id:
@@ -11498,7 +12177,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '403':
-          description: RBAC catalog:create denied for the cluster.
+          description: The project is not assigned to the cluster, the repository is not visible to the project, or catalog:create is denied.
           content:
             application/json:
               schema:
@@ -18071,7 +18750,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '503':
-          description: Agent fleet inventory is not configured.
+          description: Cluster-agent inventory is not configured.
           content:
             application/json:
               schema:
@@ -18600,79 +19279,6 @@ paths:
         '200': {description: Connection, product-agent, and authoritative mode status., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminStatus'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
-        '503': {$ref: '#/components/responses/ServiceUnavailable'}
-  /api/v1/admin/charlie/disconnect/:
-    post:
-      operationId: adminCharlieDisconnect
-      summary: Emergency-disable Charlie and remove the local connection
-      tags: [platform-admin-settings]
-      security: [{bearerJWT: []}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionRequest'}}}}
-      responses:
-        '204': {description: Charlie disabled and disconnected.}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '409': {description: Charlie could not be safely disabled or disconnected., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
-        '503': {$ref: '#/components/responses/ServiceUnavailable'}
-  /api/v1/admin/charlie/agent/install/:
-    post:
-      operationId: adminCharlieAgentInstall
-      summary: Activate the verified and ready Charlie product agent
-      tags: [platform-admin-settings]
-      security: [{bearerJWT: []}]
-      responses:
-        '200': {description: Product-agent installation state., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAgent'}}}}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '409': {description: Verified onboarding or product-agent readiness is incomplete., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
-        '503': {$ref: '#/components/responses/ServiceUnavailable'}
-  /api/v1/admin/charlie/agent/upgrade/:
-    post:
-      operationId: adminCharlieAgentUpgrade
-      summary: Replace the Charlie product agent using a new signed onboarding package
-      tags: [platform-admin-settings]
-      security: [{bearerJWT: []}]
-      responses:
-        '200': {description: Product-agent installation state., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAgent'}}}}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '409': {description: A new signed replacement package is required., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
-  /api/v1/admin/charlie/agent/rollback/:
-    post:
-      operationId: adminCharlieAgentRollback
-      summary: Roll back the Charlie product agent using a new signed onboarding package
-      tags: [platform-admin-settings]
-      security: [{bearerJWT: []}]
-      responses:
-        '200': {description: Product-agent installation state., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAgent'}}}}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '409': {description: A new signed replacement package is required., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
-  /api/v1/admin/charlie/agent/rotate/:
-    post:
-      operationId: adminCharlieAgentRotate
-      summary: Rotate the Charlie product-agent credentials using a new signed onboarding package
-      tags: [platform-admin-settings]
-      security: [{bearerJWT: []}]
-      responses:
-        '200': {description: Product-agent installation state., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAgent'}}}}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '409': {description: A new signed replacement package is required., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
-  /api/v1/admin/charlie/agent/uninstall/:
-    post:
-      operationId: adminCharlieAgentUninstall
-      summary: Emergency-disable Charlie and uninstall its product agent
-      tags: [platform-admin-settings]
-      security: [{bearerJWT: []}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionRequest'}}}}
-      responses:
-        '204': {description: Charlie disabled and product agent uninstalled.}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '409': {description: Charlie could not be safely disabled or uninstalled., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/admin/charlie/mode/:
     patch:
@@ -21958,7 +22564,7 @@ paths:
         version and current UTC time. Used by load balancers and the
         platform-health rollup.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security: []
       responses:
         '200':
@@ -22019,7 +22625,7 @@ paths:
       operationId: k8sProxyGet
       summary: Proxy a request to the cluster Kubernetes apiserver
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -22077,7 +22683,7 @@ paths:
       operationId: k8sProxyHead
       summary: Proxy a request to the cluster Kubernetes apiserver
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -22135,7 +22741,7 @@ paths:
       operationId: k8sProxyOptions
       summary: Proxy a request to the cluster Kubernetes apiserver
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -22193,7 +22799,7 @@ paths:
       operationId: k8sProxyPost
       summary: Proxy a mutating request (POST) to the cluster apiserver. Requires clusters:write scope.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -22251,7 +22857,7 @@ paths:
       operationId: k8sProxyPut
       summary: Proxy a mutating request (PUT) to the cluster apiserver. Requires clusters:write scope.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -22309,7 +22915,7 @@ paths:
       operationId: k8sProxyPatch
       summary: Proxy a mutating request (PATCH) to the cluster apiserver. Requires clusters:write scope.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -22367,7 +22973,7 @@ paths:
       operationId: k8sProxyDelete
       summary: Proxy a mutating request (DELETE) to the cluster apiserver. Requires clusters:write scope.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -22425,7 +23031,7 @@ paths:
       operationId: k8sProxyTrace
       summary: Proxy a request to the cluster Kubernetes apiserver
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -22479,432 +23085,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/internal/argocd/clusters/{cluster_id}/k8s/{path}:
-    parameters:
-      - name: cluster_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: path
-        in: path
-        required: true
-        schema:
-          type: string
-        description: Opaque Kubernetes API path after `/k8s/` (chi wildcard `*`).
-    description: |
-      Dedicated machine-to-machine front door for the built-in ArgoCD instance
-      to reach an adopted cluster's apiserver through the same tunnel proxy
-      (tunnel.ProxyHandler.HandleK8sProxy). It does NOT accept user JWTs or user
-      API tokens: the bearer token is a cluster-scoped opaque proxy token,
-      validated by SHA-256 hash against `argocd_cluster_proxy_tokens` before the
-      shared tunnel proxy runs; purpose, cluster binding, expiration, and
-      revocation are also checked. Production registrations default to the
-      private `:8090` listener. The same path remains on `:8000` for existing
-      explicitly configured cluster Secrets, with the identical token gate.
-      Mutations are audited as `argocd.k8s_proxy.forwarded`. Rate-limited under
-      the argocd-proxy class. CONNECT is accepted but not representable in
-      OpenAPI.
-    get:
-      operationId: argocdInternalK8sProxyGet
-      summary: ArgoCD-to-cluster Kubernetes apiserver proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - argoCDClusterProxyToken: []
-      responses:
-        '200':
-          description: Proxied apiserver response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-        '400':
-          description: Missing cluster_id or malformed request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '401':
-          description: Missing or invalid cluster proxy token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '502':
-          description: Invalid response from the agent.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
-          description: Cluster agent not connected.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '504':
-          description: Request timed out.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    head:
-      operationId: argocdInternalK8sProxyHead
-      summary: ArgoCD-to-cluster Kubernetes apiserver proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - argoCDClusterProxyToken: []
-      responses:
-        '200':
-          description: Proxied apiserver response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-        '400':
-          description: Missing cluster_id or malformed request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '401':
-          description: Missing or invalid cluster proxy token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '502':
-          description: Invalid response from the agent.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
-          description: Cluster agent not connected.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '504':
-          description: Request timed out.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    options:
-      operationId: argocdInternalK8sProxyOptions
-      summary: ArgoCD-to-cluster Kubernetes apiserver proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - argoCDClusterProxyToken: []
-      responses:
-        '200':
-          description: Proxied apiserver response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-        '400':
-          description: Missing cluster_id or malformed request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '401':
-          description: Missing or invalid cluster proxy token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '502':
-          description: Invalid response from the agent.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
-          description: Cluster agent not connected.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '504':
-          description: Request timed out.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    post:
-      operationId: argocdInternalK8sProxyPost
-      summary: ArgoCD-to-cluster Kubernetes apiserver proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - argoCDClusterProxyToken: []
-      responses:
-        '200':
-          description: Proxied apiserver response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-        '400':
-          description: Missing cluster_id or malformed request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '401':
-          description: Missing or invalid cluster proxy token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '502':
-          description: Invalid response from the agent.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
-          description: Cluster agent not connected.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '504':
-          description: Request timed out.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: {}
-          application/octet-stream:
-            schema:
-              type: string
-              format: binary
-    put:
-      operationId: argocdInternalK8sProxyPut
-      summary: ArgoCD-to-cluster Kubernetes apiserver proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - argoCDClusterProxyToken: []
-      responses:
-        '200':
-          description: Proxied apiserver response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-        '400':
-          description: Missing cluster_id or malformed request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '401':
-          description: Missing or invalid cluster proxy token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '502':
-          description: Invalid response from the agent.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
-          description: Cluster agent not connected.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '504':
-          description: Request timed out.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: {}
-          application/octet-stream:
-            schema:
-              type: string
-              format: binary
-    patch:
-      operationId: argocdInternalK8sProxyPatch
-      summary: ArgoCD-to-cluster Kubernetes apiserver proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - argoCDClusterProxyToken: []
-      responses:
-        '200':
-          description: Proxied apiserver response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-        '400':
-          description: Missing cluster_id or malformed request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '401':
-          description: Missing or invalid cluster proxy token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '502':
-          description: Invalid response from the agent.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
-          description: Cluster agent not connected.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '504':
-          description: Request timed out.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: {}
-    delete:
-      operationId: argocdInternalK8sProxyDelete
-      summary: ArgoCD-to-cluster Kubernetes apiserver proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - argoCDClusterProxyToken: []
-      responses:
-        '200':
-          description: Proxied apiserver response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-        '400':
-          description: Missing cluster_id or malformed request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '401':
-          description: Missing or invalid cluster proxy token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '502':
-          description: Invalid response from the agent.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
-          description: Cluster agent not connected.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '504':
-          description: Request timed out.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    trace:
-      operationId: argocdInternalK8sProxyTrace
-      summary: ArgoCD-to-cluster Kubernetes apiserver proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - argoCDClusterProxyToken: []
-      responses:
-        '200':
-          description: Proxied apiserver response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-        '400':
-          description: Missing cluster_id or malformed request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '401':
-          description: Missing or invalid cluster proxy token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '502':
-          description: Invalid response from the agent.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
-          description: Cluster agent not connected.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '504':
-          description: Request timed out.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
   /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}:
     parameters:
       - name: cluster_id
@@ -22942,7 +23122,7 @@ paths:
       operationId: serviceProxyGet
       summary: Proxy a request to an in-cluster Service
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -22989,7 +23169,7 @@ paths:
       operationId: serviceProxyHead
       summary: Proxy a request to an in-cluster Service
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23036,7 +23216,7 @@ paths:
       operationId: serviceProxyOptions
       summary: Proxy a request to an in-cluster Service
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23083,7 +23263,7 @@ paths:
       operationId: serviceProxyPost
       summary: Proxy a mutating request (POST) to an in-cluster Service. Requires clusters:write scope.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23130,7 +23310,7 @@ paths:
       operationId: serviceProxyPut
       summary: Proxy a mutating request (PUT) to an in-cluster Service. Requires clusters:write scope.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23177,7 +23357,7 @@ paths:
       operationId: serviceProxyPatch
       summary: Proxy a mutating request (PATCH) to an in-cluster Service. Requires clusters:write scope.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23224,7 +23404,7 @@ paths:
       operationId: serviceProxyDelete
       summary: Proxy a mutating request (DELETE) to an in-cluster Service. Requires clusters:write scope.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23271,7 +23451,7 @@ paths:
       operationId: serviceProxyTrace
       summary: Proxy a request to an in-cluster Service
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23348,7 +23528,7 @@ paths:
       operationId: serviceProxySubGet
       summary: Proxy a request to an in-cluster Service
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23395,7 +23575,7 @@ paths:
       operationId: serviceProxySubHead
       summary: Proxy a request to an in-cluster Service
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23442,7 +23622,7 @@ paths:
       operationId: serviceProxySubOptions
       summary: Proxy a request to an in-cluster Service
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23489,7 +23669,7 @@ paths:
       operationId: serviceProxySubPost
       summary: Proxy a request to an in-cluster Service
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23536,7 +23716,7 @@ paths:
       operationId: serviceProxySubPut
       summary: Proxy a request to an in-cluster Service
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23583,7 +23763,7 @@ paths:
       operationId: serviceProxySubPatch
       summary: Proxy a request to an in-cluster Service
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23630,7 +23810,7 @@ paths:
       operationId: serviceProxySubDelete
       summary: Proxy a request to an in-cluster Service
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23677,7 +23857,7 @@ paths:
       operationId: serviceProxySubTrace
       summary: Proxy a request to an in-cluster Service
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       requestBody:
@@ -23745,7 +23925,7 @@ paths:
       operationId: tunnelConnectGet
       summary: Agent reverse-tunnel WebSocket upgrade
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       responses:
@@ -23761,7 +23941,7 @@ paths:
       operationId: tunnelConnectHead
       summary: Agent reverse-tunnel WebSocket upgrade
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       responses:
@@ -23777,7 +23957,7 @@ paths:
       operationId: tunnelConnectOptions
       summary: Agent reverse-tunnel WebSocket upgrade
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       responses:
@@ -23793,7 +23973,7 @@ paths:
       operationId: tunnelConnectPost
       summary: Agent reverse-tunnel WebSocket upgrade
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       responses:
@@ -23809,7 +23989,7 @@ paths:
       operationId: tunnelConnectPut
       summary: Agent reverse-tunnel WebSocket upgrade
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       responses:
@@ -23825,7 +24005,7 @@ paths:
       operationId: tunnelConnectPatch
       summary: Agent reverse-tunnel WebSocket upgrade
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       responses:
@@ -23841,7 +24021,7 @@ paths:
       operationId: tunnelConnectDelete
       summary: Agent reverse-tunnel WebSocket upgrade
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       responses:
@@ -23857,7 +24037,7 @@ paths:
       operationId: tunnelConnectTrace
       summary: Agent reverse-tunnel WebSocket upgrade
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       responses:
@@ -23869,510 +24049,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-  /argocd:
-    description: |
-      Top-level reverse proxy to the in-cluster argocd-server UI
-      (handler.ArgoCDUIProxy). Mounted outside `/api/v1` because upstream
-      ArgoCD is configured with `server.rootpath: /argocd`. Authentication is
-      enforced by middleware in front of the proxy: an Astronomer
-      `Authorization: Bearer <jwt>` header (XHR) OR the `astronomer_session`
-      cookie (top-level browser navigation). Unauthenticated browser
-      navigations are redirected to `/auth/login?returnTo=...`. The proxy
-      injects the upstream `argocd.token` session cookie and rewrites the SPA
-      `<base href>`. Supports WebSocket upgrade passthrough. CONNECT accepted
-      but not representable in OpenAPI.
-    get:
-      operationId: argocdUiGet
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-    head:
-      operationId: argocdUiHead
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-    options:
-      operationId: argocdUiOptions
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-    post:
-      operationId: argocdUiPost
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: {}
-    put:
-      operationId: argocdUiPut
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: {}
-    patch:
-      operationId: argocdUiPatch
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: {}
-    delete:
-      operationId: argocdUiDelete
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-    trace:
-      operationId: argocdUiTrace
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-  /argocd/{path}:
-    parameters:
-      - name: path
-        in: path
-        required: true
-        schema:
-          type: string
-        description: Opaque ArgoCD UI/API sub-path (chi wildcard `*`), forwarded unchanged.
-    description: |
-      Sub-path variant of the ArgoCD UI reverse proxy
-      (handler.ArgoCDUIProxy). Same auth and behavior as `/argocd`; deep-link
-      `text/html` 404s under `/argocd/*` are rewritten to the SPA index so the
-      client-side router can take over. CONNECT accepted but not representable
-      in OpenAPI.
-    get:
-      operationId: argocdUiSubGet
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-    head:
-      operationId: argocdUiSubHead
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-    options:
-      operationId: argocdUiSubOptions
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-    post:
-      operationId: argocdUiSubPost
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: {}
-    put:
-      operationId: argocdUiSubPut
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: {}
-    patch:
-      operationId: argocdUiSubPatch
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: {}
-    delete:
-      operationId: argocdUiSubDelete
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
-    trace:
-      operationId: argocdUiSubTrace
-      summary: ArgoCD UI reverse proxy
-      tags:
-        - tunnel-proxy-argocd-ui
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: WebSocket upgrade (ArgoCD live-update streams).
-        '200':
-          description: Proxied ArgoCD UI/asset/API response.
-          content:
-            text/html:
-              schema:
-                type: string
-            application/json:
-              schema: {}
-        '302':
-          description: Redirect to login for unauthenticated browser navigation.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '502':
-          description: ArgoCD upstream unavailable.
-          content:
-            text/plain:
-              schema:
-                type: string
   /api/v1/ws/clusters/{cluster_id}/shell/sessions/{id}:
     get:
       operationId: kubectlShellWebSocket
@@ -24392,7 +24068,7 @@ paths:
         query parameter (StreamKindShell) or via the Authorization header.
         Rate-limited under the exec/logs class.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       parameters:
@@ -24463,7 +24139,7 @@ paths:
         `?ticket=` (StreamKindExec) for the browser path. Rate-limited under the
         exec/logs class.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       parameters:
@@ -24523,7 +24199,7 @@ paths:
         `?ticket=` (StreamKindLogs) for the browser path. Rate-limited under the
         exec/logs class.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security:
         - bearerJWT: []
       parameters:
@@ -24611,7 +24287,7 @@ paths:
         `X-Astronomer-Forwarded-User` header carries the originating user UUID
         for audit attribution.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security: []
       parameters:
         - name: cluster_id
@@ -24726,7 +24402,7 @@ paths:
         audited as `cluster.helm_proxy.forwarded`, attributed via
         `X-Astronomer-Forwarded-User`. Helm waits up to 10 minutes.
       tags:
-        - tunnel-proxy-argocd-ui
+        - Platform
       security: []
       parameters:
         - name: cluster_id

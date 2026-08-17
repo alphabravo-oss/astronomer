@@ -652,7 +652,7 @@ func TestApprovalAccessRequiresUnderlyingPermissionAndExactProductResource(t *te
 	}
 }
 
-func TestApprovalAccessAllowsExactAgentFleetRecordForProductRemediation(t *testing.T) {
+func TestApprovalAccessAllowsExactClusterAgentRecordForProductRemediation(t *testing.T) {
 	_, store, bridge, _ := approvalAccessFixture(t)
 	bridge.approval.Manifest.Resources[0].Kind = "agent_connection_record"
 	bridge.approval.Manifest.Resources[0].Id = "connection-1"
@@ -660,6 +660,6 @@ func TestApprovalAccessAllowsExactAgentFleetRecordForProductRemediation(t *testi
 	store.resources[0].ResourceID = "connection-1"
 	resource, err := validateApprovalResources(bridge.approval.Manifest, store.resources)
 	if err != nil || resource.Kind != "agent_connection_record" || string(resource.Id) != "connection-1" {
-		t.Fatalf("Astronomer-owned agent fleet record was not accepted as exact ProductContext: resource=%+v err=%v", resource, err)
+		t.Fatalf("Astronomer-owned cluster-agent record was not accepted as exact ProductContext: resource=%+v err=%v", resource, err)
 	}
 }

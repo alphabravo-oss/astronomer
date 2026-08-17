@@ -156,7 +156,7 @@ export interface ClusterTemplateLabel {
 }
 
 export interface ClusterTemplateToolBinding {
-  /** Catalog tool slug (e.g. "argocd", "monitoring"). */
+  /** Catalog tool slug (for example, "monitoring"). */
   slug: string;
   /** Preset name from the catalog (e.g. "default", "production"). */
   preset?: string;

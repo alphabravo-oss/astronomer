@@ -18,13 +18,13 @@ type operationRunnerTestRow struct {
 
 func TestClaimLatestOperations(t *testing.T) {
 	now := time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC)
-	old := operationRunnerTestRow{id: uuid.New(), target: "cluster-1:argocd", status: OpStatusPending}
-	newer := operationRunnerTestRow{id: uuid.New(), target: "cluster-1:argocd", status: OpStatusPending}
-	freshRunning := operationRunnerTestRow{id: uuid.New(), target: "cluster-2:argocd", status: OpStatusRunning, startedAt: now.Add(-30 * time.Second)}
-	staleRunning := operationRunnerTestRow{id: uuid.New(), target: "cluster-3:argocd", status: OpStatusRunning, startedAt: now.Add(-2 * time.Minute)}
-	markErr := operationRunnerTestRow{id: uuid.New(), target: "cluster-4:argocd", status: OpStatusPending}
-	conditionalFreshOlder := operationRunnerTestRow{id: uuid.New(), target: "cluster-5:argocd", status: OpStatusRunning, startedAt: now.Add(-30 * time.Second)}
-	conditionalNewest := operationRunnerTestRow{id: uuid.New(), target: "cluster-5:argocd", status: OpStatusPending}
+	old := operationRunnerTestRow{id: uuid.New(), target: "cluster-1:cert-manager", status: OpStatusPending}
+	newer := operationRunnerTestRow{id: uuid.New(), target: "cluster-1:cert-manager", status: OpStatusPending}
+	freshRunning := operationRunnerTestRow{id: uuid.New(), target: "cluster-2:cert-manager", status: OpStatusRunning, startedAt: now.Add(-30 * time.Second)}
+	staleRunning := operationRunnerTestRow{id: uuid.New(), target: "cluster-3:cert-manager", status: OpStatusRunning, startedAt: now.Add(-2 * time.Minute)}
+	markErr := operationRunnerTestRow{id: uuid.New(), target: "cluster-4:cert-manager", status: OpStatusPending}
+	conditionalFreshOlder := operationRunnerTestRow{id: uuid.New(), target: "cluster-5:cert-manager", status: OpStatusRunning, startedAt: now.Add(-30 * time.Second)}
+	conditionalNewest := operationRunnerTestRow{id: uuid.New(), target: "cluster-5:cert-manager", status: OpStatusPending}
 
 	tests := []struct {
 		name            string

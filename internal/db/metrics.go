@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 
+	deliverymetrics "github.com/alphabravocompany/astronomer-go/internal/delivery/metrics"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -327,6 +328,105 @@ GROUP BY status
 	return out, nil
 }
 
+func snapshotDeliveryMetrics(ctx context.Context, pool *pgxpool.Pool) (deliverymetrics.DatabaseSnapshot, error) {
+	var snapshot deliverymetrics.DatabaseSnapshot
+	rows, err := pool.Query(ctx, `
+SELECT COALESCE(strategy->>'type',''), state, COUNT(*)::bigint
+FROM delivery_rollouts GROUP BY 1, 2`)
+	if err != nil {
+		return snapshot, err
+	}
+	for rows.Next() {
+		var row deliverymetrics.RolloutCount
+		if err := rows.Scan(&row.Strategy, &row.State, &row.Count); err != nil {
+			rows.Close()
+			return snapshot, err
+		}
+		snapshot.Rollouts = append(snapshot.Rollouts, row)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return snapshot, err
+	}
+	rows.Close()
+
+	rows, err = pool.Query(ctx, `
+SELECT phase,
+       (observed_generation <> desired_generation OR observed_spec_digest <> desired_spec_digest) AS drift,
+       COUNT(*)::bigint
+FROM cluster_deployments GROUP BY 1, 2`)
+	if err != nil {
+		return snapshot, err
+	}
+	for rows.Next() {
+		var row deliverymetrics.DeploymentCount
+		if err := rows.Scan(&row.Phase, &row.Drift, &row.Count); err != nil {
+			rows.Close()
+			return snapshot, err
+		}
+		snapshot.Deployments = append(snapshot.Deployments, row)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return snapshot, err
+	}
+	rows.Close()
+
+	rows, err = pool.Query(ctx, `
+SELECT source.status, COALESCE(latest.verification_status, 'pending'), COUNT(*)::bigint
+FROM delivery_sources AS source
+LEFT JOIN LATERAL (
+  SELECT verification_status
+  FROM delivery_source_resolutions
+  WHERE source_id = source.id
+  ORDER BY created_at DESC, id DESC LIMIT 1
+) AS latest ON true
+GROUP BY 1, 2`)
+	if err != nil {
+		return snapshot, err
+	}
+	for rows.Next() {
+		var row deliverymetrics.SourceCount
+		if err := rows.Scan(&row.Status, &row.Verification, &row.Count); err != nil {
+			rows.Close()
+			return snapshot, err
+		}
+		snapshot.Sources = append(snapshot.Sources, row)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return snapshot, err
+	}
+	rows.Close()
+
+	rows, err = pool.Query(ctx, `
+SELECT compatibility_status, ready, COUNT(*)::bigint
+FROM delivery_controller_inventory GROUP BY 1, 2`)
+	if err != nil {
+		return snapshot, err
+	}
+	for rows.Next() {
+		var row deliverymetrics.FluxCount
+		if err := rows.Scan(&row.Compatibility, &row.Ready, &row.Count); err != nil {
+			rows.Close()
+			return snapshot, err
+		}
+		snapshot.Flux = append(snapshot.Flux, row)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return snapshot, err
+	}
+	rows.Close()
+
+	err = pool.QueryRow(ctx, `
+SELECT COUNT(*)::bigint
+FROM cluster_deployments
+WHERE phase NOT IN ('pending','removed')
+  AND (last_observed_at IS NULL OR last_observed_at < clock_timestamp() - interval '5 minutes')`).Scan(&snapshot.StaleDeployments)
+	return snapshot, err
+}
+
 // StartMetricsReporter publishes pgxpool statistics into Prometheus on a fixed
 // interval. Metrics are process-wide and safe to call once per process.
 func StartMetricsReporter(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) {
@@ -365,6 +465,17 @@ func StartMetricsReporter(ctx context.Context, pool *pgxpool.Pool, log *slog.Log
 			return
 		}
 		updateTaskOutboxMetrics(outboxRows)
+
+		deliveryCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		deliverySnapshot, err := snapshotDeliveryMetrics(deliveryCtx, pool)
+		cancel()
+		if err != nil {
+			if log != nil {
+				log.DebugContext(ctx, "failed to collect delivery runtime metrics", "error", err)
+			}
+			return
+		}
+		deliverymetrics.ReplaceDatabaseSnapshot(deliverySnapshot)
 	}
 
 	record()

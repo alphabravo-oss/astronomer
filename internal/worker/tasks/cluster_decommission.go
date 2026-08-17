@@ -49,17 +49,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/client-go/kubernetes"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	"github.com/alphabravocompany/astronomer-go/internal/operationstate"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 )
 
 // ClusterDecommissionType is the asynq task type. Re-exported as
@@ -236,7 +232,6 @@ type ClusterDecommissionQuerier interface {
 	// Phase 2: revoke tokens.
 	DeleteClusterRegistrationTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteClusterAgentTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteArgoCDClusterProxyTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 
 	// Phase 3: archive + delete audit rows atomically. A single statement
 	// (INSERT…SELECT into a snapshot CTE, then DELETE that exact set) so the
@@ -281,15 +276,6 @@ type ClusterDecommissionQuerier interface {
 	// here so a decommissioned cluster doesn't leak its snapshot rows forever
 	// (mirrors the apiserver_audit_events treatment above).
 	DeleteControlPlaneSnapshotsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	// Argo CD managed-cluster mappings + an enumerator so we can audit
-	// the orphans (upstream Argo Secrets that need manual unregister).
-	// DIR-10: decommission deliberately records orphans rather than
-	// auto-deleting upstream Argo cluster Secrets; operators unregister
-	// via the ArgoCD UI/API when they want the AppSet target removed.
-	// Optional future: auto-unregister when a platform setting is set.
-	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
-	DeleteArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-
 	// Phase 5: tombstone (soft-delete) the cluster row.
 	TombstoneCluster(ctx context.Context, id uuid.UUID) error
 
@@ -325,10 +311,6 @@ type RBACCacheInvalidator interface {
 type ClusterDecommissionDeps struct {
 	Queries ClusterDecommissionQuerier
 	Tunnel  DecommissionTunnel
-	// K8s is the management-plane Kubernetes client used to unregister
-	// upstream ArgoCD cluster Secrets during decommission. Optional; when nil
-	// the worker still drops DB rows and emits orphan audit events.
-	K8s kubernetes.Interface
 	// TunnelWait is the per-call wait for MsgDecommissionAck. Defaults to
 	// decommissionTunnelWaitDefault when zero.
 	TunnelWait time.Duration
@@ -756,8 +738,7 @@ func phaseCleanupManagedSide(ctx context.Context, deps ClusterDecommissionDeps, 
 			detail["per_step_errors"] = errStrs
 		}
 		// Orphan audit (L16): residual Velero BackupStorageLocations whose
-		// backing cloud blobs need manual cleanup. Mirrors the
-		// argocd_secret_orphan worker-side audit action.
+		// backing cloud blobs need manual cleanup.
 		if len(orphanBSLs) > 0 {
 			detail["velero_orphans"] = orphanBSLs
 			emitVeleroOrphanAudit(ctx, deps.Queries, row, orphanBSLs)
@@ -801,10 +782,6 @@ func phaseRevokeAgentToken(ctx context.Context, deps ClusterDecommissionDeps, ro
 	if err != nil {
 		return nil, fmt.Errorf("delete agent tokens: %w", err)
 	}
-	argoRows, err := deps.Queries.DeleteArgoCDClusterProxyTokensByCluster(ctx, row.ClusterID)
-	if err != nil {
-		return nil, fmt.Errorf("delete argocd cluster proxy tokens: %w", err)
-	}
 	disconnected := false
 	if deps.Tunnel != nil {
 		disconnected = deps.Tunnel.Disconnect(row.ClusterID.String())
@@ -812,7 +789,6 @@ func phaseRevokeAgentToken(ctx context.Context, deps ClusterDecommissionDeps, ro
 	detail := map[string]any{
 		"registration_tokens_removed": regRows,
 		"agent_tokens_removed":        agentRows,
-		"argocd_proxy_tokens_removed": argoRows,
 		"tunnel_disconnected":         disconnected,
 	}
 	audit.Record(ctx, deps.Queries, audit.Event{
@@ -900,78 +876,6 @@ func phaseDeleteDependents(ctx context.Context, deps ClusterDecommissionDeps, ro
 		}
 		counts[o.name] = n
 	}
-	// Argo CD managed-cluster mappings: delete the upstream cluster Secret
-	// when the management-plane K8s client is wired, then drop the local rows.
-	// If the client is unavailable or a delete fails, emit an audit event so
-	// operators have a clear orphan cleanup signal.
-	managed, mErr := q.ListArgoCDManagedClustersByCluster(ctx, cid)
-	if mErr != nil && firstErr == nil {
-		firstErr = fmt.Errorf("list argocd_managed_clusters: %w", mErr)
-	}
-	argoSecretsRemoved := int64(0)
-	argoSecretsMissing := int64(0)
-	if len(managed) > 0 {
-		orphans := make([]map[string]any, 0, len(managed))
-		for _, m := range managed {
-			orphan := map[string]any{
-				"argocd_instance_id":  m.ArgocdInstanceID.String(),
-				"cluster_secret_name": m.ClusterSecretName,
-				"server_url":          m.ServerUrl,
-			}
-			if deps.K8s == nil {
-				orphan["reason"] = "kubernetes client not configured"
-				orphans = append(orphans, orphan)
-				continue
-			}
-			secret, err := lookupClusterSecret(ctx, deps.K8s, m.ClusterSecretName, m.ServerUrl)
-			if err != nil {
-				orphan["reason"] = "lookup_failed"
-				orphan["error"] = err.Error()
-				orphans = append(orphans, orphan)
-				if firstErr == nil {
-					firstErr = fmt.Errorf("lookup argocd cluster secret: %w", err)
-				}
-				continue
-			}
-			if secret == nil {
-				argoSecretsMissing++
-				continue
-			}
-			orphan["cluster_secret_name"] = secret.Name
-			if err := deps.K8s.CoreV1().Secrets(argoCDNamespace).Delete(ctx, secret.Name, kubeutil.DeleteOptions()); err != nil && !apierrors.IsNotFound(err) {
-				orphan["reason"] = "delete_failed"
-				orphan["error"] = err.Error()
-				orphans = append(orphans, orphan)
-				if firstErr == nil {
-					firstErr = fmt.Errorf("delete argocd cluster secret %s: %w", secret.Name, err)
-				}
-				continue
-			}
-			argoSecretsRemoved++
-		}
-		if len(orphans) > 0 {
-			auditDetail := map[string]any{
-				"cluster_id": cid.String(),
-				"orphans":    orphans,
-			}
-			if payload, err := json.Marshal(auditDetail); err == nil {
-				_ = q.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
-					Source:       "worker",
-					Action:       "cluster.decommission.argocd_secret_orphan",
-					ResourceType: "cluster",
-					ResourceID:   cid.String(),
-					Detail:       payload,
-				})
-			}
-		}
-	}
-	deleted, mErr := q.DeleteArgoCDManagedClustersByCluster(ctx, cid)
-	if mErr != nil && firstErr == nil {
-		firstErr = fmt.Errorf("delete argocd_managed_clusters: %w", mErr)
-	}
-	counts["argocd_managed_clusters"] = deleted
-	counts["argocd_cluster_secrets_removed"] = argoSecretsRemoved
-	counts["argocd_cluster_secrets_missing"] = argoSecretsMissing
 	// Flush the per-user binding cache: every user who had any cluster role
 	// on this cluster just had it removed and would otherwise see the stale
 	// binding for up to one cache TTL on the hot path.

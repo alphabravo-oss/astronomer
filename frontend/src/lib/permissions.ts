@@ -45,6 +45,8 @@ export type PermissionVerb =
   | 'proxy'
   | 'sync'
   | 'approve'
+  | 'rollback'
+  | 'orphan'
   | 'manage';
 
 export type PermissionScope =

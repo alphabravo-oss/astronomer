@@ -18,11 +18,11 @@ const taskOutboxColumnCount = 17
 // ("column reference \"id\" is ambiguous") on EVERY call. The error fires before
 // any row is touched, so nothing is ever claimed, attempt_count never
 // increments, and no failure is ever logged against a row — the outbox just
-// silently delivers nothing. Live impact when found: 613 rows stranded at
-// attempt_count=0 (537 argocd:auto_register_cluster, 76 cluster:decommission).
+// silently delivers nothing. This regression test preserves the generic queue
+// invariant without depending on any retired task name.
 //
 // There is no live-Postgres unit harness in this package, so this locks the
-// statement string (same approach as the ArgoCD operation claim tests).
+// statement string directly.
 func TestClaimDueTaskOutboxReturningIsAliasQualified(t *testing.T) {
 	sql := claimDueTaskOutbox
 

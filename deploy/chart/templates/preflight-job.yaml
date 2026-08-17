@@ -22,11 +22,8 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      # initContainers run sequentially before the main `preflight` kubectl
-      # container. The DB-connect check runs here because it has different
-      # tool requirements (the migrate binary) than the CRD/Secret checks.
-      # Failure here fails the whole pod, which fails the helm hook, which
-      # fails the install — exactly the gate we want (FEATURES-051126 T13).
+      # The read-only database gate runs before Kubernetes prerequisite checks.
+      # Failure fails the Helm hook and leaves the database/PVC untouched.
       #
       # IMPORTANT: this init container only runs when the operator points
       # at an *external* Postgres. The chart-bundled Postgres
@@ -42,7 +39,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.image" (dict "context" . "component" "migrate") | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.postgres.image.repository "tag" .Values.postgres.image.tag "digest" .Values.postgres.image.digest "registry" .Values.postgres.image.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: HOME
@@ -70,40 +67,83 @@ spec:
             - /bin/sh
             - -ec
             - |
-              # Check connectivity + the schema_migrations dirty flag. The
-              # migrate binary's `version` subcommand prints either
-              # "<n>" (clean) or "<n> (dirty)" — the latter means a previous
-              # migration crashed midway and the schema is in an indeterminate
-              # state. Refusing the install here surfaces the problem early,
-              # before the migrate Job retries and CrashLoops.
-              if ! out=$(migrate -database "$DATABASE_URL" -path /migrations version 2>&1); then
-                # Special case: "no migration" is fine — empty DB, fresh install.
-                if echo "$out" | grep -q 'error: no migration'; then
-                  echo "schema_migrations table empty — fresh install, OK."
-                  exit 0
+              fail_fresh_install() {
+                echo "fresh_install_required: $1"
+                echo "Astronomer v1.0.0 never deletes, reformats, or upgrades a pre-v1 database."
+                echo "Install v1 with a new release name and an empty database; keep the old release and backup for rollback."
+                exit 1
+              }
+
+              if ! psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc 'SELECT 1' >/dev/null 2>&1; then
+                echo "Refusing release: cannot connect to Postgres with the configured DATABASE_URL."
+                exit 1
+              fi
+
+              legacy_tables=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc "
+                SELECT COALESCE(string_agg(c.relname, ',' ORDER BY c.relname), '')
+                FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public'
+                  AND c.relkind IN ('r', 'p')
+                  AND c.relname IN (
+                    'argo' || 'cd_baseline_ownership_decisions',
+                    'argo' || 'cd_cluster_proxy_tokens',
+                    'argo' || 'cd_managed_clusters',
+                    'argo' || 'cd_operation_events',
+                    'argo' || 'cd_operations',
+                    'argo' || 'cd_applications',
+                    'argo' || 'cd_instances',
+                    'fl' || 'eet_operation_targets',
+                    'fl' || 'eet_operations'
+                  );") || {
+                echo "Refusing release: PostgreSQL catalog inspection failed."
+                exit 1
+              }
+              if [ -n "$legacy_tables" ]; then
+                fail_fresh_install "legacy delivery tables detected: ${legacy_tables}"
+              fi
+
+              has_migrations=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc "SELECT to_regclass('public.schema_migrations') IS NOT NULL;") || exit 1
+              if [ "$has_migrations" != "t" ]; then
+                public_tables=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc "
+                  SELECT count(*) FROM pg_catalog.pg_class c
+                  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                  WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p');") || exit 1
+                if [ "$public_tables" != "0" ]; then
+                  fail_fresh_install "unknown public schema without schema_migrations"
                 fi
-                echo "Refusing release: cannot connect to Postgres or read schema_migrations."
-                echo "Error from migrate: $out"
-                echo ""
-                echo "Common causes:"
-                echo "  - DATABASE_URL is wrong or the Postgres pod isn't ready yet"
-                echo "  - sslmode mismatch between client and server"
-                echo "  - The astronomer user lacks SELECT on schema_migrations"
-                exit 1
+                echo "Empty PostgreSQL database detected; fresh v1 install is allowed."
+                exit 0
               fi
-              echo "Schema state: $out"
-              if echo "$out" | grep -q 'dirty'; then
-                echo ""
-                echo "Refusing release: schema_migrations is marked dirty."
-                echo "A previous migration crashed midway and the schema is in an"
-                echo "indeterminate state. Recover by:"
-                echo "  1. Inspect: kubectl -n {{ .Release.Namespace }} run psql --rm -it --image=postgres:16-alpine -- psql \"\$DATABASE_URL\" -c 'SELECT * FROM schema_migrations;'"
-                echo "  2. Decide whether to roll forward or roll back the dirty version"
-                echo "  3. migrate -database \"\$DATABASE_URL\" -path /migrations force <version>"
-                echo "See docs/upgrade-runbook.md (FEATURES-051126 T06 once landed)."
+
+              migration_state=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -AtF '|' -c "
+                SELECT count(*), COALESCE(max(version), 0), COALESCE(bool_or(dirty), false)
+                FROM public.schema_migrations;") || {
+                echo "Refusing release: schema_migrations inspection failed."
                 exit 1
+              }
+              migration_rows=$(printf '%s' "$migration_state" | cut -d '|' -f 1)
+              migration_version=$(printf '%s' "$migration_state" | cut -d '|' -f 2)
+              migration_dirty=$(printf '%s' "$migration_state" | cut -d '|' -f 3)
+              if [ "$migration_rows" != "1" ] || [ "$migration_version" != "{{ .Values.preflight.freshInstall.acceptedSchemaVersion }}" ] || [ "$migration_dirty" != "f" ]; then
+                fail_fresh_install "expected one clean schema_migrations row at version {{ .Values.preflight.freshInstall.acceptedSchemaVersion }}, found rows=${migration_rows} version=${migration_version} dirty=${migration_dirty}"
               fi
-              echo "Postgres preflight OK."
+
+              missing_v1_tables=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc "
+                WITH required(name) AS (VALUES
+                  ('delivery_sources'), ('component_bundles'), ('component_bundle_versions'),
+                  ('delivery_targets'), ('delivery_rollouts'), ('delivery_rollout_clusters'),
+                  ('delivery_rollout_approvals'), ('delivery_rollout_events'),
+                  ('cluster_deployments'), ('cluster_deployment_events'),
+                  ('delivery_source_resolutions'), ('delivery_assignment_receipts'),
+                  ('delivery_controller_inventory')
+                )
+                SELECT COALESCE(string_agg(name, ',' ORDER BY name), '')
+                FROM required WHERE to_regclass('public.' || name) IS NULL;") || exit 1
+              if [ -n "$missing_v1_tables" ]; then
+                fail_fresh_install "schema version is 1 but required v1 tables are missing: ${missing_v1_tables}"
+              fi
+              echo "Existing clean Astronomer v1 database accepted."
           resources:
             requests:
               cpu: 25m
@@ -211,7 +251,7 @@ spec:
               {{- end }}
               DEX_RUNTIME_SECRET={{ default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName | quote }}
               if ! kube_read "prepared Dex runtime Secret metadata ${DEX_RUNTIME_SECRET}" get secret "${DEX_RUNTIME_SECRET}" -n {{ .Release.Namespace | quote }} -o 'jsonpath={.type}{"\n"}{.metadata.labels.astronomer\.io/runtime-writer}{"\n"}{.metadata.labels.astronomer\.io/secret-purpose}'; then
-                echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} is missing. Prepare it before volume cutover; see docs/dex-runtime-secret-migration.md."
+                echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} is missing. Restore it from the operator-owned secret source; see docs/secret-handling-policy.md."
                 exit 1
               fi
               dex_secret_metadata=${KUBE_READ_OUTPUT}
@@ -315,7 +355,7 @@ spec:
                   echo "  kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml"
                   echo ""
                   echo "Or set tls.requireCertManager=false if cert-manager will be installed"
-                  echo "after this release applies (e.g. via Argo CD sync waves)."
+                  echo "after this release applies."
                 else
                   echo "Refusing release: could not verify cert-manager CRD issuers.cert-manager.io because the Kubernetes API read never became usable."
                 fi
@@ -351,6 +391,32 @@ spec:
                 exit 1
               fi
               echo "additionalTrustedCAs Secret found."
+              {{- end }}
+
+              {{- if .Values.delivery.sourceResolution.proxy.enabled }}
+              if ! kube_read "delivery source proxy Secret key" get secret {{ .Values.delivery.sourceResolution.proxy.urlSecretRef.name | quote }} -n {{ .Release.Namespace | quote }} -o json; then
+                echo "Refusing release: delivery source proxy Secret or key is unavailable."
+                exit 1
+              fi
+              if ! printf '%s' "$KUBE_READ_OUTPUT" | jq -e --arg key {{ .Values.delivery.sourceResolution.proxy.urlSecretRef.key | quote }} '.data[$key] | type == "string" and length > 0' >/dev/null; then
+                echo "Refusing release: delivery source proxy Secret key is empty."
+                exit 1
+              fi
+              KUBE_READ_OUTPUT=""
+              echo "Delivery source proxy Secret found."
+              {{- end }}
+
+              {{- if .Values.delivery.sourceResolution.ca.existingSecret }}
+              if ! kube_read "delivery source CA Secret key" get secret {{ .Values.delivery.sourceResolution.ca.existingSecret | quote }} -n {{ .Release.Namespace | quote }} -o json; then
+                echo "Refusing release: delivery source CA Secret or key is unavailable."
+                exit 1
+              fi
+              if ! printf '%s' "$KUBE_READ_OUTPUT" | jq -e --arg key {{ .Values.delivery.sourceResolution.ca.key | quote }} '.data[$key] | type == "string" and length > 0' >/dev/null; then
+                echo "Refusing release: delivery source CA Secret key is empty."
+                exit 1
+              fi
+              KUBE_READ_OUTPUT=""
+              echo "Delivery source CA Secret found."
               {{- end }}
 
               # Production Postgres DSN must use TLS. The inline-DSN case is
@@ -404,7 +470,7 @@ spec:
               legacy_pvc="data-{{ include "astronomer.fullname" . }}-postgres-0"
               if kube_read "legacy bundled Postgres PVC ${legacy_pvc}" get pvc "${legacy_pvc}" -n "{{ .Release.Namespace }}" -o name; then
                 echo "Refusing upgrade: detected legacy bundled Postgres PVC ${legacy_pvc} in namespace {{ .Release.Namespace }}."
-                echo "Externalize or migrate the database first. See docs/migrations/2026-05-postgres-cnpg.md."
+                echo "The v1 chart accepts only the clean v1 schema. Create a fresh v1 database; see docs/upgrade-runbook.md."
                 exit 1
               else
                 read_status=$?
@@ -432,9 +498,8 @@ spec:
 {{- end }}
 
 {{- if .Values.preflight.enabled }}
-# Helm and Argo CD need different hook lifecycles. Helm executes this isolated
-# pre-release Job and Argo CD explicitly skips it. Keeping the engine-specific
-# hook name prevents Argo from adopting or deleting a Helm-created hook.
+# Helm pre-release validation. It is read-only against external PostgreSQL and
+# fails closed before the migration workload starts.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -445,25 +510,5 @@ metadata:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": before-hook-creation
-    argocd.argoproj.io/hook: Skip
 {{ include "astronomer.preflightJobSpec" (dict "root" . "serviceAccountName" (printf "%s-preflight" (include "astronomer.serviceAccountName" .))) }}
----
-# Argo CD applies the persistent RBAC/NetworkPolicy prerequisites and this Job
-# in wave -5. Argo's kind ordering applies NetworkPolicy, ServiceAccount, and
-# RBAC kinds before Job; using one wave avoids waiting forever for health on
-# Kubernetes resource kinds that do not expose a health assessment. Wave 0
-# release resources still remain blocked until the Sync hook succeeds. Helm
-# records the Job as a test hook, so install/upgrade never executes both paths.
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: {{ include "astronomer.fullname" . }}-preflight-argocd
-  labels:
-    {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
-  annotations:
-    "helm.sh/hook": test
-    argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
-    argocd.argoproj.io/sync-wave: "-5"
-{{ include "astronomer.preflightJobSpec" (dict "root" . "serviceAccountName" (printf "%s-preflight-argocd" (include "astronomer.serviceAccountName" .))) }}
 {{- end }}

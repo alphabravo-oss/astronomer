@@ -55,16 +55,9 @@ func TestCRDControllerNamespaceEnvDefaultsAndOverrides(t *testing.T) {
 	if got := crdWatchNamespace(); got != "astronomer-mgmt" {
 		t.Fatalf("default CRD watch namespace = %q", got)
 	}
-	if got := crdArgoNamespace(); got != "argocd" {
-		t.Fatalf("default CRD Argo namespace = %q", got)
-	}
 	t.Setenv("CRD_WATCH_NAMESPACE", "custom-mgmt")
-	t.Setenv("CRD_ARGO_NAMESPACE", "custom-argocd")
 	if got := crdWatchNamespace(); got != "custom-mgmt" {
 		t.Fatalf("override CRD watch namespace = %q", got)
-	}
-	if got := crdArgoNamespace(); got != "custom-argocd" {
-		t.Fatalf("override CRD Argo namespace = %q", got)
 	}
 }
 
@@ -104,23 +97,43 @@ func TestValidateProductionSecurityConfig(t *testing.T) {
 		t.Fatalf("NewEncryptor(valid): %v", err)
 	}
 	if err := validateProductionSecurityConfig(&config.Config{
-		Env:               "production",
-		DatabaseURL:       "postgres://astronomer:astronomer@db:5432/astronomer?sslmode=require",
-		SecretKey:         "production-jwt-signing-key",
-		EncryptionKey:     validKey,
-		ServerURL:         "https://astronomer.example.com",
-		DexBundledEnabled: true,
+		Env:                                "production",
+		DatabaseURL:                        "postgres://astronomer:astronomer@db:5432/astronomer?sslmode=require",
+		SecretKey:                          "production-jwt-signing-key",
+		EncryptionKey:                      validKey,
+		ServerURL:                          "https://astronomer.example.com",
+		DexBundledEnabled:                  true,
+		DeliveryEnabled:                    true,
+		AgentImageRepository:               "registry.example.test/agent@sha256:" + strings.Repeat("a", 64),
+		DeliveryFluxDistributionRepository: "registry.example.test/system",
+		DeliveryFluxDistributionDigest:     "sha256:" + strings.Repeat("b", 64),
+		DeliveryFluxDistributionCertificateIdentity: "https://github.com/example/release@refs/tags/v1.0.0",
+		DeliveryFluxDistributionOIDCIssuer:          "https://token.actions.githubusercontent.com",
+		DeliveryBundleRepository:                    "registry.example.test/bundles",
+		DeliveryBundleDigest:                        "sha256:" + strings.Repeat("c", 64),
+		DeliveryBundleCertificateIdentity:           "https://github.com/example/release@refs/tags/v1.0.0",
+		DeliveryBundleOIDCIssuer:                    "https://token.actions.githubusercontent.com",
 	}, enc); err != nil {
 		t.Fatalf("valid production config rejected: %v", err)
 	}
 
 	if err := validateProductionSecurityConfig(&config.Config{
-		Env:                   "production",
-		DatabaseURL:           "postgres://astronomer:astronomer@db:5432/astronomer?sslmode=require",
-		SecretKey:             "production-jwt-signing-key",
-		EncryptionKey:         validKey,
-		ServerURL:             "https://astronomer.example.com",
-		AuthLocalPasswordOnly: true,
+		Env:                                "production",
+		DatabaseURL:                        "postgres://astronomer:astronomer@db:5432/astronomer?sslmode=require",
+		SecretKey:                          "production-jwt-signing-key",
+		EncryptionKey:                      validKey,
+		ServerURL:                          "https://astronomer.example.com",
+		AuthLocalPasswordOnly:              true,
+		DeliveryEnabled:                    true,
+		AgentImageRepository:               "registry.example.test/agent@sha256:" + strings.Repeat("a", 64),
+		DeliveryFluxDistributionRepository: "registry.example.test/system",
+		DeliveryFluxDistributionDigest:     "sha256:" + strings.Repeat("b", 64),
+		DeliveryFluxDistributionCertificateIdentity: "https://github.com/example/release@refs/tags/v1.0.0",
+		DeliveryFluxDistributionOIDCIssuer:          "https://token.actions.githubusercontent.com",
+		DeliveryBundleRepository:                    "registry.example.test/bundles",
+		DeliveryBundleDigest:                        "sha256:" + strings.Repeat("c", 64),
+		DeliveryBundleCertificateIdentity:           "https://github.com/example/release@refs/tags/v1.0.0",
+		DeliveryBundleOIDCIssuer:                    "https://token.actions.githubusercontent.com",
 	}, enc); err != nil {
 		t.Fatalf("local-password-only acknowledgement rejected: %v", err)
 	}

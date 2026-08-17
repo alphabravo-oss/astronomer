@@ -43,11 +43,11 @@ func mixedProfileFleet() []sqlc.Cluster {
 // the clusters whose agent resolves to the cluster-admin `admin` profile.
 func TestClusterAdminPosture_OnlyAdminProfileClustersReported(t *testing.T) {
 	callerID := uuid.New()
-	q := &fakeAgentFleetQuerier{
+	q := &fakeClusterAgentQuerier{
 		clusters: mixedProfileFleet(),
 		users:    map[uuid.UUID]sqlc.User{callerID: {ID: callerID, IsSuperuser: true}},
 	}
-	h := NewAgentFleetHandler(q)
+	h := NewClusterAgentHandler(q)
 
 	w := httptest.NewRecorder()
 	req := makeRequest("/api/v1/admin/agents/cluster-admin-posture/", callerID)
@@ -103,11 +103,11 @@ func TestClusterAdminPosture_OnlyAdminProfileClustersReported(t *testing.T) {
 // reachable without superuser.
 func TestClusterAdminPosture_RequiresSuperuser(t *testing.T) {
 	callerID := uuid.New()
-	q := &fakeAgentFleetQuerier{
+	q := &fakeClusterAgentQuerier{
 		clusters: mixedProfileFleet(),
 		users:    map[uuid.UUID]sqlc.User{callerID: {ID: callerID, IsSuperuser: false}},
 	}
-	h := NewAgentFleetHandler(q)
+	h := NewClusterAgentHandler(q)
 
 	t.Run("NonSuperuser", func(t *testing.T) {
 		w := httptest.NewRecorder()

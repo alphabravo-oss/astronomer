@@ -30,10 +30,10 @@ coverage.out
 *.test
 /keyrotate
 .claude/
+**/__pycache__/
 
 # Generated marketing screenshots (large binaries)
 screenshots/
 
 # Vendored Helm subchart tarballs (rebuilt via `helm dependency build`; Chart.lock pins versions)
 deploy/chart/charts/*
-!deploy/chart/charts/argo-cd-9.5.21.tgz

@@ -17,9 +17,7 @@ import {
 } from '@/lib/hooks';
 import { liveFallback } from '@/lib/live/status-store';
 import {
-  getArgoClusterOwnership,
   getRegistrationStatus,
-  setArgoClusterOwnershipDecision,
   type RegistrationStatus,
 } from '@/lib/api';
 import { getImageVulnSummary } from '@/lib/api/cluster-detail';
@@ -27,7 +25,7 @@ import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { MetricCard } from '@/components/ui/metric-card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { EmptyState } from '@/components/ui/empty-state';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from '@/lib/link';
 import { getServiceMeshDetection, type ServiceMeshKind } from '@/lib/api/cluster-detail';
 import { ActionMenu } from '@/components/ui/action-menu';
@@ -61,10 +59,8 @@ import {
   CircleHelp,
   ShieldAlert,
   Package,
-  GitBranch,
 } from 'lucide-react';
-import type { ArgoBaselineComponentOwnership, ArgoClusterOwnershipResponse, Cluster, ClusterCondition } from '@/types';
-import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
+import type { Cluster, ClusterCondition } from '@/types';
 import { WidgetGrid } from '@/components/dashboards/widget-grid';
 import { ExtensionSlot } from '@/components/extensions/ExtensionSlot';
 import { renderForCluster } from '@/lib/api/dashboards';
@@ -485,7 +481,6 @@ function ClusterDetailPage() {
         />
       </div>
 
-      <ArgoCDOwnershipPanel cluster={cluster} />
       <AgentPrivilegePanel cluster={cluster} />
 
       {/* Recent Events */}
@@ -670,318 +665,6 @@ function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
   );
 }
 
-type OwnershipDecision = 'adopt' | 'leave_local' | 'replace';
-
-// What each decision actually does to the cluster, in the operator's terms.
-// "Leave local" reads harmless and is not: it uninstalls nothing, it just stops
-// Astronomer managing the component, so a component that is already running is
-// left up with nothing to reconcile it. The server refuses that case outright
-// (409); this copy is what stops someone getting there by accident.
-function decisionConsequence(option: OwnershipDecision, name: string): string {
-  switch (option) {
-    case 'leave_local':
-      return `Astronomer will stop managing ${name} on this cluster. It is not uninstalled: if it is already running, the workload stays up but nothing will reconcile, upgrade or repair it. To remove it, uninstall it from Tools instead.`;
-    case 'adopt':
-      return `ArgoCD will take over managing ${name} on this cluster and reconcile it against the baseline from now on.`;
-    case 'replace':
-      return `The existing ${name} install will be replaced with Astronomer's baseline version. Resources not in the baseline may be removed.`;
-  }
-}
-
-function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
-  const queryClient = useQueryClient();
-  const [pendingDecision, setPendingDecision] = useState<{
-    slug: string;
-    name: string;
-    option: OwnershipDecision;
-  } | null>(null);
-  const [decisionReason, setDecisionReason] = useState('');
-  const ownershipQuery = useQuery({
-    queryKey: queryKeys.argocd.clusterOwnership(cluster.id),
-    queryFn: () => getArgoClusterOwnership(cluster.id),
-    enabled: !!cluster.id,
-    // `argocd.changed` (scope: ownership/health) refreshes this while the
-    // stream is open.
-    refetchInterval: liveFallback(60_000),
-  });
-  const decisionMutation = useMutation({
-    mutationFn: ({ slug, decision, reason }: { slug: string; decision: 'adopt' | 'leave_local' | 'replace'; reason: string }) =>
-      setArgoClusterOwnershipDecision(cluster.id, slug, { decision, reason }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.clusterOwnership(cluster.id) });
-      toastSuccess('Ownership decision recorded');
-    },
-    onError: (err: Error) => {
-      toastApiError('Failed to record ownership decision', err);
-    },
-  });
-  const argo = cluster.argocd;
-  const ownership = isArgoClusterOwnershipResponse(ownershipQuery.data) ? ownershipQuery.data : undefined;
-  const ownershipManagedClusters = Array.isArray(ownership?.managedClusters) ? ownership.managedClusters : [];
-  const ownershipComponents = Array.isArray(ownership?.components) ? ownership.components : [];
-  const registered = ownership?.registered ?? argo?.registered ?? false;
-  const components: ArgoBaselineComponentOwnership[] = ownershipComponents.length > 0 ? ownershipComponents : (argo?.baselineComponents ?? []).map((component) => ({
-    slug: component.slug,
-    name: component.name,
-    namespace: component.namespace,
-    applicationSetName: component.applicationSetName,
-    desiredOwner: 'argocd',
-    observedOwner: component.managedBy,
-    state: component.managedBy === 'argocd' ? 'argocd_owned' : component.managedBy === 'argocd_pending' ? 'migration_required' : component.managedBy,
-    options: ['adopt', 'leave_local', 'replace'],
-  }));
-  const owner = ownership
-    ? summarizeOwnershipState(ownershipComponents)
-    : (argo?.baselineManagedBy ?? 'unknown');
-  const drift = argo?.drift;
-  const isArgoOwned = owner === 'argocd_owned' || owner === 'argocd';
-  const isPending = owner === 'migration_required' || owner === 'argocd_pending';
-  const isHelm = owner === 'legacy_helm' || owner === 'helm';
-  const resourceCreatedCount = drift?.resourceCreatedCount ?? 0;
-  const resourceChangedCount = drift?.resourceChangedCount ?? 0;
-  const resourcePrunedCount = drift?.resourcePrunedCount ?? 0;
-  const hasResourceDrift = resourceCreatedCount > 0 || resourceChangedCount > 0 || resourcePrunedCount > 0;
-  const ownerLabel =
-    owner === 'argocd_owned' || owner === 'argocd'
-      ? 'ArgoCD'
-      : owner === 'migration_required' || owner === 'argocd_pending'
-        ? 'Migration required'
-        : owner === 'legacy_helm' || owner === 'helm'
-          ? 'Helm over tunnel'
-          : owner === 'local_manual' || owner === 'local'
-            ? 'Local cluster'
-            : 'Unknown';
-  const tone = isArgoOwned
-    ? 'border-status-success/30 bg-status-success/10 text-status-success'
-    : isPending
-      ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
-      : isHelm
-        ? 'border-status-info/30 bg-status-info/10 text-status-info'
-        : 'border-border bg-muted/30 text-muted-foreground';
-  const driftTone = !drift || drift.appCount === 0
-    ? 'border-border bg-muted/30 text-muted-foreground'
-    : drift.degradedCount > 0
-      ? 'border-status-error/30 bg-status-error/10 text-status-error'
-      : drift.outOfSyncCount > 0
-        ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
-        : 'border-status-success/30 bg-status-success/10 text-status-success';
-
-  return (
-    <div className="rounded-lg border border-border bg-card">
-      <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-            <GitBranch className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-medium text-foreground">GitOps ownership</h3>
-              <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${tone}`}>
-                {ownerLabel}
-              </span>
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span>
-                Cluster registration: {registered ? `${ownershipManagedClusters.length || argo?.instanceCount || 0} ArgoCD instance${(ownershipManagedClusters.length || argo?.instanceCount || 0) === 1 ? '' : 's'}` : 'not registered'}
-              </span>
-              {ownershipManagedClusters.length ? (
-                <span className="truncate">
-                  Secret: <code className="font-mono">{ownershipManagedClusters.map((row) => row.clusterSecretName).filter(Boolean).join(', ')}</code>
-                </span>
-              ) : argo?.clusterSecretNames?.length ? (
-                <span className="truncate">
-                  Secret: <code className="font-mono">{argo.clusterSecretNames.join(', ')}</code>
-                </span>
-              ) : null}
-            </div>
-            {drift ? (
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span className={`inline-flex items-center rounded border px-2 py-0.5 font-medium ${driftTone}`}>
-                  {drift.appCount === 0
-                    ? 'No cached apps'
-                    : `${drift.syncedCount}/${drift.appCount} synced`}
-                </span>
-                {drift.appCount > 0 ? (
-                  <>
-                    <span>
-                      Health: {drift.healthyCount} healthy
-                      {drift.progressingCount > 0 ? ` · ${drift.progressingCount} progressing` : ''}
-                      {drift.degradedCount > 0 ? ` · ${drift.degradedCount} degraded` : ''}
-                      {drift.unknownHealthCount > 0 ? ` · ${drift.unknownHealthCount} unknown` : ''}
-                    </span>
-                    {hasResourceDrift ? (
-                      <span>
-                        Resources: {resourceCreatedCount} created
-                        {` · ${resourceChangedCount} changed`}
-                        {` · ${resourcePrunedCount} pruned`}
-                      </span>
-                    ) : null}
-                    {drift.lastSynced ? (
-                      <span>Last sync: {formatRelativeTime(drift.lastSynced)}</span>
-                    ) : null}
-                    {drift.lastError ? (
-                      <span className={drift.degradedCount > 0 ? 'text-status-error' : 'text-status-warning'}>
-                        {drift.lastError}
-                      </span>
-                    ) : null}
-                  </>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Link
-            href="/dashboard/argocd"
-            className="inline-flex h-8 items-center gap-1.5 rounded border border-border px-3 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <GitBranch className="h-3.5 w-3.5" />
-            ArgoCD
-          </Link>
-          <Link
-            href={`/dashboard/clusters/${cluster.id}/tools`}
-            className="inline-flex h-8 items-center gap-1.5 rounded border border-border px-3 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <Package className="h-3.5 w-3.5" />
-            Components
-          </Link>
-        </div>
-      </div>
-      {components.length > 0 ? (
-        <div className="border-t border-border px-4 py-3">
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-            {components.map((component) => {
-              const componentState = component.state ?? owner;
-              const componentTone =
-                componentState === 'argocd_owned'
-                  ? 'border-status-success/30 bg-status-success/10 text-status-success'
-                  : componentState === 'migration_required'
-                    ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
-                    : componentState === 'legacy_helm'
-                      ? 'border-status-info/30 bg-status-info/10 text-status-info'
-                      : 'border-border bg-muted/30 text-muted-foreground';
-              const componentOwnerLabel =
-                componentState === 'argocd_owned'
-                  ? 'ArgoCD'
-                  : componentState === 'migration_required'
-                    ? 'Migrate'
-                    : componentState === 'legacy_helm'
-                      ? 'Helm'
-                      : componentState === 'local_manual'
-                        ? 'Local'
-                        : 'Unknown';
-              return (
-                <div
-                  key={component.slug}
-                  className="min-w-0 rounded-md border border-border bg-background px-3 py-2"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs font-medium text-foreground">{component.name}</span>
-                    <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] font-medium ${componentTone}`}>
-                      {componentOwnerLabel}
-                    </span>
-                  </div>
-                  <div className="mt-1 truncate text-[11px] text-muted-foreground">
-                    {component.namespace}
-                    {component.applicationSetName ? ` / ${component.applicationSetName}` : ''}
-                  </div>
-                  {component.decision?.reason ? (
-                    <div className="mt-1 truncate text-[11px] text-muted-foreground">
-                      {component.decision.reason}
-                    </div>
-                  ) : null}
-                  {ownership && component.options?.length ? (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {component.options.map((option) => (
-                        <button
-                          key={option}
-                          onClick={() => {
-                            setDecisionReason('');
-                            setPendingDecision({
-                              slug: component.slug,
-                              name: component.name,
-                              option: option as OwnershipDecision,
-                            });
-                          }}
-                          disabled={decisionMutation.isPending}
-                          className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
-                        >
-                          {decisionLabel(option)}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
-      <ConfirmDialog
-        open={!!pendingDecision}
-        onClose={() => setPendingDecision(null)}
-        onConfirm={() => {
-          if (!pendingDecision) return;
-          // Every decision here is consequential enough to explain, and the
-          // server requires a reason for leave_local and replace.
-          if (decisionReason.trim() === '') {
-            toastError(`${decisionLabel(pendingDecision.option)} decisions require a reason`);
-            return;
-          }
-          decisionMutation.mutate(
-            { slug: pendingDecision.slug, decision: pendingDecision.option, reason: decisionReason.trim() },
-            { onSuccess: () => setPendingDecision(null) },
-          );
-        }}
-        title={pendingDecision ? `${decisionLabel(pendingDecision.option)} ${pendingDecision.name}?` : ''}
-        description={pendingDecision ? decisionConsequence(pendingDecision.option, pendingDecision.name) : ''}
-        confirmText={pendingDecision ? decisionLabel(pendingDecision.option) : 'Confirm'}
-        variant={pendingDecision?.option === 'adopt' ? undefined : 'destructive'}
-        loading={decisionMutation.isPending}
-      >
-        <div className="space-y-1.5">
-          <label htmlFor="ownership-reason" className="text-sm font-medium text-foreground">
-            Reason
-          </label>
-          <textarea
-            id="ownership-reason"
-            value={decisionReason}
-            onChange={(e) => setDecisionReason(e.target.value)}
-            rows={3}
-            placeholder="Recorded in the audit log — why is this the right call?"
-            className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm
-              placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-          />
-        </div>
-      </ConfirmDialog>
-    </div>
-  );
-}
-
-function isArgoClusterOwnershipResponse(value: unknown): value is ArgoClusterOwnershipResponse {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const candidate = value as Partial<ArgoClusterOwnershipResponse>;
-  return (
-    typeof candidate.registered === 'boolean' &&
-    Array.isArray(candidate.managedClusters) &&
-    Array.isArray(candidate.components)
-  );
-}
-
-function summarizeOwnershipState(components: ArgoBaselineComponentOwnership[] = []): string {
-  if (components.length === 0) return 'unknown';
-  if (components.some((component) => component.state === 'migration_required')) return 'migration_required';
-  if (components.every((component) => component.state === 'argocd_owned')) return 'argocd_owned';
-  if (components.every((component) => component.state === 'local_manual')) return 'local_manual';
-  return 'mixed';
-}
-
-function decisionLabel(value: string): string {
-  if (value === 'leave_local') return 'Leave local';
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
 // ── Cluster conditions ──────────────────────────────────────────────────────
 //
 // Renders the kubectl-style condition pills under the cluster header. Each
@@ -992,7 +675,7 @@ const CONDITION_LABELS: Record<string, string> = {
   Connected: 'Connected',
   AgentReachable: 'Agent Reachable',
   GatewayAPISupported: 'Gateway API',
-  ArgoCDAdopted: 'ArgoCD Adopted',
+  DeliveryReady: 'Delivery ready',
   MetricsAvailable: 'Metrics Available',
 };
 

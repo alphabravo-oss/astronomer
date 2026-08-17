@@ -53,7 +53,7 @@ function ProjectsPage() {
   // cluster id → display name lookup so the table can render a real
   // cluster column instead of opaque UUIDs. Per-cluster project pages
   // already render the cluster context implicitly via the URL; the
-  // fleet-wide page needs to show it as a column or operators can't
+  // the cross-project page needs to show it as a column or operators cannot
   // disambiguate two same-named projects on different clusters.
   const clusterById = new Map<string, string>();
   (clustersData?.data || []).forEach((c) => {

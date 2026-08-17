@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flux-helm-managed
+  labels:
+    app.kubernetes.io/name: astronomer-flux-integration
+    app.kubernetes.io/managed-by: Helm
+data:
+  message: {{ .Values.message | quote }}

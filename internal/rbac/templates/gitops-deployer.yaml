@@ -1,18 +1,27 @@
 name: gitops-deployer
 display_name: GitOps Deployer
 description: |
-  Triggers and inspects GitOps deployments for a project. Cannot edit
-  global ArgoCD instances, repositories, or cluster registration.
+  Triggers and inspects delivery rollouts for a project. Cannot approve,
+  roll back, orphan resources, or change platform delivery configuration.
 scope: project
 category: gitops
 risk_level: high
 rules:
   - resource: projects
     verbs: [read]
-  - resource: argocd
-    verbs: [read, list, sync]
+  - resource: delivery_sources
+    verbs: [read, list]
+  - resource: delivery_bundles
+    verbs: [create, read, list]
+  - resource: delivery_targets
+    verbs: [create, read, update, list]
+  - resource: delivery_rollouts
+    verbs: [create, read, update, list, watch]
+  - resource: delivery_deployments
+    verbs: [read, update, list, watch]
+  - resource: delivery_inventory
+    verbs: [read, list]
   - resource: workloads
     verbs: [read, list]
   - resource: pods
     verbs: [read, list, watch, logs]
-

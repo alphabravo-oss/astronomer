@@ -13,7 +13,7 @@ the Secret, then removes both legacy names from a post-upgrade hook.
 {{- $name := printf "%s-dex-legacy-prepare" (include "astronomer.fullname" .) -}}
 {{- $legacy := printf "%s-dex-config" (include "astronomer.fullname" .) -}}
 {{- $retained := printf "%s-dex-config-retained" (include "astronomer.fullname" .) -}}
-{{- $hooks := dict "helm.sh/hook" "pre-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation" "argocd.argoproj.io/hook" "PreSync" "argocd.argoproj.io/hook-delete-policy" "BeforeHookCreation" -}}
+{{- $hooks := dict "helm.sh/hook" "pre-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation" -}}
 {{- $legacyCIDRs := .Values.networkPolicy.externalEgressCIDRs | default (list) -}}
 {{- $apiCIDRs := list -}}
 {{- range $cidr := .Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list) -}}
@@ -31,14 +31,14 @@ kind: ServiceAccount
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10" "argocd.argoproj.io/sync-wave" "-10") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10") $hooks) | nindent 4 }}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ $retained }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10" "argocd.argoproj.io/sync-wave" "-10" "helm.sh/resource-policy" "keep") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10" "helm.sh/resource-policy" "keep") $hooks) | nindent 4 }}
     astronomer.io/dex-migration-phase: staging
   labels:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
@@ -48,7 +48,7 @@ kind: Role
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10" "argocd.argoproj.io/sync-wave" "-10") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10") $hooks) | nindent 4 }}
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
@@ -64,7 +64,7 @@ kind: RoleBinding
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10" "argocd.argoproj.io/sync-wave" "-10") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10") $hooks) | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -87,7 +87,7 @@ metadata:
   labels:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "dex-legacy-prepare") | nindent 4 }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10" "argocd.argoproj.io/sync-wave" "-10") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10") $hooks) | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
@@ -116,7 +116,7 @@ kind: Job
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "-5" "argocd.argoproj.io/sync-wave" "-5") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "-5") $hooks) | nindent 4 }}
 spec:
   backoffLimit: 0
   template:
@@ -137,11 +137,11 @@ spec:
               patch_file=$(mktemp)
               trap 'rm -f "${patch_file}"' EXIT
               # Retain the original exact-name object before Helm computes
-              # obsolete resources or Argo prunes. This patch is metadata-only:
+              # obsolete resources. This patch is metadata-only:
               # credential-bearing data never enters arguments, output, or the
               # desired release manifest.
               kubectl patch configmap {{ $legacy | quote }} -n {{ .Release.Namespace | quote }} --type=merge \
-                -p '{"metadata":{"annotations":{"helm.sh/resource-policy":"keep","argocd.argoproj.io/sync-options":"Prune=false,Delete=false","argocd.argoproj.io/compare-options":"IgnoreExtraneous"}}}' >/dev/null || {
+                -p '{"metadata":{"annotations":{"helm.sh/resource-policy":"keep"}}}' >/dev/null || {
                 echo "Refusing Dex prepare release: could not retain the original legacy ConfigMap."
                 exit 1
               }

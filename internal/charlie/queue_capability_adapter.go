@@ -42,7 +42,7 @@ var managementTaskPurposes = map[string]string{
 	"metrics:aggregate":               "Aggregates management-plane metrics used by Astronomer dashboards and health views.",
 	"auth:refresh_group_sync_metrics": "Refreshes management-plane identity group synchronization metrics.",
 	"anomaly:baseline_recompute":      "Recomputes management-plane anomaly detection baselines.",
-	"anomaly:xcluster_recompute":      "Recomputes fleet-level anomaly aggregates from state already held by Astronomer.",
+	"anomaly:xcluster_recompute":      "Recomputes cross-cluster anomaly aggregates from state already held by Astronomer.",
 	"chart_recommendations:recompute": "Recomputes Astronomer's chart recommendation aggregates.",
 	"crd_mirror:gauge_populate":       "Refreshes management-plane CRD mirror health gauges.",
 	"charlie:trigger_dispatch":        "Dispatches one Astronomer management-plane trigger event to Charlie; it is separate from catalog synchronization.",

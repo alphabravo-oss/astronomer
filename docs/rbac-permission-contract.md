@@ -19,7 +19,7 @@ server through this resource/action contract.
 
 | Resource | Owns |
 | --- | --- |
-| `clusters` | Adopted cluster inventory, registration, decommission, labels, templates, baseline ownership decisions, and cluster-scoped metadata. |
+| `clusters` | Adopted cluster inventory, registration, decommission, labels, templates, and cluster-scoped metadata. |
 | `projects` | Project records, project policy, namespaces, project catalog subscriptions, quotas, and tenant grouping. |
 | `workloads` | Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, rollout actions, scale, restart, and workload YAML changes. |
 | `pods` | Pod list/detail/log/exec/proxy-style diagnostics. |
@@ -31,11 +31,10 @@ server through this resource/action contract.
 | `security` | Scans, compliance posture, CIS results, vulnerabilities, policy evidence, and security reports. |
 | `rbac` | Roles, role templates, bindings, group mappings, permission previews, and effective permission inspection. |
 | `settings` | Global platform settings that are not covered by a narrower resource. |
-| `argocd` | Argo CD instances, repositories, AppProjects, Applications, ApplicationSets, sync, rollback, and Argo cluster registration. |
 | `sso` | SSO/OIDC/SAML/Dex connector and authentication provider configuration. |
 | `users` | Local users, activation, password reset, locking, and user lifecycle. |
 | `audit_logs` | Audit search, export, detail, and read-audit evidence. |
-| `agents` | Agent fleet, diagnostics, self-test, lifecycle operations, compatibility, and upgrade queueing. |
+| `agents` | Cluster-agent inventory, diagnostics, self-test, lifecycle operations, compatibility, and upgrade queueing. |
 | `secrets` | Kubernetes Secret list/read/create/update/delete surfaces and secret-adjacent project tooling. |
 | `configmaps` | Kubernetes ConfigMap list/read/create/update/delete surfaces. |
 | `services` | Kubernetes Service management and service proxy surfaces. |
@@ -44,8 +43,17 @@ server through this resource/action contract.
 | `nodes` | Node inspect, cordon, uncordon, drain, labels, annotations, and taints. |
 | `service_mesh` | Mesh policy, mTLS, route validation, and service mesh health. |
 | `support_bundles` | Redacted diagnostic/support bundle generation and download. |
+| `delivery_sources` | Project-scoped Flux source metadata, trust policy, verification, deletion, and write-only credential rotation. |
+| `delivery_bundles` | Project-scoped component bundle identities and immutable, centrally resolved bundle versions. |
+| `delivery_targets` | Project-scoped cluster selectors and resolved rollout target sets. |
+| `delivery_rollouts` | Rollout creation, pause, resume, abort, and aggregate status. |
+| `delivery_deployments` | Per-cluster deployment state and controlled reconciliation actions. |
+| `delivery_inventory` | Applied resource inventory and drift evidence reported by cluster agents. |
+| `delivery_approvals` | Promotion-gate decisions and approval policy. |
+| `delivery_rollbacks` | Explicit rollback requests and rollback status. |
+| `delivery_orphans` | Orphan discovery and operator-approved orphan handling. |
+| `delivery_platform` | Platform-owned Flux distribution and system-release lifecycle. |
 | `cluster_templates` | Cluster template CRUD and template catalog management. |
-| `fleet_operations` | Legacy-named multi-cluster operation authoring and execution until the API is renamed. |
 | `network_policies` | Global network policy template CRUD and policy-template management. |
 | `custom_resources` | k8s-proxy access to custom resources (CRDs / non-core apigroups under `apis/<group>/<version>/...`). Lets operators grant or withhold CRD access deliberately instead of having it collapse into the generic `clusters` permission. |
 | `audit_ingest` | Machine-only write side of kube-apiserver audit collection: the per-cluster agent POSTing batched audit events. Separate from `audit_logs` (reading that evidence back) so an agent ingest credential cannot also satisfy `clusters:update`. |
@@ -66,10 +74,12 @@ server through this resource/action contract.
 | `restart` | Trigger a restart/rollout-style action. |
 | `exec` | Open an exec/attach style stream into a pod. |
 | `logs` | Read pod or workload logs. |
-| `proxy` | Forward traffic to a Kubernetes, service, pod, Argo, or agent-backed proxy target. |
-| `sync` | Trigger Argo CD sync, rollback, or deployment convergence action. |
+| `proxy` | Forward traffic to a Kubernetes, service, pod, or agent-backed proxy target. |
+| `sync` | Trigger a delivery convergence action. |
 | `manage` | High-risk compound action that spans several lower-level verbs or controls lifecycle state. |
 | `approve` | Decide one exact, expiring Charlie action. The approver must also hold the underlying target-resource permission at dispatch time. |
+| `rollback` | Request a controlled rollback to an earlier immutable bundle version. |
+| `orphan` | Decide or execute an explicitly reviewed orphan-resource action. |
 | `*` | Owner/admin wildcard. Allowed only in built-in owner/admin roles or explicit break-glass grants. |
 
 ## UI To Permission Map
@@ -87,16 +97,11 @@ server through this resource/action contract.
 | View pod detail and events | `pods:read` and `pods:list` |
 | Stream pod logs | `pods:logs` |
 | Open pod exec/attach/shell | `pods:exec` |
-| Use Kubernetes, pod, service, Argo UI, or internal proxy surfaces | Matching resource with `proxy`; high-risk pod proxy also requires `pods:exec` |
+| Use Kubernetes, pod, service, or internal proxy surfaces | Matching resource with `proxy`; high-risk pod proxy also requires `pods:exec` |
 | View or mutate ConfigMaps | `configmaps:read/list/create/update/delete` |
 | View or mutate Secrets | `secrets:read/list/create/update/delete` |
 | Manage Services, Ingresses, and entry points | `services:*`, `ingresses:*`, or `service_mesh:*` as appropriate |
 | Cordon, uncordon, drain, label, annotate, or taint nodes | `nodes:manage` or `nodes:update` |
-| View or run Argo sync, rollback, AppProject, repository, or ApplicationSet actions | `argocd:read/list/sync/create/update/delete/manage` |
-| Create, patch, delete, sync, or refresh an Argo Application | `workloads:<verb>` on the cluster hosting the Argo instance **and** on the cluster the Application's `spec.destination` resolves to. A destination that matches no registered cluster is denied. |
-| Create an ApplicationSet | `workloads:create` on the instance's cluster **and** on every registered cluster the generator's selector currently matches |
-| Delete an ApplicationSet | `workloads:delete` on the instance's cluster **and** on every registered cluster the LIVE set's selector currently matches — the delete cascades to the generated Applications, which carry a resources-finalizer |
-| Register, refresh-labels, or unregister a cluster in Argo | `workloads:update` on the instance's cluster **and** `clusters:update` on the cluster in the URL |
 | Queue agent diagnostics, self-test, or upgrade | `agents:read`, `agents:list`, `agents:update`, or `agents:manage` |
 | Manage backups or restores | `backups:create/read/update/delete/manage` |
 | Manage scans, compliance, or security evidence | `security:create/read/update/delete/list` |
@@ -107,6 +112,16 @@ server through this resource/action contract.
 | Search/export audit logs | `audit_logs:read` and `audit_logs:list` |
 | Agent POST of kube-apiserver audit batches | `audit_ingest:create` (held only by the per-cluster agent ingest token) |
 | Generate or download support bundles | `support_bundles:create/read/list` |
+| Register, inspect, rotate, or delete delivery sources | `delivery_sources:create/read/list/update/delete` in the target project |
+| Create or inspect bundles and immutable versions | `delivery_bundles:create/read/list` in the target project |
+| Create targets or inspect resolved cluster membership | `delivery_targets:create/read/list/update/delete` in the target project |
+| Start, inspect, pause, resume, or abort a rollout | `delivery_rollouts:create/read/list/update` in the target project |
+| Inspect deployment status or request reconcile/suspend | `delivery_deployments:read/list/update` in the target project |
+| Inspect applied inventory and drift | `delivery_inventory:read/list` in the target project |
+| Decide a rollout gate | `delivery_approvals:approve` in the target project |
+| Request or inspect rollback | `delivery_rollbacks:rollback/read/list` in the target project |
+| Finalize a deletion while retaining downstream resources | `delivery_orphans:orphan`; global critical grant only |
+| Manage the signed platform Flux distribution | `delivery_platform:read/update/manage` globally |
 
 ## Kubernetes Verb Map
 
@@ -130,7 +145,7 @@ server through this resource/action contract.
 | `nodes:proxy` | `get`/`create` on the node `proxy` subresource (the kubelet's own endpoint). Mutating calls additionally require `pods:exec`, because kubelet `/run/` executes arbitrary commands in any container on the node. Granted by no built-in template other than the wildcard owner/admin roles. |
 | `storage:create/read/update/delete/list/watch` | Matching PVC/PV/StorageClass verbs. |
 | `network_policies:*` | NetworkPolicy template management in Astronomer; per-cluster apply is executed through controlled project/cluster reconciliation. |
-| `argocd:*` | Argo CD API and ApplicationSet operations. Argo controller then applies Kubernetes changes using its configured cluster credentials. |
+| `delivery_*` | Desired delivery state is materialized centrally and reconciled by each cluster's Flux controllers under the cluster-agent boundary. |
 
 ## Review Rules
 

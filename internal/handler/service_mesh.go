@@ -704,7 +704,7 @@ func validateServiceMeshPolicyObject(obj map[string]any) ServiceMeshPolicyValida
 		out.Warnings = append(out.Warnings, validationWarning("apiVersion", "non-v1beta1 Istio API version; confirm the target cluster still serves it"))
 	}
 	if out.ReadOnly {
-		out.Warnings = append(out.Warnings, validationWarning("metadata", "resource appears to be ArgoCD-owned; edit through GitOps or explicitly migrate ownership before direct apply"))
+		out.Warnings = append(out.Warnings, validationWarning("metadata", "resource appears to be Flux-owned; edit through delivery configuration or explicitly migrate ownership before direct apply"))
 	}
 
 	spec := meshPolicyMapField(obj, "spec")
@@ -785,21 +785,15 @@ func (h *ServiceMeshHandler) checkMeshCRDAvailable(ctx context.Context, clusterI
 	return ""
 }
 
-func meshOwnership(labels, annotations map[string]string) (string, bool, string) {
-	if annotations != nil {
-		if v := strings.TrimSpace(annotations["argocd.argoproj.io/instance"]); v != "" {
-			return "argocd", true, "ArgoCD application " + v
-		}
-		if v := strings.TrimSpace(annotations["argocd.argoproj.io/tracking-id"]); v != "" {
-			return "argocd", true, "ArgoCD tracking id present"
-		}
-	}
+func meshOwnership(labels, _ map[string]string) (string, bool, string) {
 	if labels != nil {
-		if v := strings.TrimSpace(labels["app.kubernetes.io/managed-by"]); v != "" {
-			if strings.EqualFold(v, "argocd") || strings.EqualFold(v, "argo-cd") {
-				return "argocd", true, "app.kubernetes.io/managed-by=" + v
+		for _, key := range []string{"kustomize.toolkit.fluxcd.io/name", "helm.toolkit.fluxcd.io/name"} {
+			if value := strings.TrimSpace(labels[key]); value != "" {
+				return "flux", true, key + "=" + value
 			}
-			return v, false, ""
+		}
+		if value := strings.TrimSpace(labels["app.kubernetes.io/managed-by"]); value != "" {
+			return value, false, ""
 		}
 	}
 	return "", false, ""

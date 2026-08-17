@@ -15,6 +15,3 @@ rules:
     verbs: [read, list, watch, logs]
   - resource: monitoring
     verbs: [read, list]
-  - resource: argocd
-    verbs: [read, list, sync]
-

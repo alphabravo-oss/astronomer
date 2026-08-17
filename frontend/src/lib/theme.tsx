@@ -10,8 +10,8 @@ import {
 
 export type Theme = 'light' | 'dark' | 'system';
 
-// Namespaced key — NEVER bare `theme`: the upstream ArgoCD SPA is served on
-// the same origin under /argocd/* and JSON-parses the bare `theme` key, so a
+// Namespaced key — NEVER bare `theme`: other applications may share the
+// same origin and parse the bare `theme` key, so a
 // raw "dark" string there blanks its applications page. Values are stored raw
 // ("light" | "dark" | "system") so prefs written by next-themes survive.
 export const THEME_STORAGE_KEY = 'astronomer-theme';

@@ -18,9 +18,14 @@ func TestDexConnectorCiphertextRotationDoesNotStageLogicalRuntime(t *testing.T) 
 	if !strings.Contains(text, "set_config('astronomer.dex_connector_stage_bypass','1',true)") || !strings.Contains(text, "UPDATE dex_connectors SET config = $1::jsonb") || strings.Contains(text, "UPDATE dex_connectors SET runtime_generation") {
 		t.Fatal("Dex connector key rotation is not a ciphertext-only CAS")
 	}
-	migration, err := os.ReadFile("../../internal/db/migrations/137_dex_advisory_lock_connector_lifecycle.up.sql")
-	if err != nil || !strings.Contains(string(migration), "DROP TRIGGER IF EXISTS dex_connectors_runtime_generation") {
-		t.Fatalf("generic runtime trigger would take keyrotate offline: %v", err)
+	migration, err := os.ReadFile("../../internal/db/migrations/001_initial.up.sql")
+	if err != nil {
+		t.Fatalf("read canonical initial migration: %v", err)
+	}
+	canonical := string(migration)
+	if !strings.Contains(canonical, "current_setting('astronomer.dex_connector_stage_bypass', true) = '1'") ||
+		!strings.Contains(canonical, "CREATE TRIGGER dex_connectors_runtime_generation") {
+		t.Fatal("canonical Dex runtime trigger does not honor keyrotate's transaction-local bypass")
 	}
 }
 

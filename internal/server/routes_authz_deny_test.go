@@ -112,7 +112,7 @@ func TestControllersMutatingRoutesRequireSuperuser(t *testing.T) {
 		AuthQueries:  routeSecurityTokenAuthQuerier{user: sqlc.User{ID: userID, IsActive: true}},
 		RBACEngine:   rbac.NewEngine(),
 		RBACQueries:  routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		ControlPlane: handler.NewControlPlaneHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil),
+		ControlPlane: handler.NewControlPlaneHandler(nil, nil, nil, nil, nil, nil, nil, nil),
 	})
 
 	for _, tc := range []struct {

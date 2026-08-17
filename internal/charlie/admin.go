@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	semver "github.com/Masterminds/semver/v3"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -18,10 +17,9 @@ import (
 )
 
 var (
-	ErrAdminUnavailable         = errors.New("Charlie administration is unavailable")
-	ErrAdminNotConfigured       = errors.New("Charlie is not configured")
-	ErrAdminConflict            = errors.New("Charlie administration state changed")
-	ErrReplacementPackageNeeded = errors.New("a new signed Charlie onboarding package is required")
+	ErrAdminUnavailable   = errors.New("Charlie administration is unavailable")
+	ErrAdminNotConfigured = errors.New("Charlie is not configured")
+	ErrAdminConflict      = errors.New("Charlie administration state changed")
 )
 
 type AdminConnectionView struct {
@@ -214,21 +212,9 @@ type AdminAlertDeliveryProofView struct {
 	Deliveries           []AdminAlertDeliveryProof `json:"deliveries"`
 }
 
-type AdminAgentInstaller interface {
-	Status(context.Context, AgentInstallSpec) (AgentInstallationStatus, error)
-	Uninstall(context.Context, AgentInstallSpec) error
-	Disconnect(context.Context, AgentInstallSpec, string) error
-}
-
-type supersededAgentMaterialPruner interface {
-	PruneSupersededRepositories(context.Context, AgentInstallSpec) error
-	PruneSupersededSecrets(context.Context, AgentInstallSpec) error
-}
-
 type AdminService struct {
 	pool                  *pgxpool.Pool
 	queries               *sqlc.Queries
-	installer             AdminAgentInstaller
 	bridge                *ManagedBridge
 	visibilityRediscovery KubernetesVisibilityRediscoverer
 	mode                  *ModeController
@@ -237,7 +223,7 @@ type AdminService struct {
 	auditor               AuthorityMutationAuditor
 }
 
-func NewAdminService(pool *pgxpool.Pool, installer AdminAgentInstaller, bridge *ManagedBridge) (*AdminService, error) {
+func NewAdminService(pool *pgxpool.Pool, bridge *ManagedBridge) (*AdminService, error) {
 	if pool == nil {
 		return nil, ErrAdminUnavailable
 	}
@@ -247,14 +233,11 @@ func NewAdminService(pool *pgxpool.Pool, installer AdminAgentInstaller, bridge *
 	if err != nil {
 		return nil, err
 	}
-	service := &AdminService{pool: pool, queries: queries, installer: installer, bridge: bridge, visibilityRediscovery: bridge, now: time.Now, triggers: triggerAdmin, auditor: auditor}
+	service := &AdminService{pool: pool, queries: queries, bridge: bridge, visibilityRediscovery: bridge, now: time.Now, triggers: triggerAdmin, auditor: auditor}
 	if bridge != nil {
 		controller, err := NewModeController(PGModeStore{Pool: pool}, NewManagedModeBridge(bridge), auditor)
 		if err != nil {
 			return nil, err
-		}
-		if ceilingInstaller, ok := installer.(ModeCeilingInstaller); ok {
-			controller.SetModeCeilingRollout(modeCeilingRollout{load: queries.GetLatestCharlieConnection, installer: ceilingInstaller})
 		}
 		service.mode = controller
 	}
@@ -358,8 +341,8 @@ func safeAdminAlertDeliveryProof(row sqlc.CharlieAlertDelivery) AdminAlertDelive
 	return proof
 }
 
-// Status returns a pure projection of durable connection state, live bridge
-// heartbeats, and installer readiness. It does not run mode reconciliation —
+// Status returns a pure projection of durable connection state and live bridge
+// heartbeats. It does not run mode reconciliation —
 // that remains on RunModeReconciler and post-mutation mode paths so admin GET
 // stays free of authority side-effects.
 func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
@@ -396,26 +379,13 @@ func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 			applyBridgeStatus(&view, bridgeStatus)
 		}
 	}
-	s.applyInstallerStatus(ctx, &view, connection)
 	view.Mode = s.enrichMode(ctx, view.Mode)
 	return view, nil
 }
 
-func (s *AdminService) applyInstallerStatus(ctx context.Context, view *AdminStatusView, connection sqlc.CharlieConnection) {
-	if s == nil || s.installer == nil || view == nil {
-		return
-	}
-	installation, statusErr := s.installer.Status(ctx, adminInstallSpec(connection))
-	view.Agent.DesiredReplicas = installation.DesiredReplicas
-	view.Agent.ReadyReplicas = installation.ReadyReplicas
-	view.Agent.ApplicationState = installationState(installation, statusErr)
-	view.Mode.WorkloadCeiling = installation.ModeCeiling
-	view.Mode.WorkloadCeilingReady = statusErr == nil && installation.ModeCeilingReady
-}
-
 // LocalStatus returns only the durable product-owned projection. It never
 // reconciles central authority, contacts the product agent, or asks the
-// Kubernetes installer for live state. The feature-disabled administration
+// workload controller for live state. The feature-disabled administration
 // surface uses this method so a page refresh cannot reactivate transport.
 func (s *AdminService) LocalStatus(ctx context.Context) (AdminStatusView, error) {
 	connection, err := s.connection(ctx)
@@ -486,6 +456,7 @@ func safeAdminAgent(row sqlc.CharlieConnection) AdminAgentView {
 		ApplicationState: row.HealthState, StandbyReplicas: []string{}, Replicas: replicas, FencingEpoch: row.FencingEpoch,
 		LeaderReplica: row.LeaderInstanceID, AgentVersion: row.AgentProtocolVersion,
 		ChartVersion: row.ChartVersion, ChartDigest: row.ChartDigest, ImageDigest: row.ImageDigest,
+		DesiredReplicas: row.ReplicaCount,
 	}
 	if row.LastConnectedAt.Valid {
 		view.LastHeartbeatAt = row.LastConnectedAt.Time.UTC().Format(time.RFC3339)
@@ -555,28 +526,34 @@ func modeEffects(mode Mode) []string {
 	}
 }
 
-func installationState(status AgentInstallationStatus, err error) string {
-	if status.Ready() {
-		return "ready"
-	}
-	if status.ApplicationSynced && status.ApplicationHealthy {
-		return "degraded"
-	}
-	if status.DesiredReplicas > 0 || status.ReadyReplicas > 0 {
-		return "installing"
-	}
-	if err != nil {
-		return "unavailable"
-	}
-	return "inactive"
-}
-
 func applyBridgeStatus(view *AdminStatusView, status AdminBridgeStatus) {
 	if status.ArtifactVersion != "" {
 		view.Agent.AgentVersion = status.ArtifactVersion
 	}
 	view.Agent.LeaderReplica = status.LeaderInstanceID
 	view.Agent.FencingEpoch = status.Epoch
+	view.Agent.ReadyReplicas = 0
+	readyIDs := map[string]struct{}{}
+	if strings.TrimSpace(status.InstanceID) != "" {
+		readyIDs[status.InstanceID] = struct{}{}
+	}
+	if strings.TrimSpace(status.LeaderInstanceID) != "" {
+		readyIDs[status.LeaderInstanceID] = struct{}{}
+	}
+	view.Agent.ReadyReplicas = int32(len(readyIDs))
+	if status.ReplicaCount >= 0 && status.ReplicaCount <= 20 {
+		view.Agent.DesiredReplicas = int32(status.ReplicaCount)
+	}
+	switch {
+	case !status.ProductEnabled || !status.DeploymentEnabled:
+		view.Agent.ApplicationState = "inactive"
+	case status.CentralHealth == "healthy" && status.LeaderInstanceID != "":
+		view.Agent.ApplicationState = "ready"
+	case status.CentralHealth == "degraded":
+		view.Agent.ApplicationState = "degraded"
+	default:
+		view.Agent.ApplicationState = "unavailable"
+	}
 	if status.InstanceID != "" && status.InstanceID != status.LeaderInstanceID {
 		view.Agent.StandbyReplicas = []string{status.InstanceID}
 	} else if status.ReplicaCount > 1 {
@@ -608,283 +585,10 @@ func applyBridgeStatus(view *AdminStatusView, status AdminBridgeStatus) {
 	if status.DisclosureDigest != "" {
 		view.Mode.DisablePending = view.Mode.Requested == ModeDisabled && status.ProductEnabled
 	}
-}
-
-func adminInstallSpec(row sqlc.CharlieConnection) AgentInstallSpec {
-	return AgentInstallSpec{
-		InstallationID: row.InstallationID, ConnectionID: row.ID, LogicalAgentID: row.LogicalAgentID, DeploymentID: row.DeploymentID,
-		OnboardingPackageID: row.OnboardingPackageID,
-		CentralURL:          row.CentralUrl, ChartReference: row.ChartReference, ChartVersion: row.ChartVersion, ChartDigest: row.ChartDigest,
-		ImageReference: row.ImageReference, ImageDigest: row.ImageDigest, SecretPrefix: row.AgentSecretName, DisclosureDigest: row.DisclosureDigest,
-		SecretIntegrityHMAC: row.AgentSecretHmac, ReplicaCount: int(row.ReplicaCount),
-		ModeCeiling: normalizedModeCeiling(Mode(row.RequestedMode)),
+	if ceiling := Mode(status.ProductModeCeiling); validMode(ceiling) {
+		view.Mode.WorkloadCeiling = ceiling
+		view.Mode.WorkloadCeilingReady = ceiling == view.Mode.Authoritative
 	}
-}
-
-func (s *AdminService) Install(ctx context.Context) (AdminAgentView, error) {
-	connection, err := s.connection(ctx)
-	if err != nil {
-		return AdminAgentView{}, err
-	}
-	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.agent.install", ResourceType: "charlie_connection", ResourceID: connection.ID.String()}); err != nil {
-		return AdminAgentView{}, err
-	}
-	if connection.Active && connection.OnboardingState == "active" {
-		if pruner, ok := s.installer.(supersededAgentMaterialPruner); ok {
-			if err := pruner.PruneSupersededSecrets(ctx, adminInstallSpec(connection)); err != nil {
-				return AdminAgentView{}, fmt.Errorf("%w: superseded Charlie material cleanup is incomplete", ErrAdminConflict)
-			}
-		}
-		status, statusErr := s.Status(ctx)
-		return status.Agent, statusErr
-	}
-	if connection.OnboardingState != "consumed" || s.installer == nil {
-		return AdminAgentView{}, ErrAdminConflict
-	}
-	spec := adminInstallSpec(connection)
-	if pruner, ok := s.installer.(supersededAgentMaterialPruner); ok {
-		if err := pruner.PruneSupersededRepositories(ctx, spec); err != nil {
-			return AdminAgentView{}, fmt.Errorf("%w: superseded Charlie repository cleanup is incomplete", ErrAdminConflict)
-		}
-	}
-	installation, err := s.installer.Status(ctx, spec)
-	if err != nil || !installation.Ready() {
-		return AdminAgentView{}, fmt.Errorf("%w: Charlie agent readiness is incomplete", ErrAdminConflict)
-	}
-	if err := s.activateConnection(ctx, connection.ID); err != nil {
-		return AdminAgentView{}, ErrAdminConflict
-	}
-	if pruner, ok := s.installer.(supersededAgentMaterialPruner); ok {
-		if err := pruner.PruneSupersededSecrets(ctx, spec); err != nil {
-			return AdminAgentView{}, fmt.Errorf("%w: superseded Charlie material cleanup is incomplete", ErrAdminConflict)
-		}
-	}
-	status, err := s.Status(ctx)
-	return status.Agent, err
-}
-
-func (s *AdminService) activateConnection(ctx context.Context, connectionID uuid.UUID) error {
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	queries := s.queries.WithTx(tx)
-	locked, err := queries.LockCharlieConnectionActivation(ctx, connectionID)
-	if err != nil {
-		return err
-	}
-	found := false
-	for _, id := range locked {
-		if id == connectionID {
-			found = true
-			break
-		}
-	}
-	if !found {
-		return pgx.ErrNoRows
-	}
-	if err := queries.DeactivateCharlieConnectionsForReplacement(ctx, connectionID); err != nil {
-		return err
-	}
-	if _, err := queries.ActivateCharlieConnection(ctx, sqlc.ActivateCharlieConnectionParams{ID: connectionID, HealthState: "ready"}); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
-func (s *AdminService) ReplacementAction(ctx context.Context, action string) (AdminAgentView, error) {
-	if s == nil || s.pool == nil || s.queries == nil || s.installer == nil {
-		return AdminAgentView{}, ErrAdminUnavailable
-	}
-	current, err := s.queries.GetActiveCharlieConnection(ctx)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return AdminAgentView{}, ErrReplacementPackageNeeded
-	}
-	if err != nil {
-		return AdminAgentView{}, ErrAdminUnavailable
-	}
-	next, err := s.queries.GetLatestCharlieConnection(ctx)
-	if err != nil {
-		return AdminAgentView{}, ErrAdminUnavailable
-	}
-	now := time.Now().UTC()
-	if s.now != nil {
-		now = s.now().UTC()
-	}
-	if err := validateReplacementAction(current, next, action, now); err != nil {
-		return AdminAgentView{}, err
-	}
-	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.agent." + action, ResourceType: "charlie_connection", ResourceID: next.ID.String()}); err != nil {
-		return AdminAgentView{}, err
-	}
-	nextSpec := adminInstallSpec(next)
-	if pruner, ok := s.installer.(supersededAgentMaterialPruner); ok {
-		if err := pruner.PruneSupersededRepositories(ctx, nextSpec); err != nil {
-			return AdminAgentView{}, fmt.Errorf("%w: superseded Charlie repository cleanup is incomplete", ErrAdminConflict)
-		}
-	}
-	installation, err := s.installer.Status(ctx, nextSpec)
-	if err != nil || !installation.Ready() {
-		return AdminAgentView{}, fmt.Errorf("%w: replacement Charlie agent readiness is incomplete", ErrAdminConflict)
-	}
-	if err := s.activateReplacement(ctx, current.ID, next.ID); err != nil {
-		return AdminAgentView{}, fmt.Errorf("%w: replacement activation raced or changed", ErrAdminConflict)
-	}
-	if pruner, ok := s.installer.(supersededAgentMaterialPruner); ok {
-		if err := pruner.PruneSupersededSecrets(ctx, nextSpec); err != nil {
-			return AdminAgentView{}, fmt.Errorf("%w: superseded Charlie material cleanup is incomplete", ErrAdminConflict)
-		}
-	}
-	status, err := s.Status(ctx)
-	return status.Agent, err
-}
-
-func validateReplacementAction(current, next sqlc.CharlieConnection, action string, now time.Time) error {
-	if !current.Active || current.OnboardingState != "active" || next.Active || next.OnboardingState != "consumed" ||
-		current.ID == next.ID || !next.CreatedAt.After(current.CreatedAt) ||
-		current.InstallationID != next.InstallationID || current.ProductID != next.ProductID ||
-		current.ProductSlug != next.ProductSlug || current.DeploymentID != next.DeploymentID ||
-		current.RouteID != next.RouteID || current.CentralUrl != next.CentralUrl ||
-		current.CentralCaFingerprint != next.CentralCaFingerprint ||
-		current.SigningKeyID != next.SigningKeyID || current.SigningKeyFingerprint != next.SigningKeyFingerprint ||
-		current.LogicalAgentID != next.LogicalAgentID || current.ReplicaCount != next.ReplicaCount ||
-		current.BridgeServiceName != next.BridgeServiceName || current.McpServiceName != next.McpServiceName ||
-		current.OnboardingPackageID == next.OnboardingPackageID ||
-		current.OnboardingPackageDigest == next.OnboardingPackageDigest || strings.TrimSpace(next.AgentSecretHmac) == "" ||
-		!next.OnboardingPackageExpiresAt.After(now) || !next.EnrollmentCredentialsExpiresAt.After(now) ||
-		!next.ArtifactCredentialExpiresAt.After(now) || !next.CertificateExpiresAt.After(now) {
-		return ErrReplacementPackageNeeded
-	}
-	currentVersion, currentErr := semver.NewVersion(current.ChartVersion)
-	nextVersion, nextErr := semver.NewVersion(next.ChartVersion)
-	if currentErr != nil || nextErr != nil {
-		return ErrReplacementPackageNeeded
-	}
-	sameArtifacts := current.ChartDigest == next.ChartDigest && current.ImageDigest == next.ImageDigest
-	switch action {
-	case "upgrade":
-		if sameArtifacts || !nextVersion.GreaterThan(currentVersion) {
-			return ErrReplacementPackageNeeded
-		}
-	case "rollback":
-		if sameArtifacts || !nextVersion.LessThan(currentVersion) {
-			return ErrReplacementPackageNeeded
-		}
-	case "rotate":
-		if !sameArtifacts || !nextVersion.Equal(currentVersion) {
-			return ErrReplacementPackageNeeded
-		}
-	default:
-		return ErrAdminConflict
-	}
-	return nil
-}
-
-func (s *AdminService) activateReplacement(ctx context.Context, currentID, nextID uuid.UUID) error {
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	queries := s.queries.WithTx(tx)
-	locked, err := queries.LockCharlieConnectionActivation(ctx, nextID)
-	if err != nil {
-		return err
-	}
-	lockedIDs := make(map[uuid.UUID]struct{}, len(locked))
-	for _, id := range locked {
-		lockedIDs[id] = struct{}{}
-	}
-	if _, ok := lockedIDs[currentID]; !ok {
-		return pgx.ErrNoRows
-	}
-	if _, ok := lockedIDs[nextID]; !ok {
-		return pgx.ErrNoRows
-	}
-	current, err := queries.GetActiveCharlieConnection(ctx)
-	if err != nil || current.ID != currentID || current.OnboardingState != "active" {
-		return pgx.ErrNoRows
-	}
-	latest, err := queries.GetLatestCharlieConnection(ctx)
-	if err != nil || latest.ID != nextID || latest.OnboardingState != "consumed" || latest.Active {
-		return pgx.ErrNoRows
-	}
-	if err := queries.DeactivateCharlieConnectionsForReplacement(ctx, nextID); err != nil {
-		return err
-	}
-	if _, err := queries.ActivateCharlieConnection(ctx, sqlc.ActivateCharlieConnectionParams{ID: nextID, HealthState: "ready"}); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
-func (s *AdminService) Uninstall(ctx context.Context, actor uuid.UUID) error {
-	connection, err := s.connection(ctx)
-	if err != nil {
-		return err
-	}
-	if s.installer == nil {
-		return ErrAdminUnavailable
-	}
-	if actor == uuid.Nil {
-		return ErrAdminConflict
-	}
-	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.agent.uninstall", ResourceType: "charlie_connection", ResourceID: connection.ID.String(), ActorID: actor}); err != nil {
-		return err
-	}
-	if connection.HealthState == "inactive" {
-		if err := s.installer.Uninstall(ctx, adminInstallSpec(connection)); err != nil {
-			return fmt.Errorf("%w: uninstall cleanup was not confirmed", ErrAdminConflict)
-		}
-		return nil
-	}
-	if s.mode == nil {
-		return ErrAdminUnavailable
-	}
-	if _, err := s.mode.EmergencyDisable(ctx, actor.String()); err != nil && !strings.Contains(err.Error(), "remote confirmation is pending") {
-		return err
-	}
-	if err := s.installer.Uninstall(ctx, adminInstallSpec(connection)); err != nil {
-		return fmt.Errorf("%w: uninstall prerequisites were not confirmed", ErrAdminConflict)
-	}
-	return nil
-}
-
-func (s *AdminService) Disconnect(ctx context.Context, actor uuid.UUID) error {
-	connection, err := s.connection(ctx)
-	if err != nil {
-		return err
-	}
-	if connection.HealthState == "disconnected" {
-		return nil
-	}
-	if s.installer == nil {
-		return ErrAdminUnavailable
-	}
-	if actor == uuid.Nil {
-		return ErrAdminConflict
-	}
-	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.disconnect", ResourceType: "charlie_connection", ResourceID: connection.ID.String(), ActorID: actor}); err != nil {
-		return err
-	}
-	confirmation := "disconnect:" + connection.InstallationID.String()
-	if connection.HealthState == "inactive" {
-		if err := s.installer.Disconnect(ctx, adminInstallSpec(connection), confirmation); err != nil {
-			return fmt.Errorf("%w: disconnect cleanup was not confirmed", ErrAdminConflict)
-		}
-		return nil
-	}
-	if s.mode == nil {
-		return ErrAdminUnavailable
-	}
-	if _, err := s.mode.EmergencyDisable(ctx, actor.String()); err != nil && !strings.Contains(err.Error(), "remote confirmation is pending") {
-		return err
-	}
-	if err := s.installer.Disconnect(ctx, adminInstallSpec(connection), confirmation); err != nil {
-		return fmt.Errorf("%w: disconnect prerequisites were not confirmed", ErrAdminConflict)
-	}
-	return nil
 }
 
 func (s *AdminService) UpdateMode(ctx context.Context, desired Mode, revision int64, emergency bool, actor uuid.UUID) (AdminModeView, error) {

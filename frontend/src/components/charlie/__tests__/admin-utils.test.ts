@@ -56,7 +56,7 @@ describe("Charlie administration boundaries", () => {
       "Rule 1 needs a service identity.",
       "Rule 1 needs a valid mode ceiling.",
       "Rule 1 needs at least one severity.",
-      "Rule 1 fleet threshold must be between 0 and 100.",
+      "Rule 1 cluster coverage threshold must be between 0 and 100.",
     ]));
   });
 });

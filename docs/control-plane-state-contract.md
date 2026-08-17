@@ -2,6 +2,39 @@
 
 Date: 2026-06-12
 
+> **Version scope:** The body of this document records the v0.3.x Argo-era
+> baseline needed to characterize and delete that implementation safely. The
+> accepted v1 target is the [Flux-native delivery ADR](architecture/decisions/flux-native-delivery.md)
+> and the target-state addendum below. Where they differ, the ADR governs v1;
+> the old tables are not a compatibility promise.
+
+## Accepted v1 target-state addendum
+
+For Astronomer v1, **PostgreSQL remains authoritative** for product intent and
+history: delivery sources, encrypted credentials, bundles and immutable bundle
+versions, targets, placement snapshots, rollouts, per-cluster deployments,
+assignment generations, normalized status, operations, audit events, and the
+transactional outbox.
+
+Each managed cluster runs **local Flux** source, Kustomize, and Helm controllers.
+Flux CRDs and workload objects are downstream reconciliation state. They do not
+replace PostgreSQL, choose placement, approve rollouts, or become a public
+Astronomer API. The outbound Astronomer agent is the sole management path and
+translates typed, cluster-bound assignments into a closed set of Flux objects.
+It reports normalized, bounded status; it never reports credential material.
+
+Rancher Fleet is not installed and `fleet.cattle.io` is prohibited in runtime
+artifacts. Argo CD and Astronomer's legacy `fleet_operations` engine are removed
+rather than retained behind providers or feature flags. Management-plane Helm
+releases remain explicit operator actions and are not self-managed by downstream
+Flux.
+
+The v1 database is **fresh-install-only** and is created by one clean initial
+migration. Pre-v1 databases fail a non-mutating preflight with reinstall
+guidance; there is no legacy data importer or automatic reset. Machine-enforced
+support bounds and SLOs live in [`deploy/release/compatibility.yaml`](../deploy/release/compatibility.yaml)
+and its [generated documentation](architecture/compatibility.md).
+
 Astronomer uses Postgres as the durable product database and Kubernetes/etcd as the reconciliation substrate. That split is intentional: Postgres is better for relational product state, audit history, identity, credentials, and cross-cluster inventory; Kubernetes is better for declarative desired state, controller-owned status, and GitOps fan-out.
 
 This contract defines which system owns each class of state and how conflicts must be handled.

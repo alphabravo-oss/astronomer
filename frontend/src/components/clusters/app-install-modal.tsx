@@ -53,6 +53,7 @@ type Mode =
   | { kind: 'upgrade'; installedChartId: string; chartId: string; chartName: string; currentVersionId: string; currentValues: string; releaseName: string; namespace: string };
 
 interface AppInstallModalProps {
+  projectId: string;
   clusterId: string;
   mode: Mode;
   onClose: () => void;
@@ -84,11 +85,9 @@ const HAS_CRDS = new Set([
   'istio-base',
   'gatekeeper',
   'opa-gatekeeper',
-  'argocd',
-  'argo-cd',
 ]);
 
-export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: AppInstallModalProps) {
+export function AppInstallModal({ projectId, clusterId, mode, onClose, submitDecision }: AppInstallModalProps) {
   const qc = useQueryClient();
   const isUpgrade = mode.kind === 'upgrade';
   const submitBlockedReason = submitDecision && !submitDecision.allowed
@@ -115,8 +114,9 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
 
   // Versions
   const versions = useQuery({
-    queryKey: queryKeys.catalog.installChartVersions(mode.chartId),
-    queryFn: () => listChartVersions(mode.chartId),
+    queryKey: queryKeys.catalog.installChartVersions(projectId, mode.chartId),
+    queryFn: () => listChartVersions(projectId, mode.chartId),
+    enabled: !!projectId,
   });
 
   // Default the version select to the first (latest by row order) once
@@ -139,9 +139,9 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
   // new version's defaults — that would silently revert their
   // customisation. Show a "Reset to chart defaults" button instead.
   const defaultValues = useQuery({
-    queryKey: queryKeys.catalog.installChartValues(mode.chartId, selectedVersion?.version),
-    queryFn: () => getChartDefaultValues(mode.chartId, selectedVersion?.version),
-    enabled: !!selectedVersion?.version,
+    queryKey: queryKeys.catalog.installChartValues(projectId, mode.chartId, selectedVersion?.version),
+    queryFn: () => getChartDefaultValues(projectId, mode.chartId, selectedVersion?.version),
+    enabled: !!projectId && !!selectedVersion?.version,
   });
 
   useEffect(() => {
@@ -159,6 +159,7 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
       const value = form.state.values;
       if (mode.kind === 'install') {
         return installChartOnCluster({
+          projectId,
           clusterId,
           chartVersionId: value.selectedVersionId,
           releaseName: value.releaseName.trim(),

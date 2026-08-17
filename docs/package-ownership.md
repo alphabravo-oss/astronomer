@@ -18,8 +18,8 @@ cross-boundary dependency is required.
 | `internal/rbac` | Role/resource/action model, policy evaluation, built-in roles, binding semantics, permission explanation primitives. | Route wiring, Kubernetes API calls, UI-specific labels. |
 | `internal/agent` | In-cluster agent configuration, tunnel client behavior, local Kubernetes/service proxy execution, agent health, least-privilege runtime helpers. | Management-plane DB writes, browser/user authorization decisions. |
 | `internal/tunnel` and `internal/tunnel2` | Server-side agent connection lifecycle, stream proxying, internal Kubernetes/Helm request relays, tunnel metrics/audit hooks. | Domain state transitions that belong in handlers/workers. |
-| `internal/gitops` | GitOps source parsing, desired-state translation, repository/provider helpers, GitOps target reconciliation primitives. | Built-in Argo CD HTTP client behavior or cluster inventory CRUD. |
-| `internal/handler/argocd` | Argo CD API client surface and Argo-specific request/response helpers. | Generic GitOps source parsing or Kubernetes proxy authorization. |
+| `internal/delivery` | Sources, immutable bundles, placement, rollouts, assignments, normalized status, signed system releases, built-in bundles, and provider boundaries. | HTTP route wiring, human/browser authentication, or downstream arbitrary-object execution. |
+| `internal/agent/delivery` | Validation and deterministic materialization of accepted assignments, local Flux distribution lifecycle, checkpointed pruning, and bounded status observation. | Central placement, policy approval, credential persistence, or rollout decisions. |
 | `internal/monitoring` | Monitoring provider abstractions, query rendering, metrics collection helpers, health/status translation. | HTTP DTOs or alert rule persistence. |
 | `internal/db` and `internal/db/sqlc` | Migrations, query definitions, generated query code, hand-written sqlc extensions, migration safety tests. | Business rules that can be expressed in handlers/workers. |
 | `internal/worker` | Worker process setup, asynq instrumentation, scheduler wiring, queue metrics, common enqueue conventions. | Task-specific domain logic. |

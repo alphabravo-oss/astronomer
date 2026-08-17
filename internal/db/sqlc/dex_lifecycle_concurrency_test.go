@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,11 +46,24 @@ INSERT INTO dex_settings(id) VALUES('00000000-0000-0000-0000-000000000001'); INS
 	if _, err = c1.Exec(ctx, ddl); err != nil {
 		t.Fatal(err)
 	}
-	upSQL, err := os.ReadFile("../migrations/137_dex_advisory_lock_connector_lifecycle.up.sql")
+	initialSQL, err := os.ReadFile("../migrations/001_initial.up.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = c1.Exec(ctx, string(upSQL)); err != nil {
+	functionStart := strings.Index(string(initialSQL), "CREATE FUNCTION public.bump_dex_runtime_generation()")
+	if functionStart < 0 {
+		t.Fatal("canonical initial migration is missing bump_dex_runtime_generation")
+	}
+	functionEndOffset := strings.Index(string(initialSQL)[functionStart:], "$$;")
+	if functionEndOffset < 0 {
+		t.Fatal("canonical bump_dex_runtime_generation function is unterminated")
+	}
+	functionDDL := string(initialSQL)[functionStart : functionStart+functionEndOffset+3]
+	functionDDL = strings.Replace(functionDDL, "CREATE FUNCTION public.", "CREATE FUNCTION ", 1)
+	lifecycleDDL := functionDDL + `
+CREATE TRIGGER dex_connectors_runtime_generation AFTER INSERT OR DELETE OR UPDATE ON dex_connectors
+FOR EACH ROW EXECUTE FUNCTION bump_dex_runtime_generation();`
+	if _, err = c1.Exec(ctx, lifecycleDDL); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = c2.Exec(ctx, fmt.Sprintf(`SET search_path TO %s`, schema)); err != nil {
@@ -194,32 +208,6 @@ INSERT INTO dex_settings(id) VALUES('00000000-0000-0000-0000-000000000001'); INS
 			t.Fatal(err)
 		}
 		assertState(2, false)
-	})
-	t.Run("down restores migration 136 connector behavior", func(t *testing.T) {
-		downSQL, err := os.ReadFile("../migrations/137_dex_advisory_lock_connector_lifecycle.down.sql")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = c1.Exec(ctx, string(downSQL)); err != nil {
-			t.Fatal(err)
-		}
-		if _, err = c1.Exec(ctx, `DELETE FROM dex_connectors; UPDATE dex_settings SET runtime_generation=1,runtime_applied_generation=1,runtime_staged_generation=1,saga_previous_sso_enabled=false; UPDATE sso_configurations SET is_enabled=true`); err != nil {
-			t.Fatal(err)
-		}
-		if _, err = c1.Exec(ctx, `INSERT INTO dex_connectors(name,type,config) VALUES('migration-136','saml','{}')`); err != nil {
-			t.Fatal(err)
-		}
-		var generation int64
-		var enabled, previousEnabled bool
-		if err = c1.QueryRow(ctx, `SELECT runtime_generation,saga_previous_sso_enabled FROM dex_settings`).Scan(&generation, &previousEnabled); err != nil {
-			t.Fatal(err)
-		}
-		if err = c1.QueryRow(ctx, `SELECT is_enabled FROM sso_configurations WHERE provider='dex'`).Scan(&enabled); err != nil {
-			t.Fatal(err)
-		}
-		if generation != 2 || enabled || !previousEnabled {
-			t.Fatalf("down behavior generation=%d enabled=%v previous=%v", generation, enabled, previousEnabled)
-		}
 	})
 	t.Run("connector failure is atomic", func(t *testing.T) {
 		if _, err := c1.Exec(ctx, `DELETE FROM dex_settings; DELETE FROM dex_connectors`); err != nil {

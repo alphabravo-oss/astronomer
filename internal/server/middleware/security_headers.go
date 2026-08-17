@@ -8,8 +8,8 @@ import (
 // defaultContentSecurityPolicy hardens API + first-party responses. script-src
 // deliberately omits 'unsafe-inline' so an injected inline <script> won't run;
 // API responses are JSON (no scripts), and any HTML-serving handler/proxy that
-// genuinely needs inline scripts (e.g. the embedded ArgoCD UI) owns its own CSP
-// and overrides this default (SecurityHeaders only fills an empty header, so a
+// genuinely needs inline scripts owns its own CSP and overrides this default
+// (SecurityHeaders only fills an empty header, so a
 // handler that sets Content-Security-Policy first wins). style-src keeps
 // 'unsafe-inline' because first-party styled components rely on it.
 const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:"
@@ -17,8 +17,7 @@ const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; objec
 // SecurityHeaders adds browser hardening headers for API and proxied UI
 // responses. It deliberately avoids overriding handler-provided values so
 // narrowly-scoped proxies can loosen a header later if a downstream UI needs
-// it — e.g. the ArgoCD UI reverse proxy owns and sets its own (inline-friendly)
-// Content-Security-Policy + X-Frame-Options for /argocd/* responses.
+// it.
 func SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()

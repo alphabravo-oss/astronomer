@@ -135,7 +135,7 @@ function DashboardPage() {
           href="/dashboard/catalog"
           icon={<PackagePlus className="h-4 w-4" />}
           title="Browse catalog"
-          description="Install Helm charts across your fleet"
+          description="Install Helm charts across managed clusters"
         />
         <ActionCard
           href="/dashboard/alerting"

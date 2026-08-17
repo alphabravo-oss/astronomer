@@ -1,0 +1,85 @@
+{
+  "controller_image_signature_policy": {
+    "certificate_identity": "https://github.com/fluxcd/gha-workflows/.github/workflows/controller-release.yaml@refs/tags/v0.11.0",
+    "certificate_oidc_issuer": "https://token.actions.githubusercontent.com"
+  },
+  "controller_images": [
+    {
+      "component": "source-controller",
+      "digest": "sha256:ff8f3c92f1bcb433e858c948040c3a3393fe73f5dd72048a4502bfaf0a4c26cd",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm/v7",
+        "linux/arm64"
+      ],
+      "source_ref": "ghcr.io/fluxcd/source-controller:v1.9.3"
+    },
+    {
+      "component": "kustomize-controller",
+      "digest": "sha256:2b8bec54ffb6caf421bd2a6c005d27f567d5dd4db7feb55794fb51fcabd69b8f",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm/v7",
+        "linux/arm64"
+      ],
+      "source_ref": "ghcr.io/fluxcd/kustomize-controller:v1.9.4"
+    },
+    {
+      "component": "helm-controller",
+      "digest": "sha256:16ada99456385100698a5d7adf90aba8a2089d987ab541c9566b6d7b0e897038",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm/v7",
+        "linux/arm64"
+      ],
+      "source_ref": "ghcr.io/fluxcd/helm-controller:v1.6.3"
+    }
+  ],
+  "distribution": {
+    "components": [
+      "source-controller",
+      "kustomize-controller",
+      "helm-controller"
+    ],
+    "generated_with": "flux install --network-policy=true --export",
+    "kubernetes": {
+      "documentation": "https://fluxcd.io/flux/installation/",
+      "documentation_reviewed_at": "2026-08-17",
+      "minimum_supported": "v1.33.0"
+    },
+    "namespace": "astronomer-delivery-system"
+  },
+  "flux_release": {
+    "assets": {
+      "cli": {
+        "sha256": "eae4e8608c0ade2bf4e8dec1669dbb6b0c28b5822b252d97feccfb4fb1181fd2",
+        "url": "https://github.com/fluxcd/flux2/releases/download/v2.9.3/flux_2.9.3_linux_amd64.tar.gz"
+      },
+      "sbom": {
+        "format": "SPDX-JSON",
+        "sha256": "53db6e94f6e6fa87b3b0d79a7f8c43af41c6ac0e86932543f8b56515172c9b28",
+        "url": "https://github.com/fluxcd/flux2/releases/download/v2.9.3/flux_2.9.3_sbom.spdx.json"
+      },
+      "slsa_provenance": {
+        "sha256": "6cd6129a3da9e5cbc78af0ea0aaf1bf13a00de85dc743e79200074b10b9de3b4",
+        "url": "https://github.com/fluxcd/flux2/releases/download/v2.9.3/provenance.intoto.jsonl"
+      },
+      "source": {
+        "sha256": "904ba046242fe14b52c09acf05318f779f14c247ffd8d09cb6817f82ab6d7e32",
+        "url": "https://github.com/fluxcd/flux2/releases/download/v2.9.3/flux_2.9.3_source_code.tar.gz"
+      }
+    },
+    "published_at": "2026-07-23T15:31:54Z",
+    "signed_checksums": {
+      "certificate_identity": "https://github.com/fluxcd/flux2/.github/workflows/release.yaml@refs/tags/v2.9.3",
+      "certificate_oidc_issuer": "https://token.actions.githubusercontent.com",
+      "sha256": "7407199e09beb3b78e0f8fc491aca2bc3e54e6ebd2365db67ff4ac7a0bcf8a0a",
+      "url": "https://github.com/fluxcd/flux2/releases/download/v2.9.3/flux_2.9.3_checksums.txt",
+      "verified": true
+    },
+    "source_commit": "16602fa989daa99762f1c6d1186ae2ad1c735815",
+    "url": "https://github.com/fluxcd/flux2/releases/tag/v2.9.3",
+    "version": "v2.9.3"
+  },
+  "schema_version": 1
+}

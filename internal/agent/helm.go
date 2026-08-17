@@ -119,7 +119,7 @@ func (h *HelmHandler) locateChart(req *protocol.HelmRequestPayload) (string, err
 	}
 
 	// Compose the lookup name: an OCI repo URL + chart name yields a single
-	// ref like oci://ghcr.io/argoproj/argo-helm/argo-cd. Traditional helm
+	// ref like oci://ghcr.io/example/platform/chart. Traditional Helm
 	// repos use the chart-name-only form and rely on RepoURL/index.yaml.
 	chartName := req.ChartName
 	repoURL := strings.TrimSpace(req.RepoURL)

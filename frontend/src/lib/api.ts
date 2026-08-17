@@ -6,8 +6,6 @@ import { camelizeKeys } from '@/lib/camelize';
 import { API_BASE, wsBase } from '@/lib/env';
 
 // TEST-03: product code imports OpenAPI-generated schemas (not test-only).
-export type AgentFleetItemOpenAPI = OpenAPIComponents['schemas']['AgentFleetItem'];
-
 /**
  * Restates required-ness on a schema type generated from `docs/openapi.yaml`.
  *
@@ -289,28 +287,28 @@ export async function getClusters(params?: {
   return res.data;
 }
 
-export async function getAgentFleet(params?: { limit?: number; offset?: number }) {
-  const res = await api.get<APIResponse<import('@/types').AgentFleetResponse>>('/agents/fleet', { params });
-  return res.data.data;
+export async function getClusterAgents(params?: { limit?: number; offset?: number }) {
+  const res = await api.get<import('@/types').ClusterAgentResponse>('/cluster-agents', { params });
+  return res.data;
 }
 
 export async function getAgentDiagnostics(clusterId: string) {
   const res = await api.get<APIResponse<import('@/types').AgentDiagnosticsResponse>>(
-    `/agents/fleet/${clusterId}/diagnostics`,
+    `/cluster-agents/${clusterId}/diagnostics`,
   );
   return res.data.data;
 }
 
 export async function runAgentSelfTest(clusterId: string) {
   const res = await api.post<APIResponse<import('@/types').AgentSelfTestResponse>>(
-    `/agents/fleet/${clusterId}/self-test`,
+    `/cluster-agents/${clusterId}/self-test`,
     {},
   );
   return res.data.data;
 }
 
 export async function downloadAgentDiagnosticsBundle(clusterId: string): Promise<Blob> {
-  const res = await api.get<Blob>(`/agents/fleet/${clusterId}/diagnostics/bundle`, {
+  const res = await api.get<Blob>(`/cluster-agents/${clusterId}/diagnostics/bundle`, {
     responseType: 'blob',
   });
   return res.data;
@@ -321,7 +319,7 @@ export async function createAgentUpgradePlan(
   data: import('@/types').AgentUpgradePlanRequest = {},
 ) {
   const res = await api.post<APIResponse<import('@/types').AgentUpgradePlanResponse>>(
-    `/agents/fleet/${clusterId}/upgrade-plan`,
+    `/cluster-agents/${clusterId}/upgrade-plan`,
     data,
   );
   return res.data.data;
@@ -332,7 +330,7 @@ export async function createAgentUpgradeOperation(
   data: import('@/types').AgentUpgradePlanRequest = {},
 ) {
   const res = await api.post<APIResponse<import('@/types').AgentUpgradeOperationResponse>>(
-    `/agents/fleet/${clusterId}/upgrade`,
+    `/cluster-agents/${clusterId}/upgrade`,
     data,
   );
   return res.data.data;
@@ -340,7 +338,7 @@ export async function createAgentUpgradeOperation(
 
 export async function getAgentOperations(clusterId: string, params?: { limit?: number; offset?: number }) {
   const res = await api.get<APIResponse<import('@/types').AgentLifecycleOperationsResponse>>(
-    `/agents/fleet/${clusterId}/operations`,
+    `/cluster-agents/${clusterId}/operations`,
     { params },
   );
   return res.data.data;
@@ -452,7 +450,7 @@ export async function updateCluster(id: string, data: Partial<import('@/types').
 
 export interface OwnershipTransferResult {
   id: string;
-  managedBy: 'api' | 'ui' | 'crd' | 'system' | 'argocd';
+  managedBy: 'api' | 'ui' | 'crd' | 'system';
   transferred: boolean;
 }
 
@@ -789,58 +787,6 @@ export async function getWorkloadMetrics(
     { params }
   );
   return res.data.data;
-}
-
-// --- ArgoCD ---
-
-export async function getArgoInstances(clusterId?: string) {
-  const res = await api.get<APIResponse<import('@/types').ArgoInstance[]>>('/argocd/instances', {
-    params: clusterId ? { clusterId } : undefined,
-  });
-  return res.data.data;
-}
-
-export async function getArgoApplications(params?: { clusterId?: string; project?: string; search?: string }) {
-  const res = await api.get<APIResponse<import('@/types').ArgoApplication[]>>('/argocd/applications', { params });
-  return res.data.data;
-}
-
-export interface ArgoCachedApplication {
-  id: string;
-  argocdInstanceId: string;
-  name: string;
-  project: string;
-  repoUrl: string;
-  path: string;
-  targetRevision: string;
-  destinationCluster: string;
-  destinationNamespace: string;
-  syncStatus: string;
-  healthStatus: string;
-  resourceCreatedCount?: number;
-  resourceChangedCount?: number;
-  resourcePrunedCount?: number;
-  lastSynced?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export async function listArgoCachedApplications(params?: { instanceId?: string; limit?: number; offset?: number }) {
-  const endpoint = params?.instanceId
-    ? `/argocd/instances/${params.instanceId}/cached-applications`
-    : '/argocd/applications';
-  const res = await api.get<PaginatedResponse<ArgoCachedApplication>>(endpoint, {
-    params: {
-      limit: params?.limit,
-      offset: params?.offset,
-    },
-  });
-  return res.data.data ?? [];
-}
-
-export async function syncArgoApplication(instanceId: string, appName: string) {
-  const res = await api.post<APIResponse<void>>(`/argocd/instances/${instanceId}/applications/${appName}/sync`);
-  return res.data;
 }
 
 // --- RBAC ---
@@ -1249,9 +1195,14 @@ export async function deleteLoggingPipeline(id: string) {
 
 // --- Logging Operations (controller-backed reconciler) ---
 //
-// These mirror the argocd /operations endpoints. The list handler returns the
-// same double-wrapped envelope (`{data: {data: [...], limit, offset}}`) so we
-// unwrap with the same helper as `listArgoOperations`.
+// The handler returns a nested pagination envelope; normalize it for callers.
+
+function unwrapEnvelope<T>(value: unknown): T {
+  if (value && typeof value === 'object' && !Array.isArray(value) && 'data' in value) {
+    return (value as { data: T }).data;
+  }
+  return value as T;
+}
 
 export async function getLoggingOperations(params?: {
   status?: string;
@@ -1564,13 +1515,24 @@ export async function deleteHelmRepository(id: string) {
   await api.delete(`/catalog/repositories/${id}`);
 }
 
-export async function getHelmCharts(params?: { repository?: string; category?: string; search?: string }) {
-  const res = await api.get<APIResponse<import('@/types').HelmChart[]>>('/catalog/charts', { params });
+export async function getHelmCharts(params: {
+  projectId: string;
+  repository?: string;
+  category?: string;
+  search?: string;
+}) {
+  const { projectId, ...filters } = params;
+  const res = await api.get<APIResponse<import('@/types').HelmChart[]>>('/catalog/charts', {
+    params: { project_id: projectId, ...filters },
+  });
   return res.data.data;
 }
 
-export async function getHelmChartVersions(chartId: string) {
-  const res = await api.get<APIResponse<import('@/types').HelmChartVersion[]>>(`/catalog/charts/${chartId}/versions`);
+export async function getHelmChartVersions(projectId: string, chartId: string) {
+  const res = await api.get<APIResponse<import('@/types').HelmChartVersion[]>>(
+    `/catalog/charts/${chartId}/versions`,
+    { params: { project_id: projectId } },
+  );
   return res.data.data;
 }
 
@@ -1580,6 +1542,7 @@ export async function getInstalledCharts(params?: { cluster?: string }) {
 }
 
 export async function installHelmChart(data: {
+  project_id: string;
   cluster_id: string;
   chart_version_id: string;
   release_name: string;
@@ -2088,337 +2051,6 @@ export async function k8sApplyYaml(clusterId: string, path: string, yamlStr: str
   });
 }
 
-// === Phase B1: ArgoCD lifecycle ===
-//
-// Functions that hit the 17 backend endpoints shipped in Phase B1. Names
-// are kept distinct from the legacy helpers above (which only know about
-// the cached cross-instance app list and the by-name sync). The Go server
-// returns `data.data` on the lifecycle endpoints that wrap a single
-// resource, but pass-through endpoints (live applications, manifests,
-// projects list, applicationsets list) return raw upstream JSON and are
-// typed as `unknown` so callers can narrow.
-
-import type {
-  ArgoInstanceB1,
-  ArgoLiveApplication,
-  ArgoCreateApplicationRequest,
-  ArgoSyncOptions,
-  ArgoAppHistoryEntry,
-  ArgoManifests,
-  ArgoProject,
-  ArgoCreateProjectRequest,
-  ArgoApplicationSet,
-  ArgoCreateApplicationSetRequest,
-  ArgoManagedCluster,
-  ArgoManagedClusterRegisterRequest,
-  ArgoOrphanReport,
-  ArgoRepository,
-  ArgoRepositoryCreate,
-  ArgoOperation,
-} from '@/types';
-
-// --- Instances (live wrappers around already-existing helpers) ---
-
-export async function getArgoInstanceB1(id: string) {
-  const res = await api.get<APIResponse<ArgoInstanceB1>>(`/argocd/instances/${id}`);
-  // Backend wraps single instances directly, not under data.data.
-  // Older callers used `data.data`, but this endpoint emits the
-  // bare object. We accept either shape via the optional cast below.
-  const payload = (res.data as unknown) as ArgoInstanceB1 & { data?: ArgoInstanceB1 };
-  return payload.data ?? payload;
-}
-
-export async function getArgoInstanceHealth(id: string) {
-  // The /health/ endpoint returns 200 { data: { is_healthy: true } } or 502
-  // with the same envelope and is_healthy:false. We surface both via a
-  // non-throwing wrapper so the overview tab can render the unhealthy state
-  // without raising a toast.
-  try {
-    const res = await api.get<APIResponse<{ isHealthy: boolean }>>(`/argocd/instances/${id}/health/`);
-    return res.data.data;
-  } catch {
-    return { isHealthy: false };
-  }
-}
-
-// unwrapEnvelope returns the inner value of a `{data: T}` server envelope, or
-// the value itself if it's already bare. Used by the list endpoints below
-// because the Go handler wraps all responses through RespondJSON, but a few
-// older callers still tolerate bare shapes from tests.
-function unwrapEnvelope<T>(value: unknown): T {
-  if (value && typeof value === 'object' && !Array.isArray(value) && 'data' in (value as Record<string, unknown>)) {
-    return (value as { data: T }).data;
-  }
-  return value as T;
-}
-
-// --- Applications (B1 CRUD against upstream) ---
-
-export async function listArgoApplicationsLive(instanceId: string) {
-  // The handler returns the upstream `{items:[...]}` (Kubernetes-style list)
-  // wrapped in our standard `{data: ...}` envelope. Tolerate both wrapped
-  // and bare shapes so this function survives an envelope refactor.
-  const res = await api.get<APIResponse<{ items?: ArgoLiveApplication[] }> | { items?: ArgoLiveApplication[] } | ArgoLiveApplication[]>(
-    `/argocd/instances/${instanceId}/applications`,
-  );
-  const inner = unwrapEnvelope<{ items?: ArgoLiveApplication[] } | ArgoLiveApplication[]>(res.data);
-  if (Array.isArray(inner)) return inner;
-  return inner?.items ?? [];
-}
-
-export async function createArgoApplication(instanceId: string, body: ArgoCreateApplicationRequest) {
-  const res = await api.post<ArgoLiveApplication>(
-    `/argocd/instances/${instanceId}/applications`,
-    body,
-  );
-  return res.data;
-}
-
-export async function patchArgoApplicationByName(
-  instanceId: string,
-  name: string,
-  patch: Record<string, unknown>,
-) {
-  // The PATCH endpoint accepts a JSON merge body which the backend
-  // re-wraps for the upstream's `{name, patch, patchType:merge}` envelope.
-  const res = await api.patch<ArgoLiveApplication>(
-    `/argocd/instances/${instanceId}/applications/${encodeURIComponent(name)}`,
-    patch,
-  );
-  return res.data;
-}
-
-export async function deleteArgoApplicationByName(
-  instanceId: string,
-  name: string,
-  cascade = true,
-) {
-  await api.delete(
-    `/argocd/instances/${instanceId}/applications/${encodeURIComponent(name)}?cascade=${cascade ? 'true' : 'false'}`,
-  );
-}
-
-export async function syncArgoApplicationById(appId: string, opts: ArgoSyncOptions = {}) {
-  // Backend body uses snake_case `dry_run`; revision/prune are passed as-is.
-  const body: Record<string, unknown> = {};
-  if (opts.revision) body.revision = opts.revision;
-  if (opts.prune) body.prune = true;
-  if (opts.dryRun) body.dry_run = true;
-  if (opts.reason) body.reason = opts.reason;
-  if (opts.syncWindowOverride) body.sync_window_override = true;
-  const res = await api.post<ArgoOperation>(`/argocd/applications/${appId}/sync`, body);
-  return res.data;
-}
-
-export async function refreshArgoApplicationById(appId: string, hard = false) {
-  const url = `/argocd/applications/${appId}/refresh${hard ? '?hard=true' : ''}`;
-  const res = await api.post<unknown>(url);
-  return res.data;
-}
-
-export async function getArgoAppHistory(appId: string) {
-  // Upstream returns either `{revisions:[...]}` or a bare array depending on
-  // version. We coerce to a flat array.
-  const res = await api.get<{ revisions?: ArgoAppHistoryEntry[] } | ArgoAppHistoryEntry[]>(
-    `/argocd/applications/${appId}/history`,
-  );
-  if (Array.isArray(res.data)) return res.data;
-  return res.data?.revisions ?? [];
-}
-
-export async function getArgoAppManifests(appId: string) {
-  const res = await api.get<ArgoManifests>(`/argocd/applications/${appId}/manifests`);
-  return res.data;
-}
-
-// --- AppProjects ---
-
-export async function listArgoProjects(instanceId: string) {
-  const res = await api.get<APIResponse<{ items?: ArgoProject[] }> | { items?: ArgoProject[] } | ArgoProject[]>(
-    `/argocd/instances/${instanceId}/projects`,
-  );
-  const inner = unwrapEnvelope<{ items?: ArgoProject[] } | ArgoProject[]>(res.data);
-  if (Array.isArray(inner)) return inner;
-  return inner?.items ?? [];
-}
-
-export async function createArgoProject(instanceId: string, body: ArgoCreateProjectRequest) {
-  const res = await api.post<ArgoProject>(`/argocd/instances/${instanceId}/projects`, body);
-  return res.data;
-}
-
-export async function patchArgoProject(
-  instanceId: string,
-  name: string,
-  patch: Record<string, unknown>,
-) {
-  const res = await api.patch<ArgoProject>(
-    `/argocd/instances/${instanceId}/projects/${encodeURIComponent(name)}`,
-    patch,
-  );
-  return res.data;
-}
-
-export async function deleteArgoProject(instanceId: string, name: string) {
-  await api.delete(
-    `/argocd/instances/${instanceId}/projects/${encodeURIComponent(name)}`,
-  );
-}
-
-// --- ApplicationSets ---
-
-export async function listArgoApplicationSets(instanceId: string) {
-  const res = await api.get<APIResponse<{ items?: ArgoApplicationSet[] }> | { items?: ArgoApplicationSet[] } | ArgoApplicationSet[]>(
-    `/argocd/instances/${instanceId}/applicationsets`,
-  );
-  const inner = unwrapEnvelope<{ items?: ArgoApplicationSet[] } | ArgoApplicationSet[]>(res.data);
-  if (Array.isArray(inner)) return inner;
-  return inner?.items ?? [];
-}
-
-export async function createArgoApplicationSet(
-  instanceId: string,
-  body: ArgoCreateApplicationSetRequest,
-) {
-  const res = await api.post<ArgoApplicationSet>(
-    `/argocd/instances/${instanceId}/applicationsets`,
-    body,
-  );
-  return res.data;
-}
-
-export async function deleteArgoApplicationSet(instanceId: string, name: string) {
-  await api.delete(
-    `/argocd/instances/${instanceId}/applicationsets/${encodeURIComponent(name)}`,
-  );
-}
-
-// --- Managed clusters (Astronomer clusters registered into upstream ArgoCD) ---
-
-export async function listArgoManagedClusters(instanceId: string) {
-  const res = await api.get<APIResponse<ArgoManagedCluster[]> | ArgoManagedCluster[]>(
-    `/argocd/instances/${instanceId}/clusters`,
-  );
-  return unwrapEnvelope<ArgoManagedCluster[]>(res.data) ?? [];
-}
-
-export async function getArgoOrphanReport(instanceId: string) {
-  const res = await api.get<APIResponse<ArgoOrphanReport> | ArgoOrphanReport>(
-    `/argocd/instances/${instanceId}/orphan-report`,
-  );
-  return unwrapEnvelope<ArgoOrphanReport>(res.data);
-}
-
-export async function registerArgoManagedCluster(
-  instanceId: string,
-  clusterId: string,
-  body: ArgoManagedClusterRegisterRequest,
-) {
-  const res = await api.post<{ clusterId: string; argocdInstanceId: string; server: string }>(
-    `/argocd/instances/${instanceId}/clusters/${clusterId}/register`,
-    body,
-  );
-  return res.data;
-}
-
-export async function unregisterArgoManagedCluster(instanceId: string, clusterId: string) {
-  await api.delete(
-    `/argocd/instances/${instanceId}/clusters/${clusterId}/register`,
-  );
-}
-
-export async function refreshArgoManagedClusterLabels(instanceId: string, clusterId: string) {
-  const res = await api.post<APIResponse<ArgoManagedCluster> | ArgoManagedCluster>(
-    `/argocd/instances/${instanceId}/clusters/${clusterId}/refresh-labels`,
-  );
-  return unwrapEnvelope<ArgoManagedCluster>(res.data);
-}
-
-export async function getArgoClusterOwnership(clusterId: string) {
-  const res = await api.get<APIResponse<import('@/types').ArgoClusterOwnershipResponse>>(
-    `/argocd/clusters/${clusterId}/ownership`,
-  );
-  return unwrapEnvelope<import('@/types').ArgoClusterOwnershipResponse>(res.data);
-}
-
-export async function setArgoClusterOwnershipDecision(
-  clusterId: string,
-  componentSlug: string,
-  body: import('@/types').ArgoBaselineOwnershipDecisionRequest,
-) {
-  const res = await api.post<APIResponse<import('@/types').ArgoBaselineOwnershipDecision>>(
-    `/argocd/clusters/${clusterId}/ownership/${componentSlug}/decision`,
-    body,
-  );
-  return res.data.data;
-}
-
-// --- Repositories ---
-
-export async function listArgoRepos(instanceId: string) {
-  const res = await api.get<APIResponse<ArgoRepository[]> | ArgoRepository[]>(
-    `/argocd/instances/${instanceId}/repos`,
-  );
-  return unwrapEnvelope<ArgoRepository[]>(res.data) ?? [];
-}
-
-export async function createArgoRepo(instanceId: string, body: ArgoRepositoryCreate) {
-  const res = await api.post<ArgoRepository>(`/argocd/instances/${instanceId}/repos`, body);
-  return res.data;
-}
-
-export async function deleteArgoRepo(instanceId: string, repoURL: string) {
-  // The DELETE endpoint takes the repo URL as a query parameter to avoid
-  // path-encoding pain on URLs that contain slashes.
-  await api.delete(
-    `/argocd/instances/${instanceId}/repos?repo=${encodeURIComponent(repoURL)}`,
-  );
-}
-
-export async function testArgoRepo(instanceId: string, body: ArgoRepositoryCreate) {
-  const res = await api.post<ArgoRepository>(
-    `/argocd/instances/${instanceId}/repos/test`,
-    body,
-  );
-  return res.data;
-}
-
-// --- Operations + reconciler ---
-
-export async function listArgoOperations(params?: {
-  targetType?: string;
-  targetKey?: string;
-  status?: string;
-  limit?: number;
-  offset?: number;
-}) {
-  // Server response is double-wrapped: the handler returns its own
-  // `{data: [...], limit, offset}` pagination shape, then RespondJSON wraps
-  // it once more in `{data: ...}`. Unwrap the outer envelope first, then
-  // peel the inner `.data` to get the flat array.
-  const res = await api.get<APIResponse<{ data: ArgoOperation[]; limit?: number; offset?: number }>>(
-    '/argocd/operations',
-    { params },
-  );
-  const inner = unwrapEnvelope<{ data?: ArgoOperation[] }>(res.data);
-  return inner?.data ?? [];
-}
-
-export async function getArgoOperation(id: string) {
-  const res = await api.get<ArgoOperation>(`/argocd/operations/${id}`);
-  return res.data;
-}
-
-export async function listArgoApplicationsDB(params?: { limit?: number; offset?: number }) {
-  // The DB-backed paginated list — used for the operations tab to map
-  // app IDs back to names without re-fetching upstream.
-  const res = await api.get<PaginatedResponse<{ id: string; name: string; argocdInstanceId: string }>>(
-    '/argocd/applications',
-    { params },
-  );
-  return res.data;
-}
-
 // ============================================================
 // === Phase B4: Dex ===
 // ============================================================
@@ -2579,8 +2211,8 @@ export function cisScanReportCSVUrl(id: string): string {
 //
 // Replacement client for the Velero-backed endpoints under
 // `/api/v1/backups/`. The legacy `getBackupStorageConfigs / createBackup /
-// ...` helpers higher up this file remain intact for any Phase B1 callers;
-// new code should import the `b2*` symbols below. The handler emits
+// Existing backup helpers remain available while the B2 views use the
+// symbols below. The handler emits
 // snake_case JSON (`internal/handler/backups.go`); the response interceptor
 // rewrites incoming keys to camelCase, so read shapes are camelCase but
 // request bodies stay snake_case to match the Go `json:` tags exactly.
@@ -2803,12 +2435,6 @@ export * from './api/cluster-groups';
 // UI extensions — manifest validation and registry controls.
 // ============================================================
 export * from './api/extensions';
-
-// ============================================================
-// Fleet operations (DIR-01) — bulk fanout of tool/template/token
-// operations across the cluster fleet. See lib/api/fleet-operations.ts.
-// ============================================================
-export * from './api/fleet-operations';
 
 // Charlie is an external intelligence service; this module is the typed local
 // gateway boundary and contains no model, RAG, or agent implementation.

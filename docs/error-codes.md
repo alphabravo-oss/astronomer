@@ -20,7 +20,7 @@ accompanies, and a short description. Codes are grouped by status family; a
 handful of codes legitimately appear under more than one status depending on
 context, so the grouping reflects the dominant usage, not an exhaustive contract.
 
-**Total codes: 220**
+**Total codes: 217**
 
 ## Codes by category
 
@@ -51,7 +51,7 @@ Dominant HTTP status: 400 · Provenance: seed
 | `InvalidAddr` | `invalid_addr` | 400 / 422 | indicates a invalid addr condition. |
 | `InvalidCIDR` | `invalid_cidr` | 400 / 422 | indicates a invalid cidr condition. |
 | `InvalidChallenge` | `invalid_challenge` | 400 / 422 | indicates a invalid challenge condition. |
-| `InvalidClusterID` | `invalid_cluster` | 400 / 422 | indicates a invalid cluster condition. NOTE: the wire value is "invalid_cluster" (NOT "invalid_cluster_id") — preserved from the pre-codemod literal at anomaly.go and argocd.go. The Go identifier keeps the ...ID suffix for catalog consistency with the other invalid_* id codes; do not assume the constant name equals the emitted string. |
+| `InvalidClusterID` | `invalid_cluster` | 400 / 422 | indicates an invalid cluster condition. The wire value is "invalid_cluster"; the Go identifier keeps the ID suffix for catalog consistency with the other invalid-ID codes. |
 | `InvalidCode` | `invalid_code` | 400 / 422 | indicates a invalid code condition. |
 | `InvalidContext` | `invalid_context` | 400 / 422 | indicates a invalid context condition. |
 | `InvalidDecision` | `invalid_decision` | 400 / 422 | indicates a invalid decision condition. |
@@ -101,7 +101,6 @@ Dominant HTTP status: 400 · Provenance: seed
 | `TemplateDisabled` | `template_disabled` | 400 / 422 | indicates a template disabled condition. |
 | `UnknownKey` | `unknown_key` | 400 / 422 | indicates a unknown key condition. |
 | `UnsafeReplacementBlocked` | `unsafe_replacement_blocked` | 400 / 422 | indicates a unsafe replacement blocked condition. |
-| `UnsafeLeaveLocalBlocked` | `unsafe_leave_local_blocked` | 400 / 422 | indicates leave_local was refused because the component is running under ArgoCD and would be orphaned by it. |
 | `UnsupportedProvider` | `unsupported_provider` | 400 / 422 | indicates a unsupported provider condition. |
 | `UnsupportedType` | `unsupported_type` | 400 / 422 | indicates a unsupported type condition. |
 
@@ -182,7 +181,7 @@ Dominant HTTP status: 409 / 412 / 500 / 503 · Provenance: codemod
 
 | Constant | Wire value | HTTP | Description |
 | --- | --- | --- | --- |
-| `AgentFleetUnavailable` | `agent_fleet_unavailable` | 409 / 412 / 500 / 503 | indicates a agent fleet unavailable condition. |
+| `ClusterAgentUnavailable` | `cluster_agents_unavailable` | 409 / 412 / 500 / 503 | indicates a cluster agent unavailable condition. |
 | `CatalogUnavailable` | `catalog_unavailable` | 409 / 412 / 500 / 503 | indicates a catalog unavailable condition. |
 | `DBUnavailable` | `db_unavailable` | 409 / 412 / 500 / 503 | indicates a db unavailable condition. |
 | `DetectorUnwired` | `detector_unwired` | 409 / 412 / 500 / 503 | indicates a detector unwired condition. |
@@ -234,12 +233,10 @@ Dominant HTTP status: 500 · Provenance: codemod
 | --- | --- | --- | --- |
 | `ActivityError` | `activity_error` | 500 | indicates a activity error condition. |
 | `AgentConnectionError` | `agent_connection_error` | 500 | indicates a agent connection error condition. |
-| `AgentFleetError` | `agent_fleet_error` | 500 | indicates a agent fleet error condition. |
+| `ClusterAgentError` | `cluster_agents_error` | 500 | indicates a cluster agent error condition. |
 | `AggregateError` | `aggregate_error` | 500 | indicates a aggregate error condition. Aliases: `aggregate_failed` |
 | `AlertError` | `alert_error` | 500 | indicates a alert error condition. |
 | `ApplyError` | `apply_error` | 500 | indicates a apply error condition. |
-| `ArgoCDError` | `argocd_error` | 500 | indicates a argo cd error condition. |
-| `ArgoCDSecretError` | `argocd_secret_error` | 500 | indicates a argo cd secret error condition. |
 | `AsynqError` | `asynq_error` | 500 | indicates a asynq error condition. |
 | `AttachError` | `attach_error` | 500 | indicates a attach error condition. |
 | `AuditError` | `audit_error` | 500 | indicates a audit error condition. |

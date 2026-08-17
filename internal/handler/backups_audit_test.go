@@ -236,7 +236,7 @@ func TestBackupMutationsAreAudited(t *testing.T) {
 		"name":                  "manual",
 		"storage_id":            storage.ID.String(),
 		"backup_type":           "full",
-		"included_namespaces":   []string{"argocd"},
+		"included_namespaces":   []string{"observability"},
 		"excluded_namespaces":   []string{"kube-system"},
 		"database_tables":       []string{},
 		"additional_unused_key": "ignored",
@@ -250,7 +250,7 @@ func TestBackupMutationsAreAudited(t *testing.T) {
 
 	restoreRec := httptest.NewRecorder()
 	h.CreateRestore(restoreRec, backupAuditRequest(t, http.MethodPost, "/api/v1/backups/"+backup.ID.String()+"/restore/", map[string]any{
-		"included_namespaces": []string{"argocd"},
+		"included_namespaces": []string{"observability"},
 	}, map[string]string{"id": backup.ID.String()}))
 	if restoreRec.Code != http.StatusCreated {
 		t.Fatalf("restore create status=%d body=%s", restoreRec.Code, restoreRec.Body.String())
@@ -275,7 +275,7 @@ func TestBackupMutationsAreAudited(t *testing.T) {
 		"retention_count":     7,
 		"enabled":             true,
 		"velero_namespace":    "velero",
-		"included_namespaces": []string{"argocd"},
+		"included_namespaces": []string{"observability"},
 		"ttl":                 "168h",
 	}, nil))
 	if scheduleRec.Code != http.StatusCreated {

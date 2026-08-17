@@ -32,7 +32,7 @@ import { AccessTab } from "@/components/charlie/settings/access-tab";
 import { DiagnosticsTab } from "@/components/charlie/settings/diagnostics-tab";
 import { Unavailable } from "@/components/charlie/settings/shared";
 
-export { agentActionsForState, AgentTab } from "@/components/charlie/settings/agent-tab";
+export { AgentTab } from "@/components/charlie/settings/agent-tab";
 export { charlieModeWorkReady, ModeTab } from "@/components/charlie/settings/mode-tab";
 export { KubernetesTab } from "@/components/charlie/settings/kubernetes-tab";
 export { ConnectionTab } from "@/components/charlie/settings/connection-tab";

@@ -279,7 +279,7 @@ func TestClusterTemplate_CRUD(t *testing.T) {
 			"environment": "production",
 			"labels":      map[string]string{"tier": "prod"},
 			"tools": []map[string]any{
-				{"slug": "argocd", "preset": "ha"},
+				{"slug": "cert-manager", "preset": "ha"},
 			},
 			"default_project": map[string]any{
 				"name":                 "platform",
@@ -684,7 +684,7 @@ func TestIsUniqueViolation_NilSafe(t *testing.T) {
 // Test helpers
 // ────────────────────────────────────────────────────────────────────────
 
-// mustJSON is defined in argocd_test.go; reuse it.
+// mustJSON is shared by the handler test package.
 
 // captureEnqueuer is a minimal ClusterTemplateEnqueuer that counts
 // successful Enqueue calls. Real asynq.Client isn't needed because the

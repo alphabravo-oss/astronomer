@@ -238,7 +238,7 @@ func TestExistingHelmReleaseStatusTreatsNotFoundAsAbsent(t *testing.T) {
 
 	status, exists, err := existingHelmReleaseStatus(context.Background(), &toolHelmStub{
 		statusErr: errors.New("release: not found"),
-	}, "cluster-1", "argocd", "argocd")
+	}, "cluster-1", "cert-manager", "cert-manager")
 	if err != nil {
 		t.Fatalf("existingHelmReleaseStatus() error = %v", err)
 	}
@@ -258,8 +258,8 @@ func TestExecuteOperationInstallAdoptsExistingHelmRelease(t *testing.T) {
 	helm := &toolHelmStub{
 		statusResult: &protocol.HelmResultPayload{
 			Success:     true,
-			ReleaseName: "argocd",
-			Namespace:   "argocd",
+			ReleaseName: "cert-manager",
+			Namespace:   "cert-manager",
 			Status:      "deployed",
 			Revision:    7,
 		},
@@ -268,9 +268,9 @@ func TestExecuteOperationInstallAdoptsExistingHelmRelease(t *testing.T) {
 
 	env := toolOperationEnvelope{
 		ClusterID:   clusterID.String(),
-		ToolSlug:    "argocd",
-		ReleaseName: "argocd",
-		Namespace:   "argocd",
+		ToolSlug:    "cert-manager",
+		ReleaseName: "cert-manager",
+		Namespace:   "cert-manager",
 		Preset:      "default",
 	}
 	payload, err := json.Marshal(env)
@@ -280,7 +280,7 @@ func TestExecuteOperationInstallAdoptsExistingHelmRelease(t *testing.T) {
 	op := sqlc.ToolOperation{
 		ID:            uuid.New(),
 		TargetType:    "tool_installation",
-		TargetKey:     clusterID.String() + ":argocd",
+		TargetKey:     clusterID.String() + ":cert-manager",
 		OperationType: "install",
 		Payload:       payload,
 		Status:        "running",
@@ -300,7 +300,7 @@ func TestExecuteOperationInstallAdoptsExistingHelmRelease(t *testing.T) {
 		t.Fatalf("created rows = %d, want 1", len(queries.created))
 	}
 	created := queries.created[0]
-	if created.ReleaseName != "argocd" || created.Namespace != "argocd" {
+	if created.ReleaseName != "cert-manager" || created.Namespace != "cert-manager" {
 		t.Fatalf("created release = %s/%s", created.Namespace, created.ReleaseName)
 	}
 	if created.Status != "installed" {
@@ -309,7 +309,7 @@ func TestExecuteOperationInstallAdoptsExistingHelmRelease(t *testing.T) {
 	if created.Revision != 7 {
 		t.Fatalf("created revision = %d, want 7", created.Revision)
 	}
-	if !created.ToolSlug.Valid || created.ToolSlug.String != "argocd" {
+	if !created.ToolSlug.Valid || created.ToolSlug.String != "cert-manager" {
 		t.Fatalf("created tool slug = %+v", created.ToolSlug)
 	}
 	if !created.PresetUsed.Valid || created.PresetUsed.String != "default" {
@@ -322,20 +322,20 @@ func TestAdoptExistingToolReleaseUpdatesExistingRow(t *testing.T) {
 
 	clusterID := uuid.New()
 	queries := newToolQueryRecorder(clusterID)
-	queries.installedByRef[installedRefKey(clusterID, "argocd", "argocd")] = sqlc.InstalledChart{
+	queries.installedByRef[installedRefKey(clusterID, "cert-manager", "cert-manager")] = sqlc.InstalledChart{
 		ID:          uuid.New(),
 		ClusterID:   clusterID,
-		ReleaseName: "argocd",
-		Namespace:   "argocd",
+		ReleaseName: "cert-manager",
+		Namespace:   "cert-manager",
 		Status:      "installed_unmanaged",
 		Revision:    1,
 	}
 
 	err := adoptExistingToolRelease(context.Background(), queries, clusterID, toolOperationEnvelope{
 		ClusterID:      clusterID.String(),
-		ToolSlug:       "argocd",
-		ReleaseName:    "argocd",
-		Namespace:      "argocd",
+		ToolSlug:       "cert-manager",
+		ReleaseName:    "cert-manager",
+		Namespace:      "cert-manager",
 		ValuesYAML:     "server:\n  insecure: true\n",
 		Preset:         "default",
 		InstalledChart: nil,
@@ -356,7 +356,7 @@ func TestAdoptExistingToolReleaseUpdatesExistingRow(t *testing.T) {
 	if adopted.Revision != 3 {
 		t.Fatalf("adopted revision = %d, want 3", adopted.Revision)
 	}
-	if !adopted.ToolSlug.Valid || adopted.ToolSlug.String != "argocd" {
+	if !adopted.ToolSlug.Valid || adopted.ToolSlug.String != "cert-manager" {
 		t.Fatalf("adopted tool slug = %+v", adopted.ToolSlug)
 	}
 	if !adopted.PresetUsed.Valid || adopted.PresetUsed.String != "default" {
@@ -380,9 +380,9 @@ func TestExecuteOperationUpgradePersistsHelmRevision(t *testing.T) {
 
 	env := toolOperationEnvelope{
 		ClusterID:      clusterID.String(),
-		ToolSlug:       "argocd",
-		ReleaseName:    "argocd",
-		Namespace:      "argocd",
+		ToolSlug:       "cert-manager",
+		ReleaseName:    "cert-manager",
+		Namespace:      "cert-manager",
 		ValuesYAML:     "server:\n  insecure: true\n",
 		InstalledChart: &chartID,
 	}
@@ -420,9 +420,9 @@ func TestCheckToolReleaseReadyReflectsReadiness(t *testing.T) {
 	clusterID := uuid.New()
 	env := toolOperationEnvelope{
 		ClusterID:   clusterID.String(),
-		ToolSlug:    "argocd",
-		ReleaseName: "argocd",
-		Namespace:   "argocd",
+		ToolSlug:    "cert-manager",
+		ReleaseName: "cert-manager",
+		Namespace:   "cert-manager",
 	}
 	op := sqlc.ToolOperation{ID: uuid.New(), OperationType: "install"}
 

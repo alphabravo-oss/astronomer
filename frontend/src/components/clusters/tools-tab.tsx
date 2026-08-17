@@ -133,7 +133,7 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
   //
   // It deliberately does NOT count the auto-provisioned baseline: only
   // kube-state-metrics and prometheus-node-exporter install automatically, and
-  // they arrive over the ArgoCD ApplicationSet path, not the Helm/tool path
+  // they arrive over the continuous-delivery path, not the Helm/tool path
   // these statuses track — so they never appear here even when running.
   // internal/baseline/registry.go is the source of truth for that split.
   const noToolsInstalled =

@@ -49,13 +49,13 @@ func TestRecordRepairJobSuccessWritesGlobalState(t *testing.T) {
 func TestRecordRepairJobFailureWritesLastError(t *testing.T) {
 	recorder := &fakeRepairJobStateRecorder{}
 
-	recordRepairJobFailure(context.Background(), recorder, "argocd:auto_register_cluster", errors.New("list clusters: database unavailable"), map[string]any{"mode": "sweep"})
+	recordRepairJobFailure(context.Background(), recorder, "delivery:source_resolution", errors.New("list sources: database unavailable"), map[string]any{"mode": "sweep"})
 
 	if len(recorder.failure) != 1 {
 		t.Fatalf("failure records = %d, want 1", len(recorder.failure))
 	}
 	got := recorder.failure[0]
-	if got.JobName != "argocd:auto_register_cluster" || got.Scope != repairJobGlobalScope {
+	if got.JobName != "delivery:source_resolution" || got.Scope != repairJobGlobalScope {
 		t.Fatalf("failure params = %+v", got)
 	}
 	if !strings.Contains(got.LastError, "database unavailable") {

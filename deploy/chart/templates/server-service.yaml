@@ -11,11 +11,5 @@ spec:
       port: {{ .Values.server.service.port }}
       targetPort: http
       protocol: TCP
-    # Authenticated internal ArgoCD->cluster proxy port (not exposed via
-    # ingress; NetworkPolicy also restricts it to the ArgoCD namespace).
-    - name: argocd-proxy
-      port: 8090
-      targetPort: argocd-proxy
-      protocol: TCP
   selector:
     {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 4 }}

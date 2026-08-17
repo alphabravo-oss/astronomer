@@ -33,7 +33,7 @@ func TestDefaultTriggerRulesAreProductOwnedReadOnlyAndOptIn(t *testing.T) {
 		"agent_heartbeat_stale", "agent_auth_registration_failure", "agent_credential_invalid", "agent_downstream_api_unreachable_reported",
 		"agent_version_unsupported", "agent_upgrade_failed_or_stalled", "agent_ingestion_failed",
 		"agent_command_expired", "tunnel_replica_concentration", "tunnel_locator_failure",
-		"server_rollout_reconnect_spike", "fleet_simultaneous_disconnect",
+		"server_rollout_reconnect_spike", "cluster_agents_simultaneous_disconnect",
 	} {
 		if _, ok := byName[name]; !ok {
 			t.Errorf("required default rule %q is missing", name)

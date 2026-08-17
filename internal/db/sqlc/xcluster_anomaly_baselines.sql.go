@@ -11,8 +11,8 @@ import (
 )
 
 const getXClusterAnomalyBaseline = `-- name: GetXClusterAnomalyBaseline :one
-SELECT id, metric_name, window_seconds, cluster_count, fleet_mean, fleet_stddev,
-       fleet_min, fleet_max, stddev_mult, outlier_cluster_ids, updated_at
+SELECT id, metric_name, window_seconds, cluster_count, population_mean, population_stddev,
+       population_min, population_max, stddev_mult, outlier_cluster_ids, updated_at
 FROM xcluster_anomaly_baselines
 WHERE metric_name = $1 AND window_seconds = $2
 `
@@ -30,10 +30,10 @@ func (q *Queries) GetXClusterAnomalyBaseline(ctx context.Context, arg GetXCluste
 		&i.MetricName,
 		&i.WindowSeconds,
 		&i.ClusterCount,
-		&i.FleetMean,
-		&i.FleetStddev,
-		&i.FleetMin,
-		&i.FleetMax,
+		&i.PopulationMean,
+		&i.PopulationStddev,
+		&i.PopulationMin,
+		&i.PopulationMax,
 		&i.StddevMult,
 		&i.OutlierClusterIds,
 		&i.UpdatedAt,
@@ -43,8 +43,8 @@ func (q *Queries) GetXClusterAnomalyBaseline(ctx context.Context, arg GetXCluste
 
 const listXClusterAnomalyBaselines = `-- name: ListXClusterAnomalyBaselines :many
 
-SELECT id, metric_name, window_seconds, cluster_count, fleet_mean, fleet_stddev,
-       fleet_min, fleet_max, stddev_mult, outlier_cluster_ids, updated_at
+SELECT id, metric_name, window_seconds, cluster_count, population_mean, population_stddev,
+       population_min, population_max, stddev_mult, outlier_cluster_ids, updated_at
 FROM xcluster_anomaly_baselines
 ORDER BY metric_name ASC
 `
@@ -66,10 +66,10 @@ func (q *Queries) ListXClusterAnomalyBaselines(ctx context.Context) ([]XclusterA
 			&i.MetricName,
 			&i.WindowSeconds,
 			&i.ClusterCount,
-			&i.FleetMean,
-			&i.FleetStddev,
-			&i.FleetMin,
-			&i.FleetMax,
+			&i.PopulationMean,
+			&i.PopulationStddev,
+			&i.PopulationMin,
+			&i.PopulationMax,
 			&i.StddevMult,
 			&i.OutlierClusterIds,
 			&i.UpdatedAt,
@@ -86,33 +86,33 @@ func (q *Queries) ListXClusterAnomalyBaselines(ctx context.Context) ([]XclusterA
 
 const upsertXClusterAnomalyBaseline = `-- name: UpsertXClusterAnomalyBaseline :one
 INSERT INTO xcluster_anomaly_baselines (
-    metric_name, window_seconds, cluster_count, fleet_mean, fleet_stddev,
-    fleet_min, fleet_max, stddev_mult, outlier_cluster_ids, updated_at
+    metric_name, window_seconds, cluster_count, population_mean, population_stddev,
+    population_min, population_max, stddev_mult, outlier_cluster_ids, updated_at
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9, now()
 )
 ON CONFLICT (metric_name, window_seconds) DO UPDATE SET
     cluster_count       = EXCLUDED.cluster_count,
-    fleet_mean          = EXCLUDED.fleet_mean,
-    fleet_stddev        = EXCLUDED.fleet_stddev,
-    fleet_min           = EXCLUDED.fleet_min,
-    fleet_max           = EXCLUDED.fleet_max,
+    population_mean          = EXCLUDED.population_mean,
+    population_stddev        = EXCLUDED.population_stddev,
+    population_min           = EXCLUDED.population_min,
+    population_max           = EXCLUDED.population_max,
     stddev_mult         = EXCLUDED.stddev_mult,
     outlier_cluster_ids = EXCLUDED.outlier_cluster_ids,
     updated_at          = now()
-RETURNING id, metric_name, window_seconds, cluster_count, fleet_mean, fleet_stddev,
-          fleet_min, fleet_max, stddev_mult, outlier_cluster_ids, updated_at
+RETURNING id, metric_name, window_seconds, cluster_count, population_mean, population_stddev,
+          population_min, population_max, stddev_mult, outlier_cluster_ids, updated_at
 `
 
 type UpsertXClusterAnomalyBaselineParams struct {
 	MetricName        string          `json:"metric_name"`
 	WindowSeconds     int32           `json:"window_seconds"`
 	ClusterCount      int32           `json:"cluster_count"`
-	FleetMean         float64         `json:"fleet_mean"`
-	FleetStddev       float64         `json:"fleet_stddev"`
-	FleetMin          float64         `json:"fleet_min"`
-	FleetMax          float64         `json:"fleet_max"`
+	PopulationMean    float64         `json:"population_mean"`
+	PopulationStddev  float64         `json:"population_stddev"`
+	PopulationMin     float64         `json:"population_min"`
+	PopulationMax     float64         `json:"population_max"`
 	StddevMult        float64         `json:"stddev_mult"`
 	OutlierClusterIds json.RawMessage `json:"outlier_cluster_ids"`
 }
@@ -122,10 +122,10 @@ func (q *Queries) UpsertXClusterAnomalyBaseline(ctx context.Context, arg UpsertX
 		arg.MetricName,
 		arg.WindowSeconds,
 		arg.ClusterCount,
-		arg.FleetMean,
-		arg.FleetStddev,
-		arg.FleetMin,
-		arg.FleetMax,
+		arg.PopulationMean,
+		arg.PopulationStddev,
+		arg.PopulationMin,
+		arg.PopulationMax,
 		arg.StddevMult,
 		arg.OutlierClusterIds,
 	)
@@ -135,10 +135,10 @@ func (q *Queries) UpsertXClusterAnomalyBaseline(ctx context.Context, arg UpsertX
 		&i.MetricName,
 		&i.WindowSeconds,
 		&i.ClusterCount,
-		&i.FleetMean,
-		&i.FleetStddev,
-		&i.FleetMin,
-		&i.FleetMax,
+		&i.PopulationMean,
+		&i.PopulationStddev,
+		&i.PopulationMin,
+		&i.PopulationMax,
 		&i.StddevMult,
 		&i.OutlierClusterIds,
 		&i.UpdatedAt,

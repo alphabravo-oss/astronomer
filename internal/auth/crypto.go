@@ -72,11 +72,25 @@ func (e *Encryptor) Encrypt(plaintext string) (string, error) {
 // Decrypt decrypts a Fernet token using whichever configured key signed it.
 // No TTL is enforced — secrets are stored indefinitely.
 func (e *Encryptor) Decrypt(token string) (string, error) {
-	msg := fernet.VerifyAndDecrypt([]byte(token), time.Duration(0), e.keys)
-	if msg == nil {
-		return "", fmt.Errorf("fernet decrypt: invalid token or no matching key")
+	msg, err := e.DecryptBytes(token)
+	if err != nil {
+		return "", err
 	}
 	return string(msg), nil
+}
+
+// DecryptBytes avoids an immutable plaintext string for short-lived worker
+// credentials. The caller owns the returned slice and can overwrite it as soon
+// as the credential has been parsed or handed to its bounded consumer.
+func (e *Encryptor) DecryptBytes(token string) ([]byte, error) {
+	if e == nil || len(e.keys) == 0 {
+		return nil, fmt.Errorf("fernet decrypt: encryptor is not configured")
+	}
+	msg := fernet.VerifyAndDecrypt([]byte(token), time.Duration(0), e.keys)
+	if msg == nil {
+		return nil, fmt.Errorf("fernet decrypt: invalid token or no matching key")
+	}
+	return msg, nil
 }
 
 // KeyCount reports how many keys are loaded. Useful for /api/v1/admin

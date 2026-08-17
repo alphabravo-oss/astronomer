@@ -25,10 +25,8 @@ var errNotFound = errors.New("agent token not found (revoked or missing)")
 func connectWithToken(t *testing.T, conn *websocket.Conn, ctx context.Context, clusterID, token string) protocol.ConnectAckPayload {
 	t.Helper()
 	connectPayload, _ := json.Marshal(protocol.ConnectPayload{
-		ClusterID:    clusterID,
-		AgentID:      "agent-rot",
-		AgentVersion: "1.0.0",
-		Token:        token,
+		ClusterID: clusterID, AgentID: "agent-rot", AgentVersion: "1.0.0",
+		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Token: token,
 	})
 	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgConnect, Payload: connectPayload}); err != nil {
 		t.Fatalf("write connect: %v", err)
@@ -153,10 +151,8 @@ func TestRevokedTokenDeniesConnect(t *testing.T) {
 	// A denied connect closes the WS (StatusPolicyViolation) without an ack.
 	// Either an ack with Accepted=false OR a closed read both prove denial.
 	connectPayload, _ := json.Marshal(protocol.ConnectPayload{
-		ClusterID:    clusterID.String(),
-		AgentID:      "agent-rot",
-		AgentVersion: "1.0.0",
-		Token:        revokedToken,
+		ClusterID: clusterID.String(), AgentID: "agent-rot", AgentVersion: "1.0.0",
+		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Token: revokedToken,
 	})
 	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgConnect, Payload: connectPayload}); err != nil {
 		t.Fatalf("write connect: %v", err)

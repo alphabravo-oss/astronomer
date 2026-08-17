@@ -78,7 +78,7 @@ describe('TemplateForm (edit)', () => {
   const spec: ClusterTemplateSpec = {
     environment: 'production',
     labels: [{ key: 'team', value: 'core' }],
-    tools: [{ slug: 'argocd', preset: 'default', valuesOverride: '' }],
+    tools: [{ slug: 'monitoring', preset: 'default', valuesOverride: '' }],
     defaultProject: {
       name: 'default-{cluster}',
       podSecurityProfile: 'restricted',

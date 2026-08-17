@@ -38,7 +38,7 @@ eyeball all route thumbnails once for layout/theme breakage.
 
 - [ ] Theme cycle (light → dark → system) works and persists
 - [ ] Persistence uses the `astronomer-theme` localStorage key (byte-compatible with pre-migration)
-- [ ] `/argocd/` co-hosted UI loads and its theme is NOT clobbered (D24: no bare `theme` key written)
+- [ ] Continuous Delivery pages follow the Astronomer theme and no obsolete co-hosted UI writes a bare `theme` key
 
 ## Routing & URL state
 
@@ -56,6 +56,24 @@ eyeball all route thumbnails once for layout/theme breakage.
 
 - [ ] One virtualized table scrolls smoothly through a large dataset (e.g. pods)
 - [ ] One server-paginated table pages correctly (e.g. audit log)
+- [ ] Delivery source/target/rollout/deployment paging and filters survive refresh and back/forward navigation
+
+## Continuous Delivery
+
+- [ ] A target preview with more than 100 decisions pages forward and backward without duplicating or skipping clusters
+- [ ] Editing a target invalidates the old preview; rollout start remains blocked until a new preview digest is confirmed
+- [ ] A stale target edit surfaces the resource-version conflict instead of overwriting the newer target
+- [ ] Rollout approval, pause/resume, abort, retry, and reconcile actions update the visible rollout/deployment state
+- [ ] A non-platform administrator cannot create a platform-scoped bundle version
+- [ ] Delivery overview reports incompatible agents and links to the affected cluster-agent inventory
+
+## Catalog project isolation
+
+- [ ] Changing the selected project changes the visible chart set without briefly reusing another project's cached results
+- [ ] Direct chart versions/default-values requests include the selected project and reject an inaccessible project
+- [ ] Cluster Apps only offers projects attached to that cluster and only shows that project's charts/recommendations
+- [ ] Installing a chart sends the selected project and cannot target a cluster outside that project
+- [ ] A user without project-scoped `catalog:create` can browse but cannot open or submit the install flow
 
 ## Misc
 

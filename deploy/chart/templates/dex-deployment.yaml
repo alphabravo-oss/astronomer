@@ -16,8 +16,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "astronomer.fullname" . }}-dex
-  annotations:
-    argocd.argoproj.io/sync-wave: "0"
   labels:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
 spec:
@@ -50,7 +48,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.dex.image.repository "tag" .Values.dex.image.tag "registry" .Values.dex.image.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.dex.image.repository "tag" .Values.dex.image.tag "digest" .Values.dex.image.digest "registry" .Values.dex.image.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - /usr/local/bin/dex

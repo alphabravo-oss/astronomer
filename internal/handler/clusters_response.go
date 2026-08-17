@@ -86,41 +86,7 @@ type ClusterResponse struct {
 	// (off|attribute|enforce) from docs/design/downstream-impersonation.md.
 	// Always "off" unless a superuser has explicitly set the annotation, and
 	// read by nothing in Phase 0.
-	DownstreamImpersonation string               `json:"downstream_impersonation"`
-	ArgoCD                  ClusterArgoCDSummary `json:"argocd"`
-}
-
-type ClusterArgoCDSummary struct {
-	Registered         bool                            `json:"registered"`
-	InstanceCount      int                             `json:"instance_count"`
-	ClusterSecretNames []string                        `json:"cluster_secret_names"`
-	BaselineManagedBy  string                          `json:"baseline_managed_by"`
-	BaselineComponents []ClusterBaselineComponentOwner `json:"baseline_components"`
-	Drift              ClusterArgoCDDriftSummary       `json:"drift"`
-}
-
-type ClusterArgoCDDriftSummary struct {
-	AppCount             int     `json:"app_count"`
-	SyncedCount          int     `json:"synced_count"`
-	OutOfSyncCount       int     `json:"out_of_sync_count"`
-	UnknownSyncCount     int     `json:"unknown_sync_count"`
-	HealthyCount         int     `json:"healthy_count"`
-	ProgressingCount     int     `json:"progressing_count"`
-	DegradedCount        int     `json:"degraded_count"`
-	UnknownHealthCount   int     `json:"unknown_health_count"`
-	ResourceCreatedCount int     `json:"resource_created_count"`
-	ResourceChangedCount int     `json:"resource_changed_count"`
-	ResourcePrunedCount  int     `json:"resource_pruned_count"`
-	LastSynced           *string `json:"last_synced,omitempty"`
-	LastError            string  `json:"last_error,omitempty"`
-}
-
-type ClusterBaselineComponentOwner struct {
-	Slug               string `json:"slug"`
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
-	ApplicationSetName string `json:"application_set_name"`
-	ManagedBy          string `json:"managed_by"`
+	DownstreamImpersonation string `json:"downstream_impersonation"`
 }
 
 // clusterToResponse maps a sqlc.Cluster row into the explicit wire DTO.
@@ -165,10 +131,6 @@ func clusterToResponse(c sqlc.Cluster) ClusterResponse {
 		ObservedGeneration:      c.ObservedGeneration,
 		AgentPrivilegeProfile:   clusterAgentPrivilegeProfile(c.Annotations),
 		DownstreamImpersonation: clusterDownstreamImpersonationMode(c.Annotations),
-		ArgoCD: ClusterArgoCDSummary{
-			BaselineManagedBy:  "unknown",
-			BaselineComponents: baselineComponentOwnership("unknown"),
-		},
 	}
 	if c.LastHeartbeat.Valid {
 		s := c.LastHeartbeat.Time.Format(time.RFC3339Nano)

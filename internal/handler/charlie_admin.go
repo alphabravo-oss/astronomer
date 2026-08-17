@@ -15,10 +15,6 @@ import (
 
 type CharlieAdminBackend interface {
 	Status(context.Context) (charlie.AdminStatusView, error)
-	Install(context.Context) (charlie.AdminAgentView, error)
-	ReplacementAction(context.Context, string) (charlie.AdminAgentView, error)
-	Uninstall(context.Context, uuid.UUID) error
-	Disconnect(context.Context, uuid.UUID) error
 	UpdateMode(context.Context, charlie.Mode, int64, bool, uuid.UUID) (charlie.AdminModeView, error)
 	AcknowledgeDisclosure(context.Context, string) (charlie.AdminModeView, error)
 	Automation(context.Context) (charlie.AdminAutomationView, error)
@@ -45,6 +41,11 @@ type charlieAdminLocalBackend interface {
 type charlieKubernetesVisibilityBackend interface {
 	KubernetesVisibility(context.Context) (charlie.AdminKubernetesVisibilityView, error)
 	UpdateKubernetesVisibility(context.Context, charlie.AdminKubernetesVisibilityInput, uuid.UUID) (charlie.AdminKubernetesVisibilityView, error)
+}
+
+// openapi:request CharlieAdminActionRequest
+type charlieAdminActionRequest struct {
+	Confirmation string `json:"confirmation"`
 }
 
 type CharlieAdminHandler struct {
@@ -84,95 +85,6 @@ func (h *CharlieAdminHandler) Status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	RespondJSON(w, http.StatusOK, view)
-}
-
-// openapi:request CharlieAdminActionRequest
-type charlieAdminActionRequest struct {
-	Confirmation string `json:"confirmation"`
-}
-
-func (h *CharlieAdminHandler) Install(w http.ResponseWriter, r *http.Request) {
-	_, ok := h.actor(w, r)
-	if !ok {
-		return
-	}
-	if !h.requireAuthorityAudit(w, r, "admin.charlie.agent.install", "charlie_connection", "current", nil) {
-		return
-	}
-	view, err := h.backend.Install(r.Context())
-	if err != nil {
-		h.respondError(w, r, err)
-		return
-	}
-	recordCharlieAdminAudit(r, h.audit, "admin.charlie.agent.install", "charlie_connection", "current", nil)
-	RespondJSON(w, http.StatusOK, view)
-}
-
-func (h *CharlieAdminHandler) ReplacementAction(action string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := h.actor(w, r); !ok {
-			return
-		}
-		auditAction := "admin.charlie.agent." + action
-		if !h.requireAuthorityAudit(w, r, auditAction, "charlie_connection", "current", nil) {
-			return
-		}
-		view, err := h.backend.ReplacementAction(r.Context(), action)
-		if err != nil {
-			h.respondError(w, r, err)
-			return
-		}
-		recordCharlieAdminAudit(r, h.audit, auditAction, "charlie_connection", "current", nil)
-		RespondJSON(w, http.StatusOK, view)
-	}
-}
-
-func (h *CharlieAdminHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
-	actor, ok := h.actor(w, r)
-	if !ok {
-		return
-	}
-	var request charlieAdminActionRequest
-	if !decodeCharlieJSON(w, r, &request) {
-		return
-	}
-	if request.Confirmation != "UNINSTALL CHARLIE" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Exact uninstall confirmation is required")
-		return
-	}
-	if !h.requireAuthorityAudit(w, r, "admin.charlie.agent.uninstall", "charlie_connection", "current", nil) {
-		return
-	}
-	if err := h.backend.Uninstall(r.Context(), mustUserID(actor)); err != nil {
-		h.respondError(w, r, err)
-		return
-	}
-	recordCharlieAdminAudit(r, h.audit, "admin.charlie.agent.uninstall", "charlie_connection", "current", nil)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *CharlieAdminHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
-	actor, ok := h.actor(w, r)
-	if !ok {
-		return
-	}
-	var request charlieAdminActionRequest
-	if !decodeCharlieJSON(w, r, &request) {
-		return
-	}
-	if request.Confirmation != "DISCONNECT CHARLIE" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Exact disconnect confirmation is required")
-		return
-	}
-	if !h.requireAuthorityAudit(w, r, "admin.charlie.disconnect", "charlie_connection", "current", nil) {
-		return
-	}
-	if err := h.backend.Disconnect(r.Context(), mustUserID(actor)); err != nil {
-		h.respondError(w, r, err)
-		return
-	}
-	recordCharlieAdminAudit(r, h.audit, "admin.charlie.disconnect", "charlie_connection", "current", nil)
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // openapi:request CharlieModeRequest
@@ -649,7 +561,7 @@ func (h *CharlieAdminHandler) respondError(w http.ResponseWriter, r *http.Reques
 	switch {
 	case errors.Is(err, charlie.ErrAdminNotConfigured):
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Charlie is not configured")
-	case errors.Is(err, charlie.ErrAdminConflict), errors.Is(err, charlie.ErrReplacementPackageNeeded):
+	case errors.Is(err, charlie.ErrAdminConflict):
 		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie administration prerequisites are incomplete or changed")
 	default:
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie administration is unavailable")

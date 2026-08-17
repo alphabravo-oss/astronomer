@@ -784,8 +784,7 @@ func buildGitAuth(src sqlc.GitopsRegistrationSource) (transport.AuthMethod, erro
 // decryptGitAuth returns the plaintext git credential for a source. When a
 // Fernet decryptor is wired the stored auth_encrypted blob is unwrapped;
 // when none is configured or the blob is already plaintext (dev,
-// pre-encryption rows) the raw value is returned unchanged. Mirrors
-// handler/argocd.go decryptInstanceToken.
+// pre-encryption rows) the raw value is returned unchanged.
 func decryptGitAuth(blob string) string {
 	if gitopsDeps.Decryptor == nil || blob == "" {
 		return blob

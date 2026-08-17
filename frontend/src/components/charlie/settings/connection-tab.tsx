@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Loader2,
   Shield,
-  Trash2,
   Upload,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -13,7 +12,6 @@ import { toastApiError, toastSuccess } from "@/lib/toast";
 import { parseOnboardingFile } from "@/components/charlie/admin-utils";
 import {
   consumeCharlieOnboarding,
-  disconnectCharlie,
   getCharlieConnection,
   validateCharlieOnboarding,
   type CharlieOnboardingView,
@@ -23,7 +21,6 @@ import {
   Meta,
   Section,
   Unavailable,
-  button,
   emptyOnboarding,
   primary,
 } from "./shared";
@@ -39,7 +36,7 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
   const [fileName, setFileName] = useState("");
   const [fileError, setFileError] = useState("");
   const [validated, setValidated] = useState<CharlieOnboardingView>();
-  const [confirm, setConfirm] = useState<"consume" | "disconnect" | null>(null);
+  const [confirm, setConfirm] = useState<"consume" | null>(null);
   const [disclosure, setDisclosure] = useState(false);
   const validate = useMutation({
     mutationFn: validateCharlieOnboarding,
@@ -60,20 +57,9 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
       void qc.invalidateQueries({
         queryKey: queryKeys.charlie.adminConnection,
       });
-      toastSuccess("Charlie connection and product agent onboarding started");
+      toastSuccess("Charlie trust and product onboarding accepted");
     },
     onError: (e) => toastApiError("Charlie onboarding failed", e),
-  });
-  const disconnect = useMutation({
-    mutationFn: disconnectCharlie,
-    onSuccess: () => {
-      setConfirm(null);
-      void qc.invalidateQueries({
-        queryKey: queryKeys.charlie.adminConnection,
-      });
-      toastSuccess("Charlie disconnected");
-    },
-    onError: (e) => toastApiError("Disconnect failed", e),
   });
   const load = async (file: File | undefined) => {
     setFileError("");
@@ -177,13 +163,10 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
           </dl>
         )}
         {connection.data?.connected && (
-          <button
-            onClick={() => setConfirm("disconnect")}
-            className={`${button} mt-4 text-status-error`}
-          >
-            <Trash2 className="h-4 w-4" />
-            Disconnect
-          </button>
+          <p className="mt-4 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+            Replace trust or route configuration by validating a new signed package. Product-agent
+            lifecycle changes are performed through Flux Continuous Delivery.
+          </p>
         )}
       </Section>
       {!localOnly && <Section
@@ -343,23 +326,12 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
             ? "Replace Charlie connection"
             : "Connect Charlie"
         }
-        description="This consumes the one-time package and installs or reconciles the separate Charlie product agent. Existing authority is never expanded by the browser."
+        description="This consumes the one-time package and records the signed product trust and route. Product-agent artifacts are reconciled through Flux Continuous Delivery; existing authority is never expanded by the browser."
         confirmText={
           connection.data?.connected ? "Replace connection" : "Connect"
         }
         confirmValue={confirmValue}
         loading={consume.isPending}
-      />
-      <ConfirmDialog
-        open={confirm === "disconnect"}
-        onClose={() => setConfirm(null)}
-        onConfirm={() => disconnect.mutate()}
-        title="Disconnect Charlie"
-        description="This stops the Charlie integration while preserving Astronomer audit records."
-        confirmText="Disconnect"
-        confirmValue="DISCONNECT CHARLIE"
-        variant="destructive"
-        loading={disconnect.isPending}
       />
     </div>
   );

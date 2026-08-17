@@ -26,9 +26,9 @@ Status as of Wave B (SEC-R01 / DEBT-R01 prep). **Install default remains legacy
    is no cross-pod locator. Multi-replica management planes that route
    arbitrarily will 503 for clusters whose agent is connected elsewhere.
 3. **Feature coverage** — The hub JSON protocol still owns exec, logs, state
-   mirror, helm/internal RPCs, apiserver-audit framing, desired-state pull, and
-   related originators. remotedialer ferries dials (strong for k8s API proxy /
-   similar) but does not replace every hub message type yet.
+   mirror, helm/internal RPCs, apiserver-audit framing, Flux-native delivery v2,
+   and related originators. remotedialer ferries dials (strong for k8s API proxy
+   / similar) but does not replace every hub message type yet.
 
 ## Auth matrix (post SEC-R01)
 
@@ -50,7 +50,7 @@ Status as of Wave B (SEC-R01 / DEBT-R01 prep). **Install default remains legacy
 | Multi-replica locator HA | Yes | **No** |
 | Exec / logs consumers (ticket WS) | Yes (hub streams) | Not on remotedialer path |
 | Heartbeat / metrics / state frames | Yes | Different model |
-| Desired-state pull, lifecycle ops | Yes | Not ported |
+| Flux-native delivery v2, lifecycle ops | Yes | Not ported |
 | Install template default | **Yes** | No |
 
 ## Cutover decision

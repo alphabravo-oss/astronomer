@@ -504,291 +504,6 @@ func (q *Queries) CharlieAgentConnectionHistory(ctx context.Context, arg Charlie
 	return items, nil
 }
 
-const charlieAgentFleetGet = `-- name: CharlieAgentFleetGet :one
-SELECT
-    c.id AS cluster_id, c.name AS cluster_name, c.display_name, c.environment,
-    c.region, c.labels, c.agent_version AS cluster_agent_version,
-    COALESCE(latest.agent_id, ops.agent_id, '') AS agent_id,
-    COALESCE(latest.agent_version, ops.installed_agent_version, c.agent_version, '') AS installed_agent_version,
-    COALESCE(latest.status, 'never') AS connection_state,
-    COALESCE(latest.last_ping, c.last_heartbeat) AS last_heartbeat,
-    ops.cluster_id, ops.agent_id, ops.installed_agent_version, ops.desired_agent_version, ops.protocol_version, ops.protocol_compatible, ops.authentication_state, ops.registration_state, ops.credential_state, ops.credential_expires_at, ops.upgrade_state, ops.audit_ingestion_state, ops.metrics_ingestion_state, ops.state_ingestion_state, ops.pending_command_count, ops.failed_command_count, ops.expired_command_count, ops.downstream_api_reachable, ops.downstream_api_reported_at, ops.owning_server_replica, ops.last_successful_connection_at, ops.last_status_at, ops.created_at, ops.updated_at
-FROM clusters c
-LEFT JOIN LATERAL (
-    SELECT ac.agent_id, ac.agent_version, ac.status, ac.last_ping
-    FROM agent_connections ac WHERE ac.cluster_id = c.id
-    ORDER BY ac.connected_at DESC LIMIT 1
-) latest ON true
-LEFT JOIN agent_operational_statuses ops ON ops.cluster_id = c.id
-WHERE c.id = $1 AND c.decommissioned_at IS NULL
-`
-
-type CharlieAgentFleetGetRow struct {
-	ClusterID                  uuid.UUID          `json:"cluster_id"`
-	ClusterName                string             `json:"cluster_name"`
-	DisplayName                string             `json:"display_name"`
-	Environment                string             `json:"environment"`
-	Region                     string             `json:"region"`
-	Labels                     json.RawMessage    `json:"labels"`
-	ClusterAgentVersion        string             `json:"cluster_agent_version"`
-	AgentID                    string             `json:"agent_id"`
-	InstalledAgentVersion      string             `json:"installed_agent_version"`
-	ConnectionState            string             `json:"connection_state"`
-	LastHeartbeat              pgtype.Timestamptz `json:"last_heartbeat"`
-	ClusterID_2                pgtype.UUID        `json:"cluster_id_2"`
-	AgentID_2                  pgtype.Text        `json:"agent_id_2"`
-	InstalledAgentVersion_2    pgtype.Text        `json:"installed_agent_version_2"`
-	DesiredAgentVersion        pgtype.Text        `json:"desired_agent_version"`
-	ProtocolVersion            pgtype.Text        `json:"protocol_version"`
-	ProtocolCompatible         pgtype.Bool        `json:"protocol_compatible"`
-	AuthenticationState        pgtype.Text        `json:"authentication_state"`
-	RegistrationState          pgtype.Text        `json:"registration_state"`
-	CredentialState            pgtype.Text        `json:"credential_state"`
-	CredentialExpiresAt        pgtype.Timestamptz `json:"credential_expires_at"`
-	UpgradeState               pgtype.Text        `json:"upgrade_state"`
-	AuditIngestionState        pgtype.Text        `json:"audit_ingestion_state"`
-	MetricsIngestionState      pgtype.Text        `json:"metrics_ingestion_state"`
-	StateIngestionState        pgtype.Text        `json:"state_ingestion_state"`
-	PendingCommandCount        pgtype.Int4        `json:"pending_command_count"`
-	FailedCommandCount         pgtype.Int4        `json:"failed_command_count"`
-	ExpiredCommandCount        pgtype.Int4        `json:"expired_command_count"`
-	DownstreamApiReachable     pgtype.Bool        `json:"downstream_api_reachable"`
-	DownstreamApiReportedAt    pgtype.Timestamptz `json:"downstream_api_reported_at"`
-	OwningServerReplica        pgtype.Text        `json:"owning_server_replica"`
-	LastSuccessfulConnectionAt pgtype.Timestamptz `json:"last_successful_connection_at"`
-	LastStatusAt               pgtype.Timestamptz `json:"last_status_at"`
-	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) CharlieAgentFleetGet(ctx context.Context, clusterID uuid.UUID) (CharlieAgentFleetGetRow, error) {
-	row := q.db.QueryRow(ctx, charlieAgentFleetGet, clusterID)
-	var i CharlieAgentFleetGetRow
-	err := row.Scan(
-		&i.ClusterID,
-		&i.ClusterName,
-		&i.DisplayName,
-		&i.Environment,
-		&i.Region,
-		&i.Labels,
-		&i.ClusterAgentVersion,
-		&i.AgentID,
-		&i.InstalledAgentVersion,
-		&i.ConnectionState,
-		&i.LastHeartbeat,
-		&i.ClusterID_2,
-		&i.AgentID_2,
-		&i.InstalledAgentVersion_2,
-		&i.DesiredAgentVersion,
-		&i.ProtocolVersion,
-		&i.ProtocolCompatible,
-		&i.AuthenticationState,
-		&i.RegistrationState,
-		&i.CredentialState,
-		&i.CredentialExpiresAt,
-		&i.UpgradeState,
-		&i.AuditIngestionState,
-		&i.MetricsIngestionState,
-		&i.StateIngestionState,
-		&i.PendingCommandCount,
-		&i.FailedCommandCount,
-		&i.ExpiredCommandCount,
-		&i.DownstreamApiReachable,
-		&i.DownstreamApiReportedAt,
-		&i.OwningServerReplica,
-		&i.LastSuccessfulConnectionAt,
-		&i.LastStatusAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const charlieAgentFleetList = `-- name: CharlieAgentFleetList :many
-SELECT
-    c.id AS cluster_id, c.name AS cluster_name, c.display_name, c.environment,
-    c.region, c.labels, c.agent_version AS cluster_agent_version,
-    COALESCE(latest.agent_id, ops.agent_id, '') AS agent_id,
-    COALESCE(latest.agent_version, ops.installed_agent_version, c.agent_version, '') AS installed_agent_version,
-    COALESCE(latest.status, 'never') AS connection_state,
-    COALESCE(latest.last_ping, c.last_heartbeat) AS last_heartbeat,
-    ops.last_successful_connection_at,
-    COALESCE(ops.authentication_state, 'unknown') AS authentication_state,
-    COALESCE(ops.registration_state, 'unknown') AS registration_state,
-	COALESCE(ops.credential_state, 'unknown') AS credential_state,
-	ops.credential_expires_at,
-    COALESCE(ops.protocol_version, '') AS protocol_version,
-    ops.protocol_compatible,
-	COALESCE(ops.desired_agent_version, '') AS desired_agent_version,
-	COALESCE(ops.upgrade_state, 'unknown') AS upgrade_state,
-    COALESCE(ops.owning_server_replica, '') AS owning_server_replica,
-    COALESCE(ops.audit_ingestion_state, 'unknown') AS audit_ingestion_state,
-    COALESCE(ops.metrics_ingestion_state, 'unknown') AS metrics_ingestion_state,
-    COALESCE(ops.state_ingestion_state, 'unknown') AS state_ingestion_state,
-	COALESCE(ops.pending_command_count, 0)::int AS pending_command_count,
-	COALESCE(ops.failed_command_count, 0)::int AS failed_command_count,
-	COALESCE(ops.expired_command_count, 0)::int AS expired_command_count,
-	ops.downstream_api_reachable,
-	ops.downstream_api_reported_at,
-	ops.last_status_at
-FROM clusters c
-LEFT JOIN LATERAL (
-    SELECT ac.agent_id, ac.agent_version, ac.status, ac.last_ping
-    FROM agent_connections ac WHERE ac.cluster_id = c.id
-    ORDER BY ac.connected_at DESC LIMIT 1
-) latest ON true
-LEFT JOIN agent_operational_statuses ops ON ops.cluster_id = c.id
-WHERE c.decommissioned_at IS NULL
-  AND ($1::text IS NULL OR c.environment = $1)
-  AND ($2::text IS NULL OR c.region = $2)
-  AND ($3::text IS NULL OR COALESCE(latest.status, 'never') = $3)
-ORDER BY c.display_name, c.id
-LIMIT $5 OFFSET $4
-`
-
-type CharlieAgentFleetListParams struct {
-	Environment     pgtype.Text `json:"environment"`
-	Region          pgtype.Text `json:"region"`
-	ConnectionState pgtype.Text `json:"connection_state"`
-	PageOffset      int32       `json:"page_offset"`
-	PageLimit       int32       `json:"page_limit"`
-}
-
-type CharlieAgentFleetListRow struct {
-	ClusterID                  uuid.UUID          `json:"cluster_id"`
-	ClusterName                string             `json:"cluster_name"`
-	DisplayName                string             `json:"display_name"`
-	Environment                string             `json:"environment"`
-	Region                     string             `json:"region"`
-	Labels                     json.RawMessage    `json:"labels"`
-	ClusterAgentVersion        string             `json:"cluster_agent_version"`
-	AgentID                    string             `json:"agent_id"`
-	InstalledAgentVersion      string             `json:"installed_agent_version"`
-	ConnectionState            string             `json:"connection_state"`
-	LastHeartbeat              pgtype.Timestamptz `json:"last_heartbeat"`
-	LastSuccessfulConnectionAt pgtype.Timestamptz `json:"last_successful_connection_at"`
-	AuthenticationState        string             `json:"authentication_state"`
-	RegistrationState          string             `json:"registration_state"`
-	CredentialState            string             `json:"credential_state"`
-	CredentialExpiresAt        pgtype.Timestamptz `json:"credential_expires_at"`
-	ProtocolVersion            string             `json:"protocol_version"`
-	ProtocolCompatible         pgtype.Bool        `json:"protocol_compatible"`
-	DesiredAgentVersion        string             `json:"desired_agent_version"`
-	UpgradeState               string             `json:"upgrade_state"`
-	OwningServerReplica        string             `json:"owning_server_replica"`
-	AuditIngestionState        string             `json:"audit_ingestion_state"`
-	MetricsIngestionState      string             `json:"metrics_ingestion_state"`
-	StateIngestionState        string             `json:"state_ingestion_state"`
-	PendingCommandCount        int32              `json:"pending_command_count"`
-	FailedCommandCount         int32              `json:"failed_command_count"`
-	ExpiredCommandCount        int32              `json:"expired_command_count"`
-	DownstreamApiReachable     pgtype.Bool        `json:"downstream_api_reachable"`
-	DownstreamApiReportedAt    pgtype.Timestamptz `json:"downstream_api_reported_at"`
-	LastStatusAt               pgtype.Timestamptz `json:"last_status_at"`
-}
-
-func (q *Queries) CharlieAgentFleetList(ctx context.Context, arg CharlieAgentFleetListParams) ([]CharlieAgentFleetListRow, error) {
-	rows, err := q.db.Query(ctx, charlieAgentFleetList,
-		arg.Environment,
-		arg.Region,
-		arg.ConnectionState,
-		arg.PageOffset,
-		arg.PageLimit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CharlieAgentFleetListRow{}
-	for rows.Next() {
-		var i CharlieAgentFleetListRow
-		if err := rows.Scan(
-			&i.ClusterID,
-			&i.ClusterName,
-			&i.DisplayName,
-			&i.Environment,
-			&i.Region,
-			&i.Labels,
-			&i.ClusterAgentVersion,
-			&i.AgentID,
-			&i.InstalledAgentVersion,
-			&i.ConnectionState,
-			&i.LastHeartbeat,
-			&i.LastSuccessfulConnectionAt,
-			&i.AuthenticationState,
-			&i.RegistrationState,
-			&i.CredentialState,
-			&i.CredentialExpiresAt,
-			&i.ProtocolVersion,
-			&i.ProtocolCompatible,
-			&i.DesiredAgentVersion,
-			&i.UpgradeState,
-			&i.OwningServerReplica,
-			&i.AuditIngestionState,
-			&i.MetricsIngestionState,
-			&i.StateIngestionState,
-			&i.PendingCommandCount,
-			&i.FailedCommandCount,
-			&i.ExpiredCommandCount,
-			&i.DownstreamApiReachable,
-			&i.DownstreamApiReportedAt,
-			&i.LastStatusAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const charlieAgentFleetSummary = `-- name: CharlieAgentFleetSummary :one
-WITH latest AS (
-    SELECT DISTINCT ON (cluster_id) cluster_id, status, last_ping, connected_at, disconnected_at
-    FROM agent_connections
-    ORDER BY cluster_id, connected_at DESC
-)
-SELECT
-    count(*)::bigint AS total_clusters,
-    count(*) FILTER (WHERE latest.status = 'connected')::bigint AS connected_clusters,
-    count(*) FILTER (WHERE latest.status IS NULL OR latest.status <> 'connected')::bigint AS disconnected_clusters,
-    count(*) FILTER (WHERE COALESCE(latest.last_ping, latest.connected_at, c.last_heartbeat, c.created_at) < now() - make_interval(secs => $1::int))::bigint AS stale_heartbeats,
-    count(*) FILTER (WHERE ops.authentication_state IN ('failed', 'expired', 'revoked') OR ops.registration_state IN ('failed', 'rejected'))::bigint AS authentication_or_registration_failures,
-    count(*) FILTER (WHERE ops.audit_ingestion_state IN ('degraded', 'failed') OR ops.metrics_ingestion_state IN ('degraded', 'failed') OR ops.state_ingestion_state IN ('degraded', 'failed'))::bigint AS ingestion_degraded,
-    count(*) FILTER (WHERE ops.downstream_api_reachable = false)::bigint AS reported_api_unreachable
-FROM clusters c
-LEFT JOIN latest ON latest.cluster_id = c.id
-LEFT JOIN agent_operational_statuses ops ON ops.cluster_id = c.id
-WHERE c.decommissioned_at IS NULL
-`
-
-type CharlieAgentFleetSummaryRow struct {
-	TotalClusters                        int64 `json:"total_clusters"`
-	ConnectedClusters                    int64 `json:"connected_clusters"`
-	DisconnectedClusters                 int64 `json:"disconnected_clusters"`
-	StaleHeartbeats                      int64 `json:"stale_heartbeats"`
-	AuthenticationOrRegistrationFailures int64 `json:"authentication_or_registration_failures"`
-	IngestionDegraded                    int64 `json:"ingestion_degraded"`
-	ReportedApiUnreachable               int64 `json:"reported_api_unreachable"`
-}
-
-func (q *Queries) CharlieAgentFleetSummary(ctx context.Context, staleSeconds int32) (CharlieAgentFleetSummaryRow, error) {
-	row := q.db.QueryRow(ctx, charlieAgentFleetSummary, staleSeconds)
-	var i CharlieAgentFleetSummaryRow
-	err := row.Scan(
-		&i.TotalClusters,
-		&i.ConnectedClusters,
-		&i.DisconnectedClusters,
-		&i.StaleHeartbeats,
-		&i.AuthenticationOrRegistrationFailures,
-		&i.IngestionDegraded,
-		&i.ReportedApiUnreachable,
-	)
-	return i, err
-}
-
 const charlieAgentReconnectStats = `-- name: CharlieAgentReconnectStats :one
 SELECT
     count(*) FILTER (WHERE event_type = 'connected')::bigint AS reconnect_count,
@@ -849,6 +564,291 @@ func (q *Queries) CharlieAlertDeliveryAllowed(ctx context.Context, id uuid.UUID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const charlieClusterAgentGet = `-- name: CharlieClusterAgentGet :one
+SELECT
+    c.id AS cluster_id, c.name AS cluster_name, c.display_name, c.environment,
+    c.region, c.labels, c.agent_version AS cluster_agent_version,
+    COALESCE(latest.agent_id, ops.agent_id, '') AS agent_id,
+    COALESCE(latest.agent_version, ops.installed_agent_version, c.agent_version, '') AS installed_agent_version,
+    COALESCE(latest.status, 'never') AS connection_state,
+    COALESCE(latest.last_ping, c.last_heartbeat) AS last_heartbeat,
+    ops.cluster_id, ops.agent_id, ops.installed_agent_version, ops.desired_agent_version, ops.protocol_version, ops.protocol_compatible, ops.authentication_state, ops.registration_state, ops.credential_state, ops.credential_expires_at, ops.upgrade_state, ops.audit_ingestion_state, ops.metrics_ingestion_state, ops.state_ingestion_state, ops.pending_command_count, ops.failed_command_count, ops.expired_command_count, ops.downstream_api_reachable, ops.downstream_api_reported_at, ops.owning_server_replica, ops.last_successful_connection_at, ops.last_status_at, ops.created_at, ops.updated_at
+FROM clusters c
+LEFT JOIN LATERAL (
+    SELECT ac.agent_id, ac.agent_version, ac.status, ac.last_ping
+    FROM agent_connections ac WHERE ac.cluster_id = c.id
+    ORDER BY ac.connected_at DESC LIMIT 1
+) latest ON true
+LEFT JOIN agent_operational_statuses ops ON ops.cluster_id = c.id
+WHERE c.id = $1 AND c.decommissioned_at IS NULL
+`
+
+type CharlieClusterAgentGetRow struct {
+	ClusterID                  uuid.UUID          `json:"cluster_id"`
+	ClusterName                string             `json:"cluster_name"`
+	DisplayName                string             `json:"display_name"`
+	Environment                string             `json:"environment"`
+	Region                     string             `json:"region"`
+	Labels                     json.RawMessage    `json:"labels"`
+	ClusterAgentVersion        string             `json:"cluster_agent_version"`
+	AgentID                    string             `json:"agent_id"`
+	InstalledAgentVersion      string             `json:"installed_agent_version"`
+	ConnectionState            string             `json:"connection_state"`
+	LastHeartbeat              pgtype.Timestamptz `json:"last_heartbeat"`
+	ClusterID_2                pgtype.UUID        `json:"cluster_id_2"`
+	AgentID_2                  pgtype.Text        `json:"agent_id_2"`
+	InstalledAgentVersion_2    pgtype.Text        `json:"installed_agent_version_2"`
+	DesiredAgentVersion        pgtype.Text        `json:"desired_agent_version"`
+	ProtocolVersion            pgtype.Text        `json:"protocol_version"`
+	ProtocolCompatible         pgtype.Bool        `json:"protocol_compatible"`
+	AuthenticationState        pgtype.Text        `json:"authentication_state"`
+	RegistrationState          pgtype.Text        `json:"registration_state"`
+	CredentialState            pgtype.Text        `json:"credential_state"`
+	CredentialExpiresAt        pgtype.Timestamptz `json:"credential_expires_at"`
+	UpgradeState               pgtype.Text        `json:"upgrade_state"`
+	AuditIngestionState        pgtype.Text        `json:"audit_ingestion_state"`
+	MetricsIngestionState      pgtype.Text        `json:"metrics_ingestion_state"`
+	StateIngestionState        pgtype.Text        `json:"state_ingestion_state"`
+	PendingCommandCount        pgtype.Int4        `json:"pending_command_count"`
+	FailedCommandCount         pgtype.Int4        `json:"failed_command_count"`
+	ExpiredCommandCount        pgtype.Int4        `json:"expired_command_count"`
+	DownstreamApiReachable     pgtype.Bool        `json:"downstream_api_reachable"`
+	DownstreamApiReportedAt    pgtype.Timestamptz `json:"downstream_api_reported_at"`
+	OwningServerReplica        pgtype.Text        `json:"owning_server_replica"`
+	LastSuccessfulConnectionAt pgtype.Timestamptz `json:"last_successful_connection_at"`
+	LastStatusAt               pgtype.Timestamptz `json:"last_status_at"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CharlieClusterAgentGet(ctx context.Context, clusterID uuid.UUID) (CharlieClusterAgentGetRow, error) {
+	row := q.db.QueryRow(ctx, charlieClusterAgentGet, clusterID)
+	var i CharlieClusterAgentGetRow
+	err := row.Scan(
+		&i.ClusterID,
+		&i.ClusterName,
+		&i.DisplayName,
+		&i.Environment,
+		&i.Region,
+		&i.Labels,
+		&i.ClusterAgentVersion,
+		&i.AgentID,
+		&i.InstalledAgentVersion,
+		&i.ConnectionState,
+		&i.LastHeartbeat,
+		&i.ClusterID_2,
+		&i.AgentID_2,
+		&i.InstalledAgentVersion_2,
+		&i.DesiredAgentVersion,
+		&i.ProtocolVersion,
+		&i.ProtocolCompatible,
+		&i.AuthenticationState,
+		&i.RegistrationState,
+		&i.CredentialState,
+		&i.CredentialExpiresAt,
+		&i.UpgradeState,
+		&i.AuditIngestionState,
+		&i.MetricsIngestionState,
+		&i.StateIngestionState,
+		&i.PendingCommandCount,
+		&i.FailedCommandCount,
+		&i.ExpiredCommandCount,
+		&i.DownstreamApiReachable,
+		&i.DownstreamApiReportedAt,
+		&i.OwningServerReplica,
+		&i.LastSuccessfulConnectionAt,
+		&i.LastStatusAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const charlieClusterAgentList = `-- name: CharlieClusterAgentList :many
+SELECT
+    c.id AS cluster_id, c.name AS cluster_name, c.display_name, c.environment,
+    c.region, c.labels, c.agent_version AS cluster_agent_version,
+    COALESCE(latest.agent_id, ops.agent_id, '') AS agent_id,
+    COALESCE(latest.agent_version, ops.installed_agent_version, c.agent_version, '') AS installed_agent_version,
+    COALESCE(latest.status, 'never') AS connection_state,
+    COALESCE(latest.last_ping, c.last_heartbeat) AS last_heartbeat,
+    ops.last_successful_connection_at,
+    COALESCE(ops.authentication_state, 'unknown') AS authentication_state,
+    COALESCE(ops.registration_state, 'unknown') AS registration_state,
+	COALESCE(ops.credential_state, 'unknown') AS credential_state,
+	ops.credential_expires_at,
+    COALESCE(ops.protocol_version, '') AS protocol_version,
+    ops.protocol_compatible,
+	COALESCE(ops.desired_agent_version, '') AS desired_agent_version,
+	COALESCE(ops.upgrade_state, 'unknown') AS upgrade_state,
+    COALESCE(ops.owning_server_replica, '') AS owning_server_replica,
+    COALESCE(ops.audit_ingestion_state, 'unknown') AS audit_ingestion_state,
+    COALESCE(ops.metrics_ingestion_state, 'unknown') AS metrics_ingestion_state,
+    COALESCE(ops.state_ingestion_state, 'unknown') AS state_ingestion_state,
+	COALESCE(ops.pending_command_count, 0)::int AS pending_command_count,
+	COALESCE(ops.failed_command_count, 0)::int AS failed_command_count,
+	COALESCE(ops.expired_command_count, 0)::int AS expired_command_count,
+	ops.downstream_api_reachable,
+	ops.downstream_api_reported_at,
+	ops.last_status_at
+FROM clusters c
+LEFT JOIN LATERAL (
+    SELECT ac.agent_id, ac.agent_version, ac.status, ac.last_ping
+    FROM agent_connections ac WHERE ac.cluster_id = c.id
+    ORDER BY ac.connected_at DESC LIMIT 1
+) latest ON true
+LEFT JOIN agent_operational_statuses ops ON ops.cluster_id = c.id
+WHERE c.decommissioned_at IS NULL
+  AND ($1::text IS NULL OR c.environment = $1)
+  AND ($2::text IS NULL OR c.region = $2)
+  AND ($3::text IS NULL OR COALESCE(latest.status, 'never') = $3)
+ORDER BY c.display_name, c.id
+LIMIT $5 OFFSET $4
+`
+
+type CharlieClusterAgentListParams struct {
+	Environment     pgtype.Text `json:"environment"`
+	Region          pgtype.Text `json:"region"`
+	ConnectionState pgtype.Text `json:"connection_state"`
+	PageOffset      int32       `json:"page_offset"`
+	PageLimit       int32       `json:"page_limit"`
+}
+
+type CharlieClusterAgentListRow struct {
+	ClusterID                  uuid.UUID          `json:"cluster_id"`
+	ClusterName                string             `json:"cluster_name"`
+	DisplayName                string             `json:"display_name"`
+	Environment                string             `json:"environment"`
+	Region                     string             `json:"region"`
+	Labels                     json.RawMessage    `json:"labels"`
+	ClusterAgentVersion        string             `json:"cluster_agent_version"`
+	AgentID                    string             `json:"agent_id"`
+	InstalledAgentVersion      string             `json:"installed_agent_version"`
+	ConnectionState            string             `json:"connection_state"`
+	LastHeartbeat              pgtype.Timestamptz `json:"last_heartbeat"`
+	LastSuccessfulConnectionAt pgtype.Timestamptz `json:"last_successful_connection_at"`
+	AuthenticationState        string             `json:"authentication_state"`
+	RegistrationState          string             `json:"registration_state"`
+	CredentialState            string             `json:"credential_state"`
+	CredentialExpiresAt        pgtype.Timestamptz `json:"credential_expires_at"`
+	ProtocolVersion            string             `json:"protocol_version"`
+	ProtocolCompatible         pgtype.Bool        `json:"protocol_compatible"`
+	DesiredAgentVersion        string             `json:"desired_agent_version"`
+	UpgradeState               string             `json:"upgrade_state"`
+	OwningServerReplica        string             `json:"owning_server_replica"`
+	AuditIngestionState        string             `json:"audit_ingestion_state"`
+	MetricsIngestionState      string             `json:"metrics_ingestion_state"`
+	StateIngestionState        string             `json:"state_ingestion_state"`
+	PendingCommandCount        int32              `json:"pending_command_count"`
+	FailedCommandCount         int32              `json:"failed_command_count"`
+	ExpiredCommandCount        int32              `json:"expired_command_count"`
+	DownstreamApiReachable     pgtype.Bool        `json:"downstream_api_reachable"`
+	DownstreamApiReportedAt    pgtype.Timestamptz `json:"downstream_api_reported_at"`
+	LastStatusAt               pgtype.Timestamptz `json:"last_status_at"`
+}
+
+func (q *Queries) CharlieClusterAgentList(ctx context.Context, arg CharlieClusterAgentListParams) ([]CharlieClusterAgentListRow, error) {
+	rows, err := q.db.Query(ctx, charlieClusterAgentList,
+		arg.Environment,
+		arg.Region,
+		arg.ConnectionState,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharlieClusterAgentListRow{}
+	for rows.Next() {
+		var i CharlieClusterAgentListRow
+		if err := rows.Scan(
+			&i.ClusterID,
+			&i.ClusterName,
+			&i.DisplayName,
+			&i.Environment,
+			&i.Region,
+			&i.Labels,
+			&i.ClusterAgentVersion,
+			&i.AgentID,
+			&i.InstalledAgentVersion,
+			&i.ConnectionState,
+			&i.LastHeartbeat,
+			&i.LastSuccessfulConnectionAt,
+			&i.AuthenticationState,
+			&i.RegistrationState,
+			&i.CredentialState,
+			&i.CredentialExpiresAt,
+			&i.ProtocolVersion,
+			&i.ProtocolCompatible,
+			&i.DesiredAgentVersion,
+			&i.UpgradeState,
+			&i.OwningServerReplica,
+			&i.AuditIngestionState,
+			&i.MetricsIngestionState,
+			&i.StateIngestionState,
+			&i.PendingCommandCount,
+			&i.FailedCommandCount,
+			&i.ExpiredCommandCount,
+			&i.DownstreamApiReachable,
+			&i.DownstreamApiReportedAt,
+			&i.LastStatusAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const charlieClusterAgentSummary = `-- name: CharlieClusterAgentSummary :one
+WITH latest AS (
+    SELECT DISTINCT ON (cluster_id) cluster_id, status, last_ping, connected_at, disconnected_at
+    FROM agent_connections
+    ORDER BY cluster_id, connected_at DESC
+)
+SELECT
+    count(*)::bigint AS total_clusters,
+    count(*) FILTER (WHERE latest.status = 'connected')::bigint AS connected_clusters,
+    count(*) FILTER (WHERE latest.status IS NULL OR latest.status <> 'connected')::bigint AS disconnected_clusters,
+    count(*) FILTER (WHERE COALESCE(latest.last_ping, latest.connected_at, c.last_heartbeat, c.created_at) < now() - make_interval(secs => $1::int))::bigint AS stale_heartbeats,
+    count(*) FILTER (WHERE ops.authentication_state IN ('failed', 'expired', 'revoked') OR ops.registration_state IN ('failed', 'rejected'))::bigint AS authentication_or_registration_failures,
+    count(*) FILTER (WHERE ops.audit_ingestion_state IN ('degraded', 'failed') OR ops.metrics_ingestion_state IN ('degraded', 'failed') OR ops.state_ingestion_state IN ('degraded', 'failed'))::bigint AS ingestion_degraded,
+    count(*) FILTER (WHERE ops.downstream_api_reachable = false)::bigint AS reported_api_unreachable
+FROM clusters c
+LEFT JOIN latest ON latest.cluster_id = c.id
+LEFT JOIN agent_operational_statuses ops ON ops.cluster_id = c.id
+WHERE c.decommissioned_at IS NULL
+`
+
+type CharlieClusterAgentSummaryRow struct {
+	TotalClusters                        int64 `json:"total_clusters"`
+	ConnectedClusters                    int64 `json:"connected_clusters"`
+	DisconnectedClusters                 int64 `json:"disconnected_clusters"`
+	StaleHeartbeats                      int64 `json:"stale_heartbeats"`
+	AuthenticationOrRegistrationFailures int64 `json:"authentication_or_registration_failures"`
+	IngestionDegraded                    int64 `json:"ingestion_degraded"`
+	ReportedApiUnreachable               int64 `json:"reported_api_unreachable"`
+}
+
+func (q *Queries) CharlieClusterAgentSummary(ctx context.Context, staleSeconds int32) (CharlieClusterAgentSummaryRow, error) {
+	row := q.db.QueryRow(ctx, charlieClusterAgentSummary, staleSeconds)
+	var i CharlieClusterAgentSummaryRow
+	err := row.Scan(
+		&i.TotalClusters,
+		&i.ConnectedClusters,
+		&i.DisconnectedClusters,
+		&i.StaleHeartbeats,
+		&i.AuthenticationOrRegistrationFailures,
+		&i.IngestionDegraded,
+		&i.ReportedApiUnreachable,
+	)
+	return i, err
 }
 
 const charlieFindingMatchesConnectionIdentity = `-- name: CharlieFindingMatchesConnectionIdentity :one

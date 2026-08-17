@@ -24,11 +24,10 @@ const frontendRoot = path.resolve(scriptDir, '..');
 const routesDir = path.join(frontendRoot, 'src/routes');
 const outputPath = path.join(frontendRoot, 'tests/e2e-smoke/route-manifest.generated.json');
 
-// The current route inventory counts 111 pages with the `[[...slug]]` optional catch-all
-// (custom-resources) as ONE page; its TanStack port is an `index.tsx` +
-// `$.tsx` PAIR, and the manifest crawls both the empty and the populated
-// splat variant — hence 112 URLs for 111 inventory pages.
-const EXPECTED_ROUTE_COUNT = 112;
+// The current route inventory has one `[[...slug]]` optional catch-all
+// (custom-resources). Its TanStack port is an `index.tsx` + `$.tsx` pair, so
+// the manifest deliberately crawls both the empty and populated variants.
+const EXPECTED_ROUTE_COUNT = 117;
 
 // One fixture per `$param` name, shared across every route that uses it.
 // The route-smoke stubs answer any /api/v1 GET, so the values only need to
@@ -38,8 +37,10 @@ const PARAM_FIXTURES = {
   id: 'c-smoke-1',
   nodeName: 'node-smoke-1',
   resource: 'deployments',
-  instanceId: 'argo-smoke-1',
-  appId: 'app-smoke-1',
+  bundleId: 'bundle-smoke-1',
+  targetId: 'target-smoke-1',
+  rolloutId: 'rollout-smoke-1',
+  deploymentId: 'deployment-smoke-1',
   restoreId: 'restore-smoke-1',
   runId: 'run-smoke-1',
   credId: 'cred-smoke-1',

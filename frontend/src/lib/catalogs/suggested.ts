@@ -67,13 +67,6 @@ export const SUGGESTED_CATALOGS: SuggestedCatalog[] = [
     seeded: true,
   },
   {
-    name: 'argo',
-    displayName: 'Argo',
-    url: 'https://argoproj.github.io/argo-helm',
-    repoType: 'helm',
-    description: 'argo-cd, argo-workflows, argo-rollouts',
-  },
-  {
     name: 'longhorn',
     displayName: 'Longhorn',
     url: 'https://charts.longhorn.io',

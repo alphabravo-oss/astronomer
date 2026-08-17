@@ -16,6 +16,8 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
+const installationOwnerLabel = "astronomer.io/charlie-installation"
+
 type AgentSecretBundle struct {
 	Name                    string
 	InstallationID          string

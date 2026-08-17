@@ -56,14 +56,11 @@ func TestRBACRulesYAMLProfiles(t *testing.T) {
 				`resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]`,
 				// Workload mutation verbs remain for day-2 ops.
 				`verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]`,
-				// Cluster-wide READ is deliberate and required: ArgoCD adopts this
-				// profile, and its cluster cache lists every resource type registered
-				// in the cluster — including CRDs installed after adoption. An
-				// enumerated allowlist can never be complete, and every miss pins
-				// EVERY Application on the cluster at sync=Unknown while still
-				// reporting health=Healthy. This wildcard is read-only; wildcard
+				// Cluster-wide READ is deliberate and required for complete inventory,
+				// including CRDs installed after adoption. An enumerated allowlist can
+				// never remain complete. This wildcard is read-only; wildcard
 				// verbs stay forbidden below, so operator is still not cluster-admin.
-				// See TestArgoManagedProfilesGrantClusterWideRead.
+				// See TestInventoryProfilesGrantClusterWideRead.
 				`resources: ["*"]`,
 			},
 			notWant: []string{
@@ -333,7 +330,7 @@ func TestNormalizePrivilegeProfileExplicitProfilesStillResolve(t *testing.T) {
 // viewer. Broadening to admin is an explicit opt-in, so a no-annotation
 // adoption is safe by default and must NOT carry full-access RBAC.
 // TestRenderInstallYAMLEscapesScalars (L7) proves a malicious operator-controlled
-// scalar (e.g. the management.astronomer.io/agent-image annotation) cannot break
+// scalar (for example the configured release image) cannot break
 // out of its double-quoted YAML scalar and inject arbitrary manifest content:
 // the rendered manifest still parses as valid multi-doc YAML and the injection
 // payload does not appear as a structural element.
@@ -912,12 +909,9 @@ func TestViewerSelfManagementDoesNotWidenUserProfile(t *testing.T) {
 	}
 }
 
-// TestBootstrapRendersKubeStateMetricsReadOnlyClusterRole is the Phase 3 guard:
-// the bootstrap install manifest carries the cluster-scoped READ-ONLY ClusterRole
-// for kube-state-metrics (the one legitimate cluster-scoped component grant the
-// pull applier cannot deliver itself) and binds it to the kube-state-metrics
-// ServiceAccount in astronomer-monitoring (the SA the pull applier creates
-// namespaced). It must be strictly read-only: get/list/watch ONLY, zero write.
+// TestBootstrapRendersKubeStateMetricsReadOnlyClusterRole verifies that the
+// bootstrap manifest's cluster-wide kube-state-metrics grant remains strictly
+// read-only and binds only its astronomer-monitoring ServiceAccount.
 func TestBootstrapRendersKubeStateMetricsReadOnlyClusterRole(t *testing.T) {
 	manifest := RenderInstallYAML(InstallTemplateData{
 		ServerURL:         "https://astro.example.com",
@@ -1036,5 +1030,35 @@ func TestRenderInstallYAMLIsValidYAMLForEveryProfile(t *testing.T) {
 		if docs < 5 {
 			t.Fatalf("profile %q rendered only %d YAML docs, expected the full agent manifest", p, docs)
 		}
+	}
+}
+
+func TestRenderInstallYAMLBootstrapsSuspendedSignedSystemAfterAgent(t *testing.T) {
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL: "https://astro.example.test", ClusterID: "c1", RegistrationToken: "tok",
+		AgentImage: "registry.example.test/agent@sha256:" + strings.Repeat("a", 64), PrivilegeProfile: PrivilegeProfileAdmin,
+		SystemArtifactURL:    "registry.example.test/astronomer/system",
+		SystemArtifactDigest: "sha256:" + strings.Repeat("b", 64),
+		SystemOIDCIssuer:     "https://token.actions.githubusercontent.com",
+		SystemOIDCIdentity:   "https://github.com/example/release/.github/workflows/release.yaml@refs/tags/v1.0.0",
+	})
+	for _, required := range []string{
+		"kind: OCIRepository", "kind: Kustomization", "url: \"oci://registry.example.test/astronomer/system\"",
+		"digest: \"sha256:" + strings.Repeat("b", 64) + "\"", "provider: cosign", "suspend: true",
+		"serviceAccountName: astronomer-delivery-system-applier", "delivery.astronomer.io/system: \"true\"",
+	} {
+		if !strings.Contains(manifest, required) {
+			t.Fatalf("registration manifest missing %q", required)
+		}
+	}
+	agent := strings.Index(manifest, "kind: Deployment\nmetadata:\n  name: astronomer-agent")
+	system := strings.LastIndex(manifest, "kind: OCIRepository")
+	if agent < 0 || system < agent {
+		t.Fatalf("system bootstrap must follow the agent Deployment: agent=%d system=%d", agent, system)
+	}
+
+	invalid := RenderInstallYAML(InstallTemplateData{ServerURL: "https://astro.example.test", ClusterID: "c1", RegistrationToken: "tok", AgentImage: "agent:v1", SystemArtifactURL: "oci://user:secret@example.test/system"})
+	if strings.Contains(invalid, "name: astronomer-system-release") {
+		t.Fatal("invalid or credential-bearing system source was rendered")
 	}
 }

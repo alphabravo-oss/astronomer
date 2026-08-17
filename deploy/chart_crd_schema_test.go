@@ -22,77 +22,28 @@ func readChartTemplate(t *testing.T, name string) string {
 	return string(b)
 }
 
-func TestManagementCRDTemplatesDefinePlannedKinds(t *testing.T) {
+func TestManagementCRDTemplatesDefineRetainedGenericKinds(t *testing.T) {
 	tests := []struct {
 		file      string
 		name      string
 		kind      string
 		shortName string
-		finalizer string
 		specBits  []string
 	}{
 		{
-			file:      "crd-clusterbaseline.yaml",
-			name:      "clusterbaselines.management.astronomer.io",
-			kind:      "ClusterBaseline",
-			shortName: "astrobaseline",
-			finalizer: "management.astronomer.io/clusterbaseline-cleanup",
-			specBits: []string{
-				"clusterSelector:",
-				"profileName:",
-				"bundles:",
-				"syncPolicy:",
-				"applicationCount:",
-			},
+			file: "crd-cluster.yaml", name: "clusters.management.astronomer.io",
+			kind: "Cluster", shortName: "astrocluster",
+			specBits: []string{"profileRef:", "privilegeProfile:", "adoptionPolicy:"},
 		},
 		{
-			file:      "crd-componentbundle.yaml",
-			name:      "componentbundles.management.astronomer.io",
-			kind:      "ComponentBundle",
-			shortName: "astrobundle",
-			finalizer: "management.astronomer.io/componentbundle-cleanup",
-			specBits: []string{
-				"defaultNamespace:",
-				"source:",
-				"secretRefs:",
-				"healthChecks:",
-				"capabilityRequirements:",
-				"upgradePolicy:",
-				"versions:",
-				"availableVersions:",
-			},
+			file: "crd-project.yaml", name: "projects.management.astronomer.io",
+			kind: "Project", shortName: "astroproject",
+			specBits: []string{"clusters:", "podSecurityProfile:", "resourceQuota:"},
 		},
 		{
-			file:      "crd-agentprofile.yaml",
-			name:      "agentprofiles.management.astronomer.io",
-			kind:      "AgentProfile",
-			shortName: "astroagentprofile",
-			finalizer: "management.astronomer.io/agentprofile-cleanup",
-			specBits: []string{
-				"privilegeProfile:",
-				"namespace-viewer",
-				"namespace-operator",
-				"custom",
-				"allowedRules:",
-				"hostAccess:",
-				"networkEgress:",
-			},
-		},
-		{
-			file:      "crd-gitopstarget.yaml",
-			name:      "gitopstargets.management.astronomer.io",
-			kind:      "GitOpsTarget",
-			shortName: "astrogitopstarget",
-			finalizer: "management.astronomer.io/gitopstarget-cleanup",
-			specBits: []string{
-				"selector:",
-				"projectSelector:",
-				"bundleRef:",
-				"applicationSet:",
-				"syncPolicy:",
-				"syncWindows:",
-				"applicationCount:",
-			},
+			file: "crd-agentprofile.yaml", name: "agentprofiles.management.astronomer.io",
+			kind: "AgentProfile", shortName: "astroagentprofile",
+			specBits: []string{"privilegeProfile:", "allowedRules:", "hostAccess:", "networkEgress:"},
 		},
 	}
 
@@ -100,18 +51,10 @@ func TestManagementCRDTemplatesDefinePlannedKinds(t *testing.T) {
 		t.Run(tt.kind, func(t *testing.T) {
 			body := readChartTemplate(t, tt.file)
 			for _, want := range []string{
-				"{{- if .Values.crds.enabled }}",
-				"kind: CustomResourceDefinition",
-				"name: " + tt.name,
-				"kind: " + tt.kind,
-				"- " + tt.shortName,
-				`"helm.sh/resource-policy": keep`,
-				"management.astronomer.io/finalizer: " + tt.finalizer,
-				"subresources:",
-				"status: {}",
-				"observedGeneration:",
-				"conditions:",
-				"lastTransitionTime:",
+				"{{- if .Values.crds.enabled }}", "kind: CustomResourceDefinition",
+				"name: " + tt.name, "kind: " + tt.kind, "- " + tt.shortName,
+				`"helm.sh/resource-policy": keep`, "subresources:", "status: {}",
+				"observedGeneration:", "conditions:", "lastTransitionTime:",
 			} {
 				if !strings.Contains(body, want) {
 					t.Fatalf("%s missing %q", tt.file, want)
@@ -126,57 +69,46 @@ func TestManagementCRDTemplatesDefinePlannedKinds(t *testing.T) {
 	}
 }
 
-func TestManagementCRDRBACIncludesAllManagementKinds(t *testing.T) {
+func TestManagementCRDRBACIncludesOnlyRetainedGenericKinds(t *testing.T) {
 	body := readChartTemplate(t, "crd-rbac.yaml")
 	for _, resource := range []string{
-		"clusters",
-		"projects",
-		"clusterbaselines",
-		"componentbundles",
-		"agentprofiles",
-		"gitopstargets",
-		"clusterbaselines/status",
-		"componentbundles/status",
-		"agentprofiles/status",
-		"gitopstargets/status",
-		"clusterbaselines/finalizers",
-		"componentbundles/finalizers",
-		"agentprofiles/finalizers",
-		"gitopstargets/finalizers",
-		"applicationsets",
-		"applications",
-		"configmaps",
+		"clusters", "projects", "agentprofiles",
+		"clusters/status", "projects/status", "agentprofiles/status",
+		"clusters/finalizers", "projects/finalizers", "agentprofiles/finalizers",
 	} {
 		if !strings.Contains(body, "- "+resource) {
 			t.Fatalf("crd-rbac.yaml missing resource %q", resource)
+		}
+	}
+	for _, removed := range []string{
+		"clusterbaselines", "componentbundles", "gitopstargets",
+		"application" + "sets", "application" + "s",
+	} {
+		if strings.Contains(strings.ToLower(body), removed) {
+			t.Fatalf("crd-rbac.yaml retains removed resource %q", removed)
 		}
 	}
 }
 
 func TestClusterCRDTemplateIncludesAgentProfileRef(t *testing.T) {
 	body := readChartTemplate(t, "crd-cluster.yaml")
-	for _, want := range []string{
-		"profileRef:",
-		"namespace-viewer",
-		"namespace-operator",
-		"custom",
-	} {
+	for _, want := range []string{"profileRef:", "namespace-viewer", "namespace-operator", "custom"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("crd-cluster.yaml missing %q", want)
 		}
 	}
 }
 
-func TestCRDControllerServerEnvIncludesArgoNamespace(t *testing.T) {
+func TestCRDControllerServerEnvHasOnlyGenericSettings(t *testing.T) {
 	body := readChartTemplate(t, "server-deployment.yaml")
-	for _, want := range []string{
-		"CRD_ENABLED",
-		"CRD_WATCH_NAMESPACE",
-		"CRD_ARGO_NAMESPACE",
-		".Values.crds.argoNamespace",
-	} {
+	for _, want := range []string{"CRD_ENABLED", "CRD_WATCH_NAMESPACE"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("server-deployment.yaml missing %q", want)
+		}
+	}
+	for _, removed := range []string{"CRD_" + "ARGO_NAMESPACE", ".Values.crds." + "argoNamespace"} {
+		if strings.Contains(body, removed) {
+			t.Fatalf("server-deployment.yaml retains removed setting %q", removed)
 		}
 	}
 }

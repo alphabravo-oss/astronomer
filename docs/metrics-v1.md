@@ -73,11 +73,21 @@ metrics when available:
 - `astronomer_tunnel_state_updates_handled_total{astronomer_instance_id,outcome,kind}`
 - `astronomer_k8s_proxy_errors_total{astronomer_instance_id,mode,reason}`
 
-## Argo CD Metrics
+## Delivery metrics
 
-- `astronomer_argocd_applications{astronomer_instance_id,sync_status,health_status}`
-- `astronomer_argocd_client_requests_total{astronomer_instance_id,method,path_family,status}`
-- `astronomer_argocd_client_request_duration_seconds_bucket{astronomer_instance_id,method,path_family,status}`
+- `astronomer_delivery_source_resolution_duration_seconds{source_type,result,verification}`
+- `astronomer_delivery_source_resolutions_total{source_type,result,verification}`
+- `astronomer_delivery_planner_duration_seconds{result}` and `astronomer_delivery_planner_candidates`
+- `astronomer_delivery_rollout_transitions_total{strategy,state,outcome}` and `astronomer_delivery_rollouts{strategy,state}`
+- `astronomer_delivery_cohort_latency_seconds{stage,outcome}`
+- `astronomer_delivery_deployments{phase,drift}` and `astronomer_delivery_stale_deployments`
+- `astronomer_delivery_assignment_snapshots_total{result}` and the bounded snapshot size/object histograms
+- `astronomer_delivery_flux_readiness{compatibility,ready}`
+- `astronomer_delivery_protocol_events_total{direction,result}`
+- `astronomer_delivery_status_events_total{result}` and `astronomer_delivery_worker_events_total{worker,result}`
+
+All delivery labels are fixed domain enums. Cluster IDs, project IDs, source
+URLs, revisions, error strings, and user input are deliberately excluded.
 
 ## Audit Metrics
 

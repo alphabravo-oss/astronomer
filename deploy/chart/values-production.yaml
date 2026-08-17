@@ -202,7 +202,7 @@ config:
   # via --set config.corsAllowedOrigins=https://astronomer.example.com
   corsAllowedOrigins: ""
   # Operator MUST set: --set config.serverURL=https://astronomer.example.com
-  # Used by the Argo self-management loop to render the right hostname.
+  # Used for absolute links, callback URLs, and management-plane identity.
   serverURL: ""
 
 # ── Secrets ───────────────────────────────────────────────────────────────
@@ -229,7 +229,7 @@ dex:
 
 # F8 (C-04): in production the render FAILS unless bootstrap.password is pinned
 # OR bootstrap.existingSecret is provided. This is deliberate — an empty
-# bootstrap.password re-rolls a random value on every GitOps render (the
+# bootstrap.password re-rolls a random value on every offline render (the
 # `lookup` guard can't read the prior Secret without a live cluster), silently
 # rotating the admin password. Pass a known initial password via
 #   --set bootstrap.password=<initial-admin-password>   (or --set-file, outside git)
@@ -255,6 +255,41 @@ metrics:
     enabled: true
     interval: 30s
     scrapeTimeout: 10s
+
+# ── Flux-native delivery ──────────────────────────────────────────────────
+# Flux controllers are installed only on managed clusters from the signed
+# release distribution; they are not a dependency of this chart. Release
+# packaging normally injects immutable OCI references. Air-gapped operators
+# may provide a verified absolute disconnectedAssetPath for the distribution.
+delivery:
+  enabled: true
+  artifacts:
+    privateRegistry: ""
+    registryRewrites: {}
+    fluxDistribution:
+      ociRepository: ""
+      digest: ""
+      disconnectedAssetPath: ""
+      trustPolicy:
+        requireSignature: true
+    builtInBundles:
+      ociRepository: ""
+      digest: ""
+      trustPolicy:
+        requireSignature: true
+  sourceResolution:
+    # Direct resolver egress is deny-by-default. Add only the CIDRs that host
+    # approved Git/OCI/chart endpoints, or enable the Secret-backed proxy.
+    egressCIDRs: []
+    allowSSH: false
+    proxy:
+      enabled: false
+      urlSecretRef:
+        name: ""
+        key: url
+    ca:
+      existingSecret: ""
+      key: ca.crt
 
 # ── Network policy ────────────────────────────────────────────────────────
 # Production starts from namespace default-deny and intentionally clears the

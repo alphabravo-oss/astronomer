@@ -88,21 +88,17 @@ func TestF8_ExistingSecretSuppressesChartSecretAndRewiresServer(t *testing.T) {
 // In production an empty bootstrap.password (with no existingSecret) re-rolls
 // randAlphaNum on every GitOps render → the chart must refuse.
 func TestF8_ProductionWithoutBootstrapPasswordFails(t *testing.T) {
-	errOut := helmTemplateExpectError(t, []string{drProdValues(t)}, append([]string{},
-		"config.serverURL=https://astronomer.example.com",
-		"gateway.hosts[0]=astronomer.example.com",
-		"tls.source=secret", "tls.secretName=astronomer-tls",
-		"postgres.external.dsnSecretRef.name=astronomer-postgres-dsn",
-		"redis.external.address=redis.astronomer.svc.cluster.local:6379",
-		"secrets.secretKey=prod-jwt-signing-key",
-		"secrets.encryptionKey=prod-fernet-key",
-		"bootstrap.email=admin@example.com",
+	sets := make([]string, 0, len(productionWiringSets)+2)
+	for _, set := range productionWiringSets {
+		if !strings.HasPrefix(set, "bootstrap.password=") {
+			sets = append(sets, set)
+		}
+	}
+	sets = append(sets,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
-		"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
-		"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
-		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
-	)...)
+	)
+	errOut := helmTemplateExpectError(t, []string{drProdValues(t)}, sets...)
 	if !strings.Contains(errOut, "bootstrap.password or bootstrap.existingSecret must be set") {
 		t.Fatalf("production render without a pinned bootstrap password did not fail on F8:\n%s", errOut)
 	}

@@ -27,8 +27,9 @@ type installedCatalogAuditQuerier struct {
 	audits        []sqlc.CreateAuditLogV1Params
 }
 
-func newInstalledCatalogAuditQuerier() (*installedCatalogAuditQuerier, uuid.UUID, uuid.UUID) {
+func newInstalledCatalogAuditQuerier() (*installedCatalogAuditQuerier, uuid.UUID, uuid.UUID, uuid.UUID) {
 	clusterID := uuid.New()
+	projectID := uuid.New()
 	repoID := uuid.New()
 	chartID := uuid.New()
 	versionID := uuid.New()
@@ -42,9 +43,11 @@ func newInstalledCatalogAuditQuerier() (*installedCatalogAuditQuerier, uuid.UUID
 	}
 	q.clusters[clusterID] = sqlc.Cluster{ID: clusterID, Name: "alpha", Labels: json.RawMessage(`{}`)}
 	q.repos[repoID] = sqlc.HelmRepository{ID: repoID, Name: "stable", Url: "https://charts.example.com", Enabled: true}
+	q.projects[projectID] = sqlc.Project{ID: projectID, ClusterID: clusterID, Name: "alpha"}
+	q.catalogs[repoID] = sqlc.HelmRepositoryWithOwner{ID: repoID, Name: "stable", Url: "https://charts.example.com", Enabled: true}
 	q.charts[chartID] = sqlc.HelmChart{ID: chartID, RepositoryID: repoID, Name: "nginx", DisplayName: "NGINX"}
 	q.versions[versionID] = sqlc.HelmChartVersion{ID: versionID, ChartID: chartID, Version: "1.2.3"}
-	return q, clusterID, versionID
+	return q, clusterID, projectID, versionID
 }
 
 func (q *installedCatalogAuditQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
@@ -157,11 +160,12 @@ func (q *installedCatalogAuditQuerier) CreateAuditLogV1(_ context.Context, arg s
 }
 
 func TestCatalogInstalledMutationsAreAudited(t *testing.T) {
-	q, clusterID, versionID := newInstalledCatalogAuditQuerier()
+	q, clusterID, projectID, versionID := newInstalledCatalogAuditQuerier()
 	h := NewCatalogHandler(q)
 
 	createBody, _ := json.Marshal(map[string]any{
 		"cluster_id":       clusterID.String(),
+		"project_id":       projectID.String(),
 		"chart_version_id": versionID.String(),
 		"release_name":     "nginx",
 		"namespace":        "apps",

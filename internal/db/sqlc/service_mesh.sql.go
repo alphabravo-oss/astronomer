@@ -165,7 +165,8 @@ SELECT c.id, c.repository_id, c.name, c.display_name, c.description, c.icon_url,
        c.created_at, c.updated_at
 FROM helm_charts c
 JOIN helm_chart_tags t ON t.chart_id = c.id
-WHERE t.tag = $1
+JOIN helm_repositories r ON r.id = c.repository_id
+WHERE t.tag = $1 AND r.owner_project_id IS NULL
 ORDER BY c.name ASC
 LIMIT $2 OFFSET $3`
 
@@ -216,7 +217,8 @@ func (q *Queries) ListHelmChartsByTag(ctx context.Context, arg ListHelmChartsByT
 const countHelmChartsByTag = `-- name: CountHelmChartsByTag :one
 SELECT COUNT(*) FROM helm_charts c
 JOIN helm_chart_tags t ON t.chart_id = c.id
-WHERE t.tag = $1`
+JOIN helm_repositories r ON r.id = c.repository_id
+WHERE t.tag = $1 AND r.owner_project_id IS NULL`
 
 // CountHelmChartsByTag is the companion count for ListHelmChartsByTag —
 // drives the pagination total in the catalog response envelope.

@@ -198,7 +198,7 @@ func syncOneRepository(ctx context.Context, repoRecord sqlc.HelmRepository) erro
 		if err != nil {
 			return err
 		}
-		indexFile, err := fetchRepositoryIndex(ctx, httpclient.SafeClient(catalogFetchTimeout), indexURL, repoRecord)
+		indexFile, err := fetchRepositoryIndex(ctx, httpclient.SafeClientWithLimit(catalogFetchTimeout, catalog.MaxIndexBytes), indexURL, repoRecord)
 		if err != nil {
 			return err
 		}
@@ -322,9 +322,12 @@ func repositoryIndexURL(base string) (string, error) {
 }
 
 func decodeIndex(resp *http.Response) (*repo.IndexFile, error) {
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, catalog.MaxIndexBytes+1))
 	if err != nil {
 		return nil, err
+	}
+	if int64(len(body)) > catalog.MaxIndexBytes {
+		return nil, fmt.Errorf("repository index exceeds %d bytes", catalog.MaxIndexBytes)
 	}
 	index := repo.NewIndexFile()
 	if err := yaml.Unmarshal(body, index); err != nil {

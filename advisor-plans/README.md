@@ -10,6 +10,7 @@ Plans produced by deep-dive advisory audits. Product/feature plans remain under 
 | [003-self-managed-argo-operation-write-barrier-and-live-acceptance-plan.md](./003-self-managed-argo-operation-write-barrier-and-live-acceptance-plan.md) | **TODO — P0 0.3.0 BLOCKER** | Focused child plan against integration commit `5915bc6`. Establishes an Application single-writer barrier while Argo acceptance is Running/Terminating, adds status-only operation characterization and zero-write race tests, commits a redacting rollout-resilient live harness, and requires three clean live runs before 0.3.0 promotion. Depends on Plan 002 Section 26. |
 | [005-audit-archive-backfill-and-tombstone-retention-plan.md](./005-audit-archive-backfill-and-tombstone-retention-plan.md) | **TODO — not started** | Cluster decommission tombstones are retained forever by omission: no retention job exists and `DeleteCluster` (the hard delete) has zero callers. The retention itself is deliberate and still load-bearing — `audit_archive` denormalizes `resource_name`, but only 699 of 1250 cluster rows have it populated, so for ~44% the tombstone is the only way to name the cluster. Plan denormalizes `archived_cluster_name` onto `audit_archive` first, then purges on a window. **Ordering is mandatory: backfill before purge, never the reverse** — purging first silently orphans 551 archived audit rows. Raised 2026-07-17. |
 | [006-charlie-platform-pack-expansion-plan.md](./006-charlie-platform-pack-expansion-plan.md) | **DONE — P1 platform intelligence** | P1 selection contract, Kubernetes 1.33–1.36, PostgreSQL 16/17, Valkey 8, Argo CD 3.4, Prometheus 3, OpenTelemetry 1, and S3-compatible `2006-03-01` shipped. P2 Linux/systemd, Docker Engine, and OCI runtime remain demand-gated and do not block P1. |
+| [007-flux-native-continuous-delivery-replacement-plan.md](./007-flux-native-continuous-delivery-replacement-plan.md) | **DONE — P0 v1 architecture replacement** | Flux-native Continuous Delivery is the only v1 delivery engine. `/api/v1/delivery`, `astro delivery` / `astro cluster-agent`, first-party CD UI, protocol v2, pinned Flux `v2.9.3` source/kustomize/helm distribution, singleton `001_initial` schema, and bounded Charlie `astronomer.delivery.*` / `astronomer.cluster_agents.*` capabilities are shipped. Wave 13 public hostname/TLS cutover and `v1.0.0` publish remain operator-authorized live work. |
 
 ## Recommended execution order (from 002)
 
@@ -27,6 +28,14 @@ Child executor plans 003–018 are written only after master-plan **002** approv
 Plan 003 is now the first approved implementation unit because live acceptance
 isolated the remaining self-managed Application write race. Complete it before
 splitting or executing any lower-priority 004–018 work.
+
+## v1 architecture decision (Plan 007)
+
+Plan 007 is the execution authority for the clean v1 delivery architecture. It
+does not depend on completing Plan 003 because v1 deletes Argo rather than
+promoting that path. Plans 002/003 remain relevant only to any v0.3.x release or
+installation that continues to run Argo before the fresh v1 rebuild; do not use
+them to add Argo compatibility to Plan 007.
 
 ## Waivers
 

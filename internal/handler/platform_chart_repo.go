@@ -7,8 +7,8 @@ import (
 )
 
 // PlatformChartRepoHandler serves the embedded Astronomer chart as a tiny
-// in-process Helm repository so local ArgoCD can reconcile the management
-// plane from a stable in-cluster source.
+// in-process Helm repository for clean installs and upgrades from a stable
+// in-cluster source.
 type PlatformChartRepoHandler struct {
 	repo *deployassets.HelmChartRepo
 }

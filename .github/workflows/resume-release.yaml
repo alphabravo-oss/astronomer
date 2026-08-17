@@ -3,7 +3,7 @@ name: resume interrupted release
 # Exact artifacts are deliberately immutable, so a release that stops after
 # publishing them cannot safely rerun the tag workflow. This operator-only
 # path validates the original run and its artifacts, repeats clean-cluster
-# qualification, and performs only the withheld promotion steps.
+# qualification, and publishes only the withheld immutable GitHub release.
 
 on:
   workflow_dispatch:
@@ -81,18 +81,21 @@ jobs:
 
           artifacts="$(gh api --paginate "repos/${REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" \
             --jq '.artifacts[] | select(.expired == false) | .name')"
-          for name in chart server worker agent migrate shell frontend; do
-            if [[ "$name" = chart ]]; then
-              expected="chart-${TAG}"
-            else
-              expected="sbom-${name}-${TAG}"
-            fi
+          for name in chart delivery-artifacts server worker agent migrate shell frontend; do
+            case "$name" in
+              chart) expected="chart-${TAG}" ;;
+              delivery-artifacts) expected="delivery-artifacts-${TAG}" ;;
+              *) expected="sbom-${name}-${TAG}" ;;
+            esac
             grep -Fxq "$expected" <<<"$artifacts"
           done
 
           echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "chart_version=$chart_version" >> "$GITHUB_OUTPUT"
           echo "tag_commit=$tag_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Check build capacity
+        run: ./scripts/check-build-capacity.sh --path .
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -166,15 +169,42 @@ jobs:
           cmp \
             "source-artifacts/astronomer-${CHART_VERSION}.tgz" \
             "registry-chart/astronomer-${CHART_VERSION}.tgz"
+          chart_ref="$(cat source-artifacts/chart.digest)"
+          [[ "$chart_ref" =~ ^ghcr\.io/alphabravo-oss/charts/astronomer@sha256:[a-f0-9]{64}$ ]]
+          cosign verify \
+            --certificate-identity "https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/${IMAGE_TAG}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$chart_ref" >/dev/null
           gh attestation verify "source-artifacts/astronomer-${CHART_VERSION}.tgz" \
             --repo "$GITHUB_REPOSITORY" >/dev/null
           helm show chart "registry-chart/astronomer-${CHART_VERSION}.tgz" > chart-metadata.yaml
           test "$(awk '$0 ~ /^version:[[:space:]]/ { print $2; exit }' chart-metadata.yaml)" = "$CHART_VERSION"
           app_version="$(awk '$0 ~ /^appVersion:[[:space:]]/ { gsub(/\"/, "", $2); print $2; exit }' chart-metadata.yaml)"
-          # v0.3.7 was packaged before the tag workflow stopped overriding
-          # appVersion. Accept that exact historical form during recovery;
-          # future charts retain the preflight-validated Chart.yaml value.
-          test "$app_version" = "$CHART_VERSION" || test "$app_version" = "$IMAGE_TAG"
+          test "$app_version" = "$CHART_VERSION"
+
+      - name: Verify signed release manifest and delivery subjects
+        env:
+          IMAGE_TAG: ${{ steps.identity.outputs.image_tag }}
+          TAG_COMMIT: ${{ steps.identity.outputs.tag_commit }}
+        run: |
+          set -euo pipefail
+          identity="https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/${IMAGE_TAG}"
+          cosign verify-blob \
+            --bundle source-artifacts/release-manifest.sigstore.json \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            source-artifacts/release-manifest.json
+          test "$(jq -r .release.version source-artifacts/release-manifest.json)" = "$IMAGE_TAG"
+          test "$(jq -r .release.source_commit source-artifacts/release-manifest.json)" = "$TAG_COMMIT"
+          test "$(jq -r .astronomer.chart.reference source-artifacts/release-manifest.json)" = "$(cat source-artifacts/chart.digest)"
+          for subject_file in astronomer-flux-distribution.digest astronomer-platform-bundles.digest release-manifest.digest; do
+            subject="$(cat "source-artifacts/${subject_file}")"
+            [[ "$subject" =~ @sha256:[a-f0-9]{64}$ ]]
+            cosign verify \
+              --certificate-identity "$identity" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$subject" >/dev/null
+          done
 
   qualify:
     name: install exact release on a clean cluster
@@ -203,6 +233,11 @@ jobs:
         with:
           version: v3.16.2
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with:
+          cosign-release: "v2.4.1"
+
       - name: Download original image identities
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -211,6 +246,24 @@ jobs:
           pattern: sbom-*-${{ needs.preflight.outputs.image-tag }}
           path: release-images
           merge-multiple: true
+
+      - name: Download signed release manifest
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          name: chart-${{ needs.preflight.outputs.image-tag }}
+          path: release-unit
+
+      - name: Verify signed release manifest
+        env:
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+        run: |
+          cosign verify-blob \
+            --bundle release-unit/release-manifest.sigstore.json \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/release.yaml@refs/tags/${IMAGE_TAG}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            release-unit/release-manifest.json
 
       - name: Load immutable image references
         run: |
@@ -231,11 +284,25 @@ jobs:
             echo "${key}_REF=${ref}" >> "$GITHUB_ENV"
             echo "${key}_DIGEST=${ref#*@}" >> "$GITHUB_ENV"
           done
+          while IFS='|' read -r key source; do
+            digest="$(jq -er --arg source "$source" \
+              '.astronomer.runtime_images[] | select(.source_reference == $source) | .reference | split("@")[1]' \
+              release-unit/release-manifest.json)"
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            echo "${key}_DIGEST=${digest}" >> "$GITHUB_ENV"
+          done <<'EOF'
+          BUSYBOX|busybox:1.36
+          POSTGRES|postgres:16-alpine
+          REDIS|valkey/valkey:8-alpine
+          DEX|dexidp/dex:v2.41.1
+          BACKUP|ghcr.io/alphabravocompany/pgdump-s3:16-awscli
+          LOGGING|fluent/fluent-bit:3.2.4
+          EOF
 
       - name: Create clean Kubernetes and install Gateway prerequisites
         run: |
           k3d cluster create astronomer-release \
-            --image rancher/k3s:v1.32.8-k3s1 \
+            --image rancher/k3s:v1.33.5-k3s1 \
             --port '8080:80@loadbalancer' \
             --k3s-arg '--disable=traefik@server:*' \
             --wait
@@ -268,9 +335,18 @@ jobs:
             --set-string image.migrate.digest="$MIGRATE_DIGEST" \
             --set-string frontend.image.digest="$FRONTEND_DIGEST" \
             --set-string preflight.image.digest="$SHELL_DIGEST" \
+            --set-string utilities.busybox.digest="$BUSYBOX_DIGEST" \
+            --set-string postgres.image.digest="$POSTGRES_DIGEST" \
+            --set-string redis.image.digest="$REDIS_DIGEST" \
+            --set-string dex.image.digest="$DEX_DIGEST" \
+            --set-string managementBackup.image.digest="$BACKUP_DIGEST" \
+            --set-string managementRestoreDrill.image.digest="$BACKUP_DIGEST" \
+            --set-string managementRestoreDrill.sidecar.image.digest="$POSTGRES_DIGEST" \
+            --set-string managementLogging.image.digest="$LOGGING_DIGEST" \
             --set-string config.agentImageRepository="$AGENT_REF" \
             --set-string config.agentImageTag="$IMAGE_TAG" \
             --set-string kubectlShell.image="$SHELL_REF" \
+            --set-file release.manifest=release-unit/release-manifest.json \
             --atomic --cleanup-on-fail --timeout 15m
 
       - name: Verify health and exact first-party image identities
@@ -284,6 +360,8 @@ jobs:
           done
           grep -q "AGENT_IMAGE_REPOSITORY: \"${AGENT_REF}\"" /tmp/release-manifest.yaml
           grep -q "AGENT_IMAGE_TAG: \"${IMAGE_TAG}\"" /tmp/release-manifest.yaml
+          grep -q 'RELEASE_MANIFEST_PATH' /tmp/release-manifest.yaml
+          ! awk '$1 == "image:" {print $2}' /tmp/release-manifest.yaml | grep -Ev '@sha256:[a-f0-9]{64}$'
           for attempt in $(seq 1 90); do
             if curl -fsS -H 'Host: astronomer.localtest.me' http://127.0.0.1:8080/readyz; then
               exit 0
@@ -302,13 +380,13 @@ jobs:
             -l app.kubernetes.io/instance=astronomer || true
 
   promote:
-    name: promote recovered release and publish GitHub Release
+    name: publish recovered immutable GitHub Release
     needs: [preflight, qualify]
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: write
-      packages: write
+      packages: read
     steps:
       - name: Download original release artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -325,28 +403,14 @@ jobs:
         run: |
           set -euo pipefail
           test -f "astronomer-${CHART_VERSION}.tgz"
+          test -s release-manifest.json
+          test -s release-manifest.sigstore.json
+          test -s values-production.yaml
           for component in server worker agent migrate shell frontend; do
             test -s "sbom-${component}.spdx.json"
             jq -e . "sbom-${component}.spdx.json" >/dev/null
             test -s "${component}.digest"
             grep -Eq "^ghcr.io/alphabravo-oss/[^@]+@sha256:[0-9a-f]{64}$" "${component}.digest"
-          done
-
-      - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Promote qualified images to latest
-        env:
-          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
-        run: |
-          for image in astronomer-go-server astronomer-go-worker astronomer-go-agent astronomer-go-migrate astronomer-shell astronomer-frontend; do
-            docker buildx imagetools create \
-              --tag "${REGISTRY}/${IMAGE_OWNER}/${image}:latest" \
-              "${REGISTRY}/${IMAGE_OWNER}/${image}:${IMAGE_TAG}"
           done
 
       - name: Publish immutable GitHub Release
@@ -355,11 +419,21 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           TAG: ${{ needs.preflight.outputs.image-tag }}
         run: |
-          sort --unique ./*.digest > RELEASE_IMAGES
-          sha256sum astronomer-*.tgz sbom-*.spdx.json RELEASE_IMAGES > SHA256SUMS
+          sort --unique ./*.digest > RELEASE_SUBJECTS
+          cp RELEASE_SUBJECTS RELEASE_IMAGES
+          find . -maxdepth 1 -type f \( \
+              -name 'astronomer-*.tgz' -o -name '*.tar.gz' -o \
+              -name 'sbom-*.spdx.json' -o -name 'provenance-*.slsa.json' -o \
+              -name 'release-manifest.json' -o -name 'release-manifest.sigstore.json' -o \
+              -name 'values-production.yaml' -o \
+              -name 'RELEASE_IMAGES' -o -name 'RELEASE_SUBJECTS' \
+            \) -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
           gh release create "$TAG" \
             --repo "$REPOSITORY" \
             --verify-tag \
             --generate-notes \
             --title "Astronomer ${TAG}" \
-            astronomer-*.tgz sbom-*.spdx.json RELEASE_IMAGES SHA256SUMS
+            astronomer-*.tgz *.tar.gz sbom-*.spdx.json provenance-*.slsa.json \
+            release-manifest.json release-manifest.sigstore.json \
+            values-production.yaml \
+            RELEASE_IMAGES RELEASE_SUBJECTS SHA256SUMS

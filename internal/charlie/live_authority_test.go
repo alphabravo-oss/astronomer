@@ -401,7 +401,7 @@ func TestProductLiveAuthorityRequiresExactSessionResourceAtEvaluateAndCommit(t *
 	}
 }
 
-func TestProductLiveAuthorityAllowsAgentFleetTriggerForAstronomerRemediation(t *testing.T) {
+func TestProductLiveAuthorityAllowsClusterAgentTriggerForAstronomerRemediation(t *testing.T) {
 	queries, bindings, safety, action, _, automationID, approverID := liveAuthorityFixture(ModeApproval)
 	capability, _ := capabilityByName("astronomer.tunnel.restart_component")
 	queries.resources = [][]sqlc.CharlieSessionResource{{{
@@ -422,6 +422,6 @@ func TestProductLiveAuthorityAllowsAgentFleetTriggerForAstronomerRemediation(t *
 	}
 	facts, err := authority.Evaluate(context.Background(), action, capability, arguments)
 	if err != nil || !facts.LiveAuthorized || !facts.ApprovalExact || capability.ManagedTargetAccess {
-		t.Fatalf("Astronomer-owned agent-fleet remediation was denied or widened downstream: capability=%+v facts=%+v err=%v", capability, facts, err)
+		t.Fatalf("Astronomer-owned cluster-agent remediation was denied or widened downstream: capability=%+v facts=%+v err=%v", capability, facts, err)
 	}
 }

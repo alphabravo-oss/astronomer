@@ -86,7 +86,7 @@ func recordedUpgradeStatus(t *testing.T, client *fake.Clientset) upgradeStatusRe
 // watchdog, which must notice the timeout and restore the previous image.
 //
 // Pre-fix behaviour: nothing rolled back. RollbackImage was computed in
-// internal/handler/agent_fleet.go, rendered as prose, and never used by any
+// internal/handler/cluster_agents.go, rendered as prose, and never used by any
 // code path; the Deployment stayed on the broken image until an operator ran
 // kubectl against every affected cluster.
 func TestUpgradeWatchdogRollsBackWhenReplacementNeverBecomesAvailable(t *testing.T) {

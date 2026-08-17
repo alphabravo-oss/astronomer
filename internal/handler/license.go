@@ -49,7 +49,7 @@ var openSourceFeatures = []string{
 	"compliance-posture",
 	"cluster-explorer",
 	"dex-sso",
-	"fleet-operations",
+	"flux-delivery",
 	"image-vulnerability-scans",
 	"kubectl-shell",
 	"monitoring",

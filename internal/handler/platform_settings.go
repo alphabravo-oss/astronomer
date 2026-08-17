@@ -125,7 +125,6 @@ var settingsRegistry = map[string]settingSpec{
 	"feature.catalog":        {Type: typeBool, Default: true, Description: "Helm chart catalog tab"},
 	"feature.projects":       {Type: typeBool, Default: true, Description: "Projects (multi-tenancy) tab"},
 	"feature.monitoring":     {Type: typeBool, Default: true, Description: "Cluster monitoring tab"},
-	"feature.argocd":         {Type: typeBool, Default: true, Description: "ArgoCD GitOps integration tab"},
 	"feature.security":       {Type: typeBool, Default: true, Description: "Security / CIS scans tab"},
 	"feature.backups":        {Type: typeBool, Default: true, Description: "Backup and restore tab"},
 	"feature.charlie":        {Type: typeBool, Default: false, Description: "Charlie SRE assistant integration"},
@@ -135,16 +134,6 @@ var settingsRegistry = map[string]settingSpec{
 	// explicit BoolValue(...,false) for native RBAC / shell scoping).
 	"feature.control_plane_snapshots": {Type: typeBool, Default: false, Description: "Control-plane (etcd) DR snapshots for self-managed clusters (k3s/RKE2/kubeadm)"},
 	"feature.shell_scope_to_caller":   {Type: typeBool, Default: false, Description: "Scope the kubectl shell to the caller's own RBAC instead of the agent SA's cluster-wide grant"},
-	"argocd.auto_adopt_clusters":      {Type: typeBool, Default: true, Description: "Automatically register connected clusters into built-in/configured ArgoCD instances"},
-	"argocd.manage_platform_baseline": {Type: typeBool, Default: true, Description: "Use built-in ArgoCD ApplicationSets to reconcile platform baseline components on managed clusters"},
-	// Baseline components ship pinned to an explicit chart version (the
-	// cluster_tools row, else the compiled-in default in internal/baseline).
-	// Turning this on restores the old behavior — every baseline
-	// ApplicationSet tracks upstream-latest with prune and selfHeal on, so an
-	// upstream publish reaches the whole fleet within one reconcile tick.
-	// Default FALSE; internal/server/baseline_appsets.go also treats an
-	// unreadable value as false.
-	"argocd.baseline_unpinned_charts": {Type: typeBool, Default: false, Description: "Let platform baseline ApplicationSets track the latest upstream chart version instead of the pinned one"},
 	"token.default_ttl_min":           {Type: typeInt, Default: 60, Description: "API token default expiry in minutes; 0 = no expiry", MinInt: 0, MaxInt: 525600 * 10},
 	"token.max_ttl_min":               {Type: typeInt, Default: 525600, Description: "Maximum allowed API token expiry in minutes (1 year default)", MinInt: 1, MaxInt: 525600 * 10},
 	"telemetry.enabled":               {Type: typeBool, Default: false, Description: "Opt-in: send anonymized aggregate telemetry nightly"},

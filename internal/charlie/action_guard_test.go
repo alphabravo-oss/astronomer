@@ -264,8 +264,6 @@ func validWriteArguments(name string) map[string]any {
 		return map[string]any{"resource_id": "resource-a", "workload": "deployment/astronomer-server", "operation_id": "action-a"}
 	case "astronomer.management.workload_scale":
 		return map[string]any{"resource_id": "resource-a", "workload": "deployment/astronomer-server", "replicas": 3, "operation_id": "action-a"}
-	case "astronomer.argocd.self_management_sync":
-		return map[string]any{"resource_id": "resource-a", "application": "astronomer-self-manage", "operation_id": "action-a"}
 	case "astronomer.queue.retry_task":
 		return map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"}
 	case "astronomer.task_outbox.retry_delivery":
@@ -274,6 +272,13 @@ func validWriteArguments(name string) map[string]any {
 		return map[string]any{"resource_id": "resource-a", "job": "restore-drill", "operation_id": "action-a"}
 	case "astronomer.tunnel.restart_component":
 		return map[string]any{"resource_id": "resource-a", "component": "server", "operation_id": "action-a"}
+	case "astronomer.delivery.rollout_pause", "astronomer.delivery.rollout_resume",
+		"astronomer.delivery.rollout_retry_failed", "astronomer.delivery.rollout_rollback":
+		return map[string]any{"resource_id": "resource-a", "operation_id": "action-a", "project_id": "11111111-1111-4111-8111-111111111111", "rollout_id": "22222222-2222-4222-8222-222222222222", "expected_fence": 3, "reason_code": "operator_requested"}
+	case "astronomer.delivery.rollout_approve":
+		return map[string]any{"resource_id": "resource-a", "operation_id": "action-a", "project_id": "11111111-1111-4111-8111-111111111111", "rollout_id": "22222222-2222-4222-8222-222222222222", "expected_fence": 3, "cohort": -1, "binding_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expires_in_seconds": 900}
+	case "astronomer.delivery.deployment_reconcile":
+		return map[string]any{"resource_id": "resource-a", "operation_id": "action-a", "project_id": "11111111-1111-4111-8111-111111111111", "deployment_id": "33333333-3333-4333-8333-333333333333", "expected_generation": 4, "reason_code": "operator_requested"}
 	default:
 		return nil
 	}
@@ -345,8 +350,8 @@ func TestActionGuardBindsProductOperationToSignedActionID(t *testing.T) {
 	receipts := &fakeReceipts{}
 	executor := &fakeCapabilityExecutor{verified: true}
 	guard, privateKey := newTestActionGuard(t, authority, receipts, executor)
-	action := signedTestAction(t, privateKey, "astronomer.argocd.self_management_sync", map[string]any{
-		"resource_id": "resource-a", "application": "astronomer-self-manage", "operation_id": "model-correlation-label",
+	action := signedTestAction(t, privateKey, "astronomer.management.workload_restart", map[string]any{
+		"resource_id": "resource-a", "workload": "deployment/astronomer-server", "operation_id": "model-correlation-label",
 	})
 
 	result := guard.Execute(context.Background(), action)

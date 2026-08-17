@@ -4,7 +4,7 @@
 // groups (root + 2 levels max) that clusters can be assigned to.
 // Groups own:
 //   - a name + slug (slug unique within parent; top-level slugs are
-//     globally unique via the partial index in 066_cluster_groups.up.sql)
+//     globally unique via the partial index in the canonical initial schema)
 //   - a color + lucide-react icon for the sidebar badge
 //   - an enabled flag (soft-delete; the table never hard-deletes a row
 //     that has audit history, so historical entries can still resolve

@@ -150,7 +150,7 @@ func (h *CatalogHandler) chartCountsFor(ctx context.Context, repos []sqlc.HelmRe
 // timestamptzNano mirrors pgx v5's native pgtype.Timestamptz MarshalJSON so
 // the DTO emits the same bytes the embedded sqlc row used to.
 //
-// Distinct from timestampPtr in agent_fleet.go, which normalises to UTC and
+// Distinct from timestampPtr in cluster_agents.go, which normalises to UTC and
 // truncates to whole seconds — applying that here would silently change the
 // timestamps this endpoint has always returned.
 func timestamptzNano(ts pgtype.Timestamptz) *string {

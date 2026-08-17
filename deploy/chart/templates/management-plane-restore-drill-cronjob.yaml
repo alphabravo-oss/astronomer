@@ -78,7 +78,7 @@ spec:
               securityContext:
                 {{- toYaml . | nindent 16 }}
               {{- end }}
-              image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementRestoreDrill.sidecar.image.repository "tag" .Values.managementRestoreDrill.sidecar.image.tag "registry" .Values.managementRestoreDrill.sidecar.image.registry "fallback" .Values.image.registry) | quote }}
+              image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementRestoreDrill.sidecar.image.repository "tag" .Values.managementRestoreDrill.sidecar.image.tag "digest" .Values.managementRestoreDrill.sidecar.image.digest "registry" .Values.managementRestoreDrill.sidecar.image.registry "fallback" .Values.image.registry) | quote }}
               imagePullPolicy: {{ .Values.managementRestoreDrill.sidecar.image.pullPolicy | default "IfNotPresent" }}
               restartPolicy: Always
               env:
@@ -113,7 +113,7 @@ spec:
               securityContext:
                 {{- toYaml . | nindent 16 }}
               {{- end }}
-              image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementRestoreDrill.image.repository "tag" .Values.managementRestoreDrill.image.tag "registry" .Values.managementRestoreDrill.image.registry "fallback" .Values.image.registry) | quote }}
+              image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementRestoreDrill.image.repository "tag" .Values.managementRestoreDrill.image.tag "digest" .Values.managementRestoreDrill.image.digest "registry" .Values.managementRestoreDrill.image.registry "fallback" .Values.image.registry) | quote }}
               imagePullPolicy: {{ .Values.managementRestoreDrill.image.pullPolicy | default "IfNotPresent" }}
               command: ["/bin/sh", "-eu", "-c"]
               args:
@@ -336,9 +336,9 @@ spec:
                 - name: DECRYPT_CHECK_ENABLED
                   value: "1"
                 - name: DECRYPT_TABLE
-                  value: {{ .Values.managementRestoreDrill.decryptCheck.table | default "argocd_instances" | quote }}
+                  value: {{ .Values.managementRestoreDrill.decryptCheck.table | default "delivery_sources" | quote }}
                 - name: DECRYPT_COLUMN
-                  value: {{ .Values.managementRestoreDrill.decryptCheck.column | default "auth_token_encrypted" | quote }}
+                  value: {{ .Values.managementRestoreDrill.decryptCheck.column | default "credential_encrypted" | quote }}
                 - name: KEYBACKUP_PREFIX
                   value: {{ .Values.managementRestoreDrill.decryptCheck.keyPrefix | default "keys" | quote }}
                 {{- end }}

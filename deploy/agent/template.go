@@ -8,16 +8,21 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
+
+	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 )
 
 //go:embed install.yaml.template
 var installTemplate string
 
+//go:embed system-bootstrap.yaml.template
+var systemBootstrapTemplate string
+
 const (
 	PrivilegeProfileAnnotation        = "astronomer.io/agent-privilege-profile"
-	AgentImageAnnotation              = "management.astronomer.io/agent-image"
 	AgentServiceAccountNameAnnotation = "management.astronomer.io/agent-service-account-name"
 	AgentPodLabelsAnnotation          = "management.astronomer.io/agent-pod-labels"
 
@@ -38,15 +43,15 @@ type InstallTemplateData struct {
 	// semantics). Rendered into the agent's own Deployment env so a Phase-2
 	// self-apply preserves the pin (otherwise self-applying the Deployment would
 	// wipe it and silently drop CA pinning on the next restart).
-	CAChecksum         string
-	AgentImage         string
-	PrivilegeProfile   string
-	ServiceAccountName string
-	PodLabels          map[string]string
-	// PullReconcileEnabled renders the agent's Fleet-pull flag into its own
-	// Deployment so a Phase-2 self-apply preserves it (otherwise self-applying
-	// the Deployment would wipe the flag and disable the reconcile loop).
-	PullReconcileEnabled bool
+	CAChecksum           string
+	AgentImage           string
+	PrivilegeProfile     string
+	ServiceAccountName   string
+	PodLabels            map[string]string
+	SystemArtifactURL    string
+	SystemArtifactDigest string
+	SystemOIDCIssuer     string
+	SystemOIDCIdentity   string
 }
 
 // CAChecksumFromPEM computes the Rancher CATTLE_CA_CHECKSUM-style pin for a CA
@@ -77,10 +82,6 @@ func RenderInstallYAML(data InstallTemplateData) string {
 	if serviceAccountName == "" {
 		serviceAccountName = "astronomer-agent"
 	}
-	pullReconcile := "false"
-	if data.PullReconcileEnabled {
-		pullReconcile = "true"
-	}
 	insecure := "false"
 	if parsed, err := url.Parse(strings.TrimSpace(data.ServerURL)); err == nil &&
 		(parsed.Scheme == "http" || parsed.Scheme == "ws") {
@@ -96,14 +97,12 @@ func RenderInstallYAML(data InstallTemplateData) string {
 	if trimmed := strings.TrimSpace(data.CACert); trimmed != "" {
 		caCert = base64.StdEncoding.EncodeToString([]byte(trimmed))
 	}
-	return strings.NewReplacer(
-		"{{AGENT_PULL_RECONCILE_ENABLED}}", pullReconcile,
+	agentManifest := strings.NewReplacer(
 		"{{AGENT_INSECURE}}", insecure,
 		// L7: every scalar below renders into a double-quoted YAML scalar in
 		// install.yaml.template (SERVER_URL/CLUSTER_ID/REGISTRATION_TOKEN/
 		// CA_CHECKSUM/AGENT_IMAGE). SERVER_URL and AGENT_IMAGE are
-		// operator-influenced (config + the management.astronomer.io/agent-image
-		// cluster annotation), so an embedded `"` or `\` would break out of the
+		// operator-influenced config, so an embedded `"` or `\` would break out of the
 		// scalar and inject arbitrary YAML. escapeYAMLDoubleQuoted neutralizes
 		// both. (caCert is base64; the RBAC/label blocks are already escaped or
 		// generated.)
@@ -114,15 +113,42 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{CA_CHECKSUM}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.CAChecksum)),
 		"{{AGENT_IMAGE}}", escapeYAMLDoubleQuoted(data.AgentImage),
 		"{{AGENT_IMAGE_REPOSITORY}}", escapeYAMLDoubleQuoted(imageRepositoryOf(data.AgentImage)),
+		"{{SYSTEM_OIDC_ISSUER}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.SystemOIDCIssuer)),
+		"{{SYSTEM_OIDC_IDENTITY}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.SystemOIDCIdentity)),
 		"{{AGENT_SERVICE_ACCOUNT_NAME}}", serviceAccountName,
 		"{{AGENT_POD_LABELS}}", PodLabelsYAML(data.PodLabels),
 		"{{PRIVILEGE_PROFILE}}", profile,
 		"{{AGENT_RBAC_RULES}}", RBACRulesYAML(profile),
+		"{{AGENT_DELIVERY_CLUSTER_RULES}}", DeliveryClusterRulesYAML(profile),
 		"{{AGENT_RBAC_BINDING_KIND}}", RBACBindingKind(profile),
 		"{{AGENT_RBAC_BINDING_NAMESPACE}}", RBACBindingNamespaceLine(profile),
 		"{{AGENT_SELF_MANAGEMENT_NAMESPACED_RULES}}", SelfManagementNamespacedRulesYAML(),
 		"{{AGENT_SELF_MANAGEMENT_DEPLOYMENT_RULES}}", SelfManagementOwnDeploymentRulesYAML(),
 	).Replace(installTemplate)
+	return fluxdistribution.InstallYAML() + "\n" + agentManifest + renderSystemBootstrap(data)
+}
+
+func renderSystemBootstrap(data InstallTemplateData) string {
+	artifactURL := strings.TrimSpace(data.SystemArtifactURL)
+	if artifactURL != "" && !strings.HasPrefix(artifactURL, "oci://") {
+		artifactURL = "oci://" + artifactURL
+	}
+	digest := strings.TrimSpace(data.SystemArtifactDigest)
+	issuer := strings.TrimSpace(data.SystemOIDCIssuer)
+	identity := strings.TrimSpace(data.SystemOIDCIdentity)
+	parsedArtifact, artifactErr := url.Parse(artifactURL)
+	parsedIssuer, issuerErr := url.Parse(issuer)
+	if artifactErr != nil || parsedArtifact.Scheme != "oci" || parsedArtifact.Host == "" || parsedArtifact.User != nil || parsedArtifact.RawQuery != "" || parsedArtifact.Fragment != "" ||
+		!regexp.MustCompile(`^sha256:[0-9a-f]{64}$`).MatchString(digest) || issuerErr != nil || parsedIssuer.Scheme != "https" || parsedIssuer.Host == "" ||
+		identity == "" || len(identity) > 512 || strings.ContainsAny(identity, "\r\n\x00") {
+		return ""
+	}
+	return "\n" + strings.NewReplacer(
+		"{{SYSTEM_ARTIFACT_URL}}", escapeYAMLDoubleQuoted(artifactURL),
+		"{{SYSTEM_ARTIFACT_DIGEST}}", digest,
+		"{{SYSTEM_OIDC_ISSUER}}", escapeYAMLDoubleQuoted(issuer),
+		"{{SYSTEM_OIDC_IDENTITY}}", escapeYAMLDoubleQuoted(identity),
+	).Replace(systemBootstrapTemplate)
 }
 
 // imageRepositoryOf strips the tag and/or digest from an image reference,
@@ -192,6 +218,18 @@ func RBACRulesYAML(profile string) string {
 	}
 }
 
+// DeliveryClusterRulesYAML is the agent's separate, product-owned delivery
+// axis. It grants only the object kinds emitted by the typed materializer; it
+// never grants generic workload writes. Platform-scope ClusterRoleBinding
+// writes remain exclusive to the explicit admin enrollment profile.
+func DeliveryClusterRulesYAML(profile string) string {
+	rules := deliveryClusterRulesYAML
+	if NormalizePrivilegeProfile(profile) == PrivilegeProfileAdmin {
+		rules += deliveryPlatformBindingRuleYAML
+	}
+	return rules
+}
+
 func RBACBindingKind(profile string) string {
 	switch NormalizePrivilegeProfile(profile) {
 	case PrivilegeProfileNamespaceViewer, PrivilegeProfileNamespaceOperator:
@@ -222,9 +260,8 @@ func RBACBindingNamespaceLine(profile string) string {
 //     there.
 //   - Astronomer self-management scope (this set + the agent's own Deployment)
 //     governs the agent's reach into ASTRONOMER's OWN footprint. It is granted
-//     for EVERY profile — including viewer — so ArgoCD (which applies through
-//     the tunnel as the agent ServiceAccount) can always manage Astronomer's
-//     components regardless of how little the user profile grants.
+//     for EVERY profile — including viewer — so the agent can always manage
+//     Astronomer's components regardless of how little the user profile grants.
 //
 // Keeping these axes independent is what lets "viewer" mean "observe the
 // customer cluster read-only, but Astronomer still fully manages its own
@@ -369,22 +406,8 @@ const operatorRBACRulesYAML = `  # HONEST SCOPE (H4): "operator" is a PRIVILEGED
   # non-default opt-in (default is viewer). Trimming it to a truly-contained tier
   # vs splitting a "privileged-operator" is an open product decision (see D1).
   #
-  # CLUSTER-WIDE READ is required, not optional, for this tier. "operator" is the
-  # profile ArgoCD adopts (the baseline ApplicationSets select
-  # agent-privilege-profile In [operator, admin]), and ArgoCD's cluster cache
-  # LISTS EVERY RESOURCE TYPE REGISTERED IN THE TARGET CLUSTER — including CRDs
-  # installed long after adoption. An enumerated allowlist can never be complete:
-  # a bare k3d cluster already exposes 76 listable types across 23 CRDs, and any
-  # type we miss fails the whole cache sync:
-  #
-  #   ComparisonError: failed to sync cluster ...: failed to load initial state of
-  #   resource X: X is forbidden: User "system:serviceaccount:astronomer-system:
-  #   astronomer-agent" cannot list resource "X" at the cluster scope
-  #
-  # That failure is silent and total — Applications still report health=Healthy
-  # while pinned at sync=Unknown forever, deploying nothing. "admin" only ever
-  # worked here by accident, via its apiGroups:["*"] wildcard.
-  #
+  # CLUSTER-WIDE READ is required for complete resource inventory, including
+  # CRDs installed after adoption. An enumerated allowlist cannot remain complete.
   # The delta this adds over the enumerated reads below is small in practice: this
   # tier ALREADY reads every Secret in every namespace (see above), so the marginal
   # exposure is CRD//built-in types we hadn't enumerated. WRITE stays strictly on
@@ -394,7 +417,7 @@ const operatorRBACRulesYAML = `  # HONEST SCOPE (H4): "operator" is a PRIVILEGED
     verbs: ["get", "list", "watch"]
   # The enumerated reads below are subsumed by the cluster-wide read above. They
   # are retained as the explicit floor: they document the minimum this tier needs
-  # for its own inventory/exec surface independently of ArgoCD, and keep working
+  # for its own inventory/exec surface and keep working
   # if the wildcard is ever narrowed.
   - apiGroups: [""]
     resources: ["configmaps", "endpoints", "events", "namespaces", "nodes", "persistentvolumeclaims", "persistentvolumes", "pods", "pods/log", "replicationcontrollers", "secrets", "services", "serviceaccounts"]
@@ -510,3 +533,33 @@ const selfManagementOwnDeploymentRulesYAML = `  - apiGroups: ["apps"]
     resources: ["deployments"]
     resourceNames: ["astronomer-agent"]
     verbs: ["get", "list", "watch", "update", "patch"]`
+
+const deliveryClusterRulesYAML = `  # Closed workload-delivery graph. The agent
+  # binary validates a typed full snapshot and deterministic ownership fences
+  # before using these permissions; no raw manifest endpoint can reach them.
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "create", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["secrets", "serviceaccounts"]
+    verbs: ["get", "list", "create", "patch", "update", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "create", "patch", "update", "delete"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["gitrepositories", "ocirepositories", "helmrepositories"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]`
+
+const deliveryPlatformBindingRuleYAML = `
+  # Platform-scope assignments are independently gated in the signed release,
+  # protocol validator, and admin enrollment profile. Assignment data can bind
+  # only the fixed bootstrap-owned platform applier ClusterRole.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterrolebindings"]
+    verbs: ["get", "list", "create", "patch", "update", "delete"]`

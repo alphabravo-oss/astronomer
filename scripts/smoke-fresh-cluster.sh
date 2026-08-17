@@ -26,7 +26,7 @@
 #   MGMT_CONTEXT       — management-plane kube context (default: current context)
 #   AGENT_IMAGE        — astronomer agent image to load (default: ghcr.io/alphabravo-oss/astronomer-go-agent:dev)
 #   SHELL_IMAGE        — astronomer-shell image to load (default: ghcr.io/alphabravo-oss/astronomer-shell:dev)
-#   K3S_IMAGE          — rancher/k3s image for the adopted cluster (default: v1.32.8-k3s1)
+#   K3S_IMAGE          — rancher/k3s image for the adopted cluster (default: v1.35.0-k3s1)
 #   TIMEOUT_API        — seconds to wait for the management API (default: 180)
 #   TIMEOUT_AGENT      — seconds to wait for agent connect (default: 90)
 #   TIMEOUT_BASELINE   — seconds to wait for baseline tools install (default: 600)
@@ -43,7 +43,7 @@ set -euo pipefail
 : "${SMOKE_KEEP:=0}"
 : "${AGENT_IMAGE:=ghcr.io/alphabravo-oss/astronomer-go-agent:dev}"
 : "${SHELL_IMAGE:=ghcr.io/alphabravo-oss/astronomer-shell:dev}"
-: "${K3S_IMAGE:=rancher/k3s:v1.32.8-k3s1}"
+: "${K3S_IMAGE:=rancher/k3s:v1.35.0-k3s1}"
 : "${TIMEOUT_API:=180}"
 : "${TIMEOUT_AGENT:=90}"
 : "${TIMEOUT_BASELINE:=600}"
@@ -101,14 +101,13 @@ command -v k3d >/dev/null    || fail "k3d not on PATH"
 command -v kubectl >/dev/null || fail "kubectl not on PATH"
 command -v curl >/dev/null   || fail "curl not on PATH"
 command -v python3 >/dev/null || fail "python3 not on PATH"
-MGMT_CONTEXT="${MGMT_CONTEXT:-$(kubectl config current-context)}"
 ok "k3d $(k3d version | head -1)"
 ok "kubectl client present"
 
 step "Preflight: management API reachable (timeout ${TIMEOUT_API}s)"
-# Helm can briefly observe the first server rollout as Available immediately
-# before self-management applies the next revision. Treat that bounded 503
-# window as startup, while still failing a server that never becomes healthy.
+# Helm can briefly observe the server rollout as Available before every
+# dependency is ready. Treat that bounded 503 window as startup, while still
+# failing a server that never becomes healthy.
 api_ready=0
 deadline=$(( $(date +%s) + TIMEOUT_API ))
 while (( $(date +%s) < deadline )); do
@@ -225,36 +224,82 @@ print(" ".join(r["slug"] for r in rows if r.get("status") in ("installed","insta
 done
 [[ -z "$missing" ]] || fail "baseline tools not installed after ${TIMEOUT_BASELINE}s: missing$missing"
 
-step "Wait for Argo-owned baseline applications (timeout ${TIMEOUT_BASELINE}s)"
+step "Wait for the exact signed Flux distribution (timeout ${TIMEOUT_BASELINE}s)"
 deadline=$(( $(date +%s) + TIMEOUT_BASELINE ))
-expected_argocd_tools="kube-state-metrics prometheus-node-exporter"
+expected_flux_controllers="helm-controller kustomize-controller source-controller"
+ready_flux_controllers=""
 while (( $(date +%s) < deadline )); do
-  ready_argocd_tools="$(kubectl --context "${MGMT_CONTEXT}" -n astronomer \
-    get applications.argoproj.io -o json 2>/dev/null \
+  ready_flux_controllers="$(kubectl --context "k3d-$SMOKE_CLUSTER" \
+    -n astronomer-delivery-system get deployments -o json 2>/dev/null \
     | python3 -c 'import json,sys
-cluster_id=sys.argv[1]
 payload=json.load(sys.stdin)
 ready=[]
-for app in payload.get("items", []):
-    labels=app.get("metadata", {}).get("labels", {})
-    destination=app.get("spec", {}).get("destination", {}).get("server", "")
-    status=app.get("status", {})
-    if cluster_id in destination and status.get("sync", {}).get("status") == "Synced" and status.get("health", {}).get("status") == "Healthy":
-        ready.append(labels.get("astronomer.io/tool-slug", ""))
-print(" ".join(ready))' "${SMOKE_CLUSTER_ID}" 2>/dev/null || true)"
-  missing_argocd=""
-  for t in $expected_argocd_tools; do
-    if ! echo " $ready_argocd_tools " | grep -q " $t "; then
-      missing_argocd="$missing_argocd $t"
-    fi
-  done
-  if [[ -z "$missing_argocd" ]]; then
-    ok "Argo baseline applications are Synced/Healthy: $ready_argocd_tools"
+for item in payload.get("items", []):
+    metadata=item.get("metadata", {})
+    spec=item.get("spec", {})
+    status=item.get("status", {})
+    replicas=spec.get("replicas", 1)
+    if status.get("observedGeneration", 0) >= metadata.get("generation", 1) and status.get("availableReplicas", 0) >= replicas:
+        ready.append(metadata.get("name", ""))
+print(" ".join(sorted(ready)))' 2>/dev/null || true)"
+  if [[ "$ready_flux_controllers" == "$expected_flux_controllers" ]]; then
+    ok "exact Flux controller set is ready: $ready_flux_controllers"
     break
   fi
   sleep 5
 done
-[[ -z "$missing_argocd" ]] || fail "Argo baseline applications not healthy after ${TIMEOUT_BASELINE}s: missing$missing_argocd"
+[[ "$ready_flux_controllers" == "$expected_flux_controllers" ]] \
+  || fail "Flux controllers not ready or unexpected controller present after ${TIMEOUT_BASELINE}s: '$ready_flux_controllers'"
+
+expected_flux_images="$(python3 -c 'import json
+with open("deploy/release/compatibility.yaml", encoding="utf-8") as handle:
+    contract=json.load(handle)
+print("\n".join(sorted("{}={}@{}".format(item["name"], item["repository"], item["digest"]) for item in contract["flux"]["components"])))')"
+observed_flux_images="$(kubectl --context "k3d-$SMOKE_CLUSTER" \
+  -n astronomer-delivery-system get deployments -o json \
+  | python3 -c 'import json,sys
+payload=json.load(sys.stdin)
+rows=[]
+for item in payload.get("items", []):
+    containers=item.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+    if len(containers) == 1:
+        rows.append("{}={}".format(item["metadata"]["name"], containers[0].get("image", "")))
+print("\n".join(sorted(rows)))')"
+[[ "$observed_flux_images" == "$expected_flux_images" ]] \
+  || fail "running Flux controller images do not exactly match the signed release compatibility contract"
+ok "Flux controller images exactly match the signed release digests"
+
+step "Wait for Flux-owned built-in platform bundles (timeout ${TIMEOUT_BASELINE}s)"
+deadline=$(( $(date +%s) + TIMEOUT_BASELINE ))
+ready_builtin_releases=0
+while (( $(date +%s) < deadline )); do
+  ready_builtin_releases="$(kubectl --context "k3d-$SMOKE_CLUSTER" get \
+    helmreleases.helm.toolkit.fluxcd.io --all-namespaces \
+    -l app.kubernetes.io/managed-by=astronomer-agent -o json 2>/dev/null \
+    | python3 -c 'import json,sys
+payload=json.load(sys.stdin)
+count=0
+for item in payload.get("items", []):
+    metadata=item.get("metadata", {})
+    status=item.get("status", {})
+    current=status.get("observedGeneration", 0) >= metadata.get("generation", 1)
+    ready=any(c.get("type") == "Ready" and c.get("status") == "True" for c in status.get("conditions", []))
+    count += int(current and ready)
+print(count)' 2>/dev/null || echo 0)"
+  if [[ "$ready_builtin_releases" -ge 2 ]]; then
+    ok "$ready_builtin_releases agent-owned Helm releases are generation-current and Ready"
+    break
+  fi
+  sleep 5
+done
+[[ "$ready_builtin_releases" -ge 2 ]] \
+  || fail "fewer than two built-in Helm releases became Ready after ${TIMEOUT_BASELINE}s"
+
+kubectl --context "k3d-$SMOKE_CLUSTER" -n astronomer-monitoring \
+  rollout status deployment/kube-state-metrics --timeout=120s >/dev/null
+kubectl --context "k3d-$SMOKE_CLUSTER" -n astronomer-monitoring \
+  rollout status daemonset/prometheus-node-exporter --timeout=120s >/dev/null
+ok "kube-state-metrics and prometheus-node-exporter workloads are ready"
 
 # ── 6. open kubectl shell ─────────────────────────────────────────────
 

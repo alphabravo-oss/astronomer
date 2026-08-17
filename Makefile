@@ -1,8 +1,8 @@
-.PHONY: help build test lint fmt vet run verify verify-enterprise sqlc sqlc-generate sqlc-check sdk error-codes error-codes-check charlie-contract-generate charlie-contract-check \
+.PHONY: help build test lint fmt vet run verify verify-enterprise check-build-capacity release-contract-check airgap-plan sqlc sqlc-generate sqlc-check sdk error-codes error-codes-check charlie-contract-generate charlie-contract-check \
         docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-import-all k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
-        validate-live-b6 validate-live-argocd validate-live-argocd-register-appset validate-live-argocd-auto-adoption validate-live-dex validate-live-dex-oidc validate-live-generic-oidc validate-live-velero validate-live-cis validate-live-oci validate-live-projects verify-agent-identity-live
+        validate-live-b6 validate-live-delivery validate-live-dex validate-live-dex-oidc validate-live-generic-oidc validate-live-velero validate-live-cis validate-live-oci validate-live-projects verify-agent-identity-live
 
 # ── Variables ────────────────────────────────────────────────────────────────
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -116,6 +116,22 @@ VERIFY_SCOPE ?= all
 verify-enterprise: ## Run enterprise verification (VERIFY_SCOPE=all|backend|frontend|helm)
 	./scripts/verify-enterprise.sh $(VERIFY_SCOPE)
 
+check-build-capacity: ## Refuse build/release work when filesystem headroom is unsafe
+	./scripts/check-build-capacity.sh --path .
+
+release-contract-check: ## Verify deterministic release, Flux/bundle, image, and air-gap contracts
+	./scripts/check-build-capacity.sh --path .
+	./scripts/compatibility-contract.py check
+	python3 -m unittest scripts/tests/release_manifest_test.py scripts/tests/mirror_release_test.py scripts/tests/resolve_release_images_test.py
+	./scripts/tests/release_artifacts_test.sh
+	@tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT; ./scripts/extract-images.sh >"$$tmp"; diff -u deploy/chart/images.txt "$$tmp"
+	go test ./deploy/bundles ./internal/releasecontract ./deploy -run 'TestRelease|TestInterruptedRelease|TestExactRelease|TestSixImage' -count=1
+
+airgap-plan: ## Plan immutable release mirroring and exact Helm values (four variables required)
+	@test -n "$(MANIFEST)" -a -n "$(DESTINATION_REGISTRY)" -a -n "$(OUTPUT)" -a -n "$(VALUES_OUTPUT)" || \
+		{ echo 'MANIFEST, DESTINATION_REGISTRY, OUTPUT, and VALUES_OUTPUT are required' >&2; exit 2; }
+	./scripts/mirror-release.py plan --manifest "$(MANIFEST)" --destination-registry "$(DESTINATION_REGISTRY)" --output "$(OUTPUT)" --values-output "$(VALUES_OUTPUT)"
+
 verify-agent-identity-live: ## Run live credential SSA/RBAC acceptance (AGENT_IDENTITY_TEST_CONTEXT required)
 	./scripts/verify-agent-identity-rbac.sh
 
@@ -201,14 +217,9 @@ k3d-bootstrap: ## Bootstrap a local k3d cluster + apply manifests (CLUSTER=$(CLU
 validate-live-b6: ## Validate live cluster.k8s_changed SSE flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
 	./scripts/validate-live-b6.sh
 
-validate-live-argocd: ## Validate live ArgoCD create/patch/delete flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
-	./scripts/validate-live-argocd.sh
-
-validate-live-argocd-register-appset: ## Validate live ArgoCD register + ApplicationSet fan-out flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
-	./scripts/validate-live-argocd-register-appset.sh
-
-validate-live-argocd-auto-adoption: ## Validate live ArgoCD auto-adoption + baseline fan-out (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
-	./scripts/validate-live-argocd-auto-adoption.sh
+validate-live-delivery: ## Run Plan 007 W11-04 live delivery matrix (DELIVERY_MATRIX required)
+	@test -n "$(DELIVERY_MATRIX)" || { echo 'DELIVERY_MATRIX is required' >&2; exit 2; }
+	./scripts/validate-live-delivery.sh --matrix "$(DELIVERY_MATRIX)"
 
 validate-live-dex: ## Validate live Dex connector apply + redirect flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
 	./scripts/validate-live-dex.sh

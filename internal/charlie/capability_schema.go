@@ -24,6 +24,7 @@ var (
 	componentPattern  = `^[a-z0-9][a-z0-9-]{0,62}$`
 	workloadPattern   = `^(deployment|statefulset)/[a-z0-9][a-z0-9-]{0,62}$`
 	durationPattern   = `^[1-9][0-9]*[smhd]$`
+	digestPattern     = `^sha256:[0-9a-f]{64}$`
 	allowedQueryNames = []string{"availability", "latency", "errors", "saturation"}
 )
 
@@ -95,12 +96,12 @@ func capabilityFieldSchemas(name string) map[string]CapabilityFieldSchema {
 		stringField("controller", false, componentPattern)
 		integerField("page", false, 1, 10000)
 		integerField("page_size", false, 1, 100)
-	case "astronomer.catalog.operations", "astronomer.argocd.operations", "astronomer.tools.operations",
+	case "astronomer.catalog.operations", "astronomer.tools.operations",
 		"astronomer.monitoring.operations", "astronomer.logging.operations", "astronomer.workloads.operations":
 		fields["status"] = CapabilityFieldSchema{Type: "string", Enum: []string{"pending", "running", "completed", "failed", "superseded", "cancelled"}, MaxLength: 16}
 		integerField("page", false, 1, 10000)
 		integerField("page_size", false, 1, 100)
-	case "astronomer.catalog.operation_get", "astronomer.argocd.operation_get", "astronomer.tools.operation_get",
+	case "astronomer.catalog.operation_get", "astronomer.tools.operation_get",
 		"astronomer.monitoring.operation_get", "astronomer.logging.operation_get", "astronomer.workloads.operation_get":
 		stringField("record_id", true, uuidPattern)
 	case "astronomer.observability.health":
@@ -114,7 +115,7 @@ func capabilityFieldSchemas(name string) map[string]CapabilityFieldSchema {
 	case "astronomer.alert.get":
 		stringField("alert_id", true, uuidPattern)
 	case "astronomer.audit.recent_changes":
-		fields["resource_type"] = CapabilityFieldSchema{Type: "string", Enum: []string{"platform_setting", "management_workload", "backup", "argocd_application", "charlie_connection"}, MaxLength: 32}
+		fields["resource_type"] = CapabilityFieldSchema{Type: "string", Enum: []string{"platform_setting", "management_workload", "backup", "cluster_deployment", "charlie_connection"}, MaxLength: 32}
 		stringField("resource_id", false, opaqueIDPattern)
 		stringField("since", false, durationPattern)
 		integerField("limit", false, 1, 100)
@@ -132,17 +133,56 @@ func capabilityFieldSchemas(name string) map[string]CapabilityFieldSchema {
 	case "astronomer.catalog.repositories":
 		integerField("page", false, 1, 10000)
 		integerField("page_size", false, 1, 100)
-	case "astronomer.agent_fleet.summary":
+	case "astronomer.delivery.overview":
+		stringField("project_id", true, uuidPattern)
+	case "astronomer.delivery.sources":
+		stringField("project_id", true, uuidPattern)
+		fields["status"] = CapabilityFieldSchema{Type: "string", Enum: []string{"pending", "ready", "failed", "revoked"}, MaxLength: 16}
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
+	case "astronomer.delivery.source_get":
+		stringField("project_id", true, uuidPattern)
+		stringField("source_id", true, uuidPattern)
+	case "astronomer.delivery.bundles", "astronomer.delivery.targets":
+		stringField("project_id", true, uuidPattern)
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
+	case "astronomer.delivery.bundle_get":
+		stringField("project_id", true, uuidPattern)
+		stringField("bundle_id", true, uuidPattern)
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
+	case "astronomer.delivery.target_preview":
+		stringField("project_id", true, uuidPattern)
+		stringField("target_id", true, uuidPattern)
+	case "astronomer.delivery.rollouts":
+		stringField("project_id", true, uuidPattern)
+		fields["state"] = CapabilityFieldSchema{Type: "string", Enum: []string{"resolving", "awaiting_approval", "queued", "progressing", "paused", "aborted", "rejected", "succeeded", "failed", "rolling_back", "rolled_back", "rollback_failed"}, MaxLength: 32}
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
+	case "astronomer.delivery.rollout_get":
+		stringField("project_id", true, uuidPattern)
+		stringField("rollout_id", true, uuidPattern)
+	case "astronomer.delivery.deployments":
+		stringField("project_id", true, uuidPattern)
+		stringField("cluster_id", false, uuidPattern)
+		fields["phase"] = CapabilityFieldSchema{Type: "string", Enum: []string{"pending", "blocked", "applying", "ready", "degraded", "failed", "suspended", "deleting", "removed", "unknown"}, MaxLength: 16}
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
+	case "astronomer.delivery.deployment_get":
+		stringField("project_id", true, uuidPattern)
+		stringField("deployment_id", true, uuidPattern)
+	case "astronomer.cluster_agents.summary":
 		integerField("stale_after_seconds", false, 30, 86400)
-	case "astronomer.agent_fleet.list":
+	case "astronomer.cluster_agents.list":
 		stringField("environment", false, componentPattern)
 		stringField("region", false, componentPattern)
 		fields["state"] = CapabilityFieldSchema{Type: "string", Enum: []string{"connected", "disconnected", "never"}, MaxLength: 16}
 		integerField("page", false, 1, 10000)
 		integerField("page_size", false, 1, 100)
-	case "astronomer.agent_fleet.get", "astronomer.agent_fleet.upgrade_status", "astronomer.agent_fleet.ingestion_health":
+	case "astronomer.cluster_agents.get":
 		stringField("cluster_id", true, uuidPattern)
-	case "astronomer.agent_fleet.connection_history":
+	case "astronomer.cluster_agents.connection_history":
 		stringField("cluster_id", true, uuidPattern)
 		stringField("since", false, durationPattern)
 		integerField("limit", false, 1, 200)
@@ -167,11 +207,6 @@ func capabilityFieldSchemas(name string) map[string]CapabilityFieldSchema {
 		workload := fields["workload"]
 		workload.Description = "Target as deployment/<name>, e.g. deployment/astronomer-worker."
 		fields["workload"] = workload
-	case "astronomer.argocd.self_management_sync":
-		stringField("resource_id", true, opaqueIDPattern)
-		stringField("application", true, componentPattern)
-		stringField("operation_id", true, opaqueIDPattern)
-		annotateWriteCorrelators(fields)
 	case "astronomer.queue.retry_task":
 		stringField("resource_id", true, opaqueIDPattern)
 		stringField("task_id", true, opaqueIDPattern)
@@ -187,8 +222,33 @@ func capabilityFieldSchemas(name string) map[string]CapabilityFieldSchema {
 		fields["component"] = CapabilityFieldSchema{Type: "string", Required: true, Enum: []string{"server", "worker"}, MaxLength: 16}
 		stringField("operation_id", true, opaqueIDPattern)
 		annotateWriteCorrelators(fields)
+	case "astronomer.delivery.rollout_pause", "astronomer.delivery.rollout_resume",
+		"astronomer.delivery.rollout_retry_failed", "astronomer.delivery.rollout_rollback":
+		deliveryWriteFields(fields, stringField, integerField, "rollout_id", "expected_fence")
+		stringField("reason_code", false, opaqueIDPattern)
+	case "astronomer.delivery.rollout_approve":
+		deliveryWriteFields(fields, stringField, integerField, "rollout_id", "expected_fence")
+		integerField("cohort", true, -1, 10000)
+		stringField("binding_digest", true, digestPattern)
+		integerField("expires_in_seconds", true, 60, 86400)
+	case "astronomer.delivery.deployment_reconcile":
+		deliveryWriteFields(fields, stringField, integerField, "deployment_id", "expected_generation")
+		stringField("reason_code", false, opaqueIDPattern)
 	}
 	return fields
+}
+
+func deliveryWriteFields(fields map[string]CapabilityFieldSchema, stringField func(string, bool, string), integerField func(string, bool, int64, int64), idField, preconditionField string) {
+	stringField("resource_id", true, opaqueIDPattern)
+	stringField("operation_id", true, opaqueIDPattern)
+	stringField("project_id", true, uuidPattern)
+	stringField(idField, true, uuidPattern)
+	minimum := int64(1)
+	if preconditionField == "expected_generation" {
+		minimum = 0
+	}
+	integerField(preconditionField, true, minimum, 1<<62)
+	annotateWriteCorrelators(fields)
 }
 
 func validateCapabilityArguments(capability CapabilityDescriptor, arguments map[string]json.RawMessage) error {

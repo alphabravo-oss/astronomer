@@ -32,7 +32,6 @@ func TestSendToAgentInstrumentsEveryDownstreamRequestClass(t *testing.T) {
 		{protocol.MsgRBACSyncRequest, downstreamboundary.OperationRBAC},
 		{protocol.MsgDecommission, downstreamboundary.OperationAgentCommand},
 		{protocol.MsgAgentUpgrade, downstreamboundary.OperationAgentCommand},
-		{protocol.MsgDesiredStateRequest, downstreamboundary.OperationAgentCommand},
 	}
 	hub := NewHub(nil)
 	for _, test := range cases {

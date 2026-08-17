@@ -121,7 +121,7 @@ func (h *LoggingHandler) SetLogger(log *slog.Logger) {
 }
 
 // SetAuthorization wires per-cluster RBAC for the operations endpoints.
-// Matches the catalog/tools/argocd pattern so the same engine + querier
+// Matches the catalog/tools pattern so the same engine + querier
 // instances are shared across handlers.
 func (h *LoggingHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
 	if h == nil {

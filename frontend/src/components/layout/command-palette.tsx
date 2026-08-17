@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Server,
   BarChart3,
-  GitBranch,
   Shield,
   Settings,
   Search,
@@ -24,12 +23,10 @@ import {
   Layers,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 import { useUIStore } from '@/lib/store';
-import { queryKeys, useClusters, useProjects } from '@/lib/hooks';
-import { listArgoCachedApplications, type SearchableResourceType } from '@/lib/api';
+import { useClusters, useProjects } from '@/lib/hooks';
+import { type SearchableResourceType } from '@/lib/api';
 import { OverlayShell } from '@/components/ui/overlay-shell';
-import type { ArgoCachedApplication } from '@/lib/api';
 import type { Cluster, Project } from '@/types';
 
 const pages = [
@@ -37,7 +34,11 @@ const pages = [
   { name: 'Clusters', href: '/dashboard/clusters', icon: Server },
   { name: 'Projects', href: '/dashboard/projects', icon: Folder },
   { name: 'Monitoring', href: '/dashboard/monitoring', icon: BarChart3 },
-  { name: 'ArgoCD', href: '/dashboard/argocd', icon: GitBranch },
+  { name: 'Continuous Delivery', href: '/dashboard/delivery', icon: Rocket },
+  { name: 'Delivery Sources', href: '/dashboard/delivery/sources', icon: Rocket },
+  { name: 'Delivery Bundles', href: '/dashboard/delivery/bundles', icon: Boxes },
+  { name: 'Delivery Targets', href: '/dashboard/delivery/targets', icon: Route },
+  { name: 'Delivery Rollouts', href: '/dashboard/delivery/rollouts', icon: Rocket },
   { name: 'Catalog', href: '/dashboard/catalog', icon: Box },
   { name: 'RBAC', href: '/dashboard/rbac', icon: Shield },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
@@ -53,6 +54,7 @@ const clusterPages: Array<{ name: string; suffix: string; icon: LucideIcon; desc
   { name: 'Service Mesh', suffix: '/service-mesh', icon: Waypoints, description: 'mTLS + mesh status' },
   { name: 'Mirrored Resources', suffix: '/resources', icon: Layers, description: 'Read-only CRD mirror' },
   { name: 'Gatekeeper', suffix: '/gatekeeper', icon: Shield, description: 'OPA constraint authoring' },
+  { name: 'Delivery', suffix: '/delivery', icon: Rocket, description: 'Controller compatibility and deployments' },
 ];
 
 // Extract the cluster id from a /dashboard/clusters/<id>/... path, skipping the
@@ -74,9 +76,9 @@ const resourceSearches: Array<{ name: string; type: SearchableResourceType; desc
 
 const runbookLinks = [
   {
-    name: 'Argo recovery',
-    href: '/dashboard/argocd',
-    description: 'Health, orphan checks, sync recovery',
+    name: 'Delivery recovery',
+    href: '/dashboard/delivery/deployments?phase=failed',
+    description: 'Reconciliation failures, drift, and rollback status',
   },
   {
     name: 'Backup recovery',
@@ -139,12 +141,6 @@ export function CommandPalette() {
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const { data: projectsData } = useProjects({ pageSize: 25 });
-  const { data: argoApps = [] } = useQuery({
-    queryKey: queryKeys.argocd.cachedApplications({ limit: 25 }),
-    queryFn: () => listArgoCachedApplications({ limit: 25 }),
-    enabled: commandPaletteOpen,
-    staleTime: 30_000,
-  });
   const [search, setSearch] = useState('');
 
   // Keyboard shortcut
@@ -185,15 +181,6 @@ export function CommandPalette() {
   const selectProject = useCallback(
     (project: Project) => {
       router.push(`/dashboard/projects/${project.id}`);
-      setCommandPaletteOpen(false);
-      setSearch('');
-    },
-    [router, setCommandPaletteOpen],
-  );
-
-  const selectArgoApp = useCallback(
-    (app: ArgoCachedApplication) => {
-      router.push(`/dashboard/argocd/${app.argocdInstanceId}/applications/${app.id}`);
       setCommandPaletteOpen(false);
       setSearch('');
     },
@@ -321,26 +308,6 @@ export function CommandPalette() {
                     title={project.displayName || project.name}
                     description={`${project.namespaces?.length ?? 0} namespaces`}
                     onSelect={() => selectProject(project)}
-                  />
-                ))}
-              </Command.Group>
-            )}
-
-            {argoApps.length > 0 && (
-              <Command.Group heading="GitOps Apps" className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2">
-                {argoApps.map((app) => (
-                  <CommandRow
-                    key={app.id}
-                    value={`${app.name} ${app.project} ${app.destinationNamespace} ${app.syncStatus} ${app.healthStatus} argocd gitops app application`}
-                    icon={Rocket}
-                    title={app.name}
-                    description={`${app.project || 'default'} / ${app.destinationNamespace || 'cluster'}`}
-                    right={
-                      <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                        {app.syncStatus || 'unknown'}
-                      </span>
-                    }
-                    onSelect={() => selectArgoApp(app)}
                   />
                 ))}
               </Command.Group>

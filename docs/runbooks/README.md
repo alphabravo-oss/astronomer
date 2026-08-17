@@ -41,20 +41,21 @@ Anything with a `runbook_url` on a PrometheusRule in
 | `AstronomerSIEMEventsDropped` | [siem-events-dropped.md](siem-events-dropped.md) |
 | `AstronomerManagementLoggingForwarderDown` | [management-logging-down.md](management-logging-down.md) |
 | `AstronomerClusterLoggingFlatlined` | [logging-flatlined.md](logging-flatlined.md) |
-| `AstronomerArgoSelfManageDrift` | [argocd-drift.md](argocd-drift.md) |
 
 ## Operational scenarios (no automated alert)
 
 | Scenario | Runbook |
 |---|---|
 | cert-manager renewal stuck | [cert-manager-stuck.md](cert-manager-stuck.md) |
-| Agent fleet de-pair / mass-disconnect | [agent-fleet-depair.md](agent-fleet-depair.md) |
+| Cluster-agent mass disconnect | [cluster-agent-mass-disconnect.md](cluster-agent-mass-disconnect.md) |
 | Redis data loss | [redis-data-loss.md](redis-data-loss.md) |
 | OIDC / SSO outage | [oidc-outage.md](oidc-outage.md) |
 | License expiry | [license-expiry.md](license-expiry.md) |
 | Postgres PVC near full | [postgres-disk-full.md](postgres-disk-full.md) |
 | CRD stuck deleting / finalizer recovery | [crd-finalizer-recovery.md](crd-finalizer-recovery.md) |
-| Self-managed Application acceptance / write barrier | [self-manage-acceptance.md](self-manage-acceptance.md) |
+| Flux-native delivery rollout, source, or controller incident | [delivery-control-plane.md](delivery-control-plane.md) |
+| Delivery assignment acknowledgment lag | [delivery-assignment-lag.md](delivery-assignment-lag.md) |
+| Delivery status stale | [delivery-status-stale.md](delivery-status-stale.md) |
 
 ## Cross-references
 

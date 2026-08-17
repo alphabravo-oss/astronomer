@@ -12,8 +12,8 @@ layers:
 
 A cluster template can pre-seed a default project; a network policy
 template sets the namespace's ingress / egress rules. They compose: the
-"Production Web App" cluster template might say "install ArgoCD + create
-`platform` namespace", and the "Project isolated" network policy
+"Production Web App" cluster template might say "enable the production
+baseline + create `platform` namespace", and the "Project isolated" network policy
 template would then be applied to `platform` to lock down ingress.
 
 [cluster templates]: ../internal/db/migrations/049_cluster_templates.up.sql

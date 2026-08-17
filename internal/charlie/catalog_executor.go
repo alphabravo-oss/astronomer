@@ -112,12 +112,11 @@ func MergeCapabilityAdapters(groups ...map[string]CapabilityExecutor) map[string
 	return merged
 }
 
-func FleetCapabilityAdapters(adapter CapabilityExecutor) map[string]CapabilityExecutor {
+func ClusterAgentCapabilityAdapters(adapter CapabilityExecutor) map[string]CapabilityExecutor {
 	adapters := map[string]CapabilityExecutor{}
 	for _, capability := range ReadCapabilityCatalog() {
-		if capability.Name == "astronomer.agent_fleet.summary" || capability.Name == "astronomer.agent_fleet.list" ||
-			capability.Name == "astronomer.agent_fleet.get" || capability.Name == "astronomer.agent_fleet.connection_history" ||
-			capability.Name == "astronomer.agent_fleet.upgrade_status" || capability.Name == "astronomer.agent_fleet.ingestion_health" ||
+		if capability.Name == "astronomer.cluster_agents.summary" || capability.Name == "astronomer.cluster_agents.list" ||
+			capability.Name == "astronomer.cluster_agents.get" || capability.Name == "astronomer.cluster_agents.connection_history" ||
 			capability.Name == "astronomer.tunnel.health" || capability.Name == "astronomer.tunnel.replica_distribution" || capability.Name == "astronomer.tunnel.recent_errors" {
 			adapters[capability.Name] = adapter
 		}

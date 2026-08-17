@@ -122,53 +122,32 @@ func (tx *fakeOnboardingTx) AdvanceCharlieOnboardingState(_ context.Context, par
 	return *tx.connection, nil
 }
 
+func (tx *fakeOnboardingTx) LockCharlieConnectionActivation(context.Context, uuid.UUID) ([]uuid.UUID, error) {
+	if tx.connection == nil {
+		return nil, pgx.ErrNoRows
+	}
+	return []uuid.UUID{tx.connection.ID}, nil
+}
+
+func (tx *fakeOnboardingTx) DeactivateCharlieConnectionsForReplacement(context.Context, uuid.UUID) error {
+	return nil
+}
+
+func (tx *fakeOnboardingTx) ActivateCharlieConnection(_ context.Context, params sqlc.ActivateCharlieConnectionParams) (sqlc.CharlieConnection, error) {
+	if tx.connection == nil || tx.connection.ID != params.ID || tx.connection.OnboardingState != "consumed" {
+		return sqlc.CharlieConnection{}, pgx.ErrNoRows
+	}
+	tx.connection.Active = true
+	tx.connection.OnboardingState = "active"
+	tx.connection.HealthState = params.HealthState
+	return *tx.connection, nil
+}
+
 type fakeAgentSecretWriter struct {
 	writes    int
 	rollbacks int
 	bundles   []AgentSecretBundle
 	events    *[]string
-}
-
-type fakeAgentInstaller struct {
-	prepares  int
-	installs  int
-	prunes    int
-	rollbacks int
-	last      AgentInstallSpec
-	events    *[]string
-}
-
-func (i *fakeAgentInstaller) PruneSupersededRepositories(_ context.Context, spec AgentInstallSpec) error {
-	i.prunes++
-	i.last = spec
-	if i.events != nil {
-		*i.events = append(*i.events, "prune_repositories")
-	}
-	return nil
-}
-
-func (i *fakeAgentInstaller) PruneSupersededSecrets(context.Context, AgentInstallSpec) error {
-	return nil
-}
-
-func (i *fakeAgentInstaller) PrepareNamespace(_ context.Context, installationID uuid.UUID) (func(context.Context) error, error) {
-	if installationID == uuid.Nil {
-		return nil, errors.New("missing installation identity")
-	}
-	i.prepares++
-	if i.events != nil {
-		*i.events = append(*i.events, "prepare_namespace")
-	}
-	return func(context.Context) error { return nil }, nil
-}
-
-func (i *fakeAgentInstaller) Install(_ context.Context, spec AgentInstallSpec) (AgentInstallReceipt, error) {
-	i.installs++
-	if i.events != nil {
-		*i.events = append(*i.events, "install")
-	}
-	i.last = spec
-	return AgentInstallReceipt{Rollback: func(context.Context) error { i.rollbacks++; return nil }}, nil
 }
 
 func (w *fakeAgentSecretWriter) WriteAgentSecret(_ context.Context, bundle AgentSecretBundle) (SecretWriteReceipt, error) {
@@ -194,9 +173,8 @@ func TestOnboardingConsumerRollsBackRetriesAndReplaysIdempotently(t *testing.T) 
 	store := &fakeOnboardingStore{installationID: uuid.MustParse("3c608d44-848c-45d6-bd86-246be0b880af"), failAdvance: 2}
 	events := []string{}
 	secrets := &fakeAgentSecretWriter{events: &events}
-	installer := &fakeAgentInstaller{events: &events}
 	consumer := &OnboardingConsumer{
-		Store: store, Secrets: secrets, Installer: installer, Encryptor: encryptor,
+		Store: store, Secrets: secrets, Encryptor: encryptor,
 		BridgeServerDNS: "charlie-agent-bridge.astronomer-charlie.svc",
 		MCPServerDNS:    "astronomer-charlie-mcp.astronomer.svc",
 		Now:             func() time.Time { return fixture.now },
@@ -206,10 +184,10 @@ func TestOnboardingConsumerRollsBackRetriesAndReplaysIdempotently(t *testing.T) 
 	if _, err := consumer.Consume(context.Background(), validated, uuid.New()); err == nil {
 		t.Fatal("injected DB failure was accepted")
 	}
-	if store.connection != nil || secrets.rollbacks != 1 || installer.rollbacks != 1 {
-		t.Fatalf("partial consume was not rolled back: connection=%+v secret_rollbacks=%d install_rollbacks=%d", store.connection, secrets.rollbacks, installer.rollbacks)
+	if store.connection != nil || secrets.rollbacks != 1 {
+		t.Fatalf("partial consume was not rolled back: connection=%+v secret_rollbacks=%d", store.connection, secrets.rollbacks)
 	}
-	if len(events) < 4 || events[0] != "prepare_namespace" || events[1] != "write_secret" || events[2] != "prune_repositories" || events[3] != "install" {
+	if len(events) != 1 || events[0] != "write_secret" {
 		t.Fatalf("unsafe onboarding side-effect order: %v", events)
 	}
 
@@ -218,7 +196,7 @@ func TestOnboardingConsumerRollsBackRetriesAndReplaysIdempotently(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.State != "consumed" || status.Idempotent || store.connection == nil || store.connection.OnboardingState != "consumed" {
+	if status.State != "active" || status.Idempotent || store.connection == nil || store.connection.OnboardingState != "active" || !store.connection.Active || store.connection.HealthState != "installing" {
 		t.Fatalf("retry did not consume package: status=%+v connection=%+v", status, store.connection)
 	}
 	if len(store.created) != 1 || store.created[0].ReplicaCount != int32(validated.Package.ReplicaCount) {
@@ -237,14 +215,12 @@ func TestOnboardingConsumerRollsBackRetriesAndReplaysIdempotently(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !replay.Idempotent || replay.State != "consumed" || secrets.writes != writesAfterSuccess || len(store.created) != 1 {
+	if !replay.Idempotent || replay.State != "active" || secrets.writes != writesAfterSuccess || len(store.created) != 1 {
 		t.Fatalf("replay recreated state or Secret: replay=%+v writes=%d creates=%d", replay, secrets.writes, len(store.created))
 	}
-	if installer.prepares != 2 || installer.installs != 2 || installer.prunes != 2 || installer.last.CentralCAPEM == "" || installer.last.Trust.Astronomer.MCPServerPrivateKey == "" ||
-		len(installer.last.ActionSigningPublicKey) != 32 || installer.last.ActionSigningKeyFingerprint == "" ||
-		installer.last.ReplicaCount != 2 || string(installer.last.OnboardingPackage) != string(validated.RawPackage) ||
+	if len(secrets.bundles) != 2 || secrets.bundles[0].Name != "charlie-agent-bootstrap" ||
 		string(secrets.bundles[0].OnboardingPackage) != string(validated.RawPackage) {
-		t.Fatalf("Argo installation was not transactionally integrated: installs=%d", installer.installs)
+		t.Fatalf("Flux bootstrap Secret was not transactionally integrated: bundles=%d", len(secrets.bundles))
 	}
 
 	serialized, err := json.Marshal(struct {
@@ -272,7 +248,7 @@ func TestOnboardingAuditFailureCreatesNoStateOrExternalMaterial(t *testing.T) {
 	store := &fakeOnboardingStore{installationID: uuid.New()}
 	events := []string{}
 	consumer := &OnboardingConsumer{
-		Store: store, Secrets: &fakeAgentSecretWriter{events: &events}, Installer: &fakeAgentInstaller{events: &events}, Encryptor: encryptor,
+		Store: store, Secrets: &fakeAgentSecretWriter{events: &events}, Encryptor: encryptor,
 		BridgeServerDNS: "charlie-agent-bridge.astronomer-charlie.svc", MCPServerDNS: "astronomer-charlie-mcp.astronomer.svc",
 		Auditor: &authorityAuditFake{err: errors.New("database-SENTINEL")},
 	}

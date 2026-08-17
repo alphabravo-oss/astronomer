@@ -6,6 +6,15 @@
   "properties": {
     "createNamespace": { "type": "boolean" },
     "namespace": { "type": "string", "minLength": 1 },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "mirrorMapping"],
+      "properties": {
+        "manifest": {"type": "string", "maxLength": 900000},
+        "mirrorMapping": {"type": "string", "maxLength": 900000}
+      }
+    },
     "image": {
       "type": "object",
       "additionalProperties": true,
@@ -86,7 +95,23 @@
       }
     },
     "migrate": { "$ref": "#/definitions/workload" },
-    "preflight": { "$ref": "#/definitions/workload" },
+    "preflight": {
+      "allOf": [{ "$ref": "#/definitions/workload" }],
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "freshInstall": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "required": { "const": true },
+            "acceptedSchemaVersion": { "const": 1 }
+          },
+          "required": ["required", "acceptedSchemaVersion"]
+        }
+      },
+      "required": ["freshInstall"]
+    },
     "dex": {
       "type": "object",
       "additionalProperties": false,
@@ -132,6 +157,7 @@
         "logLevel": { "type": "string", "enum": ["debug", "info", "warn", "warning", "error"] },
         "serverURL": { "type": "string" },
         "corsAllowedOrigins": { "type": "string" },
+        "trustedProxyCIDRs": { "type": "array", "items": { "type": "string", "pattern": "^[0-9A-Fa-f:.]+/[0-9]{1,3}$" }, "uniqueItems": true },
         "loginFailureThreshold": { "type": "integer", "minimum": 1 },
         "lockoutDurationMinutes": { "type": "integer", "minimum": 1 },
         "auth": {
@@ -147,6 +173,149 @@
                 "require": { "type": "boolean" }
               }
             }
+          }
+        }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "compatibility", "artifacts", "sourceResolution", "rollout", "status", "monitoring"],
+      "properties": {
+        "enabled": { "const": true },
+        "compatibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kubernetes", "agentProtocol", "flux"],
+          "properties": {
+            "kubernetes": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["minimumMinor", "maximumMinor"],
+              "properties": {
+                "minimumMinor": { "$ref": "#/definitions/kubernetesMinor" },
+                "maximumMinor": { "$ref": "#/definitions/kubernetesMinor" }
+              }
+            },
+            "agentProtocol": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["minimum", "maximum"],
+              "properties": {
+                "minimum": { "type": "integer", "minimum": 2 },
+                "maximum": { "type": "integer", "minimum": 2 }
+              }
+            },
+            "flux": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["version"],
+              "properties": {
+                "version": { "type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$" }
+              }
+            }
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["publicRegistry", "privateRegistry", "registryRewrites", "fluxDistribution", "builtInBundles"],
+          "properties": {
+            "publicRegistry": { "$ref": "#/definitions/registryHostOrEmpty" },
+            "privateRegistry": { "$ref": "#/definitions/registryHostOrEmpty" },
+            "registryRewrites": {
+              "type": "object",
+              "propertyNames": { "$ref": "#/definitions/registryHost" },
+              "additionalProperties": { "$ref": "#/definitions/registryHost" }
+            },
+            "fluxDistribution": { "$ref": "#/definitions/signedArtifact" },
+            "builtInBundles": { "$ref": "#/definitions/signedArtifact" }
+          }
+        },
+        "sourceResolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workerConcurrency", "maxArtifactBytes", "maxHelmChartBytes", "egressCIDRs", "allowedPrivateHosts", "allowSSH", "proxy", "ca", "trustKeys"],
+          "properties": {
+            "workerConcurrency": { "type": "integer", "minimum": 1, "maximum": 256 },
+            "maxArtifactBytes": { "type": "integer", "minimum": 1048576, "maximum": 2147483648 },
+            "maxHelmChartBytes": { "type": "integer", "minimum": 1048576, "maximum": 1073741824 },
+            "egressCIDRs": { "$ref": "#/definitions/stringArray" },
+            "allowedPrivateHosts": { "$ref": "#/definitions/stringArray" },
+            "allowSSH": { "type": "boolean" },
+            "proxy": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "urlSecretRef"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "urlSecretRef": { "$ref": "#/definitions/secretKeyRef" }
+              },
+              "allOf": [{
+                "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+                "then": {
+                  "properties": {
+                    "urlSecretRef": {
+                      "required": ["name", "key"],
+                      "properties": {
+                        "name": { "type": "string", "minLength": 1 },
+                        "key": { "type": "string", "minLength": 1 }
+                      }
+                    }
+                  }
+                }
+              }]
+            },
+            "ca": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["existingSecret", "key"],
+              "properties": {
+                "existingSecret": { "type": "string", "maxLength": 253 },
+                "key": { "type": "string", "minLength": 1, "maxLength": 253 }
+              }
+            },
+            "trustKeys": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["existingSecret"],
+              "properties": {
+                "existingSecret": { "type": "string", "maxLength": 253 }
+              }
+            }
+          }
+        },
+        "rollout": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workerConcurrency", "maxActiveRollouts", "maxClustersPerRollout", "maxConcurrentClustersGlobal", "defaultFailureBudget"],
+          "properties": {
+            "workerConcurrency": { "type": "integer", "minimum": 1, "maximum": 1024 },
+            "maxActiveRollouts": { "type": "integer", "minimum": 1, "maximum": 10000 },
+            "maxClustersPerRollout": { "type": "integer", "minimum": 1, "maximum": 100000 },
+            "maxConcurrentClustersGlobal": { "type": "integer", "minimum": 1, "maximum": 10000 },
+            "defaultFailureBudget": { "type": "integer", "minimum": 0, "maximum": 10000 }
+          }
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["retentionDays", "historyPerDeployment", "coalesceWindowSeconds"],
+          "properties": {
+            "retentionDays": { "type": "integer", "minimum": 1, "maximum": 3650 },
+            "historyPerDeployment": { "type": "integer", "minimum": 1, "maximum": 10000 },
+            "coalesceWindowSeconds": { "type": "integer", "minimum": 1, "maximum": 300 }
+          }
+        },
+        "monitoring": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["assignmentAckSecondsP99", "fluxTransitionVisibilitySecondsP99", "rolloutSchedulerSecondsP99", "staleClusterStatusSeconds"],
+          "properties": {
+            "assignmentAckSecondsP99": { "type": "integer", "minimum": 1 },
+            "fluxTransitionVisibilitySecondsP99": { "type": "integer", "minimum": 1 },
+            "rolloutSchedulerSecondsP99": { "type": "integer", "minimum": 1 },
+            "staleClusterStatusSeconds": { "type": "integer", "minimum": 1 }
           }
         }
       }
@@ -402,9 +571,83 @@
               "kubernetesAPIEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" }
             },
             "required": ["enabled", "defaultDeny", "externalPostgresEgressCIDRs", "externalRedisEgressCIDRs", "kubernetesAPIEgressCIDRs"]
+          },
+          "preflight": {
+            "properties": {
+              "enabled": { "const": true },
+              "freshInstall": {
+                "properties": {
+                  "required": { "const": true },
+                  "acceptedSchemaVersion": { "const": 1 }
+                },
+                "required": ["required", "acceptedSchemaVersion"]
+              }
+            },
+            "required": ["enabled", "freshInstall"]
+          },
+          "delivery": {
+            "properties": {
+              "enabled": { "const": true },
+              "sourceResolution": {
+                "properties": {
+                  "egressCIDRs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "not": { "enum": ["0.0.0.0/0", "::/0"] }
+                    }
+                  }
+                }
+              },
+              "artifacts": {
+                "properties": {
+                  "fluxDistribution": {
+                    "properties": {
+                      "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+                      "trustPolicy": {
+                        "properties": {
+                          "requireSignature": { "const": true },
+                          "certificateIdentity": { "type": "string", "minLength": 1 },
+                          "oidcIssuer": { "type": "string", "pattern": "^https://", "minLength": 1 }
+                        },
+                        "required": ["requireSignature", "certificateIdentity", "oidcIssuer"]
+                      }
+                    },
+                    "required": ["ociRepository", "digest", "trustPolicy"],
+                    "anyOf": [
+                      {
+                        "properties": { "ociRepository": { "type": "string", "minLength": 1 } },
+                        "required": ["ociRepository"]
+                      },
+                      {
+                        "properties": { "disconnectedAssetPath": { "type": "string", "minLength": 1 } },
+                        "required": ["disconnectedAssetPath"]
+                      }
+                    ]
+                  },
+                  "builtInBundles": {
+                    "properties": {
+                      "ociRepository": { "type": "string", "minLength": 1 },
+                      "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+                      "trustPolicy": {
+                        "properties": {
+                          "requireSignature": { "const": true },
+                          "certificateIdentity": { "type": "string", "minLength": 1 },
+                          "oidcIssuer": { "type": "string", "pattern": "^https://", "minLength": 1 }
+                        },
+                        "required": ["requireSignature", "certificateIdentity", "oidcIssuer"]
+                      }
+                    },
+                    "required": ["ociRepository", "digest", "trustPolicy"]
+                  }
+                },
+                "required": ["fluxDistribution", "builtInBundles"]
+              }
+            },
+            "required": ["enabled", "sourceResolution", "artifacts"]
           }
         },
-        "required": ["postgres", "redis", "gateway", "tls", "secrets", "bootstrap", "networkPolicy"]
+        "required": ["postgres", "redis", "gateway", "tls", "secrets", "bootstrap", "networkPolicy", "preflight", "delivery"]
       }
     },
     {
@@ -516,6 +759,45 @@
     }
   ],
   "definitions": {
+    "kubernetesMinor": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "registryHost": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]{1,5})?$"
+    },
+    "registryHostOrEmpty": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^$|^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]{1,5})?$"
+    },
+    "signedArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ociRepository", "digest", "disconnectedAssetPath", "trustPolicy"],
+      "properties": {
+        "ociRepository": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^$|^(?:oci://)?[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+$"
+        },
+        "digest": { "type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$" },
+        "disconnectedAssetPath": { "type": "string", "maxLength": 1024, "pattern": "^$|^/[A-Za-z0-9._/-]+$" },
+        "trustPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requireSignature", "certificateIdentity", "oidcIssuer"],
+          "properties": {
+            "requireSignature": { "const": true },
+            "certificateIdentity": { "type": "string", "maxLength": 1024 },
+            "oidcIssuer": { "type": "string", "maxLength": 1024, "pattern": "^https://" }
+          }
+        }
+      }
+    },
     "imageRef": {
       "type": "object",
       "additionalProperties": true,

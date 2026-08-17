@@ -37,6 +37,9 @@ management plane.
 Run "astro login" first to authenticate. Then explore:
 
   astro cluster list                 # all managed clusters
+  astro delivery source list         # Continuous Delivery sources
+  astro delivery target preview      # authoritative placement preview
+  astro cluster-agent list           # Cluster Agent health
   astro cluster manifest <id>        # download agent install YAML
   astro cluster self-test <id>       # run agent health checks
   astro cluster delete <id>          # decommission a cluster
@@ -85,14 +88,14 @@ dashboard can perform, this CLI can — and vice versa.`,
 		newNodesCmd(),
 		newWorkloadsCmd(),
 
-		// Fleet & lifecycle operations.
-		newFleetCmd(),
+		// Delivery and cluster-agent lifecycle operations.
+		newClusterAgentCmd(),
+		newDeliveryCmd(),
 		newBackupCmd(),
 		newMonitoringCmd(),
 
-		// Catalog & GitOps.
+		// Catalog.
 		newCatalogCmd(),
-		newArgocdCmd(),
 
 		// Tenancy: projects, identity, access control.
 		newProjectsCmd(),

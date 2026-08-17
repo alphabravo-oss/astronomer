@@ -46,7 +46,7 @@ Do **not** use this runbook for:
 
 - Every table in the `astronomer` database: clusters, cluster agents, projects,
   project environments, RBAC (users, roles, role bindings), audit log,
-  monitoring config, ArgoCD instance records, integration tokens (encrypted),
+  monitoring config, delivery sources/bundles/targets/rollouts, integration tokens (encrypted),
   IDP / SSO config (encrypted), and migration history.
 - All the structural metadata managed clusters need in order to be recognised
   again — cluster IDs, agent tokens, environment slugs, etc.
@@ -490,16 +490,17 @@ your highest-priority post-incident action**.
 
 Postgres is the authoritative store for users, RBAC, audit history,
 credentials, cluster inventory, operation rows, and product metadata.
-Kubernetes/etcd is authoritative for live Kubernetes objects, controller-owned
-status, and ArgoCD reconciliation resources.
+Each target cluster's Kubernetes/etcd is authoritative for live workload and
+Flux reconciliation objects. The agent's accepted checkpoint is prune evidence;
+it is not a substitute for PostgreSQL delivery intent or rollout history.
 
 When snapshots are from different points in time:
 
 | Scenario | Recovery rule |
 |----------|---------------|
 | Postgres is older than Kubernetes | Keep Postgres as the source for product state. Reconcile CRD-owned `Cluster` and `Project` objects by `external_ref_*`; import only rows that carry ownership proof or after an explicit operator import. |
-| Kubernetes is older than Postgres | Keep Postgres rows. Recreate missing ArgoCD cluster Secrets, ApplicationSets, and CRD status from DB-owned intent where encrypted credential material is available. |
-| ArgoCD cluster Secret exists but DB row is missing | Do not silently adopt it. Import only if Astronomer ownership labels match, otherwise leave unmanaged and surface drift. |
+| A target cluster is older than Postgres | Keep PostgreSQL intent. Let the authenticated agent fetch the latest generation and deterministically recreate only Astronomer-owned Flux objects. Do not hand-apply an assignment or advance a checkpoint. |
+| Agent-owned Flux object exists but its deployment row is missing | Do not silently adopt it. Quarantine/orphan it through the delivery API after verifying ownership and restore chronology; never infer product intent from downstream state. |
 | CRD exists but same-name DB row is UI/API-owned | Do not take ownership automatically. Resolve through an explicit ownership transfer/import procedure. |
 | Redis jobs are missing after restore | Treat Redis as ephemeral. Run recovery sweeps and retry idempotent operations from Postgres state instead of trying to restore queue contents. |
 

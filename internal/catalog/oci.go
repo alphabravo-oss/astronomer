@@ -17,12 +17,15 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"helm.sh/helm/v3/pkg/registry"
+	"oras.land/oras-go/v2/registry/remote"
+	remoteauth "oras.land/oras-go/v2/registry/remote/auth"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
@@ -32,6 +35,18 @@ import (
 // pulls. Each tag costs a registry manifest pull, so this is a hard bound on
 // the work one repository can create.
 const MaxOCIChartVersionsPerChart = 10
+const MaxOCIResponseBytes int64 = 64 << 20
+
+const (
+	ociChartMaxCount           = 100
+	ociChartNameMaxBytes       = 255
+	ociTagPageSize             = 100
+	ociTagMaxPages             = 10
+	ociTagMaxTotal             = ociTagPageSize * ociTagMaxPages
+	ociMetadataMaxBytes  int64 = 4 << 20
+)
+
+var ociChartNamePattern = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$`)
 
 // OCIQuerier is the narrow DB surface the OCI ingest needs. Both
 // handler.CatalogQuerier and worker tasks.RuntimeQuerier satisfy it.
@@ -90,13 +105,7 @@ func IngestOCIRepo(ctx context.Context, q OCIQuerier, repo sqlc.HelmRepository, 
 	if err != nil {
 		return 0, 0, err
 	}
-	clientOpts := []registry.ClientOption{
-		registry.ClientOptWriter(io.Discard),
-	}
-	if cfg.Username != "" || cfg.Password != "" {
-		clientOpts = append(clientOpts, registry.ClientOptBasicAuth(cfg.Username, cfg.Password))
-	}
-	rc, err := registry.NewClient(clientOpts...)
+	rc, err := NewOCIRegistryClient(ctx, repo.Url, cfg, MaxOCIResponseBytes)
 	if err != nil {
 		return 0, 0, fmt.Errorf("init OCI registry client: %w", err)
 	}
@@ -116,7 +125,7 @@ func IngestOCIRepo(ctx context.Context, q OCIQuerier, repo sqlc.HelmRepository, 
 			continue
 		}
 		chartRef := base + "/" + chartName
-		tags, tagErr := rc.Tags(chartRef)
+		tags, tagErr := ListOCIRegistryTags(ctx, chartRef, cfg)
 		if tagErr != nil {
 			log.Warn("OCI tags fetch failed", "chart", chartRef, "error", tagErr)
 			continue
@@ -228,6 +237,92 @@ func IngestOCIRepo(ctx context.Context, q OCIQuerier, repo sqlc.HelmRepository, 
 	return chartCount, versionCount, nil
 }
 
+// ListOCIRegistryTags bounds both response bytes and server-driven pagination.
+// Helm's registry.Client.Tags accumulates an unlimited number of ORAS pages
+// under context.Background, so catalog ingest must never use it directly.
+func ListOCIRegistryTags(ctx context.Context, chartReference string, cfg OCIAuthConfig) ([]string, error) {
+	host := strings.SplitN(chartReference, "/", 2)[0]
+	if host == "" || !strings.Contains(chartReference, "/") {
+		return nil, errors.New("OCI chart reference is invalid")
+	}
+	if err := httpclient.GuardPublicHost("https://" + host); err != nil {
+		return nil, fmt.Errorf("OCI registry URL blocked: %w", err)
+	}
+	client := httpclient.SafeClientWithLimit(60*time.Second, ociMetadataMaxBytes)
+	client.Transport = &catalogContextTransport{ctx: ctx, base: client.Transport}
+	return listOCIRegistryTags(ctx, chartReference, cfg, client)
+}
+
+func listOCIRegistryTags(ctx context.Context, chartReference string, cfg OCIAuthConfig, client *http.Client) ([]string, error) {
+	repository, err := remote.NewRepository(chartReference)
+	if err != nil {
+		return nil, errors.New("OCI chart reference is invalid")
+	}
+	credential := remoteauth.EmptyCredential
+	if cfg.Username != "" || cfg.Password != "" {
+		credential.Username = cfg.Username
+		credential.Password = cfg.Password
+	}
+	repository.Client = &remoteauth.Client{
+		Client:     client,
+		Credential: remoteauth.StaticCredential(repository.Reference.Registry, credential),
+	}
+	repository.TagListPageSize = ociTagPageSize
+	repository.TagListMaxPages = ociTagMaxPages
+	repository.MaxMetadataBytes = ociMetadataMaxBytes
+	tags := make([]string, 0, min(ociTagPageSize, ociTagMaxTotal))
+	err = repository.Tags(ctx, "", func(page []string) error {
+		if len(page) > ociTagMaxTotal-len(tags) {
+			return errors.New("OCI tag listing exceeds the configured total limit")
+		}
+		tags = append(tags, page...)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("bounded OCI tag listing failed: %w", err)
+	}
+	return tags, nil
+}
+
+// NewOCIRegistryClient is the single construction path for catalog OCI reads.
+// It rejects private/metadata destinations at URL-validation and dial time,
+// applies a wall-clock timeout, and bounds every registry/token/blob response.
+func NewOCIRegistryClient(ctx context.Context, repoURL string, cfg OCIAuthConfig, maximum int64) (*registry.Client, error) {
+	host, _, err := SplitOCIURL(repoURL)
+	if err != nil {
+		return nil, err
+	}
+	if err := httpclient.GuardPublicHost("https://" + host); err != nil {
+		return nil, fmt.Errorf("OCI registry URL blocked: %w", err)
+	}
+	if maximum <= 0 || maximum > MaxOCIResponseBytes {
+		maximum = MaxOCIResponseBytes
+	}
+	client := httpclient.SafeClientWithLimit(60*time.Second, maximum)
+	client.Transport = &catalogContextTransport{ctx: ctx, base: client.Transport}
+	clientOpts := []registry.ClientOption{
+		registry.ClientOptWriter(io.Discard),
+		registry.ClientOptHTTPClient(client),
+	}
+	if cfg.Username != "" || cfg.Password != "" {
+		clientOpts = append(clientOpts, registry.ClientOptBasicAuth(cfg.Username, cfg.Password))
+	}
+	return registry.NewClient(clientOpts...)
+}
+
+type catalogContextTransport struct {
+	ctx  context.Context
+	base http.RoundTripper
+}
+
+func (t *catalogContextTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	ctx := t.ctx
+	if ctx == nil {
+		ctx = request.Context()
+	}
+	return t.base.RoundTrip(request.Clone(ctx))
+}
+
 // SelectOCITags filters and orders registry tags newest-first, then caps.
 func SelectOCITags(tags []string, limit int) []string {
 	filtered := make([]string, 0, len(tags))
@@ -297,18 +392,39 @@ func OCIMetadataFromPull(p *registry.PullResult) OCIChartMeta {
 //  2. /v2/_catalog probe (only when AllowCatalog is true).
 func selectOCICharts(ctx context.Context, repo sqlc.HelmRepository, cfg OCIAuthConfig) ([]string, error) {
 	if len(cfg.Charts) > 0 {
-		out := make([]string, 0, len(cfg.Charts))
-		for _, c := range cfg.Charts {
-			if s := strings.TrimSpace(c); s != "" {
-				out = append(out, s)
-			}
-		}
-		return out, nil
+		return normalizeOCIChartNames(cfg.Charts)
 	}
 	if !cfg.AllowCatalog {
 		return nil, nil
 	}
-	return probeOCICatalog(ctx, repo.Url, cfg.Username, cfg.Password)
+	charts, err := probeOCICatalog(ctx, repo.Url, cfg.Username, cfg.Password)
+	if err != nil {
+		return nil, err
+	}
+	return normalizeOCIChartNames(charts)
+}
+
+func normalizeOCIChartNames(charts []string) ([]string, error) {
+	if len(charts) > ociChartMaxCount {
+		return nil, fmt.Errorf("OCI chart list exceeds %d entries", ociChartMaxCount)
+	}
+	out := make([]string, 0, len(charts))
+	seen := make(map[string]struct{}, len(charts))
+	for _, raw := range charts {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		if len(name) > ociChartNameMaxBytes || !ociChartNamePattern.MatchString(name) {
+			return nil, fmt.Errorf("OCI chart name %q is invalid", name)
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	return out, nil
 }
 
 // probeOCICatalog calls /v2/_catalog on the OCI registry's host. Many
@@ -331,7 +447,7 @@ func probeOCICatalog(ctx context.Context, repoURL, username, password string) ([
 	if username != "" || password != "" {
 		req.SetBasicAuth(username, password)
 	}
-	client := httpclient.SafeClient(15 * time.Second)
+	client := httpclient.SafeClientWithLimit(15*time.Second, 4<<20)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("call /v2/_catalog: %w", err)

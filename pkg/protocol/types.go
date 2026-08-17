@@ -151,26 +151,12 @@ const (
 	// and tells the agent to hold its checkpoint and re-forward.
 	MsgApiserverAuditAck MessageType = "APISERVER_AUDIT_ACK"
 
-	// Fleet-style PULL reconcile (sprint: pull-reconcile). The agent is the
-	// LOCAL GitOps applier: it requests its DESIRED STATE from the management
-	// plane over the existing WS tunnel, server-side-applies the returned
-	// manifests into the astronomer-* owned namespaces, prunes managed objects
-	// no longer desired, and reports per-manifest status back.
-	//
-	//   - MsgDesiredStateRequest  (agent -> server): "give me my desired state".
-	//     Carries the cluster ID and the revision the agent last applied so the
-	//     server could short-circuit (MVP always re-renders + returns).
-	//   - MsgDesiredStateResponse (server -> agent): the rendered desired set —
-	//     a stable revision hash plus an ordered list of manifest documents,
-	//     each tagged with its target astronomer-* namespace.
-	//   - MsgApplyStatus          (agent -> server): one-way report of what the
-	//     agent applied for a revision (per-manifest applied/error).
-	//
-	// The whole pull path is gated OFF by default behind PullReconcileEnabled;
-	// the DesiredState responder is read-only rendering and may always answer.
-	MsgDesiredStateRequest  MessageType = "DESIRED_STATE_REQUEST"
-	MsgDesiredStateResponse MessageType = "DESIRED_STATE_RESPONSE"
-	MsgApplyStatus          MessageType = "APPLY_STATUS"
+	// Flux-native delivery protocol v2. A wake-up is only an invalidation hint;
+	// the agent always pulls the authoritative, generation-fenced snapshot.
+	MsgDeliveryStateRequest  MessageType = "DELIVERY_STATE_REQUEST_V2"
+	MsgDeliveryStateResponse MessageType = "DELIVERY_STATE_RESPONSE_V2"
+	MsgDeliveryStatus        MessageType = "DELIVERY_STATUS_V2"
+	MsgDeliveryReconcile     MessageType = "DELIVERY_RECONCILE_V2"
 )
 
 // ApiserverAuditPayload is the body of a MsgApiserverAudit frame: a batch of
@@ -337,60 +323,6 @@ type AgentUpgradeResultPayload struct {
 	RollbackImage string `json:"rollback_image,omitempty"`
 }
 
-// DesiredStateRequestPayload is the agent's request for its desired state.
-// CurrentRevision is the revision hash the agent last successfully applied
-// (empty on first reconcile). The server ignores the cluster ID in the
-// payload for authorization — the authoritative cluster is the authenticated
-// tunnel session — but it is echoed for log correlation.
-type DesiredStateRequestPayload struct {
-	ClusterID       string `json:"cluster_id"`
-	CurrentRevision string `json:"current_revision,omitempty"`
-}
-
-// DesiredManifest is one rendered desired-state document. Namespace is the
-// target astronomer-* namespace the document applies into; it MUST be one of
-// deploy/agent.AstronomerOwnedNamespaces (the agent re-validates before apply,
-// and prunes only within these namespaces by the managed-by label). Content is
-// the raw manifest YAML (one or more YAML documents). Name/Kind are advisory
-// metadata for status correlation and logging.
-type DesiredManifest struct {
-	Name      string `json:"name"`
-	Kind      string `json:"kind,omitempty"`
-	Namespace string `json:"namespace"`
-	Content   string `json:"content"`
-}
-
-// DesiredStateResponsePayload is the server's rendered desired state for a
-// cluster. Revision is a stable, deterministic hash of the rendered set so the
-// agent can skip re-applying an unchanged revision and report status against a
-// concrete version. Manifests is the ordered set of documents to apply, each
-// bounded to an astronomer-* namespace.
-type DesiredStateResponsePayload struct {
-	ClusterID string            `json:"cluster_id"`
-	Revision  string            `json:"revision"`
-	Manifests []DesiredManifest `json:"manifests"`
-}
-
-// ApplyStatusPayload is the agent's one-way report of an apply pass for a
-// revision. Results is per-manifest (keyed by DesiredManifest.Name). Success is
-// the aggregate (all manifests applied). Pruned is the count of managed objects
-// the agent deleted because they were no longer desired.
-type ApplyStatusPayload struct {
-	ClusterID string             `json:"cluster_id"`
-	Revision  string             `json:"revision"`
-	Success   bool               `json:"success"`
-	Pruned    int                `json:"pruned,omitempty"`
-	Results   []ApplyResultEntry `json:"results,omitempty"`
-	Error     string             `json:"error,omitempty"`
-}
-
-// ApplyResultEntry is the outcome of applying a single desired manifest.
-type ApplyResultEntry struct {
-	Name    string `json:"name"`
-	Applied bool   `json:"applied"`
-	Error   string `json:"error,omitempty"`
-}
-
 // Message is the envelope for all tunnel communication.
 type Message struct {
 	Type      MessageType     `json:"type"`
@@ -404,10 +336,11 @@ type Message struct {
 
 // ConnectPayload is sent by the agent when establishing a connection.
 type ConnectPayload struct {
-	ClusterID    string `json:"cluster_id"`
-	AgentID      string `json:"agent_id"`
-	AgentVersion string `json:"agent_version"`
-	Token        string `json:"token"`
+	ClusterID               string `json:"cluster_id"`
+	AgentID                 string `json:"agent_id"`
+	AgentVersion            string `json:"agent_version"`
+	DeliveryProtocolVersion string `json:"delivery_protocol_version"`
+	Token                   string `json:"token"`
 }
 
 // ConnectAckPayload is sent by the server to acknowledge a connection.

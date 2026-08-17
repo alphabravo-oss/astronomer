@@ -43,7 +43,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "digest" .Values.utilities.busybox.digest "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - sh
@@ -94,11 +94,6 @@ spec:
               protocol: TCP
             - name: metrics
               containerPort: 9090
-              protocol: TCP
-            # Token-authenticated, network-isolated ArgoCD->cluster proxy. Never
-            # mapped by public ingress; NetworkPolicy restricts it to ArgoCD.
-            - name: argocd-proxy
-              containerPort: 8090
               protocol: TCP
             # Private mTLS-only MCP endpoint used by the Charlie product agent.
             # It is never exposed by the public Ingress.
@@ -203,8 +198,14 @@ spec:
               value: "true"
             - name: CRD_WATCH_NAMESPACE
               value: {{ .Values.crds.watchNamespace | quote }}
-            - name: CRD_ARGO_NAMESPACE
-              value: {{ .Values.crds.argoNamespace | quote }}
+            {{- end }}
+            {{- if .Values.release.manifest }}
+            - name: RELEASE_MANIFEST_PATH
+              value: /etc/astronomer/release/release-manifest.json
+            {{- if .Values.release.mirrorMapping }}
+            - name: RELEASE_MIRROR_MAPPING_PATH
+              value: /etc/astronomer/release/mirror-mapping.json
+            {{- end }}
             {{- end }}
             {{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
             # Go's crypto/x509 scans SSL_CERT_DIR in addition to the system
@@ -224,6 +225,11 @@ spec:
             - name: charlie-bridge-tls
               mountPath: /var/run/secrets/astronomer/charlie-bridge
               readOnly: true
+            {{- if .Values.release.manifest }}
+            - name: release-manifest
+              mountPath: /etc/astronomer/release
+              readOnly: true
+            {{- end }}
             {{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
             - name: tls-ca-additional
               mountPath: /astronomer/trust/extra
@@ -275,6 +281,18 @@ spec:
           secret:
             secretName: astronomer-charlie-bridge-client-tls
             optional: true
+        {{- if .Values.release.manifest }}
+        - name: release-manifest
+          configMap:
+            name: {{ include "astronomer.fullname" . }}-release-manifest
+            items:
+              - key: release-manifest.json
+                path: release-manifest.json
+              {{- if .Values.release.mirrorMapping }}
+              - key: mirror-mapping.json
+                path: mirror-mapping.json
+              {{- end }}
+        {{- end }}
         {{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
         - name: tls-ca-additional
           secret:

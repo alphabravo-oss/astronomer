@@ -60,7 +60,7 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: fluent-bit
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementLogging.image.repository "tag" .Values.managementLogging.image.tag "registry" .Values.managementLogging.image.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementLogging.image.repository "tag" .Values.managementLogging.image.tag "digest" .Values.managementLogging.image.digest "registry" .Values.managementLogging.image.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.managementLogging.image.pullPolicy | default "IfNotPresent" }}
           args:
             - --config=/fluent-bit/etc-astronomer/fluent-bit.conf

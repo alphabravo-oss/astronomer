@@ -2,7 +2,7 @@ name: project-owner
 display_name: Project Owner
 description: |
   Owns a project: full read/write across the project's workloads,
-  monitoring data, and ArgoCD sync, plus the ability to manage RBAC
+  monitoring data, and delivery rollouts, plus the ability to manage RBAC
   bindings inside the project. Cannot create or delete the project
   itself; that stays a platform-admin action.
 scope: project
@@ -22,7 +22,21 @@ rules:
     verbs: [read, list]
   - resource: backups
     verbs: [read, list, create]
-  - resource: argocd
-    verbs: [read, list, sync]
+  - resource: delivery_sources
+    verbs: [create, read, update, delete, list]
+  - resource: delivery_bundles
+    verbs: [create, read, list]
+  - resource: delivery_targets
+    verbs: [create, read, update, delete, list]
+  - resource: delivery_rollouts
+    verbs: [create, read, update, list, watch]
+  - resource: delivery_deployments
+    verbs: [read, update, list, watch]
+  - resource: delivery_inventory
+    verbs: [read, list]
+  - resource: delivery_approvals
+    verbs: [approve]
+  - resource: delivery_rollbacks
+    verbs: [rollback]
   - resource: rbac
     verbs: [read, list, create, update, delete]

@@ -87,10 +87,8 @@ func testServerAndClient(t *testing.T, h *Hub) (*httptest.Server, *websocket.Con
 func connectAgent(t *testing.T, conn *websocket.Conn, ctx context.Context, clusterID, agentID string) protocol.ConnectAckPayload {
 	t.Helper()
 	connectPayload, _ := json.Marshal(protocol.ConnectPayload{
-		ClusterID:    clusterID,
-		AgentID:      agentID,
-		AgentVersion: "1.0.0",
-		Token:        "test-token",
+		ClusterID: clusterID, AgentID: agentID, AgentVersion: "1.0.0",
+		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Token: "test-token",
 	})
 	connectMsg := protocol.Message{
 		Type:    protocol.MsgConnect,
@@ -314,10 +312,9 @@ func TestConnectBlocksIncompatibleAgentVersion(t *testing.T) {
 	_, conn, ctx := testServerAndClient(t, h)
 
 	connectPayload, _ := json.Marshal(protocol.ConnectPayload{
-		ClusterID:    clusterID,
-		AgentID:      "agent-old",
-		AgentVersion: "v0.0.9", // below the v0.1.0 compatible floor → blocked
-		Token:        "test-token",
+		ClusterID: clusterID, AgentID: "agent-old",
+		AgentVersion:            "v0.0.9", // below the compatible floor → blocked
+		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Token: "test-token",
 	})
 	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgConnect, Payload: connectPayload}); err != nil {
 		t.Fatalf("write connect: %v", err)
@@ -333,6 +330,32 @@ func TestConnectBlocksIncompatibleAgentVersion(t *testing.T) {
 	events := pub.Snapshot()
 	if len(events) != 1 || events[0].Type != "agent.failed" {
 		t.Fatalf("events = %+v, want one agent.failed", events)
+	}
+}
+
+func TestConnectRejectsPreV2AgentWithStableReenrollmentReason(t *testing.T) {
+	h := NewHub(slog.Default())
+	_, conn, ctx := testServerAndClient(t, h)
+	payload, _ := json.Marshal(protocol.ConnectPayload{
+		ClusterID: "945db76b-d7f3-4e6c-8c70-6ca50ca514f4", AgentID: "old-agent",
+		AgentVersion: "1.0.0", Token: "test-token",
+	})
+	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgConnect, Payload: payload}); err != nil {
+		t.Fatal(err)
+	}
+	var message protocol.Message
+	if err := wsjson.Read(ctx, conn, &message); err != nil {
+		t.Fatalf("read rejection ack: %v", err)
+	}
+	if message.Type != protocol.MsgConnectAck {
+		t.Fatalf("got %s, want CONNECT_ACK", message.Type)
+	}
+	var ack protocol.ConnectAckPayload
+	if err := json.Unmarshal(message.Payload, &ack); err != nil {
+		t.Fatal(err)
+	}
+	if ack.Accepted || ack.Reason != "agent_reenrollment_required" {
+		t.Fatalf("unexpected rejection: %#v", ack)
 	}
 }
 

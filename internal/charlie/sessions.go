@@ -49,16 +49,16 @@ type SessionContextProvider interface {
 }
 
 type BridgeSessionRequest struct {
-	ClientSessionID  string     `json:"client_session_id"`
-	ActorID          string     `json:"actor_id"`
-	ActorType        string     `json:"actor_type"`
-	ActorLabel       string     `json:"actor_label"`
-	AuthorizationRef string     `json:"authorization_ref"`
-	Intent           string     `json:"intent"`
-	Objective        string     `json:"objective"`
-	ProductVersion   string               `json:"product_version"`
-	Context          SREContext           `json:"context"`
-	Platforms        []PlatformAssertion  `json:"platforms"`
+	ClientSessionID  string              `json:"client_session_id"`
+	ActorID          string              `json:"actor_id"`
+	ActorType        string              `json:"actor_type"`
+	ActorLabel       string              `json:"actor_label"`
+	AuthorizationRef string              `json:"authorization_ref"`
+	Intent           string              `json:"intent"`
+	Objective        string              `json:"objective"`
+	ProductVersion   string              `json:"product_version"`
+	Context          SREContext          `json:"context"`
+	Platforms        []PlatformAssertion `json:"platforms"`
 }
 
 type BridgeSessionReceipt struct {
@@ -267,7 +267,7 @@ func allowedSessionResource(resource SessionResource) bool {
 	allowedTypes := map[string]bool{
 		"installation": true, "management_component": true, "alert": true,
 		"backup": true, "self_management_application": true,
-		"agent_connection_record": true, "agent_fleet": true, "tunnel": true,
+		"agent_connection_record": true, "cluster_agents": true, "tunnel": true,
 	}
 	return allowedTypes[resource.Type] && strings.TrimSpace(resource.ID) != "" && len(resource.ID) <= 255 && resource.RequiredVerb == "read"
 }

@@ -138,20 +138,6 @@ func registerClusterAddonRoutes(r chi.Router, deps RouterDependencies) {
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/apiserver-allowlist/preview/", deps.ApiserverAllowlist.Preview)
 	}
 
-	// Fleet operations (migration 056).
-	if deps.FleetOperations != nil {
-		r.Route("/fleet-operations", func(r chi.Router) {
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbList)).Get("/", deps.FleetOperations.List)
-			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbCreate)).Post("/", deps.FleetOperations.Create)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbRead)).Get("/{id}/", deps.FleetOperations.Get)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbRead)).Get("/{id}/targets/", deps.FleetOperations.ListTargets)
-			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbUpdate)).Post("/{id}/pause/", deps.FleetOperations.Pause)
-			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbUpdate)).Post("/{id}/resume/", deps.FleetOperations.Resume)
-			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbUpdate)).Post("/{id}/abort/", deps.FleetOperations.Abort)
-			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbUpdate)).Post("/{id}/retry-failed/", deps.FleetOperations.RetryFailed)
-		})
-	}
-
 	// Service mesh tile (migration 071).
 	if deps.ServiceMesh != nil {
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/service-mesh/", deps.ServiceMesh.Get)

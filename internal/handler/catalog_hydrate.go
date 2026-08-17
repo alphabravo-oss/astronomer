@@ -197,19 +197,11 @@ func (h *CatalogHandler) fetchHTTPChartArchive(ctx context.Context, repo sqlc.He
 }
 
 func (h *CatalogHandler) fetchOCIChartArchive(ctx context.Context, repo sqlc.HelmRepository, chart sqlc.HelmChart, version sqlc.HelmChartVersion) ([]byte, error) {
-	_ = ctx // registry.Client doesn't take a context; we rely on its internal HTTP defaults
-
 	cfg, err := h.resolveOCIAuthConfig(repo)
 	if err != nil {
 		return nil, err
 	}
-	clientOpts := []registry.ClientOption{
-		registry.ClientOptWriter(io.Discard),
-	}
-	if cfg.Username != "" {
-		clientOpts = append(clientOpts, registry.ClientOptBasicAuth(cfg.Username, cfg.Password))
-	}
-	rc, err := registry.NewClient(clientOpts...)
+	rc, err := catalog.NewOCIRegistryClient(ctx, repo.Url, cfg, chartArchiveMaxBytes)
 	if err != nil {
 		return nil, fmt.Errorf("oci client: %w", err)
 	}

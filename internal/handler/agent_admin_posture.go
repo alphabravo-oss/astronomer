@@ -49,9 +49,9 @@ type clusterAdminPostureResponse struct {
 // It returns every cluster whose stored privilege-profile annotation
 // resolves (via the canonical agenttemplate.NormalizePrivilegeProfile) to
 // the cluster-admin `admin` profile.
-func (h *AgentFleetHandler) ClusterAdminPosture(w http.ResponseWriter, r *http.Request) {
+func (h *ClusterAgentHandler) ClusterAdminPosture(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AgentFleetUnavailable, "Agent fleet inventory is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
 	}
 	if _, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{

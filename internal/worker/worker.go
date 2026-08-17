@@ -40,15 +40,6 @@ const (
 	// is the periodic sweep that picks up rows whose worker crashed.
 	TypeClusterDecommission    = tasks.ClusterDecommissionType
 	TypeClusterDecommissionAll = tasks.ClusterDecommissionAllType
-	// ArgoCD managed-cluster label refresh. Enqueued by ClustersHandler.Update
-	// after a labels mutation; the worker re-stamps the astronomer.io/label-*
-	// keys on every upstream ArgoCD cluster Secret this cluster is registered
-	// into. Idempotent — skips the PATCH when the desired labels already match.
-	TypeArgoCDRefreshManagedClusterLabels = tasks.ArgoCDRefreshManagedClusterLabelsType
-	// ArgoCD auto-adoption. Enqueued when an agent connects and swept
-	// periodically so every live Astronomer-managed cluster is present in
-	// built-in ArgoCD with a cluster-scoped proxy credential.
-	TypeArgoCDAutoRegisterCluster = tasks.ArgoCDAutoRegisterClusterType
 	// Telemetry sender — opt-in nightly POST. Migration 046.
 	TypeTelemetrySend = tasks.TelemetrySendType
 	// Migration 047: SMTP email dispatch + retention.
@@ -86,14 +77,6 @@ const (
 	// forwarder status.
 	TypeSIEMDispatch   = tasks.SIEMDispatchType
 	TypeSIEMCleanupOld = tasks.SIEMCleanupOldType
-	// Migration 056: fleet operations orchestrator. Periodic task that
-	// drives every pending/running fleet_operations row toward a
-	// terminal status — evaluates the selector at launch, dispatches
-	// up to max_concurrent per-cluster sub-operations, polls them,
-	// applies the abort-on-error policy. Idempotent: re-running a tick
-	// on the same operation won't re-fire sub-operations that already
-	// completed.
-	TypeFleetOrchestrate = tasks.FleetOrchestrateType
 	// Migration 057: maintenance window deferred-op dispatcher.
 	TypeDispatchDeferred = tasks.DispatchDeferredType
 	// Migration 092: durable Postgres task outbox dispatcher. This is the
@@ -280,9 +263,6 @@ func (w *Worker) RegisterHandlers() {
 	// uninstall), which lives only in the server pod — so both run on the
 	// server's tunnel-queue worker (see RegisterTunnelHandlers) and are
 	// enqueued/scheduled to the "tunnel" queue.
-	w.mux.HandleFunc(TypeArgoCDRefreshManagedClusterLabels, instrumentTask(TypeArgoCDRefreshManagedClusterLabels, tasks.HandleArgoCDRefreshManagedClusterLabels))
-	w.mux.HandleFunc(tasks.ArgoCDRefreshAllManagedClusterLabelsType, instrumentTask(tasks.ArgoCDRefreshAllManagedClusterLabelsType, tasks.HandleArgoCDRefreshAllManagedClusterLabels))
-	w.mux.HandleFunc(TypeArgoCDAutoRegisterCluster, instrumentTask(TypeArgoCDAutoRegisterCluster, tasks.HandleArgoCDAutoRegisterCluster))
 	w.mux.HandleFunc(tasks.RefreshGroupSyncMetricsType, instrumentTask(tasks.RefreshGroupSyncMetricsType, tasks.HandleRefreshGroupSyncMetrics))
 	w.mux.HandleFunc(TypeTelemetrySend, instrumentTask(TypeTelemetrySend, tasks.HandleTelemetrySend))
 	w.mux.HandleFunc(TypeEmailDispatch, instrumentTask(TypeEmailDispatch, tasks.HandleEmailDispatch))
@@ -302,7 +282,6 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypePlaintextCredentialMigration, instrumentTask(TypePlaintextCredentialMigration, tasks.HandlePlaintextCredentialMigration))
 	w.mux.HandleFunc(TypeSIEMDispatch, instrumentTask(TypeSIEMDispatch, tasks.HandleSIEMDispatch))
 	w.mux.HandleFunc(TypeSIEMCleanupOld, instrumentTask(TypeSIEMCleanupOld, tasks.HandleSIEMCleanupOld))
-	w.mux.HandleFunc(TypeFleetOrchestrate, instrumentTask(TypeFleetOrchestrate, tasks.HandleFleetOrchestrate))
 	// Durable agent-token rotation policy sweep (task A2). DB-only —
 	// flags clusters whose token_rotation_days policy elapsed; the tunnel
 	// server drives the grace rotation on the agent's next connect.
@@ -310,6 +289,9 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(tasks.AgentUpgradeStuckSweepType, instrumentTask(tasks.AgentUpgradeStuckSweepType, tasks.HandleAgentUpgradeStuckSweep))
 	w.mux.HandleFunc(TypeDispatchDeferred, instrumentTask(TypeDispatchDeferred, tasks.HandleDispatchDeferred))
 	w.mux.HandleFunc(TypeTaskOutboxDispatch, instrumentTask(TypeTaskOutboxDispatch, tasks.HandleTaskOutboxDispatch))
+	w.mux.HandleFunc(tasks.DeliveryRolloutReconcileType, instrumentTask(tasks.DeliveryRolloutReconcileType, tasks.HandleDeliveryRolloutReconcile))
+	w.mux.HandleFunc(tasks.DeliverySourceResolutionType, instrumentTask(tasks.DeliverySourceResolutionType, tasks.HandleDeliverySourceResolution))
+	w.mux.HandleFunc(tasks.DeliverySystemRolloutReconcileType, instrumentTask(tasks.DeliverySystemRolloutReconcileType, tasks.HandleDeliverySystemRolloutReconcile))
 	// Migration 060: GitOps cluster registration sync.
 	w.mux.HandleFunc(tasks.GitOpsSyncType, instrumentTask(tasks.GitOpsSyncType, tasks.HandleGitOpsSync))
 	w.mux.HandleFunc(TypeKubectlSessionReap, instrumentTask(TypeKubectlSessionReap, tasks.HandleKubectlSessionReap))

@@ -143,7 +143,7 @@ function ClusterGroupsPage() {
       ) : flattened.length === 0 ? (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
           <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-          <p>No cluster groups yet — create one to start organizing your fleet.</p>
+          <p>No cluster groups yet — create one to start organizing your clusters.</p>
         </div>
       ) : (
         <div className="border border-border rounded-lg overflow-hidden">

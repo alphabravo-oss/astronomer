@@ -6,7 +6,7 @@
 // queries here in the same `_manual.go` style established by the
 // audit_v1, compliance, and notification_templates files.
 //
-// Schema definition: internal/db/migrations/063_read_audit.up.sql.
+// Schema definition: internal/db/migrations/001_initial.up.sql.
 
 package sqlc
 

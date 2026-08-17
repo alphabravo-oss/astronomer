@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astronomer.io/schemas/release-compatibility-v1.json",
+  "title": "Astronomer release compatibility contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "release_line",
+    "install_mode",
+    "kubernetes",
+    "flux",
+    "agent_protocol",
+    "postgresql",
+    "browsers",
+    "sources",
+    "limits",
+    "slos"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "release_line": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.x$"},
+    "install_mode": {"const": "fresh_only"},
+    "kubernetes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supported_ranges", "advertised_minors", "patch_policy", "qualification"],
+      "properties": {
+        "supported_ranges": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/kubernetesRange"}
+        },
+        "advertised_minors": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"}
+        },
+        "patch_policy": {"const": "latest_patch"},
+        "qualification": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/qualification"}
+        }
+      }
+    },
+    "flux": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["distribution_version", "components", "excluded_components"],
+      "properties": {
+        "distribution_version": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "components": {
+          "type": "array",
+          "minItems": 3,
+          "items": {"$ref": "#/$defs/fluxComponent"}
+        },
+        "excluded_components": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "agent_protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "supported_ranges", "required_capabilities", "unknown_field_policy"],
+      "properties": {
+        "name": {"const": "astronomer.delivery"},
+        "supported_ranges": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/integerRange"}
+        },
+        "required_capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "unknown_field_policy": {"const": "reject"}
+      }
+    },
+    "postgresql": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supported_majors", "tls_required_in_production", "migration_mode"],
+      "properties": {
+        "supported_majors": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 14}
+        },
+        "tls_required_in_production": {"const": true},
+        "migration_mode": {"const": "single_initial"}
+      }
+    },
+    "browsers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["support_policy", "minimum_versions"],
+      "properties": {
+        "support_policy": {"const": "current_and_previous_stable_at_release"},
+        "minimum_versions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["chrome", "edge", "firefox", "safari"],
+          "properties": {
+            "chrome": {"type": "integer", "minimum": 100},
+            "edge": {"type": "integer", "minimum": 100},
+            "firefox": {"type": "integer", "minimum": 100},
+            "safari": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"}
+          }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/source"}
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assignment_snapshot_bytes",
+        "status_snapshot_bytes",
+        "status_events_per_snapshot",
+        "source_artifact_bytes",
+        "helm_chart_bytes",
+        "rendered_objects_per_deployment",
+        "concurrent_assignments_per_cluster"
+      ],
+      "properties": {
+        "assignment_snapshot_bytes": {"type": "integer", "minimum": 1},
+        "status_snapshot_bytes": {"type": "integer", "minimum": 1},
+        "status_events_per_snapshot": {"type": "integer", "minimum": 1},
+        "source_artifact_bytes": {"type": "integer", "minimum": 1},
+        "helm_chart_bytes": {"type": "integer", "minimum": 1},
+        "rendered_objects_per_deployment": {"type": "integer", "minimum": 1},
+        "concurrent_assignments_per_cluster": {"type": "integer", "minimum": 1}
+      }
+    },
+    "slos": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "management_api_monthly_availability_percent",
+        "connected_assignment_ack_seconds_p99",
+        "flux_transition_visibility_seconds_p99",
+        "rollout_scheduler_seconds_p99",
+        "management_database_rpo_minutes",
+        "management_plane_rto_minutes",
+        "offline_reconciliation"
+      ],
+      "properties": {
+        "management_api_monthly_availability_percent": {"type": "number", "exclusiveMinimum": 0, "maximum": 100},
+        "connected_assignment_ack_seconds_p99": {"type": "integer", "minimum": 1},
+        "flux_transition_visibility_seconds_p99": {"type": "integer", "minimum": 1},
+        "rollout_scheduler_seconds_p99": {"type": "integer", "minimum": 1},
+        "management_database_rpo_minutes": {"type": "integer", "minimum": 0},
+        "management_plane_rto_minutes": {"type": "integer", "minimum": 1},
+        "offline_reconciliation": {"const": "last_accepted_generation_continues"}
+      }
+    }
+  },
+  "$defs": {
+    "kubernetesRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_minor", "maximum_minor"],
+      "properties": {
+        "minimum_minor": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+        "maximum_minor": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"}
+      }
+    },
+    "integerRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum", "maximum"],
+      "properties": {
+        "minimum": {"type": "integer", "minimum": 1},
+        "maximum": {"type": "integer", "minimum": 1}
+      }
+    },
+    "qualification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minor", "kind", "runner", "command"],
+      "properties": {
+        "minor": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+        "kind": {"enum": ["ci", "live"]},
+        "runner": {"type": "string", "minLength": 1},
+        "command": {"type": "string", "minLength": 1}
+      }
+    },
+    "fluxComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "repository", "tag", "digest", "digest_pin_required", "apis"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "pattern": "^ghcr\\.io/fluxcd/[a-z0-9-]+$"},
+        "tag": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "digest_pin_required": {"const": true},
+        "apis": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z0-9.]+/v[0-9a-z]+/[A-Za-z]+$"}
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "immutable_identity", "authentication"],
+      "properties": {
+        "type": {"enum": ["git", "oci_artifact", "helm_http", "helm_oci"]},
+        "immutable_identity": {"type": "string", "minLength": 1},
+        "authentication": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

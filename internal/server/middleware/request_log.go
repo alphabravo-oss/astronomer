@@ -127,7 +127,6 @@ func requestLogOperationID(r *http.Request, routeTemplate string) string {
 		return operationID
 	}
 	if routeTemplateHas(routeTemplate, "/operations/{id}") ||
-		routeTemplateHas(routeTemplate, "/fleet-operations/{id}") ||
 		routeTemplateHas(routeTemplate, "/deferred-operations/{id}") {
 		return strings.TrimSpace(chi.URLParam(r, "id"))
 	}

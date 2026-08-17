@@ -11,12 +11,12 @@ import (
 
 func TestDecodeBridgeFindingScopeKeepsOnlyExactActionMetadata(t *testing.T) {
 	digest := findingResourceDigest("astronomer")
-	raw := json.RawMessage(`{"finding":{"finding_id":"finding-a","session_id":"session-a","block_code":"read_only","affected_resources":["sha256:` + digest + `"],"recommended_capability":"astronomer.argocd.self_management_sync","diagnosis":"content-canary","operator_checks":["content-canary"]}}`)
+	raw := json.RawMessage(`{"finding":{"finding_id":"finding-a","session_id":"session-a","block_code":"read_only","affected_resources":["sha256:` + digest + `"],"recommended_capability":"astronomer.management.workload_restart","diagnosis":"content-canary","operator_checks":["content-canary"]}}`)
 	got, err := bridgeFindingScopeFromEnvelope(decodeFindingEnvelopeForTest(t, raw))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.FindingID != "finding-a" || got.SessionID != "session-a" || got.ResourceDigest != digest || got.RecommendedCapability != "astronomer.argocd.self_management_sync" {
+	if got.FindingID != "finding-a" || got.SessionID != "session-a" || got.ResourceDigest != digest || got.RecommendedCapability != "astronomer.management.workload_restart" {
 		t.Fatalf("scope = %#v", got)
 	}
 	encoded, err := json.Marshal(got)
@@ -31,9 +31,9 @@ func TestDecodeBridgeFindingScopeKeepsOnlyExactActionMetadata(t *testing.T) {
 func TestDecodeBridgeFindingScopeRejectsAmbiguousOrSubstitutedTargets(t *testing.T) {
 	digest := findingResourceDigest("astronomer")
 	for _, raw := range []string{
-		`{"finding":{"finding_id":"finding-a","session_id":"session-a","block_code":"read_only","affected_resources":[],"recommended_capability":"astronomer.argocd.self_management_sync"}}`,
-		`{"finding":{"finding_id":"finding-a","session_id":"session-a","block_code":"read_only","affected_resources":["sha256:` + digest + `","sha256:` + digest + `"],"recommended_capability":"astronomer.argocd.self_management_sync"}}`,
-		`{"finding":{"finding_id":"finding-a","session_id":"session-a","block_code":"read_only","affected_resources":["astronomer"],"recommended_capability":"astronomer.argocd.self_management_sync"}}`,
+		`{"finding":{"finding_id":"finding-a","session_id":"session-a","block_code":"read_only","affected_resources":[],"recommended_capability":"astronomer.management.workload_restart"}}`,
+		`{"finding":{"finding_id":"finding-a","session_id":"session-a","block_code":"read_only","affected_resources":["sha256:` + digest + `","sha256:` + digest + `"],"recommended_capability":"astronomer.management.workload_restart"}}`,
+		`{"finding":{"finding_id":"finding-a","session_id":"session-a","block_code":"read_only","affected_resources":["astronomer"],"recommended_capability":"astronomer.management.workload_restart"}}`,
 		`{"finding":{"finding_id":"finding-a","session_id":"session-a","block_code":"read_only","affected_resources":["sha256:` + digest + `"],"recommended_capability":"invalid capability"}}`,
 	} {
 		if _, err := bridgeFindingScopeFromEnvelope(decodeFindingEnvelopeForTest(t, json.RawMessage(raw))); err == nil {
@@ -55,7 +55,7 @@ func decodeFindingEnvelopeForTest(t *testing.T, raw json.RawMessage) contract.Fi
 func TestExactFindingResourceRejectsMissingAndAmbiguousDigests(t *testing.T) {
 	resources := []sqlc.CharlieSessionResource{
 		{ResourceType: "self_management_application", ResourceID: "astronomer", RequiredVerb: "read"},
-		{ResourceType: "agent_fleet", ResourceID: "fleet", RequiredVerb: "read"},
+		{ResourceType: "cluster_agents", ResourceID: "cluster-agents", RequiredVerb: "read"},
 	}
 	got, ok := exactFindingResource(resources, findingResourceDigest("astronomer"))
 	if !ok || got.ResourceType != "self_management_application" {

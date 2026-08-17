@@ -19,7 +19,7 @@ spec:
   # capture independently managed namespace infrastructure such as the NGINX
   # Gateway Fabric data plane and leave it unable to reach its controller.
   # The exact ownership tuple keeps every Astronomer platform component under
-  # default deny while excluding bundled Argo CD, NGF, and unrelated pods.
+  # default deny while excluding NGF and unrelated pods.
   podSelector:
     matchLabels:
       {{- include "astronomer.selectorLabels" . | nindent 6 }}
@@ -91,28 +91,6 @@ spec:
         - protocol: TCP
           port: 9090
     {{- end }}
-    # Internal ArgoCD->cluster proxy (port 8090). Requests are authenticated
-    # with the cluster-scoped token from ArgoCD's cluster Secret. This policy is
-    # a second control limiting network reachability to bundled ArgoCD pods. The
-    # application-controller performs cluster syncs; argocd-server connects here
-    # to validate reachability during cluster upsert, so both must be allowed.
-    # The public ingress never maps 8090.
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.crds.argoNamespace | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: argocd-application-controller
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.crds.argoNamespace | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: argocd-server
-      ports:
-        - protocol: TCP
-          port: 8090
   egress:
     - ports:
         - protocol: UDP
@@ -153,20 +131,6 @@ spec:
         - protocol: TCP
           port: 5556
     {{- end }}
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.crds.argoNamespace | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: argocd-server
-      ports:
-        - protocol: TCP
-          port: 80
-        - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 8080
     {{- range $cidr := $externalCIDRs }}
     - to:
         - ipBlock:
@@ -263,26 +227,22 @@ spec:
         - protocol: TCP
           port: {{ $.Values.redis.port }}
     {{- end }}
-    # The argocd auto-register worker task calls the built-in ArgoCD API server
-    # to register connected clusters (so baseline ApplicationSets can provision
-    # them). Calico evaluates egress against the Service port (pre-DNAT), not the
-    # backend pod's 8080, so allow the Service's 80/443 as well as 8080 — matching
-    # the server netpol. External ArgoCD instances are reached via the 80/443
-    # external-CIDR egress below.
+    {{- range $cidr := .Values.delivery.sourceResolution.egressCIDRs }}
+    # Source resolution stays behind application-layer SSRF, redirect, and DNS
+    # rebinding validation; this CIDR allowlist is a second network boundary.
     - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.crds.argoNamespace | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: argocd-server
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
       ports:
         - protocol: TCP
           port: 80
         - protocol: TCP
           port: 443
+        {{- if $.Values.delivery.sourceResolution.allowSSH }}
         - protocol: TCP
-          port: 8080
+          port: 22
+        {{- end }}
+    {{- end }}
     {{- range $cidr := $externalCIDRs }}
     - to:
         - ipBlock:

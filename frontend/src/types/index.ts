@@ -3,6 +3,7 @@
 // ============================================================
 
 import type { OpenAPIComponents } from '@/types/openapi.generated';
+import type { CamelizeKeys } from '@/types/wire-contract';
 
 // --- API Response Types ---
 
@@ -90,21 +91,23 @@ export interface Cluster {
   // "Decommissioning" badge until the worker tombstones it).
   decommissioning?: boolean;
   agentPrivilegeProfile?: 'viewer' | 'operator' | 'namespace-viewer' | 'namespace-operator' | 'custom' | 'admin' | string;
-  argocd?: ClusterArgoCDSummary;
 }
 
-export type AgentFleetStatus = 'connected' | 'degraded' | 'disconnected';
+export type ClusterAgentStatus = 'connected' | 'degraded' | 'disconnected';
 
-export interface AgentOfflineBehavior {
+export type AgentOfflineBehavior = Omit<
+  CamelizeKeys<OpenAPIComponents['schemas']['AgentOfflineBehavior']>,
+  'state' | 'stale' | 'message' | 'permittedQueuedOperations' | 'blockedOperations'
+> & {
   state: 'offline' | string;
   lastKnownAt?: string;
   stale: boolean;
   message: string;
   permittedQueuedOperations: string[];
   blockedOperations: string[];
-}
+};
 
-export interface AgentFleetSummary {
+export interface ClusterAgentSummary {
   totalClusters: number;
   connected: number;
   degraded: number;
@@ -119,13 +122,26 @@ export interface AgentFleetSummary {
   generatedAt: string;
 }
 
-export interface AgentFleetItem {
+export type ClusterAgentItem = Omit<
+  CamelizeKeys<OpenAPIComponents['schemas']['ClusterAgentItem']>,
+  | 'clusterId'
+  | 'clusterName'
+  | 'clusterDisplayName'
+  | 'clusterStatus'
+  | 'isLocal'
+  | 'agentStatus'
+  | 'nodeCount'
+  | 'privilegeProfile'
+  | 'capabilities'
+  | 'compatibilityStatus'
+  | 'offlineBehavior'
+> & {
   clusterId: string;
   clusterName: string;
   clusterDisplayName: string;
   clusterStatus: string;
   isLocal: boolean;
-  agentStatus: AgentFleetStatus;
+  agentStatus: ClusterAgentStatus;
   agentId?: string;
   sessionId?: string;
   agentVersion?: string;
@@ -146,14 +162,17 @@ export interface AgentFleetItem {
   degradedReasons?: string[];
   recommendedAction?: string;
   offlineBehavior?: AgentOfflineBehavior;
-}
+};
 
-export interface AgentFleetResponse {
-  summary: AgentFleetSummary;
-  items: AgentFleetItem[];
+export type ClusterAgentResponse = Omit<
+  CamelizeKeys<OpenAPIComponents['schemas']['ClusterAgentResponse']>,
+  'summary' | 'items' | 'limit' | 'offset'
+> & {
+  summary: ClusterAgentSummary;
+  items: ClusterAgentItem[];
   limit: number;
   offset: number;
-}
+};
 
 export interface AgentConnectionDiagnostic {
   id: string;
@@ -182,14 +201,6 @@ export interface AgentUpgradeRecommendation {
   currentVersion?: string;
   status: string;
   message: string;
-}
-
-export interface AgentArgoCDDiagnostic {
-  registered: boolean;
-  instanceCount: number;
-  clusterSecretNames?: string[];
-  serverUrls?: string[];
-  lastUpdatedAt?: string;
 }
 
 export interface AgentLiveDiagnosticCheck {
@@ -221,10 +232,9 @@ export interface AgentLiveDiagnostics {
 
 export interface AgentDiagnosticsResponse {
   generatedAt: string;
-  agent: AgentFleetItem;
+  agent: ClusterAgentItem;
   recentConnections: AgentConnectionDiagnostic[];
   conditions: AgentClusterConditionDiagnostic[];
-  argocd: AgentArgoCDDiagnostic;
   live?: AgentLiveDiagnostics;
   recommendations: string[];
   redactions: string[];
@@ -307,39 +317,6 @@ export interface AgentLifecycleOperationsResponse {
 export interface AgentUpgradeOperationResponse {
   operation: AgentLifecycleOperation;
   plan: AgentUpgradePlanResponse;
-}
-
-export interface ClusterArgoCDSummary {
-  registered: boolean;
-  instanceCount: number;
-  clusterSecretNames: string[];
-  baselineManagedBy: 'argocd' | 'argocd_pending' | 'helm' | 'local' | 'unknown' | string;
-  baselineComponents?: ClusterBaselineComponentOwner[];
-  drift?: ClusterArgoCDDriftSummary;
-}
-
-export interface ClusterArgoCDDriftSummary {
-  appCount: number;
-  syncedCount: number;
-  outOfSyncCount: number;
-  unknownSyncCount: number;
-  healthyCount: number;
-  progressingCount: number;
-  degradedCount: number;
-  unknownHealthCount: number;
-  resourceCreatedCount: number;
-  resourceChangedCount: number;
-  resourcePrunedCount: number;
-  lastSynced?: string;
-  lastError?: string;
-}
-
-export interface ClusterBaselineComponentOwner {
-  slug: string;
-  name: string;
-  namespace: string;
-  applicationSetName: string;
-  managedBy: 'argocd' | 'argocd_pending' | 'helm' | 'local' | 'unknown' | string;
 }
 
 // metav1.Condition-shaped row written by the health-check worker
@@ -843,109 +820,6 @@ export interface PermissionPreviewResponse {
   };
 }
 
-// --- ArgoCD Types ---
-
-export type ArgoSyncStatus = 'Synced' | 'OutOfSync' | 'Unknown';
-
-export type ArgoHealthStatus = 'Healthy' | 'Degraded' | 'Progressing' | 'Suspended' | 'Missing' | 'Unknown';
-
-export interface ArgoInstance {
-  id: string;
-  name: string;
-  url: string;
-  clusterId: string;
-  clusterName: string;
-  version: string;
-  applicationCount: number;
-  status: 'connected' | 'disconnected';
-  createdAt: string;
-}
-
-export interface ArgoApplication {
-  name: string;
-  namespace: string;
-  project: string;
-  clusterId: string;
-  clusterName: string;
-  argoInstanceId: string;
-  syncStatus: ArgoSyncStatus;
-  healthStatus: ArgoHealthStatus;
-  source: ArgoApplicationSource;
-  destination: ArgoApplicationDestination;
-  syncPolicy?: ArgoSyncPolicy;
-  lastSyncedAt?: string;
-  createdAt: string;
-}
-
-export interface ArgoApplicationSource {
-  repoURL: string;
-  path: string;
-  targetRevision: string;
-  chart?: string;
-  helm?: {
-    valueFiles?: string[];
-    parameters?: { name: string; value: string }[];
-  };
-}
-
-export interface ArgoApplicationDestination {
-  server: string;
-  namespace: string;
-  name?: string;
-}
-
-export interface ArgoSyncPolicy {
-  automated?: {
-    prune: boolean;
-    selfHeal: boolean;
-  };
-  syncOptions?: string[];
-}
-
-export interface ArgoManagedClusterOwnershipSummary {
-  argocdInstanceId: string;
-  clusterSecretName: string;
-  serverUrl: string;
-  labels: Record<string, string>;
-  updatedAt: string;
-}
-
-export interface ArgoBaselineOwnershipDecision {
-  id: string;
-  decision: 'adopt' | 'leave_local' | 'replace' | string;
-  reason: string;
-  expiresAt?: string;
-  decidedById?: string;
-  updatedAt: string;
-}
-
-export interface ArgoBaselineComponentOwnership {
-  slug: string;
-  name: string;
-  namespace: string;
-  applicationSetName: string;
-  desiredOwner: string;
-  observedOwner: string;
-  state: 'argocd_owned' | 'legacy_helm' | 'local_manual' | 'external_argocd' | 'unmanaged' | 'migration_required' | string;
-  options: Array<'adopt' | 'leave_local' | 'replace' | string>;
-  decision?: ArgoBaselineOwnershipDecision;
-}
-
-export interface ArgoClusterOwnershipResponse {
-  clusterId: string;
-  clusterName: string;
-  registered: boolean;
-  managedClusters: ArgoManagedClusterOwnershipSummary[];
-  components: ArgoBaselineComponentOwnership[];
-  generatedAt: string;
-}
-
-export interface ArgoBaselineOwnershipDecisionRequest {
-  decision: 'adopt' | 'leave_local' | 'replace';
-  reason?: string;
-  expiresAt?: string;
-}
-
 // --- Metrics Types ---
 
 export interface TimeSeriesPoint {
@@ -1301,7 +1175,7 @@ export interface LoggingFilter {
  * A row from `GET /api/v1/logging/operations/`. The Go reconciler emits
  * snake_case keys; the axios response interceptor camelizes them before they
  * reach the type system, so this interface mirrors the post-camelize shape
- * (same pattern as `ArgoOperation`).
+ * (same pattern as other durable operation records).
  */
 export interface LoggingOperation {
   id: string;
@@ -1923,288 +1797,6 @@ export interface ActivityEvent {
   namespace?: string;
   resource?: string;
   timestamp: string;
-}
-
-// === Phase B1: ArgoCD lifecycle ===
-//
-// Wire shapes for the upstream-backed ArgoCD endpoints. The Go backend emits
-// a kebab/snake mix, and the axios interceptor camelizes incoming keys, so
-// consumer code references camelCase only except for `apiUrl`
-// (api_url -> apiUrl), the instance's upstream API endpoint.
-
-/** Augmented row returned by GET /argocd/instances/. */
-export interface ArgoInstanceB1 {
-  id: string;
-  name: string;
-  clusterId: string;
-  apiUrl: string;
-  authToken?: string;
-  verifySsl: boolean;
-  isHealthy: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/** Live application row returned by /argocd/instances/{id}/applications/. */
-export interface ArgoLiveApplication {
-  metadata: {
-    name: string;
-    namespace?: string;
-    uid?: string;
-    creationTimestamp?: string;
-  };
-  spec: {
-    project?: string;
-    source?: {
-      repoURL: string;
-      path?: string;
-      targetRevision?: string;
-      chart?: string;
-    };
-    destination?: {
-      server?: string;
-      name?: string;
-      namespace?: string;
-    };
-    syncPolicy?: {
-      automated?: { prune?: boolean; selfHeal?: boolean };
-      syncOptions?: string[];
-    };
-  };
-  status?: {
-    sync?: { status?: string; revision?: string };
-    health?: { status?: string };
-    operationState?: {
-      phase?: string;
-      message?: string;
-      finishedAt?: string;
-    };
-  };
-}
-
-export interface ArgoCreateApplicationRequest {
-  name: string;
-  spec: {
-    project: string;
-    source: {
-      repoURL: string;
-      path?: string;
-      targetRevision?: string;
-      chart?: string;
-    };
-    destination: {
-      server?: string;
-      name?: string;
-      namespace?: string;
-    };
-    syncPolicy?: {
-      automated?: { prune?: boolean; selfHeal?: boolean };
-      syncOptions?: string[];
-    };
-  };
-}
-
-export interface ArgoSyncOptions {
-  revision?: string;
-  prune?: boolean;
-  dryRun?: boolean;
-  reason?: string;
-  syncWindowOverride?: boolean;
-}
-
-export interface ArgoAppHistoryEntry {
-  id: number;
-  revision: string;
-  deployedAt?: string;
-  deployStartedAt?: string;
-  source?: { repoURL: string; targetRevision?: string };
-}
-
-export interface ArgoManifests {
-  manifests?: string[];
-  namespace?: string;
-  server?: string;
-  revision?: string;
-  // Tail of any other fields ArgoCD emits.
-  [key: string]: unknown;
-}
-
-export interface ArgoProjectSpec {
-  description?: string;
-  sourceRepos?: string[];
-  destinations?: { server?: string; name?: string; namespace?: string }[];
-  clusterResourceWhitelist?: { group: string; kind: string }[];
-  namespaceResourceWhitelist?: { group: string; kind: string }[];
-  syncWindows?: ArgoProjectSyncWindow[];
-}
-
-export interface ArgoProjectSyncWindow {
-  kind: 'allow' | 'deny' | string;
-  schedule: string;
-  duration: string;
-  applications?: string[];
-  namespaces?: string[];
-  clusters?: string[];
-  manualSync?: boolean;
-  syncOverrun?: boolean;
-  timeZone?: string;
-  useAndOperator?: boolean;
-  description?: string;
-}
-
-export interface ArgoProject {
-  metadata: { name: string; namespace?: string };
-  spec: ArgoProjectSpec;
-}
-
-export interface ArgoCreateProjectRequest {
-  name: string;
-  spec: ArgoProjectSpec;
-}
-
-export interface ArgoApplicationSetGenerator {
-  list?: { elements: Record<string, string>[] };
-  clusters?: {
-    selector?: {
-      matchLabels?: Record<string, string>;
-      matchExpressions?: { key: string; operator: string; values?: string[] }[];
-    };
-    values?: Record<string, string>;
-  };
-  git?: {
-    repoURL: string;
-    revision?: string;
-    files?: { path: string }[];
-    directories?: { path: string; exclude?: boolean }[];
-  };
-}
-
-export interface ArgoApplicationSetSpec {
-  generators: ArgoApplicationSetGenerator[];
-  template: {
-    metadata: { name: string; namespace?: string; labels?: Record<string, string> };
-    spec: {
-      project: string;
-      source: { repoURL: string; path?: string; targetRevision?: string; chart?: string };
-      destination: { server?: string; name?: string; namespace?: string };
-      syncPolicy?: { automated?: { prune?: boolean; selfHeal?: boolean }; syncOptions?: string[] };
-    };
-  };
-  syncPolicy?: { preserveResourcesOnDeletion?: boolean };
-}
-
-export interface ArgoApplicationSet {
-  metadata: { name: string; namespace?: string };
-  spec: ArgoApplicationSetSpec;
-  status?: {
-    conditions?: { type: string; status: string; message?: string }[];
-  };
-}
-
-export interface ArgoCreateApplicationSetRequest {
-  name: string;
-  spec: ArgoApplicationSetSpec;
-}
-
-/** A managed cluster row registered into a particular ArgoCD instance. */
-export interface ArgoManagedCluster {
-  id: string;
-  argocdInstanceId: string;
-  clusterId: string;
-  server: string;
-  clusterSecretName?: string;
-  labels?: Record<string, string>;
-  createdAt: string;
-}
-
-export interface ArgoOrphanApplication {
-  id?: string;
-  name: string;
-  componentSlug?: string;
-  applicationSetName?: string;
-  destinationCluster: string;
-  destinationNamespace?: string;
-  reason:
-    | 'missing_destination'
-    | 'stale_destination_cluster'
-    | 'live_missing_destination'
-    | 'live_stale_destination_cluster'
-    | 'stale_applicationset_metadata'
-    | string;
-  source: 'cache' | 'live' | string;
-  message: string;
-}
-
-export interface ArgoOrphanReport {
-  instanceId: string;
-  applicationCount: number;
-  cachedApplicationCount: number;
-  liveApplicationCount: number;
-  managedTargetCount: number;
-  orphanApplicationCount: number;
-  orphanApplications: ArgoOrphanApplication[];
-  liveError?: string;
-  generatedAt: string;
-}
-
-export interface ArgoManagedClusterRegisterRequest {
-  bearer_token?: string;
-  ca_data?: string;
-  insecure?: boolean;
-  labels?: Record<string, string>;
-  project?: string;
-  namespaces?: string[];
-  server?: string;
-  name?: string;
-}
-
-export interface ArgoRepository {
-  repo: string;
-  name?: string;
-  type?: 'git' | 'helm' | string;
-  username?: string;
-  insecure?: boolean;
-  enableLfs?: boolean;
-  project?: string;
-  connectionState?: { status?: string; message?: string; attemptedAt?: string };
-}
-
-export interface ArgoRepositoryCreate {
-  repo: string;
-  type?: 'git' | 'helm';
-  name?: string;
-  username?: string;
-  password?: string;
-  ssh_private_key?: string;
-  insecure?: boolean;
-  enable_lfs?: boolean;
-  project?: string;
-}
-
-/** Operation row returned by /argocd/operations/. */
-export interface ArgoOperation {
-  id: string;
-  targetType: string;
-  targetKey: string;
-  operationType: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'superseded' | string;
-  attemptCount: number;
-  startedAt?: string | null;
-  completedAt?: string | null;
-  errorMessage?: string;
-  createdAt: string;
-  updatedAt: string;
-  // Returned only on the detail endpoint.
-  events?: ArgoOperationEvent[];
-}
-
-export interface ArgoOperationEvent {
-  id: string;
-  level: string;
-  stage: string;
-  message: string;
-  detail?: Record<string, unknown>;
-  createdAt: string;
 }
 
 // === Phase B4: Dex ===

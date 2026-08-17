@@ -483,12 +483,12 @@ rendered manifest.
            forgeable signing key is not a production-only problem. */ -}}
     {{- /* F8 (C-04): bootstrap-secret.yaml generates randAlphaNum when
            bootstrap.password is empty and the `lookup` guard can't see the
-           existing Secret. Under GitOps / `helm template` (no live cluster)
+           existing Secret. Under `helm template` (no live cluster)
            lookup returns nil, so every sync re-rolls the admin password. In
            production require an explicit pin or an existingSecret escape hatch
            (mirrors postgres.external.dsnSecretRef) so the render is stable. */ -}}
     {{- if not (or .Values.bootstrap.password .Values.bootstrap.existingSecret) }}
-      {{- $errs = append $errs "  - bootstrap.password or bootstrap.existingSecret must be set when config.env=production. An empty bootstrap.password re-rolls randAlphaNum on every GitOps render (lookup can't read the prior Secret without a live cluster), rotating the admin password. Pin bootstrap.password, or set bootstrap.existingSecret to a pre-created Secret with a 'password' key." }}
+      {{- $errs = append $errs "  - bootstrap.password or bootstrap.existingSecret must be set when config.env=production. An empty bootstrap.password re-rolls randAlphaNum on every offline render (lookup can't read the prior Secret without a live cluster), rotating the admin password. Pin bootstrap.password, or set bootstrap.existingSecret to a pre-created Secret with a 'password' key." }}
     {{- end }}
     {{- /* Migration 045 soft check: production posture is "Dex on" unless
            the operator explicitly opts into local-password-only auth. The

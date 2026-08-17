@@ -478,7 +478,6 @@ func TestSettings_FeaturesReturnsOnlyFeatureBooleans(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: false})
 	q.rows["feature.catalog"] = sqlc.PlatformSetting{Key: "feature.catalog", Value: []byte(`false`)}
-	q.rows["feature.argocd"] = sqlc.PlatformSetting{Key: "feature.argocd", Value: []byte(`true`)}
 	q.rows["telemetry.endpoint"] = sqlc.PlatformSetting{Key: "telemetry.endpoint", Value: []byte(`"https://telemetry.example"`)}
 	q.rows["branding.product_name"] = sqlc.PlatformSetting{Key: "branding.product_name", Value: []byte(`"Megacorp"`)}
 	h := NewPlatformSettingsHandler(q)
@@ -500,9 +499,6 @@ func TestSettings_FeaturesReturnsOnlyFeatureBooleans(t *testing.T) {
 	}
 	if flags["feature.catalog"] {
 		t.Fatalf("feature.catalog = true, want false")
-	}
-	if !flags["feature.argocd"] {
-		t.Fatalf("feature.argocd = false, want true")
 	}
 	if !flags["feature.projects"] {
 		t.Fatalf("feature.projects default = false, want true")

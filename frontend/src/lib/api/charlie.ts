@@ -19,7 +19,7 @@ export type CharlieResource = {
     | "backup"
     | "self_management_application"
     | "agent_connection_record"
-    | "agent_fleet"
+    | "cluster_agents"
     | "tunnel";
   id: string;
   requiredVerb: "read";

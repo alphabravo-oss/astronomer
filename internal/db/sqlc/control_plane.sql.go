@@ -305,7 +305,7 @@ func (q *Queries) GetAlertInhibitionByID(ctx context.Context, id uuid.UUID) (Ale
 }
 
 const getDefaultControlPlanePolicy = `-- name: GetDefaultControlPlanePolicy :one
-SELECT id, name, monitoring_queue_depth_threshold, argocd_queue_depth_threshold, tools_queue_depth_threshold, catalog_queue_depth_threshold, monitoring_stale_running_threshold, argocd_stale_running_threshold, tools_stale_running_threshold, catalog_stale_running_threshold, monitoring_recent_failure_threshold, argocd_recent_failure_threshold, tools_recent_failure_threshold, catalog_recent_failure_threshold, recent_failure_window_minutes, created_at, updated_at FROM control_plane_policies WHERE name = 'default' LIMIT 1
+SELECT id, name, monitoring_queue_depth_threshold, delivery_queue_depth_threshold, tools_queue_depth_threshold, catalog_queue_depth_threshold, monitoring_stale_running_threshold, delivery_stale_running_threshold, tools_stale_running_threshold, catalog_stale_running_threshold, monitoring_recent_failure_threshold, delivery_recent_failure_threshold, tools_recent_failure_threshold, catalog_recent_failure_threshold, recent_failure_window_minutes, created_at, updated_at FROM control_plane_policies WHERE name = 'default' LIMIT 1
 `
 
 func (q *Queries) GetDefaultControlPlanePolicy(ctx context.Context) (ControlPlanePolicy, error) {
@@ -315,15 +315,15 @@ func (q *Queries) GetDefaultControlPlanePolicy(ctx context.Context) (ControlPlan
 		&i.ID,
 		&i.Name,
 		&i.MonitoringQueueDepthThreshold,
-		&i.ArgocdQueueDepthThreshold,
+		&i.DeliveryQueueDepthThreshold,
 		&i.ToolsQueueDepthThreshold,
 		&i.CatalogQueueDepthThreshold,
 		&i.MonitoringStaleRunningThreshold,
-		&i.ArgocdStaleRunningThreshold,
+		&i.DeliveryStaleRunningThreshold,
 		&i.ToolsStaleRunningThreshold,
 		&i.CatalogStaleRunningThreshold,
 		&i.MonitoringRecentFailureThreshold,
-		&i.ArgocdRecentFailureThreshold,
+		&i.DeliveryRecentFailureThreshold,
 		&i.ToolsRecentFailureThreshold,
 		&i.CatalogRecentFailureThreshold,
 		&i.RecentFailureWindowMinutes,
@@ -593,15 +593,15 @@ const upsertDefaultControlPlanePolicy = `-- name: UpsertDefaultControlPlanePolic
 INSERT INTO control_plane_policies (
     name,
     monitoring_queue_depth_threshold,
-    argocd_queue_depth_threshold,
+    delivery_queue_depth_threshold,
     tools_queue_depth_threshold,
     catalog_queue_depth_threshold,
     monitoring_stale_running_threshold,
-    argocd_stale_running_threshold,
+    delivery_stale_running_threshold,
     tools_stale_running_threshold,
     catalog_stale_running_threshold,
     monitoring_recent_failure_threshold,
-    argocd_recent_failure_threshold,
+    delivery_recent_failure_threshold,
     tools_recent_failure_threshold,
     catalog_recent_failure_threshold,
     recent_failure_window_minutes
@@ -615,33 +615,33 @@ VALUES (
 )
 ON CONFLICT (name) DO UPDATE SET
     monitoring_queue_depth_threshold = EXCLUDED.monitoring_queue_depth_threshold,
-    argocd_queue_depth_threshold = EXCLUDED.argocd_queue_depth_threshold,
+    delivery_queue_depth_threshold = EXCLUDED.delivery_queue_depth_threshold,
     tools_queue_depth_threshold = EXCLUDED.tools_queue_depth_threshold,
     catalog_queue_depth_threshold = EXCLUDED.catalog_queue_depth_threshold,
     monitoring_stale_running_threshold = EXCLUDED.monitoring_stale_running_threshold,
-    argocd_stale_running_threshold = EXCLUDED.argocd_stale_running_threshold,
+    delivery_stale_running_threshold = EXCLUDED.delivery_stale_running_threshold,
     tools_stale_running_threshold = EXCLUDED.tools_stale_running_threshold,
     catalog_stale_running_threshold = EXCLUDED.catalog_stale_running_threshold,
     monitoring_recent_failure_threshold = EXCLUDED.monitoring_recent_failure_threshold,
-    argocd_recent_failure_threshold = EXCLUDED.argocd_recent_failure_threshold,
+    delivery_recent_failure_threshold = EXCLUDED.delivery_recent_failure_threshold,
     tools_recent_failure_threshold = EXCLUDED.tools_recent_failure_threshold,
     catalog_recent_failure_threshold = EXCLUDED.catalog_recent_failure_threshold,
     recent_failure_window_minutes = EXCLUDED.recent_failure_window_minutes,
     updated_at = now()
-RETURNING id, name, monitoring_queue_depth_threshold, argocd_queue_depth_threshold, tools_queue_depth_threshold, catalog_queue_depth_threshold, monitoring_stale_running_threshold, argocd_stale_running_threshold, tools_stale_running_threshold, catalog_stale_running_threshold, monitoring_recent_failure_threshold, argocd_recent_failure_threshold, tools_recent_failure_threshold, catalog_recent_failure_threshold, recent_failure_window_minutes, created_at, updated_at
+RETURNING id, name, monitoring_queue_depth_threshold, delivery_queue_depth_threshold, tools_queue_depth_threshold, catalog_queue_depth_threshold, monitoring_stale_running_threshold, delivery_stale_running_threshold, tools_stale_running_threshold, catalog_stale_running_threshold, monitoring_recent_failure_threshold, delivery_recent_failure_threshold, tools_recent_failure_threshold, catalog_recent_failure_threshold, recent_failure_window_minutes, created_at, updated_at
 `
 
 type UpsertDefaultControlPlanePolicyParams struct {
 	MonitoringQueueDepthThreshold    int32 `json:"monitoring_queue_depth_threshold"`
-	ArgocdQueueDepthThreshold        int32 `json:"argocd_queue_depth_threshold"`
+	DeliveryQueueDepthThreshold      int32 `json:"delivery_queue_depth_threshold"`
 	ToolsQueueDepthThreshold         int32 `json:"tools_queue_depth_threshold"`
 	CatalogQueueDepthThreshold       int32 `json:"catalog_queue_depth_threshold"`
 	MonitoringStaleRunningThreshold  int32 `json:"monitoring_stale_running_threshold"`
-	ArgocdStaleRunningThreshold      int32 `json:"argocd_stale_running_threshold"`
+	DeliveryStaleRunningThreshold    int32 `json:"delivery_stale_running_threshold"`
 	ToolsStaleRunningThreshold       int32 `json:"tools_stale_running_threshold"`
 	CatalogStaleRunningThreshold     int32 `json:"catalog_stale_running_threshold"`
 	MonitoringRecentFailureThreshold int32 `json:"monitoring_recent_failure_threshold"`
-	ArgocdRecentFailureThreshold     int32 `json:"argocd_recent_failure_threshold"`
+	DeliveryRecentFailureThreshold   int32 `json:"delivery_recent_failure_threshold"`
 	ToolsRecentFailureThreshold      int32 `json:"tools_recent_failure_threshold"`
 	CatalogRecentFailureThreshold    int32 `json:"catalog_recent_failure_threshold"`
 	RecentFailureWindowMinutes       int32 `json:"recent_failure_window_minutes"`
@@ -650,15 +650,15 @@ type UpsertDefaultControlPlanePolicyParams struct {
 func (q *Queries) UpsertDefaultControlPlanePolicy(ctx context.Context, arg UpsertDefaultControlPlanePolicyParams) (ControlPlanePolicy, error) {
 	row := q.db.QueryRow(ctx, upsertDefaultControlPlanePolicy,
 		arg.MonitoringQueueDepthThreshold,
-		arg.ArgocdQueueDepthThreshold,
+		arg.DeliveryQueueDepthThreshold,
 		arg.ToolsQueueDepthThreshold,
 		arg.CatalogQueueDepthThreshold,
 		arg.MonitoringStaleRunningThreshold,
-		arg.ArgocdStaleRunningThreshold,
+		arg.DeliveryStaleRunningThreshold,
 		arg.ToolsStaleRunningThreshold,
 		arg.CatalogStaleRunningThreshold,
 		arg.MonitoringRecentFailureThreshold,
-		arg.ArgocdRecentFailureThreshold,
+		arg.DeliveryRecentFailureThreshold,
 		arg.ToolsRecentFailureThreshold,
 		arg.CatalogRecentFailureThreshold,
 		arg.RecentFailureWindowMinutes,
@@ -668,15 +668,15 @@ func (q *Queries) UpsertDefaultControlPlanePolicy(ctx context.Context, arg Upser
 		&i.ID,
 		&i.Name,
 		&i.MonitoringQueueDepthThreshold,
-		&i.ArgocdQueueDepthThreshold,
+		&i.DeliveryQueueDepthThreshold,
 		&i.ToolsQueueDepthThreshold,
 		&i.CatalogQueueDepthThreshold,
 		&i.MonitoringStaleRunningThreshold,
-		&i.ArgocdStaleRunningThreshold,
+		&i.DeliveryStaleRunningThreshold,
 		&i.ToolsStaleRunningThreshold,
 		&i.CatalogStaleRunningThreshold,
 		&i.MonitoringRecentFailureThreshold,
-		&i.ArgocdRecentFailureThreshold,
+		&i.DeliveryRecentFailureThreshold,
 		&i.ToolsRecentFailureThreshold,
 		&i.CatalogRecentFailureThreshold,
 		&i.RecentFailureWindowMinutes,

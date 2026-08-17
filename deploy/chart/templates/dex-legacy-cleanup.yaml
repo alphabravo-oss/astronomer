@@ -12,8 +12,8 @@ the exact legacy ConfigMap. No credential content is read or logged here.
 {{- $legacy := printf "%s-dex-config" (include "astronomer.fullname" .) -}}
 {{- $retained := printf "%s-dex-config-retained" (include "astronomer.fullname" .) -}}
 {{- $runtime := default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName -}}
-{{- $jobHooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" "argocd.argoproj.io/hook" "PostSync" "argocd.argoproj.io/hook-delete-policy" "BeforeHookCreation,HookSucceeded" -}}
-{{- $prerequisiteHooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation" "argocd.argoproj.io/hook" "PostSync" "argocd.argoproj.io/hook-delete-policy" "BeforeHookCreation" -}}
+{{- $jobHooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" -}}
+{{- $prerequisiteHooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation" -}}
 {{- $legacyCIDRs := .Values.networkPolicy.externalEgressCIDRs | default (list) -}}
 {{- $apiCIDRs := list -}}
 {{- range $cidr := .Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list) -}}
@@ -31,14 +31,14 @@ kind: ServiceAccount
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $prerequisiteHooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5") $prerequisiteHooks) | nindent 4 }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $prerequisiteHooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5") $prerequisiteHooks) | nindent 4 }}
 rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
@@ -58,7 +58,7 @@ kind: RoleBinding
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $prerequisiteHooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5") $prerequisiteHooks) | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -71,7 +71,7 @@ subjects:
 # Non-Job hooks are considered complete immediately, so this policy must omit
 # hook-succeeded and remain present while the later cleanup Job runs. Render it
 # even when the new values disable default deny: an old release's selecting
-# policy can remain active through Argo PostSync/prune ordering.
+# policy can remain active through Helm's post-upgrade ordering.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -80,7 +80,7 @@ metadata:
   labels:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "dex-legacy-cleanup") | nindent 4 }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $prerequisiteHooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5") $prerequisiteHooks) | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
@@ -109,7 +109,7 @@ kind: Job
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "10" "argocd.argoproj.io/sync-wave" "10") $jobHooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "10") $jobHooks) | nindent 4 }}
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 600

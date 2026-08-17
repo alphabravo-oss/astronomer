@@ -13,11 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type FeatureAgentLifecycle interface {
-	Suspend(context.Context, AgentInstallSpec) error
-	Resume(context.Context, AgentInstallSpec) error
-}
-
 type RuntimeShutdown interface{ Shutdown(context.Context) error }
 type RuntimeActivator interface{ Activate(context.Context) error }
 type emergencyModeDisabler interface {
@@ -29,7 +24,6 @@ type emergencyModeDisabler interface {
 type FeatureLifecycle struct {
 	queries    *sqlc.Queries
 	connection func(context.Context) (sqlc.CharlieConnection, error)
-	installer  FeatureAgentLifecycle
 	mode       emergencyModeDisabler
 	runtime    RuntimeShutdown
 	writes     *WriteFence
@@ -37,7 +31,7 @@ type FeatureLifecycle struct {
 	timeout    time.Duration
 }
 
-func NewFeatureLifecycle(pool *pgxpool.Pool, installer FeatureAgentLifecycle, bridge *ManagedBridge, runtime RuntimeShutdown, writes *WriteFence) (*FeatureLifecycle, error) {
+func NewFeatureLifecycle(pool *pgxpool.Pool, bridge *ManagedBridge, runtime RuntimeShutdown, writes *WriteFence) (*FeatureLifecycle, error) {
 	if pool == nil || writes == nil {
 		return nil, fmt.Errorf("Charlie feature lifecycle requires durable state and write admission")
 	}
@@ -50,12 +44,9 @@ func NewFeatureLifecycle(pool *pgxpool.Pool, installer FeatureAgentLifecycle, br
 		if err != nil {
 			return nil, err
 		}
-		if ceilingInstaller, ok := installer.(ModeCeilingInstaller); ok {
-			mode.SetModeCeilingRollout(modeCeilingRollout{load: queries.GetLatestCharlieConnection, installer: ceilingInstaller})
-		}
 		mode.SetWriteFence(writes)
 	}
-	return &FeatureLifecycle{queries: queries, connection: queries.GetLatestCharlieConnection, installer: installer, mode: mode, runtime: runtime, writes: writes, auditor: auditor, timeout: 30 * time.Second}, nil
+	return &FeatureLifecycle{queries: queries, connection: queries.GetLatestCharlieConnection, mode: mode, runtime: runtime, writes: writes, auditor: auditor, timeout: 30 * time.Second}, nil
 }
 
 func (l *FeatureLifecycle) Disable(parent context.Context, actorID string) error {
@@ -98,19 +89,6 @@ func (l *FeatureLifecycle) Disable(parent context.Context, actorID string) error
 			return fmt.Errorf("stop Charlie MCP listener: %w", err)
 		}
 	}
-	if connection.HealthState == "disconnected" {
-		return nil
-	}
-	if l.installer == nil {
-		return fmt.Errorf("Charlie agent suspension is unavailable")
-	}
-	// Repeat suspension for an already-inactive installation. A prior server can
-	// have removed the Argo Application and workload before it learned how to
-	// delete every chart-owned Service/PDB/NetworkPolicy. Idempotent disable must
-	// converge that stale surface to zero instead of trusting metadata alone.
-	if err := l.installer.Suspend(ctx, adminInstallSpec(connection)); err != nil {
-		return fmt.Errorf("suspend Charlie agent runtime: %w", err)
-	}
 	return nil
 }
 
@@ -130,7 +108,7 @@ func (l *FeatureLifecycle) Enable(parent context.Context, actorID string) error 
 	if l.queries == nil && l.connection == nil {
 		return fmt.Errorf("Charlie feature enable is unavailable")
 	}
-	connection, err := l.latestConnection(ctx)
+	_, err := l.latestConnection(ctx)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// A fresh feature enable is valid before onboarding; no runtime exists to
 		// restore and the write fence remains closed until activation.
@@ -138,15 +116,6 @@ func (l *FeatureLifecycle) Enable(parent context.Context, actorID string) error 
 	}
 	if err != nil {
 		return fmt.Errorf("load Charlie connection for enable: %w", err)
-	}
-	if connection.HealthState != "inactive" {
-		return l.activateRuntime(ctx)
-	}
-	if l.installer == nil {
-		return fmt.Errorf("Charlie agent resume is unavailable")
-	}
-	if err := l.installer.Resume(ctx, adminInstallSpec(connection)); err != nil {
-		return fmt.Errorf("resume Charlie agent runtime: %w", err)
 	}
 	return l.activateRuntime(ctx)
 }

@@ -21,34 +21,8 @@ import (
 )
 
 const (
-	ArgoCDClusterProxyTokenScopes = "argoCDClusterProxyToken.Scopes"
-	BearerAuthScopes              = "bearerAuth.Scopes"
-	BearerJWTScopes               = "bearerJWT.Scopes"
-)
-
-// Defines values for AgentFleetItemAgentStatus.
-const (
-	AgentFleetItemAgentStatusConnected    AgentFleetItemAgentStatus = "connected"
-	AgentFleetItemAgentStatusDegraded     AgentFleetItemAgentStatus = "degraded"
-	AgentFleetItemAgentStatusDisconnected AgentFleetItemAgentStatus = "disconnected"
-)
-
-// Defines values for AgentFleetItemCompatibilityStatus.
-const (
-	AgentFleetItemCompatibilityStatusBlocked    AgentFleetItemCompatibilityStatus = "blocked"
-	AgentFleetItemCompatibilityStatusDeprecated AgentFleetItemCompatibilityStatus = "deprecated"
-	AgentFleetItemCompatibilityStatusSupported  AgentFleetItemCompatibilityStatus = "supported"
-	AgentFleetItemCompatibilityStatusUnknown    AgentFleetItemCompatibilityStatus = "unknown"
-)
-
-// Defines values for AgentFleetItemPrivilegeProfile.
-const (
-	AgentFleetItemPrivilegeProfileAdmin             AgentFleetItemPrivilegeProfile = "admin"
-	AgentFleetItemPrivilegeProfileCustom            AgentFleetItemPrivilegeProfile = "custom"
-	AgentFleetItemPrivilegeProfileNamespaceOperator AgentFleetItemPrivilegeProfile = "namespace-operator"
-	AgentFleetItemPrivilegeProfileNamespaceViewer   AgentFleetItemPrivilegeProfile = "namespace-viewer"
-	AgentFleetItemPrivilegeProfileOperator          AgentFleetItemPrivilegeProfile = "operator"
-	AgentFleetItemPrivilegeProfileViewer            AgentFleetItemPrivilegeProfile = "viewer"
+	BearerAuthScopes = "bearerAuth.Scopes"
+	BearerJWTScopes  = "bearerJWT.Scopes"
 )
 
 // Defines values for AgentLifecycleOperationOperationType.
@@ -77,40 +51,6 @@ const (
 	AgentSelfTestStatusFailed  AgentSelfTestStatus = "failed"
 	AgentSelfTestStatusPassed  AgentSelfTestStatus = "passed"
 	AgentSelfTestStatusWarning AgentSelfTestStatus = "warning"
-)
-
-// Defines values for ArgoOperationOperationType.
-const (
-	ArgoOperationOperationTypeSync ArgoOperationOperationType = "sync"
-)
-
-// Defines values for ArgoOperationStatus.
-const (
-	ArgoOperationStatusCompleted  ArgoOperationStatus = "completed"
-	ArgoOperationStatusFailed     ArgoOperationStatus = "failed"
-	ArgoOperationStatusPending    ArgoOperationStatus = "pending"
-	ArgoOperationStatusRunning    ArgoOperationStatus = "running"
-	ArgoOperationStatusSuperseded ArgoOperationStatus = "superseded"
-)
-
-// Defines values for ArgoOperationTargetType.
-const (
-	ArgoOperationTargetTypeApplication ArgoOperationTargetType = "application"
-)
-
-// Defines values for ArgoOrphanApplicationReason.
-const (
-	ArgoOrphanApplicationReasonLiveMissingDestination      ArgoOrphanApplicationReason = "live_missing_destination"
-	ArgoOrphanApplicationReasonLiveStaleDestinationCluster ArgoOrphanApplicationReason = "live_stale_destination_cluster"
-	ArgoOrphanApplicationReasonMissingDestination          ArgoOrphanApplicationReason = "missing_destination"
-	ArgoOrphanApplicationReasonStaleApplicationsetMetadata ArgoOrphanApplicationReason = "stale_applicationset_metadata"
-	ArgoOrphanApplicationReasonStaleDestinationCluster     ArgoOrphanApplicationReason = "stale_destination_cluster"
-)
-
-// Defines values for ArgoOrphanApplicationSource.
-const (
-	ArgoOrphanApplicationSourceCache ArgoOrphanApplicationSource = "cache"
-	ArgoOrphanApplicationSourceLive  ArgoOrphanApplicationSource = "live"
 )
 
 // Defines values for BackupControllerStatusHealth.
@@ -319,12 +259,24 @@ const (
 	CharlieApprovalSummaryStatePending  CharlieApprovalSummaryState = "pending"
 )
 
+// Defines values for CharlieCommandDescriptorEffect.
+const (
+	CharlieCommandDescriptorEffectLocal CharlieCommandDescriptorEffect = "local"
+	CharlieCommandDescriptorEffectRead  CharlieCommandDescriptorEffect = "read"
+)
+
+// Defines values for CharlieCommandDescriptorExecution.
+const (
+	CharlieCommandDescriptorExecutionAgent  CharlieCommandDescriptorExecution = "agent"
+	CharlieCommandDescriptorExecutionClient CharlieCommandDescriptorExecution = "client"
+)
+
 // Defines values for CharlieContextSearchResultType.
 const (
 	CharlieContextSearchResultTypeAgentConnectionRecord     CharlieContextSearchResultType = "agent_connection_record"
-	CharlieContextSearchResultTypeAgentFleet                CharlieContextSearchResultType = "agent_fleet"
 	CharlieContextSearchResultTypeAlert                     CharlieContextSearchResultType = "alert"
 	CharlieContextSearchResultTypeBackup                    CharlieContextSearchResultType = "backup"
+	CharlieContextSearchResultTypeClusterAgents             CharlieContextSearchResultType = "cluster_agents"
 	CharlieContextSearchResultTypeInstallation              CharlieContextSearchResultType = "installation"
 	CharlieContextSearchResultTypeManagementComponent       CharlieContextSearchResultType = "management_component"
 	CharlieContextSearchResultTypeSelfManagementApplication CharlieContextSearchResultType = "self_management_application"
@@ -384,9 +336,9 @@ const (
 // Defines values for CharlieFindingResourceType.
 const (
 	CharlieFindingResourceTypeAgentConnectionRecord     CharlieFindingResourceType = "agent_connection_record"
-	CharlieFindingResourceTypeAgentFleet                CharlieFindingResourceType = "agent_fleet"
 	CharlieFindingResourceTypeAlert                     CharlieFindingResourceType = "alert"
 	CharlieFindingResourceTypeBackup                    CharlieFindingResourceType = "backup"
+	CharlieFindingResourceTypeClusterAgents             CharlieFindingResourceType = "cluster_agents"
 	CharlieFindingResourceTypeInstallation              CharlieFindingResourceType = "installation"
 	CharlieFindingResourceTypeManagementComponent       CharlieFindingResourceType = "management_component"
 	CharlieFindingResourceTypeSelfManagementApplication CharlieFindingResourceType = "self_management_application"
@@ -560,13 +512,19 @@ const (
 // Defines values for CharlieSessionResourceType.
 const (
 	CharlieSessionResourceTypeAgentConnectionRecord     CharlieSessionResourceType = "agent_connection_record"
-	CharlieSessionResourceTypeAgentFleet                CharlieSessionResourceType = "agent_fleet"
 	CharlieSessionResourceTypeAlert                     CharlieSessionResourceType = "alert"
 	CharlieSessionResourceTypeBackup                    CharlieSessionResourceType = "backup"
+	CharlieSessionResourceTypeClusterAgents             CharlieSessionResourceType = "cluster_agents"
 	CharlieSessionResourceTypeInstallation              CharlieSessionResourceType = "installation"
 	CharlieSessionResourceTypeManagementComponent       CharlieSessionResourceType = "management_component"
 	CharlieSessionResourceTypeSelfManagementApplication CharlieSessionResourceType = "self_management_application"
 	CharlieSessionResourceTypeTunnel                    CharlieSessionResourceType = "tunnel"
+)
+
+// Defines values for CharlieThreadMetadataState.
+const (
+	CharlieThreadMetadataStateActive   CharlieThreadMetadataState = "active"
+	CharlieThreadMetadataStateArchived CharlieThreadMetadataState = "archived"
 )
 
 // Defines values for ClusterAgentPrivilegeProfile.
@@ -577,15 +535,6 @@ const (
 	ClusterAgentPrivilegeProfileNamespaceViewer   ClusterAgentPrivilegeProfile = "namespace-viewer"
 	ClusterAgentPrivilegeProfileOperator          ClusterAgentPrivilegeProfile = "operator"
 	ClusterAgentPrivilegeProfileViewer            ClusterAgentPrivilegeProfile = "viewer"
-)
-
-// Defines values for ClusterArgocdBaselineManagedBy.
-const (
-	ClusterArgocdBaselineManagedByArgocd        ClusterArgocdBaselineManagedBy = "argocd"
-	ClusterArgocdBaselineManagedByArgocdPending ClusterArgocdBaselineManagedBy = "argocd_pending"
-	ClusterArgocdBaselineManagedByHelm          ClusterArgocdBaselineManagedBy = "helm"
-	ClusterArgocdBaselineManagedByLocal         ClusterArgocdBaselineManagedBy = "local"
-	ClusterArgocdBaselineManagedByUnknown       ClusterArgocdBaselineManagedBy = "unknown"
 )
 
 // Defines values for ClusterDownstreamImpersonation.
@@ -619,6 +568,196 @@ const (
 	ClusterStatusDisconnected ClusterStatus = "disconnected"
 	ClusterStatusError        ClusterStatus = "error"
 	ClusterStatusPending      ClusterStatus = "pending"
+)
+
+// Defines values for ClusterAgentItemAgentStatus.
+const (
+	ClusterAgentItemAgentStatusConnected    ClusterAgentItemAgentStatus = "connected"
+	ClusterAgentItemAgentStatusDegraded     ClusterAgentItemAgentStatus = "degraded"
+	ClusterAgentItemAgentStatusDisconnected ClusterAgentItemAgentStatus = "disconnected"
+)
+
+// Defines values for ClusterAgentItemCompatibilityStatus.
+const (
+	ClusterAgentItemCompatibilityStatusBlocked    ClusterAgentItemCompatibilityStatus = "blocked"
+	ClusterAgentItemCompatibilityStatusDeprecated ClusterAgentItemCompatibilityStatus = "deprecated"
+	ClusterAgentItemCompatibilityStatusSupported  ClusterAgentItemCompatibilityStatus = "supported"
+	ClusterAgentItemCompatibilityStatusUnknown    ClusterAgentItemCompatibilityStatus = "unknown"
+)
+
+// Defines values for ClusterAgentItemPrivilegeProfile.
+const (
+	ClusterAgentItemPrivilegeProfileAdmin             ClusterAgentItemPrivilegeProfile = "admin"
+	ClusterAgentItemPrivilegeProfileCustom            ClusterAgentItemPrivilegeProfile = "custom"
+	ClusterAgentItemPrivilegeProfileNamespaceOperator ClusterAgentItemPrivilegeProfile = "namespace-operator"
+	ClusterAgentItemPrivilegeProfileNamespaceViewer   ClusterAgentItemPrivilegeProfile = "namespace-viewer"
+	ClusterAgentItemPrivilegeProfileOperator          ClusterAgentItemPrivilegeProfile = "operator"
+	ClusterAgentItemPrivilegeProfileViewer            ClusterAgentItemPrivilegeProfile = "viewer"
+)
+
+// Defines values for ClusterDeploymentAction.
+const (
+	ClusterDeploymentActionApply   ClusterDeploymentAction = "apply"
+	ClusterDeploymentActionDelete  ClusterDeploymentAction = "delete"
+	ClusterDeploymentActionSuspend ClusterDeploymentAction = "suspend"
+)
+
+// Defines values for ClusterDeploymentPhase.
+const (
+	ClusterDeploymentPhaseApplying  ClusterDeploymentPhase = "applying"
+	ClusterDeploymentPhaseBlocked   ClusterDeploymentPhase = "blocked"
+	ClusterDeploymentPhaseDegraded  ClusterDeploymentPhase = "degraded"
+	ClusterDeploymentPhaseDeleting  ClusterDeploymentPhase = "deleting"
+	ClusterDeploymentPhaseFailed    ClusterDeploymentPhase = "failed"
+	ClusterDeploymentPhasePending   ClusterDeploymentPhase = "pending"
+	ClusterDeploymentPhaseReady     ClusterDeploymentPhase = "ready"
+	ClusterDeploymentPhaseRemoved   ClusterDeploymentPhase = "removed"
+	ClusterDeploymentPhaseSuspended ClusterDeploymentPhase = "suspended"
+	ClusterDeploymentPhaseUnknown   ClusterDeploymentPhase = "unknown"
+)
+
+// Defines values for DeliveryBundleVersionRenderer.
+const (
+	DeliveryBundleVersionRendererHelm      DeliveryBundleVersionRenderer = "helm"
+	DeliveryBundleVersionRendererKustomize DeliveryBundleVersionRenderer = "kustomize"
+)
+
+// Defines values for DeliveryBundleVersionScope.
+const (
+	DeliveryBundleVersionScopeNamespace DeliveryBundleVersionScope = "namespace"
+	DeliveryBundleVersionScopePlatform  DeliveryBundleVersionScope = "platform"
+)
+
+// Defines values for DeliveryBundleVersionState.
+const (
+	DeliveryBundleVersionStateFailed    DeliveryBundleVersionState = "failed"
+	DeliveryBundleVersionStateReady     DeliveryBundleVersionState = "ready"
+	DeliveryBundleVersionStateResolving DeliveryBundleVersionState = "resolving"
+	DeliveryBundleVersionStateRevoked   DeliveryBundleVersionState = "revoked"
+)
+
+// Defines values for DeliveryBundleVersionVerificationStatus.
+const (
+	DeliveryBundleVersionVerificationStatusFailed   DeliveryBundleVersionVerificationStatus = "failed"
+	DeliveryBundleVersionVerificationStatusPending  DeliveryBundleVersionVerificationStatus = "pending"
+	DeliveryBundleVersionVerificationStatusUnsigned DeliveryBundleVersionVerificationStatus = "unsigned"
+	DeliveryBundleVersionVerificationStatusVerified DeliveryBundleVersionVerificationStatus = "verified"
+)
+
+// Defines values for DeliveryControllerInventoryCompatibilityStatus.
+const (
+	DeliveryControllerInventoryCompatibilityStatusCompatible      DeliveryControllerInventoryCompatibilityStatus = "compatible"
+	DeliveryControllerInventoryCompatibilityStatusDegraded        DeliveryControllerInventoryCompatibilityStatus = "degraded"
+	DeliveryControllerInventoryCompatibilityStatusIncompatible    DeliveryControllerInventoryCompatibilityStatus = "incompatible"
+	DeliveryControllerInventoryCompatibilityStatusUpgradeRequired DeliveryControllerInventoryCompatibilityStatus = "upgrade_required"
+)
+
+// Defines values for DeliveryPreviewDecisionMatchReasons.
+const (
+	DeliveryPreviewDecisionMatchReasonsAllClusters      DeliveryPreviewDecisionMatchReasons = "all_clusters"
+	DeliveryPreviewDecisionMatchReasonsClusterGroup     DeliveryPreviewDecisionMatchReasons = "cluster_group"
+	DeliveryPreviewDecisionMatchReasonsExplicitCluster  DeliveryPreviewDecisionMatchReasons = "explicit_cluster"
+	DeliveryPreviewDecisionMatchReasonsMatchExpressions DeliveryPreviewDecisionMatchReasons = "match_expressions"
+	DeliveryPreviewDecisionMatchReasonsMatchLabels      DeliveryPreviewDecisionMatchReasons = "match_labels"
+)
+
+// Defines values for DeliveryPreviewDecisionReason.
+const (
+	DeliveryPreviewDecisionReasonDecommissioning    DeliveryPreviewDecisionReason = "decommissioning"
+	DeliveryPreviewDecisionReasonDisconnected       DeliveryPreviewDecisionReason = "disconnected"
+	DeliveryPreviewDecisionReasonExcludedBySelector DeliveryPreviewDecisionReason = "excluded_by_selector"
+	DeliveryPreviewDecisionReasonExcludedExplicitly DeliveryPreviewDecisionReason = "excluded_explicitly"
+	DeliveryPreviewDecisionReasonIncompatible       DeliveryPreviewDecisionReason = "incompatible"
+	DeliveryPreviewDecisionReasonMissingCapability  DeliveryPreviewDecisionReason = "missing_capability"
+	DeliveryPreviewDecisionReasonSelected           DeliveryPreviewDecisionReason = "selected"
+	DeliveryPreviewDecisionReasonUnauthorized       DeliveryPreviewDecisionReason = "unauthorized"
+)
+
+// Defines values for DeliveryRolloutApprovalDecision.
+const (
+	DeliveryRolloutApprovalDecisionApproved DeliveryRolloutApprovalDecision = "approved"
+	DeliveryRolloutApprovalDecisionRejected DeliveryRolloutApprovalDecision = "rejected"
+)
+
+// Defines values for DeliveryRolloutApprovalRecordDecision.
+const (
+	DeliveryRolloutApprovalRecordDecisionApproved DeliveryRolloutApprovalRecordDecision = "approved"
+	DeliveryRolloutApprovalRecordDecisionRejected DeliveryRolloutApprovalRecordDecision = "rejected"
+)
+
+// Defines values for DeliveryRolloutClusterAssignmentAction.
+const (
+	DeliveryRolloutClusterAssignmentActionApply    DeliveryRolloutClusterAssignmentAction = "apply"
+	DeliveryRolloutClusterAssignmentActionRollback DeliveryRolloutClusterAssignmentAction = "rollback"
+)
+
+// Defines values for DeliverySourceAuthMode.
+const (
+	DeliverySourceAuthModeBasic            DeliverySourceAuthMode = "basic"
+	DeliverySourceAuthModeBearer           DeliverySourceAuthMode = "bearer"
+	DeliverySourceAuthModeNone             DeliverySourceAuthMode = "none"
+	DeliverySourceAuthModeSsh              DeliverySourceAuthMode = "ssh"
+	DeliverySourceAuthModeWorkloadIdentity DeliverySourceAuthMode = "workload_identity"
+)
+
+// Defines values for DeliverySourceStatus.
+const (
+	DeliverySourceStatusDegraded DeliverySourceStatus = "degraded"
+	DeliverySourceStatusPending  DeliverySourceStatus = "pending"
+	DeliverySourceStatusReady    DeliverySourceStatus = "ready"
+	DeliverySourceStatusRevoked  DeliverySourceStatus = "revoked"
+)
+
+// Defines values for DeliverySourceType.
+const (
+	DeliverySourceTypeGit         DeliverySourceType = "git"
+	DeliverySourceTypeHelmHttp    DeliverySourceType = "helm_http"
+	DeliverySourceTypeHelmOci     DeliverySourceType = "helm_oci"
+	DeliverySourceTypeOciArtifact DeliverySourceType = "oci_artifact"
+)
+
+// Defines values for DeliverySourceCredentialRotateAuthMode.
+const (
+	DeliverySourceCredentialRotateAuthModeBasic  DeliverySourceCredentialRotateAuthMode = "basic"
+	DeliverySourceCredentialRotateAuthModeBearer DeliverySourceCredentialRotateAuthMode = "bearer"
+	DeliverySourceCredentialRotateAuthModeSsh    DeliverySourceCredentialRotateAuthMode = "ssh"
+)
+
+// Defines values for DeliverySourceWriteAuthMode.
+const (
+	DeliverySourceWriteAuthModeBasic            DeliverySourceWriteAuthMode = "basic"
+	DeliverySourceWriteAuthModeBearer           DeliverySourceWriteAuthMode = "bearer"
+	DeliverySourceWriteAuthModeNone             DeliverySourceWriteAuthMode = "none"
+	DeliverySourceWriteAuthModeSsh              DeliverySourceWriteAuthMode = "ssh"
+	DeliverySourceWriteAuthModeWorkloadIdentity DeliverySourceWriteAuthMode = "workload_identity"
+)
+
+// Defines values for DeliverySourceWriteType.
+const (
+	DeliverySourceWriteTypeGit         DeliverySourceWriteType = "git"
+	DeliverySourceWriteTypeHelmHttp    DeliverySourceWriteType = "helm_http"
+	DeliverySourceWriteTypeHelmOci     DeliverySourceWriteType = "helm_oci"
+	DeliverySourceWriteTypeOciArtifact DeliverySourceWriteType = "oci_artifact"
+)
+
+// Defines values for DeliveryTargetDeletionState.
+const (
+	DeliveryTargetDeletionStateActive   DeliveryTargetDeletionState = "active"
+	DeliveryTargetDeletionStateDeleted  DeliveryTargetDeletionState = "deleted"
+	DeliveryTargetDeletionStateDeleting DeliveryTargetDeletionState = "deleting"
+)
+
+// Defines values for DeliveryTargetDeletionDeletionState.
+const (
+	DeliveryTargetDeletionDeletionStateDeleted  DeliveryTargetDeletionDeletionState = "deleted"
+	DeliveryTargetDeletionDeletionStateDeleting DeliveryTargetDeletionDeletionState = "deleting"
+)
+
+// Defines values for DeliveryTrustPolicyProvider.
+const (
+	DeliveryTrustPolicyProviderCosignKey     DeliveryTrustPolicyProvider = "cosign_key"
+	DeliveryTrustPolicyProviderCosignKeyless DeliveryTrustPolicyProvider = "cosign_keyless"
+	DeliveryTrustPolicyProviderGit           DeliveryTrustPolicyProvider = "git"
 )
 
 // Defines values for DexRegisterSSOResultRuntimeState.
@@ -701,7 +840,6 @@ const (
 // Defines values for OwnershipTransferResponseManagedBy.
 const (
 	OwnershipTransferResponseManagedByApi    OwnershipTransferResponseManagedBy = "api"
-	OwnershipTransferResponseManagedByArgocd OwnershipTransferResponseManagedBy = "argocd"
 	OwnershipTransferResponseManagedByCrd    OwnershipTransferResponseManagedBy = "crd"
 	OwnershipTransferResponseManagedBySystem OwnershipTransferResponseManagedBy = "system"
 	OwnershipTransferResponseManagedByUi     OwnershipTransferResponseManagedBy = "ui"
@@ -877,6 +1015,14 @@ const (
 	DeleteNamedClusterResourceParamsResourceTypeServices               DeleteNamedClusterResourceParamsResourceType = "services"
 )
 
+// Defines values for GetApiV1DeliverySourcesParamsStatus.
+const (
+	GetApiV1DeliverySourcesParamsStatusDegraded GetApiV1DeliverySourcesParamsStatus = "degraded"
+	GetApiV1DeliverySourcesParamsStatusPending  GetApiV1DeliverySourcesParamsStatus = "pending"
+	GetApiV1DeliverySourcesParamsStatusReady    GetApiV1DeliverySourcesParamsStatus = "ready"
+	GetApiV1DeliverySourcesParamsStatusRevoked  GetApiV1DeliverySourcesParamsStatus = "revoked"
+)
+
 // Defines values for SearchResourcesAcrossClustersParamsType.
 const (
 	SearchResourcesAcrossClustersParamsTypeConfigmaps             SearchResourcesAcrossClustersParamsType = "configmaps"
@@ -927,14 +1073,7 @@ const (
 
 // AgentDiagnostics defines model for AgentDiagnostics.
 type AgentDiagnostics struct {
-	Agent  *AgentFleetItem `json:"agent,omitempty"`
-	Argocd *struct {
-		ClusterSecretNames *[]string  `json:"cluster_secret_names,omitempty"`
-		InstanceCount      *int       `json:"instance_count,omitempty"`
-		LastUpdatedAt      *time.Time `json:"last_updated_at"`
-		Registered         *bool      `json:"registered,omitempty"`
-		ServerUrls         *[]string  `json:"server_urls,omitempty"`
-	} `json:"argocd,omitempty"`
+	Agent                 *ClusterAgentItem         `json:"agent,omitempty"`
 	Conditions            *[]map[string]interface{} `json:"conditions,omitempty"`
 	GeneratedAt           *time.Time                `json:"generated_at,omitempty"`
 	Live                  *map[string]interface{}   `json:"live,omitempty"`
@@ -952,66 +1091,6 @@ type AgentDiagnosticsBundle struct {
 	GeneratedAt *time.Time          `json:"generated_at,omitempty"`
 	Notes       *[]string           `json:"notes,omitempty"`
 	Version     *string             `json:"version,omitempty"`
-}
-
-// AgentFleetItem defines model for AgentFleetItem.
-type AgentFleetItem struct {
-	AgentId              *string                            `json:"agent_id,omitempty"`
-	AgentStatus          *AgentFleetItemAgentStatus         `json:"agent_status,omitempty"`
-	AgentVersion         *string                            `json:"agent_version,omitempty"`
-	Capabilities         *map[string]bool                   `json:"capabilities,omitempty"`
-	ChannelName          *string                            `json:"channel_name,omitempty"`
-	ClusterDisplayName   *string                            `json:"cluster_display_name,omitempty"`
-	ClusterId            *openapi_types.UUID                `json:"cluster_id,omitempty"`
-	ClusterName          *string                            `json:"cluster_name,omitempty"`
-	ClusterStatus        *string                            `json:"cluster_status,omitempty"`
-	CompatibilityMessage *string                            `json:"compatibility_message,omitempty"`
-	CompatibilityStatus  *AgentFleetItemCompatibilityStatus `json:"compatibility_status,omitempty"`
-	ConnectedAt          *time.Time                         `json:"connected_at"`
-	DegradedReasons      *[]string                          `json:"degraded_reasons,omitempty"`
-	DisconnectedAt       *time.Time                         `json:"disconnected_at"`
-	Distribution         *string                            `json:"distribution,omitempty"`
-	IsLocal              *bool                              `json:"is_local,omitempty"`
-	KubernetesVersion    *string                            `json:"kubernetes_version,omitempty"`
-	LastHeartbeat        *time.Time                         `json:"last_heartbeat"`
-	LastPing             *time.Time                         `json:"last_ping"`
-	NodeCount            *int                               `json:"node_count,omitempty"`
-	NodeName             *string                            `json:"node_name,omitempty"`
-	OfflineBehavior      *AgentOfflineBehavior              `json:"offline_behavior,omitempty"`
-	PodName              *string                            `json:"pod_name,omitempty"`
-	PrivilegeProfile     *AgentFleetItemPrivilegeProfile    `json:"privilege_profile,omitempty"`
-	RecommendedAction    *string                            `json:"recommended_action,omitempty"`
-	SessionId            *string                            `json:"session_id,omitempty"`
-}
-
-// AgentFleetItemAgentStatus defines model for AgentFleetItem.AgentStatus.
-type AgentFleetItemAgentStatus string
-
-// AgentFleetItemCompatibilityStatus defines model for AgentFleetItem.CompatibilityStatus.
-type AgentFleetItemCompatibilityStatus string
-
-// AgentFleetItemPrivilegeProfile defines model for AgentFleetItem.PrivilegeProfile.
-type AgentFleetItemPrivilegeProfile string
-
-// AgentFleetResponse defines model for AgentFleetResponse.
-type AgentFleetResponse struct {
-	Items   *[]AgentFleetItem `json:"items,omitempty"`
-	Limit   *int              `json:"limit,omitempty"`
-	Offset  *int              `json:"offset,omitempty"`
-	Summary *struct {
-		Compatibility                 *map[string]int `json:"compatibility,omitempty"`
-		Connected                     *int            `json:"connected,omitempty"`
-		Degraded                      *int            `json:"degraded,omitempty"`
-		Disconnected                  *int            `json:"disconnected,omitempty"`
-		GeneratedAt                   *time.Time      `json:"generated_at,omitempty"`
-		MinimumCompatibleAgentVersion *string         `json:"minimum_compatible_agent_version,omitempty"`
-		MinimumSupportedAgentVersion  *string         `json:"minimum_supported_agent_version,omitempty"`
-		Profiles                      *map[string]int `json:"profiles,omitempty"`
-		ServerVersion                 *string         `json:"server_version,omitempty"`
-		Statuses                      *map[string]int `json:"statuses,omitempty"`
-		TotalClusters                 *int            `json:"total_clusters,omitempty"`
-		Versions                      *map[string]int `json:"versions,omitempty"`
-	} `json:"summary,omitempty"`
 }
 
 // AgentLifecycleOperation defines model for AgentLifecycleOperation.
@@ -1158,94 +1237,6 @@ type ApplyClusterTemplateRequest map[string]interface{}
 
 // ApplyNetworkPolicyRequest Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
 type ApplyNetworkPolicyRequest map[string]interface{}
-
-// ArgoOperation defines model for ArgoOperation.
-type ArgoOperation struct {
-	AttemptCount int        `json:"attemptCount"`
-	CompletedAt  *time.Time `json:"completedAt"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	ErrorMessage *string    `json:"errorMessage,omitempty"`
-
-	// Events Present on operation detail responses.
-	Events        *[]ArgoOperationEvent      `json:"events,omitempty"`
-	Id            openapi_types.UUID         `json:"id"`
-	OperationType ArgoOperationOperationType `json:"operationType"`
-	StartedAt     *time.Time                 `json:"startedAt"`
-	Status        ArgoOperationStatus        `json:"status"`
-
-	// TargetKey Stable Astronomer-local Application UUID.
-	TargetKey  string                  `json:"targetKey"`
-	TargetType ArgoOperationTargetType `json:"targetType"`
-	UpdatedAt  time.Time               `json:"updatedAt"`
-}
-
-// ArgoOperationOperationType defines model for ArgoOperation.OperationType.
-type ArgoOperationOperationType string
-
-// ArgoOperationStatus defines model for ArgoOperation.Status.
-type ArgoOperationStatus string
-
-// ArgoOperationTargetType defines model for ArgoOperation.TargetType.
-type ArgoOperationTargetType string
-
-// ArgoOperationEnvelope defines model for ArgoOperationEnvelope.
-type ArgoOperationEnvelope struct {
-	Data ArgoOperation `json:"data"`
-}
-
-// ArgoOperationEvent defines model for ArgoOperationEvent.
-type ArgoOperationEvent struct {
-	CreatedAt time.Time               `json:"createdAt"`
-	Detail    *map[string]interface{} `json:"detail,omitempty"`
-	Id        openapi_types.UUID      `json:"id"`
-	Level     string                  `json:"level"`
-	Message   string                  `json:"message"`
-	Stage     string                  `json:"stage"`
-}
-
-// ArgoOrphanApplication defines model for ArgoOrphanApplication.
-type ArgoOrphanApplication struct {
-	ApplicationSetName   *string                      `json:"application_set_name,omitempty"`
-	ComponentSlug        *string                      `json:"component_slug,omitempty"`
-	DestinationCluster   *string                      `json:"destination_cluster,omitempty"`
-	DestinationNamespace *string                      `json:"destination_namespace,omitempty"`
-	Id                   *openapi_types.UUID          `json:"id,omitempty"`
-	Message              *string                      `json:"message,omitempty"`
-	Name                 *string                      `json:"name,omitempty"`
-	Reason               *ArgoOrphanApplicationReason `json:"reason,omitempty"`
-	Source               *ArgoOrphanApplicationSource `json:"source,omitempty"`
-}
-
-// ArgoOrphanApplicationReason defines model for ArgoOrphanApplication.Reason.
-type ArgoOrphanApplicationReason string
-
-// ArgoOrphanApplicationSource defines model for ArgoOrphanApplication.Source.
-type ArgoOrphanApplicationSource string
-
-// ArgoOrphanReport defines model for ArgoOrphanReport.
-type ArgoOrphanReport struct {
-	ApplicationCount       *int                     `json:"application_count,omitempty"`
-	CachedApplicationCount *int                     `json:"cached_application_count,omitempty"`
-	GeneratedAt            *time.Time               `json:"generated_at,omitempty"`
-	InstanceId             *openapi_types.UUID      `json:"instance_id,omitempty"`
-	LiveApplicationCount   *int                     `json:"live_application_count,omitempty"`
-	LiveError              *string                  `json:"live_error,omitempty"`
-	ManagedTargetCount     *int                     `json:"managed_target_count,omitempty"`
-	OrphanApplicationCount *int                     `json:"orphan_application_count,omitempty"`
-	OrphanApplications     *[]ArgoOrphanApplication `json:"orphan_applications,omitempty"`
-}
-
-// ArgoSyncRequest Bounded manual-sync options. Application source/spec and credential
-// material are never accepted by this operation endpoint.
-type ArgoSyncRequest struct {
-	DryRun   *bool   `json:"dry_run,omitempty"`
-	Prune    *bool   `json:"prune,omitempty"`
-	Reason   *string `json:"reason,omitempty"`
-	Revision *string `json:"revision,omitempty"`
-
-	// SyncWindowOverride Audit intent only; does not bypass ArgoCD AppProject sync windows.
-	SyncWindowOverride *bool `json:"sync_window_override,omitempty"`
-}
 
 // AuditLogEntry defines model for AuditLogEntry.
 type AuditLogEntry struct {
@@ -1734,7 +1725,7 @@ type CharlieAdminMode struct {
 	Requested                    CharlieAdminModeRequested     `json:"requested"`
 	Revision                     int64                         `json:"revision"`
 
-	// WorkloadCeiling Product-owned ceiling currently rendered in the agent Argo workload.
+	// WorkloadCeiling Product-owned ceiling currently rendered in the agent's Flux delivery workload.
 	WorkloadCeiling CharlieAdminModeWorkloadCeiling `json:"workload_ceiling"`
 
 	// WorkloadCeilingReady True only after a non-pruning rollout and exact readback from both ready product-agent replicas.
@@ -1747,7 +1738,7 @@ type CharlieAdminModeAuthoritative string
 // CharlieAdminModeRequested defines model for CharlieAdminMode.Requested.
 type CharlieAdminModeRequested string
 
-// CharlieAdminModeWorkloadCeiling Product-owned ceiling currently rendered in the agent Argo workload.
+// CharlieAdminModeWorkloadCeiling Product-owned ceiling currently rendered in the agent's Flux delivery workload.
 type CharlieAdminModeWorkloadCeiling string
 
 // CharlieAdminPermission defines model for CharlieAdminPermission.
@@ -1855,6 +1846,46 @@ type CharlieApprovalSummaryEffect string
 
 // CharlieApprovalSummaryState defines model for CharlieApprovalSummary.State.
 type CharlieApprovalSummaryState string
+
+// CharlieCommandCatalog defines model for CharlieCommandCatalog.
+type CharlieCommandCatalog struct {
+	Commands []CharlieCommandDescriptor `json:"commands"`
+	Schema   string                     `json:"schema"`
+	Version  int                        `json:"version"`
+}
+
+// CharlieCommandDescriptor defines model for CharlieCommandDescriptor.
+type CharlieCommandDescriptor struct {
+	Aliases  *[]string `json:"aliases,omitempty"`
+	Argument *struct {
+		Name        string `json:"name"`
+		Placeholder string `json:"placeholder"`
+		Required    bool   `json:"required"`
+	} `json:"argument,omitempty"`
+	Category     string                            `json:"category"`
+	Description  string                            `json:"description"`
+	Effect       CharlieCommandDescriptorEffect    `json:"effect"`
+	Example      string                            `json:"example"`
+	Execution    CharlieCommandDescriptorExecution `json:"execution"`
+	Id           string                            `json:"id"`
+	Label        string                            `json:"label"`
+	Name         string                            `json:"name"`
+	RequiredMode string                            `json:"required_mode"`
+	Version      string                            `json:"version"`
+}
+
+// CharlieCommandDescriptorEffect defines model for CharlieCommandDescriptor.Effect.
+type CharlieCommandDescriptorEffect string
+
+// CharlieCommandDescriptorExecution defines model for CharlieCommandDescriptor.Execution.
+type CharlieCommandDescriptorExecution string
+
+// CharlieCommandRequest Product-validated shortcut selection. It does not grant authority or bypass Charlie policy.
+type CharlieCommandRequest struct {
+	Arguments map[string]string `json:"arguments"`
+	Id        string            `json:"id"`
+	Version   string            `json:"version"`
+}
 
 // CharlieContextSearchResult defines model for CharlieContextSearchResult.
 type CharlieContextSearchResult struct {
@@ -2188,10 +2219,45 @@ type CharlieSessionResource struct {
 // CharlieSessionResourceType defines model for CharlieSessionResource.Type.
 type CharlieSessionResourceType string
 
+// CharlieThreadMessageRequest defines model for CharlieThreadMessageRequest.
+type CharlieThreadMessageRequest struct {
+	ClientMessageId openapi_types.UUID `json:"client_message_id"`
+
+	// Command Product-validated shortcut selection. It does not grant authority or bypass Charlie policy.
+	Command          *CharlieCommandRequest    `json:"command,omitempty"`
+	CurrentUiContext *string                   `json:"current_ui_context,omitempty"`
+	Message          string                    `json:"message"`
+	Resources        *[]CharlieSessionResource `json:"resources,omitempty"`
+	Trigger          *string                   `json:"trigger,omitempty"`
+}
+
+// CharlieThreadMetadata defines model for CharlieThreadMetadata.
+type CharlieThreadMetadata struct {
+	ArchivedAt       *time.Time                 `json:"archived_at"`
+	CreatedAt        time.Time                  `json:"created_at"`
+	CurrentSessionId *openapi_types.UUID        `json:"current_session_id"`
+	Id               openapi_types.UUID         `json:"id"`
+	State            CharlieThreadMetadataState `json:"state"`
+	Title            string                     `json:"title"`
+	UpdatedAt        time.Time                  `json:"updated_at"`
+}
+
+// CharlieThreadMetadataState defines model for CharlieThreadMetadata.State.
+type CharlieThreadMetadataState string
+
 // CharlieTriggerRetryRequest defines model for CharlieTriggerRetryRequest.
 type CharlieTriggerRetryRequest struct {
 	// RequestId Idempotency key and fresh retry-attempt identifier.
 	RequestId openapi_types.UUID `json:"request_id"`
+}
+
+// ChartRecommendation defines model for ChartRecommendation.
+type ChartRecommendation struct {
+	AvgStars      float64            `json:"avg_stars"`
+	BayesianScore float64            `json:"bayesian_score"`
+	ChartId       openapi_types.UUID `json:"chart_id"`
+	RatingCount   int32              `json:"rating_count"`
+	Weight        *int32             `json:"weight,omitempty"`
 }
 
 // CloudCredential Project cloud-provider credential (secret values redacted).
@@ -2225,32 +2291,11 @@ type Cluster struct {
 	AgentPrivilegeProfile *ClusterAgentPrivilegeProfile `json:"agent_privilege_profile,omitempty"`
 	AgentVersion          *string                       `json:"agent_version,omitempty"`
 	Annotations           *map[string]string            `json:"annotations,omitempty"`
-	Argocd                *struct {
-		BaselineManagedBy  *ClusterArgocdBaselineManagedBy `json:"baseline_managed_by,omitempty"`
-		ClusterSecretNames *[]string                       `json:"cluster_secret_names,omitempty"`
-		Drift              *struct {
-			AppCount             *int       `json:"app_count,omitempty"`
-			DegradedCount        *int       `json:"degraded_count,omitempty"`
-			HealthyCount         *int       `json:"healthy_count,omitempty"`
-			LastError            *string    `json:"last_error,omitempty"`
-			LastSynced           *time.Time `json:"last_synced"`
-			OutOfSyncCount       *int       `json:"out_of_sync_count,omitempty"`
-			ProgressingCount     *int       `json:"progressing_count,omitempty"`
-			ResourceChangedCount *int       `json:"resource_changed_count,omitempty"`
-			ResourceCreatedCount *int       `json:"resource_created_count,omitempty"`
-			ResourcePrunedCount  *int       `json:"resource_pruned_count,omitempty"`
-			SyncedCount          *int       `json:"synced_count,omitempty"`
-			UnknownHealthCount   *int       `json:"unknown_health_count,omitempty"`
-			UnknownSyncCount     *int       `json:"unknown_sync_count,omitempty"`
-		} `json:"drift,omitempty"`
-		InstanceCount *int  `json:"instance_count,omitempty"`
-		Registered    *bool `json:"registered,omitempty"`
-	} `json:"argocd,omitempty"`
-	CpuPercentage    *float32   `json:"cpu_percentage,omitempty"`
-	CreatedAt        *time.Time `json:"created_at,omitempty"`
-	DecommissionedAt *time.Time `json:"decommissioned_at"`
-	Description      *string    `json:"description,omitempty"`
-	DisplayName      *string    `json:"display_name,omitempty"`
+	CpuPercentage         *float32                      `json:"cpu_percentage,omitempty"`
+	CreatedAt             *time.Time                    `json:"created_at,omitempty"`
+	DecommissionedAt      *time.Time                    `json:"decommissioned_at"`
+	Description           *string                       `json:"description,omitempty"`
+	DisplayName           *string                       `json:"display_name,omitempty"`
 
 	// Distribution vanilla / k3s / openshift / ...
 	Distribution *string `json:"distribution,omitempty"`
@@ -2282,9 +2327,6 @@ type Cluster struct {
 // ClusterAgentPrivilegeProfile defines model for Cluster.AgentPrivilegeProfile.
 type ClusterAgentPrivilegeProfile string
 
-// ClusterArgocdBaselineManagedBy defines model for Cluster.Argocd.BaselineManagedBy.
-type ClusterArgocdBaselineManagedBy string
-
 // ClusterDownstreamImpersonation Tri-state downstream-impersonation mode for this cluster (docs/design/downstream-impersonation.md §5), stored in `annotations` under `astronomer.io/downstream-impersonation`. Writable by superusers only, and `enforce` additionally requires the agent to have advertised the impersonation capability. Absent, blank and unrecognized all read as `off`, which is the default and — in Phase 0 — the only mode any code path acts on.
 type ClusterDownstreamImpersonation string
 
@@ -2297,8 +2339,161 @@ type ClusterRegistrationPhase string
 // ClusterStatus defines model for Cluster.Status.
 type ClusterStatus string
 
+// ClusterAgentItem defines model for ClusterAgentItem.
+type ClusterAgentItem struct {
+	AgentId              *string                              `json:"agent_id,omitempty"`
+	AgentStatus          *ClusterAgentItemAgentStatus         `json:"agent_status,omitempty"`
+	AgentVersion         *string                              `json:"agent_version,omitempty"`
+	Capabilities         *map[string]bool                     `json:"capabilities,omitempty"`
+	ChannelName          *string                              `json:"channel_name,omitempty"`
+	ClusterDisplayName   *string                              `json:"cluster_display_name,omitempty"`
+	ClusterId            *openapi_types.UUID                  `json:"cluster_id,omitempty"`
+	ClusterName          *string                              `json:"cluster_name,omitempty"`
+	ClusterStatus        *string                              `json:"cluster_status,omitempty"`
+	CompatibilityMessage *string                              `json:"compatibility_message,omitempty"`
+	CompatibilityStatus  *ClusterAgentItemCompatibilityStatus `json:"compatibility_status,omitempty"`
+	ConnectedAt          *time.Time                           `json:"connected_at"`
+	DegradedReasons      *[]string                            `json:"degraded_reasons,omitempty"`
+	DisconnectedAt       *time.Time                           `json:"disconnected_at"`
+	Distribution         *string                              `json:"distribution,omitempty"`
+	IsLocal              *bool                                `json:"is_local,omitempty"`
+	KubernetesVersion    *string                              `json:"kubernetes_version,omitempty"`
+	LastHeartbeat        *time.Time                           `json:"last_heartbeat"`
+	LastPing             *time.Time                           `json:"last_ping"`
+	NodeCount            *int                                 `json:"node_count,omitempty"`
+	NodeName             *string                              `json:"node_name,omitempty"`
+	OfflineBehavior      *AgentOfflineBehavior                `json:"offline_behavior,omitempty"`
+	PodName              *string                              `json:"pod_name,omitempty"`
+	PrivilegeProfile     *ClusterAgentItemPrivilegeProfile    `json:"privilege_profile,omitempty"`
+	RecommendedAction    *string                              `json:"recommended_action,omitempty"`
+	SessionId            *string                              `json:"session_id,omitempty"`
+}
+
+// ClusterAgentItemAgentStatus defines model for ClusterAgentItem.AgentStatus.
+type ClusterAgentItemAgentStatus string
+
+// ClusterAgentItemCompatibilityStatus defines model for ClusterAgentItem.CompatibilityStatus.
+type ClusterAgentItemCompatibilityStatus string
+
+// ClusterAgentItemPrivilegeProfile defines model for ClusterAgentItem.PrivilegeProfile.
+type ClusterAgentItemPrivilegeProfile string
+
+// ClusterAgentResponse defines model for ClusterAgentResponse.
+type ClusterAgentResponse struct {
+	Items   *[]ClusterAgentItem `json:"items,omitempty"`
+	Limit   *int                `json:"limit,omitempty"`
+	Offset  *int                `json:"offset,omitempty"`
+	Summary *struct {
+		Compatibility                 *map[string]int `json:"compatibility,omitempty"`
+		Connected                     *int            `json:"connected,omitempty"`
+		Degraded                      *int            `json:"degraded,omitempty"`
+		Disconnected                  *int            `json:"disconnected,omitempty"`
+		GeneratedAt                   *time.Time      `json:"generated_at,omitempty"`
+		MinimumCompatibleAgentVersion *string         `json:"minimum_compatible_agent_version,omitempty"`
+		MinimumSupportedAgentVersion  *string         `json:"minimum_supported_agent_version,omitempty"`
+		Profiles                      *map[string]int `json:"profiles,omitempty"`
+		ServerVersion                 *string         `json:"server_version,omitempty"`
+		Statuses                      *map[string]int `json:"statuses,omitempty"`
+		TotalClusters                 *int            `json:"total_clusters,omitempty"`
+		Versions                      *map[string]int `json:"versions,omitempty"`
+	} `json:"summary,omitempty"`
+}
+
 // ClusterConditionResponse Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
 type ClusterConditionResponse map[string]interface{}
+
+// ClusterDeployment defines model for ClusterDeployment.
+type ClusterDeployment struct {
+	Action                  ClusterDeploymentAction  `json:"action"`
+	AgentSequence           int64                    `json:"agent_sequence"`
+	AgentSessionId          string                   `json:"agent_session_id"`
+	ClusterId               openapi_types.UUID       `json:"cluster_id"`
+	Conditions              []map[string]interface{} `json:"conditions"`
+	CreatedAt               time.Time                `json:"created_at"`
+	CurrentRolloutId        *openapi_types.UUID      `json:"current_rollout_id"`
+	DesiredBundleVersionId  *openapi_types.UUID      `json:"desired_bundle_version_id"`
+	DesiredGeneration       int64                    `json:"desired_generation"`
+	DesiredRevision         string                   `json:"desired_revision"`
+	DesiredSpecDigest       string                   `json:"desired_spec_digest"`
+	Id                      openapi_types.UUID       `json:"id"`
+	Inventory               map[string]interface{}   `json:"inventory"`
+	LastErrorCode           string                   `json:"last_error_code"`
+	LastMessage             string                   `json:"last_message"`
+	LastObservedAt          *time.Time               `json:"last_observed_at"`
+	ObservedGeneration      int64                    `json:"observed_generation"`
+	ObservedRevision        string                   `json:"observed_revision"`
+	ObservedSpecDigest      string                   `json:"observed_spec_digest"`
+	Phase                   ClusterDeploymentPhase   `json:"phase"`
+	PreviousBundleVersionId *openapi_types.UUID      `json:"previous_bundle_version_id"`
+	ReconcilerKind          string                   `json:"reconciler_kind"`
+	ReconcilerName          string                   `json:"reconciler_name"`
+	SourceKind              string                   `json:"source_kind"`
+	SourceName              string                   `json:"source_name"`
+	TargetId                openapi_types.UUID       `json:"target_id"`
+	UpdatedAt               time.Time                `json:"updated_at"`
+}
+
+// ClusterDeploymentAction defines model for ClusterDeployment.Action.
+type ClusterDeploymentAction string
+
+// ClusterDeploymentPhase defines model for ClusterDeployment.Phase.
+type ClusterDeploymentPhase string
+
+// ClusterDeploymentControl defines model for ClusterDeploymentControl.
+type ClusterDeploymentControl struct {
+	Deployment ClusterDeployment      `json:"deployment"`
+	Event      ClusterDeploymentEvent `json:"event"`
+}
+
+// ClusterDeploymentControlEnvelope defines model for ClusterDeploymentControlEnvelope.
+type ClusterDeploymentControlEnvelope struct {
+	Data ClusterDeploymentControl `json:"data"`
+}
+
+// ClusterDeploymentDetail defines model for ClusterDeploymentDetail.
+type ClusterDeploymentDetail struct {
+	Deployment ClusterDeployment        `json:"deployment"`
+	Events     []ClusterDeploymentEvent `json:"events"`
+}
+
+// ClusterDeploymentDetailEnvelope defines model for ClusterDeploymentDetailEnvelope.
+type ClusterDeploymentDetailEnvelope struct {
+	Data ClusterDeploymentDetail `json:"data"`
+}
+
+// ClusterDeploymentEvent defines model for ClusterDeploymentEvent.
+type ClusterDeploymentEvent struct {
+	CreatedAt    time.Time           `json:"created_at"`
+	DeploymentId openapi_types.UUID  `json:"deployment_id"`
+	EventType    string              `json:"event_type"`
+	FromPhase    string              `json:"from_phase"`
+	Generation   int64               `json:"generation"`
+	Id           openapi_types.UUID  `json:"id"`
+	Message      string              `json:"message"`
+	ObservedAt   time.Time           `json:"observed_at"`
+	ReasonCode   string              `json:"reason_code"`
+	RolloutId    *openapi_types.UUID `json:"rollout_id"`
+	SpecDigest   string              `json:"spec_digest"`
+	ToPhase      string              `json:"to_phase"`
+}
+
+// ClusterDeploymentEventPage defines model for ClusterDeploymentEventPage.
+type ClusterDeploymentEventPage struct {
+	Count      int64                    `json:"count"`
+	Data       []ClusterDeploymentEvent `json:"data"`
+	Next       *string                  `json:"next"`
+	Previous   *string                  `json:"previous"`
+	TotalKnown bool                     `json:"total_known"`
+}
+
+// ClusterDeploymentPage defines model for ClusterDeploymentPage.
+type ClusterDeploymentPage struct {
+	Count      int64               `json:"count"`
+	Data       []ClusterDeployment `json:"data"`
+	Next       *string             `json:"next"`
+	Previous   *string             `json:"previous"`
+	TotalKnown bool                `json:"total_known"`
+}
 
 // ClusterEvent defines model for ClusterEvent.
 type ClusterEvent struct {
@@ -2375,9 +2570,6 @@ type CreateClusterRequest struct {
 // CreateClusterTemplateRequest Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
 type CreateClusterTemplateRequest map[string]interface{}
 
-// CreateFleetOperationRequest Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-type CreateFleetOperationRequest map[string]interface{}
-
 // CreateNetworkPolicyTemplateRequest Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
 type CreateNetworkPolicyTemplateRequest map[string]interface{}
 
@@ -2406,6 +2598,641 @@ type DataEnvelope struct {
 
 // DecommissionStatusResponse Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
 type DecommissionStatusResponse map[string]interface{}
+
+// DeliveryBundle defines model for DeliveryBundle.
+type DeliveryBundle struct {
+	CreatedAt   time.Time          `json:"created_at"`
+	Description *string            `json:"description,omitempty"`
+	Id          openapi_types.UUID `json:"id"`
+	Name        string             `json:"name"`
+	ProjectId   openapi_types.UUID `json:"project_id"`
+	UpdatedAt   time.Time          `json:"updated_at"`
+}
+
+// DeliveryBundleEnvelope defines model for DeliveryBundleEnvelope.
+type DeliveryBundleEnvelope struct {
+	Data DeliveryBundle `json:"data"`
+}
+
+// DeliveryBundlePage defines model for DeliveryBundlePage.
+type DeliveryBundlePage struct {
+	Count      int64            `json:"count"`
+	Data       []DeliveryBundle `json:"data"`
+	Next       *string          `json:"next"`
+	Previous   *string          `json:"previous"`
+	TotalKnown bool             `json:"total_known"`
+}
+
+// DeliveryBundleVersion defines model for DeliveryBundleVersion.
+type DeliveryBundleVersion struct {
+	ArtifactDigest       *string                                 `json:"artifact_digest,omitempty"`
+	BundleId             openapi_types.UUID                      `json:"bundle_id"`
+	CreatedAt            time.Time                               `json:"created_at"`
+	DependencyBundleIds  []openapi_types.UUID                    `json:"dependency_bundle_ids"`
+	Id                   openapi_types.UUID                      `json:"id"`
+	LastErrorCode        *string                                 `json:"last_error_code,omitempty"`
+	ReconciliationPolicy map[string]interface{}                  `json:"reconciliation_policy"`
+	Renderer             DeliveryBundleVersionRenderer           `json:"renderer"`
+	RendererSpec         map[string]interface{}                  `json:"renderer_spec"`
+	RequestedRevision    string                                  `json:"requested_revision"`
+	RequiredCapabilities []map[string]interface{}                `json:"required_capabilities"`
+	ResolvedRevision     *string                                 `json:"resolved_revision,omitempty"`
+	Scope                DeliveryBundleVersionScope              `json:"scope"`
+	SourceId             openapi_types.UUID                      `json:"source_id"`
+	SpecDigest           string                                  `json:"spec_digest"`
+	State                DeliveryBundleVersionState              `json:"state"`
+	VerificationIdentity *string                                 `json:"verification_identity,omitempty"`
+	VerificationStatus   DeliveryBundleVersionVerificationStatus `json:"verification_status"`
+	Version              string                                  `json:"version"`
+}
+
+// DeliveryBundleVersionRenderer defines model for DeliveryBundleVersion.Renderer.
+type DeliveryBundleVersionRenderer string
+
+// DeliveryBundleVersionScope defines model for DeliveryBundleVersion.Scope.
+type DeliveryBundleVersionScope string
+
+// DeliveryBundleVersionState defines model for DeliveryBundleVersion.State.
+type DeliveryBundleVersionState string
+
+// DeliveryBundleVersionVerificationStatus defines model for DeliveryBundleVersion.VerificationStatus.
+type DeliveryBundleVersionVerificationStatus string
+
+// DeliveryBundleVersionEnvelope defines model for DeliveryBundleVersionEnvelope.
+type DeliveryBundleVersionEnvelope struct {
+	Data DeliveryBundleVersion `json:"data"`
+}
+
+// DeliveryBundleVersionPage defines model for DeliveryBundleVersionPage.
+type DeliveryBundleVersionPage struct {
+	Count      int64                   `json:"count"`
+	Data       []DeliveryBundleVersion `json:"data"`
+	Next       *string                 `json:"next"`
+	Previous   *string                 `json:"previous"`
+	TotalKnown bool                    `json:"total_known"`
+}
+
+// DeliveryBundleVersionWrite defines model for DeliveryBundleVersionWrite.
+type DeliveryBundleVersionWrite struct {
+	DependencyBundleIds *[]openapi_types.UUID `json:"dependency_bundle_ids,omitempty"`
+	ProjectId           *openapi_types.UUID   `json:"project_id,omitempty"`
+
+	// Spec Credential-free immutable renderer, source revision, scope, reconciliation, and capability draft.
+	Spec    map[string]interface{} `json:"spec"`
+	Version string                 `json:"version"`
+}
+
+// DeliveryBundleWrite defines model for DeliveryBundleWrite.
+type DeliveryBundleWrite struct {
+	Description *string             `json:"description,omitempty"`
+	Name        string              `json:"name"`
+	ProjectId   *openapi_types.UUID `json:"project_id,omitempty"`
+}
+
+// DeliveryClusterInventory defines model for DeliveryClusterInventory.
+type DeliveryClusterInventory struct {
+	ControllerInventory DeliveryControllerInventory `json:"controller_inventory"`
+	DeploymentCount     int64                       `json:"deployment_count"`
+	Deployments         []ClusterDeployment         `json:"deployments"`
+}
+
+// DeliveryClusterInventoryEnvelope defines model for DeliveryClusterInventoryEnvelope.
+type DeliveryClusterInventoryEnvelope struct {
+	Data DeliveryClusterInventory `json:"data"`
+}
+
+// DeliveryCompatibilityContract defines model for DeliveryCompatibilityContract.
+type DeliveryCompatibilityContract struct {
+	AgentProtocol        string            `json:"agent_protocol"`
+	FluxApis             []string          `json:"flux_apis"`
+	FluxComponents       map[string]string `json:"flux_components"`
+	FluxVersion          string            `json:"flux_version"`
+	KubernetesMaximum    string            `json:"kubernetes_maximum"`
+	KubernetesMinimum    string            `json:"kubernetes_minimum"`
+	RequiredCapabilities []string          `json:"required_capabilities"`
+	Summary              string            `json:"summary"`
+}
+
+// DeliveryCompatibilityCount defines model for DeliveryCompatibilityCount.
+type DeliveryCompatibilityCount struct {
+	ClusterCount        int64  `json:"cluster_count"`
+	CompatibilityStatus string `json:"compatibility_status"`
+}
+
+// DeliveryControllerInventory defines model for DeliveryControllerInventory.
+type DeliveryControllerInventory struct {
+	AgentVersion        string                                         `json:"agent_version"`
+	ApiVersions         []string                                       `json:"api_versions"`
+	ClusterId           openapi_types.UUID                             `json:"cluster_id"`
+	CompatibilityStatus DeliveryControllerInventoryCompatibilityStatus `json:"compatibility_status"`
+	Components          map[string]string                              `json:"components"`
+	DistributionDigest  string                                         `json:"distribution_digest"`
+	ErrorCode           string                                         `json:"error_code"`
+	FluxVersion         string                                         `json:"flux_version"`
+	KubernetesVersion   string                                         `json:"kubernetes_version"`
+	ObservedAt          *time.Time                                     `json:"observed_at"`
+	Ready               bool                                           `json:"ready"`
+	UpdatedAt           time.Time                                      `json:"updated_at"`
+}
+
+// DeliveryControllerInventoryCompatibilityStatus defines model for DeliveryControllerInventory.CompatibilityStatus.
+type DeliveryControllerInventoryCompatibilityStatus string
+
+// DeliveryFrozenRollout defines model for DeliveryFrozenRollout.
+type DeliveryFrozenRollout struct {
+	Actor            string                   `json:"actor"`
+	Approval         map[string]interface{}   `json:"approval"`
+	Clusters         []map[string]interface{} `json:"clusters"`
+	Cohorts          []map[string]interface{} `json:"cohorts"`
+	CreatedAt        time.Time                `json:"created_at"`
+	Deadline         time.Time                `json:"deadline"`
+	Desired          map[string]interface{}   `json:"desired"`
+	Id               openapi_types.UUID       `json:"id"`
+	IdempotencyKey   string                   `json:"idempotency_key"`
+	PlacementDigest  string                   `json:"placement_digest"`
+	PlanDigest       string                   `json:"plan_digest"`
+	ProjectId        openapi_types.UUID       `json:"project_id"`
+	RequestDigest    string                   `json:"request_digest"`
+	Strategy         map[string]interface{}   `json:"strategy"`
+	StrategyDigest   string                   `json:"strategy_digest"`
+	TargetGeneration int64                    `json:"target_generation"`
+	TargetId         openapi_types.UUID       `json:"target_id"`
+}
+
+// DeliveryFrozenRolloutEnvelope defines model for DeliveryFrozenRolloutEnvelope.
+type DeliveryFrozenRolloutEnvelope struct {
+	Data DeliveryFrozenRollout `json:"data"`
+}
+
+// DeliveryPreviewDecision defines model for DeliveryPreviewDecision.
+type DeliveryPreviewDecision struct {
+	ClusterId           openapi_types.UUID                     `json:"cluster_id"`
+	ClusterName         *string                                `json:"cluster_name,omitempty"`
+	CompatibilityReason *string                                `json:"compatibility_reason,omitempty"`
+	MatchReasons        *[]DeliveryPreviewDecisionMatchReasons `json:"match_reasons,omitempty"`
+	MatchedGroupIds     *[]openapi_types.UUID                  `json:"matched_group_ids,omitempty"`
+	MissingCapabilities *[]string                              `json:"missing_capabilities,omitempty"`
+	ProjectId           *openapi_types.UUID                    `json:"project_id,omitempty"`
+	Reason              DeliveryPreviewDecisionReason          `json:"reason"`
+}
+
+// DeliveryPreviewDecisionMatchReasons defines model for DeliveryPreviewDecision.MatchReasons.
+type DeliveryPreviewDecisionMatchReasons string
+
+// DeliveryPreviewDecisionReason defines model for DeliveryPreviewDecision.Reason.
+type DeliveryPreviewDecisionReason string
+
+// DeliveryRollout defines model for DeliveryRollout.
+type DeliveryRollout struct {
+	ApprovalPolicy      *map[string]interface{} `json:"approval_policy,omitempty"`
+	BlockedClusters     int32                   `json:"blocked_clusters"`
+	CompletedAt         *time.Time              `json:"completed_at"`
+	CreatedAt           time.Time               `json:"created_at"`
+	FailedClusters      int32                   `json:"failed_clusters"`
+	FencingGeneration   int64                   `json:"fencing_generation"`
+	FromBundleVersionId *openapi_types.UUID     `json:"from_bundle_version_id"`
+	FrozenPlan          *map[string]interface{} `json:"frozen_plan,omitempty"`
+	Id                  openapi_types.UUID      `json:"id"`
+	LastErrorCode       *string                 `json:"last_error_code,omitempty"`
+	PlacementDigest     string                  `json:"placement_digest"`
+	PlacementSnapshot   *map[string]interface{} `json:"placement_snapshot,omitempty"`
+	PlanDigest          string                  `json:"plan_digest"`
+	ProgressDeadline    *time.Time              `json:"progress_deadline"`
+	ReadyClusters       int32                   `json:"ready_clusters"`
+	ReleasedClusters    int32                   `json:"released_clusters"`
+	RequestDigest       *string                 `json:"request_digest,omitempty"`
+	StartedAt           *time.Time              `json:"started_at"`
+	State               string                  `json:"state"`
+	Strategy            map[string]interface{}  `json:"strategy"`
+	StrategyDigest      *string                 `json:"strategy_digest,omitempty"`
+	TargetGeneration    int64                   `json:"target_generation"`
+	TargetId            openapi_types.UUID      `json:"target_id"`
+	ToBundleVersionId   openapi_types.UUID      `json:"to_bundle_version_id"`
+	TotalClusters       int32                   `json:"total_clusters"`
+	UpdatedAt           time.Time               `json:"updated_at"`
+}
+
+// DeliveryRolloutAction defines model for DeliveryRolloutAction.
+type DeliveryRolloutAction struct {
+	ProjectId  *openapi_types.UUID `json:"project_id,omitempty"`
+	ReasonCode *string             `json:"reason_code,omitempty"`
+}
+
+// DeliveryRolloutApproval defines model for DeliveryRolloutApproval.
+type DeliveryRolloutApproval struct {
+	BindingDigest string                          `json:"binding_digest"`
+	Cohort        int                             `json:"cohort"`
+	Decision      DeliveryRolloutApprovalDecision `json:"decision"`
+	ExpiresAt     time.Time                       `json:"expires_at"`
+	ProjectId     *openapi_types.UUID             `json:"project_id,omitempty"`
+}
+
+// DeliveryRolloutApprovalDecision defines model for DeliveryRolloutApproval.Decision.
+type DeliveryRolloutApprovalDecision string
+
+// DeliveryRolloutApprovalRecord defines model for DeliveryRolloutApprovalRecord.
+type DeliveryRolloutApprovalRecord struct {
+	BindingDigest string                                `json:"binding_digest"`
+	Cohort        int32                                 `json:"cohort"`
+	CreatedAt     time.Time                             `json:"created_at"`
+	DecidedAt     time.Time                             `json:"decided_at"`
+	DecidedBy     *openapi_types.UUID                   `json:"decided_by"`
+	Decision      DeliveryRolloutApprovalRecordDecision `json:"decision"`
+	ExpiresAt     time.Time                             `json:"expires_at"`
+	Id            openapi_types.UUID                    `json:"id"`
+	RolloutId     openapi_types.UUID                    `json:"rollout_id"`
+}
+
+// DeliveryRolloutApprovalRecordDecision defines model for DeliveryRolloutApprovalRecord.Decision.
+type DeliveryRolloutApprovalRecordDecision string
+
+// DeliveryRolloutCluster defines model for DeliveryRolloutCluster.
+type DeliveryRolloutCluster struct {
+	AcknowledgedAt          *time.Time                             `json:"acknowledged_at"`
+	AssignmentAction        DeliveryRolloutClusterAssignmentAction `json:"assignment_action"`
+	Attempt                 int32                                  `json:"attempt"`
+	ClusterId               openapi_types.UUID                     `json:"cluster_id"`
+	Cohort                  int32                                  `json:"cohort"`
+	CompletedAt             *time.Time                             `json:"completed_at"`
+	CreatedAt               time.Time                              `json:"created_at"`
+	Deadline                *time.Time                             `json:"deadline"`
+	DesiredBundleVersionId  openapi_types.UUID                     `json:"desired_bundle_version_id"`
+	DesiredSpecDigest       string                                 `json:"desired_spec_digest"`
+	Fence                   int64                                  `json:"fence"`
+	Id                      openapi_types.UUID                     `json:"id"`
+	LastErrorCode           string                                 `json:"last_error_code"`
+	PreviousBundleVersionId *openapi_types.UUID                    `json:"previous_bundle_version_id"`
+	ReadyAt                 *time.Time                             `json:"ready_at"`
+	ReleaseOrder            int32                                  `json:"release_order"`
+	ReleasedAt              *time.Time                             `json:"released_at"`
+	RolloutId               openapi_types.UUID                     `json:"rollout_id"`
+	State                   string                                 `json:"state"`
+	UpdatedAt               time.Time                              `json:"updated_at"`
+}
+
+// DeliveryRolloutClusterAssignmentAction defines model for DeliveryRolloutCluster.AssignmentAction.
+type DeliveryRolloutClusterAssignmentAction string
+
+// DeliveryRolloutClusterPage defines model for DeliveryRolloutClusterPage.
+type DeliveryRolloutClusterPage struct {
+	Count      int64                    `json:"count"`
+	Data       []DeliveryRolloutCluster `json:"data"`
+	Next       *string                  `json:"next"`
+	Previous   *string                  `json:"previous"`
+	TotalKnown bool                     `json:"total_known"`
+}
+
+// DeliveryRolloutControl defines model for DeliveryRolloutControl.
+type DeliveryRolloutControl struct {
+	Approval *DeliveryRolloutApprovalRecord `json:"approval,omitempty"`
+	Event    DeliveryRolloutEvent           `json:"event"`
+	Rollout  DeliveryRollout                `json:"rollout"`
+}
+
+// DeliveryRolloutControlEnvelope defines model for DeliveryRolloutControlEnvelope.
+type DeliveryRolloutControlEnvelope struct {
+	Data DeliveryRolloutControl `json:"data"`
+}
+
+// DeliveryRolloutDetail defines model for DeliveryRolloutDetail.
+type DeliveryRolloutDetail struct {
+	Approvals  []DeliveryRolloutApprovalRecord `json:"approvals"`
+	FrozenPlan map[string]interface{}          `json:"frozen_plan"`
+	Rollout    DeliveryRollout                 `json:"rollout"`
+	Timeline   []DeliveryRolloutEvent          `json:"timeline"`
+}
+
+// DeliveryRolloutDetailEnvelope defines model for DeliveryRolloutDetailEnvelope.
+type DeliveryRolloutDetailEnvelope struct {
+	Data DeliveryRolloutDetail `json:"data"`
+}
+
+// DeliveryRolloutEvent defines model for DeliveryRolloutEvent.
+type DeliveryRolloutEvent struct {
+	ClusterId      *openapi_types.UUID `json:"cluster_id"`
+	CreatedAt      time.Time           `json:"created_at"`
+	DecisionDigest *string             `json:"decision_digest,omitempty"`
+	EventType      string              `json:"event_type"`
+	Fence          int64               `json:"fence"`
+	FromState      string              `json:"from_state"`
+	Id             openapi_types.UUID  `json:"id"`
+	OccurredAt     time.Time           `json:"occurred_at"`
+	ReasonCode     string              `json:"reason_code"`
+	RolloutId      openapi_types.UUID  `json:"rollout_id"`
+	ToState        string              `json:"to_state"`
+}
+
+// DeliveryRolloutEventPage defines model for DeliveryRolloutEventPage.
+type DeliveryRolloutEventPage struct {
+	Count      int64                  `json:"count"`
+	Data       []DeliveryRolloutEvent `json:"data"`
+	Next       *string                `json:"next"`
+	Previous   *string                `json:"previous"`
+	TotalKnown bool                   `json:"total_known"`
+}
+
+// DeliveryRolloutPage defines model for DeliveryRolloutPage.
+type DeliveryRolloutPage struct {
+	Count      int64             `json:"count"`
+	Data       []DeliveryRollout `json:"data"`
+	Next       *string           `json:"next"`
+	Previous   *string           `json:"previous"`
+	TotalKnown bool              `json:"total_known"`
+}
+
+// DeliveryRolloutStart defines model for DeliveryRolloutStart.
+type DeliveryRolloutStart struct {
+	ConfirmAllClusters bool                   `json:"confirm_all_clusters"`
+	PreviewDigest      string                 `json:"preview_digest"`
+	ProjectId          *openapi_types.UUID    `json:"project_id,omitempty"`
+	Strategy           map[string]interface{} `json:"strategy"`
+}
+
+// DeliverySource defines model for DeliverySource.
+type DeliverySource struct {
+	AuthMode   DeliverySourceAuthMode `json:"auth_mode"`
+	CreatedAt  time.Time              `json:"created_at"`
+	Credential struct {
+		Configured bool  `json:"configured"`
+		Epoch      int64 `json:"epoch"`
+		KeyVersion int32 `json:"key_version"`
+	} `json:"credential"`
+	Description    *string              `json:"description,omitempty"`
+	Id             openapi_types.UUID   `json:"id"`
+	LastErrorCode  *string              `json:"last_error_code,omitempty"`
+	LastResolvedAt *time.Time           `json:"last_resolved_at"`
+	Name           string               `json:"name"`
+	ProjectId      openapi_types.UUID   `json:"project_id"`
+	ProxyRef       *string              `json:"proxy_ref,omitempty"`
+	Status         DeliverySourceStatus `json:"status"`
+	TrustPolicy    DeliveryTrustPolicy  `json:"trust_policy"`
+	Type           DeliverySourceType   `json:"type"`
+	UpdatedAt      time.Time            `json:"updated_at"`
+	Url            string               `json:"url"`
+}
+
+// DeliverySourceAuthMode defines model for DeliverySource.AuthMode.
+type DeliverySourceAuthMode string
+
+// DeliverySourceStatus defines model for DeliverySource.Status.
+type DeliverySourceStatus string
+
+// DeliverySourceType defines model for DeliverySource.Type.
+type DeliverySourceType string
+
+// DeliverySourceCredentialInput Write-only credential material; never returned by the API.
+type DeliverySourceCredentialInput struct {
+	KnownHosts *string `json:"known_hosts,omitempty"`
+	Passphrase *string `json:"passphrase,omitempty"`
+	Password   *string `json:"password,omitempty"`
+	PrivateKey *string `json:"private_key,omitempty"`
+	Token      *string `json:"token,omitempty"`
+	Username   *string `json:"username,omitempty"`
+}
+
+// DeliverySourceCredentialRotate defines model for DeliverySourceCredentialRotate.
+type DeliverySourceCredentialRotate struct {
+	AuthMode DeliverySourceCredentialRotateAuthMode `json:"auth_mode"`
+
+	// Credential Write-only credential material; never returned by the API.
+	Credential DeliverySourceCredentialInput `json:"credential"`
+	ProjectId  *openapi_types.UUID           `json:"project_id,omitempty"`
+}
+
+// DeliverySourceCredentialRotateAuthMode defines model for DeliverySourceCredentialRotate.AuthMode.
+type DeliverySourceCredentialRotateAuthMode string
+
+// DeliverySourceEnvelope defines model for DeliverySourceEnvelope.
+type DeliverySourceEnvelope struct {
+	Data DeliverySource `json:"data"`
+}
+
+// DeliverySourcePage defines model for DeliverySourcePage.
+type DeliverySourcePage struct {
+	Count      int64            `json:"count"`
+	Data       []DeliverySource `json:"data"`
+	Next       *string          `json:"next"`
+	Previous   *string          `json:"previous"`
+	TotalKnown bool             `json:"total_known"`
+}
+
+// DeliverySourcePatch defines model for DeliverySourcePatch.
+type DeliverySourcePatch struct {
+	CaBundle    *string              `json:"ca_bundle,omitempty"`
+	Description *string              `json:"description,omitempty"`
+	ProjectId   *openapi_types.UUID  `json:"project_id,omitempty"`
+	ProxyRef    *string              `json:"proxy_ref,omitempty"`
+	TrustPolicy *DeliveryTrustPolicy `json:"trust_policy,omitempty"`
+	Url         *string              `json:"url,omitempty"`
+}
+
+// DeliverySourceVerify defines model for DeliverySourceVerify.
+type DeliverySourceVerify struct {
+	Chart             *string             `json:"chart,omitempty"`
+	ProjectId         *openapi_types.UUID `json:"project_id,omitempty"`
+	RequestedRevision string              `json:"requested_revision"`
+}
+
+// DeliverySourceWrite defines model for DeliverySourceWrite.
+type DeliverySourceWrite struct {
+	AuthMode DeliverySourceWriteAuthMode `json:"auth_mode"`
+	CaBundle *string                     `json:"ca_bundle,omitempty"`
+
+	// Credential Write-only credential material; never returned by the API.
+	Credential  *DeliverySourceCredentialInput `json:"credential,omitempty"`
+	Description *string                        `json:"description,omitempty"`
+	Name        string                         `json:"name"`
+	ProjectId   *openapi_types.UUID            `json:"project_id,omitempty"`
+	ProxyRef    *string                        `json:"proxy_ref,omitempty"`
+	TrustPolicy DeliveryTrustPolicy            `json:"trust_policy"`
+	Type        DeliverySourceWriteType        `json:"type"`
+	Url         string                         `json:"url"`
+}
+
+// DeliverySourceWriteAuthMode defines model for DeliverySourceWrite.AuthMode.
+type DeliverySourceWriteAuthMode string
+
+// DeliverySourceWriteType defines model for DeliverySourceWrite.Type.
+type DeliverySourceWriteType string
+
+// DeliverySystemCompatibility defines model for DeliverySystemCompatibility.
+type DeliverySystemCompatibility struct {
+	Contract          DeliveryCompatibilityContract `json:"contract"`
+	CurrentRelease    *DeliverySystemRelease        `json:"current_release"`
+	CurrentRollout    *DeliverySystemRollout        `json:"current_rollout"`
+	ObservedInventory []DeliveryCompatibilityCount  `json:"observed_inventory"`
+}
+
+// DeliverySystemCompatibilityEnvelope defines model for DeliverySystemCompatibilityEnvelope.
+type DeliverySystemCompatibilityEnvelope struct {
+	Data DeliverySystemCompatibility `json:"data"`
+}
+
+// DeliverySystemRelease defines model for DeliverySystemRelease.
+type DeliverySystemRelease struct {
+	AgentImage             *string                 `json:"agent_image,omitempty"`
+	AgentVersion           *string                 `json:"agent_version,omitempty"`
+	ArtifactDigest         *string                 `json:"artifact_digest,omitempty"`
+	ArtifactUrl            *string                 `json:"artifact_url,omitempty"`
+	CrdStorageVersion      *string                 `json:"crd_storage_version,omitempty"`
+	CreatedAt              *time.Time              `json:"created_at,omitempty"`
+	CreatedBy              *openapi_types.UUID     `json:"created_by"`
+	CredentialEpoch        *int64                  `json:"credential_epoch,omitempty"`
+	CredentialKeyVersion   *int32                  `json:"credential_key_version,omitempty"`
+	DistributionDigest     *string                 `json:"distribution_digest,omitempty"`
+	Id                     *openapi_types.UUID     `json:"id,omitempty"`
+	Interval               *string                 `json:"interval,omitempty"`
+	MaximumKubernetes      *string                 `json:"maximum_kubernetes,omitempty"`
+	MinimumKubernetes      *string                 `json:"minimum_kubernetes,omitempty"`
+	PreviousStorageVersion *string                 `json:"previous_storage_version,omitempty"`
+	ReleaseSequence        *int64                  `json:"release_sequence,omitempty"`
+	ReleasedAt             *time.Time              `json:"released_at"`
+	RetiredAt              *time.Time              `json:"retired_at"`
+	SpecDigest             *string                 `json:"spec_digest,omitempty"`
+	State                  *string                 `json:"state,omitempty"`
+	Timeout                *string                 `json:"timeout,omitempty"`
+	VerificationPolicy     *map[string]interface{} `json:"verification_policy,omitempty"`
+	Version                *string                 `json:"version,omitempty"`
+}
+
+// DeliverySystemRollout defines model for DeliverySystemRollout.
+type DeliverySystemRollout struct {
+	CompletedAt       *time.Time              `json:"completed_at"`
+	CreatedAt         *time.Time              `json:"created_at,omitempty"`
+	FailedClusters    *int32                  `json:"failed_clusters,omitempty"`
+	FencingGeneration *int64                  `json:"fencing_generation,omitempty"`
+	Id                *openapi_types.UUID     `json:"id,omitempty"`
+	LastErrorCode     *string                 `json:"last_error_code,omitempty"`
+	PreviousReleaseId *openapi_types.UUID     `json:"previous_release_id"`
+	ProgressDeadline  *time.Time              `json:"progress_deadline"`
+	ReadyClusters     *int32                  `json:"ready_clusters,omitempty"`
+	ReleaseId         *openapi_types.UUID     `json:"release_id,omitempty"`
+	ReleasedClusters  *int32                  `json:"released_clusters,omitempty"`
+	StartedAt         *time.Time              `json:"started_at"`
+	State             *string                 `json:"state,omitempty"`
+	Strategy          *map[string]interface{} `json:"strategy,omitempty"`
+	StrategyDigest    *string                 `json:"strategy_digest,omitempty"`
+	TotalClusters     *int32                  `json:"total_clusters,omitempty"`
+	UpdatedAt         *time.Time              `json:"updated_at,omitempty"`
+}
+
+// DeliveryTarget defines model for DeliveryTarget.
+type DeliveryTarget struct {
+	BundleVersionId         openapi_types.UUID          `json:"bundle_version_id"`
+	CreatedAt               time.Time                   `json:"created_at"`
+	DeletionState           DeliveryTargetDeletionState `json:"deletion_state"`
+	Description             *string                     `json:"description,omitempty"`
+	Generation              int64                       `json:"generation"`
+	Id                      openapi_types.UUID          `json:"id"`
+	MaintenanceWindowPolicy map[string]interface{}      `json:"maintenance_window_policy"`
+	Name                    string                      `json:"name"`
+	Placement               map[string]interface{}      `json:"placement"`
+	ProjectId               openapi_types.UUID          `json:"project_id"`
+	ReconciliationPolicy    map[string]interface{}      `json:"reconciliation_policy"`
+	ResourceVersion         int64                       `json:"resource_version"`
+	RolloutPolicy           map[string]interface{}      `json:"rollout_policy"`
+	Suspended               bool                        `json:"suspended"`
+	UpdatedAt               time.Time                   `json:"updated_at"`
+}
+
+// DeliveryTargetDeletionState defines model for DeliveryTarget.DeletionState.
+type DeliveryTargetDeletionState string
+
+// DeliveryTargetDeletion defines model for DeliveryTargetDeletion.
+type DeliveryTargetDeletion struct {
+	DeletionState   DeliveryTargetDeletionDeletionState `json:"deletion_state"`
+	DeploymentCount *int64                              `json:"deployment_count,omitempty"`
+	Id              openapi_types.UUID                  `json:"id"`
+	ResourceVersion int64                               `json:"resource_version"`
+}
+
+// DeliveryTargetDeletionDeletionState defines model for DeliveryTargetDeletion.DeletionState.
+type DeliveryTargetDeletionDeletionState string
+
+// DeliveryTargetDeletionEnvelope defines model for DeliveryTargetDeletionEnvelope.
+type DeliveryTargetDeletionEnvelope struct {
+	Data DeliveryTargetDeletion `json:"data"`
+}
+
+// DeliveryTargetEnvelope defines model for DeliveryTargetEnvelope.
+type DeliveryTargetEnvelope struct {
+	Data DeliveryTarget `json:"data"`
+}
+
+// DeliveryTargetPage defines model for DeliveryTargetPage.
+type DeliveryTargetPage struct {
+	Count      int64            `json:"count"`
+	Data       []DeliveryTarget `json:"data"`
+	Next       *string          `json:"next"`
+	Previous   *string          `json:"previous"`
+	TotalKnown bool             `json:"total_known"`
+}
+
+// DeliveryTargetPatch defines model for DeliveryTargetPatch.
+type DeliveryTargetPatch struct {
+	BundleVersionId         *openapi_types.UUID     `json:"bundle_version_id,omitempty"`
+	Description             *string                 `json:"description,omitempty"`
+	MaintenanceWindowPolicy *map[string]interface{} `json:"maintenance_window_policy,omitempty"`
+	Placement               *map[string]interface{} `json:"placement,omitempty"`
+	ProjectId               *openapi_types.UUID     `json:"project_id,omitempty"`
+	ReconciliationPolicy    *map[string]interface{} `json:"reconciliation_policy,omitempty"`
+	RolloutPolicy           *struct {
+		ApprovalRequired *bool `json:"approval_required,omitempty"`
+	} `json:"rollout_policy,omitempty"`
+	Suspended *bool `json:"suspended,omitempty"`
+}
+
+// DeliveryTargetPreview defines model for DeliveryTargetPreview.
+type DeliveryTargetPreview struct {
+	BundleVersionId  openapi_types.UUID        `json:"bundle_version_id"`
+	DecisionCount    int                       `json:"decision_count"`
+	DecisionOffset   int                       `json:"decision_offset"`
+	DecisionPageSize int                       `json:"decision_page_size"`
+	Decisions        []DeliveryPreviewDecision `json:"decisions"`
+	ExcludedCount    int                       `json:"excluded_count"`
+	HasMoreDecisions bool                      `json:"has_more_decisions"`
+
+	// NextCursor Digest-bound opaque cursor; empty on the final page.
+	NextCursor              string             `json:"next_cursor"`
+	PreviewDigest           string             `json:"preview_digest"`
+	RequiresAllConfirmation bool               `json:"requires_all_confirmation"`
+	Risks                   []string           `json:"risks"`
+	SelectedCount           int                `json:"selected_count"`
+	TargetGeneration        int64              `json:"target_generation"`
+	TargetId                openapi_types.UUID `json:"target_id"`
+}
+
+// DeliveryTargetPreviewEnvelope defines model for DeliveryTargetPreviewEnvelope.
+type DeliveryTargetPreviewEnvelope struct {
+	Data DeliveryTargetPreview `json:"data"`
+}
+
+// DeliveryTargetWrite defines model for DeliveryTargetWrite.
+type DeliveryTargetWrite struct {
+	BundleVersionId         openapi_types.UUID      `json:"bundle_version_id"`
+	Description             *string                 `json:"description,omitempty"`
+	MaintenanceWindowPolicy *map[string]interface{} `json:"maintenance_window_policy,omitempty"`
+	Name                    string                  `json:"name"`
+	Placement               map[string]interface{}  `json:"placement"`
+	ProjectId               *openapi_types.UUID     `json:"project_id,omitempty"`
+	ReconciliationPolicy    map[string]interface{}  `json:"reconciliation_policy"`
+	RolloutPolicy           struct {
+		ApprovalRequired *bool `json:"approval_required,omitempty"`
+	} `json:"rollout_policy"`
+	Suspended *bool `json:"suspended,omitempty"`
+}
+
+// DeliveryTrustPolicy defines model for DeliveryTrustPolicy.
+type DeliveryTrustPolicy struct {
+	AllowUnsigned bool                         `json:"allow_unsigned"`
+	Identity      *string                      `json:"identity,omitempty"`
+	Issuer        *string                      `json:"issuer,omitempty"`
+	KeyRef        *string                      `json:"key_ref,omitempty"`
+	Provider      *DeliveryTrustPolicyProvider `json:"provider,omitempty"`
+}
+
+// DeliveryTrustPolicyProvider defines model for DeliveryTrustPolicy.Provider.
+type DeliveryTrustPolicyProvider string
 
 // DexConnector defines model for DexConnector.
 type DexConnector struct {
@@ -2653,7 +3480,6 @@ type ExtensionValidationCompatibilityStatus string
 
 // FeatureFlags defines model for FeatureFlags.
 type FeatureFlags struct {
-	FeatureArgocd     *bool `json:"feature.argocd,omitempty"`
 	FeatureBackups    *bool `json:"feature.backups,omitempty"`
 	FeatureCatalog    *bool `json:"feature.catalog,omitempty"`
 	FeatureCharlie    *bool `json:"feature.charlie,omitempty"`
@@ -2661,12 +3487,6 @@ type FeatureFlags struct {
 	FeatureProjects   *bool `json:"feature.projects,omitempty"`
 	FeatureSecurity   *bool `json:"feature.security,omitempty"`
 }
-
-// FleetOperationResponse Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-type FleetOperationResponse map[string]interface{}
-
-// FleetOperationTargetResponse Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-type FleetOperationTargetResponse map[string]interface{}
 
 // HelmChart defines model for HelmChart.
 type HelmChart struct {
@@ -3996,32 +4816,6 @@ type AdminWebhookDeliveriesParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
-// GetApiV1AgentsFleetParams defines parameters for GetApiV1AgentsFleet.
-type GetApiV1AgentsFleetParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
-}
-
-// GetApiV1AgentsFleetClusterIdOperationsParams defines parameters for GetApiV1AgentsFleetClusterIdOperations.
-type GetApiV1AgentsFleetClusterIdOperationsParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
-}
-
-// GetApiV1ArgocdInstancesIdOrphanReportParams defines parameters for GetApiV1ArgocdInstancesIdOrphanReport.
-type GetApiV1ArgocdInstancesIdOrphanReportParams struct {
-	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
-// GetApiV1ArgocdOperationsParams defines parameters for GetApiV1ArgocdOperations.
-type GetApiV1ArgocdOperationsParams struct {
-	TargetType *string `form:"targetType,omitempty" json:"targetType,omitempty"`
-	TargetKey  *string `form:"targetKey,omitempty" json:"targetKey,omitempty"`
-	Status     *string `form:"status,omitempty" json:"status,omitempty"`
-	Limit      *int    `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset     *int    `form:"offset,omitempty" json:"offset,omitempty"`
-}
-
 // ListAuditLogsParams defines parameters for ListAuditLogs.
 type ListAuditLogsParams struct {
 	// Limit Page size. Aliases pageSize / page_size are also accepted. Defaults to 20; values <1 reset to 20; capped at 500.
@@ -4254,25 +5048,38 @@ type GetApiV1CatalogChartsParams struct {
 	// Tag Filter charts by helm_chart_tags tag.
 	Tag *string `form:"tag,omitempty" json:"tag,omitempty"`
 
-	// ProjectId Narrow to the project-scoped catalog union.
+	// ProjectId Select the project-scoped catalog union. Omit only for the globally managed catalog view.
+	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+}
+
+// GetApiV1CatalogChartsIdParams defines parameters for GetApiV1CatalogChartsId.
+type GetApiV1CatalogChartsIdParams struct {
+	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
 }
 
 // GetApiV1CatalogChartsIdReadmeParams defines parameters for GetApiV1CatalogChartsIdReadme.
 type GetApiV1CatalogChartsIdReadmeParams struct {
+	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
+	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+
 	// Version Specific chart version; defaults to latest.
 	Version *string `form:"version,omitempty" json:"version,omitempty"`
 }
 
 // GetApiV1CatalogChartsIdValuesParams defines parameters for GetApiV1CatalogChartsIdValues.
 type GetApiV1CatalogChartsIdValuesParams struct {
-	Version *string `form:"version,omitempty" json:"version,omitempty"`
+	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
+	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	Version   *string             `form:"version,omitempty" json:"version,omitempty"`
 }
 
 // GetApiV1CatalogChartsIdVersionsParams defines parameters for GetApiV1CatalogChartsIdVersions.
 type GetApiV1CatalogChartsIdVersionsParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
+	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	Limit     *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *int                `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // GetApiV1CatalogInstalledParams defines parameters for GetApiV1CatalogInstalled.
@@ -4284,14 +5091,15 @@ type GetApiV1CatalogInstalledParams struct {
 
 // PostApiV1CatalogInstalledJSONBody defines parameters for PostApiV1CatalogInstalled.
 type PostApiV1CatalogInstalledJSONBody struct {
-	ChartVersionId *openapi_types.UUID `json:"chart_version_id,omitempty"`
-	ClusterId      openapi_types.UUID  `json:"cluster_id"`
-	Namespace      string              `json:"namespace"`
-	Notes          *string             `json:"notes,omitempty"`
-	PresetUsed     *string             `json:"preset_used,omitempty"`
-	ReleaseName    string              `json:"release_name"`
-	ToolSlug       *string             `json:"tool_slug,omitempty"`
-	ValuesOverride *string             `json:"values_override,omitempty"`
+	ChartVersionId openapi_types.UUID `json:"chart_version_id"`
+	ClusterId      openapi_types.UUID `json:"cluster_id"`
+	Namespace      string             `json:"namespace"`
+	Notes          *string            `json:"notes,omitempty"`
+	PresetUsed     *string            `json:"preset_used,omitempty"`
+	ProjectId      openapi_types.UUID `json:"project_id"`
+	ReleaseName    string             `json:"release_name"`
+	ToolSlug       *string            `json:"tool_slug,omitempty"`
+	ValuesOverride *string            `json:"values_override,omitempty"`
 }
 
 // PutApiV1CatalogInstalledIdUpgradeJSONBody defines parameters for PutApiV1CatalogInstalledIdUpgrade.
@@ -4306,6 +5114,18 @@ type GetApiV1CatalogOperationsParams struct {
 	TargetType *string `form:"targetType,omitempty" json:"targetType,omitempty"`
 	TargetKey  *string `form:"targetKey,omitempty" json:"targetKey,omitempty"`
 	Status     *string `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// GetApiV1CatalogRecommendationsPopularParams defines parameters for GetApiV1CatalogRecommendationsPopular.
+type GetApiV1CatalogRecommendationsPopularParams struct {
+	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	Limit     *int                `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetApiV1CatalogRecommendationsSimilarChartIdParams defines parameters for GetApiV1CatalogRecommendationsSimilarChartId.
+type GetApiV1CatalogRecommendationsSimilarChartIdParams struct {
+	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	Limit     *int                `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // GetApiV1CatalogRepositoriesParams defines parameters for GetApiV1CatalogRepositories.
@@ -4392,6 +5212,18 @@ type ListCharlieSessionsParams struct {
 type GetCharlieSessionHistoryParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetApiV1ClusterAgentsParams defines parameters for GetApiV1ClusterAgents.
+type GetApiV1ClusterAgentsParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetApiV1ClusterAgentsClusterIdOperationsParams defines parameters for GetApiV1ClusterAgentsClusterIdOperations.
+type GetApiV1ClusterAgentsClusterIdOperationsParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // GetApiV1ClusterTemplatesParams defines parameters for GetApiV1ClusterTemplates.
@@ -4613,6 +5445,198 @@ type RemoteV2ListPodsParams struct {
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
 }
 
+// GetApiV1DeliveryBundlesParams defines parameters for GetApiV1DeliveryBundles.
+type GetApiV1DeliveryBundlesParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+	Limit     *int               `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *int               `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// PostApiV1DeliveryBundlesParams defines parameters for PostApiV1DeliveryBundles.
+type PostApiV1DeliveryBundlesParams struct {
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiV1DeliveryBundlesIdParams defines parameters for DeleteApiV1DeliveryBundlesId.
+type DeleteApiV1DeliveryBundlesIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// GetApiV1DeliveryBundlesIdParams defines parameters for GetApiV1DeliveryBundlesId.
+type GetApiV1DeliveryBundlesIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// PatchApiV1DeliveryBundlesIdParams defines parameters for PatchApiV1DeliveryBundlesId.
+type PatchApiV1DeliveryBundlesIdParams struct {
+	ProjectId      openapi_types.UUID `form:"project_id" json:"project_id"`
+	IdempotencyKey *string            `json:"Idempotency-Key,omitempty"`
+}
+
+// GetApiV1DeliveryBundlesIdVersionsParams defines parameters for GetApiV1DeliveryBundlesIdVersions.
+type GetApiV1DeliveryBundlesIdVersionsParams struct {
+	Limit     *int               `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *int               `form:"offset,omitempty" json:"offset,omitempty"`
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// PostApiV1DeliveryBundlesIdVersionsParams defines parameters for PostApiV1DeliveryBundlesIdVersions.
+type PostApiV1DeliveryBundlesIdVersionsParams struct {
+	ProjectId      openapi_types.UUID `form:"project_id" json:"project_id"`
+	IdempotencyKey *string            `json:"Idempotency-Key,omitempty"`
+}
+
+// GetApiV1DeliveryBundlesIdVersionsVersionIdParams defines parameters for GetApiV1DeliveryBundlesIdVersionsVersionId.
+type GetApiV1DeliveryBundlesIdVersionsVersionIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// GetApiV1DeliveryClustersClusterIdInventoryParams defines parameters for GetApiV1DeliveryClustersClusterIdInventory.
+type GetApiV1DeliveryClustersClusterIdInventoryParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// GetApiV1DeliveryDeploymentsParams defines parameters for GetApiV1DeliveryDeployments.
+type GetApiV1DeliveryDeploymentsParams struct {
+	ProjectId openapi_types.UUID  `form:"project_id" json:"project_id"`
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
+	Phase     *string             `form:"phase,omitempty" json:"phase,omitempty"`
+}
+
+// GetApiV1DeliveryDeploymentsIdParams defines parameters for GetApiV1DeliveryDeploymentsId.
+type GetApiV1DeliveryDeploymentsIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// GetApiV1DeliveryDeploymentsIdEventsParams defines parameters for GetApiV1DeliveryDeploymentsIdEvents.
+type GetApiV1DeliveryDeploymentsIdEventsParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// GetApiV1DeliveryRolloutsParams defines parameters for GetApiV1DeliveryRollouts.
+type GetApiV1DeliveryRolloutsParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+	State     *string            `form:"state,omitempty" json:"state,omitempty"`
+	Limit     *int               `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *int               `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetApiV1DeliveryRolloutsIdParams defines parameters for GetApiV1DeliveryRolloutsId.
+type GetApiV1DeliveryRolloutsIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// PostApiV1DeliveryRolloutsIdApproveParams defines parameters for PostApiV1DeliveryRolloutsIdApprove.
+type PostApiV1DeliveryRolloutsIdApproveParams struct {
+	IfMatch string `json:"If-Match"`
+}
+
+// GetApiV1DeliveryRolloutsIdClustersParams defines parameters for GetApiV1DeliveryRolloutsIdClusters.
+type GetApiV1DeliveryRolloutsIdClustersParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// GetApiV1DeliveryRolloutsIdEventsParams defines parameters for GetApiV1DeliveryRolloutsIdEvents.
+type GetApiV1DeliveryRolloutsIdEventsParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// PostApiV1DeliveryRolloutsIdRollbackParams defines parameters for PostApiV1DeliveryRolloutsIdRollback.
+type PostApiV1DeliveryRolloutsIdRollbackParams struct {
+	IfMatch string `json:"If-Match"`
+}
+
+// GetApiV1DeliverySourcesParams defines parameters for GetApiV1DeliverySources.
+type GetApiV1DeliverySourcesParams struct {
+	ProjectId openapi_types.UUID                   `form:"project_id" json:"project_id"`
+	Status    *GetApiV1DeliverySourcesParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Limit     *int                                 `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *int                                 `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetApiV1DeliverySourcesParamsStatus defines parameters for GetApiV1DeliverySources.
+type GetApiV1DeliverySourcesParamsStatus string
+
+// PostApiV1DeliverySourcesParams defines parameters for PostApiV1DeliverySources.
+type PostApiV1DeliverySourcesParams struct {
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiV1DeliverySourcesIdParams defines parameters for DeleteApiV1DeliverySourcesId.
+type DeleteApiV1DeliverySourcesIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// GetApiV1DeliverySourcesIdParams defines parameters for GetApiV1DeliverySourcesId.
+type GetApiV1DeliverySourcesIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// PatchApiV1DeliverySourcesIdParams defines parameters for PatchApiV1DeliverySourcesId.
+type PatchApiV1DeliverySourcesIdParams struct {
+	ProjectId      openapi_types.UUID `form:"project_id" json:"project_id"`
+	IdempotencyKey *string            `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiV1DeliverySourcesIdRotateCredentialParams defines parameters for PostApiV1DeliverySourcesIdRotateCredential.
+type PostApiV1DeliverySourcesIdRotateCredentialParams struct {
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiV1DeliverySourcesIdVerifyParams defines parameters for PostApiV1DeliverySourcesIdVerify.
+type PostApiV1DeliverySourcesIdVerifyParams struct {
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// GetApiV1DeliveryTargetsParams defines parameters for GetApiV1DeliveryTargets.
+type GetApiV1DeliveryTargetsParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+	Name      *string            `form:"name,omitempty" json:"name,omitempty"`
+	Limit     *int               `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *int               `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// PostApiV1DeliveryTargetsParams defines parameters for PostApiV1DeliveryTargets.
+type PostApiV1DeliveryTargetsParams struct {
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteApiV1DeliveryTargetsIdParams defines parameters for DeleteApiV1DeliveryTargetsId.
+type DeleteApiV1DeliveryTargetsIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+	IfMatch   string             `json:"If-Match"`
+}
+
+// GetApiV1DeliveryTargetsIdParams defines parameters for GetApiV1DeliveryTargetsId.
+type GetApiV1DeliveryTargetsIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// PatchApiV1DeliveryTargetsIdParams defines parameters for PatchApiV1DeliveryTargetsId.
+type PatchApiV1DeliveryTargetsIdParams struct {
+	ProjectId      openapi_types.UUID `form:"project_id" json:"project_id"`
+	IfMatch        string             `json:"If-Match"`
+	IdempotencyKey *string            `json:"Idempotency-Key,omitempty"`
+}
+
+// PostApiV1DeliveryTargetsIdOrphanParams defines parameters for PostApiV1DeliveryTargetsIdOrphan.
+type PostApiV1DeliveryTargetsIdOrphanParams struct {
+	IfMatch string `json:"If-Match"`
+}
+
+// PostApiV1DeliveryTargetsIdPreviewParams defines parameters for PostApiV1DeliveryTargetsIdPreview.
+type PostApiV1DeliveryTargetsIdPreviewParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+	PageSize  *int               `form:"page_size,omitempty" json:"page_size,omitempty"`
+	Cursor    *string            `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// PostApiV1DeliveryTargetsIdRolloutsParams defines parameters for PostApiV1DeliveryTargetsIdRollouts.
+type PostApiV1DeliveryTargetsIdRolloutsParams struct {
+	IfMatch        string `json:"If-Match"`
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // PostApiV1ExtensionsJSONBody defines parameters for PostApiV1Extensions.
 type PostApiV1ExtensionsJSONBody struct {
 	Enable   *bool             `json:"enable,omitempty"`
@@ -4676,28 +5700,6 @@ type PostApiV1ExtensionsNameTokenJSONBody struct {
 	// DataSource A Tier-2 bundle dataSource id declared in the manifest.
 	DataSource string `json:"dataSource"`
 }
-
-// GetApiV1FleetOperationsParams defines parameters for GetApiV1FleetOperations.
-type GetApiV1FleetOperationsParams struct {
-	Status *string `form:"status,omitempty" json:"status,omitempty"`
-	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int    `form:"offset,omitempty" json:"offset,omitempty"`
-}
-
-// GetApiV1FleetOperationsIdTargetsParams defines parameters for GetApiV1FleetOperationsIdTargets.
-type GetApiV1FleetOperationsIdTargetsParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
-}
-
-// ArgocdInternalK8sProxyPatchJSONBody defines parameters for ArgocdInternalK8sProxyPatch.
-type ArgocdInternalK8sProxyPatchJSONBody = interface{}
-
-// ArgocdInternalK8sProxyPostJSONBody defines parameters for ArgocdInternalK8sProxyPost.
-type ArgocdInternalK8sProxyPostJSONBody = interface{}
-
-// ArgocdInternalK8sProxyPutJSONBody defines parameters for ArgocdInternalK8sProxyPut.
-type ArgocdInternalK8sProxyPutJSONBody = interface{}
 
 // GetApiV1ProjectsParams defines parameters for GetApiV1Projects.
 type GetApiV1ProjectsParams struct {
@@ -4974,24 +5976,6 @@ type PodLogsWebSocketParams struct {
 // PodLogsWebSocketParamsFollow defines parameters for PodLogsWebSocket.
 type PodLogsWebSocketParamsFollow string
 
-// ArgocdUiPatchJSONBody defines parameters for ArgocdUiPatch.
-type ArgocdUiPatchJSONBody = interface{}
-
-// ArgocdUiPostJSONBody defines parameters for ArgocdUiPost.
-type ArgocdUiPostJSONBody = interface{}
-
-// ArgocdUiPutJSONBody defines parameters for ArgocdUiPut.
-type ArgocdUiPutJSONBody = interface{}
-
-// ArgocdUiSubPatchJSONBody defines parameters for ArgocdUiSubPatch.
-type ArgocdUiSubPatchJSONBody = interface{}
-
-// ArgocdUiSubPostJSONBody defines parameters for ArgocdUiSubPost.
-type ArgocdUiSubPostJSONBody = interface{}
-
-// ArgocdUiSubPutJSONBody defines parameters for ArgocdUiSubPut.
-type ArgocdUiSubPutJSONBody = interface{}
-
 // InternalTunnelHelmJSONBody defines parameters for InternalTunnelHelm.
 type InternalTunnelHelmJSONBody struct {
 	// MsgType Helm message type (HELM_INSTALL/HELM_UPGRADE/HELM_UNINSTALL/HELM_ROLLBACK/HELM_STATUS).
@@ -5067,14 +6051,8 @@ type AdminCharlieAccessUpdateJSONRequestBody = CharlieAccessRequest
 // AdminCharlieActionPolicyUpdateJSONRequestBody defines body for AdminCharlieActionPolicyUpdate for application/json ContentType.
 type AdminCharlieActionPolicyUpdateJSONRequestBody = CharlieAdminActionPolicyInput
 
-// AdminCharlieAgentUninstallJSONRequestBody defines body for AdminCharlieAgentUninstall for application/json ContentType.
-type AdminCharlieAgentUninstallJSONRequestBody = CharlieAdminActionRequest
-
 // AdminCharlieAlertPolicyUpdateJSONRequestBody defines body for AdminCharlieAlertPolicyUpdate for application/json ContentType.
 type AdminCharlieAlertPolicyUpdateJSONRequestBody = CharlieAdminAlertPolicyInput
-
-// AdminCharlieDisconnectJSONRequestBody defines body for AdminCharlieDisconnect for application/json ContentType.
-type AdminCharlieDisconnectJSONRequestBody = CharlieAdminActionRequest
 
 // AdminCharlieKubernetesVisibilityUpdateJSONRequestBody defines body for AdminCharlieKubernetesVisibilityUpdate for application/json ContentType.
 type AdminCharlieKubernetesVisibilityUpdateJSONRequestBody = CharlieKubernetesVisibilityRequest
@@ -5132,18 +6110,6 @@ type AdminWebhooksCreateJSONRequestBody = WebhookSubscriptionRequest
 
 // AdminWebhookUpdateJSONRequestBody defines body for AdminWebhookUpdate for application/json ContentType.
 type AdminWebhookUpdateJSONRequestBody = WebhookSubscriptionRequest
-
-// PostApiV1AgentsFleetClusterIdUpgradePlanJSONRequestBody defines body for PostApiV1AgentsFleetClusterIdUpgradePlan for application/json ContentType.
-type PostApiV1AgentsFleetClusterIdUpgradePlanJSONRequestBody = AgentUpgradePlanRequest
-
-// PostApiV1AgentsFleetClusterIdUpgradeJSONRequestBody defines body for PostApiV1AgentsFleetClusterIdUpgrade for application/json ContentType.
-type PostApiV1AgentsFleetClusterIdUpgradeJSONRequestBody = AgentUpgradePlanRequest
-
-// PostApiV1ArgocdApplicationsIdSyncJSONRequestBody defines body for PostApiV1ArgocdApplicationsIdSync for application/json ContentType.
-type PostApiV1ArgocdApplicationsIdSyncJSONRequestBody = ArgoSyncRequest
-
-// PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody defines body for PostApiV1ArgocdInstancesIdApplicationsNameSync for application/json ContentType.
-type PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody = ArgoSyncRequest
 
 // PostApiV1AuthChangePasswordJSONRequestBody defines body for PostApiV1AuthChangePassword for application/json ContentType.
 type PostApiV1AuthChangePasswordJSONRequestBody PostApiV1AuthChangePasswordJSONBody
@@ -5249,6 +6215,15 @@ type AbortCharlieSessionJSONRequestBody = CharlieAbortRequest
 
 // CreateCharlieSessionMessageJSONRequestBody defines body for CreateCharlieSessionMessage for application/json ContentType.
 type CreateCharlieSessionMessageJSONRequestBody = CharlieMessageRequest
+
+// CreateCharlieThreadMessageJSONRequestBody defines body for CreateCharlieThreadMessage for application/json ContentType.
+type CreateCharlieThreadMessageJSONRequestBody = CharlieThreadMessageRequest
+
+// PostApiV1ClusterAgentsClusterIdUpgradePlanJSONRequestBody defines body for PostApiV1ClusterAgentsClusterIdUpgradePlan for application/json ContentType.
+type PostApiV1ClusterAgentsClusterIdUpgradePlanJSONRequestBody = AgentUpgradePlanRequest
+
+// PostApiV1ClusterAgentsClusterIdUpgradeJSONRequestBody defines body for PostApiV1ClusterAgentsClusterIdUpgrade for application/json ContentType.
+type PostApiV1ClusterAgentsClusterIdUpgradeJSONRequestBody = AgentUpgradePlanRequest
 
 // PostApiV1ClusterGroupsJSONRequestBody defines body for PostApiV1ClusterGroups for application/json ContentType.
 type PostApiV1ClusterGroupsJSONRequestBody = CreateClusterGroupRequest
@@ -5403,6 +6378,42 @@ type PutApiV1ClustersIdRegistrationOptionsJSONRequestBody = SetOptionsRequest
 // PutApiV1ClustersIdRegistryJSONRequestBody defines body for PutApiV1ClustersIdRegistry for application/json ContentType.
 type PutApiV1ClustersIdRegistryJSONRequestBody = UpdateRegistryConfigRequest
 
+// PostApiV1DeliveryBundlesJSONRequestBody defines body for PostApiV1DeliveryBundles for application/json ContentType.
+type PostApiV1DeliveryBundlesJSONRequestBody = DeliveryBundleWrite
+
+// PatchApiV1DeliveryBundlesIdJSONRequestBody defines body for PatchApiV1DeliveryBundlesId for application/json ContentType.
+type PatchApiV1DeliveryBundlesIdJSONRequestBody = DeliveryBundleWrite
+
+// PostApiV1DeliveryBundlesIdVersionsJSONRequestBody defines body for PostApiV1DeliveryBundlesIdVersions for application/json ContentType.
+type PostApiV1DeliveryBundlesIdVersionsJSONRequestBody = DeliveryBundleVersionWrite
+
+// PostApiV1DeliveryRolloutsIdApproveJSONRequestBody defines body for PostApiV1DeliveryRolloutsIdApprove for application/json ContentType.
+type PostApiV1DeliveryRolloutsIdApproveJSONRequestBody = DeliveryRolloutApproval
+
+// PostApiV1DeliveryRolloutsIdRollbackJSONRequestBody defines body for PostApiV1DeliveryRolloutsIdRollback for application/json ContentType.
+type PostApiV1DeliveryRolloutsIdRollbackJSONRequestBody = DeliveryRolloutAction
+
+// PostApiV1DeliverySourcesJSONRequestBody defines body for PostApiV1DeliverySources for application/json ContentType.
+type PostApiV1DeliverySourcesJSONRequestBody = DeliverySourceWrite
+
+// PatchApiV1DeliverySourcesIdJSONRequestBody defines body for PatchApiV1DeliverySourcesId for application/json ContentType.
+type PatchApiV1DeliverySourcesIdJSONRequestBody = DeliverySourcePatch
+
+// PostApiV1DeliverySourcesIdRotateCredentialJSONRequestBody defines body for PostApiV1DeliverySourcesIdRotateCredential for application/json ContentType.
+type PostApiV1DeliverySourcesIdRotateCredentialJSONRequestBody = DeliverySourceCredentialRotate
+
+// PostApiV1DeliverySourcesIdVerifyJSONRequestBody defines body for PostApiV1DeliverySourcesIdVerify for application/json ContentType.
+type PostApiV1DeliverySourcesIdVerifyJSONRequestBody = DeliverySourceVerify
+
+// PostApiV1DeliveryTargetsJSONRequestBody defines body for PostApiV1DeliveryTargets for application/json ContentType.
+type PostApiV1DeliveryTargetsJSONRequestBody = DeliveryTargetWrite
+
+// PatchApiV1DeliveryTargetsIdJSONRequestBody defines body for PatchApiV1DeliveryTargetsId for application/json ContentType.
+type PatchApiV1DeliveryTargetsIdJSONRequestBody = DeliveryTargetPatch
+
+// PostApiV1DeliveryTargetsIdRolloutsJSONRequestBody defines body for PostApiV1DeliveryTargetsIdRollouts for application/json ContentType.
+type PostApiV1DeliveryTargetsIdRolloutsJSONRequestBody = DeliveryRolloutStart
+
 // PostApiV1ExtensionsJSONRequestBody defines body for PostApiV1Extensions for application/json ContentType.
 type PostApiV1ExtensionsJSONRequestBody PostApiV1ExtensionsJSONBody
 
@@ -5417,18 +6428,6 @@ type PostApiV1ExtensionsNameDataDataSourceIdJSONRequestBody PostApiV1ExtensionsN
 
 // PostApiV1ExtensionsNameTokenJSONRequestBody defines body for PostApiV1ExtensionsNameToken for application/json ContentType.
 type PostApiV1ExtensionsNameTokenJSONRequestBody PostApiV1ExtensionsNameTokenJSONBody
-
-// PostApiV1FleetOperationsJSONRequestBody defines body for PostApiV1FleetOperations for application/json ContentType.
-type PostApiV1FleetOperationsJSONRequestBody = CreateFleetOperationRequest
-
-// ArgocdInternalK8sProxyPatchJSONRequestBody defines body for ArgocdInternalK8sProxyPatch for application/json ContentType.
-type ArgocdInternalK8sProxyPatchJSONRequestBody = ArgocdInternalK8sProxyPatchJSONBody
-
-// ArgocdInternalK8sProxyPostJSONRequestBody defines body for ArgocdInternalK8sProxyPost for application/json ContentType.
-type ArgocdInternalK8sProxyPostJSONRequestBody = ArgocdInternalK8sProxyPostJSONBody
-
-// ArgocdInternalK8sProxyPutJSONRequestBody defines body for ArgocdInternalK8sProxyPut for application/json ContentType.
-type ArgocdInternalK8sProxyPutJSONRequestBody = ArgocdInternalK8sProxyPutJSONBody
 
 // PostApiV1NodesClusterIdNodeNameAnnotationsJSONRequestBody defines body for PostApiV1NodesClusterIdNodeNameAnnotations for application/json ContentType.
 type PostApiV1NodesClusterIdNodeNameAnnotationsJSONRequestBody = NodeKeyValueRequest
@@ -5546,24 +6545,6 @@ type PutApiV1UsersIdJSONRequestBody = UsersSettingsUpdateUserRequest
 
 // PostApiV1UsersIdResetPasswordJSONRequestBody defines body for PostApiV1UsersIdResetPassword for application/json ContentType.
 type PostApiV1UsersIdResetPasswordJSONRequestBody PostApiV1UsersIdResetPasswordJSONBody
-
-// ArgocdUiPatchJSONRequestBody defines body for ArgocdUiPatch for application/json ContentType.
-type ArgocdUiPatchJSONRequestBody = ArgocdUiPatchJSONBody
-
-// ArgocdUiPostJSONRequestBody defines body for ArgocdUiPost for application/json ContentType.
-type ArgocdUiPostJSONRequestBody = ArgocdUiPostJSONBody
-
-// ArgocdUiPutJSONRequestBody defines body for ArgocdUiPut for application/json ContentType.
-type ArgocdUiPutJSONRequestBody = ArgocdUiPutJSONBody
-
-// ArgocdUiSubPatchJSONRequestBody defines body for ArgocdUiSubPatch for application/json ContentType.
-type ArgocdUiSubPatchJSONRequestBody = ArgocdUiSubPatchJSONBody
-
-// ArgocdUiSubPostJSONRequestBody defines body for ArgocdUiSubPost for application/json ContentType.
-type ArgocdUiSubPostJSONRequestBody = ArgocdUiSubPostJSONBody
-
-// ArgocdUiSubPutJSONRequestBody defines body for ArgocdUiSubPut for application/json ContentType.
-type ArgocdUiSubPutJSONRequestBody = ArgocdUiSubPutJSONBody
 
 // InternalTunnelHelmJSONRequestBody defines body for InternalTunnelHelm for application/json ContentType.
 type InternalTunnelHelmJSONRequestBody InternalTunnelHelmJSONBody
@@ -10354,23 +11335,6 @@ type ClientInterface interface {
 
 	AdminCharlieActionPolicyUpdate(ctx context.Context, capability string, body AdminCharlieActionPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AdminCharlieAgentInstall request
-	AdminCharlieAgentInstall(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// AdminCharlieAgentRollback request
-	AdminCharlieAgentRollback(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// AdminCharlieAgentRotate request
-	AdminCharlieAgentRotate(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// AdminCharlieAgentUninstallWithBody request with any body
-	AdminCharlieAgentUninstallWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	AdminCharlieAgentUninstall(ctx context.Context, body AdminCharlieAgentUninstallJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// AdminCharlieAgentUpgrade request
-	AdminCharlieAgentUpgrade(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// AdminCharlieAlertDeliveryProofs request
 	AdminCharlieAlertDeliveryProofs(ctx context.Context, params *AdminCharlieAlertDeliveryProofsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -10384,11 +11348,6 @@ type ClientInterface interface {
 
 	// AdminCharlieDiagnosticsRun request
 	AdminCharlieDiagnosticsRun(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// AdminCharlieDisconnectWithBody request with any body
-	AdminCharlieDisconnectWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	AdminCharlieDisconnect(ctx context.Context, body AdminCharlieDisconnectJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AdminCharlieKubernetesVisibilityGet request
 	AdminCharlieKubernetesVisibilityGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -10566,31 +11525,6 @@ type ClientInterface interface {
 	// AdminWebhookTest request
 	AdminWebhookTest(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetApiV1AgentsFleet request
-	GetApiV1AgentsFleet(ctx context.Context, params *GetApiV1AgentsFleetParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetApiV1AgentsFleetClusterIdDiagnostics request
-	GetApiV1AgentsFleetClusterIdDiagnostics(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetApiV1AgentsFleetClusterIdDiagnosticsBundle request
-	GetApiV1AgentsFleetClusterIdDiagnosticsBundle(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetApiV1AgentsFleetClusterIdOperations request
-	GetApiV1AgentsFleetClusterIdOperations(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1AgentsFleetClusterIdOperationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostApiV1AgentsFleetClusterIdSelfTest request
-	PostApiV1AgentsFleetClusterIdSelfTest(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostApiV1AgentsFleetClusterIdUpgradePlanWithBody request with any body
-	PostApiV1AgentsFleetClusterIdUpgradePlanWithBody(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PostApiV1AgentsFleetClusterIdUpgradePlan(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1AgentsFleetClusterIdUpgradePlanJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostApiV1AgentsFleetClusterIdUpgradeWithBody request with any body
-	PostApiV1AgentsFleetClusterIdUpgradeWithBody(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PostApiV1AgentsFleetClusterIdUpgrade(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1AgentsFleetClusterIdUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// GetApiV1AlertingChannels request
 	GetApiV1AlertingChannels(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -10599,28 +11533,6 @@ type ClientInterface interface {
 
 	// GetApiV1AlertingEvents request
 	GetApiV1AlertingEvents(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostApiV1ArgocdApplicationsIdSyncWithBody request with any body
-	PostApiV1ArgocdApplicationsIdSyncWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PostApiV1ArgocdApplicationsIdSync(ctx context.Context, id openapi_types.UUID, body PostApiV1ArgocdApplicationsIdSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetApiV1ArgocdInstances request
-	GetApiV1ArgocdInstances(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBody request with any body
-	PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBody(ctx context.Context, id openapi_types.UUID, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PostApiV1ArgocdInstancesIdApplicationsNameSync(ctx context.Context, id openapi_types.UUID, name string, body PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetApiV1ArgocdInstancesIdOrphanReport request
-	GetApiV1ArgocdInstancesIdOrphanReport(ctx context.Context, id openapi_types.UUID, params *GetApiV1ArgocdInstancesIdOrphanReportParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetApiV1ArgocdOperations request
-	GetApiV1ArgocdOperations(ctx context.Context, params *GetApiV1ArgocdOperationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetApiV1ArgocdOperationsId request
-	GetApiV1ArgocdOperationsId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListAuditLogs request
 	ListAuditLogs(ctx context.Context, params *ListAuditLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -10841,7 +11753,7 @@ type ClientInterface interface {
 	GetApiV1CatalogCharts(ctx context.Context, params *GetApiV1CatalogChartsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1CatalogChartsId request
-	GetApiV1CatalogChartsId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetApiV1CatalogChartsId(ctx context.Context, id openapi_types.UUID, params *GetApiV1CatalogChartsIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1CatalogChartsIdReadme request
 	GetApiV1CatalogChartsIdReadme(ctx context.Context, id openapi_types.UUID, params *GetApiV1CatalogChartsIdReadmeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -10886,6 +11798,12 @@ type ClientInterface interface {
 	// PostApiV1CatalogOperationsIdRetry request
 	PostApiV1CatalogOperationsIdRetry(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiV1CatalogRecommendationsPopular request
+	GetApiV1CatalogRecommendationsPopular(ctx context.Context, params *GetApiV1CatalogRecommendationsPopularParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1CatalogRecommendationsSimilarChartId request
+	GetApiV1CatalogRecommendationsSimilarChartId(ctx context.Context, chartId openapi_types.UUID, params *GetApiV1CatalogRecommendationsSimilarChartIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1CatalogRepositories request
 	GetApiV1CatalogRepositories(ctx context.Context, params *GetApiV1CatalogRepositoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -10918,6 +11836,9 @@ type ClientInterface interface {
 	DecideCharlieApprovalWithBody(ctx context.Context, approvalId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	DecideCharlieApproval(ctx context.Context, approvalId string, body DecideCharlieApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListCharlieCommands request
+	ListCharlieCommands(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SearchCharlieContext request
 	SearchCharlieContext(ctx context.Context, params *SearchCharlieContextParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -10983,8 +11904,53 @@ type ClientInterface interface {
 
 	CreateCharlieSessionMessage(ctx context.Context, sessionId openapi_types.UUID, body CreateCharlieSessionMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListCharlieThreads request
+	ListCharlieThreads(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetActiveCharlieThread request
+	GetActiveCharlieThread(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateCharlieThreadMessageWithBody request with any body
+	CreateCharlieThreadMessageWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateCharlieThreadMessage(ctx context.Context, body CreateCharlieThreadMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateCharlieThread request
+	CreateCharlieThread(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCharlieThreadHistory request
+	GetCharlieThreadHistory(ctx context.Context, threadId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1CloudCredentialsProviders request
 	GetApiV1CloudCredentialsProviders(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ClusterAgents request
+	GetApiV1ClusterAgents(ctx context.Context, params *GetApiV1ClusterAgentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ClusterAgentsClusterId request
+	GetApiV1ClusterAgentsClusterId(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ClusterAgentsClusterIdDiagnostics request
+	GetApiV1ClusterAgentsClusterIdDiagnostics(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ClusterAgentsClusterIdDiagnosticsBundle request
+	GetApiV1ClusterAgentsClusterIdDiagnosticsBundle(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ClusterAgentsClusterIdOperations request
+	GetApiV1ClusterAgentsClusterIdOperations(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClusterAgentsClusterIdOperationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClusterAgentsClusterIdSelfTest request
+	PostApiV1ClusterAgentsClusterIdSelfTest(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClusterAgentsClusterIdUpgradePlanWithBody request with any body
+	PostApiV1ClusterAgentsClusterIdUpgradePlanWithBody(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ClusterAgentsClusterIdUpgradePlan(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1ClusterAgentsClusterIdUpgradePlanJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClusterAgentsClusterIdUpgradeWithBody request with any body
+	PostApiV1ClusterAgentsClusterIdUpgradeWithBody(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ClusterAgentsClusterIdUpgrade(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1ClusterAgentsClusterIdUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1ClusterGroups request
 	GetApiV1ClusterGroups(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -11520,6 +12486,153 @@ type ClientInterface interface {
 	// TunnelConnectTrace request
 	TunnelConnectTrace(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiV1DeliveryBundles request
+	GetApiV1DeliveryBundles(ctx context.Context, params *GetApiV1DeliveryBundlesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryBundlesWithBody request with any body
+	PostApiV1DeliveryBundlesWithBody(ctx context.Context, params *PostApiV1DeliveryBundlesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1DeliveryBundles(ctx context.Context, params *PostApiV1DeliveryBundlesParams, body PostApiV1DeliveryBundlesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1DeliveryBundlesId request
+	DeleteApiV1DeliveryBundlesId(ctx context.Context, id openapi_types.UUID, params *DeleteApiV1DeliveryBundlesIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryBundlesId request
+	GetApiV1DeliveryBundlesId(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryBundlesIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchApiV1DeliveryBundlesIdWithBody request with any body
+	PatchApiV1DeliveryBundlesIdWithBody(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryBundlesIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchApiV1DeliveryBundlesId(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryBundlesIdParams, body PatchApiV1DeliveryBundlesIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryBundlesIdVersions request
+	GetApiV1DeliveryBundlesIdVersions(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryBundlesIdVersionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryBundlesIdVersionsWithBody request with any body
+	PostApiV1DeliveryBundlesIdVersionsWithBody(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryBundlesIdVersionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1DeliveryBundlesIdVersions(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryBundlesIdVersionsParams, body PostApiV1DeliveryBundlesIdVersionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryBundlesIdVersionsVersionId request
+	GetApiV1DeliveryBundlesIdVersionsVersionId(ctx context.Context, id openapi_types.UUID, versionId openapi_types.UUID, params *GetApiV1DeliveryBundlesIdVersionsVersionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryClustersClusterIdInventory request
+	GetApiV1DeliveryClustersClusterIdInventory(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1DeliveryClustersClusterIdInventoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryDeployments request
+	GetApiV1DeliveryDeployments(ctx context.Context, params *GetApiV1DeliveryDeploymentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryDeploymentsId request
+	GetApiV1DeliveryDeploymentsId(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryDeploymentsIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryDeploymentsIdEvents request
+	GetApiV1DeliveryDeploymentsIdEvents(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryDeploymentsIdEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryDeploymentsIdReconcile request
+	PostApiV1DeliveryDeploymentsIdReconcile(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryDeploymentsIdResume request
+	PostApiV1DeliveryDeploymentsIdResume(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryDeploymentsIdSuspend request
+	PostApiV1DeliveryDeploymentsIdSuspend(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryRollouts request
+	GetApiV1DeliveryRollouts(ctx context.Context, params *GetApiV1DeliveryRolloutsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryRolloutsId request
+	GetApiV1DeliveryRolloutsId(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryRolloutsIdAbort request
+	PostApiV1DeliveryRolloutsIdAbort(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryRolloutsIdApproveWithBody request with any body
+	PostApiV1DeliveryRolloutsIdApproveWithBody(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdApproveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1DeliveryRolloutsIdApprove(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdApproveParams, body PostApiV1DeliveryRolloutsIdApproveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryRolloutsIdClusters request
+	GetApiV1DeliveryRolloutsIdClusters(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdClustersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryRolloutsIdEvents request
+	GetApiV1DeliveryRolloutsIdEvents(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryRolloutsIdPause request
+	PostApiV1DeliveryRolloutsIdPause(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryRolloutsIdResume request
+	PostApiV1DeliveryRolloutsIdResume(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryRolloutsIdRetry request
+	PostApiV1DeliveryRolloutsIdRetry(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryRolloutsIdRollbackWithBody request with any body
+	PostApiV1DeliveryRolloutsIdRollbackWithBody(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1DeliveryRolloutsIdRollback(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdRollbackParams, body PostApiV1DeliveryRolloutsIdRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliverySources request
+	GetApiV1DeliverySources(ctx context.Context, params *GetApiV1DeliverySourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliverySourcesWithBody request with any body
+	PostApiV1DeliverySourcesWithBody(ctx context.Context, params *PostApiV1DeliverySourcesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1DeliverySources(ctx context.Context, params *PostApiV1DeliverySourcesParams, body PostApiV1DeliverySourcesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1DeliverySourcesId request
+	DeleteApiV1DeliverySourcesId(ctx context.Context, id openapi_types.UUID, params *DeleteApiV1DeliverySourcesIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliverySourcesId request
+	GetApiV1DeliverySourcesId(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliverySourcesIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchApiV1DeliverySourcesIdWithBody request with any body
+	PatchApiV1DeliverySourcesIdWithBody(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliverySourcesIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchApiV1DeliverySourcesId(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliverySourcesIdParams, body PatchApiV1DeliverySourcesIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliverySourcesIdRotateCredentialWithBody request with any body
+	PostApiV1DeliverySourcesIdRotateCredentialWithBody(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdRotateCredentialParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1DeliverySourcesIdRotateCredential(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdRotateCredentialParams, body PostApiV1DeliverySourcesIdRotateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliverySourcesIdVerifyWithBody request with any body
+	PostApiV1DeliverySourcesIdVerifyWithBody(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdVerifyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1DeliverySourcesIdVerify(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdVerifyParams, body PostApiV1DeliverySourcesIdVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliverySystemCompatibility request
+	GetApiV1DeliverySystemCompatibility(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryTargets request
+	GetApiV1DeliveryTargets(ctx context.Context, params *GetApiV1DeliveryTargetsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryTargetsWithBody request with any body
+	PostApiV1DeliveryTargetsWithBody(ctx context.Context, params *PostApiV1DeliveryTargetsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1DeliveryTargets(ctx context.Context, params *PostApiV1DeliveryTargetsParams, body PostApiV1DeliveryTargetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1DeliveryTargetsId request
+	DeleteApiV1DeliveryTargetsId(ctx context.Context, id openapi_types.UUID, params *DeleteApiV1DeliveryTargetsIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1DeliveryTargetsId request
+	GetApiV1DeliveryTargetsId(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryTargetsIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchApiV1DeliveryTargetsIdWithBody request with any body
+	PatchApiV1DeliveryTargetsIdWithBody(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryTargetsIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchApiV1DeliveryTargetsId(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryTargetsIdParams, body PatchApiV1DeliveryTargetsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryTargetsIdOrphan request
+	PostApiV1DeliveryTargetsIdOrphan(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdOrphanParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryTargetsIdPreview request
+	PostApiV1DeliveryTargetsIdPreview(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdPreviewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1DeliveryTargetsIdRolloutsWithBody request with any body
+	PostApiV1DeliveryTargetsIdRolloutsWithBody(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdRolloutsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1DeliveryTargetsIdRollouts(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdRolloutsParams, body PostApiV1DeliveryTargetsIdRolloutsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1Extensions request
 	GetApiV1Extensions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -11559,62 +12672,6 @@ type ClientInterface interface {
 	PostApiV1ExtensionsNameTokenWithBody(ctx context.Context, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostApiV1ExtensionsNameToken(ctx context.Context, name string, body PostApiV1ExtensionsNameTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetApiV1FleetOperations request
-	GetApiV1FleetOperations(ctx context.Context, params *GetApiV1FleetOperationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostApiV1FleetOperationsWithBody request with any body
-	PostApiV1FleetOperationsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PostApiV1FleetOperations(ctx context.Context, body PostApiV1FleetOperationsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetApiV1FleetOperationsId request
-	GetApiV1FleetOperationsId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostApiV1FleetOperationsIdAbort request
-	PostApiV1FleetOperationsIdAbort(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostApiV1FleetOperationsIdPause request
-	PostApiV1FleetOperationsIdPause(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostApiV1FleetOperationsIdResume request
-	PostApiV1FleetOperationsIdResume(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostApiV1FleetOperationsIdRetryFailed request
-	PostApiV1FleetOperationsIdRetryFailed(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetApiV1FleetOperationsIdTargets request
-	GetApiV1FleetOperationsIdTargets(ctx context.Context, id openapi_types.UUID, params *GetApiV1FleetOperationsIdTargetsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdInternalK8sProxyDelete request
-	ArgocdInternalK8sProxyDelete(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdInternalK8sProxyGet request
-	ArgocdInternalK8sProxyGet(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdInternalK8sProxyHead request
-	ArgocdInternalK8sProxyHead(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdInternalK8sProxyOptions request
-	ArgocdInternalK8sProxyOptions(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdInternalK8sProxyPatchWithBody request with any body
-	ArgocdInternalK8sProxyPatchWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	ArgocdInternalK8sProxyPatch(ctx context.Context, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPatchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdInternalK8sProxyPostWithBody request with any body
-	ArgocdInternalK8sProxyPostWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	ArgocdInternalK8sProxyPost(ctx context.Context, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdInternalK8sProxyPutWithBody request with any body
-	ArgocdInternalK8sProxyPutWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	ArgocdInternalK8sProxyPut(ctx context.Context, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPutJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdInternalK8sProxyTrace request
-	ArgocdInternalK8sProxyTrace(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1NodesClusterIdNodeNameAnnotationsWithBody request with any body
 	PostApiV1NodesClusterIdNodeNameAnnotationsWithBody(ctx context.Context, clusterId openapi_types.UUID, nodeName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -12027,66 +13084,6 @@ type ClientInterface interface {
 	// PodLogsWebSocket request
 	PodLogsWebSocket(ctx context.Context, clusterId openapi_types.UUID, namespace string, pod string, container string, params *PodLogsWebSocketParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ArgocdUiDelete request
-	ArgocdUiDelete(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiGet request
-	ArgocdUiGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiHead request
-	ArgocdUiHead(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiOptions request
-	ArgocdUiOptions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiPatchWithBody request with any body
-	ArgocdUiPatchWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	ArgocdUiPatch(ctx context.Context, body ArgocdUiPatchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiPostWithBody request with any body
-	ArgocdUiPostWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	ArgocdUiPost(ctx context.Context, body ArgocdUiPostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiPutWithBody request with any body
-	ArgocdUiPutWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	ArgocdUiPut(ctx context.Context, body ArgocdUiPutJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiTrace request
-	ArgocdUiTrace(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiSubDelete request
-	ArgocdUiSubDelete(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiSubGet request
-	ArgocdUiSubGet(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiSubHead request
-	ArgocdUiSubHead(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiSubOptions request
-	ArgocdUiSubOptions(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiSubPatchWithBody request with any body
-	ArgocdUiSubPatchWithBody(ctx context.Context, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	ArgocdUiSubPatch(ctx context.Context, path string, body ArgocdUiSubPatchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiSubPostWithBody request with any body
-	ArgocdUiSubPostWithBody(ctx context.Context, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	ArgocdUiSubPost(ctx context.Context, path string, body ArgocdUiSubPostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiSubPutWithBody request with any body
-	ArgocdUiSubPutWithBody(ctx context.Context, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	ArgocdUiSubPut(ctx context.Context, path string, body ArgocdUiSubPutJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ArgocdUiSubTrace request
-	ArgocdUiSubTrace(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// TunnelHealthCheck request
 	TunnelHealthCheck(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -12328,78 +13325,6 @@ func (c *Client) AdminCharlieActionPolicyUpdate(ctx context.Context, capability 
 	return c.Client.Do(req)
 }
 
-func (c *Client) AdminCharlieAgentInstall(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAdminCharlieAgentInstallRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) AdminCharlieAgentRollback(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAdminCharlieAgentRollbackRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) AdminCharlieAgentRotate(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAdminCharlieAgentRotateRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) AdminCharlieAgentUninstallWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAdminCharlieAgentUninstallRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) AdminCharlieAgentUninstall(ctx context.Context, body AdminCharlieAgentUninstallJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAdminCharlieAgentUninstallRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) AdminCharlieAgentUpgrade(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAdminCharlieAgentUpgradeRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) AdminCharlieAlertDeliveryProofs(ctx context.Context, params *AdminCharlieAlertDeliveryProofsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminCharlieAlertDeliveryProofsRequest(c.Server, params)
 	if err != nil {
@@ -12450,30 +13375,6 @@ func (c *Client) AdminCharlieAlertPolicyUpdate(ctx context.Context, body AdminCh
 
 func (c *Client) AdminCharlieDiagnosticsRun(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminCharlieDiagnosticsRunRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) AdminCharlieDisconnectWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAdminCharlieDisconnectRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) AdminCharlieDisconnect(ctx context.Context, body AdminCharlieDisconnectJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAdminCharlieDisconnectRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13264,114 +14165,6 @@ func (c *Client) AdminWebhookTest(ctx context.Context, id openapi_types.UUID, re
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetApiV1AgentsFleet(ctx context.Context, params *GetApiV1AgentsFleetParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1AgentsFleetRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetApiV1AgentsFleetClusterIdDiagnostics(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1AgentsFleetClusterIdDiagnosticsRequest(c.Server, clusterId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetApiV1AgentsFleetClusterIdDiagnosticsBundle(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1AgentsFleetClusterIdDiagnosticsBundleRequest(c.Server, clusterId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetApiV1AgentsFleetClusterIdOperations(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1AgentsFleetClusterIdOperationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1AgentsFleetClusterIdOperationsRequest(c.Server, clusterId, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1AgentsFleetClusterIdSelfTest(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1AgentsFleetClusterIdSelfTestRequest(c.Server, clusterId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1AgentsFleetClusterIdUpgradePlanWithBody(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1AgentsFleetClusterIdUpgradePlanRequestWithBody(c.Server, clusterId, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1AgentsFleetClusterIdUpgradePlan(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1AgentsFleetClusterIdUpgradePlanJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1AgentsFleetClusterIdUpgradePlanRequest(c.Server, clusterId, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1AgentsFleetClusterIdUpgradeWithBody(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1AgentsFleetClusterIdUpgradeRequestWithBody(c.Server, clusterId, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1AgentsFleetClusterIdUpgrade(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1AgentsFleetClusterIdUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1AgentsFleetClusterIdUpgradeRequest(c.Server, clusterId, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) GetApiV1AlertingChannels(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1AlertingChannelsRequest(c.Server)
 	if err != nil {
@@ -13398,102 +14191,6 @@ func (c *Client) PostApiV1AlertingChannels(ctx context.Context, reqEditors ...Re
 
 func (c *Client) GetApiV1AlertingEvents(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1AlertingEventsRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1ArgocdApplicationsIdSyncWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ArgocdApplicationsIdSyncRequestWithBody(c.Server, id, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1ArgocdApplicationsIdSync(ctx context.Context, id openapi_types.UUID, body PostApiV1ArgocdApplicationsIdSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ArgocdApplicationsIdSyncRequest(c.Server, id, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetApiV1ArgocdInstances(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1ArgocdInstancesRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBody(ctx context.Context, id openapi_types.UUID, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequestWithBody(c.Server, id, name, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1ArgocdInstancesIdApplicationsNameSync(ctx context.Context, id openapi_types.UUID, name string, body PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequest(c.Server, id, name, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetApiV1ArgocdInstancesIdOrphanReport(ctx context.Context, id openapi_types.UUID, params *GetApiV1ArgocdInstancesIdOrphanReportParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1ArgocdInstancesIdOrphanReportRequest(c.Server, id, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetApiV1ArgocdOperations(ctx context.Context, params *GetApiV1ArgocdOperationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1ArgocdOperationsRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetApiV1ArgocdOperationsId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1ArgocdOperationsIdRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -14464,8 +15161,8 @@ func (c *Client) GetApiV1CatalogCharts(ctx context.Context, params *GetApiV1Cata
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetApiV1CatalogChartsId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1CatalogChartsIdRequest(c.Server, id)
+func (c *Client) GetApiV1CatalogChartsId(ctx context.Context, id openapi_types.UUID, params *GetApiV1CatalogChartsIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1CatalogChartsIdRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -14656,6 +15353,30 @@ func (c *Client) PostApiV1CatalogOperationsIdRetry(ctx context.Context, id opena
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetApiV1CatalogRecommendationsPopular(ctx context.Context, params *GetApiV1CatalogRecommendationsPopularParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1CatalogRecommendationsPopularRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1CatalogRecommendationsSimilarChartId(ctx context.Context, chartId openapi_types.UUID, params *GetApiV1CatalogRecommendationsSimilarChartIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1CatalogRecommendationsSimilarChartIdRequest(c.Server, chartId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetApiV1CatalogRepositories(ctx context.Context, params *GetApiV1CatalogRepositoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1CatalogRepositoriesRequest(c.Server, params)
 	if err != nil {
@@ -14790,6 +15511,18 @@ func (c *Client) DecideCharlieApprovalWithBody(ctx context.Context, approvalId s
 
 func (c *Client) DecideCharlieApproval(ctx context.Context, approvalId string, body DecideCharlieApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDecideCharlieApprovalRequest(c.Server, approvalId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCharlieCommands(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCharlieCommandsRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -15088,8 +15821,200 @@ func (c *Client) CreateCharlieSessionMessage(ctx context.Context, sessionId open
 	return c.Client.Do(req)
 }
 
+func (c *Client) ListCharlieThreads(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCharlieThreadsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetActiveCharlieThread(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetActiveCharlieThreadRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateCharlieThreadMessageWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCharlieThreadMessageRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateCharlieThreadMessage(ctx context.Context, body CreateCharlieThreadMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCharlieThreadMessageRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateCharlieThread(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCharlieThreadRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCharlieThreadHistory(ctx context.Context, threadId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCharlieThreadHistoryRequest(c.Server, threadId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetApiV1CloudCredentialsProviders(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1CloudCredentialsProvidersRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1ClusterAgents(ctx context.Context, params *GetApiV1ClusterAgentsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClusterAgentsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1ClusterAgentsClusterId(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClusterAgentsClusterIdRequest(c.Server, clusterId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1ClusterAgentsClusterIdDiagnostics(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClusterAgentsClusterIdDiagnosticsRequest(c.Server, clusterId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1ClusterAgentsClusterIdDiagnosticsBundle(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClusterAgentsClusterIdDiagnosticsBundleRequest(c.Server, clusterId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1ClusterAgentsClusterIdOperations(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClusterAgentsClusterIdOperationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClusterAgentsClusterIdOperationsRequest(c.Server, clusterId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClusterAgentsClusterIdSelfTest(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClusterAgentsClusterIdSelfTestRequest(c.Server, clusterId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClusterAgentsClusterIdUpgradePlanWithBody(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClusterAgentsClusterIdUpgradePlanRequestWithBody(c.Server, clusterId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClusterAgentsClusterIdUpgradePlan(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1ClusterAgentsClusterIdUpgradePlanJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClusterAgentsClusterIdUpgradePlanRequest(c.Server, clusterId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClusterAgentsClusterIdUpgradeWithBody(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClusterAgentsClusterIdUpgradeRequestWithBody(c.Server, clusterId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClusterAgentsClusterIdUpgrade(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1ClusterAgentsClusterIdUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClusterAgentsClusterIdUpgradeRequest(c.Server, clusterId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -17440,6 +18365,642 @@ func (c *Client) TunnelConnectTrace(ctx context.Context, clusterId openapi_types
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetApiV1DeliveryBundles(ctx context.Context, params *GetApiV1DeliveryBundlesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryBundlesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryBundlesWithBody(ctx context.Context, params *PostApiV1DeliveryBundlesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryBundlesRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryBundles(ctx context.Context, params *PostApiV1DeliveryBundlesParams, body PostApiV1DeliveryBundlesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryBundlesRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteApiV1DeliveryBundlesId(ctx context.Context, id openapi_types.UUID, params *DeleteApiV1DeliveryBundlesIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1DeliveryBundlesIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryBundlesId(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryBundlesIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryBundlesIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchApiV1DeliveryBundlesIdWithBody(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryBundlesIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1DeliveryBundlesIdRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchApiV1DeliveryBundlesId(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryBundlesIdParams, body PatchApiV1DeliveryBundlesIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1DeliveryBundlesIdRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryBundlesIdVersions(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryBundlesIdVersionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryBundlesIdVersionsRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryBundlesIdVersionsWithBody(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryBundlesIdVersionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryBundlesIdVersionsRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryBundlesIdVersions(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryBundlesIdVersionsParams, body PostApiV1DeliveryBundlesIdVersionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryBundlesIdVersionsRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryBundlesIdVersionsVersionId(ctx context.Context, id openapi_types.UUID, versionId openapi_types.UUID, params *GetApiV1DeliveryBundlesIdVersionsVersionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryBundlesIdVersionsVersionIdRequest(c.Server, id, versionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryClustersClusterIdInventory(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1DeliveryClustersClusterIdInventoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryClustersClusterIdInventoryRequest(c.Server, clusterId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryDeployments(ctx context.Context, params *GetApiV1DeliveryDeploymentsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryDeploymentsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryDeploymentsId(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryDeploymentsIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryDeploymentsIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryDeploymentsIdEvents(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryDeploymentsIdEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryDeploymentsIdEventsRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryDeploymentsIdReconcile(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryDeploymentsIdReconcileRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryDeploymentsIdResume(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryDeploymentsIdResumeRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryDeploymentsIdSuspend(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryDeploymentsIdSuspendRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryRollouts(ctx context.Context, params *GetApiV1DeliveryRolloutsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryRolloutsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryRolloutsId(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryRolloutsIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryRolloutsIdAbort(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryRolloutsIdAbortRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryRolloutsIdApproveWithBody(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdApproveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryRolloutsIdApproveRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryRolloutsIdApprove(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdApproveParams, body PostApiV1DeliveryRolloutsIdApproveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryRolloutsIdApproveRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryRolloutsIdClusters(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdClustersParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryRolloutsIdClustersRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryRolloutsIdEvents(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryRolloutsIdEventsRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryRolloutsIdPause(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryRolloutsIdPauseRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryRolloutsIdResume(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryRolloutsIdResumeRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryRolloutsIdRetry(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryRolloutsIdRetryRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryRolloutsIdRollbackWithBody(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryRolloutsIdRollbackRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryRolloutsIdRollback(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdRollbackParams, body PostApiV1DeliveryRolloutsIdRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryRolloutsIdRollbackRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliverySources(ctx context.Context, params *GetApiV1DeliverySourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliverySourcesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliverySourcesWithBody(ctx context.Context, params *PostApiV1DeliverySourcesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliverySourcesRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliverySources(ctx context.Context, params *PostApiV1DeliverySourcesParams, body PostApiV1DeliverySourcesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliverySourcesRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteApiV1DeliverySourcesId(ctx context.Context, id openapi_types.UUID, params *DeleteApiV1DeliverySourcesIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1DeliverySourcesIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliverySourcesId(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliverySourcesIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliverySourcesIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchApiV1DeliverySourcesIdWithBody(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliverySourcesIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1DeliverySourcesIdRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchApiV1DeliverySourcesId(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliverySourcesIdParams, body PatchApiV1DeliverySourcesIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1DeliverySourcesIdRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliverySourcesIdRotateCredentialWithBody(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdRotateCredentialParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliverySourcesIdRotateCredentialRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliverySourcesIdRotateCredential(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdRotateCredentialParams, body PostApiV1DeliverySourcesIdRotateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliverySourcesIdRotateCredentialRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliverySourcesIdVerifyWithBody(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdVerifyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliverySourcesIdVerifyRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliverySourcesIdVerify(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdVerifyParams, body PostApiV1DeliverySourcesIdVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliverySourcesIdVerifyRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliverySystemCompatibility(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliverySystemCompatibilityRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryTargets(ctx context.Context, params *GetApiV1DeliveryTargetsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryTargetsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryTargetsWithBody(ctx context.Context, params *PostApiV1DeliveryTargetsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryTargetsRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryTargets(ctx context.Context, params *PostApiV1DeliveryTargetsParams, body PostApiV1DeliveryTargetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryTargetsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteApiV1DeliveryTargetsId(ctx context.Context, id openapi_types.UUID, params *DeleteApiV1DeliveryTargetsIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1DeliveryTargetsIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1DeliveryTargetsId(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryTargetsIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1DeliveryTargetsIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchApiV1DeliveryTargetsIdWithBody(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryTargetsIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1DeliveryTargetsIdRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchApiV1DeliveryTargetsId(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryTargetsIdParams, body PatchApiV1DeliveryTargetsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchApiV1DeliveryTargetsIdRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryTargetsIdOrphan(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdOrphanParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryTargetsIdOrphanRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryTargetsIdPreview(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdPreviewParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryTargetsIdPreviewRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryTargetsIdRolloutsWithBody(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdRolloutsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryTargetsIdRolloutsRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1DeliveryTargetsIdRollouts(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdRolloutsParams, body PostApiV1DeliveryTargetsIdRolloutsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1DeliveryTargetsIdRolloutsRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetApiV1Extensions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1ExtensionsRequest(c.Server)
 	if err != nil {
@@ -17610,246 +19171,6 @@ func (c *Client) PostApiV1ExtensionsNameTokenWithBody(ctx context.Context, name 
 
 func (c *Client) PostApiV1ExtensionsNameToken(ctx context.Context, name string, body PostApiV1ExtensionsNameTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiV1ExtensionsNameTokenRequest(c.Server, name, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetApiV1FleetOperations(ctx context.Context, params *GetApiV1FleetOperationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1FleetOperationsRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1FleetOperationsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1FleetOperationsRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1FleetOperations(ctx context.Context, body PostApiV1FleetOperationsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1FleetOperationsRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetApiV1FleetOperationsId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1FleetOperationsIdRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1FleetOperationsIdAbort(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1FleetOperationsIdAbortRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1FleetOperationsIdPause(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1FleetOperationsIdPauseRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1FleetOperationsIdResume(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1FleetOperationsIdResumeRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostApiV1FleetOperationsIdRetryFailed(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostApiV1FleetOperationsIdRetryFailedRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetApiV1FleetOperationsIdTargets(ctx context.Context, id openapi_types.UUID, params *GetApiV1FleetOperationsIdTargetsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1FleetOperationsIdTargetsRequest(c.Server, id, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdInternalK8sProxyDelete(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdInternalK8sProxyDeleteRequest(c.Server, clusterId, path)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdInternalK8sProxyGet(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdInternalK8sProxyGetRequest(c.Server, clusterId, path)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdInternalK8sProxyHead(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdInternalK8sProxyHeadRequest(c.Server, clusterId, path)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdInternalK8sProxyOptions(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdInternalK8sProxyOptionsRequest(c.Server, clusterId, path)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdInternalK8sProxyPatchWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdInternalK8sProxyPatchRequestWithBody(c.Server, clusterId, path, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdInternalK8sProxyPatch(ctx context.Context, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPatchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdInternalK8sProxyPatchRequest(c.Server, clusterId, path, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdInternalK8sProxyPostWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdInternalK8sProxyPostRequestWithBody(c.Server, clusterId, path, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdInternalK8sProxyPost(ctx context.Context, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdInternalK8sProxyPostRequest(c.Server, clusterId, path, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdInternalK8sProxyPutWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdInternalK8sProxyPutRequestWithBody(c.Server, clusterId, path, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdInternalK8sProxyPut(ctx context.Context, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPutJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdInternalK8sProxyPutRequest(c.Server, clusterId, path, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdInternalK8sProxyTrace(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdInternalK8sProxyTraceRequest(c.Server, clusterId, path)
 	if err != nil {
 		return nil, err
 	}
@@ -19660,270 +20981,6 @@ func (c *Client) PodLogsWebSocket(ctx context.Context, clusterId openapi_types.U
 	return c.Client.Do(req)
 }
 
-func (c *Client) ArgocdUiDelete(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiDeleteRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiGetRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiHead(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiHeadRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiOptions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiOptionsRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiPatchWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiPatchRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiPatch(ctx context.Context, body ArgocdUiPatchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiPatchRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiPostWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiPostRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiPost(ctx context.Context, body ArgocdUiPostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiPostRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiPutWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiPutRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiPut(ctx context.Context, body ArgocdUiPutJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiPutRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiTrace(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiTraceRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiSubDelete(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiSubDeleteRequest(c.Server, path)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiSubGet(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiSubGetRequest(c.Server, path)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiSubHead(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiSubHeadRequest(c.Server, path)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiSubOptions(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiSubOptionsRequest(c.Server, path)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiSubPatchWithBody(ctx context.Context, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiSubPatchRequestWithBody(c.Server, path, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiSubPatch(ctx context.Context, path string, body ArgocdUiSubPatchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiSubPatchRequest(c.Server, path, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiSubPostWithBody(ctx context.Context, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiSubPostRequestWithBody(c.Server, path, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiSubPost(ctx context.Context, path string, body ArgocdUiSubPostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiSubPostRequest(c.Server, path, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiSubPutWithBody(ctx context.Context, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiSubPutRequestWithBody(c.Server, path, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiSubPut(ctx context.Context, path string, body ArgocdUiSubPutJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiSubPutRequest(c.Server, path, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) ArgocdUiSubTrace(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewArgocdUiSubTraceRequest(c.Server, path)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) TunnelHealthCheck(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTunnelHealthCheckRequest(c.Server)
 	if err != nil {
@@ -20554,154 +21611,6 @@ func NewAdminCharlieActionPolicyUpdateRequestWithBody(server string, capability 
 	return req, nil
 }
 
-// NewAdminCharlieAgentInstallRequest generates requests for AdminCharlieAgentInstall
-func NewAdminCharlieAgentInstallRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/admin/charlie/agent/install/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewAdminCharlieAgentRollbackRequest generates requests for AdminCharlieAgentRollback
-func NewAdminCharlieAgentRollbackRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/admin/charlie/agent/rollback/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewAdminCharlieAgentRotateRequest generates requests for AdminCharlieAgentRotate
-func NewAdminCharlieAgentRotateRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/admin/charlie/agent/rotate/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewAdminCharlieAgentUninstallRequest calls the generic AdminCharlieAgentUninstall builder with application/json body
-func NewAdminCharlieAgentUninstallRequest(server string, body AdminCharlieAgentUninstallJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewAdminCharlieAgentUninstallRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewAdminCharlieAgentUninstallRequestWithBody generates requests for AdminCharlieAgentUninstall with any type of body
-func NewAdminCharlieAgentUninstallRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/admin/charlie/agent/uninstall/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewAdminCharlieAgentUpgradeRequest generates requests for AdminCharlieAgentUpgrade
-func NewAdminCharlieAgentUpgradeRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/admin/charlie/agent/upgrade/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewAdminCharlieAlertDeliveryProofsRequest generates requests for AdminCharlieAlertDeliveryProofs
 func NewAdminCharlieAlertDeliveryProofsRequest(server string, params *AdminCharlieAlertDeliveryProofsParams) (*http.Request, error) {
 	var err error
@@ -20837,46 +21746,6 @@ func NewAdminCharlieDiagnosticsRunRequest(server string) (*http.Request, error) 
 	if err != nil {
 		return nil, err
 	}
-
-	return req, nil
-}
-
-// NewAdminCharlieDisconnectRequest calls the generic AdminCharlieDisconnect builder with application/json body
-func NewAdminCharlieDisconnectRequest(server string, body AdminCharlieDisconnectJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewAdminCharlieDisconnectRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewAdminCharlieDisconnectRequestWithBody generates requests for AdminCharlieDisconnect with any type of body
-func NewAdminCharlieDisconnectRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/admin/charlie/disconnect/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -22699,339 +23568,6 @@ func NewAdminWebhookTestRequest(server string, id openapi_types.UUID) (*http.Req
 	return req, nil
 }
 
-// NewGetApiV1AgentsFleetRequest generates requests for GetApiV1AgentsFleet
-func NewGetApiV1AgentsFleetRequest(server string, params *GetApiV1AgentsFleetParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/agents/fleet/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Offset != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetApiV1AgentsFleetClusterIdDiagnosticsRequest generates requests for GetApiV1AgentsFleetClusterIdDiagnostics
-func NewGetApiV1AgentsFleetClusterIdDiagnosticsRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/agents/fleet/%s/diagnostics/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetApiV1AgentsFleetClusterIdDiagnosticsBundleRequest generates requests for GetApiV1AgentsFleetClusterIdDiagnosticsBundle
-func NewGetApiV1AgentsFleetClusterIdDiagnosticsBundleRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/agents/fleet/%s/diagnostics/bundle/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetApiV1AgentsFleetClusterIdOperationsRequest generates requests for GetApiV1AgentsFleetClusterIdOperations
-func NewGetApiV1AgentsFleetClusterIdOperationsRequest(server string, clusterId openapi_types.UUID, params *GetApiV1AgentsFleetClusterIdOperationsParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/agents/fleet/%s/operations/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Offset != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostApiV1AgentsFleetClusterIdSelfTestRequest generates requests for PostApiV1AgentsFleetClusterIdSelfTest
-func NewPostApiV1AgentsFleetClusterIdSelfTestRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/agents/fleet/%s/self-test/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostApiV1AgentsFleetClusterIdUpgradePlanRequest calls the generic PostApiV1AgentsFleetClusterIdUpgradePlan builder with application/json body
-func NewPostApiV1AgentsFleetClusterIdUpgradePlanRequest(server string, clusterId openapi_types.UUID, body PostApiV1AgentsFleetClusterIdUpgradePlanJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostApiV1AgentsFleetClusterIdUpgradePlanRequestWithBody(server, clusterId, "application/json", bodyReader)
-}
-
-// NewPostApiV1AgentsFleetClusterIdUpgradePlanRequestWithBody generates requests for PostApiV1AgentsFleetClusterIdUpgradePlan with any type of body
-func NewPostApiV1AgentsFleetClusterIdUpgradePlanRequestWithBody(server string, clusterId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/agents/fleet/%s/upgrade-plan/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewPostApiV1AgentsFleetClusterIdUpgradeRequest calls the generic PostApiV1AgentsFleetClusterIdUpgrade builder with application/json body
-func NewPostApiV1AgentsFleetClusterIdUpgradeRequest(server string, clusterId openapi_types.UUID, body PostApiV1AgentsFleetClusterIdUpgradeJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostApiV1AgentsFleetClusterIdUpgradeRequestWithBody(server, clusterId, "application/json", bodyReader)
-}
-
-// NewPostApiV1AgentsFleetClusterIdUpgradeRequestWithBody generates requests for PostApiV1AgentsFleetClusterIdUpgrade with any type of body
-func NewPostApiV1AgentsFleetClusterIdUpgradeRequestWithBody(server string, clusterId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/agents/fleet/%s/upgrade/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
 // NewGetApiV1AlertingChannelsRequest generates requests for GetApiV1AlertingChannels
 func NewGetApiV1AlertingChannelsRequest(server string) (*http.Request, error) {
 	var err error
@@ -23096,337 +23632,6 @@ func NewGetApiV1AlertingEventsRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/alerting/events/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostApiV1ArgocdApplicationsIdSyncRequest calls the generic PostApiV1ArgocdApplicationsIdSync builder with application/json body
-func NewPostApiV1ArgocdApplicationsIdSyncRequest(server string, id openapi_types.UUID, body PostApiV1ArgocdApplicationsIdSyncJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostApiV1ArgocdApplicationsIdSyncRequestWithBody(server, id, "application/json", bodyReader)
-}
-
-// NewPostApiV1ArgocdApplicationsIdSyncRequestWithBody generates requests for PostApiV1ArgocdApplicationsIdSync with any type of body
-func NewPostApiV1ArgocdApplicationsIdSyncRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/argocd/applications/%s/sync/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewGetApiV1ArgocdInstancesRequest generates requests for GetApiV1ArgocdInstances
-func NewGetApiV1ArgocdInstancesRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/argocd/instances/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequest calls the generic PostApiV1ArgocdInstancesIdApplicationsNameSync builder with application/json body
-func NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequest(server string, id openapi_types.UUID, name string, body PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequestWithBody(server, id, name, "application/json", bodyReader)
-}
-
-// NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequestWithBody generates requests for PostApiV1ArgocdInstancesIdApplicationsNameSync with any type of body
-func NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequestWithBody(server string, id openapi_types.UUID, name string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "name", runtime.ParamLocationPath, name)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/argocd/instances/%s/applications/%s/sync/", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewGetApiV1ArgocdInstancesIdOrphanReportRequest generates requests for GetApiV1ArgocdInstancesIdOrphanReport
-func NewGetApiV1ArgocdInstancesIdOrphanReportRequest(server string, id openapi_types.UUID, params *GetApiV1ArgocdInstancesIdOrphanReportParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/argocd/instances/%s/orphan-report/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetApiV1ArgocdOperationsRequest generates requests for GetApiV1ArgocdOperations
-func NewGetApiV1ArgocdOperationsRequest(server string, params *GetApiV1ArgocdOperationsParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/argocd/operations/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.TargetType != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "targetType", runtime.ParamLocationQuery, *params.TargetType); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.TargetKey != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "targetKey", runtime.ParamLocationQuery, *params.TargetKey); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Status != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "status", runtime.ParamLocationQuery, *params.Status); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Offset != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetApiV1ArgocdOperationsIdRequest generates requests for GetApiV1ArgocdOperationsId
-func NewGetApiV1ArgocdOperationsIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/argocd/operations/%s/", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -26400,7 +26605,7 @@ func NewGetApiV1CatalogChartsRequest(server string, params *GetApiV1CatalogChart
 }
 
 // NewGetApiV1CatalogChartsIdRequest generates requests for GetApiV1CatalogChartsId
-func NewGetApiV1CatalogChartsIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+func NewGetApiV1CatalogChartsIdRequest(server string, id openapi_types.UUID, params *GetApiV1CatalogChartsIdParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -26423,6 +26628,28 @@ func NewGetApiV1CatalogChartsIdRequest(server string, id openapi_types.UUID) (*h
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ProjectId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -26461,6 +26688,22 @@ func NewGetApiV1CatalogChartsIdReadmeRequest(server string, id openapi_types.UUI
 
 	if params != nil {
 		queryValues := queryURL.Query()
+
+		if params.ProjectId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
 
 		if params.Version != nil {
 
@@ -26518,6 +26761,22 @@ func NewGetApiV1CatalogChartsIdValuesRequest(server string, id openapi_types.UUI
 	if params != nil {
 		queryValues := queryURL.Query()
 
+		if params.ProjectId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		if params.Version != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "version", runtime.ParamLocationQuery, *params.Version); err != nil {
@@ -26573,6 +26832,22 @@ func NewGetApiV1CatalogChartsIdVersionsRequest(server string, id openapi_types.U
 
 	if params != nil {
 		queryValues := queryURL.Query()
+
+		if params.ProjectId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
 
 		if params.Limit != nil {
 
@@ -27095,6 +27370,143 @@ func NewPostApiV1CatalogOperationsIdRetryRequest(server string, id openapi_types
 	return req, nil
 }
 
+// NewGetApiV1CatalogRecommendationsPopularRequest generates requests for GetApiV1CatalogRecommendationsPopular
+func NewGetApiV1CatalogRecommendationsPopularRequest(server string, params *GetApiV1CatalogRecommendationsPopularParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/recommendations/popular/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ProjectId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1CatalogRecommendationsSimilarChartIdRequest generates requests for GetApiV1CatalogRecommendationsSimilarChartId
+func NewGetApiV1CatalogRecommendationsSimilarChartIdRequest(server string, chartId openapi_types.UUID, params *GetApiV1CatalogRecommendationsSimilarChartIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "chart_id", runtime.ParamLocationPath, chartId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/recommendations/similar/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ProjectId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1CatalogRepositoriesRequest generates requests for GetApiV1CatalogRepositories
 func NewGetApiV1CatalogRepositoriesRequest(server string, params *GetApiV1CatalogRepositoriesParams) (*http.Request, error) {
 	var err error
@@ -27485,6 +27897,33 @@ func NewDecideCharlieApprovalRequestWithBody(server string, approvalId string, c
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListCharlieCommandsRequest generates requests for ListCharlieCommands
+func NewListCharlieCommandsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/commands/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -28273,6 +28712,161 @@ func NewCreateCharlieSessionMessageRequestWithBody(server string, sessionId open
 	return req, nil
 }
 
+// NewListCharlieThreadsRequest generates requests for ListCharlieThreads
+func NewListCharlieThreadsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/threads/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetActiveCharlieThreadRequest generates requests for GetActiveCharlieThread
+func NewGetActiveCharlieThreadRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/threads/active/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateCharlieThreadMessageRequest calls the generic CreateCharlieThreadMessage builder with application/json body
+func NewCreateCharlieThreadMessageRequest(server string, body CreateCharlieThreadMessageJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateCharlieThreadMessageRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateCharlieThreadMessageRequestWithBody generates requests for CreateCharlieThreadMessage with any type of body
+func NewCreateCharlieThreadMessageRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/threads/messages/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewCreateCharlieThreadRequest generates requests for CreateCharlieThread
+func NewCreateCharlieThreadRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/threads/new/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetCharlieThreadHistoryRequest generates requests for GetCharlieThreadHistory
+func NewGetCharlieThreadHistoryRequest(server string, threadId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "thread_id", runtime.ParamLocationPath, threadId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/threads/%s/history/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1CloudCredentialsProvidersRequest generates requests for GetApiV1CloudCredentialsProviders
 func NewGetApiV1CloudCredentialsProvidersRequest(server string) (*http.Request, error) {
 	var err error
@@ -28296,6 +28890,373 @@ func NewGetApiV1CloudCredentialsProvidersRequest(server string) (*http.Request, 
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewGetApiV1ClusterAgentsRequest generates requests for GetApiV1ClusterAgents
+func NewGetApiV1ClusterAgentsRequest(server string, params *GetApiV1ClusterAgentsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/cluster-agents/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1ClusterAgentsClusterIdRequest generates requests for GetApiV1ClusterAgentsClusterId
+func NewGetApiV1ClusterAgentsClusterIdRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/cluster-agents/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1ClusterAgentsClusterIdDiagnosticsRequest generates requests for GetApiV1ClusterAgentsClusterIdDiagnostics
+func NewGetApiV1ClusterAgentsClusterIdDiagnosticsRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/cluster-agents/%s/diagnostics/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1ClusterAgentsClusterIdDiagnosticsBundleRequest generates requests for GetApiV1ClusterAgentsClusterIdDiagnosticsBundle
+func NewGetApiV1ClusterAgentsClusterIdDiagnosticsBundleRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/cluster-agents/%s/diagnostics/bundle/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1ClusterAgentsClusterIdOperationsRequest generates requests for GetApiV1ClusterAgentsClusterIdOperations
+func NewGetApiV1ClusterAgentsClusterIdOperationsRequest(server string, clusterId openapi_types.UUID, params *GetApiV1ClusterAgentsClusterIdOperationsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/cluster-agents/%s/operations/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1ClusterAgentsClusterIdSelfTestRequest generates requests for PostApiV1ClusterAgentsClusterIdSelfTest
+func NewPostApiV1ClusterAgentsClusterIdSelfTestRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/cluster-agents/%s/self-test/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1ClusterAgentsClusterIdUpgradePlanRequest calls the generic PostApiV1ClusterAgentsClusterIdUpgradePlan builder with application/json body
+func NewPostApiV1ClusterAgentsClusterIdUpgradePlanRequest(server string, clusterId openapi_types.UUID, body PostApiV1ClusterAgentsClusterIdUpgradePlanJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ClusterAgentsClusterIdUpgradePlanRequestWithBody(server, clusterId, "application/json", bodyReader)
+}
+
+// NewPostApiV1ClusterAgentsClusterIdUpgradePlanRequestWithBody generates requests for PostApiV1ClusterAgentsClusterIdUpgradePlan with any type of body
+func NewPostApiV1ClusterAgentsClusterIdUpgradePlanRequestWithBody(server string, clusterId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/cluster-agents/%s/upgrade-plan/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostApiV1ClusterAgentsClusterIdUpgradeRequest calls the generic PostApiV1ClusterAgentsClusterIdUpgrade builder with application/json body
+func NewPostApiV1ClusterAgentsClusterIdUpgradeRequest(server string, clusterId openapi_types.UUID, body PostApiV1ClusterAgentsClusterIdUpgradeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ClusterAgentsClusterIdUpgradeRequestWithBody(server, clusterId, "application/json", bodyReader)
+}
+
+// NewPostApiV1ClusterAgentsClusterIdUpgradeRequestWithBody generates requests for PostApiV1ClusterAgentsClusterIdUpgrade with any type of body
+func NewPostApiV1ClusterAgentsClusterIdUpgradeRequestWithBody(server string, clusterId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/cluster-agents/%s/upgrade/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -34901,6 +35862,2422 @@ func NewTunnelConnectTraceRequest(server string, clusterId openapi_types.UUID) (
 	return req, nil
 }
 
+// NewGetApiV1DeliveryBundlesRequest generates requests for GetApiV1DeliveryBundles
+func NewGetApiV1DeliveryBundlesRequest(server string, params *GetApiV1DeliveryBundlesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/bundles/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryBundlesRequest calls the generic PostApiV1DeliveryBundles builder with application/json body
+func NewPostApiV1DeliveryBundlesRequest(server string, params *PostApiV1DeliveryBundlesParams, body PostApiV1DeliveryBundlesJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1DeliveryBundlesRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1DeliveryBundlesRequestWithBody generates requests for PostApiV1DeliveryBundles with any type of body
+func NewPostApiV1DeliveryBundlesRequestWithBody(server string, params *PostApiV1DeliveryBundlesParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/bundles/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewDeleteApiV1DeliveryBundlesIdRequest generates requests for DeleteApiV1DeliveryBundlesId
+func NewDeleteApiV1DeliveryBundlesIdRequest(server string, id openapi_types.UUID, params *DeleteApiV1DeliveryBundlesIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/bundles/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryBundlesIdRequest generates requests for GetApiV1DeliveryBundlesId
+func NewGetApiV1DeliveryBundlesIdRequest(server string, id openapi_types.UUID, params *GetApiV1DeliveryBundlesIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/bundles/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchApiV1DeliveryBundlesIdRequest calls the generic PatchApiV1DeliveryBundlesId builder with application/json body
+func NewPatchApiV1DeliveryBundlesIdRequest(server string, id openapi_types.UUID, params *PatchApiV1DeliveryBundlesIdParams, body PatchApiV1DeliveryBundlesIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchApiV1DeliveryBundlesIdRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPatchApiV1DeliveryBundlesIdRequestWithBody generates requests for PatchApiV1DeliveryBundlesId with any type of body
+func NewPatchApiV1DeliveryBundlesIdRequestWithBody(server string, id openapi_types.UUID, params *PatchApiV1DeliveryBundlesIdParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/bundles/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryBundlesIdVersionsRequest generates requests for GetApiV1DeliveryBundlesIdVersions
+func NewGetApiV1DeliveryBundlesIdVersionsRequest(server string, id openapi_types.UUID, params *GetApiV1DeliveryBundlesIdVersionsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/bundles/%s/versions/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryBundlesIdVersionsRequest calls the generic PostApiV1DeliveryBundlesIdVersions builder with application/json body
+func NewPostApiV1DeliveryBundlesIdVersionsRequest(server string, id openapi_types.UUID, params *PostApiV1DeliveryBundlesIdVersionsParams, body PostApiV1DeliveryBundlesIdVersionsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1DeliveryBundlesIdVersionsRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1DeliveryBundlesIdVersionsRequestWithBody generates requests for PostApiV1DeliveryBundlesIdVersions with any type of body
+func NewPostApiV1DeliveryBundlesIdVersionsRequestWithBody(server string, id openapi_types.UUID, params *PostApiV1DeliveryBundlesIdVersionsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/bundles/%s/versions/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryBundlesIdVersionsVersionIdRequest generates requests for GetApiV1DeliveryBundlesIdVersionsVersionId
+func NewGetApiV1DeliveryBundlesIdVersionsVersionIdRequest(server string, id openapi_types.UUID, versionId openapi_types.UUID, params *GetApiV1DeliveryBundlesIdVersionsVersionIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "versionId", runtime.ParamLocationPath, versionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/bundles/%s/versions/%s/", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryClustersClusterIdInventoryRequest generates requests for GetApiV1DeliveryClustersClusterIdInventory
+func NewGetApiV1DeliveryClustersClusterIdInventoryRequest(server string, clusterId openapi_types.UUID, params *GetApiV1DeliveryClustersClusterIdInventoryParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "clusterId", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/clusters/%s/inventory/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryDeploymentsRequest generates requests for GetApiV1DeliveryDeployments
+func NewGetApiV1DeliveryDeploymentsRequest(server string, params *GetApiV1DeliveryDeploymentsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/deployments/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Phase != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "phase", runtime.ParamLocationQuery, *params.Phase); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryDeploymentsIdRequest generates requests for GetApiV1DeliveryDeploymentsId
+func NewGetApiV1DeliveryDeploymentsIdRequest(server string, id openapi_types.UUID, params *GetApiV1DeliveryDeploymentsIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/deployments/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryDeploymentsIdEventsRequest generates requests for GetApiV1DeliveryDeploymentsIdEvents
+func NewGetApiV1DeliveryDeploymentsIdEventsRequest(server string, id openapi_types.UUID, params *GetApiV1DeliveryDeploymentsIdEventsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/deployments/%s/events/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryDeploymentsIdReconcileRequest generates requests for PostApiV1DeliveryDeploymentsIdReconcile
+func NewPostApiV1DeliveryDeploymentsIdReconcileRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/deployments/%s/reconcile/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryDeploymentsIdResumeRequest generates requests for PostApiV1DeliveryDeploymentsIdResume
+func NewPostApiV1DeliveryDeploymentsIdResumeRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/deployments/%s/resume/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryDeploymentsIdSuspendRequest generates requests for PostApiV1DeliveryDeploymentsIdSuspend
+func NewPostApiV1DeliveryDeploymentsIdSuspendRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/deployments/%s/suspend/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryRolloutsRequest generates requests for GetApiV1DeliveryRollouts
+func NewGetApiV1DeliveryRolloutsRequest(server string, params *GetApiV1DeliveryRolloutsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/rollouts/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "state", runtime.ParamLocationQuery, *params.State); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryRolloutsIdRequest generates requests for GetApiV1DeliveryRolloutsId
+func NewGetApiV1DeliveryRolloutsIdRequest(server string, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/rollouts/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryRolloutsIdAbortRequest generates requests for PostApiV1DeliveryRolloutsIdAbort
+func NewPostApiV1DeliveryRolloutsIdAbortRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/rollouts/%s/abort/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryRolloutsIdApproveRequest calls the generic PostApiV1DeliveryRolloutsIdApprove builder with application/json body
+func NewPostApiV1DeliveryRolloutsIdApproveRequest(server string, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdApproveParams, body PostApiV1DeliveryRolloutsIdApproveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1DeliveryRolloutsIdApproveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1DeliveryRolloutsIdApproveRequestWithBody generates requests for PostApiV1DeliveryRolloutsIdApprove with any type of body
+func NewPostApiV1DeliveryRolloutsIdApproveRequestWithBody(server string, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdApproveParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/rollouts/%s/approve/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryRolloutsIdClustersRequest generates requests for GetApiV1DeliveryRolloutsIdClusters
+func NewGetApiV1DeliveryRolloutsIdClustersRequest(server string, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdClustersParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/rollouts/%s/clusters/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryRolloutsIdEventsRequest generates requests for GetApiV1DeliveryRolloutsIdEvents
+func NewGetApiV1DeliveryRolloutsIdEventsRequest(server string, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdEventsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/rollouts/%s/events/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryRolloutsIdPauseRequest generates requests for PostApiV1DeliveryRolloutsIdPause
+func NewPostApiV1DeliveryRolloutsIdPauseRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/rollouts/%s/pause/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryRolloutsIdResumeRequest generates requests for PostApiV1DeliveryRolloutsIdResume
+func NewPostApiV1DeliveryRolloutsIdResumeRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/rollouts/%s/resume/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryRolloutsIdRetryRequest generates requests for PostApiV1DeliveryRolloutsIdRetry
+func NewPostApiV1DeliveryRolloutsIdRetryRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/rollouts/%s/retry/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryRolloutsIdRollbackRequest calls the generic PostApiV1DeliveryRolloutsIdRollback builder with application/json body
+func NewPostApiV1DeliveryRolloutsIdRollbackRequest(server string, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdRollbackParams, body PostApiV1DeliveryRolloutsIdRollbackJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1DeliveryRolloutsIdRollbackRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1DeliveryRolloutsIdRollbackRequestWithBody generates requests for PostApiV1DeliveryRolloutsIdRollback with any type of body
+func NewPostApiV1DeliveryRolloutsIdRollbackRequestWithBody(server string, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdRollbackParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/rollouts/%s/rollback/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliverySourcesRequest generates requests for GetApiV1DeliverySources
+func NewGetApiV1DeliverySourcesRequest(server string, params *GetApiV1DeliverySourcesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/sources/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "status", runtime.ParamLocationQuery, *params.Status); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliverySourcesRequest calls the generic PostApiV1DeliverySources builder with application/json body
+func NewPostApiV1DeliverySourcesRequest(server string, params *PostApiV1DeliverySourcesParams, body PostApiV1DeliverySourcesJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1DeliverySourcesRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1DeliverySourcesRequestWithBody generates requests for PostApiV1DeliverySources with any type of body
+func NewPostApiV1DeliverySourcesRequestWithBody(server string, params *PostApiV1DeliverySourcesParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/sources/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewDeleteApiV1DeliverySourcesIdRequest generates requests for DeleteApiV1DeliverySourcesId
+func NewDeleteApiV1DeliverySourcesIdRequest(server string, id openapi_types.UUID, params *DeleteApiV1DeliverySourcesIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/sources/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliverySourcesIdRequest generates requests for GetApiV1DeliverySourcesId
+func NewGetApiV1DeliverySourcesIdRequest(server string, id openapi_types.UUID, params *GetApiV1DeliverySourcesIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/sources/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchApiV1DeliverySourcesIdRequest calls the generic PatchApiV1DeliverySourcesId builder with application/json body
+func NewPatchApiV1DeliverySourcesIdRequest(server string, id openapi_types.UUID, params *PatchApiV1DeliverySourcesIdParams, body PatchApiV1DeliverySourcesIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchApiV1DeliverySourcesIdRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPatchApiV1DeliverySourcesIdRequestWithBody generates requests for PatchApiV1DeliverySourcesId with any type of body
+func NewPatchApiV1DeliverySourcesIdRequestWithBody(server string, id openapi_types.UUID, params *PatchApiV1DeliverySourcesIdParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/sources/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliverySourcesIdRotateCredentialRequest calls the generic PostApiV1DeliverySourcesIdRotateCredential builder with application/json body
+func NewPostApiV1DeliverySourcesIdRotateCredentialRequest(server string, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdRotateCredentialParams, body PostApiV1DeliverySourcesIdRotateCredentialJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1DeliverySourcesIdRotateCredentialRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1DeliverySourcesIdRotateCredentialRequestWithBody generates requests for PostApiV1DeliverySourcesIdRotateCredential with any type of body
+func NewPostApiV1DeliverySourcesIdRotateCredentialRequestWithBody(server string, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdRotateCredentialParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/sources/%s/rotate-credential/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliverySourcesIdVerifyRequest calls the generic PostApiV1DeliverySourcesIdVerify builder with application/json body
+func NewPostApiV1DeliverySourcesIdVerifyRequest(server string, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdVerifyParams, body PostApiV1DeliverySourcesIdVerifyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1DeliverySourcesIdVerifyRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1DeliverySourcesIdVerifyRequestWithBody generates requests for PostApiV1DeliverySourcesIdVerify with any type of body
+func NewPostApiV1DeliverySourcesIdVerifyRequestWithBody(server string, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdVerifyParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/sources/%s/verify/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliverySystemCompatibilityRequest generates requests for GetApiV1DeliverySystemCompatibility
+func NewGetApiV1DeliverySystemCompatibilityRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/system/compatibility/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryTargetsRequest generates requests for GetApiV1DeliveryTargets
+func NewGetApiV1DeliveryTargetsRequest(server string, params *GetApiV1DeliveryTargetsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/targets/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Name != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "name", runtime.ParamLocationQuery, *params.Name); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryTargetsRequest calls the generic PostApiV1DeliveryTargets builder with application/json body
+func NewPostApiV1DeliveryTargetsRequest(server string, params *PostApiV1DeliveryTargetsParams, body PostApiV1DeliveryTargetsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1DeliveryTargetsRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1DeliveryTargetsRequestWithBody generates requests for PostApiV1DeliveryTargets with any type of body
+func NewPostApiV1DeliveryTargetsRequestWithBody(server string, params *PostApiV1DeliveryTargetsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/targets/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewDeleteApiV1DeliveryTargetsIdRequest generates requests for DeleteApiV1DeliveryTargetsId
+func NewDeleteApiV1DeliveryTargetsIdRequest(server string, id openapi_types.UUID, params *DeleteApiV1DeliveryTargetsIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/targets/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1DeliveryTargetsIdRequest generates requests for GetApiV1DeliveryTargetsId
+func NewGetApiV1DeliveryTargetsIdRequest(server string, id openapi_types.UUID, params *GetApiV1DeliveryTargetsIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/targets/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchApiV1DeliveryTargetsIdRequest calls the generic PatchApiV1DeliveryTargetsId builder with application/json body
+func NewPatchApiV1DeliveryTargetsIdRequest(server string, id openapi_types.UUID, params *PatchApiV1DeliveryTargetsIdParams, body PatchApiV1DeliveryTargetsIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchApiV1DeliveryTargetsIdRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPatchApiV1DeliveryTargetsIdRequestWithBody generates requests for PatchApiV1DeliveryTargetsId with any type of body
+func NewPatchApiV1DeliveryTargetsIdRequestWithBody(server string, id openapi_types.UUID, params *PatchApiV1DeliveryTargetsIdParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/targets/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryTargetsIdOrphanRequest generates requests for PostApiV1DeliveryTargetsIdOrphan
+func NewPostApiV1DeliveryTargetsIdOrphanRequest(server string, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdOrphanParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/targets/%s/orphan/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryTargetsIdPreviewRequest generates requests for PostApiV1DeliveryTargetsIdPreview
+func NewPostApiV1DeliveryTargetsIdPreviewRequest(server string, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdPreviewParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/targets/%s/preview/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.PageSize != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page_size", runtime.ParamLocationQuery, *params.PageSize); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1DeliveryTargetsIdRolloutsRequest calls the generic PostApiV1DeliveryTargetsIdRollouts builder with application/json body
+func NewPostApiV1DeliveryTargetsIdRolloutsRequest(server string, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdRolloutsParams, body PostApiV1DeliveryTargetsIdRolloutsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1DeliveryTargetsIdRolloutsRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1DeliveryTargetsIdRolloutsRequestWithBody generates requests for PostApiV1DeliveryTargetsIdRollouts with any type of body
+func NewPostApiV1DeliveryTargetsIdRolloutsRequestWithBody(server string, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdRolloutsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/targets/%s/rollouts/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, params.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1ExtensionsRequest generates requests for GetApiV1Extensions
 func NewGetApiV1ExtensionsRequest(server string) (*http.Request, error) {
 	var err error
@@ -35282,736 +38659,6 @@ func NewPostApiV1ExtensionsNameTokenRequestWithBody(server string, name string, 
 	}
 
 	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewGetApiV1FleetOperationsRequest generates requests for GetApiV1FleetOperations
-func NewGetApiV1FleetOperationsRequest(server string, params *GetApiV1FleetOperationsParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/fleet-operations")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.Status != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "status", runtime.ParamLocationQuery, *params.Status); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Offset != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostApiV1FleetOperationsRequest calls the generic PostApiV1FleetOperations builder with application/json body
-func NewPostApiV1FleetOperationsRequest(server string, body PostApiV1FleetOperationsJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostApiV1FleetOperationsRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewPostApiV1FleetOperationsRequestWithBody generates requests for PostApiV1FleetOperations with any type of body
-func NewPostApiV1FleetOperationsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/fleet-operations")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewGetApiV1FleetOperationsIdRequest generates requests for GetApiV1FleetOperationsId
-func NewGetApiV1FleetOperationsIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/fleet-operations/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostApiV1FleetOperationsIdAbortRequest generates requests for PostApiV1FleetOperationsIdAbort
-func NewPostApiV1FleetOperationsIdAbortRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/fleet-operations/%s/abort", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostApiV1FleetOperationsIdPauseRequest generates requests for PostApiV1FleetOperationsIdPause
-func NewPostApiV1FleetOperationsIdPauseRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/fleet-operations/%s/pause", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostApiV1FleetOperationsIdResumeRequest generates requests for PostApiV1FleetOperationsIdResume
-func NewPostApiV1FleetOperationsIdResumeRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/fleet-operations/%s/resume", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostApiV1FleetOperationsIdRetryFailedRequest generates requests for PostApiV1FleetOperationsIdRetryFailed
-func NewPostApiV1FleetOperationsIdRetryFailedRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/fleet-operations/%s/retry-failed", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetApiV1FleetOperationsIdTargetsRequest generates requests for GetApiV1FleetOperationsIdTargets
-func NewGetApiV1FleetOperationsIdTargetsRequest(server string, id openapi_types.UUID, params *GetApiV1FleetOperationsIdTargetsParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/fleet-operations/%s/targets", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Offset != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdInternalK8sProxyDeleteRequest generates requests for ArgocdInternalK8sProxyDelete
-func NewArgocdInternalK8sProxyDeleteRequest(server string, clusterId openapi_types.UUID, path string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/internal/argocd/clusters/%s/k8s/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdInternalK8sProxyGetRequest generates requests for ArgocdInternalK8sProxyGet
-func NewArgocdInternalK8sProxyGetRequest(server string, clusterId openapi_types.UUID, path string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/internal/argocd/clusters/%s/k8s/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdInternalK8sProxyHeadRequest generates requests for ArgocdInternalK8sProxyHead
-func NewArgocdInternalK8sProxyHeadRequest(server string, clusterId openapi_types.UUID, path string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/internal/argocd/clusters/%s/k8s/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdInternalK8sProxyOptionsRequest generates requests for ArgocdInternalK8sProxyOptions
-func NewArgocdInternalK8sProxyOptionsRequest(server string, clusterId openapi_types.UUID, path string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/internal/argocd/clusters/%s/k8s/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("OPTIONS", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdInternalK8sProxyPatchRequest calls the generic ArgocdInternalK8sProxyPatch builder with application/json body
-func NewArgocdInternalK8sProxyPatchRequest(server string, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPatchJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewArgocdInternalK8sProxyPatchRequestWithBody(server, clusterId, path, "application/json", bodyReader)
-}
-
-// NewArgocdInternalK8sProxyPatchRequestWithBody generates requests for ArgocdInternalK8sProxyPatch with any type of body
-func NewArgocdInternalK8sProxyPatchRequestWithBody(server string, clusterId openapi_types.UUID, path string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/internal/argocd/clusters/%s/k8s/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PATCH", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewArgocdInternalK8sProxyPostRequest calls the generic ArgocdInternalK8sProxyPost builder with application/json body
-func NewArgocdInternalK8sProxyPostRequest(server string, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPostJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewArgocdInternalK8sProxyPostRequestWithBody(server, clusterId, path, "application/json", bodyReader)
-}
-
-// NewArgocdInternalK8sProxyPostRequestWithBody generates requests for ArgocdInternalK8sProxyPost with any type of body
-func NewArgocdInternalK8sProxyPostRequestWithBody(server string, clusterId openapi_types.UUID, path string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/internal/argocd/clusters/%s/k8s/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewArgocdInternalK8sProxyPutRequest calls the generic ArgocdInternalK8sProxyPut builder with application/json body
-func NewArgocdInternalK8sProxyPutRequest(server string, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPutJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewArgocdInternalK8sProxyPutRequestWithBody(server, clusterId, path, "application/json", bodyReader)
-}
-
-// NewArgocdInternalK8sProxyPutRequestWithBody generates requests for ArgocdInternalK8sProxyPut with any type of body
-func NewArgocdInternalK8sProxyPutRequestWithBody(server string, clusterId openapi_types.UUID, path string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/internal/argocd/clusters/%s/k8s/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PUT", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewArgocdInternalK8sProxyTraceRequest generates requests for ArgocdInternalK8sProxyTrace
-func NewArgocdInternalK8sProxyTraceRequest(server string, clusterId openapi_types.UUID, path string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/internal/argocd/clusters/%s/k8s/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("TRACE", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
 
 	return req, nil
 }
@@ -41433,572 +44080,6 @@ func NewPodLogsWebSocketRequest(server string, clusterId openapi_types.UUID, nam
 	return req, nil
 }
 
-// NewArgocdUiDeleteRequest generates requests for ArgocdUiDelete
-func NewArgocdUiDeleteRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdUiGetRequest generates requests for ArgocdUiGet
-func NewArgocdUiGetRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdUiHeadRequest generates requests for ArgocdUiHead
-func NewArgocdUiHeadRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdUiOptionsRequest generates requests for ArgocdUiOptions
-func NewArgocdUiOptionsRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("OPTIONS", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdUiPatchRequest calls the generic ArgocdUiPatch builder with application/json body
-func NewArgocdUiPatchRequest(server string, body ArgocdUiPatchJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewArgocdUiPatchRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewArgocdUiPatchRequestWithBody generates requests for ArgocdUiPatch with any type of body
-func NewArgocdUiPatchRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PATCH", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewArgocdUiPostRequest calls the generic ArgocdUiPost builder with application/json body
-func NewArgocdUiPostRequest(server string, body ArgocdUiPostJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewArgocdUiPostRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewArgocdUiPostRequestWithBody generates requests for ArgocdUiPost with any type of body
-func NewArgocdUiPostRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewArgocdUiPutRequest calls the generic ArgocdUiPut builder with application/json body
-func NewArgocdUiPutRequest(server string, body ArgocdUiPutJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewArgocdUiPutRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewArgocdUiPutRequestWithBody generates requests for ArgocdUiPut with any type of body
-func NewArgocdUiPutRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PUT", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewArgocdUiTraceRequest generates requests for ArgocdUiTrace
-func NewArgocdUiTraceRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("TRACE", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdUiSubDeleteRequest generates requests for ArgocdUiSubDelete
-func NewArgocdUiSubDeleteRequest(server string, path string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdUiSubGetRequest generates requests for ArgocdUiSubGet
-func NewArgocdUiSubGetRequest(server string, path string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdUiSubHeadRequest generates requests for ArgocdUiSubHead
-func NewArgocdUiSubHeadRequest(server string, path string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdUiSubOptionsRequest generates requests for ArgocdUiSubOptions
-func NewArgocdUiSubOptionsRequest(server string, path string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("OPTIONS", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewArgocdUiSubPatchRequest calls the generic ArgocdUiSubPatch builder with application/json body
-func NewArgocdUiSubPatchRequest(server string, path string, body ArgocdUiSubPatchJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewArgocdUiSubPatchRequestWithBody(server, path, "application/json", bodyReader)
-}
-
-// NewArgocdUiSubPatchRequestWithBody generates requests for ArgocdUiSubPatch with any type of body
-func NewArgocdUiSubPatchRequestWithBody(server string, path string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PATCH", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewArgocdUiSubPostRequest calls the generic ArgocdUiSubPost builder with application/json body
-func NewArgocdUiSubPostRequest(server string, path string, body ArgocdUiSubPostJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewArgocdUiSubPostRequestWithBody(server, path, "application/json", bodyReader)
-}
-
-// NewArgocdUiSubPostRequestWithBody generates requests for ArgocdUiSubPost with any type of body
-func NewArgocdUiSubPostRequestWithBody(server string, path string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewArgocdUiSubPutRequest calls the generic ArgocdUiSubPut builder with application/json body
-func NewArgocdUiSubPutRequest(server string, path string, body ArgocdUiSubPutJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewArgocdUiSubPutRequestWithBody(server, path, "application/json", bodyReader)
-}
-
-// NewArgocdUiSubPutRequestWithBody generates requests for ArgocdUiSubPut with any type of body
-func NewArgocdUiSubPutRequestWithBody(server string, path string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PUT", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewArgocdUiSubTraceRequest generates requests for ArgocdUiSubTrace
-func NewArgocdUiSubTraceRequest(server string, path string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "path", runtime.ParamLocationPath, path)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/argocd/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("TRACE", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewTunnelHealthCheckRequest generates requests for TunnelHealthCheck
 func NewTunnelHealthCheckRequest(server string) (*http.Request, error) {
 	var err error
@@ -42618,23 +44699,6 @@ type ClientWithResponsesInterface interface {
 
 	AdminCharlieActionPolicyUpdateWithResponse(ctx context.Context, capability string, body AdminCharlieActionPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieActionPolicyUpdateResponse, error)
 
-	// AdminCharlieAgentInstallWithResponse request
-	AdminCharlieAgentInstallWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentInstallResponse, error)
-
-	// AdminCharlieAgentRollbackWithResponse request
-	AdminCharlieAgentRollbackWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentRollbackResponse, error)
-
-	// AdminCharlieAgentRotateWithResponse request
-	AdminCharlieAgentRotateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentRotateResponse, error)
-
-	// AdminCharlieAgentUninstallWithBodyWithResponse request with any body
-	AdminCharlieAgentUninstallWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUninstallResponse, error)
-
-	AdminCharlieAgentUninstallWithResponse(ctx context.Context, body AdminCharlieAgentUninstallJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUninstallResponse, error)
-
-	// AdminCharlieAgentUpgradeWithResponse request
-	AdminCharlieAgentUpgradeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUpgradeResponse, error)
-
 	// AdminCharlieAlertDeliveryProofsWithResponse request
 	AdminCharlieAlertDeliveryProofsWithResponse(ctx context.Context, params *AdminCharlieAlertDeliveryProofsParams, reqEditors ...RequestEditorFn) (*AdminCharlieAlertDeliveryProofsResponse, error)
 
@@ -42648,11 +44712,6 @@ type ClientWithResponsesInterface interface {
 
 	// AdminCharlieDiagnosticsRunWithResponse request
 	AdminCharlieDiagnosticsRunWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieDiagnosticsRunResponse, error)
-
-	// AdminCharlieDisconnectWithBodyWithResponse request with any body
-	AdminCharlieDisconnectWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieDisconnectResponse, error)
-
-	AdminCharlieDisconnectWithResponse(ctx context.Context, body AdminCharlieDisconnectJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieDisconnectResponse, error)
 
 	// AdminCharlieKubernetesVisibilityGetWithResponse request
 	AdminCharlieKubernetesVisibilityGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieKubernetesVisibilityGetResponse, error)
@@ -42830,31 +44889,6 @@ type ClientWithResponsesInterface interface {
 	// AdminWebhookTestWithResponse request
 	AdminWebhookTestWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*AdminWebhookTestResponse, error)
 
-	// GetApiV1AgentsFleetWithResponse request
-	GetApiV1AgentsFleetWithResponse(ctx context.Context, params *GetApiV1AgentsFleetParams, reqEditors ...RequestEditorFn) (*GetApiV1AgentsFleetResponse, error)
-
-	// GetApiV1AgentsFleetClusterIdDiagnosticsWithResponse request
-	GetApiV1AgentsFleetClusterIdDiagnosticsWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1AgentsFleetClusterIdDiagnosticsResponse, error)
-
-	// GetApiV1AgentsFleetClusterIdDiagnosticsBundleWithResponse request
-	GetApiV1AgentsFleetClusterIdDiagnosticsBundleWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1AgentsFleetClusterIdDiagnosticsBundleResponse, error)
-
-	// GetApiV1AgentsFleetClusterIdOperationsWithResponse request
-	GetApiV1AgentsFleetClusterIdOperationsWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1AgentsFleetClusterIdOperationsParams, reqEditors ...RequestEditorFn) (*GetApiV1AgentsFleetClusterIdOperationsResponse, error)
-
-	// PostApiV1AgentsFleetClusterIdSelfTestWithResponse request
-	PostApiV1AgentsFleetClusterIdSelfTestWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1AgentsFleetClusterIdSelfTestResponse, error)
-
-	// PostApiV1AgentsFleetClusterIdUpgradePlanWithBodyWithResponse request with any body
-	PostApiV1AgentsFleetClusterIdUpgradePlanWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1AgentsFleetClusterIdUpgradePlanResponse, error)
-
-	PostApiV1AgentsFleetClusterIdUpgradePlanWithResponse(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1AgentsFleetClusterIdUpgradePlanJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AgentsFleetClusterIdUpgradePlanResponse, error)
-
-	// PostApiV1AgentsFleetClusterIdUpgradeWithBodyWithResponse request with any body
-	PostApiV1AgentsFleetClusterIdUpgradeWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1AgentsFleetClusterIdUpgradeResponse, error)
-
-	PostApiV1AgentsFleetClusterIdUpgradeWithResponse(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1AgentsFleetClusterIdUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AgentsFleetClusterIdUpgradeResponse, error)
-
 	// GetApiV1AlertingChannelsWithResponse request
 	GetApiV1AlertingChannelsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1AlertingChannelsResponse, error)
 
@@ -42863,28 +44897,6 @@ type ClientWithResponsesInterface interface {
 
 	// GetApiV1AlertingEventsWithResponse request
 	GetApiV1AlertingEventsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1AlertingEventsResponse, error)
-
-	// PostApiV1ArgocdApplicationsIdSyncWithBodyWithResponse request with any body
-	PostApiV1ArgocdApplicationsIdSyncWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdApplicationsIdSyncResponse, error)
-
-	PostApiV1ArgocdApplicationsIdSyncWithResponse(ctx context.Context, id openapi_types.UUID, body PostApiV1ArgocdApplicationsIdSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdApplicationsIdSyncResponse, error)
-
-	// GetApiV1ArgocdInstancesWithResponse request
-	GetApiV1ArgocdInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdInstancesResponse, error)
-
-	// PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBodyWithResponse request with any body
-	PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse, error)
-
-	PostApiV1ArgocdInstancesIdApplicationsNameSyncWithResponse(ctx context.Context, id openapi_types.UUID, name string, body PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse, error)
-
-	// GetApiV1ArgocdInstancesIdOrphanReportWithResponse request
-	GetApiV1ArgocdInstancesIdOrphanReportWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1ArgocdInstancesIdOrphanReportParams, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdInstancesIdOrphanReportResponse, error)
-
-	// GetApiV1ArgocdOperationsWithResponse request
-	GetApiV1ArgocdOperationsWithResponse(ctx context.Context, params *GetApiV1ArgocdOperationsParams, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdOperationsResponse, error)
-
-	// GetApiV1ArgocdOperationsIdWithResponse request
-	GetApiV1ArgocdOperationsIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdOperationsIdResponse, error)
 
 	// ListAuditLogsWithResponse request
 	ListAuditLogsWithResponse(ctx context.Context, params *ListAuditLogsParams, reqEditors ...RequestEditorFn) (*ListAuditLogsResponse, error)
@@ -43105,7 +45117,7 @@ type ClientWithResponsesInterface interface {
 	GetApiV1CatalogChartsWithResponse(ctx context.Context, params *GetApiV1CatalogChartsParams, reqEditors ...RequestEditorFn) (*GetApiV1CatalogChartsResponse, error)
 
 	// GetApiV1CatalogChartsIdWithResponse request
-	GetApiV1CatalogChartsIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1CatalogChartsIdResponse, error)
+	GetApiV1CatalogChartsIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1CatalogChartsIdParams, reqEditors ...RequestEditorFn) (*GetApiV1CatalogChartsIdResponse, error)
 
 	// GetApiV1CatalogChartsIdReadmeWithResponse request
 	GetApiV1CatalogChartsIdReadmeWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1CatalogChartsIdReadmeParams, reqEditors ...RequestEditorFn) (*GetApiV1CatalogChartsIdReadmeResponse, error)
@@ -43150,6 +45162,12 @@ type ClientWithResponsesInterface interface {
 	// PostApiV1CatalogOperationsIdRetryWithResponse request
 	PostApiV1CatalogOperationsIdRetryWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1CatalogOperationsIdRetryResponse, error)
 
+	// GetApiV1CatalogRecommendationsPopularWithResponse request
+	GetApiV1CatalogRecommendationsPopularWithResponse(ctx context.Context, params *GetApiV1CatalogRecommendationsPopularParams, reqEditors ...RequestEditorFn) (*GetApiV1CatalogRecommendationsPopularResponse, error)
+
+	// GetApiV1CatalogRecommendationsSimilarChartIdWithResponse request
+	GetApiV1CatalogRecommendationsSimilarChartIdWithResponse(ctx context.Context, chartId openapi_types.UUID, params *GetApiV1CatalogRecommendationsSimilarChartIdParams, reqEditors ...RequestEditorFn) (*GetApiV1CatalogRecommendationsSimilarChartIdResponse, error)
+
 	// GetApiV1CatalogRepositoriesWithResponse request
 	GetApiV1CatalogRepositoriesWithResponse(ctx context.Context, params *GetApiV1CatalogRepositoriesParams, reqEditors ...RequestEditorFn) (*GetApiV1CatalogRepositoriesResponse, error)
 
@@ -43182,6 +45200,9 @@ type ClientWithResponsesInterface interface {
 	DecideCharlieApprovalWithBodyWithResponse(ctx context.Context, approvalId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DecideCharlieApprovalResponse, error)
 
 	DecideCharlieApprovalWithResponse(ctx context.Context, approvalId string, body DecideCharlieApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*DecideCharlieApprovalResponse, error)
+
+	// ListCharlieCommandsWithResponse request
+	ListCharlieCommandsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListCharlieCommandsResponse, error)
 
 	// SearchCharlieContextWithResponse request
 	SearchCharlieContextWithResponse(ctx context.Context, params *SearchCharlieContextParams, reqEditors ...RequestEditorFn) (*SearchCharlieContextResponse, error)
@@ -43247,8 +45268,53 @@ type ClientWithResponsesInterface interface {
 
 	CreateCharlieSessionMessageWithResponse(ctx context.Context, sessionId openapi_types.UUID, body CreateCharlieSessionMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCharlieSessionMessageResponse, error)
 
+	// ListCharlieThreadsWithResponse request
+	ListCharlieThreadsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListCharlieThreadsResponse, error)
+
+	// GetActiveCharlieThreadWithResponse request
+	GetActiveCharlieThreadWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetActiveCharlieThreadResponse, error)
+
+	// CreateCharlieThreadMessageWithBodyWithResponse request with any body
+	CreateCharlieThreadMessageWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCharlieThreadMessageResponse, error)
+
+	CreateCharlieThreadMessageWithResponse(ctx context.Context, body CreateCharlieThreadMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCharlieThreadMessageResponse, error)
+
+	// CreateCharlieThreadWithResponse request
+	CreateCharlieThreadWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*CreateCharlieThreadResponse, error)
+
+	// GetCharlieThreadHistoryWithResponse request
+	GetCharlieThreadHistoryWithResponse(ctx context.Context, threadId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCharlieThreadHistoryResponse, error)
+
 	// GetApiV1CloudCredentialsProvidersWithResponse request
 	GetApiV1CloudCredentialsProvidersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1CloudCredentialsProvidersResponse, error)
+
+	// GetApiV1ClusterAgentsWithResponse request
+	GetApiV1ClusterAgentsWithResponse(ctx context.Context, params *GetApiV1ClusterAgentsParams, reqEditors ...RequestEditorFn) (*GetApiV1ClusterAgentsResponse, error)
+
+	// GetApiV1ClusterAgentsClusterIdWithResponse request
+	GetApiV1ClusterAgentsClusterIdWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClusterAgentsClusterIdResponse, error)
+
+	// GetApiV1ClusterAgentsClusterIdDiagnosticsWithResponse request
+	GetApiV1ClusterAgentsClusterIdDiagnosticsWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClusterAgentsClusterIdDiagnosticsResponse, error)
+
+	// GetApiV1ClusterAgentsClusterIdDiagnosticsBundleWithResponse request
+	GetApiV1ClusterAgentsClusterIdDiagnosticsBundleWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClusterAgentsClusterIdDiagnosticsBundleResponse, error)
+
+	// GetApiV1ClusterAgentsClusterIdOperationsWithResponse request
+	GetApiV1ClusterAgentsClusterIdOperationsWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClusterAgentsClusterIdOperationsParams, reqEditors ...RequestEditorFn) (*GetApiV1ClusterAgentsClusterIdOperationsResponse, error)
+
+	// PostApiV1ClusterAgentsClusterIdSelfTestWithResponse request
+	PostApiV1ClusterAgentsClusterIdSelfTestWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1ClusterAgentsClusterIdSelfTestResponse, error)
+
+	// PostApiV1ClusterAgentsClusterIdUpgradePlanWithBodyWithResponse request with any body
+	PostApiV1ClusterAgentsClusterIdUpgradePlanWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClusterAgentsClusterIdUpgradePlanResponse, error)
+
+	PostApiV1ClusterAgentsClusterIdUpgradePlanWithResponse(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1ClusterAgentsClusterIdUpgradePlanJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClusterAgentsClusterIdUpgradePlanResponse, error)
+
+	// PostApiV1ClusterAgentsClusterIdUpgradeWithBodyWithResponse request with any body
+	PostApiV1ClusterAgentsClusterIdUpgradeWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClusterAgentsClusterIdUpgradeResponse, error)
+
+	PostApiV1ClusterAgentsClusterIdUpgradeWithResponse(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1ClusterAgentsClusterIdUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClusterAgentsClusterIdUpgradeResponse, error)
 
 	// GetApiV1ClusterGroupsWithResponse request
 	GetApiV1ClusterGroupsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ClusterGroupsResponse, error)
@@ -43784,6 +45850,153 @@ type ClientWithResponsesInterface interface {
 	// TunnelConnectTraceWithResponse request
 	TunnelConnectTraceWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectTraceResponse, error)
 
+	// GetApiV1DeliveryBundlesWithResponse request
+	GetApiV1DeliveryBundlesWithResponse(ctx context.Context, params *GetApiV1DeliveryBundlesParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryBundlesResponse, error)
+
+	// PostApiV1DeliveryBundlesWithBodyWithResponse request with any body
+	PostApiV1DeliveryBundlesWithBodyWithResponse(ctx context.Context, params *PostApiV1DeliveryBundlesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryBundlesResponse, error)
+
+	PostApiV1DeliveryBundlesWithResponse(ctx context.Context, params *PostApiV1DeliveryBundlesParams, body PostApiV1DeliveryBundlesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryBundlesResponse, error)
+
+	// DeleteApiV1DeliveryBundlesIdWithResponse request
+	DeleteApiV1DeliveryBundlesIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteApiV1DeliveryBundlesIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1DeliveryBundlesIdResponse, error)
+
+	// GetApiV1DeliveryBundlesIdWithResponse request
+	GetApiV1DeliveryBundlesIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryBundlesIdParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryBundlesIdResponse, error)
+
+	// PatchApiV1DeliveryBundlesIdWithBodyWithResponse request with any body
+	PatchApiV1DeliveryBundlesIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryBundlesIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1DeliveryBundlesIdResponse, error)
+
+	PatchApiV1DeliveryBundlesIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryBundlesIdParams, body PatchApiV1DeliveryBundlesIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1DeliveryBundlesIdResponse, error)
+
+	// GetApiV1DeliveryBundlesIdVersionsWithResponse request
+	GetApiV1DeliveryBundlesIdVersionsWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryBundlesIdVersionsParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryBundlesIdVersionsResponse, error)
+
+	// PostApiV1DeliveryBundlesIdVersionsWithBodyWithResponse request with any body
+	PostApiV1DeliveryBundlesIdVersionsWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryBundlesIdVersionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryBundlesIdVersionsResponse, error)
+
+	PostApiV1DeliveryBundlesIdVersionsWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryBundlesIdVersionsParams, body PostApiV1DeliveryBundlesIdVersionsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryBundlesIdVersionsResponse, error)
+
+	// GetApiV1DeliveryBundlesIdVersionsVersionIdWithResponse request
+	GetApiV1DeliveryBundlesIdVersionsVersionIdWithResponse(ctx context.Context, id openapi_types.UUID, versionId openapi_types.UUID, params *GetApiV1DeliveryBundlesIdVersionsVersionIdParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryBundlesIdVersionsVersionIdResponse, error)
+
+	// GetApiV1DeliveryClustersClusterIdInventoryWithResponse request
+	GetApiV1DeliveryClustersClusterIdInventoryWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1DeliveryClustersClusterIdInventoryParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryClustersClusterIdInventoryResponse, error)
+
+	// GetApiV1DeliveryDeploymentsWithResponse request
+	GetApiV1DeliveryDeploymentsWithResponse(ctx context.Context, params *GetApiV1DeliveryDeploymentsParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryDeploymentsResponse, error)
+
+	// GetApiV1DeliveryDeploymentsIdWithResponse request
+	GetApiV1DeliveryDeploymentsIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryDeploymentsIdParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryDeploymentsIdResponse, error)
+
+	// GetApiV1DeliveryDeploymentsIdEventsWithResponse request
+	GetApiV1DeliveryDeploymentsIdEventsWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryDeploymentsIdEventsParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryDeploymentsIdEventsResponse, error)
+
+	// PostApiV1DeliveryDeploymentsIdReconcileWithResponse request
+	PostApiV1DeliveryDeploymentsIdReconcileWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryDeploymentsIdReconcileResponse, error)
+
+	// PostApiV1DeliveryDeploymentsIdResumeWithResponse request
+	PostApiV1DeliveryDeploymentsIdResumeWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryDeploymentsIdResumeResponse, error)
+
+	// PostApiV1DeliveryDeploymentsIdSuspendWithResponse request
+	PostApiV1DeliveryDeploymentsIdSuspendWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryDeploymentsIdSuspendResponse, error)
+
+	// GetApiV1DeliveryRolloutsWithResponse request
+	GetApiV1DeliveryRolloutsWithResponse(ctx context.Context, params *GetApiV1DeliveryRolloutsParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryRolloutsResponse, error)
+
+	// GetApiV1DeliveryRolloutsIdWithResponse request
+	GetApiV1DeliveryRolloutsIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryRolloutsIdResponse, error)
+
+	// PostApiV1DeliveryRolloutsIdAbortWithResponse request
+	PostApiV1DeliveryRolloutsIdAbortWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdAbortResponse, error)
+
+	// PostApiV1DeliveryRolloutsIdApproveWithBodyWithResponse request with any body
+	PostApiV1DeliveryRolloutsIdApproveWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdApproveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdApproveResponse, error)
+
+	PostApiV1DeliveryRolloutsIdApproveWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdApproveParams, body PostApiV1DeliveryRolloutsIdApproveJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdApproveResponse, error)
+
+	// GetApiV1DeliveryRolloutsIdClustersWithResponse request
+	GetApiV1DeliveryRolloutsIdClustersWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdClustersParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryRolloutsIdClustersResponse, error)
+
+	// GetApiV1DeliveryRolloutsIdEventsWithResponse request
+	GetApiV1DeliveryRolloutsIdEventsWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdEventsParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryRolloutsIdEventsResponse, error)
+
+	// PostApiV1DeliveryRolloutsIdPauseWithResponse request
+	PostApiV1DeliveryRolloutsIdPauseWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdPauseResponse, error)
+
+	// PostApiV1DeliveryRolloutsIdResumeWithResponse request
+	PostApiV1DeliveryRolloutsIdResumeWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdResumeResponse, error)
+
+	// PostApiV1DeliveryRolloutsIdRetryWithResponse request
+	PostApiV1DeliveryRolloutsIdRetryWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdRetryResponse, error)
+
+	// PostApiV1DeliveryRolloutsIdRollbackWithBodyWithResponse request with any body
+	PostApiV1DeliveryRolloutsIdRollbackWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdRollbackResponse, error)
+
+	PostApiV1DeliveryRolloutsIdRollbackWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdRollbackParams, body PostApiV1DeliveryRolloutsIdRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdRollbackResponse, error)
+
+	// GetApiV1DeliverySourcesWithResponse request
+	GetApiV1DeliverySourcesWithResponse(ctx context.Context, params *GetApiV1DeliverySourcesParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliverySourcesResponse, error)
+
+	// PostApiV1DeliverySourcesWithBodyWithResponse request with any body
+	PostApiV1DeliverySourcesWithBodyWithResponse(ctx context.Context, params *PostApiV1DeliverySourcesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliverySourcesResponse, error)
+
+	PostApiV1DeliverySourcesWithResponse(ctx context.Context, params *PostApiV1DeliverySourcesParams, body PostApiV1DeliverySourcesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliverySourcesResponse, error)
+
+	// DeleteApiV1DeliverySourcesIdWithResponse request
+	DeleteApiV1DeliverySourcesIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteApiV1DeliverySourcesIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1DeliverySourcesIdResponse, error)
+
+	// GetApiV1DeliverySourcesIdWithResponse request
+	GetApiV1DeliverySourcesIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliverySourcesIdParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliverySourcesIdResponse, error)
+
+	// PatchApiV1DeliverySourcesIdWithBodyWithResponse request with any body
+	PatchApiV1DeliverySourcesIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliverySourcesIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1DeliverySourcesIdResponse, error)
+
+	PatchApiV1DeliverySourcesIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliverySourcesIdParams, body PatchApiV1DeliverySourcesIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1DeliverySourcesIdResponse, error)
+
+	// PostApiV1DeliverySourcesIdRotateCredentialWithBodyWithResponse request with any body
+	PostApiV1DeliverySourcesIdRotateCredentialWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdRotateCredentialParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliverySourcesIdRotateCredentialResponse, error)
+
+	PostApiV1DeliverySourcesIdRotateCredentialWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdRotateCredentialParams, body PostApiV1DeliverySourcesIdRotateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliverySourcesIdRotateCredentialResponse, error)
+
+	// PostApiV1DeliverySourcesIdVerifyWithBodyWithResponse request with any body
+	PostApiV1DeliverySourcesIdVerifyWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdVerifyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliverySourcesIdVerifyResponse, error)
+
+	PostApiV1DeliverySourcesIdVerifyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdVerifyParams, body PostApiV1DeliverySourcesIdVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliverySourcesIdVerifyResponse, error)
+
+	// GetApiV1DeliverySystemCompatibilityWithResponse request
+	GetApiV1DeliverySystemCompatibilityWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1DeliverySystemCompatibilityResponse, error)
+
+	// GetApiV1DeliveryTargetsWithResponse request
+	GetApiV1DeliveryTargetsWithResponse(ctx context.Context, params *GetApiV1DeliveryTargetsParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryTargetsResponse, error)
+
+	// PostApiV1DeliveryTargetsWithBodyWithResponse request with any body
+	PostApiV1DeliveryTargetsWithBodyWithResponse(ctx context.Context, params *PostApiV1DeliveryTargetsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryTargetsResponse, error)
+
+	PostApiV1DeliveryTargetsWithResponse(ctx context.Context, params *PostApiV1DeliveryTargetsParams, body PostApiV1DeliveryTargetsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryTargetsResponse, error)
+
+	// DeleteApiV1DeliveryTargetsIdWithResponse request
+	DeleteApiV1DeliveryTargetsIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteApiV1DeliveryTargetsIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1DeliveryTargetsIdResponse, error)
+
+	// GetApiV1DeliveryTargetsIdWithResponse request
+	GetApiV1DeliveryTargetsIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryTargetsIdParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryTargetsIdResponse, error)
+
+	// PatchApiV1DeliveryTargetsIdWithBodyWithResponse request with any body
+	PatchApiV1DeliveryTargetsIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryTargetsIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1DeliveryTargetsIdResponse, error)
+
+	PatchApiV1DeliveryTargetsIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryTargetsIdParams, body PatchApiV1DeliveryTargetsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1DeliveryTargetsIdResponse, error)
+
+	// PostApiV1DeliveryTargetsIdOrphanWithResponse request
+	PostApiV1DeliveryTargetsIdOrphanWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdOrphanParams, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryTargetsIdOrphanResponse, error)
+
+	// PostApiV1DeliveryTargetsIdPreviewWithResponse request
+	PostApiV1DeliveryTargetsIdPreviewWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdPreviewParams, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryTargetsIdPreviewResponse, error)
+
+	// PostApiV1DeliveryTargetsIdRolloutsWithBodyWithResponse request with any body
+	PostApiV1DeliveryTargetsIdRolloutsWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdRolloutsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryTargetsIdRolloutsResponse, error)
+
+	PostApiV1DeliveryTargetsIdRolloutsWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdRolloutsParams, body PostApiV1DeliveryTargetsIdRolloutsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryTargetsIdRolloutsResponse, error)
+
 	// GetApiV1ExtensionsWithResponse request
 	GetApiV1ExtensionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ExtensionsResponse, error)
 
@@ -43823,62 +46036,6 @@ type ClientWithResponsesInterface interface {
 	PostApiV1ExtensionsNameTokenWithBodyWithResponse(ctx context.Context, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameTokenResponse, error)
 
 	PostApiV1ExtensionsNameTokenWithResponse(ctx context.Context, name string, body PostApiV1ExtensionsNameTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameTokenResponse, error)
-
-	// GetApiV1FleetOperationsWithResponse request
-	GetApiV1FleetOperationsWithResponse(ctx context.Context, params *GetApiV1FleetOperationsParams, reqEditors ...RequestEditorFn) (*GetApiV1FleetOperationsResponse, error)
-
-	// PostApiV1FleetOperationsWithBodyWithResponse request with any body
-	PostApiV1FleetOperationsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1FleetOperationsResponse, error)
-
-	PostApiV1FleetOperationsWithResponse(ctx context.Context, body PostApiV1FleetOperationsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1FleetOperationsResponse, error)
-
-	// GetApiV1FleetOperationsIdWithResponse request
-	GetApiV1FleetOperationsIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1FleetOperationsIdResponse, error)
-
-	// PostApiV1FleetOperationsIdAbortWithResponse request
-	PostApiV1FleetOperationsIdAbortWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1FleetOperationsIdAbortResponse, error)
-
-	// PostApiV1FleetOperationsIdPauseWithResponse request
-	PostApiV1FleetOperationsIdPauseWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1FleetOperationsIdPauseResponse, error)
-
-	// PostApiV1FleetOperationsIdResumeWithResponse request
-	PostApiV1FleetOperationsIdResumeWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1FleetOperationsIdResumeResponse, error)
-
-	// PostApiV1FleetOperationsIdRetryFailedWithResponse request
-	PostApiV1FleetOperationsIdRetryFailedWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1FleetOperationsIdRetryFailedResponse, error)
-
-	// GetApiV1FleetOperationsIdTargetsWithResponse request
-	GetApiV1FleetOperationsIdTargetsWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1FleetOperationsIdTargetsParams, reqEditors ...RequestEditorFn) (*GetApiV1FleetOperationsIdTargetsResponse, error)
-
-	// ArgocdInternalK8sProxyDeleteWithResponse request
-	ArgocdInternalK8sProxyDeleteWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyDeleteResponse, error)
-
-	// ArgocdInternalK8sProxyGetWithResponse request
-	ArgocdInternalK8sProxyGetWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyGetResponse, error)
-
-	// ArgocdInternalK8sProxyHeadWithResponse request
-	ArgocdInternalK8sProxyHeadWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyHeadResponse, error)
-
-	// ArgocdInternalK8sProxyOptionsWithResponse request
-	ArgocdInternalK8sProxyOptionsWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyOptionsResponse, error)
-
-	// ArgocdInternalK8sProxyPatchWithBodyWithResponse request with any body
-	ArgocdInternalK8sProxyPatchWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyPatchResponse, error)
-
-	ArgocdInternalK8sProxyPatchWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPatchJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyPatchResponse, error)
-
-	// ArgocdInternalK8sProxyPostWithBodyWithResponse request with any body
-	ArgocdInternalK8sProxyPostWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyPostResponse, error)
-
-	ArgocdInternalK8sProxyPostWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPostJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyPostResponse, error)
-
-	// ArgocdInternalK8sProxyPutWithBodyWithResponse request with any body
-	ArgocdInternalK8sProxyPutWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyPutResponse, error)
-
-	ArgocdInternalK8sProxyPutWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPutJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyPutResponse, error)
-
-	// ArgocdInternalK8sProxyTraceWithResponse request
-	ArgocdInternalK8sProxyTraceWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyTraceResponse, error)
 
 	// PostApiV1NodesClusterIdNodeNameAnnotationsWithBodyWithResponse request with any body
 	PostApiV1NodesClusterIdNodeNameAnnotationsWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, nodeName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1NodesClusterIdNodeNameAnnotationsResponse, error)
@@ -44291,66 +46448,6 @@ type ClientWithResponsesInterface interface {
 	// PodLogsWebSocketWithResponse request
 	PodLogsWebSocketWithResponse(ctx context.Context, clusterId openapi_types.UUID, namespace string, pod string, container string, params *PodLogsWebSocketParams, reqEditors ...RequestEditorFn) (*PodLogsWebSocketResponse, error)
 
-	// ArgocdUiDeleteWithResponse request
-	ArgocdUiDeleteWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ArgocdUiDeleteResponse, error)
-
-	// ArgocdUiGetWithResponse request
-	ArgocdUiGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ArgocdUiGetResponse, error)
-
-	// ArgocdUiHeadWithResponse request
-	ArgocdUiHeadWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ArgocdUiHeadResponse, error)
-
-	// ArgocdUiOptionsWithResponse request
-	ArgocdUiOptionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ArgocdUiOptionsResponse, error)
-
-	// ArgocdUiPatchWithBodyWithResponse request with any body
-	ArgocdUiPatchWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdUiPatchResponse, error)
-
-	ArgocdUiPatchWithResponse(ctx context.Context, body ArgocdUiPatchJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdUiPatchResponse, error)
-
-	// ArgocdUiPostWithBodyWithResponse request with any body
-	ArgocdUiPostWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdUiPostResponse, error)
-
-	ArgocdUiPostWithResponse(ctx context.Context, body ArgocdUiPostJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdUiPostResponse, error)
-
-	// ArgocdUiPutWithBodyWithResponse request with any body
-	ArgocdUiPutWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdUiPutResponse, error)
-
-	ArgocdUiPutWithResponse(ctx context.Context, body ArgocdUiPutJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdUiPutResponse, error)
-
-	// ArgocdUiTraceWithResponse request
-	ArgocdUiTraceWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ArgocdUiTraceResponse, error)
-
-	// ArgocdUiSubDeleteWithResponse request
-	ArgocdUiSubDeleteWithResponse(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*ArgocdUiSubDeleteResponse, error)
-
-	// ArgocdUiSubGetWithResponse request
-	ArgocdUiSubGetWithResponse(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*ArgocdUiSubGetResponse, error)
-
-	// ArgocdUiSubHeadWithResponse request
-	ArgocdUiSubHeadWithResponse(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*ArgocdUiSubHeadResponse, error)
-
-	// ArgocdUiSubOptionsWithResponse request
-	ArgocdUiSubOptionsWithResponse(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*ArgocdUiSubOptionsResponse, error)
-
-	// ArgocdUiSubPatchWithBodyWithResponse request with any body
-	ArgocdUiSubPatchWithBodyWithResponse(ctx context.Context, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdUiSubPatchResponse, error)
-
-	ArgocdUiSubPatchWithResponse(ctx context.Context, path string, body ArgocdUiSubPatchJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdUiSubPatchResponse, error)
-
-	// ArgocdUiSubPostWithBodyWithResponse request with any body
-	ArgocdUiSubPostWithBodyWithResponse(ctx context.Context, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdUiSubPostResponse, error)
-
-	ArgocdUiSubPostWithResponse(ctx context.Context, path string, body ArgocdUiSubPostJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdUiSubPostResponse, error)
-
-	// ArgocdUiSubPutWithBodyWithResponse request with any body
-	ArgocdUiSubPutWithBodyWithResponse(ctx context.Context, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdUiSubPutResponse, error)
-
-	ArgocdUiSubPutWithResponse(ctx context.Context, path string, body ArgocdUiSubPutJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdUiSubPutResponse, error)
-
-	// ArgocdUiSubTraceWithResponse request
-	ArgocdUiSubTraceWithResponse(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*ArgocdUiSubTraceResponse, error)
-
 	// TunnelHealthCheckWithResponse request
 	TunnelHealthCheckWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*TunnelHealthCheckResponse, error)
 
@@ -44694,133 +46791,6 @@ func (r AdminCharlieActionPolicyUpdateResponse) StatusCode() int {
 	return 0
 }
 
-type AdminCharlieAgentInstallResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *CharlieAdminAgent
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
-	JSON503      *ServiceUnavailable
-}
-
-// Status returns HTTPResponse.Status
-func (r AdminCharlieAgentInstallResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r AdminCharlieAgentInstallResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type AdminCharlieAgentRollbackResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *CharlieAdminAgent
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r AdminCharlieAgentRollbackResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r AdminCharlieAgentRollbackResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type AdminCharlieAgentRotateResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *CharlieAdminAgent
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r AdminCharlieAgentRotateResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r AdminCharlieAgentRotateResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type AdminCharlieAgentUninstallResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
-	JSON503      *ServiceUnavailable
-}
-
-// Status returns HTTPResponse.Status
-func (r AdminCharlieAgentUninstallResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r AdminCharlieAgentUninstallResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type AdminCharlieAgentUpgradeResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *CharlieAdminAgent
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r AdminCharlieAgentUpgradeResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r AdminCharlieAgentUpgradeResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type AdminCharlieAlertDeliveryProofsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -44919,32 +46889,6 @@ func (r AdminCharlieDiagnosticsRunResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r AdminCharlieDiagnosticsRunResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type AdminCharlieDisconnectResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
-	JSON503      *ServiceUnavailable
-}
-
-// Status returns HTTPResponse.Status
-func (r AdminCharlieDisconnectResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r AdminCharlieDisconnectResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -46254,176 +48198,6 @@ func (r AdminWebhookTestResponse) StatusCode() int {
 	return 0
 }
 
-type GetApiV1AgentsFleetResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data *AgentFleetResponse `json:"data,omitempty"`
-	}
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1AgentsFleetResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1AgentsFleetResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetApiV1AgentsFleetClusterIdDiagnosticsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data *AgentDiagnostics `json:"data,omitempty"`
-	}
-	JSON404 *NotFound
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1AgentsFleetClusterIdDiagnosticsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1AgentsFleetClusterIdDiagnosticsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetApiV1AgentsFleetClusterIdDiagnosticsBundleResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *AgentDiagnosticsBundle
-	JSON404      *NotFound
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1AgentsFleetClusterIdDiagnosticsBundleResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1AgentsFleetClusterIdDiagnosticsBundleResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetApiV1AgentsFleetClusterIdOperationsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data *AgentLifecycleOperationsResponse `json:"data,omitempty"`
-	}
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1AgentsFleetClusterIdOperationsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1AgentsFleetClusterIdOperationsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostApiV1AgentsFleetClusterIdSelfTestResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data *AgentSelfTest `json:"data,omitempty"`
-	}
-	JSON404 *NotFound
-}
-
-// Status returns HTTPResponse.Status
-func (r PostApiV1AgentsFleetClusterIdSelfTestResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostApiV1AgentsFleetClusterIdSelfTestResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostApiV1AgentsFleetClusterIdUpgradePlanResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data *AgentUpgradePlan `json:"data,omitempty"`
-	}
-}
-
-// Status returns HTTPResponse.Status
-func (r PostApiV1AgentsFleetClusterIdUpgradePlanResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostApiV1AgentsFleetClusterIdUpgradePlanResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostApiV1AgentsFleetClusterIdUpgradeResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON202      *struct {
-		Data *AgentUpgradeOperationResponse `json:"data,omitempty"`
-	}
-	JSON409 *map[string]interface{}
-}
-
-// Status returns HTTPResponse.Status
-func (r PostApiV1AgentsFleetClusterIdUpgradeResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostApiV1AgentsFleetClusterIdUpgradeResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type GetApiV1AlertingChannelsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -46482,144 +48256,6 @@ func (r GetApiV1AlertingEventsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetApiV1AlertingEventsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostApiV1ArgocdApplicationsIdSyncResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON202      *ArgoOperationEnvelope
-	JSON404      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PostApiV1ArgocdApplicationsIdSyncResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostApiV1ArgocdApplicationsIdSyncResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetApiV1ArgocdInstancesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1ArgocdInstancesResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1ArgocdInstancesResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON202      *ArgoOperationEnvelope
-	JSON404      *ErrorEnvelope
-	JSON409      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetApiV1ArgocdInstancesIdOrphanReportResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data *ArgoOrphanReport `json:"data,omitempty"`
-	}
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1ArgocdInstancesIdOrphanReportResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1ArgocdInstancesIdOrphanReportResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetApiV1ArgocdOperationsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1ArgocdOperationsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1ArgocdOperationsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetApiV1ArgocdOperationsIdResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ArgoOperationEnvelope
-	JSON404      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1ArgocdOperationsIdResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1ArgocdOperationsIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -48653,6 +50289,75 @@ func (r PostApiV1CatalogOperationsIdRetryResponse) StatusCode() int {
 	return 0
 }
 
+type GetApiV1CatalogRecommendationsPopularResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		// Count Total number of items across all pages.
+		Count int64                 `json:"count"`
+		Data  []ChartRecommendation `json:"data"`
+
+		// Next URL of the next page, or null on the last page.
+		Next *string `json:"next"`
+
+		// Previous URL of the previous page, or null on the first page.
+		Previous *string `json:"previous"`
+	}
+	JSON400 *BadRequest
+	JSON403 *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1CatalogRecommendationsPopularResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1CatalogRecommendationsPopularResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1CatalogRecommendationsSimilarChartIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		// Count Total number of items across all pages.
+		Count int64                 `json:"count"`
+		Data  []ChartRecommendation `json:"data"`
+
+		// Next URL of the next page, or null on the last page.
+		Next *string `json:"next"`
+
+		// Previous URL of the previous page, or null on the first page.
+		Previous *string `json:"previous"`
+	}
+	JSON400 *BadRequest
+	JSON403 *Forbidden
+	JSON404 *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1CatalogRecommendationsSimilarChartIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1CatalogRecommendationsSimilarChartIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetApiV1CatalogRepositoriesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -48904,6 +50609,30 @@ func (r DecideCharlieApprovalResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r DecideCharlieApprovalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListCharlieCommandsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieCommandCatalog
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCharlieCommandsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCharlieCommandsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -49337,6 +51066,131 @@ func (r CreateCharlieSessionMessageResponse) StatusCode() int {
 	return 0
 }
 
+type ListCharlieThreadsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Threads []CharlieThreadMetadata `json:"threads"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCharlieThreadsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCharlieThreadsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetActiveCharlieThreadResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *map[string]interface{}
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r GetActiveCharlieThreadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetActiveCharlieThreadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreateCharlieThreadMessageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *map[string]interface{}
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateCharlieThreadMessageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateCharlieThreadMessageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreateCharlieThreadResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *map[string]interface{}
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateCharlieThreadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateCharlieThreadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCharlieThreadHistoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *map[string]interface{}
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCharlieThreadHistoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCharlieThreadHistoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetApiV1CloudCredentialsProvidersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -49357,6 +51211,198 @@ func (r GetApiV1CloudCredentialsProvidersResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetApiV1CloudCredentialsProvidersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1ClusterAgentsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data *ClusterAgentResponse `json:"data,omitempty"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClusterAgentsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClusterAgentsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1ClusterAgentsClusterIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClusterAgentsClusterIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClusterAgentsClusterIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1ClusterAgentsClusterIdDiagnosticsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data *AgentDiagnostics `json:"data,omitempty"`
+	}
+	JSON404 *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClusterAgentsClusterIdDiagnosticsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClusterAgentsClusterIdDiagnosticsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1ClusterAgentsClusterIdDiagnosticsBundleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AgentDiagnosticsBundle
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClusterAgentsClusterIdDiagnosticsBundleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClusterAgentsClusterIdDiagnosticsBundleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1ClusterAgentsClusterIdOperationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data *AgentLifecycleOperationsResponse `json:"data,omitempty"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClusterAgentsClusterIdOperationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClusterAgentsClusterIdOperationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClusterAgentsClusterIdSelfTestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data *AgentSelfTest `json:"data,omitempty"`
+	}
+	JSON404 *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClusterAgentsClusterIdSelfTestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClusterAgentsClusterIdSelfTestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClusterAgentsClusterIdUpgradePlanResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data *AgentUpgradePlan `json:"data,omitempty"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClusterAgentsClusterIdUpgradePlanResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClusterAgentsClusterIdUpgradePlanResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClusterAgentsClusterIdUpgradeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *struct {
+		Data *AgentUpgradeOperationResponse `json:"data,omitempty"`
+	}
+	JSON409 *map[string]interface{}
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClusterAgentsClusterIdUpgradeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClusterAgentsClusterIdUpgradeResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -53125,6 +55171,920 @@ func (r TunnelConnectTraceResponse) StatusCode() int {
 	return 0
 }
 
+type GetApiV1DeliveryBundlesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryBundlePage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryBundlesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryBundlesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryBundlesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *DeliveryBundleEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryBundlesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryBundlesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteApiV1DeliveryBundlesIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1DeliveryBundlesIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1DeliveryBundlesIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryBundlesIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryBundleEnvelope
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryBundlesIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryBundlesIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchApiV1DeliveryBundlesIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryBundleEnvelope
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchApiV1DeliveryBundlesIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchApiV1DeliveryBundlesIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryBundlesIdVersionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryBundleVersionPage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryBundlesIdVersionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryBundlesIdVersionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryBundlesIdVersionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *DeliveryBundleVersionEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryBundlesIdVersionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryBundlesIdVersionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryBundlesIdVersionsVersionIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryBundleVersionEnvelope
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryBundlesIdVersionsVersionIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryBundlesIdVersionsVersionIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryClustersClusterIdInventoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryClusterInventoryEnvelope
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryClustersClusterIdInventoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryClustersClusterIdInventoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryDeploymentsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ClusterDeploymentPage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryDeploymentsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryDeploymentsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryDeploymentsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ClusterDeploymentDetailEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryDeploymentsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryDeploymentsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryDeploymentsIdEventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ClusterDeploymentEventPage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryDeploymentsIdEventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryDeploymentsIdEventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryDeploymentsIdReconcileResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryDeploymentsIdReconcileResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryDeploymentsIdReconcileResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryDeploymentsIdResumeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryDeploymentsIdResumeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryDeploymentsIdResumeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryDeploymentsIdSuspendResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryDeploymentsIdSuspendResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryDeploymentsIdSuspendResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryRolloutsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryRolloutPage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryRolloutsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryRolloutsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryRolloutsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryRolloutDetailEnvelope
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryRolloutsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryRolloutsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryRolloutsIdAbortResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryRolloutsIdAbortResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryRolloutsIdAbortResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryRolloutsIdApproveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *DeliveryRolloutControlEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryRolloutsIdApproveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryRolloutsIdApproveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryRolloutsIdClustersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryRolloutClusterPage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryRolloutsIdClustersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryRolloutsIdClustersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryRolloutsIdEventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryRolloutEventPage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryRolloutsIdEventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryRolloutsIdEventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryRolloutsIdPauseResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryRolloutsIdPauseResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryRolloutsIdPauseResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryRolloutsIdResumeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryRolloutsIdResumeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryRolloutsIdResumeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryRolloutsIdRetryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryRolloutsIdRetryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryRolloutsIdRetryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryRolloutsIdRollbackResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *DeliveryRolloutControlEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryRolloutsIdRollbackResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryRolloutsIdRollbackResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliverySourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliverySourcePage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliverySourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliverySourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliverySourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *DeliverySourceEnvelope
+	JSON400      *BadRequest
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliverySourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliverySourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteApiV1DeliverySourcesIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1DeliverySourcesIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1DeliverySourcesIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliverySourcesIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliverySourceEnvelope
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliverySourcesIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliverySourcesIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchApiV1DeliverySourcesIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliverySourceEnvelope
+	JSON400      *BadRequest
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchApiV1DeliverySourcesIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchApiV1DeliverySourcesIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliverySourcesIdRotateCredentialResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliverySourceEnvelope
+	JSON400      *BadRequest
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliverySourcesIdRotateCredentialResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliverySourcesIdRotateCredentialResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliverySourcesIdVerifyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliverySourcesIdVerifyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliverySourcesIdVerifyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliverySystemCompatibilityResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliverySystemCompatibilityEnvelope
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliverySystemCompatibilityResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliverySystemCompatibilityResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryTargetsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryTargetPage
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryTargetsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryTargetsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryTargetsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *DeliveryTargetEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryTargetsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryTargetsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteApiV1DeliveryTargetsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *DeliveryTargetDeletionEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1DeliveryTargetsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1DeliveryTargetsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1DeliveryTargetsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryTargetEnvelope
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1DeliveryTargetsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1DeliveryTargetsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchApiV1DeliveryTargetsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryTargetEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchApiV1DeliveryTargetsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchApiV1DeliveryTargetsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryTargetsIdOrphanResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryTargetDeletionEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryTargetsIdOrphanResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryTargetsIdOrphanResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryTargetsIdPreviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryTargetPreviewEnvelope
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryTargetsIdPreviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryTargetsIdPreviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1DeliveryTargetsIdRolloutsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *DeliveryFrozenRolloutEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1DeliveryTargetsIdRolloutsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1DeliveryTargetsIdRolloutsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetApiV1ExtensionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -53380,442 +56340,6 @@ func (r PostApiV1ExtensionsNameTokenResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostApiV1ExtensionsNameTokenResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetApiV1FleetOperationsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                    `json:"count"`
-		Data  []FleetOperationResponse `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
-	}
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1FleetOperationsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1FleetOperationsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostApiV1FleetOperationsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *struct {
-		// Data Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-		Data FleetOperationResponse `json:"data"`
-	}
-	JSON400 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PostApiV1FleetOperationsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostApiV1FleetOperationsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetApiV1FleetOperationsIdResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		// Data Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-		Data FleetOperationResponse `json:"data"`
-	}
-	JSON404 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1FleetOperationsIdResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1FleetOperationsIdResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostApiV1FleetOperationsIdAbortResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON202      *struct {
-		// Data Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-		Data FleetOperationResponse `json:"data"`
-	}
-	JSON404 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PostApiV1FleetOperationsIdAbortResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostApiV1FleetOperationsIdAbortResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostApiV1FleetOperationsIdPauseResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON202      *struct {
-		// Data Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-		Data FleetOperationResponse `json:"data"`
-	}
-	JSON404 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PostApiV1FleetOperationsIdPauseResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostApiV1FleetOperationsIdPauseResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostApiV1FleetOperationsIdResumeResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON202      *struct {
-		// Data Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-		Data FleetOperationResponse `json:"data"`
-	}
-	JSON404 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PostApiV1FleetOperationsIdResumeResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostApiV1FleetOperationsIdResumeResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostApiV1FleetOperationsIdRetryFailedResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON202      *struct {
-		// Data Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-		Data FleetOperationResponse `json:"data"`
-	}
-	JSON404 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PostApiV1FleetOperationsIdRetryFailedResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostApiV1FleetOperationsIdRetryFailedResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetApiV1FleetOperationsIdTargetsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                          `json:"count"`
-		Data  []FleetOperationTargetResponse `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
-	}
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1FleetOperationsIdTargetsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1FleetOperationsIdTargetsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdInternalK8sProxyDeleteResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON400      *ErrorEnvelope
-	JSON401      *ErrorEnvelope
-	JSON502      *ErrorEnvelope
-	JSON503      *ErrorEnvelope
-	JSON504      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdInternalK8sProxyDeleteResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdInternalK8sProxyDeleteResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdInternalK8sProxyGetResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON400      *ErrorEnvelope
-	JSON401      *ErrorEnvelope
-	JSON502      *ErrorEnvelope
-	JSON503      *ErrorEnvelope
-	JSON504      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdInternalK8sProxyGetResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdInternalK8sProxyGetResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdInternalK8sProxyHeadResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON400      *ErrorEnvelope
-	JSON401      *ErrorEnvelope
-	JSON502      *ErrorEnvelope
-	JSON503      *ErrorEnvelope
-	JSON504      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdInternalK8sProxyHeadResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdInternalK8sProxyHeadResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdInternalK8sProxyOptionsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON400      *ErrorEnvelope
-	JSON401      *ErrorEnvelope
-	JSON502      *ErrorEnvelope
-	JSON503      *ErrorEnvelope
-	JSON504      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdInternalK8sProxyOptionsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdInternalK8sProxyOptionsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdInternalK8sProxyPatchResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON400      *ErrorEnvelope
-	JSON401      *ErrorEnvelope
-	JSON502      *ErrorEnvelope
-	JSON503      *ErrorEnvelope
-	JSON504      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdInternalK8sProxyPatchResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdInternalK8sProxyPatchResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdInternalK8sProxyPostResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON400      *ErrorEnvelope
-	JSON401      *ErrorEnvelope
-	JSON502      *ErrorEnvelope
-	JSON503      *ErrorEnvelope
-	JSON504      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdInternalK8sProxyPostResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdInternalK8sProxyPostResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdInternalK8sProxyPutResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON400      *ErrorEnvelope
-	JSON401      *ErrorEnvelope
-	JSON502      *ErrorEnvelope
-	JSON503      *ErrorEnvelope
-	JSON504      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdInternalK8sProxyPutResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdInternalK8sProxyPutResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdInternalK8sProxyTraceResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON400      *ErrorEnvelope
-	JSON401      *ErrorEnvelope
-	JSON502      *ErrorEnvelope
-	JSON503      *ErrorEnvelope
-	JSON504      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdInternalK8sProxyTraceResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdInternalK8sProxyTraceResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -56899,374 +59423,6 @@ func (r PodLogsWebSocketResponse) StatusCode() int {
 	return 0
 }
 
-type ArgocdUiDeleteResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiDeleteResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiDeleteResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiGetResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiGetResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiGetResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiHeadResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiHeadResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiHeadResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiOptionsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiOptionsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiOptionsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiPatchResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiPatchResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiPatchResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiPostResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiPostResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiPostResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiPutResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiPutResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiPutResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiTraceResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiTraceResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiTraceResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiSubDeleteResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiSubDeleteResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiSubDeleteResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiSubGetResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiSubGetResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiSubGetResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiSubHeadResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiSubHeadResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiSubHeadResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiSubOptionsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiSubOptionsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiSubOptionsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiSubPatchResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiSubPatchResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiSubPatchResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiSubPostResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiSubPostResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiSubPostResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiSubPutResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiSubPutResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiSubPutResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type ArgocdUiSubTraceResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *interface{}
-	JSON401      *Unauthorized
-}
-
-// Status returns HTTPResponse.Status
-func (r ArgocdUiSubTraceResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ArgocdUiSubTraceResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type TunnelHealthCheckResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -57730,59 +59886,6 @@ func (c *ClientWithResponses) AdminCharlieActionPolicyUpdateWithResponse(ctx con
 	return ParseAdminCharlieActionPolicyUpdateResponse(rsp)
 }
 
-// AdminCharlieAgentInstallWithResponse request returning *AdminCharlieAgentInstallResponse
-func (c *ClientWithResponses) AdminCharlieAgentInstallWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentInstallResponse, error) {
-	rsp, err := c.AdminCharlieAgentInstall(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseAdminCharlieAgentInstallResponse(rsp)
-}
-
-// AdminCharlieAgentRollbackWithResponse request returning *AdminCharlieAgentRollbackResponse
-func (c *ClientWithResponses) AdminCharlieAgentRollbackWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentRollbackResponse, error) {
-	rsp, err := c.AdminCharlieAgentRollback(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseAdminCharlieAgentRollbackResponse(rsp)
-}
-
-// AdminCharlieAgentRotateWithResponse request returning *AdminCharlieAgentRotateResponse
-func (c *ClientWithResponses) AdminCharlieAgentRotateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentRotateResponse, error) {
-	rsp, err := c.AdminCharlieAgentRotate(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseAdminCharlieAgentRotateResponse(rsp)
-}
-
-// AdminCharlieAgentUninstallWithBodyWithResponse request with arbitrary body returning *AdminCharlieAgentUninstallResponse
-func (c *ClientWithResponses) AdminCharlieAgentUninstallWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUninstallResponse, error) {
-	rsp, err := c.AdminCharlieAgentUninstallWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseAdminCharlieAgentUninstallResponse(rsp)
-}
-
-func (c *ClientWithResponses) AdminCharlieAgentUninstallWithResponse(ctx context.Context, body AdminCharlieAgentUninstallJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUninstallResponse, error) {
-	rsp, err := c.AdminCharlieAgentUninstall(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseAdminCharlieAgentUninstallResponse(rsp)
-}
-
-// AdminCharlieAgentUpgradeWithResponse request returning *AdminCharlieAgentUpgradeResponse
-func (c *ClientWithResponses) AdminCharlieAgentUpgradeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUpgradeResponse, error) {
-	rsp, err := c.AdminCharlieAgentUpgrade(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseAdminCharlieAgentUpgradeResponse(rsp)
-}
-
 // AdminCharlieAlertDeliveryProofsWithResponse request returning *AdminCharlieAlertDeliveryProofsResponse
 func (c *ClientWithResponses) AdminCharlieAlertDeliveryProofsWithResponse(ctx context.Context, params *AdminCharlieAlertDeliveryProofsParams, reqEditors ...RequestEditorFn) (*AdminCharlieAlertDeliveryProofsResponse, error) {
 	rsp, err := c.AdminCharlieAlertDeliveryProofs(ctx, params, reqEditors...)
@@ -57825,23 +59928,6 @@ func (c *ClientWithResponses) AdminCharlieDiagnosticsRunWithResponse(ctx context
 		return nil, err
 	}
 	return ParseAdminCharlieDiagnosticsRunResponse(rsp)
-}
-
-// AdminCharlieDisconnectWithBodyWithResponse request with arbitrary body returning *AdminCharlieDisconnectResponse
-func (c *ClientWithResponses) AdminCharlieDisconnectWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieDisconnectResponse, error) {
-	rsp, err := c.AdminCharlieDisconnectWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseAdminCharlieDisconnectResponse(rsp)
-}
-
-func (c *ClientWithResponses) AdminCharlieDisconnectWithResponse(ctx context.Context, body AdminCharlieDisconnectJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieDisconnectResponse, error) {
-	rsp, err := c.AdminCharlieDisconnect(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseAdminCharlieDisconnectResponse(rsp)
 }
 
 // AdminCharlieKubernetesVisibilityGetWithResponse request returning *AdminCharlieKubernetesVisibilityGetResponse
@@ -58410,85 +60496,6 @@ func (c *ClientWithResponses) AdminWebhookTestWithResponse(ctx context.Context, 
 	return ParseAdminWebhookTestResponse(rsp)
 }
 
-// GetApiV1AgentsFleetWithResponse request returning *GetApiV1AgentsFleetResponse
-func (c *ClientWithResponses) GetApiV1AgentsFleetWithResponse(ctx context.Context, params *GetApiV1AgentsFleetParams, reqEditors ...RequestEditorFn) (*GetApiV1AgentsFleetResponse, error) {
-	rsp, err := c.GetApiV1AgentsFleet(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetApiV1AgentsFleetResponse(rsp)
-}
-
-// GetApiV1AgentsFleetClusterIdDiagnosticsWithResponse request returning *GetApiV1AgentsFleetClusterIdDiagnosticsResponse
-func (c *ClientWithResponses) GetApiV1AgentsFleetClusterIdDiagnosticsWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1AgentsFleetClusterIdDiagnosticsResponse, error) {
-	rsp, err := c.GetApiV1AgentsFleetClusterIdDiagnostics(ctx, clusterId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetApiV1AgentsFleetClusterIdDiagnosticsResponse(rsp)
-}
-
-// GetApiV1AgentsFleetClusterIdDiagnosticsBundleWithResponse request returning *GetApiV1AgentsFleetClusterIdDiagnosticsBundleResponse
-func (c *ClientWithResponses) GetApiV1AgentsFleetClusterIdDiagnosticsBundleWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1AgentsFleetClusterIdDiagnosticsBundleResponse, error) {
-	rsp, err := c.GetApiV1AgentsFleetClusterIdDiagnosticsBundle(ctx, clusterId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetApiV1AgentsFleetClusterIdDiagnosticsBundleResponse(rsp)
-}
-
-// GetApiV1AgentsFleetClusterIdOperationsWithResponse request returning *GetApiV1AgentsFleetClusterIdOperationsResponse
-func (c *ClientWithResponses) GetApiV1AgentsFleetClusterIdOperationsWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1AgentsFleetClusterIdOperationsParams, reqEditors ...RequestEditorFn) (*GetApiV1AgentsFleetClusterIdOperationsResponse, error) {
-	rsp, err := c.GetApiV1AgentsFleetClusterIdOperations(ctx, clusterId, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetApiV1AgentsFleetClusterIdOperationsResponse(rsp)
-}
-
-// PostApiV1AgentsFleetClusterIdSelfTestWithResponse request returning *PostApiV1AgentsFleetClusterIdSelfTestResponse
-func (c *ClientWithResponses) PostApiV1AgentsFleetClusterIdSelfTestWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1AgentsFleetClusterIdSelfTestResponse, error) {
-	rsp, err := c.PostApiV1AgentsFleetClusterIdSelfTest(ctx, clusterId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1AgentsFleetClusterIdSelfTestResponse(rsp)
-}
-
-// PostApiV1AgentsFleetClusterIdUpgradePlanWithBodyWithResponse request with arbitrary body returning *PostApiV1AgentsFleetClusterIdUpgradePlanResponse
-func (c *ClientWithResponses) PostApiV1AgentsFleetClusterIdUpgradePlanWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1AgentsFleetClusterIdUpgradePlanResponse, error) {
-	rsp, err := c.PostApiV1AgentsFleetClusterIdUpgradePlanWithBody(ctx, clusterId, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1AgentsFleetClusterIdUpgradePlanResponse(rsp)
-}
-
-func (c *ClientWithResponses) PostApiV1AgentsFleetClusterIdUpgradePlanWithResponse(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1AgentsFleetClusterIdUpgradePlanJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AgentsFleetClusterIdUpgradePlanResponse, error) {
-	rsp, err := c.PostApiV1AgentsFleetClusterIdUpgradePlan(ctx, clusterId, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1AgentsFleetClusterIdUpgradePlanResponse(rsp)
-}
-
-// PostApiV1AgentsFleetClusterIdUpgradeWithBodyWithResponse request with arbitrary body returning *PostApiV1AgentsFleetClusterIdUpgradeResponse
-func (c *ClientWithResponses) PostApiV1AgentsFleetClusterIdUpgradeWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1AgentsFleetClusterIdUpgradeResponse, error) {
-	rsp, err := c.PostApiV1AgentsFleetClusterIdUpgradeWithBody(ctx, clusterId, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1AgentsFleetClusterIdUpgradeResponse(rsp)
-}
-
-func (c *ClientWithResponses) PostApiV1AgentsFleetClusterIdUpgradeWithResponse(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1AgentsFleetClusterIdUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AgentsFleetClusterIdUpgradeResponse, error) {
-	rsp, err := c.PostApiV1AgentsFleetClusterIdUpgrade(ctx, clusterId, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1AgentsFleetClusterIdUpgradeResponse(rsp)
-}
-
 // GetApiV1AlertingChannelsWithResponse request returning *GetApiV1AlertingChannelsResponse
 func (c *ClientWithResponses) GetApiV1AlertingChannelsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1AlertingChannelsResponse, error) {
 	rsp, err := c.GetApiV1AlertingChannels(ctx, reqEditors...)
@@ -58514,76 +60521,6 @@ func (c *ClientWithResponses) GetApiV1AlertingEventsWithResponse(ctx context.Con
 		return nil, err
 	}
 	return ParseGetApiV1AlertingEventsResponse(rsp)
-}
-
-// PostApiV1ArgocdApplicationsIdSyncWithBodyWithResponse request with arbitrary body returning *PostApiV1ArgocdApplicationsIdSyncResponse
-func (c *ClientWithResponses) PostApiV1ArgocdApplicationsIdSyncWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdApplicationsIdSyncResponse, error) {
-	rsp, err := c.PostApiV1ArgocdApplicationsIdSyncWithBody(ctx, id, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1ArgocdApplicationsIdSyncResponse(rsp)
-}
-
-func (c *ClientWithResponses) PostApiV1ArgocdApplicationsIdSyncWithResponse(ctx context.Context, id openapi_types.UUID, body PostApiV1ArgocdApplicationsIdSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdApplicationsIdSyncResponse, error) {
-	rsp, err := c.PostApiV1ArgocdApplicationsIdSync(ctx, id, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1ArgocdApplicationsIdSyncResponse(rsp)
-}
-
-// GetApiV1ArgocdInstancesWithResponse request returning *GetApiV1ArgocdInstancesResponse
-func (c *ClientWithResponses) GetApiV1ArgocdInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdInstancesResponse, error) {
-	rsp, err := c.GetApiV1ArgocdInstances(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetApiV1ArgocdInstancesResponse(rsp)
-}
-
-// PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBodyWithResponse request with arbitrary body returning *PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse
-func (c *ClientWithResponses) PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse, error) {
-	rsp, err := c.PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBody(ctx, id, name, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1ArgocdInstancesIdApplicationsNameSyncResponse(rsp)
-}
-
-func (c *ClientWithResponses) PostApiV1ArgocdInstancesIdApplicationsNameSyncWithResponse(ctx context.Context, id openapi_types.UUID, name string, body PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse, error) {
-	rsp, err := c.PostApiV1ArgocdInstancesIdApplicationsNameSync(ctx, id, name, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1ArgocdInstancesIdApplicationsNameSyncResponse(rsp)
-}
-
-// GetApiV1ArgocdInstancesIdOrphanReportWithResponse request returning *GetApiV1ArgocdInstancesIdOrphanReportResponse
-func (c *ClientWithResponses) GetApiV1ArgocdInstancesIdOrphanReportWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1ArgocdInstancesIdOrphanReportParams, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdInstancesIdOrphanReportResponse, error) {
-	rsp, err := c.GetApiV1ArgocdInstancesIdOrphanReport(ctx, id, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetApiV1ArgocdInstancesIdOrphanReportResponse(rsp)
-}
-
-// GetApiV1ArgocdOperationsWithResponse request returning *GetApiV1ArgocdOperationsResponse
-func (c *ClientWithResponses) GetApiV1ArgocdOperationsWithResponse(ctx context.Context, params *GetApiV1ArgocdOperationsParams, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdOperationsResponse, error) {
-	rsp, err := c.GetApiV1ArgocdOperations(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetApiV1ArgocdOperationsResponse(rsp)
-}
-
-// GetApiV1ArgocdOperationsIdWithResponse request returning *GetApiV1ArgocdOperationsIdResponse
-func (c *ClientWithResponses) GetApiV1ArgocdOperationsIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdOperationsIdResponse, error) {
-	rsp, err := c.GetApiV1ArgocdOperationsId(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetApiV1ArgocdOperationsIdResponse(rsp)
 }
 
 // ListAuditLogsWithResponse request returning *ListAuditLogsResponse
@@ -59285,8 +61222,8 @@ func (c *ClientWithResponses) GetApiV1CatalogChartsWithResponse(ctx context.Cont
 }
 
 // GetApiV1CatalogChartsIdWithResponse request returning *GetApiV1CatalogChartsIdResponse
-func (c *ClientWithResponses) GetApiV1CatalogChartsIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1CatalogChartsIdResponse, error) {
-	rsp, err := c.GetApiV1CatalogChartsId(ctx, id, reqEditors...)
+func (c *ClientWithResponses) GetApiV1CatalogChartsIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1CatalogChartsIdParams, reqEditors ...RequestEditorFn) (*GetApiV1CatalogChartsIdResponse, error) {
+	rsp, err := c.GetApiV1CatalogChartsId(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -59426,6 +61363,24 @@ func (c *ClientWithResponses) PostApiV1CatalogOperationsIdRetryWithResponse(ctx 
 	return ParsePostApiV1CatalogOperationsIdRetryResponse(rsp)
 }
 
+// GetApiV1CatalogRecommendationsPopularWithResponse request returning *GetApiV1CatalogRecommendationsPopularResponse
+func (c *ClientWithResponses) GetApiV1CatalogRecommendationsPopularWithResponse(ctx context.Context, params *GetApiV1CatalogRecommendationsPopularParams, reqEditors ...RequestEditorFn) (*GetApiV1CatalogRecommendationsPopularResponse, error) {
+	rsp, err := c.GetApiV1CatalogRecommendationsPopular(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1CatalogRecommendationsPopularResponse(rsp)
+}
+
+// GetApiV1CatalogRecommendationsSimilarChartIdWithResponse request returning *GetApiV1CatalogRecommendationsSimilarChartIdResponse
+func (c *ClientWithResponses) GetApiV1CatalogRecommendationsSimilarChartIdWithResponse(ctx context.Context, chartId openapi_types.UUID, params *GetApiV1CatalogRecommendationsSimilarChartIdParams, reqEditors ...RequestEditorFn) (*GetApiV1CatalogRecommendationsSimilarChartIdResponse, error) {
+	rsp, err := c.GetApiV1CatalogRecommendationsSimilarChartId(ctx, chartId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1CatalogRecommendationsSimilarChartIdResponse(rsp)
+}
+
 // GetApiV1CatalogRepositoriesWithResponse request returning *GetApiV1CatalogRepositoriesResponse
 func (c *ClientWithResponses) GetApiV1CatalogRepositoriesWithResponse(ctx context.Context, params *GetApiV1CatalogRepositoriesParams, reqEditors ...RequestEditorFn) (*GetApiV1CatalogRepositoriesResponse, error) {
 	rsp, err := c.GetApiV1CatalogRepositories(ctx, params, reqEditors...)
@@ -59529,6 +61484,15 @@ func (c *ClientWithResponses) DecideCharlieApprovalWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParseDecideCharlieApprovalResponse(rsp)
+}
+
+// ListCharlieCommandsWithResponse request returning *ListCharlieCommandsResponse
+func (c *ClientWithResponses) ListCharlieCommandsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListCharlieCommandsResponse, error) {
+	rsp, err := c.ListCharlieCommands(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCharlieCommandsResponse(rsp)
 }
 
 // SearchCharlieContextWithResponse request returning *SearchCharlieContextResponse
@@ -59739,6 +61703,59 @@ func (c *ClientWithResponses) CreateCharlieSessionMessageWithResponse(ctx contex
 	return ParseCreateCharlieSessionMessageResponse(rsp)
 }
 
+// ListCharlieThreadsWithResponse request returning *ListCharlieThreadsResponse
+func (c *ClientWithResponses) ListCharlieThreadsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListCharlieThreadsResponse, error) {
+	rsp, err := c.ListCharlieThreads(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCharlieThreadsResponse(rsp)
+}
+
+// GetActiveCharlieThreadWithResponse request returning *GetActiveCharlieThreadResponse
+func (c *ClientWithResponses) GetActiveCharlieThreadWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetActiveCharlieThreadResponse, error) {
+	rsp, err := c.GetActiveCharlieThread(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetActiveCharlieThreadResponse(rsp)
+}
+
+// CreateCharlieThreadMessageWithBodyWithResponse request with arbitrary body returning *CreateCharlieThreadMessageResponse
+func (c *ClientWithResponses) CreateCharlieThreadMessageWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCharlieThreadMessageResponse, error) {
+	rsp, err := c.CreateCharlieThreadMessageWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCharlieThreadMessageResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateCharlieThreadMessageWithResponse(ctx context.Context, body CreateCharlieThreadMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCharlieThreadMessageResponse, error) {
+	rsp, err := c.CreateCharlieThreadMessage(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCharlieThreadMessageResponse(rsp)
+}
+
+// CreateCharlieThreadWithResponse request returning *CreateCharlieThreadResponse
+func (c *ClientWithResponses) CreateCharlieThreadWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*CreateCharlieThreadResponse, error) {
+	rsp, err := c.CreateCharlieThread(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCharlieThreadResponse(rsp)
+}
+
+// GetCharlieThreadHistoryWithResponse request returning *GetCharlieThreadHistoryResponse
+func (c *ClientWithResponses) GetCharlieThreadHistoryWithResponse(ctx context.Context, threadId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCharlieThreadHistoryResponse, error) {
+	rsp, err := c.GetCharlieThreadHistory(ctx, threadId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCharlieThreadHistoryResponse(rsp)
+}
+
 // GetApiV1CloudCredentialsProvidersWithResponse request returning *GetApiV1CloudCredentialsProvidersResponse
 func (c *ClientWithResponses) GetApiV1CloudCredentialsProvidersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1CloudCredentialsProvidersResponse, error) {
 	rsp, err := c.GetApiV1CloudCredentialsProviders(ctx, reqEditors...)
@@ -59746,6 +61763,94 @@ func (c *ClientWithResponses) GetApiV1CloudCredentialsProvidersWithResponse(ctx 
 		return nil, err
 	}
 	return ParseGetApiV1CloudCredentialsProvidersResponse(rsp)
+}
+
+// GetApiV1ClusterAgentsWithResponse request returning *GetApiV1ClusterAgentsResponse
+func (c *ClientWithResponses) GetApiV1ClusterAgentsWithResponse(ctx context.Context, params *GetApiV1ClusterAgentsParams, reqEditors ...RequestEditorFn) (*GetApiV1ClusterAgentsResponse, error) {
+	rsp, err := c.GetApiV1ClusterAgents(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClusterAgentsResponse(rsp)
+}
+
+// GetApiV1ClusterAgentsClusterIdWithResponse request returning *GetApiV1ClusterAgentsClusterIdResponse
+func (c *ClientWithResponses) GetApiV1ClusterAgentsClusterIdWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClusterAgentsClusterIdResponse, error) {
+	rsp, err := c.GetApiV1ClusterAgentsClusterId(ctx, clusterId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClusterAgentsClusterIdResponse(rsp)
+}
+
+// GetApiV1ClusterAgentsClusterIdDiagnosticsWithResponse request returning *GetApiV1ClusterAgentsClusterIdDiagnosticsResponse
+func (c *ClientWithResponses) GetApiV1ClusterAgentsClusterIdDiagnosticsWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClusterAgentsClusterIdDiagnosticsResponse, error) {
+	rsp, err := c.GetApiV1ClusterAgentsClusterIdDiagnostics(ctx, clusterId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClusterAgentsClusterIdDiagnosticsResponse(rsp)
+}
+
+// GetApiV1ClusterAgentsClusterIdDiagnosticsBundleWithResponse request returning *GetApiV1ClusterAgentsClusterIdDiagnosticsBundleResponse
+func (c *ClientWithResponses) GetApiV1ClusterAgentsClusterIdDiagnosticsBundleWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClusterAgentsClusterIdDiagnosticsBundleResponse, error) {
+	rsp, err := c.GetApiV1ClusterAgentsClusterIdDiagnosticsBundle(ctx, clusterId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClusterAgentsClusterIdDiagnosticsBundleResponse(rsp)
+}
+
+// GetApiV1ClusterAgentsClusterIdOperationsWithResponse request returning *GetApiV1ClusterAgentsClusterIdOperationsResponse
+func (c *ClientWithResponses) GetApiV1ClusterAgentsClusterIdOperationsWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClusterAgentsClusterIdOperationsParams, reqEditors ...RequestEditorFn) (*GetApiV1ClusterAgentsClusterIdOperationsResponse, error) {
+	rsp, err := c.GetApiV1ClusterAgentsClusterIdOperations(ctx, clusterId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClusterAgentsClusterIdOperationsResponse(rsp)
+}
+
+// PostApiV1ClusterAgentsClusterIdSelfTestWithResponse request returning *PostApiV1ClusterAgentsClusterIdSelfTestResponse
+func (c *ClientWithResponses) PostApiV1ClusterAgentsClusterIdSelfTestWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1ClusterAgentsClusterIdSelfTestResponse, error) {
+	rsp, err := c.PostApiV1ClusterAgentsClusterIdSelfTest(ctx, clusterId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClusterAgentsClusterIdSelfTestResponse(rsp)
+}
+
+// PostApiV1ClusterAgentsClusterIdUpgradePlanWithBodyWithResponse request with arbitrary body returning *PostApiV1ClusterAgentsClusterIdUpgradePlanResponse
+func (c *ClientWithResponses) PostApiV1ClusterAgentsClusterIdUpgradePlanWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClusterAgentsClusterIdUpgradePlanResponse, error) {
+	rsp, err := c.PostApiV1ClusterAgentsClusterIdUpgradePlanWithBody(ctx, clusterId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClusterAgentsClusterIdUpgradePlanResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ClusterAgentsClusterIdUpgradePlanWithResponse(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1ClusterAgentsClusterIdUpgradePlanJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClusterAgentsClusterIdUpgradePlanResponse, error) {
+	rsp, err := c.PostApiV1ClusterAgentsClusterIdUpgradePlan(ctx, clusterId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClusterAgentsClusterIdUpgradePlanResponse(rsp)
+}
+
+// PostApiV1ClusterAgentsClusterIdUpgradeWithBodyWithResponse request with arbitrary body returning *PostApiV1ClusterAgentsClusterIdUpgradeResponse
+func (c *ClientWithResponses) PostApiV1ClusterAgentsClusterIdUpgradeWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClusterAgentsClusterIdUpgradeResponse, error) {
+	rsp, err := c.PostApiV1ClusterAgentsClusterIdUpgradeWithBody(ctx, clusterId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClusterAgentsClusterIdUpgradeResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ClusterAgentsClusterIdUpgradeWithResponse(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1ClusterAgentsClusterIdUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClusterAgentsClusterIdUpgradeResponse, error) {
+	rsp, err := c.PostApiV1ClusterAgentsClusterIdUpgrade(ctx, clusterId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClusterAgentsClusterIdUpgradeResponse(rsp)
 }
 
 // GetApiV1ClusterGroupsWithResponse request returning *GetApiV1ClusterGroupsResponse
@@ -61452,6 +63557,471 @@ func (c *ClientWithResponses) TunnelConnectTraceWithResponse(ctx context.Context
 	return ParseTunnelConnectTraceResponse(rsp)
 }
 
+// GetApiV1DeliveryBundlesWithResponse request returning *GetApiV1DeliveryBundlesResponse
+func (c *ClientWithResponses) GetApiV1DeliveryBundlesWithResponse(ctx context.Context, params *GetApiV1DeliveryBundlesParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryBundlesResponse, error) {
+	rsp, err := c.GetApiV1DeliveryBundles(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryBundlesResponse(rsp)
+}
+
+// PostApiV1DeliveryBundlesWithBodyWithResponse request with arbitrary body returning *PostApiV1DeliveryBundlesResponse
+func (c *ClientWithResponses) PostApiV1DeliveryBundlesWithBodyWithResponse(ctx context.Context, params *PostApiV1DeliveryBundlesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryBundlesResponse, error) {
+	rsp, err := c.PostApiV1DeliveryBundlesWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryBundlesResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1DeliveryBundlesWithResponse(ctx context.Context, params *PostApiV1DeliveryBundlesParams, body PostApiV1DeliveryBundlesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryBundlesResponse, error) {
+	rsp, err := c.PostApiV1DeliveryBundles(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryBundlesResponse(rsp)
+}
+
+// DeleteApiV1DeliveryBundlesIdWithResponse request returning *DeleteApiV1DeliveryBundlesIdResponse
+func (c *ClientWithResponses) DeleteApiV1DeliveryBundlesIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteApiV1DeliveryBundlesIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1DeliveryBundlesIdResponse, error) {
+	rsp, err := c.DeleteApiV1DeliveryBundlesId(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1DeliveryBundlesIdResponse(rsp)
+}
+
+// GetApiV1DeliveryBundlesIdWithResponse request returning *GetApiV1DeliveryBundlesIdResponse
+func (c *ClientWithResponses) GetApiV1DeliveryBundlesIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryBundlesIdParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryBundlesIdResponse, error) {
+	rsp, err := c.GetApiV1DeliveryBundlesId(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryBundlesIdResponse(rsp)
+}
+
+// PatchApiV1DeliveryBundlesIdWithBodyWithResponse request with arbitrary body returning *PatchApiV1DeliveryBundlesIdResponse
+func (c *ClientWithResponses) PatchApiV1DeliveryBundlesIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryBundlesIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1DeliveryBundlesIdResponse, error) {
+	rsp, err := c.PatchApiV1DeliveryBundlesIdWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchApiV1DeliveryBundlesIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchApiV1DeliveryBundlesIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryBundlesIdParams, body PatchApiV1DeliveryBundlesIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1DeliveryBundlesIdResponse, error) {
+	rsp, err := c.PatchApiV1DeliveryBundlesId(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchApiV1DeliveryBundlesIdResponse(rsp)
+}
+
+// GetApiV1DeliveryBundlesIdVersionsWithResponse request returning *GetApiV1DeliveryBundlesIdVersionsResponse
+func (c *ClientWithResponses) GetApiV1DeliveryBundlesIdVersionsWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryBundlesIdVersionsParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryBundlesIdVersionsResponse, error) {
+	rsp, err := c.GetApiV1DeliveryBundlesIdVersions(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryBundlesIdVersionsResponse(rsp)
+}
+
+// PostApiV1DeliveryBundlesIdVersionsWithBodyWithResponse request with arbitrary body returning *PostApiV1DeliveryBundlesIdVersionsResponse
+func (c *ClientWithResponses) PostApiV1DeliveryBundlesIdVersionsWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryBundlesIdVersionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryBundlesIdVersionsResponse, error) {
+	rsp, err := c.PostApiV1DeliveryBundlesIdVersionsWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryBundlesIdVersionsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1DeliveryBundlesIdVersionsWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryBundlesIdVersionsParams, body PostApiV1DeliveryBundlesIdVersionsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryBundlesIdVersionsResponse, error) {
+	rsp, err := c.PostApiV1DeliveryBundlesIdVersions(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryBundlesIdVersionsResponse(rsp)
+}
+
+// GetApiV1DeliveryBundlesIdVersionsVersionIdWithResponse request returning *GetApiV1DeliveryBundlesIdVersionsVersionIdResponse
+func (c *ClientWithResponses) GetApiV1DeliveryBundlesIdVersionsVersionIdWithResponse(ctx context.Context, id openapi_types.UUID, versionId openapi_types.UUID, params *GetApiV1DeliveryBundlesIdVersionsVersionIdParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryBundlesIdVersionsVersionIdResponse, error) {
+	rsp, err := c.GetApiV1DeliveryBundlesIdVersionsVersionId(ctx, id, versionId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryBundlesIdVersionsVersionIdResponse(rsp)
+}
+
+// GetApiV1DeliveryClustersClusterIdInventoryWithResponse request returning *GetApiV1DeliveryClustersClusterIdInventoryResponse
+func (c *ClientWithResponses) GetApiV1DeliveryClustersClusterIdInventoryWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1DeliveryClustersClusterIdInventoryParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryClustersClusterIdInventoryResponse, error) {
+	rsp, err := c.GetApiV1DeliveryClustersClusterIdInventory(ctx, clusterId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryClustersClusterIdInventoryResponse(rsp)
+}
+
+// GetApiV1DeliveryDeploymentsWithResponse request returning *GetApiV1DeliveryDeploymentsResponse
+func (c *ClientWithResponses) GetApiV1DeliveryDeploymentsWithResponse(ctx context.Context, params *GetApiV1DeliveryDeploymentsParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryDeploymentsResponse, error) {
+	rsp, err := c.GetApiV1DeliveryDeployments(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryDeploymentsResponse(rsp)
+}
+
+// GetApiV1DeliveryDeploymentsIdWithResponse request returning *GetApiV1DeliveryDeploymentsIdResponse
+func (c *ClientWithResponses) GetApiV1DeliveryDeploymentsIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryDeploymentsIdParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryDeploymentsIdResponse, error) {
+	rsp, err := c.GetApiV1DeliveryDeploymentsId(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryDeploymentsIdResponse(rsp)
+}
+
+// GetApiV1DeliveryDeploymentsIdEventsWithResponse request returning *GetApiV1DeliveryDeploymentsIdEventsResponse
+func (c *ClientWithResponses) GetApiV1DeliveryDeploymentsIdEventsWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryDeploymentsIdEventsParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryDeploymentsIdEventsResponse, error) {
+	rsp, err := c.GetApiV1DeliveryDeploymentsIdEvents(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryDeploymentsIdEventsResponse(rsp)
+}
+
+// PostApiV1DeliveryDeploymentsIdReconcileWithResponse request returning *PostApiV1DeliveryDeploymentsIdReconcileResponse
+func (c *ClientWithResponses) PostApiV1DeliveryDeploymentsIdReconcileWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryDeploymentsIdReconcileResponse, error) {
+	rsp, err := c.PostApiV1DeliveryDeploymentsIdReconcile(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryDeploymentsIdReconcileResponse(rsp)
+}
+
+// PostApiV1DeliveryDeploymentsIdResumeWithResponse request returning *PostApiV1DeliveryDeploymentsIdResumeResponse
+func (c *ClientWithResponses) PostApiV1DeliveryDeploymentsIdResumeWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryDeploymentsIdResumeResponse, error) {
+	rsp, err := c.PostApiV1DeliveryDeploymentsIdResume(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryDeploymentsIdResumeResponse(rsp)
+}
+
+// PostApiV1DeliveryDeploymentsIdSuspendWithResponse request returning *PostApiV1DeliveryDeploymentsIdSuspendResponse
+func (c *ClientWithResponses) PostApiV1DeliveryDeploymentsIdSuspendWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryDeploymentsIdSuspendResponse, error) {
+	rsp, err := c.PostApiV1DeliveryDeploymentsIdSuspend(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryDeploymentsIdSuspendResponse(rsp)
+}
+
+// GetApiV1DeliveryRolloutsWithResponse request returning *GetApiV1DeliveryRolloutsResponse
+func (c *ClientWithResponses) GetApiV1DeliveryRolloutsWithResponse(ctx context.Context, params *GetApiV1DeliveryRolloutsParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryRolloutsResponse, error) {
+	rsp, err := c.GetApiV1DeliveryRollouts(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryRolloutsResponse(rsp)
+}
+
+// GetApiV1DeliveryRolloutsIdWithResponse request returning *GetApiV1DeliveryRolloutsIdResponse
+func (c *ClientWithResponses) GetApiV1DeliveryRolloutsIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryRolloutsIdResponse, error) {
+	rsp, err := c.GetApiV1DeliveryRolloutsId(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryRolloutsIdResponse(rsp)
+}
+
+// PostApiV1DeliveryRolloutsIdAbortWithResponse request returning *PostApiV1DeliveryRolloutsIdAbortResponse
+func (c *ClientWithResponses) PostApiV1DeliveryRolloutsIdAbortWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdAbortResponse, error) {
+	rsp, err := c.PostApiV1DeliveryRolloutsIdAbort(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryRolloutsIdAbortResponse(rsp)
+}
+
+// PostApiV1DeliveryRolloutsIdApproveWithBodyWithResponse request with arbitrary body returning *PostApiV1DeliveryRolloutsIdApproveResponse
+func (c *ClientWithResponses) PostApiV1DeliveryRolloutsIdApproveWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdApproveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdApproveResponse, error) {
+	rsp, err := c.PostApiV1DeliveryRolloutsIdApproveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryRolloutsIdApproveResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1DeliveryRolloutsIdApproveWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdApproveParams, body PostApiV1DeliveryRolloutsIdApproveJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdApproveResponse, error) {
+	rsp, err := c.PostApiV1DeliveryRolloutsIdApprove(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryRolloutsIdApproveResponse(rsp)
+}
+
+// GetApiV1DeliveryRolloutsIdClustersWithResponse request returning *GetApiV1DeliveryRolloutsIdClustersResponse
+func (c *ClientWithResponses) GetApiV1DeliveryRolloutsIdClustersWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdClustersParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryRolloutsIdClustersResponse, error) {
+	rsp, err := c.GetApiV1DeliveryRolloutsIdClusters(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryRolloutsIdClustersResponse(rsp)
+}
+
+// GetApiV1DeliveryRolloutsIdEventsWithResponse request returning *GetApiV1DeliveryRolloutsIdEventsResponse
+func (c *ClientWithResponses) GetApiV1DeliveryRolloutsIdEventsWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryRolloutsIdEventsParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryRolloutsIdEventsResponse, error) {
+	rsp, err := c.GetApiV1DeliveryRolloutsIdEvents(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryRolloutsIdEventsResponse(rsp)
+}
+
+// PostApiV1DeliveryRolloutsIdPauseWithResponse request returning *PostApiV1DeliveryRolloutsIdPauseResponse
+func (c *ClientWithResponses) PostApiV1DeliveryRolloutsIdPauseWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdPauseResponse, error) {
+	rsp, err := c.PostApiV1DeliveryRolloutsIdPause(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryRolloutsIdPauseResponse(rsp)
+}
+
+// PostApiV1DeliveryRolloutsIdResumeWithResponse request returning *PostApiV1DeliveryRolloutsIdResumeResponse
+func (c *ClientWithResponses) PostApiV1DeliveryRolloutsIdResumeWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdResumeResponse, error) {
+	rsp, err := c.PostApiV1DeliveryRolloutsIdResume(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryRolloutsIdResumeResponse(rsp)
+}
+
+// PostApiV1DeliveryRolloutsIdRetryWithResponse request returning *PostApiV1DeliveryRolloutsIdRetryResponse
+func (c *ClientWithResponses) PostApiV1DeliveryRolloutsIdRetryWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdRetryResponse, error) {
+	rsp, err := c.PostApiV1DeliveryRolloutsIdRetry(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryRolloutsIdRetryResponse(rsp)
+}
+
+// PostApiV1DeliveryRolloutsIdRollbackWithBodyWithResponse request with arbitrary body returning *PostApiV1DeliveryRolloutsIdRollbackResponse
+func (c *ClientWithResponses) PostApiV1DeliveryRolloutsIdRollbackWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdRollbackResponse, error) {
+	rsp, err := c.PostApiV1DeliveryRolloutsIdRollbackWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryRolloutsIdRollbackResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1DeliveryRolloutsIdRollbackWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryRolloutsIdRollbackParams, body PostApiV1DeliveryRolloutsIdRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryRolloutsIdRollbackResponse, error) {
+	rsp, err := c.PostApiV1DeliveryRolloutsIdRollback(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryRolloutsIdRollbackResponse(rsp)
+}
+
+// GetApiV1DeliverySourcesWithResponse request returning *GetApiV1DeliverySourcesResponse
+func (c *ClientWithResponses) GetApiV1DeliverySourcesWithResponse(ctx context.Context, params *GetApiV1DeliverySourcesParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliverySourcesResponse, error) {
+	rsp, err := c.GetApiV1DeliverySources(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliverySourcesResponse(rsp)
+}
+
+// PostApiV1DeliverySourcesWithBodyWithResponse request with arbitrary body returning *PostApiV1DeliverySourcesResponse
+func (c *ClientWithResponses) PostApiV1DeliverySourcesWithBodyWithResponse(ctx context.Context, params *PostApiV1DeliverySourcesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliverySourcesResponse, error) {
+	rsp, err := c.PostApiV1DeliverySourcesWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliverySourcesResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1DeliverySourcesWithResponse(ctx context.Context, params *PostApiV1DeliverySourcesParams, body PostApiV1DeliverySourcesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliverySourcesResponse, error) {
+	rsp, err := c.PostApiV1DeliverySources(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliverySourcesResponse(rsp)
+}
+
+// DeleteApiV1DeliverySourcesIdWithResponse request returning *DeleteApiV1DeliverySourcesIdResponse
+func (c *ClientWithResponses) DeleteApiV1DeliverySourcesIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteApiV1DeliverySourcesIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1DeliverySourcesIdResponse, error) {
+	rsp, err := c.DeleteApiV1DeliverySourcesId(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1DeliverySourcesIdResponse(rsp)
+}
+
+// GetApiV1DeliverySourcesIdWithResponse request returning *GetApiV1DeliverySourcesIdResponse
+func (c *ClientWithResponses) GetApiV1DeliverySourcesIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliverySourcesIdParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliverySourcesIdResponse, error) {
+	rsp, err := c.GetApiV1DeliverySourcesId(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliverySourcesIdResponse(rsp)
+}
+
+// PatchApiV1DeliverySourcesIdWithBodyWithResponse request with arbitrary body returning *PatchApiV1DeliverySourcesIdResponse
+func (c *ClientWithResponses) PatchApiV1DeliverySourcesIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliverySourcesIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1DeliverySourcesIdResponse, error) {
+	rsp, err := c.PatchApiV1DeliverySourcesIdWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchApiV1DeliverySourcesIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchApiV1DeliverySourcesIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliverySourcesIdParams, body PatchApiV1DeliverySourcesIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1DeliverySourcesIdResponse, error) {
+	rsp, err := c.PatchApiV1DeliverySourcesId(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchApiV1DeliverySourcesIdResponse(rsp)
+}
+
+// PostApiV1DeliverySourcesIdRotateCredentialWithBodyWithResponse request with arbitrary body returning *PostApiV1DeliverySourcesIdRotateCredentialResponse
+func (c *ClientWithResponses) PostApiV1DeliverySourcesIdRotateCredentialWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdRotateCredentialParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliverySourcesIdRotateCredentialResponse, error) {
+	rsp, err := c.PostApiV1DeliverySourcesIdRotateCredentialWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliverySourcesIdRotateCredentialResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1DeliverySourcesIdRotateCredentialWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdRotateCredentialParams, body PostApiV1DeliverySourcesIdRotateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliverySourcesIdRotateCredentialResponse, error) {
+	rsp, err := c.PostApiV1DeliverySourcesIdRotateCredential(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliverySourcesIdRotateCredentialResponse(rsp)
+}
+
+// PostApiV1DeliverySourcesIdVerifyWithBodyWithResponse request with arbitrary body returning *PostApiV1DeliverySourcesIdVerifyResponse
+func (c *ClientWithResponses) PostApiV1DeliverySourcesIdVerifyWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdVerifyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliverySourcesIdVerifyResponse, error) {
+	rsp, err := c.PostApiV1DeliverySourcesIdVerifyWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliverySourcesIdVerifyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1DeliverySourcesIdVerifyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliverySourcesIdVerifyParams, body PostApiV1DeliverySourcesIdVerifyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliverySourcesIdVerifyResponse, error) {
+	rsp, err := c.PostApiV1DeliverySourcesIdVerify(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliverySourcesIdVerifyResponse(rsp)
+}
+
+// GetApiV1DeliverySystemCompatibilityWithResponse request returning *GetApiV1DeliverySystemCompatibilityResponse
+func (c *ClientWithResponses) GetApiV1DeliverySystemCompatibilityWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1DeliverySystemCompatibilityResponse, error) {
+	rsp, err := c.GetApiV1DeliverySystemCompatibility(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliverySystemCompatibilityResponse(rsp)
+}
+
+// GetApiV1DeliveryTargetsWithResponse request returning *GetApiV1DeliveryTargetsResponse
+func (c *ClientWithResponses) GetApiV1DeliveryTargetsWithResponse(ctx context.Context, params *GetApiV1DeliveryTargetsParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryTargetsResponse, error) {
+	rsp, err := c.GetApiV1DeliveryTargets(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryTargetsResponse(rsp)
+}
+
+// PostApiV1DeliveryTargetsWithBodyWithResponse request with arbitrary body returning *PostApiV1DeliveryTargetsResponse
+func (c *ClientWithResponses) PostApiV1DeliveryTargetsWithBodyWithResponse(ctx context.Context, params *PostApiV1DeliveryTargetsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryTargetsResponse, error) {
+	rsp, err := c.PostApiV1DeliveryTargetsWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryTargetsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1DeliveryTargetsWithResponse(ctx context.Context, params *PostApiV1DeliveryTargetsParams, body PostApiV1DeliveryTargetsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryTargetsResponse, error) {
+	rsp, err := c.PostApiV1DeliveryTargets(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryTargetsResponse(rsp)
+}
+
+// DeleteApiV1DeliveryTargetsIdWithResponse request returning *DeleteApiV1DeliveryTargetsIdResponse
+func (c *ClientWithResponses) DeleteApiV1DeliveryTargetsIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteApiV1DeliveryTargetsIdParams, reqEditors ...RequestEditorFn) (*DeleteApiV1DeliveryTargetsIdResponse, error) {
+	rsp, err := c.DeleteApiV1DeliveryTargetsId(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1DeliveryTargetsIdResponse(rsp)
+}
+
+// GetApiV1DeliveryTargetsIdWithResponse request returning *GetApiV1DeliveryTargetsIdResponse
+func (c *ClientWithResponses) GetApiV1DeliveryTargetsIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1DeliveryTargetsIdParams, reqEditors ...RequestEditorFn) (*GetApiV1DeliveryTargetsIdResponse, error) {
+	rsp, err := c.GetApiV1DeliveryTargetsId(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1DeliveryTargetsIdResponse(rsp)
+}
+
+// PatchApiV1DeliveryTargetsIdWithBodyWithResponse request with arbitrary body returning *PatchApiV1DeliveryTargetsIdResponse
+func (c *ClientWithResponses) PatchApiV1DeliveryTargetsIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryTargetsIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchApiV1DeliveryTargetsIdResponse, error) {
+	rsp, err := c.PatchApiV1DeliveryTargetsIdWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchApiV1DeliveryTargetsIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchApiV1DeliveryTargetsIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PatchApiV1DeliveryTargetsIdParams, body PatchApiV1DeliveryTargetsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchApiV1DeliveryTargetsIdResponse, error) {
+	rsp, err := c.PatchApiV1DeliveryTargetsId(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchApiV1DeliveryTargetsIdResponse(rsp)
+}
+
+// PostApiV1DeliveryTargetsIdOrphanWithResponse request returning *PostApiV1DeliveryTargetsIdOrphanResponse
+func (c *ClientWithResponses) PostApiV1DeliveryTargetsIdOrphanWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdOrphanParams, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryTargetsIdOrphanResponse, error) {
+	rsp, err := c.PostApiV1DeliveryTargetsIdOrphan(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryTargetsIdOrphanResponse(rsp)
+}
+
+// PostApiV1DeliveryTargetsIdPreviewWithResponse request returning *PostApiV1DeliveryTargetsIdPreviewResponse
+func (c *ClientWithResponses) PostApiV1DeliveryTargetsIdPreviewWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdPreviewParams, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryTargetsIdPreviewResponse, error) {
+	rsp, err := c.PostApiV1DeliveryTargetsIdPreview(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryTargetsIdPreviewResponse(rsp)
+}
+
+// PostApiV1DeliveryTargetsIdRolloutsWithBodyWithResponse request with arbitrary body returning *PostApiV1DeliveryTargetsIdRolloutsResponse
+func (c *ClientWithResponses) PostApiV1DeliveryTargetsIdRolloutsWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdRolloutsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryTargetsIdRolloutsResponse, error) {
+	rsp, err := c.PostApiV1DeliveryTargetsIdRolloutsWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryTargetsIdRolloutsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1DeliveryTargetsIdRolloutsWithResponse(ctx context.Context, id openapi_types.UUID, params *PostApiV1DeliveryTargetsIdRolloutsParams, body PostApiV1DeliveryTargetsIdRolloutsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1DeliveryTargetsIdRolloutsResponse, error) {
+	rsp, err := c.PostApiV1DeliveryTargetsIdRollouts(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1DeliveryTargetsIdRolloutsResponse(rsp)
+}
+
 // GetApiV1ExtensionsWithResponse request returning *GetApiV1ExtensionsResponse
 func (c *ClientWithResponses) GetApiV1ExtensionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ExtensionsResponse, error) {
 	rsp, err := c.GetApiV1Extensions(ctx, reqEditors...)
@@ -61580,182 +64150,6 @@ func (c *ClientWithResponses) PostApiV1ExtensionsNameTokenWithResponse(ctx conte
 		return nil, err
 	}
 	return ParsePostApiV1ExtensionsNameTokenResponse(rsp)
-}
-
-// GetApiV1FleetOperationsWithResponse request returning *GetApiV1FleetOperationsResponse
-func (c *ClientWithResponses) GetApiV1FleetOperationsWithResponse(ctx context.Context, params *GetApiV1FleetOperationsParams, reqEditors ...RequestEditorFn) (*GetApiV1FleetOperationsResponse, error) {
-	rsp, err := c.GetApiV1FleetOperations(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetApiV1FleetOperationsResponse(rsp)
-}
-
-// PostApiV1FleetOperationsWithBodyWithResponse request with arbitrary body returning *PostApiV1FleetOperationsResponse
-func (c *ClientWithResponses) PostApiV1FleetOperationsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1FleetOperationsResponse, error) {
-	rsp, err := c.PostApiV1FleetOperationsWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1FleetOperationsResponse(rsp)
-}
-
-func (c *ClientWithResponses) PostApiV1FleetOperationsWithResponse(ctx context.Context, body PostApiV1FleetOperationsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1FleetOperationsResponse, error) {
-	rsp, err := c.PostApiV1FleetOperations(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1FleetOperationsResponse(rsp)
-}
-
-// GetApiV1FleetOperationsIdWithResponse request returning *GetApiV1FleetOperationsIdResponse
-func (c *ClientWithResponses) GetApiV1FleetOperationsIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1FleetOperationsIdResponse, error) {
-	rsp, err := c.GetApiV1FleetOperationsId(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetApiV1FleetOperationsIdResponse(rsp)
-}
-
-// PostApiV1FleetOperationsIdAbortWithResponse request returning *PostApiV1FleetOperationsIdAbortResponse
-func (c *ClientWithResponses) PostApiV1FleetOperationsIdAbortWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1FleetOperationsIdAbortResponse, error) {
-	rsp, err := c.PostApiV1FleetOperationsIdAbort(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1FleetOperationsIdAbortResponse(rsp)
-}
-
-// PostApiV1FleetOperationsIdPauseWithResponse request returning *PostApiV1FleetOperationsIdPauseResponse
-func (c *ClientWithResponses) PostApiV1FleetOperationsIdPauseWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1FleetOperationsIdPauseResponse, error) {
-	rsp, err := c.PostApiV1FleetOperationsIdPause(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1FleetOperationsIdPauseResponse(rsp)
-}
-
-// PostApiV1FleetOperationsIdResumeWithResponse request returning *PostApiV1FleetOperationsIdResumeResponse
-func (c *ClientWithResponses) PostApiV1FleetOperationsIdResumeWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1FleetOperationsIdResumeResponse, error) {
-	rsp, err := c.PostApiV1FleetOperationsIdResume(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1FleetOperationsIdResumeResponse(rsp)
-}
-
-// PostApiV1FleetOperationsIdRetryFailedWithResponse request returning *PostApiV1FleetOperationsIdRetryFailedResponse
-func (c *ClientWithResponses) PostApiV1FleetOperationsIdRetryFailedWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1FleetOperationsIdRetryFailedResponse, error) {
-	rsp, err := c.PostApiV1FleetOperationsIdRetryFailed(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostApiV1FleetOperationsIdRetryFailedResponse(rsp)
-}
-
-// GetApiV1FleetOperationsIdTargetsWithResponse request returning *GetApiV1FleetOperationsIdTargetsResponse
-func (c *ClientWithResponses) GetApiV1FleetOperationsIdTargetsWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1FleetOperationsIdTargetsParams, reqEditors ...RequestEditorFn) (*GetApiV1FleetOperationsIdTargetsResponse, error) {
-	rsp, err := c.GetApiV1FleetOperationsIdTargets(ctx, id, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetApiV1FleetOperationsIdTargetsResponse(rsp)
-}
-
-// ArgocdInternalK8sProxyDeleteWithResponse request returning *ArgocdInternalK8sProxyDeleteResponse
-func (c *ClientWithResponses) ArgocdInternalK8sProxyDeleteWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyDeleteResponse, error) {
-	rsp, err := c.ArgocdInternalK8sProxyDelete(ctx, clusterId, path, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdInternalK8sProxyDeleteResponse(rsp)
-}
-
-// ArgocdInternalK8sProxyGetWithResponse request returning *ArgocdInternalK8sProxyGetResponse
-func (c *ClientWithResponses) ArgocdInternalK8sProxyGetWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyGetResponse, error) {
-	rsp, err := c.ArgocdInternalK8sProxyGet(ctx, clusterId, path, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdInternalK8sProxyGetResponse(rsp)
-}
-
-// ArgocdInternalK8sProxyHeadWithResponse request returning *ArgocdInternalK8sProxyHeadResponse
-func (c *ClientWithResponses) ArgocdInternalK8sProxyHeadWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyHeadResponse, error) {
-	rsp, err := c.ArgocdInternalK8sProxyHead(ctx, clusterId, path, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdInternalK8sProxyHeadResponse(rsp)
-}
-
-// ArgocdInternalK8sProxyOptionsWithResponse request returning *ArgocdInternalK8sProxyOptionsResponse
-func (c *ClientWithResponses) ArgocdInternalK8sProxyOptionsWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyOptionsResponse, error) {
-	rsp, err := c.ArgocdInternalK8sProxyOptions(ctx, clusterId, path, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdInternalK8sProxyOptionsResponse(rsp)
-}
-
-// ArgocdInternalK8sProxyPatchWithBodyWithResponse request with arbitrary body returning *ArgocdInternalK8sProxyPatchResponse
-func (c *ClientWithResponses) ArgocdInternalK8sProxyPatchWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyPatchResponse, error) {
-	rsp, err := c.ArgocdInternalK8sProxyPatchWithBody(ctx, clusterId, path, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdInternalK8sProxyPatchResponse(rsp)
-}
-
-func (c *ClientWithResponses) ArgocdInternalK8sProxyPatchWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPatchJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyPatchResponse, error) {
-	rsp, err := c.ArgocdInternalK8sProxyPatch(ctx, clusterId, path, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdInternalK8sProxyPatchResponse(rsp)
-}
-
-// ArgocdInternalK8sProxyPostWithBodyWithResponse request with arbitrary body returning *ArgocdInternalK8sProxyPostResponse
-func (c *ClientWithResponses) ArgocdInternalK8sProxyPostWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyPostResponse, error) {
-	rsp, err := c.ArgocdInternalK8sProxyPostWithBody(ctx, clusterId, path, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdInternalK8sProxyPostResponse(rsp)
-}
-
-func (c *ClientWithResponses) ArgocdInternalK8sProxyPostWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPostJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyPostResponse, error) {
-	rsp, err := c.ArgocdInternalK8sProxyPost(ctx, clusterId, path, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdInternalK8sProxyPostResponse(rsp)
-}
-
-// ArgocdInternalK8sProxyPutWithBodyWithResponse request with arbitrary body returning *ArgocdInternalK8sProxyPutResponse
-func (c *ClientWithResponses) ArgocdInternalK8sProxyPutWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyPutResponse, error) {
-	rsp, err := c.ArgocdInternalK8sProxyPutWithBody(ctx, clusterId, path, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdInternalK8sProxyPutResponse(rsp)
-}
-
-func (c *ClientWithResponses) ArgocdInternalK8sProxyPutWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, body ArgocdInternalK8sProxyPutJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyPutResponse, error) {
-	rsp, err := c.ArgocdInternalK8sProxyPut(ctx, clusterId, path, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdInternalK8sProxyPutResponse(rsp)
-}
-
-// ArgocdInternalK8sProxyTraceWithResponse request returning *ArgocdInternalK8sProxyTraceResponse
-func (c *ClientWithResponses) ArgocdInternalK8sProxyTraceWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, reqEditors ...RequestEditorFn) (*ArgocdInternalK8sProxyTraceResponse, error) {
-	rsp, err := c.ArgocdInternalK8sProxyTrace(ctx, clusterId, path, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdInternalK8sProxyTraceResponse(rsp)
 }
 
 // PostApiV1NodesClusterIdNodeNameAnnotationsWithBodyWithResponse request with arbitrary body returning *PostApiV1NodesClusterIdNodeNameAnnotationsResponse
@@ -63069,198 +65463,6 @@ func (c *ClientWithResponses) PodLogsWebSocketWithResponse(ctx context.Context, 
 	return ParsePodLogsWebSocketResponse(rsp)
 }
 
-// ArgocdUiDeleteWithResponse request returning *ArgocdUiDeleteResponse
-func (c *ClientWithResponses) ArgocdUiDeleteWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ArgocdUiDeleteResponse, error) {
-	rsp, err := c.ArgocdUiDelete(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiDeleteResponse(rsp)
-}
-
-// ArgocdUiGetWithResponse request returning *ArgocdUiGetResponse
-func (c *ClientWithResponses) ArgocdUiGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ArgocdUiGetResponse, error) {
-	rsp, err := c.ArgocdUiGet(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiGetResponse(rsp)
-}
-
-// ArgocdUiHeadWithResponse request returning *ArgocdUiHeadResponse
-func (c *ClientWithResponses) ArgocdUiHeadWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ArgocdUiHeadResponse, error) {
-	rsp, err := c.ArgocdUiHead(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiHeadResponse(rsp)
-}
-
-// ArgocdUiOptionsWithResponse request returning *ArgocdUiOptionsResponse
-func (c *ClientWithResponses) ArgocdUiOptionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ArgocdUiOptionsResponse, error) {
-	rsp, err := c.ArgocdUiOptions(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiOptionsResponse(rsp)
-}
-
-// ArgocdUiPatchWithBodyWithResponse request with arbitrary body returning *ArgocdUiPatchResponse
-func (c *ClientWithResponses) ArgocdUiPatchWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdUiPatchResponse, error) {
-	rsp, err := c.ArgocdUiPatchWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiPatchResponse(rsp)
-}
-
-func (c *ClientWithResponses) ArgocdUiPatchWithResponse(ctx context.Context, body ArgocdUiPatchJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdUiPatchResponse, error) {
-	rsp, err := c.ArgocdUiPatch(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiPatchResponse(rsp)
-}
-
-// ArgocdUiPostWithBodyWithResponse request with arbitrary body returning *ArgocdUiPostResponse
-func (c *ClientWithResponses) ArgocdUiPostWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdUiPostResponse, error) {
-	rsp, err := c.ArgocdUiPostWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiPostResponse(rsp)
-}
-
-func (c *ClientWithResponses) ArgocdUiPostWithResponse(ctx context.Context, body ArgocdUiPostJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdUiPostResponse, error) {
-	rsp, err := c.ArgocdUiPost(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiPostResponse(rsp)
-}
-
-// ArgocdUiPutWithBodyWithResponse request with arbitrary body returning *ArgocdUiPutResponse
-func (c *ClientWithResponses) ArgocdUiPutWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdUiPutResponse, error) {
-	rsp, err := c.ArgocdUiPutWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiPutResponse(rsp)
-}
-
-func (c *ClientWithResponses) ArgocdUiPutWithResponse(ctx context.Context, body ArgocdUiPutJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdUiPutResponse, error) {
-	rsp, err := c.ArgocdUiPut(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiPutResponse(rsp)
-}
-
-// ArgocdUiTraceWithResponse request returning *ArgocdUiTraceResponse
-func (c *ClientWithResponses) ArgocdUiTraceWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ArgocdUiTraceResponse, error) {
-	rsp, err := c.ArgocdUiTrace(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiTraceResponse(rsp)
-}
-
-// ArgocdUiSubDeleteWithResponse request returning *ArgocdUiSubDeleteResponse
-func (c *ClientWithResponses) ArgocdUiSubDeleteWithResponse(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*ArgocdUiSubDeleteResponse, error) {
-	rsp, err := c.ArgocdUiSubDelete(ctx, path, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiSubDeleteResponse(rsp)
-}
-
-// ArgocdUiSubGetWithResponse request returning *ArgocdUiSubGetResponse
-func (c *ClientWithResponses) ArgocdUiSubGetWithResponse(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*ArgocdUiSubGetResponse, error) {
-	rsp, err := c.ArgocdUiSubGet(ctx, path, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiSubGetResponse(rsp)
-}
-
-// ArgocdUiSubHeadWithResponse request returning *ArgocdUiSubHeadResponse
-func (c *ClientWithResponses) ArgocdUiSubHeadWithResponse(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*ArgocdUiSubHeadResponse, error) {
-	rsp, err := c.ArgocdUiSubHead(ctx, path, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiSubHeadResponse(rsp)
-}
-
-// ArgocdUiSubOptionsWithResponse request returning *ArgocdUiSubOptionsResponse
-func (c *ClientWithResponses) ArgocdUiSubOptionsWithResponse(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*ArgocdUiSubOptionsResponse, error) {
-	rsp, err := c.ArgocdUiSubOptions(ctx, path, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiSubOptionsResponse(rsp)
-}
-
-// ArgocdUiSubPatchWithBodyWithResponse request with arbitrary body returning *ArgocdUiSubPatchResponse
-func (c *ClientWithResponses) ArgocdUiSubPatchWithBodyWithResponse(ctx context.Context, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdUiSubPatchResponse, error) {
-	rsp, err := c.ArgocdUiSubPatchWithBody(ctx, path, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiSubPatchResponse(rsp)
-}
-
-func (c *ClientWithResponses) ArgocdUiSubPatchWithResponse(ctx context.Context, path string, body ArgocdUiSubPatchJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdUiSubPatchResponse, error) {
-	rsp, err := c.ArgocdUiSubPatch(ctx, path, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiSubPatchResponse(rsp)
-}
-
-// ArgocdUiSubPostWithBodyWithResponse request with arbitrary body returning *ArgocdUiSubPostResponse
-func (c *ClientWithResponses) ArgocdUiSubPostWithBodyWithResponse(ctx context.Context, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdUiSubPostResponse, error) {
-	rsp, err := c.ArgocdUiSubPostWithBody(ctx, path, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiSubPostResponse(rsp)
-}
-
-func (c *ClientWithResponses) ArgocdUiSubPostWithResponse(ctx context.Context, path string, body ArgocdUiSubPostJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdUiSubPostResponse, error) {
-	rsp, err := c.ArgocdUiSubPost(ctx, path, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiSubPostResponse(rsp)
-}
-
-// ArgocdUiSubPutWithBodyWithResponse request with arbitrary body returning *ArgocdUiSubPutResponse
-func (c *ClientWithResponses) ArgocdUiSubPutWithBodyWithResponse(ctx context.Context, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ArgocdUiSubPutResponse, error) {
-	rsp, err := c.ArgocdUiSubPutWithBody(ctx, path, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiSubPutResponse(rsp)
-}
-
-func (c *ClientWithResponses) ArgocdUiSubPutWithResponse(ctx context.Context, path string, body ArgocdUiSubPutJSONRequestBody, reqEditors ...RequestEditorFn) (*ArgocdUiSubPutResponse, error) {
-	rsp, err := c.ArgocdUiSubPut(ctx, path, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiSubPutResponse(rsp)
-}
-
-// ArgocdUiSubTraceWithResponse request returning *ArgocdUiSubTraceResponse
-func (c *ClientWithResponses) ArgocdUiSubTraceWithResponse(ctx context.Context, path string, reqEditors ...RequestEditorFn) (*ArgocdUiSubTraceResponse, error) {
-	rsp, err := c.ArgocdUiSubTrace(ctx, path, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseArgocdUiSubTraceResponse(rsp)
-}
-
 // TunnelHealthCheckWithResponse request returning *TunnelHealthCheckResponse
 func (c *ClientWithResponses) TunnelHealthCheckWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*TunnelHealthCheckResponse, error) {
 	rsp, err := c.TunnelHealthCheck(ctx, reqEditors...)
@@ -63804,255 +66006,6 @@ func ParseAdminCharlieActionPolicyUpdateResponse(rsp *http.Response) (*AdminChar
 	return response, nil
 }
 
-// ParseAdminCharlieAgentInstallResponse parses an HTTP response from a AdminCharlieAgentInstallWithResponse call
-func ParseAdminCharlieAgentInstallResponse(rsp *http.Response) (*AdminCharlieAgentInstallResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &AdminCharlieAgentInstallResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminAgent
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ServiceUnavailable
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseAdminCharlieAgentRollbackResponse parses an HTTP response from a AdminCharlieAgentRollbackWithResponse call
-func ParseAdminCharlieAgentRollbackResponse(rsp *http.Response) (*AdminCharlieAgentRollbackResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &AdminCharlieAgentRollbackResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminAgent
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseAdminCharlieAgentRotateResponse parses an HTTP response from a AdminCharlieAgentRotateWithResponse call
-func ParseAdminCharlieAgentRotateResponse(rsp *http.Response) (*AdminCharlieAgentRotateResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &AdminCharlieAgentRotateResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminAgent
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseAdminCharlieAgentUninstallResponse parses an HTTP response from a AdminCharlieAgentUninstallWithResponse call
-func ParseAdminCharlieAgentUninstallResponse(rsp *http.Response) (*AdminCharlieAgentUninstallResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &AdminCharlieAgentUninstallResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest BadRequest
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ServiceUnavailable
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseAdminCharlieAgentUpgradeResponse parses an HTTP response from a AdminCharlieAgentUpgradeWithResponse call
-func ParseAdminCharlieAgentUpgradeResponse(rsp *http.Response) (*AdminCharlieAgentUpgradeResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &AdminCharlieAgentUpgradeResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminAgent
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseAdminCharlieAlertDeliveryProofsResponse parses an HTTP response from a AdminCharlieAlertDeliveryProofsWithResponse call
 func ParseAdminCharlieAlertDeliveryProofsResponse(rsp *http.Response) (*AdminCharlieAlertDeliveryProofsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -64256,60 +66209,6 @@ func ParseAdminCharlieDiagnosticsRunResponse(rsp *http.Response) (*AdminCharlieD
 			return nil, err
 		}
 		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ServiceUnavailable
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseAdminCharlieDisconnectResponse parses an HTTP response from a AdminCharlieDisconnectWithResponse call
-func ParseAdminCharlieDisconnectResponse(rsp *http.Response) (*AdminCharlieDisconnectResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &AdminCharlieDisconnectResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest BadRequest
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest ServiceUnavailable
@@ -66710,228 +68609,6 @@ func ParseAdminWebhookTestResponse(rsp *http.Response) (*AdminWebhookTestRespons
 	return response, nil
 }
 
-// ParseGetApiV1AgentsFleetResponse parses an HTTP response from a GetApiV1AgentsFleetWithResponse call
-func ParseGetApiV1AgentsFleetResponse(rsp *http.Response) (*GetApiV1AgentsFleetResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1AgentsFleetResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data *AgentFleetResponse `json:"data,omitempty"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetApiV1AgentsFleetClusterIdDiagnosticsResponse parses an HTTP response from a GetApiV1AgentsFleetClusterIdDiagnosticsWithResponse call
-func ParseGetApiV1AgentsFleetClusterIdDiagnosticsResponse(rsp *http.Response) (*GetApiV1AgentsFleetClusterIdDiagnosticsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1AgentsFleetClusterIdDiagnosticsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data *AgentDiagnostics `json:"data,omitempty"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest NotFound
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetApiV1AgentsFleetClusterIdDiagnosticsBundleResponse parses an HTTP response from a GetApiV1AgentsFleetClusterIdDiagnosticsBundleWithResponse call
-func ParseGetApiV1AgentsFleetClusterIdDiagnosticsBundleResponse(rsp *http.Response) (*GetApiV1AgentsFleetClusterIdDiagnosticsBundleResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1AgentsFleetClusterIdDiagnosticsBundleResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest AgentDiagnosticsBundle
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest NotFound
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetApiV1AgentsFleetClusterIdOperationsResponse parses an HTTP response from a GetApiV1AgentsFleetClusterIdOperationsWithResponse call
-func ParseGetApiV1AgentsFleetClusterIdOperationsResponse(rsp *http.Response) (*GetApiV1AgentsFleetClusterIdOperationsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1AgentsFleetClusterIdOperationsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data *AgentLifecycleOperationsResponse `json:"data,omitempty"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostApiV1AgentsFleetClusterIdSelfTestResponse parses an HTTP response from a PostApiV1AgentsFleetClusterIdSelfTestWithResponse call
-func ParsePostApiV1AgentsFleetClusterIdSelfTestResponse(rsp *http.Response) (*PostApiV1AgentsFleetClusterIdSelfTestResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostApiV1AgentsFleetClusterIdSelfTestResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data *AgentSelfTest `json:"data,omitempty"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest NotFound
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostApiV1AgentsFleetClusterIdUpgradePlanResponse parses an HTTP response from a PostApiV1AgentsFleetClusterIdUpgradePlanWithResponse call
-func ParsePostApiV1AgentsFleetClusterIdUpgradePlanResponse(rsp *http.Response) (*PostApiV1AgentsFleetClusterIdUpgradePlanResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostApiV1AgentsFleetClusterIdUpgradePlanResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data *AgentUpgradePlan `json:"data,omitempty"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostApiV1AgentsFleetClusterIdUpgradeResponse parses an HTTP response from a PostApiV1AgentsFleetClusterIdUpgradeWithResponse call
-func ParsePostApiV1AgentsFleetClusterIdUpgradeResponse(rsp *http.Response) (*PostApiV1AgentsFleetClusterIdUpgradeResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostApiV1AgentsFleetClusterIdUpgradeResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest struct {
-			Data *AgentUpgradeOperationResponse `json:"data,omitempty"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON202 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest map[string]interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseGetApiV1AlertingChannelsResponse parses an HTTP response from a GetApiV1AlertingChannelsWithResponse call
 func ParseGetApiV1AlertingChannelsResponse(rsp *http.Response) (*GetApiV1AlertingChannelsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -66984,192 +68661,6 @@ func ParseGetApiV1AlertingEventsResponse(rsp *http.Response) (*GetApiV1AlertingE
 			return nil, err
 		}
 		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostApiV1ArgocdApplicationsIdSyncResponse parses an HTTP response from a PostApiV1ArgocdApplicationsIdSyncWithResponse call
-func ParsePostApiV1ArgocdApplicationsIdSyncResponse(rsp *http.Response) (*PostApiV1ArgocdApplicationsIdSyncResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostApiV1ArgocdApplicationsIdSyncResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest ArgoOperationEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON202 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetApiV1ArgocdInstancesResponse parses an HTTP response from a GetApiV1ArgocdInstancesWithResponse call
-func ParseGetApiV1ArgocdInstancesResponse(rsp *http.Response) (*GetApiV1ArgocdInstancesResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1ArgocdInstancesResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostApiV1ArgocdInstancesIdApplicationsNameSyncResponse parses an HTTP response from a PostApiV1ArgocdInstancesIdApplicationsNameSyncWithResponse call
-func ParsePostApiV1ArgocdInstancesIdApplicationsNameSyncResponse(rsp *http.Response) (*PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest ArgoOperationEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON202 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetApiV1ArgocdInstancesIdOrphanReportResponse parses an HTTP response from a GetApiV1ArgocdInstancesIdOrphanReportWithResponse call
-func ParseGetApiV1ArgocdInstancesIdOrphanReportResponse(rsp *http.Response) (*GetApiV1ArgocdInstancesIdOrphanReportResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1ArgocdInstancesIdOrphanReportResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data *ArgoOrphanReport `json:"data,omitempty"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetApiV1ArgocdOperationsResponse parses an HTTP response from a GetApiV1ArgocdOperationsWithResponse call
-func ParseGetApiV1ArgocdOperationsResponse(rsp *http.Response) (*GetApiV1ArgocdOperationsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1ArgocdOperationsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetApiV1ArgocdOperationsIdResponse parses an HTTP response from a GetApiV1ArgocdOperationsIdWithResponse call
-func ParseGetApiV1ArgocdOperationsIdResponse(rsp *http.Response) (*GetApiV1ArgocdOperationsIdResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1ArgocdOperationsIdResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ArgoOperationEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
 
 	}
 
@@ -70474,6 +71965,113 @@ func ParsePostApiV1CatalogOperationsIdRetryResponse(rsp *http.Response) (*PostAp
 	return response, nil
 }
 
+// ParseGetApiV1CatalogRecommendationsPopularResponse parses an HTTP response from a GetApiV1CatalogRecommendationsPopularWithResponse call
+func ParseGetApiV1CatalogRecommendationsPopularResponse(rsp *http.Response) (*GetApiV1CatalogRecommendationsPopularResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1CatalogRecommendationsPopularResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			// Count Total number of items across all pages.
+			Count int64                 `json:"count"`
+			Data  []ChartRecommendation `json:"data"`
+
+			// Next URL of the next page, or null on the last page.
+			Next *string `json:"next"`
+
+			// Previous URL of the previous page, or null on the first page.
+			Previous *string `json:"previous"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1CatalogRecommendationsSimilarChartIdResponse parses an HTTP response from a GetApiV1CatalogRecommendationsSimilarChartIdWithResponse call
+func ParseGetApiV1CatalogRecommendationsSimilarChartIdResponse(rsp *http.Response) (*GetApiV1CatalogRecommendationsSimilarChartIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1CatalogRecommendationsSimilarChartIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			// Count Total number of items across all pages.
+			Count int64                 `json:"count"`
+			Data  []ChartRecommendation `json:"data"`
+
+			// Next URL of the next page, or null on the last page.
+			Next *string `json:"next"`
+
+			// Previous URL of the previous page, or null on the first page.
+			Previous *string `json:"previous"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetApiV1CatalogRepositoriesResponse parses an HTTP response from a GetApiV1CatalogRepositoriesWithResponse call
 func ParseGetApiV1CatalogRepositoriesResponse(rsp *http.Response) (*GetApiV1CatalogRepositoriesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -70883,6 +72481,46 @@ func ParseDecideCharlieApprovalResponse(rsp *http.Response) (*DecideCharlieAppro
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCharlieCommandsResponse parses an HTTP response from a ListCharlieCommandsWithResponse call
+func ParseListCharlieCommandsResponse(rsp *http.Response) (*ListCharlieCommandsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCharlieCommandsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieCommandCatalog
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -71677,6 +73315,229 @@ func ParseCreateCharlieSessionMessageResponse(rsp *http.Response) (*CreateCharli
 	return response, nil
 }
 
+// ParseListCharlieThreadsResponse parses an HTTP response from a ListCharlieThreadsWithResponse call
+func ParseListCharlieThreadsResponse(rsp *http.Response) (*ListCharlieThreadsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCharlieThreadsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Threads []CharlieThreadMetadata `json:"threads"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetActiveCharlieThreadResponse parses an HTTP response from a GetActiveCharlieThreadWithResponse call
+func ParseGetActiveCharlieThreadResponse(rsp *http.Response) (*GetActiveCharlieThreadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetActiveCharlieThreadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateCharlieThreadMessageResponse parses an HTTP response from a CreateCharlieThreadMessageWithResponse call
+func ParseCreateCharlieThreadMessageResponse(rsp *http.Response) (*CreateCharlieThreadMessageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateCharlieThreadMessageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateCharlieThreadResponse parses an HTTP response from a CreateCharlieThreadWithResponse call
+func ParseCreateCharlieThreadResponse(rsp *http.Response) (*CreateCharlieThreadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateCharlieThreadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCharlieThreadHistoryResponse parses an HTTP response from a GetCharlieThreadHistoryWithResponse call
+func ParseGetCharlieThreadHistoryResponse(rsp *http.Response) (*GetCharlieThreadHistoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCharlieThreadHistoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetApiV1CloudCredentialsProvidersResponse parses an HTTP response from a GetApiV1CloudCredentialsProvidersWithResponse call
 func ParseGetApiV1CloudCredentialsProvidersResponse(rsp *http.Response) (*GetApiV1CloudCredentialsProvidersResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -71701,6 +73562,254 @@ func ParseGetApiV1CloudCredentialsProvidersResponse(rsp *http.Response) (*GetApi
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ClusterAgentsResponse parses an HTTP response from a GetApiV1ClusterAgentsWithResponse call
+func ParseGetApiV1ClusterAgentsResponse(rsp *http.Response) (*GetApiV1ClusterAgentsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClusterAgentsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data *ClusterAgentResponse `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ClusterAgentsClusterIdResponse parses an HTTP response from a GetApiV1ClusterAgentsClusterIdWithResponse call
+func ParseGetApiV1ClusterAgentsClusterIdResponse(rsp *http.Response) (*GetApiV1ClusterAgentsClusterIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClusterAgentsClusterIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ClusterAgentsClusterIdDiagnosticsResponse parses an HTTP response from a GetApiV1ClusterAgentsClusterIdDiagnosticsWithResponse call
+func ParseGetApiV1ClusterAgentsClusterIdDiagnosticsResponse(rsp *http.Response) (*GetApiV1ClusterAgentsClusterIdDiagnosticsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClusterAgentsClusterIdDiagnosticsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data *AgentDiagnostics `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ClusterAgentsClusterIdDiagnosticsBundleResponse parses an HTTP response from a GetApiV1ClusterAgentsClusterIdDiagnosticsBundleWithResponse call
+func ParseGetApiV1ClusterAgentsClusterIdDiagnosticsBundleResponse(rsp *http.Response) (*GetApiV1ClusterAgentsClusterIdDiagnosticsBundleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClusterAgentsClusterIdDiagnosticsBundleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AgentDiagnosticsBundle
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ClusterAgentsClusterIdOperationsResponse parses an HTTP response from a GetApiV1ClusterAgentsClusterIdOperationsWithResponse call
+func ParseGetApiV1ClusterAgentsClusterIdOperationsResponse(rsp *http.Response) (*GetApiV1ClusterAgentsClusterIdOperationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClusterAgentsClusterIdOperationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data *AgentLifecycleOperationsResponse `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClusterAgentsClusterIdSelfTestResponse parses an HTTP response from a PostApiV1ClusterAgentsClusterIdSelfTestWithResponse call
+func ParsePostApiV1ClusterAgentsClusterIdSelfTestResponse(rsp *http.Response) (*PostApiV1ClusterAgentsClusterIdSelfTestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClusterAgentsClusterIdSelfTestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data *AgentSelfTest `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClusterAgentsClusterIdUpgradePlanResponse parses an HTTP response from a PostApiV1ClusterAgentsClusterIdUpgradePlanWithResponse call
+func ParsePostApiV1ClusterAgentsClusterIdUpgradePlanResponse(rsp *http.Response) (*PostApiV1ClusterAgentsClusterIdUpgradePlanResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClusterAgentsClusterIdUpgradePlanResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data *AgentUpgradePlan `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClusterAgentsClusterIdUpgradeResponse parses an HTTP response from a PostApiV1ClusterAgentsClusterIdUpgradeWithResponse call
+func ParsePostApiV1ClusterAgentsClusterIdUpgradeResponse(rsp *http.Response) (*PostApiV1ClusterAgentsClusterIdUpgradeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClusterAgentsClusterIdUpgradeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest struct {
+			Data *AgentUpgradeOperationResponse `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
@@ -77791,6 +79900,1129 @@ func ParseTunnelConnectTraceResponse(rsp *http.Response) (*TunnelConnectTraceRes
 	return response, nil
 }
 
+// ParseGetApiV1DeliveryBundlesResponse parses an HTTP response from a GetApiV1DeliveryBundlesWithResponse call
+func ParseGetApiV1DeliveryBundlesResponse(rsp *http.Response) (*GetApiV1DeliveryBundlesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryBundlesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryBundlePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryBundlesResponse parses an HTTP response from a PostApiV1DeliveryBundlesWithResponse call
+func ParsePostApiV1DeliveryBundlesResponse(rsp *http.Response) (*PostApiV1DeliveryBundlesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryBundlesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest DeliveryBundleEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1DeliveryBundlesIdResponse parses an HTTP response from a DeleteApiV1DeliveryBundlesIdWithResponse call
+func ParseDeleteApiV1DeliveryBundlesIdResponse(rsp *http.Response) (*DeleteApiV1DeliveryBundlesIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1DeliveryBundlesIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryBundlesIdResponse parses an HTTP response from a GetApiV1DeliveryBundlesIdWithResponse call
+func ParseGetApiV1DeliveryBundlesIdResponse(rsp *http.Response) (*GetApiV1DeliveryBundlesIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryBundlesIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryBundleEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchApiV1DeliveryBundlesIdResponse parses an HTTP response from a PatchApiV1DeliveryBundlesIdWithResponse call
+func ParsePatchApiV1DeliveryBundlesIdResponse(rsp *http.Response) (*PatchApiV1DeliveryBundlesIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchApiV1DeliveryBundlesIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryBundleEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryBundlesIdVersionsResponse parses an HTTP response from a GetApiV1DeliveryBundlesIdVersionsWithResponse call
+func ParseGetApiV1DeliveryBundlesIdVersionsResponse(rsp *http.Response) (*GetApiV1DeliveryBundlesIdVersionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryBundlesIdVersionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryBundleVersionPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryBundlesIdVersionsResponse parses an HTTP response from a PostApiV1DeliveryBundlesIdVersionsWithResponse call
+func ParsePostApiV1DeliveryBundlesIdVersionsResponse(rsp *http.Response) (*PostApiV1DeliveryBundlesIdVersionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryBundlesIdVersionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest DeliveryBundleVersionEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryBundlesIdVersionsVersionIdResponse parses an HTTP response from a GetApiV1DeliveryBundlesIdVersionsVersionIdWithResponse call
+func ParseGetApiV1DeliveryBundlesIdVersionsVersionIdResponse(rsp *http.Response) (*GetApiV1DeliveryBundlesIdVersionsVersionIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryBundlesIdVersionsVersionIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryBundleVersionEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryClustersClusterIdInventoryResponse parses an HTTP response from a GetApiV1DeliveryClustersClusterIdInventoryWithResponse call
+func ParseGetApiV1DeliveryClustersClusterIdInventoryResponse(rsp *http.Response) (*GetApiV1DeliveryClustersClusterIdInventoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryClustersClusterIdInventoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryClusterInventoryEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryDeploymentsResponse parses an HTTP response from a GetApiV1DeliveryDeploymentsWithResponse call
+func ParseGetApiV1DeliveryDeploymentsResponse(rsp *http.Response) (*GetApiV1DeliveryDeploymentsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryDeploymentsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ClusterDeploymentPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryDeploymentsIdResponse parses an HTTP response from a GetApiV1DeliveryDeploymentsIdWithResponse call
+func ParseGetApiV1DeliveryDeploymentsIdResponse(rsp *http.Response) (*GetApiV1DeliveryDeploymentsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryDeploymentsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ClusterDeploymentDetailEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryDeploymentsIdEventsResponse parses an HTTP response from a GetApiV1DeliveryDeploymentsIdEventsWithResponse call
+func ParseGetApiV1DeliveryDeploymentsIdEventsResponse(rsp *http.Response) (*GetApiV1DeliveryDeploymentsIdEventsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryDeploymentsIdEventsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ClusterDeploymentEventPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryDeploymentsIdReconcileResponse parses an HTTP response from a PostApiV1DeliveryDeploymentsIdReconcileWithResponse call
+func ParsePostApiV1DeliveryDeploymentsIdReconcileResponse(rsp *http.Response) (*PostApiV1DeliveryDeploymentsIdReconcileResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryDeploymentsIdReconcileResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryDeploymentsIdResumeResponse parses an HTTP response from a PostApiV1DeliveryDeploymentsIdResumeWithResponse call
+func ParsePostApiV1DeliveryDeploymentsIdResumeResponse(rsp *http.Response) (*PostApiV1DeliveryDeploymentsIdResumeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryDeploymentsIdResumeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryDeploymentsIdSuspendResponse parses an HTTP response from a PostApiV1DeliveryDeploymentsIdSuspendWithResponse call
+func ParsePostApiV1DeliveryDeploymentsIdSuspendResponse(rsp *http.Response) (*PostApiV1DeliveryDeploymentsIdSuspendResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryDeploymentsIdSuspendResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryRolloutsResponse parses an HTTP response from a GetApiV1DeliveryRolloutsWithResponse call
+func ParseGetApiV1DeliveryRolloutsResponse(rsp *http.Response) (*GetApiV1DeliveryRolloutsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryRolloutsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryRolloutPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryRolloutsIdResponse parses an HTTP response from a GetApiV1DeliveryRolloutsIdWithResponse call
+func ParseGetApiV1DeliveryRolloutsIdResponse(rsp *http.Response) (*GetApiV1DeliveryRolloutsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryRolloutsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryRolloutDetailEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryRolloutsIdAbortResponse parses an HTTP response from a PostApiV1DeliveryRolloutsIdAbortWithResponse call
+func ParsePostApiV1DeliveryRolloutsIdAbortResponse(rsp *http.Response) (*PostApiV1DeliveryRolloutsIdAbortResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryRolloutsIdAbortResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryRolloutsIdApproveResponse parses an HTTP response from a PostApiV1DeliveryRolloutsIdApproveWithResponse call
+func ParsePostApiV1DeliveryRolloutsIdApproveResponse(rsp *http.Response) (*PostApiV1DeliveryRolloutsIdApproveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryRolloutsIdApproveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest DeliveryRolloutControlEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryRolloutsIdClustersResponse parses an HTTP response from a GetApiV1DeliveryRolloutsIdClustersWithResponse call
+func ParseGetApiV1DeliveryRolloutsIdClustersResponse(rsp *http.Response) (*GetApiV1DeliveryRolloutsIdClustersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryRolloutsIdClustersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryRolloutClusterPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryRolloutsIdEventsResponse parses an HTTP response from a GetApiV1DeliveryRolloutsIdEventsWithResponse call
+func ParseGetApiV1DeliveryRolloutsIdEventsResponse(rsp *http.Response) (*GetApiV1DeliveryRolloutsIdEventsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryRolloutsIdEventsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryRolloutEventPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryRolloutsIdPauseResponse parses an HTTP response from a PostApiV1DeliveryRolloutsIdPauseWithResponse call
+func ParsePostApiV1DeliveryRolloutsIdPauseResponse(rsp *http.Response) (*PostApiV1DeliveryRolloutsIdPauseResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryRolloutsIdPauseResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryRolloutsIdResumeResponse parses an HTTP response from a PostApiV1DeliveryRolloutsIdResumeWithResponse call
+func ParsePostApiV1DeliveryRolloutsIdResumeResponse(rsp *http.Response) (*PostApiV1DeliveryRolloutsIdResumeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryRolloutsIdResumeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryRolloutsIdRetryResponse parses an HTTP response from a PostApiV1DeliveryRolloutsIdRetryWithResponse call
+func ParsePostApiV1DeliveryRolloutsIdRetryResponse(rsp *http.Response) (*PostApiV1DeliveryRolloutsIdRetryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryRolloutsIdRetryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryRolloutsIdRollbackResponse parses an HTTP response from a PostApiV1DeliveryRolloutsIdRollbackWithResponse call
+func ParsePostApiV1DeliveryRolloutsIdRollbackResponse(rsp *http.Response) (*PostApiV1DeliveryRolloutsIdRollbackResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryRolloutsIdRollbackResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest DeliveryRolloutControlEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliverySourcesResponse parses an HTTP response from a GetApiV1DeliverySourcesWithResponse call
+func ParseGetApiV1DeliverySourcesResponse(rsp *http.Response) (*GetApiV1DeliverySourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliverySourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliverySourcePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliverySourcesResponse parses an HTTP response from a PostApiV1DeliverySourcesWithResponse call
+func ParsePostApiV1DeliverySourcesResponse(rsp *http.Response) (*PostApiV1DeliverySourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliverySourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest DeliverySourceEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1DeliverySourcesIdResponse parses an HTTP response from a DeleteApiV1DeliverySourcesIdWithResponse call
+func ParseDeleteApiV1DeliverySourcesIdResponse(rsp *http.Response) (*DeleteApiV1DeliverySourcesIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1DeliverySourcesIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliverySourcesIdResponse parses an HTTP response from a GetApiV1DeliverySourcesIdWithResponse call
+func ParseGetApiV1DeliverySourcesIdResponse(rsp *http.Response) (*GetApiV1DeliverySourcesIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliverySourcesIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliverySourceEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchApiV1DeliverySourcesIdResponse parses an HTTP response from a PatchApiV1DeliverySourcesIdWithResponse call
+func ParsePatchApiV1DeliverySourcesIdResponse(rsp *http.Response) (*PatchApiV1DeliverySourcesIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchApiV1DeliverySourcesIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliverySourceEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliverySourcesIdRotateCredentialResponse parses an HTTP response from a PostApiV1DeliverySourcesIdRotateCredentialWithResponse call
+func ParsePostApiV1DeliverySourcesIdRotateCredentialResponse(rsp *http.Response) (*PostApiV1DeliverySourcesIdRotateCredentialResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliverySourcesIdRotateCredentialResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliverySourceEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliverySourcesIdVerifyResponse parses an HTTP response from a PostApiV1DeliverySourcesIdVerifyWithResponse call
+func ParsePostApiV1DeliverySourcesIdVerifyResponse(rsp *http.Response) (*PostApiV1DeliverySourcesIdVerifyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliverySourcesIdVerifyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliverySystemCompatibilityResponse parses an HTTP response from a GetApiV1DeliverySystemCompatibilityWithResponse call
+func ParseGetApiV1DeliverySystemCompatibilityResponse(rsp *http.Response) (*GetApiV1DeliverySystemCompatibilityResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliverySystemCompatibilityResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliverySystemCompatibilityEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryTargetsResponse parses an HTTP response from a GetApiV1DeliveryTargetsWithResponse call
+func ParseGetApiV1DeliveryTargetsResponse(rsp *http.Response) (*GetApiV1DeliveryTargetsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryTargetsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryTargetPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryTargetsResponse parses an HTTP response from a PostApiV1DeliveryTargetsWithResponse call
+func ParsePostApiV1DeliveryTargetsResponse(rsp *http.Response) (*PostApiV1DeliveryTargetsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryTargetsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest DeliveryTargetEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1DeliveryTargetsIdResponse parses an HTTP response from a DeleteApiV1DeliveryTargetsIdWithResponse call
+func ParseDeleteApiV1DeliveryTargetsIdResponse(rsp *http.Response) (*DeleteApiV1DeliveryTargetsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1DeliveryTargetsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest DeliveryTargetDeletionEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1DeliveryTargetsIdResponse parses an HTTP response from a GetApiV1DeliveryTargetsIdWithResponse call
+func ParseGetApiV1DeliveryTargetsIdResponse(rsp *http.Response) (*GetApiV1DeliveryTargetsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1DeliveryTargetsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryTargetEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchApiV1DeliveryTargetsIdResponse parses an HTTP response from a PatchApiV1DeliveryTargetsIdWithResponse call
+func ParsePatchApiV1DeliveryTargetsIdResponse(rsp *http.Response) (*PatchApiV1DeliveryTargetsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchApiV1DeliveryTargetsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryTargetEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryTargetsIdOrphanResponse parses an HTTP response from a PostApiV1DeliveryTargetsIdOrphanWithResponse call
+func ParsePostApiV1DeliveryTargetsIdOrphanResponse(rsp *http.Response) (*PostApiV1DeliveryTargetsIdOrphanResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryTargetsIdOrphanResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryTargetDeletionEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryTargetsIdPreviewResponse parses an HTTP response from a PostApiV1DeliveryTargetsIdPreviewWithResponse call
+func ParsePostApiV1DeliveryTargetsIdPreviewResponse(rsp *http.Response) (*PostApiV1DeliveryTargetsIdPreviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryTargetsIdPreviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryTargetPreviewEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1DeliveryTargetsIdRolloutsResponse parses an HTTP response from a PostApiV1DeliveryTargetsIdRolloutsWithResponse call
+func ParsePostApiV1DeliveryTargetsIdRolloutsResponse(rsp *http.Response) (*PostApiV1DeliveryTargetsIdRolloutsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1DeliveryTargetsIdRolloutsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest DeliveryFrozenRolloutEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetApiV1ExtensionsResponse parses an HTTP response from a GetApiV1ExtensionsWithResponse call
 func ParseGetApiV1ExtensionsResponse(rsp *http.Response) (*GetApiV1ExtensionsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -78085,806 +81317,6 @@ func ParsePostApiV1ExtensionsNameTokenResponse(rsp *http.Response) (*PostApiV1Ex
 			return nil, err
 		}
 		response.JSON201 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetApiV1FleetOperationsResponse parses an HTTP response from a GetApiV1FleetOperationsWithResponse call
-func ParseGetApiV1FleetOperationsResponse(rsp *http.Response) (*GetApiV1FleetOperationsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1FleetOperationsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                    `json:"count"`
-			Data  []FleetOperationResponse `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostApiV1FleetOperationsResponse parses an HTTP response from a PostApiV1FleetOperationsWithResponse call
-func ParsePostApiV1FleetOperationsResponse(rsp *http.Response) (*PostApiV1FleetOperationsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostApiV1FleetOperationsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest struct {
-			// Data Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-			Data FleetOperationResponse `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetApiV1FleetOperationsIdResponse parses an HTTP response from a GetApiV1FleetOperationsIdWithResponse call
-func ParseGetApiV1FleetOperationsIdResponse(rsp *http.Response) (*GetApiV1FleetOperationsIdResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1FleetOperationsIdResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			// Data Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-			Data FleetOperationResponse `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostApiV1FleetOperationsIdAbortResponse parses an HTTP response from a PostApiV1FleetOperationsIdAbortWithResponse call
-func ParsePostApiV1FleetOperationsIdAbortResponse(rsp *http.Response) (*PostApiV1FleetOperationsIdAbortResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostApiV1FleetOperationsIdAbortResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest struct {
-			// Data Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-			Data FleetOperationResponse `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON202 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostApiV1FleetOperationsIdPauseResponse parses an HTTP response from a PostApiV1FleetOperationsIdPauseWithResponse call
-func ParsePostApiV1FleetOperationsIdPauseResponse(rsp *http.Response) (*PostApiV1FleetOperationsIdPauseResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostApiV1FleetOperationsIdPauseResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest struct {
-			// Data Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-			Data FleetOperationResponse `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON202 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostApiV1FleetOperationsIdResumeResponse parses an HTTP response from a PostApiV1FleetOperationsIdResumeWithResponse call
-func ParsePostApiV1FleetOperationsIdResumeResponse(rsp *http.Response) (*PostApiV1FleetOperationsIdResumeResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostApiV1FleetOperationsIdResumeResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest struct {
-			// Data Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-			Data FleetOperationResponse `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON202 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostApiV1FleetOperationsIdRetryFailedResponse parses an HTTP response from a PostApiV1FleetOperationsIdRetryFailedWithResponse call
-func ParsePostApiV1FleetOperationsIdRetryFailedResponse(rsp *http.Response) (*PostApiV1FleetOperationsIdRetryFailedResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostApiV1FleetOperationsIdRetryFailedResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest struct {
-			// Data Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
-			Data FleetOperationResponse `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON202 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetApiV1FleetOperationsIdTargetsResponse parses an HTTP response from a GetApiV1FleetOperationsIdTargetsWithResponse call
-func ParseGetApiV1FleetOperationsIdTargetsResponse(rsp *http.Response) (*GetApiV1FleetOperationsIdTargetsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1FleetOperationsIdTargetsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                          `json:"count"`
-			Data  []FleetOperationTargetResponse `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdInternalK8sProxyDeleteResponse parses an HTTP response from a ArgocdInternalK8sProxyDeleteWithResponse call
-func ParseArgocdInternalK8sProxyDeleteResponse(rsp *http.Response) (*ArgocdInternalK8sProxyDeleteResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdInternalK8sProxyDeleteResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON502 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON504 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdInternalK8sProxyGetResponse parses an HTTP response from a ArgocdInternalK8sProxyGetWithResponse call
-func ParseArgocdInternalK8sProxyGetResponse(rsp *http.Response) (*ArgocdInternalK8sProxyGetResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdInternalK8sProxyGetResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON502 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON504 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdInternalK8sProxyHeadResponse parses an HTTP response from a ArgocdInternalK8sProxyHeadWithResponse call
-func ParseArgocdInternalK8sProxyHeadResponse(rsp *http.Response) (*ArgocdInternalK8sProxyHeadResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdInternalK8sProxyHeadResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON502 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON504 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdInternalK8sProxyOptionsResponse parses an HTTP response from a ArgocdInternalK8sProxyOptionsWithResponse call
-func ParseArgocdInternalK8sProxyOptionsResponse(rsp *http.Response) (*ArgocdInternalK8sProxyOptionsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdInternalK8sProxyOptionsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON502 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON504 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdInternalK8sProxyPatchResponse parses an HTTP response from a ArgocdInternalK8sProxyPatchWithResponse call
-func ParseArgocdInternalK8sProxyPatchResponse(rsp *http.Response) (*ArgocdInternalK8sProxyPatchResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdInternalK8sProxyPatchResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON502 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON504 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdInternalK8sProxyPostResponse parses an HTTP response from a ArgocdInternalK8sProxyPostWithResponse call
-func ParseArgocdInternalK8sProxyPostResponse(rsp *http.Response) (*ArgocdInternalK8sProxyPostResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdInternalK8sProxyPostResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON502 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON504 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdInternalK8sProxyPutResponse parses an HTTP response from a ArgocdInternalK8sProxyPutWithResponse call
-func ParseArgocdInternalK8sProxyPutResponse(rsp *http.Response) (*ArgocdInternalK8sProxyPutResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdInternalK8sProxyPutResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON502 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON504 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdInternalK8sProxyTraceResponse parses an HTTP response from a ArgocdInternalK8sProxyTraceWithResponse call
-func ParseArgocdInternalK8sProxyTraceResponse(rsp *http.Response) (*ArgocdInternalK8sProxyTraceResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdInternalK8sProxyTraceResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON502 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON504 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -84122,582 +86554,6 @@ func ParsePodLogsWebSocketResponse(rsp *http.Response) (*PodLogsWebSocketRespons
 			return nil, err
 		}
 		response.JSON401 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiDeleteResponse parses an HTTP response from a ArgocdUiDeleteWithResponse call
-func ParseArgocdUiDeleteResponse(rsp *http.Response) (*ArgocdUiDeleteResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiDeleteResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiGetResponse parses an HTTP response from a ArgocdUiGetWithResponse call
-func ParseArgocdUiGetResponse(rsp *http.Response) (*ArgocdUiGetResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiGetResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiHeadResponse parses an HTTP response from a ArgocdUiHeadWithResponse call
-func ParseArgocdUiHeadResponse(rsp *http.Response) (*ArgocdUiHeadResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiHeadResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiOptionsResponse parses an HTTP response from a ArgocdUiOptionsWithResponse call
-func ParseArgocdUiOptionsResponse(rsp *http.Response) (*ArgocdUiOptionsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiOptionsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiPatchResponse parses an HTTP response from a ArgocdUiPatchWithResponse call
-func ParseArgocdUiPatchResponse(rsp *http.Response) (*ArgocdUiPatchResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiPatchResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiPostResponse parses an HTTP response from a ArgocdUiPostWithResponse call
-func ParseArgocdUiPostResponse(rsp *http.Response) (*ArgocdUiPostResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiPostResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiPutResponse parses an HTTP response from a ArgocdUiPutWithResponse call
-func ParseArgocdUiPutResponse(rsp *http.Response) (*ArgocdUiPutResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiPutResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiTraceResponse parses an HTTP response from a ArgocdUiTraceWithResponse call
-func ParseArgocdUiTraceResponse(rsp *http.Response) (*ArgocdUiTraceResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiTraceResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiSubDeleteResponse parses an HTTP response from a ArgocdUiSubDeleteWithResponse call
-func ParseArgocdUiSubDeleteResponse(rsp *http.Response) (*ArgocdUiSubDeleteResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiSubDeleteResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiSubGetResponse parses an HTTP response from a ArgocdUiSubGetWithResponse call
-func ParseArgocdUiSubGetResponse(rsp *http.Response) (*ArgocdUiSubGetResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiSubGetResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiSubHeadResponse parses an HTTP response from a ArgocdUiSubHeadWithResponse call
-func ParseArgocdUiSubHeadResponse(rsp *http.Response) (*ArgocdUiSubHeadResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiSubHeadResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiSubOptionsResponse parses an HTTP response from a ArgocdUiSubOptionsWithResponse call
-func ParseArgocdUiSubOptionsResponse(rsp *http.Response) (*ArgocdUiSubOptionsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiSubOptionsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiSubPatchResponse parses an HTTP response from a ArgocdUiSubPatchWithResponse call
-func ParseArgocdUiSubPatchResponse(rsp *http.Response) (*ArgocdUiSubPatchResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiSubPatchResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiSubPostResponse parses an HTTP response from a ArgocdUiSubPostWithResponse call
-func ParseArgocdUiSubPostResponse(rsp *http.Response) (*ArgocdUiSubPostResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiSubPostResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiSubPutResponse parses an HTTP response from a ArgocdUiSubPutWithResponse call
-func ParseArgocdUiSubPutResponse(rsp *http.Response) (*ArgocdUiSubPutResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiSubPutResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
-
-	}
-
-	return response, nil
-}
-
-// ParseArgocdUiSubTraceResponse parses an HTTP response from a ArgocdUiSubTraceWithResponse call
-func ParseArgocdUiSubTraceResponse(rsp *http.Response) (*ArgocdUiSubTraceResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ArgocdUiSubTraceResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (text/html) unsupported
 
 	}
 

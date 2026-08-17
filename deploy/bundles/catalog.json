@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "release": "v1.0.0",
+  "components": [
+    {
+      "slug": "kube-state-metrics",
+      "name": "kube-state-metrics",
+      "description": "Cluster inventory metrics used by Astronomer dashboards.",
+      "default_enabled": true,
+      "source": {
+        "kind": "helm_http",
+        "url": "https://prometheus-community.github.io/helm-charts",
+        "chart": "kube-state-metrics",
+        "version": "8.0.0",
+        "chart_digest": "sha256:e9a119672c0764580ff8739c11a88dad5a9822607ea10b7e2475b207f8c39f41"
+      },
+      "scope": "platform",
+      "target_namespace": "astronomer-monitoring",
+      "release_name": "kube-state-metrics",
+      "images": [
+        "registry.k8s.io/kube-state-metrics/kube-state-metrics@sha256:85108987d044b18a098126732f98602df408888c0f7d456241f5abefb9744bc1"
+      ],
+      "values": {
+        "image": {
+          "sha": "sha256:85108987d044b18a098126732f98602df408888c0f7d456241f5abefb9744bc1"
+        },
+        "metricLabelsAllowlist": ["pods=[*]", "deployments=[*]"]
+      },
+      "requirements": {
+        "kubernetes_minimum": "1.33.0",
+        "kubernetes_maximum": "1.35.99",
+        "capabilities": ["delivery.source.helm_http", "delivery.renderer.helm", "delivery.scope.platform"]
+      }
+    },
+    {
+      "slug": "prometheus-node-exporter",
+      "name": "Prometheus Node Exporter",
+      "description": "Host metrics used by Astronomer node and capacity dashboards.",
+      "default_enabled": true,
+      "source": {
+        "kind": "helm_http",
+        "url": "https://prometheus-community.github.io/helm-charts",
+        "chart": "prometheus-node-exporter",
+        "version": "4.56.1",
+        "chart_digest": "sha256:70fab291e00a34c58fd943bb075fecc2e2e73fa95db1bcbbe7cdfe008795354a"
+      },
+      "scope": "platform",
+      "target_namespace": "astronomer-monitoring",
+      "release_name": "prometheus-node-exporter",
+      "images": [
+        "quay.io/prometheus/node-exporter@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0"
+      ],
+      "values": {
+        "image": {
+          "digest": "sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0"
+        },
+        "hostRootFsMount": {"enabled": true}
+      },
+      "requirements": {
+        "kubernetes_minimum": "1.33.0",
+        "kubernetes_maximum": "1.35.99",
+        "capabilities": ["delivery.source.helm_http", "delivery.renderer.helm", "delivery.scope.platform"]
+      }
+    }
+  ]
+}

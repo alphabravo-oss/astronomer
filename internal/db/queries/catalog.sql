@@ -129,7 +129,10 @@ SELECT * FROM helm_charts WHERE id = $1;
 SELECT * FROM helm_charts WHERE repository_id = $1 AND name = $2;
 
 -- name: ListHelmCharts :many
-SELECT * FROM helm_charts ORDER BY created_at DESC LIMIT $1 OFFSET $2;
+SELECT c.* FROM helm_charts c
+JOIN helm_repositories r ON r.id = c.repository_id
+WHERE r.owner_project_id IS NULL
+ORDER BY c.created_at DESC LIMIT $1 OFFSET $2;
 
 -- name: ListChartsByRepository :many
 SELECT * FROM helm_charts WHERE repository_id = $1 ORDER BY name ASC LIMIT $2 OFFSET $3;
@@ -157,7 +160,9 @@ RETURNING *;
 DELETE FROM helm_charts WHERE id = $1;
 
 -- name: CountHelmCharts :one
-SELECT count(*) FROM helm_charts;
+SELECT count(*) FROM helm_charts c
+JOIN helm_repositories r ON r.id = c.repository_id
+WHERE r.owner_project_id IS NULL;
 
 -- Helm Chart Versions
 

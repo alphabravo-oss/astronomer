@@ -53,9 +53,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/baseline"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/registration"
 )
 
 // ClusterTemplateApplyType is the asynq task type. Re-exported via
@@ -88,8 +86,6 @@ const ClusterTemplateApplyQueueName = "tunnel"
 // cadence; cooperative leader lease keeps multiple worker pods from
 // racing on the same row.
 const ClusterTemplateDriftCheckType = "cluster_template:drift_check"
-
-const platformSettingArgoCDManageBaselineKey = "argocd.manage_platform_baseline"
 
 // clusterTemplateDriftCheckLimit caps how many applications the drift
 // sweep evaluates per tick. The sweep is meant to surface drift as a UI
@@ -126,7 +122,6 @@ type ClusterTemplateApplyQuerier interface {
 	GetClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterTemplateApplication, error)
 	MarkClusterTemplateApplicationStatus(ctx context.Context, arg sqlc.MarkClusterTemplateApplicationStatusParams) (sqlc.ClusterTemplateApplication, error)
 	ListClusterTemplateApplicationsByStatus(ctx context.Context, arg sqlc.ListClusterTemplateApplicationsByStatusParams) ([]sqlc.ClusterTemplateApplication, error)
-	GetPlatformSetting(ctx context.Context, key string) (sqlc.PlatformSetting, error)
 	GetToolBySlug(ctx context.Context, slug string) (sqlc.ClusterTool, error)
 	GetProjectByNameAndCluster(ctx context.Context, arg sqlc.GetProjectByNameAndClusterParams) (sqlc.Project, error)
 	CreateProject(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.Project, error)
@@ -176,25 +171,6 @@ type ToolInstaller interface {
 type ClusterTemplateApplyDeps struct {
 	Queries   ClusterTemplateApplyQuerier
 	Installer ToolInstaller
-	// Registration is the wizard phase machine. Optional; when wired
-	// the worker calls it on start (→ provisioning) and on end
-	// (→ ready or → failed) so the SSE stream reflects the apply
-	// progress without polling. nil-safe.
-	Registration ClusterTemplateRegistrationAdvancer
-}
-
-// ClusterTemplateRegistrationAdvancer is the narrow surface the apply
-// worker uses to advance the wizard phase + write per-tool step rows.
-// registration.Service implements this natively.
-type ClusterTemplateRegistrationAdvancer interface {
-	OnTemplateApplyStart(ctx context.Context, clusterID uuid.UUID) error
-	OnTemplateApplySuccess(ctx context.Context, clusterID uuid.UUID) error
-	OnTemplateApplyFailure(ctx context.Context, clusterID uuid.UUID, errMsg string) error
-	// Sprint 23: per-tool step rows. Each tool install gets a row when
-	// it starts and the same row is updated to success/failed on
-	// completion so the wizard page-3 timeline shows individual progress.
-	WriteStep(ctx context.Context, clusterID uuid.UUID, in registration.StepInput) (sqlc.ClusterRegistrationStep, error)
-	UpdateStep(ctx context.Context, in registration.UpdateStepInput) (sqlc.ClusterRegistrationStep, error)
 }
 
 var clusterTemplateApplyDeps ClusterTemplateApplyDeps
@@ -295,14 +271,6 @@ func runClusterTemplateApply(ctx context.Context, deps ClusterTemplateApplyDeps,
 		return nil
 	}
 
-	// Wizard phase: connected → provisioning. Idempotent; nil-safe.
-	if deps.Registration != nil {
-		if err := deps.Registration.OnTemplateApplyStart(ctx, clusterID); err != nil {
-			runtimeLogger().WarnContext(ctx, "wizard phase advance on apply-start failed",
-				"cluster_id", clusterID, "error", err)
-		}
-	}
-
 	var spec templateSpec
 	if len(app.SpecSnapshot) > 0 {
 		if err := json.Unmarshal(app.SpecSnapshot, &spec); err != nil {
@@ -363,13 +331,6 @@ func runClusterTemplateApply(ctx context.Context, deps ClusterTemplateApplyDeps,
 		return nil
 	}
 
-	// Wizard phase: provisioning → ready. Nil-safe.
-	if deps.Registration != nil {
-		if err := deps.Registration.OnTemplateApplySuccess(ctx, clusterID); err != nil {
-			runtimeLogger().WarnContext(ctx, "wizard phase advance on apply-success failed",
-				"cluster_id", clusterID, "error", err)
-		}
-	}
 	return nil
 }
 
@@ -384,13 +345,6 @@ func persistApplyFailure(ctx context.Context, deps ClusterTemplateApplyDeps, clu
 		LastError: msg,
 	}); err != nil {
 		runtimeLogger().ErrorContext(ctx, "persist apply failure", "error", err, "cluster_id", clusterID, "msg", msg)
-	}
-	// Wizard phase: → failed. Nil-safe.
-	if deps.Registration != nil {
-		if err := deps.Registration.OnTemplateApplyFailure(ctx, clusterID, msg); err != nil {
-			runtimeLogger().WarnContext(ctx, "wizard phase advance on apply-failure failed",
-				"cluster_id", clusterID, "error", err)
-		}
 	}
 }
 
@@ -446,82 +400,17 @@ func applyTools(ctx context.Context, deps ClusterTemplateApplyDeps, cluster sqlc
 		// the operator is running in a unit-test or chart-less env.
 		return nil
 	}
-	argocdOwnsBaseline := !cluster.IsLocal && argoCDManagePlatformBaselineSetting(ctx, deps.Queries)
-	// Sprint 23: emit a per-tool step row + SSE event so the wizard
-	// progress timeline (page 3) shows individual install progress
-	// instead of one opaque "Applying Platform Baseline → applied"
-	// transition. Each tool gets a running row when its install starts
-	// and the same row is updated to success / failed on completion.
-	// Registration service is nil-safe: when unwired (test fakes) we
-	// just install without writing step rows.
 	for _, t := range spec.Tools {
-		if argocdOwnsBaseline && isArgoCDManagedBaselineTool(t.Slug) {
-			runtimeLogger().InfoContext(ctx, "skipping cluster-template tool install because ArgoCD owns platform baseline",
-				"cluster_id", cluster.ID.String(),
-				"tool_slug", t.Slug)
-			continue
-		}
 		valuesYAML := ""
 		if len(t.Values) > 0 {
 			valuesYAML = string(t.Values)
 		}
-		var stepID uuid.UUID
-		if deps.Registration != nil {
-			step, werr := deps.Registration.WriteStep(ctx, cluster.ID, registration.StepInput{
-				StepName:    "tool_installing:" + t.Slug,
-				Status:      "running",
-				ProgressPct: 0,
-				Detail: map[string]any{
-					"slug":   t.Slug,
-					"preset": t.Preset,
-				},
-				MarkStarted: true,
-			})
-			if werr == nil {
-				stepID = step.ID
-			}
-		}
 		_, err := deps.Installer.EnsureInstalled(ctx, cluster.ID, t.Slug, t.Slug, t.Preset, valuesYAML)
 		if err != nil {
-			if deps.Registration != nil && stepID != uuid.Nil {
-				_, _ = deps.Registration.UpdateStep(ctx, registration.UpdateStepInput{
-					StepID:       stepID,
-					Status:       "failed",
-					ErrorMessage: err.Error(),
-				})
-			}
 			return fmt.Errorf("ensure tool %q installed: %w", t.Slug, err)
-		}
-		if deps.Registration != nil && stepID != uuid.Nil {
-			_, _ = deps.Registration.UpdateStep(ctx, registration.UpdateStepInput{
-				StepID: stepID,
-				Status: "success",
-			})
 		}
 	}
 	return nil
-}
-
-func isArgoCDManagedBaselineTool(slug string) bool {
-	component, ok := baseline.ComponentBySlug(strings.TrimSpace(slug))
-	return ok && component.DeliveryPath() == baseline.PathApplicationSet
-}
-
-func argoCDManagePlatformBaselineSetting(ctx context.Context, q ClusterTemplateApplyQuerier) bool {
-	row, err := q.GetPlatformSetting(ctx, platformSettingArgoCDManageBaselineKey)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return true
-		}
-		runtimeLogger().WarnContext(ctx, "failed to read argocd platform baseline setting; preserving legacy template installs", "error", err)
-		return false
-	}
-	var enabled bool
-	if err := json.Unmarshal(row.Value, &enabled); err != nil {
-		runtimeLogger().WarnContext(ctx, "failed to parse argocd platform baseline setting; preserving legacy template installs", "error", err)
-		return false
-	}
-	return enabled
 }
 
 // applyDefaultProject creates the spec'd project when absent. We don't

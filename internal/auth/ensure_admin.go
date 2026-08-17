@@ -40,7 +40,7 @@ type EnsurePlatformConfigQuerier interface {
 // always override the URL afterwards through /dashboard/settings, so this is
 // purely a default for fresh installs.
 //
-// The self-management loop in internal/server/self_manage_argocd.go won't
+// The self-management loop won't
 // create the astronomer-self-manage Argo Application until server_url is
 // populated; seeding it here means a `helm install` with no manual setup
 // reaches the self-managed state automatically.

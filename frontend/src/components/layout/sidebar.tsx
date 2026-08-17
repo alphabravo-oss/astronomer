@@ -53,6 +53,7 @@ import {
   Waypoints,
   Rocket,
   Sparkles,
+  Crosshair,
 } from 'lucide-react';
 import { cn, formatK8sVersion } from '@/lib/utils';
 import { APP_VERSION } from '@/lib/env';
@@ -114,8 +115,7 @@ const globalNavGroups: NavGroup[] = [
       { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
       { label: 'Charlie', href: '/dashboard/charlie', icon: Sparkles, permission: { resource: 'charlie', verb: 'read' }, featureFlag: 'feature.charlie' },
       { label: 'Clusters', href: '/dashboard/clusters', icon: Server, permission: { resource: 'clusters', verb: 'list' } },
-      { label: 'Agents', href: '/dashboard/agents', icon: Activity, permission: { resource: 'agents', verb: 'read' } },
-      { label: 'Fleet Operations', href: '/dashboard/fleet', icon: Rocket, permission: { resource: 'fleet_operations', verb: 'list' } },
+      { label: 'Cluster Agents', href: '/dashboard/agents', icon: Activity, permission: { resource: 'cluster_agents', verb: 'read' } },
       { label: 'Onboarding Bundles', href: '/dashboard/cluster-templates', icon: Layers, permission: { resource: 'cluster_templates', verb: 'list' } },
     ],
   },
@@ -136,10 +136,12 @@ const globalNavGroups: NavGroup[] = [
   {
     label: 'Continuous Delivery',
     items: [
-      { label: 'ArgoCD', href: '/dashboard/argocd', icon: GitBranch, permission: { resource: 'argocd', verb: 'read' }, featureFlag: 'feature.argocd' },
-      // Git-cluster-sources config lives under settings; surface it alongside
-      // ArgoCD so GitOps is a single top-level destination.
-      { label: 'Git Sources', href: '/dashboard/settings/gitops', icon: GitBranch, permission: { resource: 'settings', verb: 'read' } },
+      { label: 'Overview', href: '/dashboard/delivery', icon: Rocket, permission: { resource: 'delivery_targets', verb: 'list' }, exact: true },
+      { label: 'Sources', href: '/dashboard/delivery/sources', icon: GitBranch, permission: { resource: 'delivery_sources', verb: 'list' } },
+      { label: 'Bundles', href: '/dashboard/delivery/bundles', icon: Boxes, permission: { resource: 'delivery_bundles', verb: 'list' } },
+      { label: 'Targets', href: '/dashboard/delivery/targets', icon: Crosshair, permission: { resource: 'delivery_targets', verb: 'list' } },
+      { label: 'Rollouts', href: '/dashboard/delivery/rollouts', icon: Route, permission: { resource: 'delivery_rollouts', verb: 'list' } },
+      { label: 'Deployments', href: '/dashboard/delivery/deployments', icon: Layers, permission: { resource: 'delivery_deployments', verb: 'list' } },
     ],
   },
   {
@@ -215,6 +217,7 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
         { label: 'Events', href: `${base}/events`, icon: Activity },
         { label: 'Tools', href: `${base}/tools`, icon: Wrench },
         { label: 'Apps', href: `${base}/apps`, icon: Package },
+        { label: 'Delivery', href: `${base}/delivery`, icon: Rocket, permission: { resource: 'delivery_inventory', verb: 'read' as const } },
         // Lifecycle for this cluster's kube-prometheus-stack (install /
         // upgrade / replace / uninstall). Gated on monitoring:read, which is
         // what the status + preview routes require; the mutating controls on

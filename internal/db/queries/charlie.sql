@@ -76,7 +76,7 @@ INSERT INTO tunnel_locator_events (
     sqlc.arg(reason_code), sqlc.arg(server_replica), sqlc.arg(occurred_at)
 ) RETURNING *;
 
--- name: CharlieAgentFleetSummary :one
+-- name: CharlieClusterAgentSummary :one
 WITH latest AS (
     SELECT DISTINCT ON (cluster_id) cluster_id, status, last_ping, connected_at, disconnected_at
     FROM agent_connections
@@ -95,7 +95,7 @@ LEFT JOIN latest ON latest.cluster_id = c.id
 LEFT JOIN agent_operational_statuses ops ON ops.cluster_id = c.id
 WHERE c.decommissioned_at IS NULL;
 
--- name: CharlieAgentFleetList :many
+-- name: CharlieClusterAgentList :many
 SELECT
     c.id AS cluster_id, c.name AS cluster_name, c.display_name, c.environment,
     c.region, c.labels, c.agent_version AS cluster_agent_version,
@@ -136,7 +136,7 @@ WHERE c.decommissioned_at IS NULL
 ORDER BY c.display_name, c.id
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
--- name: CharlieAgentFleetGet :one
+-- name: CharlieClusterAgentGet :one
 SELECT
     c.id AS cluster_id, c.name AS cluster_name, c.display_name, c.environment,
     c.region, c.labels, c.agent_version AS cluster_agent_version,

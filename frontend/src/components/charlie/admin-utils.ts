@@ -108,7 +108,7 @@ export function automationValidationIssues(input: {
       rule.fleetThresholdPercent < 0 ||
       rule.fleetThresholdPercent > 100
     )
-      issues.push(`${label} fleet threshold must be between 0 and 100.`);
+      issues.push(`${label} cluster coverage threshold must be between 0 and 100.`);
   });
   return issues;
 }

@@ -116,19 +116,6 @@ func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec crd.ClusterS
 		Phase:        phase,
 		AgentVersion: existing.AgentVersion,
 	}
-	if spec.ArgoCD.AutoAdopt != nil && !*spec.ArgoCD.AutoAdopt {
-		status.ArgoCD.Phase = "disabled"
-		return status, nil
-	}
-	if managed, merr := a.queries.ListArgoCDManagedClustersByCluster(ctx, existing.ID); merr == nil && len(managed) > 0 {
-		status.ArgoCD.Phase = "registered"
-		status.ArgoCD.ClusterSecretName = managed[0].ClusterSecretName
-	} else {
-		if merr != nil && a.log != nil {
-			a.log.Warn("failed to load ArgoCD managed cluster status", "cluster_id", existing.ID.String(), "error", merr)
-		}
-		status.ArgoCD.Phase = "pending"
-	}
 	return status, nil
 }
 
@@ -586,7 +573,6 @@ func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Co
 	mgr, err := crd.New(crd.ControllerConfig{
 		K8sConfig:               restCfg,
 		WatchNamespace:          crdWatchNamespace(),
-		ArgoNamespace:           crdArgoNamespace(),
 		LeaderElection:          true,
 		LeaderElectionNamespace: crdWatchNamespace(),
 		ClusterHandler:          cAdapter,
@@ -603,7 +589,7 @@ func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Co
 	}
 
 	go func() {
-		logger.Info("crd_controller_starting", "watch_namespace", crdWatchNamespace(), "argo_namespace", crdArgoNamespace())
+		logger.Info("crd_controller_starting", "watch_namespace", crdWatchNamespace())
 		if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("crd_controller_stopped", "error", err.Error())
 			return
@@ -632,14 +618,6 @@ func crdWatchNamespace() string {
 	v := strings.TrimSpace(getenv("CRD_WATCH_NAMESPACE"))
 	if v == "" {
 		return "astronomer-mgmt"
-	}
-	return v
-}
-
-func crdArgoNamespace() string {
-	v := strings.TrimSpace(getenv("CRD_ARGO_NAMESPACE"))
-	if v == "" {
-		return "argocd"
 	}
 	return v
 }

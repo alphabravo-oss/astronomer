@@ -200,13 +200,12 @@ func TestRemoteIPForRequest_RealIPInRemoteAddr(t *testing.T) {
 	}
 }
 
-func TestRemoteIPForRequest_XFFFallback(t *testing.T) {
+func TestRemoteIPForRequest_DoesNotTrustForwardedHeader(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/t", nil)
 	r.RemoteAddr = "" // simulate the case where the test setup never wired RealIP
 	r.Header.Set("X-Forwarded-For", "198.51.100.5, 10.0.0.1")
-	got := RemoteIPForRequest(r)
-	if got == nil || got.String() != "198.51.100.5" {
-		t.Fatalf("got %v, want 198.51.100.5", got)
+	if got := RemoteIPForRequest(r); got != nil {
+		t.Fatalf("spoofed X-Forwarded-For produced %v", got)
 	}
 }
 

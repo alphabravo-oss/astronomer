@@ -26,7 +26,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * operations that the API will reject.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useSearchParams, useRouter } from '@/lib/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDebouncedValue } from '@tanstack/react-pacer';
@@ -45,7 +45,7 @@ import {
 } from 'lucide-react';
 import { Link } from '@/lib/link';
 
-import { queryKeys, useCluster } from '@/lib/hooks';
+import { queryKeys, useCluster, useProjects } from '@/lib/hooks';
 import { liveFallback } from '@/lib/live/status-store';
 import { usePermissionDecision, permissionDeniedReason, toastPermissionDenied } from '@/lib/permission-hooks';
 import type { PermissionDecision } from '@/lib/permissions';
@@ -147,6 +147,33 @@ function ClusterAppsPage() {
   // resolves the chart on browse-data arrival.
   const searchParams = useSearchParams();
   const router = useRouter();
+  const projectsQuery = useProjects({ pageSize: 200 });
+  const clusterProjects = useMemo(
+    () =>
+      (projectsQuery.data?.data ?? []).filter(
+        (project) =>
+          project.clusterId === clusterId ||
+          project.clusterIds?.includes(clusterId),
+      ),
+    [clusterId, projectsQuery.data?.data],
+  );
+  const requestedProjectId = searchParams?.get('project') ?? '';
+  const projectId = clusterProjects.some(
+    (project) => project.id === requestedProjectId,
+  )
+    ? requestedProjectId
+    : clusterProjects.length === 1
+      ? clusterProjects[0].id
+      : '';
+  const setProjectId = (nextProjectId: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextProjectId) next.set('project', nextProjectId);
+    else next.delete('project');
+    router.replace(
+      `/dashboard/clusters/${clusterId}/apps${next.size ? `?${next.toString()}` : ''}`,
+    );
+    setModal({ kind: 'none' });
+  };
   const requestedInstall = searchParams?.get('install') ?? '';
   const requestedSection = searchParams?.get('section') as Section | null;
 
@@ -159,7 +186,8 @@ function ClusterAppsPage() {
   const [searchQ, setSearchQ] = useState(requestedInstall || '');
   const [modal, setModal] = useState<ModalState>({ kind: 'none' });
   const catalogScope = { type: 'cluster' as const, id: clusterId };
-  const catalogCreateDecision = usePermissionDecision('catalog', 'create', catalogScope);
+  const catalogProjectScope = { type: 'project' as const, id: projectId };
+  const catalogCreateDecision = usePermissionDecision('catalog', 'create', catalogProjectScope);
   const catalogUpdateDecision = usePermissionDecision('catalog', 'update', catalogScope);
   const catalogDeleteDecision = usePermissionDecision('catalog', 'delete', catalogScope);
 
@@ -198,15 +226,15 @@ function ClusterAppsPage() {
   // hammering the catalog endpoint on every keystroke.
   const [debouncedSearchQ] = useDebouncedValue(searchQ, { wait: 200 });
   const browse = useQuery({
-    queryKey: queryKeys.clusterPages.appCatalogBrowse(debouncedSearchQ),
-    queryFn: () => listCatalogCharts({ limit: 60, search: debouncedSearchQ || undefined }),
-    enabled: section === 'browse',
+    queryKey: queryKeys.clusterPages.appCatalogBrowse(projectId, debouncedSearchQ),
+    queryFn: () => listCatalogCharts({ projectId, limit: 60, search: debouncedSearchQ || undefined }),
+    enabled: section === 'browse' && !!projectId,
   });
 
   const recommended = useQuery({
-    queryKey: queryKeys.clusterPages.appCatalogRecommended,
-    queryFn: () => listRecommendedCharts(12),
-    enabled: section === 'recommended',
+    queryKey: queryKeys.clusterPages.appCatalogRecommended(projectId),
+    queryFn: () => listRecommendedCharts(projectId, 12),
+    enabled: section === 'recommended' && !!projectId,
   });
 
   // Deep-link auto-open: when ?install=<chartName> is present and we
@@ -222,14 +250,14 @@ function ClusterAppsPage() {
     if (match) {
       if (!catalogCreateDecision.allowed) {
         toastPermissionDenied(catalogCreateDecision);
-        router.replace(`/dashboard/clusters/${clusterId}/apps`);
+        router.replace(`/dashboard/clusters/${clusterId}/apps?project=${encodeURIComponent(projectId)}`);
         return;
       }
       setModal({ kind: 'install', chartId: match.id, chartName: match.name });
       // Drop the query param so a back-button + re-navigate doesn't loop.
-      router.replace(`/dashboard/clusters/${clusterId}/apps`);
+      router.replace(`/dashboard/clusters/${clusterId}/apps?project=${encodeURIComponent(projectId)}`);
     }
-  }, [requestedInstall, browse.data, browse.isLoading, modal.kind, router, clusterId, catalogCreateDecision]);
+  }, [requestedInstall, browse.data, browse.isLoading, modal.kind, router, clusterId, projectId, catalogCreateDecision]);
 
   const openInstall = (chartId: string, chartName: string) => {
     if (!catalogCreateDecision.allowed) {
@@ -280,7 +308,7 @@ function ClusterAppsPage() {
 
   return (
     <div className="space-y-6 p-4">
-      <header className="flex items-start justify-between gap-4">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             <Package className="h-6 w-6" /> Apps
@@ -291,12 +319,31 @@ function ClusterAppsPage() {
             Releases managed by the <Link href={`/dashboard/clusters/${clusterId}/tools`} className="underline">Tools tab</Link> appear here too with a &quot;Managed by Tools&quot; pivot.
           </p>
         </div>
-        <Link
-          href={`/dashboard/catalog?cluster_id=${clusterId}`}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          Manage catalog repos <ExternalLink className="h-3.5 w-3.5" />
-        </Link>
+        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            Project visibility
+            <select
+              aria-label="Catalog project"
+              value={projectId}
+              onChange={(event) => setProjectId(event.target.value)}
+              className="h-9 min-w-56 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+              disabled={projectsQuery.isLoading}
+            >
+              <option value="">Select a project</option>
+              {clusterProjects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.displayName || project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Link
+            href={`/dashboard/catalog?cluster_id=${clusterId}${projectId ? `&project=${encodeURIComponent(projectId)}` : ''}`}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            Manage catalog repos <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </header>
 
       <nav className="flex items-center gap-1 border-b border-border">
@@ -339,7 +386,16 @@ function ClusterAppsPage() {
           onDeleteFailed={openDeleteFailed}
         />
       )}
-      {section === 'browse' && (
+      {(section === 'browse' || section === 'recommended') && !projectId && (
+        <div className="rounded-lg border border-dashed border-border p-8 text-center">
+          <Package className="mx-auto h-7 w-7 text-muted-foreground" />
+          <p className="mt-3 text-sm font-medium text-foreground">Select a project</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Chart visibility and install authorization are isolated by project.
+          </p>
+        </div>
+      )}
+      {section === 'browse' && projectId && (
         <BrowseView
           q={browse}
           search={searchQ}
@@ -350,7 +406,7 @@ function ClusterAppsPage() {
           onInstall={openInstall}
         />
       )}
-      {section === 'recommended' && (
+      {section === 'recommended' && projectId && (
         <RecommendedView
           q={recommended}
           installed={installed.data?.items ?? []}
@@ -362,6 +418,7 @@ function ClusterAppsPage() {
       {/* Modal layer */}
       {modal.kind === 'install' && (
         <AppInstallModal
+          projectId={projectId}
           clusterId={clusterId}
           mode={{ kind: 'install', chartId: modal.chartId, chartName: modal.chartName }}
           submitDecision={catalogCreateDecision}
@@ -370,6 +427,7 @@ function ClusterAppsPage() {
       )}
       {modal.kind === 'upgrade' && (
         <AppInstallModal
+          projectId={projectId}
           clusterId={clusterId}
           mode={{
             kind: 'upgrade',
@@ -896,7 +954,7 @@ function RecommendedView({
         <p className="text-sm text-foreground">No recommendations yet</p>
         <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
           The recommendation engine needs at least a handful of installs
-          across the fleet to surface popular charts. Try the Browse tab
+          across managed clusters to surface popular charts. Try the Browse tab
           for the full catalog.
         </p>
       </div>
@@ -917,7 +975,7 @@ function RecommendedView({
             </div>
             <div className="text-xs text-muted-foreground space-y-0.5">
               <div>Score: <span className="tabular-nums text-foreground">{c.score.toFixed(2)}</span></div>
-              <div>Installs across fleet: <span className="tabular-nums text-foreground">{c.installCount}</span></div>
+              <div>Installs across clusters: <span className="tabular-nums text-foreground">{c.installCount}</span></div>
               {c.ratingAvg > 0 && (
                 <div>Avg rating: <span className="tabular-nums text-foreground">{c.ratingAvg.toFixed(1)}</span></div>
               )}

@@ -542,7 +542,7 @@ func (h *GitOpsHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 	// Memoize the cluster lookup per request so a source with the same
 	// cluster registered under multiple repo paths resolves the name once
 	// instead of a GetClusterByID per row (N+1). Mirrors the instance→cluster
-	// cache in argocd.ListAllApps and the clusterName cache in projects.
+	// cache in delivery status views and the clusterName cache in projects.
 	out := make([]map[string]any, 0, len(rows))
 	clusterCache := make(map[uuid.UUID]sqlc.Cluster, len(rows))
 	clusterMissing := make(map[uuid.UUID]struct{})

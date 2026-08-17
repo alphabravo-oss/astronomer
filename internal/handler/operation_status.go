@@ -12,8 +12,8 @@ import "github.com/alphabravocompany/astronomer-go/internal/operationstate"
 // cast at every call site for zero added safety, so we keep the
 // constants string-typed.
 //
-// Scope: only the *_operations tables (argocd_operations,
-// catalog_operations, logging_operations, monitoring_operations,
+// Scope: only the *_operations tables (catalog_operations,
+// logging_operations, monitoring_operations,
 // tool_operations, workload_operations). Other tables (backups,
 // restore_operations, cluster_decommissions, security_policies,
 // cis_scans, helm releases) have their own status alphabets that

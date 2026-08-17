@@ -11,9 +11,10 @@
 #   BASE_URL        default: http://astronomer.localtest.me:8080
 #   REMOTE_CONTEXT  default: k3d-astronomer-remote
 #   CLUSTER_ID      default: first active non-local cluster
+#   PROJECT_ID      default: first project assigned to CLUSTER_ID
 #   EVENT_TIMEOUT   default: 180
-#   OCI_REPO_URL    default: oci://ghcr.io/argoproj/argo-helm
-#   OCI_CHART       default: argo-cd
+#   OCI_REPO_URL    default: oci://ghcr.io/stefanprodan/charts
+#   OCI_CHART       default: podinfo
 #   OCI_VERSION     optional exact chart version; default: latest synced version
 
 set -euo pipefail
@@ -22,17 +23,18 @@ BASE_URL="${BASE_URL:-http://astronomer.localtest.me:8080}"
 API_BASE="${BASE_URL%/}/api/v1"
 REMOTE_CONTEXT="${REMOTE_CONTEXT:-k3d-astronomer-remote}"
 CLUSTER_ID="${CLUSTER_ID:-}"
+PROJECT_ID="${PROJECT_ID:-}"
 EVENT_TIMEOUT="${EVENT_TIMEOUT:-180}"
 AUTH_TOKEN="${AUTH_TOKEN:-}"
 ASTRO_USERNAME="${ASTRO_USERNAME:-}"
 ASTRO_PASSWORD="${ASTRO_PASSWORD:-}"
-OCI_REPO_URL="${OCI_REPO_URL:-oci://ghcr.io/argoproj/argo-helm}"
-OCI_CHART="${OCI_CHART:-argo-cd}"
+OCI_REPO_URL="${OCI_REPO_URL:-oci://ghcr.io/stefanprodan/charts}"
+OCI_CHART="${OCI_CHART:-podinfo}"
 OCI_VERSION="${OCI_VERSION:-}"
 
 RUN_ID="$(date +%s)"
 REPO_NAME="oci-live-${RUN_ID}"
-RELEASE_NAME="${RELEASE_NAME:-oci-live-argocd}"
+RELEASE_NAME="${RELEASE_NAME:-oci-live-podinfo}"
 NAMESPACE="${NAMESPACE:-${RELEASE_NAME}}"
 REPO_ID=""
 CHART_ID=""
@@ -129,8 +131,19 @@ if [[ -z "${CLUSTER_ID}" ]]; then
   echo "no active non-local cluster found; set CLUSTER_ID explicitly" >&2
   exit 1
 fi
+if [[ -z "${PROJECT_ID}" ]]; then
+  PROJECT_ID="$(
+    curl -fsS -H "Authorization: Bearer ${AUTH_TOKEN}" \
+      "${API_BASE}/clusters/${CLUSTER_ID}/projects/" |
+      jq -r '(.data // .)[0].id // empty'
+  )"
+fi
+if [[ -z "${PROJECT_ID}" ]]; then
+  echo "cluster ${CLUSTER_ID} has no visible assigned project; set PROJECT_ID explicitly" >&2
+  exit 1
+fi
 
-echo "Using cluster_id=${CLUSTER_ID} remote_context=${REMOTE_CONTEXT}"
+echo "Using cluster_id=${CLUSTER_ID} project_id=${PROJECT_ID} remote_context=${REMOTE_CONTEXT}"
 echo "Creating OCI repo ${REPO_NAME} -> ${OCI_REPO_URL}"
 
 create_repo_body="$(
@@ -168,7 +181,7 @@ curl -fsS \
 CHART_ID="$(
   curl -fsS \
     -H "Authorization: Bearer ${AUTH_TOKEN}" \
-    "${API_BASE}/catalog/charts/?limit=500" |
+    "${API_BASE}/catalog/charts/?project_id=${PROJECT_ID}&limit=500" |
     jq -r --arg repo_id "${REPO_ID}" --arg chart "${OCI_CHART}" '
       .data[]
       | select(.repository_id == $repo_id and .name == $chart)
@@ -184,7 +197,7 @@ fi
 version_payload="$(
   curl -fsS \
     -H "Authorization: Bearer ${AUTH_TOKEN}" \
-    "${API_BASE}/catalog/charts/${CHART_ID}/versions/"
+    "${API_BASE}/catalog/charts/${CHART_ID}/versions/?project_id=${PROJECT_ID}"
 )"
 if [[ -n "${OCI_VERSION}" ]]; then
   CHART_VERSION_ID="$(echo "${version_payload}" | jq -r --arg version "${OCI_VERSION}" '.data[] | select(.version == $version) | .id' | head -n1)"
@@ -203,11 +216,13 @@ echo "Installing chart ${OCI_CHART} version=${CHART_VERSION} release=${RELEASE_N
 install_body="$(
   jq -n \
     --arg cluster_id "${CLUSTER_ID}" \
+    --arg project_id "${PROJECT_ID}" \
     --arg chart_version_id "${CHART_VERSION_ID}" \
     --arg release_name "${RELEASE_NAME}" \
     --arg namespace "${NAMESPACE}" \
     '{
       cluster_id:$cluster_id,
+      project_id:$project_id,
       chart_version_id:$chart_version_id,
       release_name:$release_name,
       namespace:$namespace

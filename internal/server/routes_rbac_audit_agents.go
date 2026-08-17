@@ -77,28 +77,30 @@ func registerRBACAuditAgentRoutes(r chi.Router, deps RouterDependencies) {
 		})
 	}
 
-	if deps.AgentFleet != nil {
+	if deps.ClusterAgent != nil {
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbRead)).
-			Get("/agents/fleet/", deps.AgentFleet.List)
+			Get("/cluster-agents/", deps.ClusterAgent.List)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbRead)).
-			Get("/agents/fleet/{cluster_id}/diagnostics/", deps.AgentFleet.Diagnostics)
+			Get("/cluster-agents/{cluster_id}/", deps.ClusterAgent.Get)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbRead)).
-			Get("/agents/fleet/{cluster_id}/diagnostics/bundle/", deps.AgentFleet.DiagnosticsBundle)
+			Get("/cluster-agents/{cluster_id}/diagnostics/", deps.ClusterAgent.Diagnostics)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbRead)).
-			Get("/agents/fleet/{cluster_id}/operations/", deps.AgentFleet.Operations)
+			Get("/cluster-agents/{cluster_id}/diagnostics/bundle/", deps.ClusterAgent.DiagnosticsBundle)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbRead)).
+			Get("/cluster-agents/{cluster_id}/operations/", deps.ClusterAgent.Operations)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbUpdate)).
-			Post("/agents/fleet/{cluster_id}/self-test/", deps.AgentFleet.SelfTest)
+			Post("/cluster-agents/{cluster_id}/self-test/", deps.ClusterAgent.SelfTest)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbUpdate)).
-			Post("/agents/fleet/{cluster_id}/upgrade-plan/", deps.AgentFleet.UpgradePlan)
+			Post("/cluster-agents/{cluster_id}/upgrade-plan/", deps.ClusterAgent.UpgradePlan)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbUpdate)).
-			Post("/agents/fleet/{cluster_id}/upgrade/", deps.AgentFleet.Upgrade)
+			Post("/cluster-agents/{cluster_id}/upgrade/", deps.ClusterAgent.Upgrade)
 		// E3 (C2 rollout aid): cluster-admin agent posture report. Lists
 		// every managed cluster whose agent still resolves to the
 		// cluster-admin `admin` profile so operators can re-profile after
 		// the GATE-0 fail-closed default flip. Superuser-gated inside the
 		// handler (clean 401/403), same pattern as the other /admin/* reads.
 		r.With(requireAuth(deps.JWT, deps.AuthQueries)).
-			Get("/admin/agents/cluster-admin-posture/", deps.AgentFleet.ClusterAdminPosture)
+			Get("/admin/agents/cluster-admin-posture/", deps.ClusterAgent.ClusterAdminPosture)
 	}
 
 	if deps.Audit != nil {

@@ -109,7 +109,7 @@ func TestAdvance_CASAllowsLegitTransition(t *testing.T) {
 	base.seed(id, PhaseProvisioning, &yes)
 	svc := New(q, nil)
 
-	rec, err := svc.Advance(ctx, id, EventTemplateApplied)
+	rec, err := svc.Advance(ctx, id, EventDeliveryApplied)
 	if err != nil {
 		t.Fatalf("legit provisioning→ready transition failed: %v", err)
 	}

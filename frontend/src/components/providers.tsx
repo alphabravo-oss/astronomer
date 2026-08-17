@@ -32,7 +32,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       {/* Native provider (D12): class strategy, system tracking, default dark.
           The load-bearing `astronomer-theme` storage key (never bare `theme` —
-          the co-hosted ArgoCD SPA JSON-parses that key) lives in @/lib/theme. */}
+          other co-hosted applications may also use that key) lives in @/lib/theme. */}
       <ThemeProvider>
         {children}
         <Toaster

@@ -124,7 +124,7 @@ func init() {
 		"Emitted when a cluster row is soft-deleted (before the decommission worker runs).")
 
 	registerWebhookFamily(KeyWebhookClusterDecommissioned,
-		"Emitted on each phase of the cluster decommission worker (cleanup_managed_side, argocd_secret_orphan, …). Detail carries the phase + outcome.",
+		"Emitted on each phase of the cluster decommission worker (cleanup_managed_side, delivery_target_cleanup, …). Detail carries the phase + outcome.",
 		VariableSpec{Name: "detail.phase", Description: "Phase tag", Required: true, Example: "cleanup_managed_side"},
 		VariableSpec{Name: "detail.outcome", Description: "success | failed", Required: true, Example: "success"},
 	)

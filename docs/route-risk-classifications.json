@@ -45,10 +45,13 @@
       ],
       "patterns": [
         "/api/v1/clusters/{id}/agent-token/rotate",
-        "/api/v1/clusters/{id}/agent-token/revoke"
+        "/api/v1/clusters/{id}/agent-token/revoke",
+        "/api/v1/cluster-agents/{cluster_id}/self-test",
+        "/api/v1/cluster-agents/{cluster_id}/upgrade",
+        "/api/v1/cluster-agents/{cluster_id}/upgrade-plan"
       ],
       "classification": "covered-rbac-cluster-scoped",
-      "reason": "Trigger a durable agent-token rotation (sets rotation_pending_at; the grace rotation completes on the agent's next CONNECT and never invalidates the token the agent currently holds) or hard-revoke the token (revoked_at) for one cluster. Both are gated on the clusters:update RBAC permission plus the write-clusters scope, blast radius is the owning cluster only, and each call is audited (agent.token.rotate.requested / agent.token.revoked)."
+      "reason": "Cluster-agent mutations are authenticated and cluster-scoped. Token rotation and revocation require clusters:update plus the write-clusters scope; upgrade planning, upgrade execution, and self-test require their dedicated cluster-agent RBAC actions. Every operation is limited to the named cluster and records an audit event."
     },
     {
       "id": "monitoring-settings-unauthenticated-read-fix",
@@ -273,36 +276,6 @@
       "reason": "Install/enable/disable/verify-bundle require ScopeAdmin plus settings:update. The tenant-facing data proxy and bridge-token mint are deliberately only settings:read at the router: the real gate is inside ProxyData/IssueTicket, which re-checks the CALLING user's own RBAC against the manifest's declared dataSource, so an extension can never exceed its user."
     },
     {
-      "id": "argocd-lifecycle-cluster-scoped",
-      "methods": [
-        "POST",
-        "PUT",
-        "PATCH",
-        "DELETE"
-      ],
-      "patterns": [
-        "/api/v1/argocd/instances",
-        "/api/v1/argocd/instances/{id}",
-        "/api/v1/argocd/instances/{id}/applications",
-        "/api/v1/argocd/instances/{id}/applications/{name}",
-        "/api/v1/argocd/instances/{id}/applications/{name}/sync",
-        "/api/v1/argocd/instances/{id}/applicationsets",
-        "/api/v1/argocd/instances/{id}/applicationsets/{name}",
-        "/api/v1/argocd/instances/{id}/projects",
-        "/api/v1/argocd/instances/{id}/projects/{name}",
-        "/api/v1/argocd/instances/{id}/repos",
-        "/api/v1/argocd/instances/{id}/repos/test",
-        "/api/v1/argocd/instances/{id}/clusters/{cluster_id}/register",
-        "/api/v1/argocd/instances/{id}/clusters/{cluster_id}/refresh-labels",
-        "/api/v1/argocd/applications/{id}/sync",
-        "/api/v1/argocd/applications/{id}/refresh",
-        "/api/v1/argocd/clusters/{cluster_id}/ownership/{component_slug}/decision",
-        "/api/v1/argocd/operations/{id}/retry"
-      ],
-      "classification": "covered-rbac-cluster-scoped",
-      "reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:<verb> on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-    },
-    {
       "id": "logging-pipeline-cluster-scoped",
       "methods": [
         "POST",
@@ -406,6 +379,49 @@
       ],
       "classification": "covered-token-gated",
       "reason": "A git provider cannot present a JWT, so this push endpoint is deliberately outside the auth chain: the handler compares the X-Astronomer-Webhook-Secret (or bearer) against the configured shared secret in constant time and 503s when no secret is configured. It triggers a sync of the one source named in the path and nothing else."
+    },
+    {
+      "id": "flux-native-delivery-project-mutations",
+      "methods": [
+        "POST",
+        "PATCH",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/delivery/sources",
+        "/api/v1/delivery/sources/{id}",
+        "/api/v1/delivery/sources/{id}/rotate-credential",
+        "/api/v1/delivery/sources/{id}/verify",
+        "/api/v1/delivery/bundles",
+        "/api/v1/delivery/bundles/{id}",
+        "/api/v1/delivery/bundles/{id}/versions",
+        "/api/v1/delivery/targets",
+        "/api/v1/delivery/targets/{id}",
+        "/api/v1/delivery/targets/{id}/preview",
+        "/api/v1/delivery/targets/{id}/rollouts",
+        "/api/v1/delivery/rollouts/{id}/pause",
+        "/api/v1/delivery/rollouts/{id}/resume",
+        "/api/v1/delivery/rollouts/{id}/abort",
+        "/api/v1/delivery/rollouts/{id}/retry",
+        "/api/v1/delivery/deployments/{id}/reconcile",
+        "/api/v1/delivery/deployments/{id}/suspend",
+        "/api/v1/delivery/deployments/{id}/resume"
+      ],
+      "classification": "covered-rbac-project-scoped",
+      "reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+    },
+    {
+      "id": "flux-native-delivery-critical-decisions",
+      "methods": [
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/delivery/rollouts/{id}/approve",
+        "/api/v1/delivery/rollouts/{id}/rollback",
+        "/api/v1/delivery/targets/{id}/orphan"
+      ],
+      "classification": "covered-rbac-high-risk",
+      "reason": "Approval, rollback, and orphan decisions have distinct delivery_approvals:approve, delivery_rollbacks:rollback, and delivery_orphans:orphan grants instead of inheriting ordinary rollout or target update. Every request is project-normalized, authenticated, audited, idempotency-protected, and bound to an exact strong If-Match generation; approvals also bind an exact frozen digest and bounded expiry."
     }
   ]
 }

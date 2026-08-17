@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "release_line": "1.0.x",
+  "install_mode": "fresh_only",
+  "kubernetes": {
+    "supported_ranges": [
+      {
+        "minimum_minor": "1.33",
+        "maximum_minor": "1.35"
+      }
+    ],
+    "advertised_minors": ["1.33", "1.34", "1.35"],
+    "patch_policy": "latest_patch",
+    "qualification": [
+      {
+        "minor": "1.33",
+        "kind": "live",
+        "runner": "scripts/k3d-version-matrix-test.sh",
+        "command": "bash ./scripts/k3d-version-matrix-test.sh v1.33.5-k3s1"
+      },
+      {
+        "minor": "1.34",
+        "kind": "live",
+        "runner": "scripts/k3d-version-matrix-test.sh",
+        "command": "bash ./scripts/k3d-version-matrix-test.sh v1.34.1-k3s1"
+      },
+      {
+        "minor": "1.35",
+        "kind": "live",
+        "runner": "scripts/k3d-version-matrix-test.sh",
+        "command": "bash ./scripts/k3d-version-matrix-test.sh v1.35.0-k3s1"
+      }
+    ]
+  },
+  "flux": {
+    "distribution_version": "v2.9.3",
+    "components": [
+      {
+        "name": "source-controller",
+        "repository": "ghcr.io/fluxcd/source-controller",
+        "tag": "v1.9.3",
+        "digest": "sha256:ff8f3c92f1bcb433e858c948040c3a3393fe73f5dd72048a4502bfaf0a4c26cd",
+        "digest_pin_required": true,
+        "apis": [
+          "source.toolkit.fluxcd.io/v1/GitRepository",
+          "source.toolkit.fluxcd.io/v1/HelmRepository",
+          "source.toolkit.fluxcd.io/v1/OCIRepository"
+        ]
+      },
+      {
+        "name": "kustomize-controller",
+        "repository": "ghcr.io/fluxcd/kustomize-controller",
+        "tag": "v1.9.4",
+        "digest": "sha256:2b8bec54ffb6caf421bd2a6c005d27f567d5dd4db7feb55794fb51fcabd69b8f",
+        "digest_pin_required": true,
+        "apis": ["kustomize.toolkit.fluxcd.io/v1/Kustomization"]
+      },
+      {
+        "name": "helm-controller",
+        "repository": "ghcr.io/fluxcd/helm-controller",
+        "tag": "v1.6.3",
+        "digest": "sha256:16ada99456385100698a5d7adf90aba8a2089d987ab541c9566b6d7b0e897038",
+        "digest_pin_required": true,
+        "apis": ["helm.toolkit.fluxcd.io/v2/HelmRelease"]
+      }
+    ],
+    "excluded_components": [
+      "notification-controller",
+      "image-reflector-controller",
+      "image-automation-controller",
+      "source-watcher"
+    ]
+  },
+  "agent_protocol": {
+    "name": "astronomer.delivery",
+    "supported_ranges": [
+      {
+        "minimum": 2,
+        "maximum": 2
+      }
+    ],
+    "required_capabilities": [
+      "delivery.assignments.v2",
+      "delivery.status.v2",
+      "delivery.system.v2"
+    ],
+    "unknown_field_policy": "reject"
+  },
+  "postgresql": {
+    "supported_majors": [16, 17],
+    "tls_required_in_production": true,
+    "migration_mode": "single_initial"
+  },
+  "browsers": {
+    "support_policy": "current_and_previous_stable_at_release",
+    "minimum_versions": {
+      "chrome": 130,
+      "edge": 130,
+      "firefox": 128,
+      "safari": "18.0"
+    }
+  },
+  "sources": [
+    {
+      "type": "git",
+      "immutable_identity": "commit",
+      "authentication": ["none", "basic", "ssh", "workload_identity"]
+    },
+    {
+      "type": "oci_artifact",
+      "immutable_identity": "digest",
+      "authentication": ["none", "docker_config", "workload_identity"]
+    },
+    {
+      "type": "helm_http",
+      "immutable_identity": "version_and_sha256",
+      "authentication": ["none", "basic", "tls_client_certificate"]
+    },
+    {
+      "type": "helm_oci",
+      "immutable_identity": "manifest_digest",
+      "authentication": ["none", "docker_config", "workload_identity"]
+    }
+  ],
+  "limits": {
+    "assignment_snapshot_bytes": 1048576,
+    "status_snapshot_bytes": 524288,
+    "status_events_per_snapshot": 100,
+    "source_artifact_bytes": 536870912,
+    "helm_chart_bytes": 104857600,
+    "rendered_objects_per_deployment": 10000,
+    "concurrent_assignments_per_cluster": 32
+  },
+  "slos": {
+    "management_api_monthly_availability_percent": 99.95,
+    "connected_assignment_ack_seconds_p99": 60,
+    "flux_transition_visibility_seconds_p99": 30,
+    "rollout_scheduler_seconds_p99": 15,
+    "management_database_rpo_minutes": 5,
+    "management_plane_rto_minutes": 60,
+    "offline_reconciliation": "last_accepted_generation_continues"
+  }
+}

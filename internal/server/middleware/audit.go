@@ -29,7 +29,7 @@ var pathResourceMap = map[string]string{
 	"cluster-roles": "cluster role",
 	"project-roles": "project role",
 	"bindings":      "role binding",
-	"argocd":        "ArgoCD",
+	"delivery":      "delivery",
 	"alerting":      "alert",
 	"rules":         "alert rule",
 	"channels":      "notification channel",

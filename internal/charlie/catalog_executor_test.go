@@ -128,8 +128,8 @@ func TestCatalogRejectsUnknownAndNilAdapterRegistrations(t *testing.T) {
 func TestProductionAdapterGroupsCoverTheEntireV1Catalog(t *testing.T) {
 	adapter := staticCapabilityAdapter{}
 	registrations := MergeCapabilityAdapters(
-		FleetCapabilityAdapters(adapter), ManagementKubernetesCapabilityAdapters(adapter),
-		QueueCapabilityAdapters(adapter), ArgoCDCapabilityAdapters(adapter), OperationalCapabilityAdapters(adapter),
+		ClusterAgentCapabilityAdapters(adapter), DeliveryCapabilityAdapters(adapter), ManagementKubernetesCapabilityAdapters(adapter),
+		QueueCapabilityAdapters(adapter), OperationalCapabilityAdapters(adapter),
 		WorkPipelineCapabilityAdapters(adapter), RuntimeCapabilityAdapters(adapter), AdminVisibilityCapabilityAdapters(adapter),
 		SystemHealthCapabilityAdapters(adapter),
 	)
@@ -151,8 +151,8 @@ func TestProductionCapabilityAdaptersCannotCallDownstreamTunnel(t *testing.T) {
 	}
 	directory := filepath.Dir(currentFile)
 	for _, name := range []string{
-		"fleet_capability_adapter.go", "management_kubernetes_adapter.go",
-		"queue_capability_adapter.go", "argocd_capability_adapter.go",
+		"cluster_agent_capability_adapter.go", "delivery_capability_adapter.go", "management_kubernetes_adapter.go",
+		"queue_capability_adapter.go",
 		"operational_capability_adapter.go", "work_pipeline_capability_adapter.go",
 		"runtime_capability_adapter.go",
 		"admin_visibility_capability_adapter.go",

@@ -19,5 +19,15 @@ rules:
     verbs: [read, list]
   - resource: catalog
     verbs: [read, list]
-  - resource: argocd
-    verbs: [read, list, sync]
+  - resource: delivery_sources
+    verbs: [read, list]
+  - resource: delivery_bundles
+    verbs: [read, list]
+  - resource: delivery_targets
+    verbs: [read, list]
+  - resource: delivery_rollouts
+    verbs: [read, list, watch]
+  - resource: delivery_deployments
+    verbs: [read, list, watch]
+  - resource: delivery_inventory
+    verbs: [read, list]

@@ -380,7 +380,7 @@ export function AutomationTab() {
               set={(v) => update(i, { flapCount: v })}
             />
             <NumberField
-              label="Fleet threshold %"
+              label="Cluster coverage threshold %"
               value={r.fleetThresholdPercent}
               min={0}
               max={100}

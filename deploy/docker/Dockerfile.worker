@@ -11,7 +11,7 @@ RUN go mod download
 
 COPY . .
 
-ARG VERSION=0.3.9
+ARG VERSION=1.0.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
@@ -22,10 +22,12 @@ RUN CGO_ENABLED=0 go build \
       -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=${BUILD_DATE}" \
     -o /bin/astronomer-worker ./cmd/worker
 
+FROM ghcr.io/sigstore/cosign/cosign@sha256:b03690aa52bfe94054187142fba24dc54137650682810633901767d8a3e15b31 AS cosign
+
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
 
-ARG VERSION=0.3.9
+ARG VERSION=1.0.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
@@ -37,6 +39,7 @@ LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astrono
 RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /bin/astronomer-worker /usr/local/bin/astronomer-worker
+COPY --from=cosign /ko-app/cosign /usr/local/bin/cosign
 
 USER nobody
 

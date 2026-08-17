@@ -34,8 +34,8 @@ func TestBuiltinRoleCatalogContract(t *testing.T) {
 		{scope: "global", name: "Charlie Automation", check: expectPermission("charlie", "read")},
 		{scope: "global", name: "Security Auditor", check: expectPermission("security", "read")},
 		{scope: "global", name: "Compliance Manager", check: expectPermission("security", "update")},
-		{scope: "global", name: "GitOps Admin", check: expectPermission("argocd", "manage")},
-		{scope: "global", name: "GitOps Viewer", check: expectPermission("argocd", "read")},
+		{scope: "global", name: "GitOps Admin", check: expectPermission("delivery_platform", "update")},
+		{scope: "global", name: "GitOps Viewer", check: expectPermission("delivery_inventory", "read")},
 		{scope: "global", name: "Logging Viewer", check: expectPermission("logging", "read")},
 		{scope: "global", name: "Monitoring Admin", check: expectPermission("monitoring", "delete")},
 		{scope: "global", name: "Monitoring Viewer", check: expectPermission("monitoring", "read")},
@@ -46,7 +46,7 @@ func TestBuiltinRoleCatalogContract(t *testing.T) {
 		{scope: "cluster", name: "Cluster Owner", check: expectPermission("*", "*")},
 		{scope: "cluster", name: "Cluster Member", check: expectPermission("workloads", "restart")},
 		{scope: "cluster", name: "Cluster Viewer", check: expectPermission("*", "watch")},
-		{scope: "cluster", name: "Cluster Operator", check: expectPermission("argocd", "sync")},
+		{scope: "cluster", name: "Cluster Operator", check: expectPermission("workloads", "restart")},
 		{scope: "cluster", name: "Cluster Troubleshooter", check: expectPermission("pods", "exec")},
 		{scope: "cluster", name: "Catalog Installer", check: expectPermission("catalog", "create")},
 		{scope: "cluster", name: "Cluster Backup Operator", check: expectPermission("backups", "delete")},
@@ -56,10 +56,10 @@ func TestBuiltinRoleCatalogContract(t *testing.T) {
 		{scope: "project", name: "Project Owner", check: expectPermission("*", "*")},
 		{scope: "project", name: "Project Member", check: expectPermission("workloads", "scale")},
 		{scope: "project", name: "Project Viewer", check: expectPermission("*", "watch")},
-		{scope: "project", name: "Project Operator", check: expectPermission("argocd", "sync")},
+		{scope: "project", name: "Project Operator", check: expectPermission("workloads", "restart")},
 		{scope: "project", name: "Project Troubleshooter", check: expectPermission("pods", "logs")},
 		{scope: "project", name: "Config Manager", check: expectPermission("configmaps", "delete")},
-		{scope: "project", name: "GitOps Deployer", check: expectPermission("argocd", "sync")},
+		{scope: "project", name: "GitOps Deployer", check: expectPermission("delivery_rollouts", "create")},
 		{scope: "project", name: "Namespace Operator", check: expectPermission("network_policies", "update")},
 		{scope: "project", name: "Secret Manager", check: expectPermission("secrets", "read")},
 		{scope: "project", name: "Service and Ingress Manager", check: expectPermission("services", "proxy")},
@@ -123,12 +123,7 @@ func loadSeededRoles(t *testing.T) map[string]seededRole {
 		t.Fatal("failed to resolve caller path")
 	}
 	migrationsDir := filepath.Join(filepath.Dir(file), "..", "db", "migrations")
-	files := []string{
-		filepath.Join(migrationsDir, "001_initial.up.sql"),
-		filepath.Join(migrationsDir, "032_builtin_role_catalog.up.sql"),
-		filepath.Join(migrationsDir, "098_rancher_grade_role_catalog.up.sql"),
-		filepath.Join(migrationsDir, "147_charlie_agent_integration.up.sql"),
-	}
+	files := []string{filepath.Join(migrationsDir, "001_initial.up.sql")}
 
 	roles := make(map[string]seededRole)
 	scope := ""
@@ -143,16 +138,17 @@ func loadSeededRoles(t *testing.T) map[string]seededRole {
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			switch {
-			case strings.HasPrefix(line, "INSERT INTO global_roles"):
+			case strings.HasPrefix(line, "INSERT INTO public.global_roles"):
 				scope = "global"
-			case strings.HasPrefix(line, "INSERT INTO cluster_roles"):
+			case strings.HasPrefix(line, "INSERT INTO public.cluster_roles"):
 				scope = "cluster"
-			case strings.HasPrefix(line, "INSERT INTO project_roles"):
+			case strings.HasPrefix(line, "INSERT INTO public.project_roles"):
 				scope = "project"
-			case strings.HasPrefix(line, "('"):
-				role := parseSeedLine(t, scope, line)
-				roles[scope+"::"+role.name] = role
+			default:
+				continue
 			}
+			role := parseSeedLine(t, scope, line)
+			roles[scope+"::"+role.name] = role
 		}
 		if err := scanner.Err(); err != nil {
 			_ = fh.Close()
@@ -173,7 +169,11 @@ func parseSeedLine(t *testing.T, scope, line string) seededRole {
 		t.Fatalf("unexpected seed line format: %s", line)
 	}
 
-	name := fields[0]
+	nameIndex := 0
+	if strings.HasPrefix(line, "INSERT INTO ") {
+		nameIndex = 1 // pg_dump INSERTs quote the UUID before the role name.
+	}
+	name := fields[nameIndex]
 	rulesJSON := ""
 	for _, field := range fields[1:] {
 		if strings.HasPrefix(field, "[") {

@@ -30,11 +30,11 @@ Projects:
 - Primary users: project owners and platform operators.
 - Interaction standard: project-scoped pages must make cluster/project scope visible and avoid cross-tenant ambiguity.
 
-GitOps:
+Delivery:
 
-- Purpose: Argo CD instances, Applications, ApplicationSets, AppProjects, repos, managed clusters, sync windows, rollback, orphan detection, and baseline ownership.
-- Primary users: GitOps operators and platform operators.
-- Interaction standard: every sync, rollback, adopt, replace, and unregister action requires clear target identity, audit trail, and convergence status.
+- Purpose: sources, immutable bundle versions, placement previews, rollout strategies, approvals, normalized deployment health, rollback, and orphan handling.
+- Primary users: application delivery operators, project owners, and platform operators.
+- Interaction standard: every rollout, approval, retry, rollback, suspend, reconcile, and orphan action requires clear target identity, an audit trail, and generation-current convergence status.
 
 Agents:
 

@@ -112,12 +112,12 @@ Nightly pg_dump is ENABLED.
 {{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
   Key backup  : ENABLED — the Fernet/JWT key Secret is wrapped with a separately
                 held passphrase and stored under {{ .Values.managementBackup.encryptionKeyBackup.keyPrefix | default "keys" }}/. A restore onto a
-                new cluster can decrypt agent tokens / SSO secrets / gitops creds.
+                new cluster can decrypt agent tokens / SSO secrets / delivery credentials.
 {{- else }}
 
   WARNING: encryption-key backup is NOT wired (F4). pg_dump alone is NOT a
   recoverable backup — a restore onto a new cluster would bring back rows whose
-  agent tokens / SSO secrets / gitops creds are permanently UNDECRYPTABLE,
+  agent tokens / SSO secrets / delivery credentials are permanently UNDECRYPTABLE,
   because the Fernet key lives in a Secret, not in Postgres. Wire it:
 
     --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=<secret>

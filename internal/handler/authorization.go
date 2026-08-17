@@ -230,6 +230,22 @@ func (a *authorizationSupport) authorizeClusterAction(w http.ResponseWriter, r *
 	return a.authorizeClusterActionAny(w, r, clusterID, clusterPermission{resource, verb})
 }
 
+func (a *authorizationSupport) authorizeProjectAction(w http.ResponseWriter, r *http.Request, projectID uuid.UUID, resource rbac.Resource, verb rbac.Verb) bool {
+	bindings, restricted, err := a.bindingsForContext(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		return false
+	}
+	if !restricted {
+		return true
+	}
+	if a.engine != nil && a.engine.CheckPermission(bindings, resource, verb, uuid.Nil, projectID) {
+		return true
+	}
+	RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to perform this action")
+	return false
+}
+
 // clusterPermission is one (resource, verb) alternative for
 // authorizeClusterActionAny.
 type clusterPermission struct {

@@ -79,7 +79,7 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 	// mutations below. Self-skips reads, so applying it to these groups
 	// covers every POST/PUT/PATCH/DELETE without per-route tagging. These
 	// typed verbs are NOT on the DB-backed operation-idempotency path (that
-	// covers tools/catalog/clusters/fleet/backups), so there is no double
+	// covers tools/catalog/clusters/cluster agents/backups), so there is no double
 	// dedup. Janitor lifetime is process-scoped, matching the rate limiter.
 	idem := appmiddleware.Idempotency(context.Background())
 

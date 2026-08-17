@@ -123,16 +123,6 @@ spec:
         - path:
             type: Exact
             value: /readyz
-        # The auth-gated reverse proxy that fronts the ArgoCD UI lives on
-        # the Go server (internal/handler/argocd_ui_proxy.go), so route
-        # /argocd/* to the same backend as /api/*. Enforces Astronomer auth
-        # via cookie or bearer header before forwarding upstream.
-        - path:
-            type: PathPrefix
-            value: /argocd/
-        - path:
-            type: Exact
-            value: /argocd
       backendRefs:
         - name: {{ include "astronomer.fullname" . }}-server
           port: {{ .Values.server.service.port }}

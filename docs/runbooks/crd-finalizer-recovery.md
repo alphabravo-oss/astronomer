@@ -1,128 +1,82 @@
-# CRD Finalizer Recovery
+# CRD finalizer recovery
 
-Use this runbook when a management CR is stuck in `Terminating` and the normal controller retry loop is not making progress.
+Use this runbook when a `Cluster`, `Project`, or `AgentProfile` in
+`management.astronomer.io/v1alpha1` remains `Terminating` after its normal
+controller retry window. Manual finalizer removal is a last resort: it can
+orphan a durable project record or bypass an adopted cluster's audited
+decommission workflow.
 
-Manual finalizer removal is a last-resort recovery step. Prefer restoring the controller, fixing RBAC, or deleting/reconciling child resources first. Removing finalizers early can orphan Argo CD ApplicationSets, leave adopted clusters registered, or hide a failed decommission.
+## Symptoms
 
-## Scope
+- `metadata.deletionTimestamp` is set but the resource remains present.
+- the generation-current `Ready` condition is false or absent;
+- server logs show ownership, persistence, or decommission errors.
 
-Current finalizers:
+The active finalizers are:
 
-- `management.astronomer.io/decommission` on `Cluster`
-- `management.astronomer.io/cleanup` on `Project`
-- `management.astronomer.io/clusterbaseline-cleanup` on `ClusterBaseline`
-- `management.astronomer.io/componentbundle-cleanup` on `ComponentBundle`
-- `management.astronomer.io/agentprofile-cleanup` on `AgentProfile`
-- `management.astronomer.io/gitopstarget-cleanup` on `GitOpsTarget`
-
-`ClusterBaseline` and `GitOpsTarget` finalizers delete generated Argo CD ApplicationSets before releasing the CR. `Cluster` deletion delegates to the normal decommission flow.
+- `management.astronomer.io/decommission` on `Cluster`;
+- `management.astronomer.io/cleanup` on `Project`;
+- `management.astronomer.io/agentprofile-cleanup` on `AgentProfile`.
 
 ## Triage
 
-Set the namespace once:
+Set the exact namespace and object; never run a broad finalizer rewrite:
 
-```sh
+```bash
 NS=astronomer-mgmt
-ARGO_NS=argocd
+KIND=cluster
+NAME=payments-production
+
+kubectl -n "$NS" get "$KIND" "$NAME" -o json |
+  jq '{deletionTimestamp: .metadata.deletionTimestamp,
+       finalizers: .metadata.finalizers,
+       generation: .metadata.generation,
+       status: .status}'
+kubectl -n astronomer logs deployment/astronomer-server --tail=300
 ```
 
-Check the stuck object:
+For a `Cluster`, inspect its decommission operation and agent connection in the
+dashboard or API. A disconnected agent, unavailable Kubernetes API, or pending
+credential revocation can legitimately keep deletion in progress. For a
+`Project`, resolve cluster membership and ownership conflicts before retrying.
+For an `AgentProfile`, confirm the embedded controller is running and can patch
+the watched namespace.
 
-```sh
-kubectl get clusterbaseline -n "$NS"
-kubectl get gitopstarget -n "$NS"
-kubectl get cluster -n "$NS"
-kubectl describe <kind> -n "$NS" <name>
+Check controller permissions without printing Secrets:
+
+```bash
+kubectl auth can-i get clusters.management.astronomer.io \
+  --as system:serviceaccount:astronomer:astronomer
+kubectl auth can-i patch clusters.management.astronomer.io/status \
+  --as system:serviceaccount:astronomer:astronomer
 ```
 
-If cleanup or decommission has been blocked for more than 15 minutes, the
-controller should keep the finalizer and surface the timeout in status:
+## Recovery
 
-```sh
-kubectl get <kind> -n "$NS" <name> \
-  -o jsonpath='{.status.phase}{"\n"}{range .status.conditions[*]}{.type}{" "}{.status}{" "}{.reason}{"\n"}{end}'
+1. Restore the server/controller deployment and database connectivity.
+2. Correct a same-namespace `AgentProfile` reference, project ownership
+   conflict, or controller RBAC failure.
+3. For a cluster, let the audited decommission operation finish or retry it
+   through the supported API. Do not delete operation rows or agent tokens.
+4. Re-read the exact object and confirm the controller has made progress.
+
+Only when the owning product record has already been handled, the controller
+cannot be restored in time, and the incident commander accepts the orphan risk,
+remove the one known finalizer from the one recorded object:
+
+```bash
+kubectl -n "$NS" patch "$KIND" "$NAME" --type=json \
+  -p='[{"op":"remove","path":"/metadata/finalizers"}]'
 ```
 
-Expected timeout signal:
+Record the full object identity, finalizer, reason, approver, and durable object
+state in the incident. Never patch every resource or every namespace.
 
-- `status.phase` is `DeletingTimedOut`.
-- `Ready` and `Reconciled` are `False` with reason `FinalizerTimeout`.
-- The relevant finalizer is still present.
+## Verify
 
-`DeletingTimedOut` is an escalation signal, not a cleanup bypass. Continue with
-the recovery steps below and remove finalizers only as a last resort.
-
-Check the controller pod:
-
-```sh
-kubectl get pods -n astronomer-system -l app.kubernetes.io/name=astronomer
-kubectl logs -n astronomer-system deploy/astronomer-server --tail=200
-```
-
-For Argo-owning CRDs, list generated children:
-
-```sh
-kubectl get applicationsets -n "$ARGO_NS" \
-  -l app.kubernetes.io/managed-by=astronomer,astronomer.io/crd-kind=ClusterBaseline
-
-kubectl get applicationsets -n "$ARGO_NS" \
-  -l app.kubernetes.io/managed-by=astronomer,astronomer.io/crd-kind=GitOpsTarget
-```
-
-Narrow to one CR:
-
-```sh
-kubectl get applicationsets -n "$ARGO_NS" \
-  -l app.kubernetes.io/managed-by=astronomer,astronomer.io/crd-kind=<Kind>,astronomer.io/crd-namespace=<namespace>,astronomer.io/crd-name=<name>
-```
-
-Use DNS-label-normalized values for `astronomer.io/crd-namespace` and `astronomer.io/crd-name`.
-
-## Preferred Recovery
-
-1. Restore the server/controller deployment if it is down.
-2. Fix controller RBAC if logs show `forbidden` on ApplicationSets, Applications, ConfigMaps, CRDs, or management resources.
-3. Delete generated ApplicationSets manually only when the CR owner labels and source annotations match the stuck CR.
-4. Re-check the CR. The controller should remove the finalizer on its next reconcile.
-
-Delete generated ApplicationSets for one stuck CR:
-
-```sh
-kubectl delete applicationsets -n "$ARGO_NS" \
-  -l app.kubernetes.io/managed-by=astronomer,astronomer.io/crd-kind=<Kind>,astronomer.io/crd-namespace=<namespace>,astronomer.io/crd-name=<name>
-```
-
-Confirm no generated children remain:
-
-```sh
-kubectl get applicationsets -n "$ARGO_NS" \
-  -l app.kubernetes.io/managed-by=astronomer,astronomer.io/crd-kind=<Kind>,astronomer.io/crd-namespace=<namespace>,astronomer.io/crd-name=<name>
-```
-
-## Last-Resort Finalizer Removal
-
-Only remove finalizers after child resources are gone or after you have explicitly accepted the orphaning risk.
-
-Patch one object:
-
-```sh
-kubectl patch <kind> -n "$NS" <name> --type=merge -p '{"metadata":{"finalizers":[]}}'
-```
-
-For `Cluster`, also verify the decommission state through the API or database before patching. Removing the CR finalizer does not prove the adopted cluster was decommissioned.
-
-## Validation
-
-After recovery:
-
-```sh
-kubectl get <kind> -n "$NS" <name>
-kubectl get applicationsets -n "$ARGO_NS" -l app.kubernetes.io/managed-by=astronomer
-```
-
-Expected result:
-
-- The stuck CR is deleted.
-- No generated ApplicationSet remains for that CR.
-- The server logs stop repeating finalizer cleanup errors.
-- For `Cluster`, the product row is decommissioned or intentionally preserved according to the recovery decision.
+- the exact resource is gone;
+- the server/controller is healthy and reconciling new generation changes;
+- a deleted cluster is disconnected, credentials are revoked, and its durable
+  decommission operation is terminal;
+- a deleted project has no unintended cluster membership or retained policy;
+- no unrelated resource lost a finalizer.

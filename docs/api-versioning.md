@@ -113,7 +113,7 @@ twice. There are two cooperating layers, both keyed by the same header:
 
 1. **Durable, DB-backed** (handler layer): the source of truth for
    operations that need cross-replica, restart-surviving guarantees
-   (tool install/upgrade/uninstall, catalog, clusters, fleet operations,
+   (tool install/upgrade/uninstall, catalog, clusters, delivery rollouts,
    backups, monitoring). A completed operation's outcome is recorded and
    replayed.
 2. **In-memory short-TTL guard** (middleware layer): a lightweight retry

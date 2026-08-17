@@ -157,12 +157,6 @@ func (q *clusterRegistryTestQuerier) GetPlatformSetting(_ context.Context, key s
 	}
 	return sqlc.PlatformSetting{}, pgx.ErrNoRows
 }
-func (q *clusterRegistryTestQuerier) ListArgoCDManagedClustersByCluster(context.Context, uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
-	return nil, nil
-}
-func (q *clusterRegistryTestQuerier) ListArgoCDApplicationsByManagedClusterTargets(context.Context, sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams) ([]sqlc.ArgocdApplication, error) {
-	return nil, nil
-}
 func (q *clusterRegistryTestQuerier) ListClusterConditionRemediationByCluster(context.Context, uuid.UUID) ([]sqlc.ClusterConditionRemediationAttempt, error) {
 	return nil, nil
 }

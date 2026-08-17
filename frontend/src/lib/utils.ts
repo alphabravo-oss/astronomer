@@ -353,23 +353,3 @@ export function downloadBlob(content: Blob | BlobPart, filename: string, mime?: 
   link.remove();
   URL.revokeObjectURL(url);
 }
-
-/**
- * Map an ArgoCD sync-operation status to the status vocabulary the shared
- * StatusBadge / statusColor helpers understand.
- */
-export function mapOperationStatus(s: string): string {
-  switch (s) {
-    case 'completed':
-      return 'healthy';
-    case 'running':
-      return 'progressing';
-    case 'pending':
-      return 'connecting';
-    case 'failed':
-    case 'superseded':
-      return 'error';
-    default:
-      return 'unknown';
-  }
-}

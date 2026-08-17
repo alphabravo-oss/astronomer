@@ -112,6 +112,12 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		"--set", "managementBackup.s3.credentialsSecretRef.name=backup-credentials",
 		"--set", "managementBackup.encryptionKeyBackup.wrappingSecretRef.name=backup-wrap",
 		"--set", "managementRestoreDrill.decryptCheck.wrappingSecretRef.name=backup-wrap",
+		"--set", "delivery.artifacts.fluxDistribution.ociRepository=ghcr.io/example/astronomer/flux-distribution",
+		"--set", "delivery.artifacts.fluxDistribution.digest=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		"--set", "delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0",
+		"--set", "delivery.artifacts.builtInBundles.ociRepository=ghcr.io/example/astronomer/bundles",
+		"--set", "delivery.artifacts.builtInBundles.digest=sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+		"--set", "delivery.artifacts.builtInBundles.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0",
 	}
 	command := exec.Command("helm", args...)
 	var stdout bytes.Buffer

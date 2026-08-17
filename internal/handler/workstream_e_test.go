@@ -19,29 +19,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
-// --- Finding 1: ArgoCD sync_window_override is a documented no-op ---
-
-func TestSyncWindowOverrideNoteIsHonest(t *testing.T) {
-	if note := syncWindowOverrideNote(false); note != "" {
-		t.Fatalf("expected empty note when override not requested, got %q", note)
-	}
-	note := syncWindowOverrideNote(true)
-	if note == "" {
-		t.Fatal("expected a note when override requested")
-	}
-	low := strings.ToLower(note)
-	if !strings.Contains(low, "does not bypass") {
-		t.Errorf("note should state Astronomer does not bypass sync windows: %q", note)
-	}
-	// The note must never imply the deny window WAS overridden.
-	for _, bad := range []string{"overridden", "window bypassed", "bypassed the"} {
-		if strings.Contains(low, bad) {
-			t.Errorf("note misleadingly implies the override happened (%q): %q", bad, note)
-		}
-	}
-}
-
-// --- Finding 2: private HTTP Helm repo index auth ---
+// --- Private HTTP Helm repo index auth ---
 
 func TestApplyRepoIndexAuth(t *testing.T) {
 	h := &CatalogHandler{log: slog.Default()}
@@ -172,12 +150,13 @@ func TestToolSendHelmRawResolvesVaultAtExecution(t *testing.T) {
 }
 
 func TestCatalogInstallKeepsVaultMarkerInPayload(t *testing.T) {
-	q, clusterID, versionID := newInstalledCatalogAuditQuerier()
+	q, clusterID, projectID, versionID := newInstalledCatalogAuditQuerier()
 	h := NewCatalogHandler(q)
 
 	const marker = "${vault://prod/secret/db#password}"
 	body, _ := json.Marshal(map[string]any{
 		"cluster_id":       clusterID.String(),
+		"project_id":       projectID.String(),
 		"chart_version_id": versionID.String(),
 		"release_name":     "nginx",
 		"namespace":        "apps",
@@ -210,7 +189,7 @@ func TestCatalogInstallKeepsVaultMarkerInPayload(t *testing.T) {
 // --- Finding 5: rollback accepts an explicit target revision ---
 
 func TestRollbackAcceptsTargetRevision(t *testing.T) {
-	q, clusterID, _ := newInstalledCatalogAuditQuerier()
+	q, clusterID, _, _ := newInstalledCatalogAuditQuerier()
 	h := NewCatalogHandler(q)
 
 	instID := uuid.New()

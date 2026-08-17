@@ -8,7 +8,6 @@ const api = vi.hoisted(() => ({
   acknowledgeCharlieDisclosure: vi.fn(),
   consumeCharlieOnboarding: vi.fn(),
   deleteCharlieAutomationRule: vi.fn(),
-  disconnectCharlie: vi.fn(),
   emergencyDisableCharlie: vi.fn(),
   getCharlieAccess: vi.fn(),
   getCharlieAgent: vi.fn(),
@@ -20,8 +19,6 @@ const api = vi.hoisted(() => ({
   getCharlieMode: vi.fn(),
   listCharlieTriggerEvents: vi.fn(),
   retryCharlieTriggerEvent: vi.fn(),
-  runCharlieAgentAction: vi.fn(),
-  uninstallCharlieAgent: vi.fn(),
   updateCharlieAutomation: vi.fn(),
   updateCharlieActionPolicy: vi.fn(),
   updateCharlieAlertPolicy: vi.fn(),
@@ -76,7 +73,6 @@ import {
   DiagnosticsTab,
   KubernetesTab,
   ModeTab,
-  agentActionsForState,
 } from "@/routes/dashboard/settings/charlie";
 
 const CharlieAdminPage = CharlieAdminContent;
@@ -373,18 +369,19 @@ describe("Charlie administration acceptance", () => {
     }
   });
 
-  it("shows truthful per-replica state and state-appropriate lifecycle actions", async () => {
-    expect(agentActionsForState("not_installed")).toEqual(["install"]);
-    expect(agentActionsForState("installing")).toEqual([]);
-    expect(agentActionsForState("ready")).toEqual(["upgrade", "rollback", "rotate"]);
+  it("shows truthful per-replica state and routes lifecycle changes through Flux delivery", async () => {
     renderWithClient(<AgentTab />);
     expect((await screen.findAllByText("instance-0")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("instance-1").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Upgrade" })).toBeEnabled();
+    expect(screen.getByText("Lifecycle is managed by Flux delivery")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Continuous Delivery" })).toHaveAttribute(
+      "href",
+      "/dashboard/delivery",
+    );
+    expect(screen.queryByRole("button", { name: /install|upgrade|rollback|rotate|uninstall/i })).toBeNull();
   });
 
-  it("gates agent installation on a consumed signed connection", async () => {
+  it("keeps missing-agent state read-only instead of calling deleted lifecycle routes", async () => {
     api.getCharlieConnection.mockResolvedValue({ connected: false });
     api.getCharlieAgent.mockResolvedValue({
       applicationState: "not_installed",
@@ -394,11 +391,8 @@ describe("Charlie administration acceptance", () => {
       replicas: [],
     });
     renderWithClient(<AgentTab />);
-    expect(await screen.findByRole("button", { name: "Install" })).toBeDisabled();
-    expect(screen.getByRole("status")).toHaveTextContent(
-      /signed Charlie onboarding package has been validated and consumed/i,
-    );
-    expect(api.runCharlieAgentAction).not.toHaveBeenCalled();
+    expect(await screen.findByText("Lifecycle is managed by Flux delivery")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /install|upgrade|rollback|rotate|uninstall/i })).toBeNull();
   });
 
   it("keeps Charlie-owned intelligence configuration out of Astronomer", async () => {
@@ -536,7 +530,7 @@ describe("Charlie administration acceptance", () => {
     );
     expect(screen.getByLabelText("Rule name")).toHaveValue("Agent flap");
     expect(screen.getByLabelText("Severities (comma separated)")).toHaveValue("high");
-    expect(screen.getByLabelText("Fleet threshold %")).toHaveAttribute("max", "100");
+    expect(screen.getByLabelText("Cluster coverage threshold %")).toHaveAttribute("max", "100");
     fireEvent.click(screen.getByRole("button", { name: "Add trigger rule" }));
     expect(screen.getByRole("alert")).toHaveTextContent("needs a name");
     expect(screen.getByRole("button", { name: "Save automation" })).toBeDisabled();

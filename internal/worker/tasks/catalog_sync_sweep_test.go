@@ -251,9 +251,9 @@ func TestHandleCatalogSyncIngestsOCIRepos(t *testing.T) {
 	ociRepo := sqlc.HelmRepository{
 		ID:         uuid.New(),
 		Name:       "ghcr",
-		Url:        "oci://ghcr.io/argoproj/argo-helm",
+		Url:        "oci://quay.io/jetstack/charts",
 		RepoType:   "oci",
-		AuthConfig: json.RawMessage(`{"charts":["argo-cd"]}`),
+		AuthConfig: json.RawMessage(`{"charts":["cert-manager"]}`),
 	}
 	helmRepo := sqlc.HelmRepository{ID: uuid.New(), Name: "plain", Url: http1.URL, RepoType: "helm"}
 

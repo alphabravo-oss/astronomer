@@ -24,15 +24,15 @@ func productionReadAdapterFixture(t *testing.T) *CatalogExecutor {
 	now := time.Now().UTC()
 	replicas := int32(2)
 
-	fleetQueries := &fleetQueriesFake{
-		summary: sqlc.CharlieAgentFleetSummaryRow{TotalClusters: 1, ConnectedClusters: 1},
-		list: []sqlc.CharlieAgentFleetListRow{{
+	clusterAgentQueries := &clusterAgentQueriesFake{
+		summary: sqlc.CharlieClusterAgentSummaryRow{TotalClusters: 1, ConnectedClusters: 1},
+		list: []sqlc.CharlieClusterAgentListRow{{
 			ClusterID: id, ClusterName: "internal-SENTINEL", DisplayName: "production", Labels: json.RawMessage(`{"token":"SENTINEL"}`),
 			Environment: "prod", Region: "us-east", AgentID: "agent-a", ConnectionState: "connected",
 		}},
-		get: sqlc.CharlieAgentFleetGetRow{ClusterID: id, DisplayName: "production", Environment: "prod", Region: "us-east", AgentID: "agent-a", ConnectionState: "connected"},
+		get: sqlc.CharlieClusterAgentGetRow{ClusterID: id, DisplayName: "production", Environment: "prod", Region: "us-east", AgentID: "agent-a", ConnectionState: "connected"},
 	}
-	fleet, err := NewFleetCapabilityAdapter(fleetQueries)
+	clusterAgentAdapter, err := NewClusterAgentCapabilityAdapter(clusterAgentQueries)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,6 @@ func productionReadAdapterFixture(t *testing.T) *CatalogExecutor {
 		t.Fatal(err)
 	}
 
-	argo := argoAdapterFixture(t, argoApplication("astronomer-self-manage", true))
 	queries := &operationalQueriesFake{
 		settings: map[string]json.RawMessage{"feature.charlie": json.RawMessage(`true`), "database.password": json.RawMessage(`"SENTINEL"`)},
 		backups:  []sqlc.Backup{{ID: id, Name: "management", Status: "completed"}},
@@ -78,12 +77,12 @@ func productionReadAdapterFixture(t *testing.T) *CatalogExecutor {
 	operational.databaseSnapshot = func(context.Context) (bool, int64, error) { return false, 1024, nil }
 
 	groups := []map[string]CapabilityExecutor{
-		FleetCapabilityAdapters(fleet),
+		ClusterAgentCapabilityAdapters(clusterAgentAdapter),
 		ManagementKubernetesCapabilityAdapters(management),
 		QueueCapabilityAdapters(queue),
-		ArgoCDCapabilityAdapters(argo),
 		OperationalCapabilityAdapters(operational),
 		WorkPipelineCapabilityAdapters(staticCapabilityAdapter{}),
+		DeliveryCapabilityAdapters(staticCapabilityAdapter{}),
 		RuntimeCapabilityAdapters(staticCapabilityAdapter{}),
 		AdminVisibilityCapabilityAdapters(staticCapabilityAdapter{}),
 	}
@@ -111,14 +110,13 @@ func TestProductionReadAdaptersExecuteEntireCatalogWithSafeBoundedShapes(t *test
 		"astronomer.queue.tasks":               true,
 		"astronomer.alert.list":                true,
 		"astronomer.catalog.repositories":      true,
-		"astronomer.agent_fleet.list":          true,
+		"astronomer.cluster_agents.list":       true,
 		"astronomer.audit.search":              true,
 		"astronomer.management.resource_usage": true,
 		"astronomer.management.jobs":           true,
 		"astronomer.task_outbox.list":          true,
 		"astronomer.controllers.alerts":        true,
 		"astronomer.catalog.operations":        true,
-		"astronomer.argocd.operations":         true,
 		"astronomer.tools.operations":          true,
 		"astronomer.monitoring.operations":     true,
 		"astronomer.logging.operations":        true,
@@ -153,7 +151,7 @@ func TestProductionReadAdaptersExecuteEntireCatalogWithSafeBoundedShapes(t *test
 }
 
 func TestProductionReadAdaptersExposeEmptyAndPartialStateWithoutFailure(t *testing.T) {
-	emptyFleet, _ := NewFleetCapabilityAdapter(&fleetQueriesFake{})
+	emptyClusterAgents, _ := NewClusterAgentCapabilityAdapter(&clusterAgentQueriesFake{})
 	emptyQueue, _ := NewQueueCapabilityAdapter(&queueInspectorFake{queues: map[string]*asynq.QueueInfo{}, tasks: map[string]map[string]*asynq.TaskInfo{}})
 	partialQueue, _ := NewQueueCapabilityAdapter(&queueInspectorFake{
 		queues: map[string]*asynq.QueueInfo{}, tasks: map[string]map[string]*asynq.TaskInfo{},
@@ -169,8 +167,8 @@ func TestProductionReadAdaptersExposeEmptyAndPartialStateWithoutFailure(t *testi
 		capability string
 		want       string
 	}{
-		{"empty fleet list", emptyFleet, "astronomer.agent_fleet.list", `"items":[]`},
-		{"empty tunnel errors", emptyFleet, "astronomer.tunnel.recent_errors", `"items":[]`},
+		{"empty cluster-agent list", emptyClusterAgents, "astronomer.cluster_agents.list", `"items":[]`},
+		{"empty tunnel errors", emptyClusterAgents, "astronomer.tunnel.recent_errors", `"items":[]`},
 		{"empty workloads", emptyManagement, "astronomer.management.workloads", `"items":[]`},
 		{"empty storage", emptyManagement, "astronomer.management.storage", `"items":[]`},
 		{"empty failed tasks", emptyQueue, "astronomer.queue.failed_tasks", `"items":[]`},

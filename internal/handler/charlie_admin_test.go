@@ -22,8 +22,6 @@ type charlieAdminFake struct {
 	localCalls                int
 	diagnosticCalls           int
 	localDiagnosticCalls      int
-	uninstallCalls            int
-	uninstallActor            uuid.UUID
 	mode                      charlie.AdminModeView
 	modeInput                 charlie.Mode
 	modeCalls                 int
@@ -247,11 +245,6 @@ func (f *charlieAdminFake) LocalDiagnostics(context.Context, string) (charlie.Ad
 	f.localDiagnosticCalls++
 	return charlie.AdminDiagnosticsView{Overall: "inactive"}, nil
 }
-func (f *charlieAdminFake) Uninstall(_ context.Context, actor uuid.UUID) error {
-	f.uninstallCalls++
-	f.uninstallActor = actor
-	return nil
-}
 func (f *charlieAdminFake) UpdateMode(_ context.Context, mode charlie.Mode, _ int64, emergency bool, _ uuid.UUID) (charlie.AdminModeView, error) {
 	f.modeCalls++
 	f.modeInput, f.emergency = mode, emergency
@@ -362,30 +355,6 @@ func TestCharlieAdminDisabledStatusAndDiagnosticsAreLocalOnly(t *testing.T) {
 	handler.Diagnostics(diagnostics, authenticatedCharlieRequest(http.MethodPost, "/", "{}", uuid.New(), "jwt"))
 	if diagnostics.Code != http.StatusOK || !strings.Contains(diagnostics.Body.String(), "inactive") || fake.localDiagnosticCalls != 1 || fake.diagnosticCalls != 0 {
 		t.Fatalf("disabled diagnostics were not local-only: code=%d local=%d remote=%d body=%s", diagnostics.Code, fake.localDiagnosticCalls, fake.diagnosticCalls, diagnostics.Body.String())
-	}
-}
-
-func TestCharlieAdminDestructiveActionsRequireBrowserAndExactConfirmation(t *testing.T) {
-	fake := &charlieAdminFake{}
-	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
-
-	wrong := httptest.NewRecorder()
-	handler.Uninstall(wrong, authenticatedCharlieRequest(http.MethodPost, "/", `{"confirmation":"uninstall"}`, uuid.New(), "jwt"))
-	if wrong.Code != http.StatusBadRequest || fake.uninstallCalls != 0 {
-		t.Fatalf("wrong confirmation = %d calls=%d", wrong.Code, fake.uninstallCalls)
-	}
-
-	apiToken := httptest.NewRecorder()
-	handler.Uninstall(apiToken, authenticatedCharlieRequest(http.MethodPost, "/", `{"confirmation":"UNINSTALL CHARLIE"}`, uuid.New(), "api_token"))
-	if apiToken.Code != http.StatusUnauthorized || fake.uninstallCalls != 0 {
-		t.Fatalf("API token destructive action = %d calls=%d", apiToken.Code, fake.uninstallCalls)
-	}
-
-	ok := httptest.NewRecorder()
-	actorID := uuid.New()
-	handler.Uninstall(ok, authenticatedCharlieRequest(http.MethodPost, "/", `{"confirmation":"UNINSTALL CHARLIE"}`, actorID, "jwt"))
-	if ok.Code != http.StatusNoContent || fake.uninstallCalls != 1 || fake.uninstallActor != actorID {
-		t.Fatalf("confirmed uninstall = %d calls=%d body=%s", ok.Code, fake.uninstallCalls, ok.Body.String())
 	}
 }
 

@@ -95,55 +95,6 @@
     ]
   },
   {
-    "id": "agent-fleet-self-test",
-    "route": "/api/v1/agents/fleet/{cluster_id}/self-test/",
-    "sample_path": "/api/v1/agents/fleet/{cluster_id}/self-test/",
-    "method": "POST",
-    "expected_unauthenticated_status": 401,
-    "surface": "active agent health self-test through inventory and live diagnostics",
-    "auth": "bearer/session auth",
-    "rbac": "agents:update",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "agent self-test is read-only but active; add explicit audit if command execution expands",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestAgentFleetSelfTestPassesForHealthyConnectedAgent",
-      "TestAgentFleetSelfTestFailsForDisconnectedBlockedAgent"
-    ]
-  },
-  {
-    "id": "agent-fleet-upgrade-plan",
-    "route": "/api/v1/agents/fleet/{cluster_id}/upgrade-plan/",
-    "sample_path": "/api/v1/agents/fleet/{cluster_id}/upgrade-plan/",
-    "method": "POST",
-    "expected_unauthenticated_status": 401,
-    "surface": "agent lifecycle upgrade plan generation",
-    "auth": "bearer/session auth",
-    "rbac": "agents:update",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "upgrade planning is read-only but active; queued upgrades are audited separately",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ]
-  },
-  {
-    "id": "agent-fleet-upgrade-queue",
-    "route": "/api/v1/agents/fleet/{cluster_id}/upgrade/",
-    "sample_path": "/api/v1/agents/fleet/{cluster_id}/upgrade/",
-    "method": "POST",
-    "expected_unauthenticated_status": 401,
-    "surface": "agent lifecycle upgrade operation queue",
-    "auth": "bearer/session auth",
-    "rbac": "agents:update",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "agent.upgrade.queued",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestAgentFleetUpgradeQueuesLifecycleOperation",
-      "TestAgentFleetUpgradeDoesNotQueueBlockedPlan"
-    ]
-  },
-  {
     "id": "generic-k8s-proxy",
     "route": "/api/v1/clusters/{cluster_id}/k8s/*",
     "sample_path": "/api/v1/clusters/{cluster_id}/k8s/api/v1/pods",
@@ -195,29 +146,6 @@
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
       "TestResourcesSearchSecretsRequireSecretsListAndAudit"
-    ]
-  },
-  {
-    "id": "argocd-k8s-proxy",
-    "route": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*",
-    "sample_path": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/api/v1/pods",
-    "method": "*",
-    "expected_unauthenticated_status": 401,
-    "surface": "cluster-scoped machine-to-machine Kubernetes proxy for built-in Argo CD",
-    "auth": "cluster-scoped argocd cluster proxy token only",
-    "rbac": "not user RBAC; token hash must match the requested cluster",
-    "csrf": "not applicable: machine-to-machine bearer token",
-    "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
-      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
-      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
-      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
-      "TestInternalArgoCDProxyRouterRetainsRateLimit",
-      "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
-      "TestArgoCDInternalK8sProxyMutationsAreAudited",
-      "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
     ]
   },
   {
@@ -1684,38 +1612,6 @@
     ]
   },
   {
-    "id": "fleet-operation-create",
-    "route": "/api/v1/fleet-operations/",
-    "sample_path": "/api/v1/fleet-operations/",
-    "method": "POST",
-    "expected_unauthenticated_status": 401,
-    "surface": "legacy fleet-named multi-cluster operation creation",
-    "auth": "bearer/session auth",
-    "rbac": "fleet_operations:create plus clusters write API-token scope",
-    "csrf": "required for browser cookie POST by protected route auth",
-    "audit": "fleet.operation.created; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestFleetOperation_CRUD"
-    ]
-  },
-  {
-    "id": "fleet-operation-abort",
-    "route": "/api/v1/fleet-operations/{id}/abort/",
-    "sample_path": "/api/v1/fleet-operations/00000000-0000-0000-0000-000000000001/abort/",
-    "method": "POST",
-    "expected_unauthenticated_status": 401,
-    "surface": "legacy fleet-named multi-cluster operation abort",
-    "auth": "bearer/session auth",
-    "rbac": "fleet_operations:update plus clusters write API-token scope",
-    "csrf": "required for browser cookie POST by protected route auth",
-    "audit": "fleet.operation.aborted; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestFleetOperation_Abort"
-    ]
-  },
-  {
     "id": "apiserver-allowlist-update",
     "route": "/api/v1/clusters/{cluster_id}/apiserver-allowlist/",
     "sample_path": "/api/v1/clusters/{cluster_id}/apiserver-allowlist/",
@@ -1979,36 +1875,6 @@
     "rbac": "admin API token scope plus superuser check inside handler",
     "csrf": "required for browser cookie POST by requireAuth",
     "audit": "admin.user.totp_disabled",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ]
-  },
-  {
-    "id": "argocd-ui-root",
-    "route": "/argocd",
-    "sample_path": "/argocd",
-    "method": "*",
-    "expected_unauthenticated_status": 401,
-    "surface": "browser reverse proxy to built-in Argo CD UI",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
-    "audit": "route should add explicit Argo UI access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ]
-  },
-  {
-    "id": "argocd-ui-suffix",
-    "route": "/argocd/*",
-    "sample_path": "/argocd/api/version",
-    "method": "*",
-    "expected_unauthenticated_status": 401,
-    "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
-    "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
     ]
@@ -2702,54 +2568,6 @@
     "audit": "catalog.installation.rollback",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ]
-  },
-  {
-    "id": "fleet-operation-pause",
-    "route": "/api/v1/fleet-operations/{id}/pause/",
-    "sample_path": "/api/v1/fleet-operations/00000000-0000-0000-0000-000000000001/pause/",
-    "method": "POST",
-    "expected_unauthenticated_status": 401,
-    "surface": "legacy Fleet-named multi-cluster operation pause",
-    "auth": "bearer/session auth",
-    "rbac": "API token clusters:write plus fleet_operations:update",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "fleet.operation.paused; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestFleetOperation_PauseResume"
-    ]
-  },
-  {
-    "id": "fleet-operation-resume",
-    "route": "/api/v1/fleet-operations/{id}/resume/",
-    "sample_path": "/api/v1/fleet-operations/00000000-0000-0000-0000-000000000001/resume/",
-    "method": "POST",
-    "expected_unauthenticated_status": 401,
-    "surface": "legacy Fleet-named multi-cluster operation resume",
-    "auth": "bearer/session auth",
-    "rbac": "API token clusters:write plus fleet_operations:update",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "fleet.operation.resumed; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestFleetOperation_PauseResume"
-    ]
-  },
-  {
-    "id": "fleet-operation-retry-failed",
-    "route": "/api/v1/fleet-operations/{id}/retry-failed/",
-    "sample_path": "/api/v1/fleet-operations/00000000-0000-0000-0000-000000000001/retry-failed/",
-    "method": "POST",
-    "expected_unauthenticated_status": 401,
-    "surface": "legacy Fleet-named multi-cluster failed-target retry",
-    "auth": "bearer/session auth",
-    "rbac": "API token clusters:write plus fleet_operations:update",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "fleet.operation.retry_failed; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestFleetOperation_RetryFailed"
     ]
   },
   {
@@ -3885,5 +3703,226 @@
     "csrf": "required for browser cookie mutation by authenticated router",
     "audit": "durable approval lifecycle metadata and verified manifest digest; rationale content stored only as a digest",
     "tests": ["TestHighRiskRoutesDenyUnauthenticatedRequests", "TestBrowserCookieMutatingRoutesRequireCSRF"]
+  },
+  {
+    "id": "delivery-source-create",
+    "route": "/api/v1/delivery/sources/",
+    "sample_path": "/api/v1/delivery/sources/?project_id=11111111-1111-4111-8111-111111111111",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "create one project-scoped Flux delivery source with a write-only provider credential",
+    "auth": "browser JWT or API token with projects:write scope; idempotent request UUID",
+    "rbac": "delivery_sources:create on the normalized project scope",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "authenticated mutation metadata only; credential plaintext is never logged or returned",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC", "TestDeliveryCreateRouteIdempotencyRunsAfterAuthorization"]
+  },
+  {
+    "id": "delivery-source-delete",
+    "route": "/api/v1/delivery/sources/{id}/",
+    "sample_path": "/api/v1/delivery/sources/11111111-1111-4111-8111-111111111111/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "delete one Flux delivery source from a project",
+    "auth": "browser JWT or API token with projects:write scope",
+    "rbac": "delivery_sources:delete on the normalized project scope",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "authenticated mutation metadata only; provider credentials are excluded",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-source-credential-rotate",
+    "route": "/api/v1/delivery/sources/{id}/rotate-credential/",
+    "sample_path": "/api/v1/delivery/sources/11111111-1111-4111-8111-111111111111/rotate-credential/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "replace the write-only encrypted provider credential for one Flux delivery source",
+    "auth": "browser JWT or API token with projects:write scope; idempotent request UUID",
+    "rbac": "delivery_sources:update on the normalized project scope",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "authenticated mutation metadata only; credential plaintext is never logged, persisted unencrypted, or returned",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC", "TestDeliveryMutationScopeValidationPrecedesPersistence"]
+  },
+  {
+    "id": "delivery-bundle-create",
+    "route": "/api/v1/delivery/bundles/",
+    "sample_path": "/api/v1/delivery/bundles/?project_id=11111111-1111-4111-8111-111111111111",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "create one immutable-versioned Flux delivery bundle in a project",
+    "auth": "browser JWT or API token with projects:write scope; idempotent request UUID",
+    "rbac": "delivery_bundles:create on the normalized project scope",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "authenticated mutation metadata only",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC", "TestDeliveryCreateRouteIdempotencyRunsAfterAuthorization"]
+  },
+  {
+    "id": "delivery-bundle-version-create",
+    "route": "/api/v1/delivery/bundles/{id}/versions/",
+    "sample_path": "/api/v1/delivery/bundles/11111111-1111-4111-8111-111111111111/versions/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "publish one immutable Flux delivery bundle version in a project",
+    "auth": "browser JWT or API token with projects:write scope; idempotent request UUID",
+    "rbac": "delivery_bundles:create on the normalized project scope",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "authenticated mutation metadata only",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-source-verify",
+    "route": "/api/v1/delivery/sources/{id}/verify/",
+    "sample_path": "/api/v1/delivery/sources/11111111-1111-4111-8111-111111111111/verify/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "queue an authenticated provider and trust-policy verification",
+    "auth": "browser JWT or API token with projects:write scope; idempotency middleware",
+    "rbac": "delivery_sources:update on the normalized project scope",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "resolution identity and bounded status only; credentials excluded",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-target-create",
+    "route": "/api/v1/delivery/targets/",
+    "sample_path": "/api/v1/delivery/targets/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "create one project-scoped target and placement policy",
+    "auth": "browser JWT or projects:write API token; idempotency middleware",
+    "rbac": "delivery_targets:create on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "target identity, policy digest, actor, and outcome",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-target-update",
+    "route": "/api/v1/delivery/targets/{id}/",
+    "sample_path": "/api/v1/delivery/targets/11111111-1111-4111-8111-111111111111/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "PATCH",
+    "expected_unauthenticated_status": 401,
+    "surface": "CAS-update target desired state and generation",
+    "auth": "browser JWT or projects:write API token; strong If-Match and idempotency middleware",
+    "rbac": "delivery_targets:update on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "target identity, generation transition, actor, and outcome",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-target-delete",
+    "route": "/api/v1/delivery/targets/{id}/",
+    "sample_path": "/api/v1/delivery/targets/11111111-1111-4111-8111-111111111111/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "persist target deletion and downstream tombstone intents",
+    "auth": "browser JWT or projects:write API token; strong If-Match and idempotency middleware",
+    "rbac": "delivery_targets:delete on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "target identity, affected deployment count, actor, and outcome",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-target-preview",
+    "route": "/api/v1/delivery/targets/{id}/preview/",
+    "sample_path": "/api/v1/delivery/targets/11111111-1111-4111-8111-111111111111/preview/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "evaluate authoritative membership, blockers, risk, and digest",
+    "auth": "browser JWT or API token",
+    "rbac": "delivery_targets:read on the normalized project scope",
+    "csrf": "required because POST is browser-cookie reachable",
+    "audit": "target identity and preview digest only",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-rollout-start",
+    "route": "/api/v1/delivery/targets/{id}/rollouts/",
+    "sample_path": "/api/v1/delivery/targets/11111111-1111-4111-8111-111111111111/rollouts/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "freeze placement and launch an immutable multi-cluster rollout",
+    "auth": "browser JWT or projects:write API token; required Idempotency-Key and target-generation If-Match",
+    "rbac": "delivery_rollouts:create on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "rollout ID, exact plan and preview digests, actor, and outcome",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-rollout-control",
+    "route": "/api/v1/delivery/rollouts/{id}/{pause,resume,abort,retry}/",
+    "sample_path": "/api/v1/delivery/rollouts/11111111-1111-4111-8111-111111111111/pause/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "perform one typed rollout state transition",
+    "auth": "browser JWT or projects:write API token; strong fencing-generation If-Match and idempotency middleware",
+    "rbac": "delivery_rollouts:update on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "rollout ID, transition, decision digest, fence, actor, and outcome",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-rollout-approve",
+    "route": "/api/v1/delivery/rollouts/{id}/approve/",
+    "sample_path": "/api/v1/delivery/rollouts/11111111-1111-4111-8111-111111111111/approve/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "decide one exact expiring frozen rollout approval gate",
+    "auth": "browser JWT or projects:write API token; strong fencing-generation If-Match and idempotency middleware",
+    "rbac": "dedicated delivery_approvals:approve grant on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "rollout/cohort, frozen binding digest, decision, expiry, actor, and outcome",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-rollout-rollback",
+    "route": "/api/v1/delivery/rollouts/{id}/rollback/",
+    "sample_path": "/api/v1/delivery/rollouts/11111111-1111-4111-8111-111111111111/rollback/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "roll back every selected cluster to its frozen known-good version",
+    "auth": "browser JWT or projects:write API token; strong fencing-generation If-Match and idempotency middleware",
+    "rbac": "dedicated delivery_rollbacks:rollback grant on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "rollout ID, frozen plan digest, fence, actor, and outcome",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-target-orphan",
+    "route": "/api/v1/delivery/targets/{id}/orphan/",
+    "sample_path": "/api/v1/delivery/targets/11111111-1111-4111-8111-111111111111/orphan/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "finalize target deletion while explicitly retaining downstream resources",
+    "auth": "browser JWT or projects:write API token; strong target If-Match and idempotency middleware",
+    "rbac": "dedicated global critical delivery_orphans:orphan grant",
+    "csrf": "required for browser cookie mutation",
+    "audit": "target ID, orphan decision, resource version, actor, and outcome",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-deployment-reconcile",
+    "route": "/api/v1/delivery/deployments/{id}/reconcile/",
+    "sample_path": "/api/v1/delivery/deployments/11111111-1111-4111-8111-111111111111/reconcile/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "increment a deployment desired generation and request convergence",
+    "auth": "browser JWT or projects:write API token; strong desired-generation If-Match and idempotency middleware",
+    "rbac": "delivery_deployments:update on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "deployment and cluster IDs, generation, actor, and outcome",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
+  },
+  {
+    "id": "delivery-deployment-suspend",
+    "route": "/api/v1/delivery/deployments/{id}/suspend/",
+    "sample_path": "/api/v1/delivery/deployments/11111111-1111-4111-8111-111111111111/suspend/?project_id=22222222-2222-4222-8222-222222222222",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "persist an explicit per-cluster suspension exception",
+    "auth": "browser JWT or projects:write API token; strong desired-generation If-Match and idempotency middleware",
+    "rbac": "delivery_deployments:update on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "deployment and cluster IDs, generation, actor, and outcome",
+    "tests": ["TestDeliveryRoutesRequireAuthentication", "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"]
   }
 ]

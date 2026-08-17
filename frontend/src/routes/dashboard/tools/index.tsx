@@ -84,7 +84,7 @@ function ClusterToolRow({ cluster, tools }: { cluster: Cluster; tools: ClusterTo
   );
 }
 
-function ToolsFleetPage() {
+function ManagedToolsPage() {
   const { data: clustersData, isLoading: clustersLoading } = useClusters({ pageSize: 100 });
   const { data: tools, isLoading: toolsLoading } = useTools();
 
@@ -148,5 +148,5 @@ function ToolsFleetPage() {
 }
 
 export const Route = createFileRoute('/dashboard/tools/')({
-  component: ToolsFleetPage,
+  component: ManagedToolsPage,
 });

@@ -19,7 +19,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
-	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
 	"github.com/alphabravocompany/astronomer-go/internal/baseline"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
@@ -457,8 +456,7 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 	}
 	// Pre-flight the agent privilege profile for components whose chart creates
 	// cluster-scoped RBAC (cert-manager, gatekeeper, ingress-nginx,
-	// trivy-operator). ArgoCD proxies the helm apply through the managed
-	// cluster's own agent SA; on an operator/viewer profile that SA is read-only
+	// trivy-operator). The managed cluster's agent SA is read-only
 	// on ClusterRole/ClusterRoleBinding, so the install would land its namespaced
 	// bits but leave the cluster-scoped ones permanently OutOfSync. Reject up
 	// front instead of enqueuing an operation that can never converge.
@@ -1696,10 +1694,9 @@ func (h *ToolHandler) recordToolOperationEvent(ctx context.Context, operationID 
 //   - `ClusterScanProfile`  (cis.cattle.io/v1) — listed by SecurityHandler.ListProfiles
 //   - `ClusterScanReport`   (cis.cattle.io/v1) — polled by tasks.HandleSecurityIngest
 //
-// The actual `cluster_tools` row is seeded in migration
-// `022_cis_scan_findings.up.sql` (idempotent INSERT … ON CONFLICT DO
-// NOTHING) so the catalog is consistent across fresh deploys, replicas, and
-// existing installs without requiring a separate seed step. Keeping the
+// The `cluster_tools` row is seeded in the canonical v1 initial schema so the
+// catalog is consistent across fresh deploys and replicas without requiring a
+// separate seed step. Keeping the
 // chart coordinates here as a Go-side constant means handlers and tasks can
 // reference them without re-querying the DB.
 const (
@@ -1723,85 +1720,6 @@ func CISOperatorChartCoordinates() toolChart {
 	}
 }
 
-// Phase B1 — ArgoCD lifecycle
-//
-// Catalog entry for `argo/argo-cd`. Per-cluster install. Once the release is
-// rolled out, the chart provides the argocd-server, argocd-repo-server,
-// argocd-application-controller, and argocd-applicationset-controller
-// workloads. Astronomer registers the resulting instance via
-// POST /api/v1/argocd/instances/ and from then on uses the typed client in
-// internal/handler/argocd to drive Application/AppProject/ApplicationSet/
-// Cluster/Repository CRUD against it.
-//
-// The `cluster_tools` row is seeded by an idempotent INSERT in the same
-// migration that adds the argocd_managed_clusters table. Keeping the chart
-// coordinates here as Go constants means handlers and follow-up auto-
-// registration code can reference them without re-querying the DB.
-const (
-	ArgoCDToolSlug      = "argocd"
-	ArgoCDToolName      = "ArgoCD"
-	ArgoCDChartName     = "argo-cd"
-	ArgoCDChartRepoURL  = "https://argoproj.github.io/argo-helm"
-	ArgoCDChartCategory = "gitops"
-	ArgoCDNamespace     = "argocd"
-)
-
-// ArgoCDChartCoordinates returns the chart coordinates for argo-cd as the
-// same struct shape stored under `cluster_tools.charts`. Exposed so tests
-// and other packages can reference one source of truth.
-func ArgoCDChartCoordinates() toolChart {
-	return toolChart{
-		ChartName: ArgoCDChartName,
-		RepoURL:   ArgoCDChartRepoURL,
-		Namespace: ArgoCDNamespace,
-		Order:     0,
-	}
-}
-
-// ArgoCDDefaultValuesYAML is the conservative single-node default values
-// snippet baked into the catalog `presets["default"]`. It targets:
-//   - server: ClusterIP service, ingress disabled, rootpath /argocd so the
-//     SPA + API both live under that prefix and the Astronomer reverse
-//     proxy can mount it transparently.
-//   - controller: HA off (replicas=1) — flip to 2+ later for prod.
-//   - redis-ha: off — chart's bundled redis is sufficient for day-one.
-//   - applicationSet: enabled — required for Phase B1's fan-out endpoints.
-//   - dex: disabled — Astronomer's Dex shim brokers identity instead.
-//   - configs.cm.accounts.astronomer = "apiKey, login": dedicated upstream
-//     account that lets us mint NEVER-EXPIRING API tokens. Without this the
-//     only path is admin's session JWT which expires after 24h and silently
-//     flips the instance to "unhealthy" until someone re-mints it.
-//   - configs.rbac.policy.csv: bind that account to the upstream `admin`
-//     role so it can drive ApplicationSet / cluster / project CRUD.
-//
-// The values are kept as a Go literal so tests can assert the shape; the
-// migration seeds the same string into `cluster_tools.presets`.
-const ArgoCDDefaultValuesYAML = `server:
-  service:
-    type: ClusterIP
-  ingress:
-    enabled: false
-controller:
-  replicas: 1
-redis-ha:
-  enabled: false
-applicationSet:
-  enabled: true
-dex:
-  enabled: false
-configs:
-  params:
-    server.insecure: "true"
-    server.rootpath: "/argocd"
-    server.basehref: "/argocd"
-  cm:
-    accounts.astronomer: "apiKey, login"
-  rbac:
-    policy.default: "role:readonly"
-    policy.csv: |
-      g, astronomer, role:admin
-`
-
 // Phase B4 — Dex
 //
 // Catalog entry for `dex` from the dexidp Helm repo. Single-instance install
@@ -1818,9 +1736,8 @@ configs:
 //     sso_configurations so A1's generic OIDC path treats Dex as a regular
 //     /auth/login/dex/ provider.
 //
-// The actual `cluster_tools` row is seeded in migration
-// `023_dex_connectors.up.sql` (idempotent INSERT … ON CONFLICT DO NOTHING)
-// alongside the new dex_connectors / dex_settings tables. Chart coordinates
+// The `cluster_tools` row is seeded in the canonical v1 initial schema
+// alongside the dex_connectors / dex_settings tables. Chart coordinates
 // stay here as Go constants so handlers/tests have one source of truth.
 const (
 	DexToolSlug          = "dex"
@@ -1866,9 +1783,8 @@ func DexChartCoordinates() toolChart {
 // independent of credentials so we can install Velero before anyone has
 // configured S3.
 //
-// The cluster_tools row is seeded by an idempotent INSERT in migration
-// 020_velero_backup_engine.up.sql alongside the schema changes that track
-// the Velero CR identities. Chart coordinates stay here as Go constants so
+// The cluster_tools row is seeded by the canonical v1 initial schema alongside
+// the tables that track the Velero CR identities. Chart coordinates stay here as Go constants so
 // handlers and tests share one source of truth.
 const (
 	VeleroToolSlug         = "velero"
@@ -1897,9 +1813,7 @@ func VeleroChartCoordinates() toolChart {
 // primarily to automate TLS for the management Gateway, but operators may also
 // use it for app/workload ingress on managed clusters.
 //
-// The actual `cluster_tools` row is seeded in migration
-// `033_cert_manager_tool.up.sql` (idempotent INSERT … ON CONFLICT DO NOTHING)
-// so existing installs gain the entry on upgrade.
+// The `cluster_tools` row is seeded in the canonical v1 initial schema.
 const (
 	CertManagerToolSlug         = "cert-manager"
 	CertManagerToolName         = "cert-manager"
@@ -1947,8 +1861,8 @@ type ToolScope string
 
 const (
 	// ToolScopeControlPlane means the tool is part of the management plane
-	// and should only be installed on the local Astronomer cluster (Dex,
-	// ArgoCD). Installing it on a workload cluster is almost always a
+	// and should only be installed on the local Astronomer cluster (Dex).
+	// Installing it on a workload cluster is almost always a
 	// mistake — nothing on the workload cluster consumes it.
 	ToolScopeControlPlane ToolScope = "control-plane"
 	// ToolScopeWorkload means the tool is data-plane: it runs on each
@@ -1965,7 +1879,6 @@ const (
 // without requiring every tool to be classified.
 var toolScopes = map[string]ToolScope{
 	DexToolSlug:         ToolScopeControlPlane,
-	ArgoCDToolSlug:      ToolScopeControlPlane,
 	VeleroToolSlug:      ToolScopeWorkload,
 	CISOperatorToolSlug: ToolScopeWorkload,
 }
@@ -2024,7 +1937,7 @@ func (h *ToolHandler) checkClusterRBACProfile(ctx context.Context, slug string, 
 	if err != nil {
 		return "", true
 	}
-	profile := argolabels.ClusterAgentPrivilegeProfile(cluster.Annotations)
+	profile := agentPrivilegeProfileFromAnnotations(cluster.Annotations)
 	if profile == agenttemplate.PrivilegeProfileAdmin {
 		return "", true
 	}

@@ -131,81 +131,6 @@
     "security_registry_id": "charlie-admin-action-policy-update"
   },
   {
-    "method": "POST",
-    "pattern": "/api/v1/*/admin/charlie/agent/install/",
-    "handler_owner": "internal/server route owner requires explicit classification",
-    "surface": "install the Charlie product agent from verified onboarding state",
-    "auth": "browser JWT only; feature.charlie opt-in gate",
-    "rbac": "admin API token scope plus charlie:manage",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "admin.charlie.agent.install; no package or credential content",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestBrowserCookieMutatingRoutesRequireCSRF"
-    ],
-    "security_registry_id": "charlie-admin-agent-install"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/admin/charlie/agent/rollback/",
-    "handler_owner": "internal/server route owner requires explicit classification",
-    "surface": "request a Charlie product-agent replacement rollback",
-    "auth": "browser JWT only; feature.charlie opt-in gate; new signed replacement package required",
-    "rbac": "admin API token scope plus charlie:manage",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "admin.charlie.agent.rollback after accepted replacement only",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestBrowserCookieMutatingRoutesRequireCSRF"
-    ],
-    "security_registry_id": "charlie-admin-agent-rollback"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/admin/charlie/agent/rotate/",
-    "handler_owner": "internal/server route owner requires explicit classification",
-    "surface": "request Charlie product-agent credential replacement",
-    "auth": "browser JWT only; feature.charlie opt-in gate; new signed replacement package required",
-    "rbac": "admin API token scope plus charlie:manage",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "admin.charlie.agent.rotate after accepted replacement only",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestBrowserCookieMutatingRoutesRequireCSRF"
-    ],
-    "security_registry_id": "charlie-admin-agent-rotate"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/admin/charlie/agent/uninstall/",
-    "handler_owner": "internal/server route owner requires explicit classification",
-    "surface": "emergency-disable Charlie and uninstall the product agent",
-    "auth": "browser JWT only; remains available while feature.charlie is disabled; exact confirmation phrase",
-    "rbac": "admin API token scope plus charlie:manage",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "admin.charlie.agent.uninstall with content-free confirmation status",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestBrowserCookieMutatingRoutesRequireCSRF"
-    ],
-    "security_registry_id": "charlie-admin-agent-uninstall"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/admin/charlie/agent/upgrade/",
-    "handler_owner": "internal/server route owner requires explicit classification",
-    "surface": "request a Charlie product-agent replacement upgrade",
-    "auth": "browser JWT only; feature.charlie opt-in gate; new signed replacement package required",
-    "rbac": "admin API token scope plus charlie:manage",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "admin.charlie.agent.upgrade after accepted replacement only",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestBrowserCookieMutatingRoutesRequireCSRF"
-    ],
-    "security_registry_id": "charlie-admin-agent-upgrade"
-  },
-  {
     "method": "GET",
     "pattern": "/api/v1/*/admin/charlie/alert-deliveries/",
     "handler_owner": "internal/server route owner requires explicit classification",
@@ -262,21 +187,6 @@
       "TestBrowserCookieMutatingRoutesRequireCSRF"
     ],
     "security_registry_id": "charlie-admin-diagnostics"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/admin/charlie/disconnect/",
-    "handler_owner": "internal/server route owner requires explicit classification",
-    "surface": "emergency-disable Charlie and remove the local connection",
-    "auth": "browser JWT only; remains available while feature.charlie is disabled; exact confirmation phrase",
-    "rbac": "admin API token scope plus charlie:manage",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "admin.charlie.disconnect with content-free confirmation status",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestBrowserCookieMutatingRoutesRequireCSRF"
-    ],
-    "security_registry_id": "charlie-admin-disconnect"
   },
   {
     "method": "GET",
@@ -711,104 +621,6 @@
   },
   {
     "method": "GET",
-    "pattern": "/api/v1/*/agents/fleet/",
-    "handler_owner": "handler.AgentFleetHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/agents/fleet/{cluster_id}/diagnostics/",
-    "handler_owner": "handler.AgentFleetHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/agents/fleet/{cluster_id}/diagnostics/bundle/",
-    "handler_owner": "handler.AgentFleetHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/agents/fleet/{cluster_id}/operations/",
-    "handler_owner": "handler.AgentFleetHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/agents/fleet/{cluster_id}/self-test/",
-    "handler_owner": "handler.AgentFleetHandler",
-    "surface": "active agent health self-test through inventory and live diagnostics",
-    "auth": "bearer/session auth",
-    "rbac": "agents:update",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "agent self-test is read-only but active; add explicit audit if command execution expands",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestAgentFleetSelfTestPassesForHealthyConnectedAgent",
-      "TestAgentFleetSelfTestFailsForDisconnectedBlockedAgent"
-    ],
-    "security_registry_id": "agent-fleet-self-test"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/agents/fleet/{cluster_id}/upgrade-plan/",
-    "handler_owner": "handler.AgentFleetHandler",
-    "surface": "agent lifecycle upgrade plan generation",
-    "auth": "bearer/session auth",
-    "rbac": "agents:update",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "upgrade planning is read-only but active; queued upgrades are audited separately",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "agent-fleet-upgrade-plan"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/agents/fleet/{cluster_id}/upgrade/",
-    "handler_owner": "handler.AgentFleetHandler",
-    "surface": "agent lifecycle upgrade operation queue",
-    "auth": "bearer/session auth",
-    "rbac": "agents:update",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "agent.upgrade.queued",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestAgentFleetUpgradeQueuesLifecycleOperation",
-      "TestAgentFleetUpgradeDoesNotQueueBlockedPlan"
-    ],
-    "security_registry_id": "agent-fleet-upgrade-queue"
-  },
-  {
-    "method": "GET",
     "pattern": "/api/v1/*/alerting/channels/",
     "handler_owner": "internal/server route owner requires explicit classification",
     "surface": "management API",
@@ -1195,592 +1007,6 @@
     "tests": [
       "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
     ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/applications/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/applications/{id}/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/applications/{id}/history/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/applications/{id}/manifests/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/applications/{id}/refresh/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/applications/{id}/sync/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/clusters/{cluster_id}/ownership/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "adopted cluster management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/clusters/{cluster_id}/ownership/{component_slug}/decision/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "adopted cluster management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/controller/status/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/instances/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/instances/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/*/argocd/instances/{id}/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/instances/{id}/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "PUT",
-    "pattern": "/api/v1/*/argocd/instances/{id}/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/instances/{id}/applications/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/instances/{id}/applications/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/*/argocd/instances/{id}/applications/{name}/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "PATCH",
-    "pattern": "/api/v1/*/argocd/instances/{id}/applications/{name}/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/instances/{id}/applications/{name}/sync/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/instances/{id}/applicationsets/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/instances/{id}/applicationsets/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/*/argocd/instances/{id}/applicationsets/{name}/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/instances/{id}/cached-applications/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/instances/{id}/clusters/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/instances/{id}/clusters/{cluster_id}/refresh-labels/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "adopted cluster management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/*/argocd/instances/{id}/clusters/{cluster_id}/register/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "adopted cluster management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/instances/{id}/clusters/{cluster_id}/register/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "adopted cluster management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/instances/{id}/health/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/instances/{id}/orphan-report/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/instances/{id}/projects/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/instances/{id}/projects/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/*/argocd/instances/{id}/projects/{name}/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "PATCH",
-    "pattern": "/api/v1/*/argocd/instances/{id}/projects/{name}/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/*/argocd/instances/{id}/repos/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/instances/{id}/repos/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/instances/{id}/repos/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/instances/{id}/repos/test/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/operations/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/argocd/operations/{id}/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/argocd/operations/{id}/retry/",
-    "handler_owner": "handler.ArgoCDHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific write permission documented in high-risk registry",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "mutating request audit middleware or explicit handler audit",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
-      "TestMutatingRoutesHaveSecurityClassification"
-    ],
-    "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "GET",
@@ -2713,6 +1939,19 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/charlie/commands/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/charlie/context/search/",
     "handler_owner": "internal/server route owner requires explicit classification",
     "surface": "bounded product-owned resource context search for Charlie chat disclosure",
@@ -3114,6 +2353,119 @@
     "tests": [
       "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
     ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/cluster-agents/",
+    "handler_owner": "handler.ClusterAgentHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/cluster-agents/{cluster_id}/",
+    "handler_owner": "handler.ClusterAgentHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/cluster-agents/{cluster_id}/diagnostics/",
+    "handler_owner": "handler.ClusterAgentHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/cluster-agents/{cluster_id}/diagnostics/bundle/",
+    "handler_owner": "handler.ClusterAgentHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/cluster-agents/{cluster_id}/operations/",
+    "handler_owner": "handler.ClusterAgentHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/cluster-agents/{cluster_id}/self-test/",
+    "handler_owner": "handler.ClusterAgentHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Cluster-agent mutations are authenticated and cluster-scoped. Token rotation and revocation require clusters:update plus the write-clusters scope; upgrade planning, upgrade execution, and self-test require their dedicated cluster-agent RBAC actions. Every operation is limited to the named cluster and records an audit event."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/cluster-agents/{cluster_id}/upgrade-plan/",
+    "handler_owner": "handler.ClusterAgentHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Cluster-agent mutations are authenticated and cluster-scoped. Token rotation and revocation require clusters:update plus the write-clusters scope; upgrade planning, upgrade execution, and self-test require their dedicated cluster-agent RBAC actions. Every operation is limited to the named cluster and records an audit event."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/cluster-agents/{cluster_id}/upgrade/",
+    "handler_owner": "handler.ClusterAgentHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Cluster-agent mutations are authenticated and cluster-scoped. Token rotation and revocation require clusters:update plus the write-clusters scope; upgrade planning, upgrade execution, and self-test require their dedicated cluster-agent RBAC actions. Every operation is limited to the named cluster and records an audit event."
   },
   {
     "method": "GET",
@@ -4887,7 +4239,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "Trigger a durable agent-token rotation (sets rotation_pending_at; the grace rotation completes on the agent's next CONNECT and never invalidates the token the agent currently holds) or hard-revoke the token (revoked_at) for one cluster. Both are gated on the clusters:update RBAC permission plus the write-clusters scope, blast radius is the owning cluster only, and each call is audited (agent.token.rotate.requested / agent.token.revoked)."
+    "risk_reason": "Cluster-agent mutations are authenticated and cluster-scoped. Token rotation and revocation require clusters:update plus the write-clusters scope; upgrade planning, upgrade execution, and self-test require their dedicated cluster-agent RBAC actions. Every operation is limited to the named cluster and records an audit event."
   },
   {
     "method": "POST",
@@ -4903,7 +4255,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "Trigger a durable agent-token rotation (sets rotation_pending_at; the grace rotation completes on the agent's next CONNECT and never invalidates the token the agent currently holds) or hard-revoke the token (revoked_at) for one cluster. Both are gated on the clusters:update RBAC permission plus the write-clusters scope, blast radius is the owning cluster only, and each call is audited (agent.token.rotate.requested / agent.token.revoked)."
+    "risk_reason": "Cluster-agent mutations are authenticated and cluster-scoped. Token rotation and revocation require clusters:update plus the write-clusters scope; upgrade planning, upgrade execution, and self-test require their dedicated cluster-agent RBAC actions. Every operation is limited to the named cluster and records an audit event."
   },
   {
     "method": "GET",
@@ -5530,6 +4882,598 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/delivery/bundles/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/bundles/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "create one immutable-versioned Flux delivery bundle in a project",
+    "auth": "browser JWT or API token with projects:write scope; idempotent request UUID",
+    "rbac": "delivery_bundles:create on the normalized project scope",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "authenticated mutation metadata only",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC",
+      "TestDeliveryCreateRouteIdempotencyRunsAfterAuthorization"
+    ],
+    "security_registry_id": "delivery-bundle-create"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/delivery/bundles/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/bundles/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/*/delivery/bundles/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/bundles/{id}/versions/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/bundles/{id}/versions/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "publish one immutable Flux delivery bundle version in a project",
+    "auth": "browser JWT or API token with projects:write scope; idempotent request UUID",
+    "rbac": "delivery_bundles:create on the normalized project scope",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "authenticated mutation metadata only",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-bundle-version-create"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/bundles/{id}/versions/{versionId}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/clusters/{clusterId}/inventory/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/deployments/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/deployments/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/deployments/{id}/events/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/deployments/{id}/reconcile/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "increment a deployment desired generation and request convergence",
+    "auth": "browser JWT or projects:write API token; strong desired-generation If-Match and idempotency middleware",
+    "rbac": "delivery_deployments:update on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "deployment and cluster IDs, generation, actor, and outcome",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-deployment-reconcile"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/deployments/{id}/resume/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/deployments/{id}/suspend/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "persist an explicit per-cluster suspension exception",
+    "auth": "browser JWT or projects:write API token; strong desired-generation If-Match and idempotency middleware",
+    "rbac": "delivery_deployments:update on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "deployment and cluster IDs, generation, actor, and outcome",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-deployment-suspend"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/rollouts/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/rollouts/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/rollouts/{id}/abort/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/rollouts/{id}/approve/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "decide one exact expiring frozen rollout approval gate",
+    "auth": "browser JWT or projects:write API token; strong fencing-generation If-Match and idempotency middleware",
+    "rbac": "dedicated delivery_approvals:approve grant on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "rollout/cohort, frozen binding digest, decision, expiry, actor, and outcome",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-rollout-approve"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/rollouts/{id}/clusters/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/rollouts/{id}/events/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/rollouts/{id}/pause/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/rollouts/{id}/resume/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/rollouts/{id}/retry/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/rollouts/{id}/rollback/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "roll back every selected cluster to its frozen known-good version",
+    "auth": "browser JWT or projects:write API token; strong fencing-generation If-Match and idempotency middleware",
+    "rbac": "dedicated delivery_rollbacks:rollback grant on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "rollout ID, frozen plan digest, fence, actor, and outcome",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-rollout-rollback"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/sources/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/sources/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "create one project-scoped Flux delivery source with a write-only provider credential",
+    "auth": "browser JWT or API token with projects:write scope; idempotent request UUID",
+    "rbac": "delivery_sources:create on the normalized project scope",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "authenticated mutation metadata only; credential plaintext is never logged or returned",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC",
+      "TestDeliveryCreateRouteIdempotencyRunsAfterAuthorization"
+    ],
+    "security_registry_id": "delivery-source-create"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/delivery/sources/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "delete one Flux delivery source from a project",
+    "auth": "browser JWT or API token with projects:write scope",
+    "rbac": "delivery_sources:delete on the normalized project scope",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "authenticated mutation metadata only; provider credentials are excluded",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-source-delete"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/sources/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/*/delivery/sources/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/sources/{id}/rotate-credential/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "replace the write-only encrypted provider credential for one Flux delivery source",
+    "auth": "browser JWT or API token with projects:write scope; idempotent request UUID",
+    "rbac": "delivery_sources:update on the normalized project scope",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "authenticated mutation metadata only; credential plaintext is never logged, persisted unencrypted, or returned",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC",
+      "TestDeliveryMutationScopeValidationPrecedesPersistence"
+    ],
+    "security_registry_id": "delivery-source-credential-rotate"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/sources/{id}/verify/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "queue an authenticated provider and trust-policy verification",
+    "auth": "browser JWT or API token with projects:write scope; idempotency middleware",
+    "rbac": "delivery_sources:update on the normalized project scope",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "resolution identity and bounded status only; credentials excluded",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-source-verify"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/system/compatibility/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/targets/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/targets/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "create one project-scoped target and placement policy",
+    "auth": "browser JWT or projects:write API token; idempotency middleware",
+    "rbac": "delivery_targets:create on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "target identity, policy digest, actor, and outcome",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-target-create"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/delivery/targets/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "persist target deletion and downstream tombstone intents",
+    "auth": "browser JWT or projects:write API token; strong If-Match and idempotency middleware",
+    "rbac": "delivery_targets:delete on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "target identity, affected deployment count, actor, and outcome",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-target-delete"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/targets/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/*/delivery/targets/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "CAS-update target desired state and generation",
+    "auth": "browser JWT or projects:write API token; strong If-Match and idempotency middleware",
+    "rbac": "delivery_targets:update on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "target identity, generation transition, actor, and outcome",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-target-update"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/targets/{id}/orphan/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "finalize target deletion while explicitly retaining downstream resources",
+    "auth": "browser JWT or projects:write API token; strong target If-Match and idempotency middleware",
+    "rbac": "dedicated global critical delivery_orphans:orphan grant",
+    "csrf": "required for browser cookie mutation",
+    "audit": "target ID, orphan decision, resource version, actor, and outcome",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-target-orphan"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/targets/{id}/preview/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "evaluate authoritative membership, blockers, risk, and digest",
+    "auth": "browser JWT or API token",
+    "rbac": "delivery_targets:read on the normalized project scope",
+    "csrf": "required because POST is browser-cookie reachable",
+    "audit": "target identity and preview digest only",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-target-preview"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/targets/{id}/rollouts/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "freeze placement and launch an immutable multi-cluster rollout",
+    "auth": "browser JWT or projects:write API token; required Idempotency-Key and target-generation If-Match",
+    "rbac": "delivery_rollouts:create on the normalized project scope",
+    "csrf": "required for browser cookie mutation",
+    "audit": "rollout ID, exact plan and preview digests, actor, and outcome",
+    "tests": [
+      "TestDeliveryRoutesRequireAuthentication",
+      "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
+    ],
+    "security_registry_id": "delivery-rollout-start"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/extensions/",
     "handler_owner": "internal/server route owner requires explicit classification",
     "surface": "management API",
@@ -5678,120 +5622,6 @@
     ],
     "risk_classification": "covered-rbac-global-settings",
     "risk_reason": "Install/enable/disable/verify-bundle require ScopeAdmin plus settings:update. The tenant-facing data proxy and bridge-token mint are deliberately only settings:read at the router: the real gate is inside ProxyData/IssueTicket, which re-checks the CALLING user's own RBAC against the manifest's declared dataSource, so an extension can never exceed its user."
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/fleet-operations/",
-    "handler_owner": "handler.FleetOperationHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/fleet-operations/",
-    "handler_owner": "handler.FleetOperationHandler",
-    "surface": "legacy fleet-named multi-cluster operation creation",
-    "auth": "bearer/session auth",
-    "rbac": "fleet_operations:create plus clusters write API-token scope",
-    "csrf": "required for browser cookie POST by protected route auth",
-    "audit": "fleet.operation.created; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestFleetOperation_CRUD"
-    ],
-    "security_registry_id": "fleet-operation-create"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/fleet-operations/{id}/",
-    "handler_owner": "handler.FleetOperationHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/fleet-operations/{id}/abort/",
-    "handler_owner": "handler.FleetOperationHandler",
-    "surface": "legacy fleet-named multi-cluster operation abort",
-    "auth": "bearer/session auth",
-    "rbac": "fleet_operations:update plus clusters write API-token scope",
-    "csrf": "required for browser cookie POST by protected route auth",
-    "audit": "fleet.operation.aborted; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestFleetOperation_Abort"
-    ],
-    "security_registry_id": "fleet-operation-abort"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/fleet-operations/{id}/pause/",
-    "handler_owner": "handler.FleetOperationHandler",
-    "surface": "legacy Fleet-named multi-cluster operation pause",
-    "auth": "bearer/session auth",
-    "rbac": "API token clusters:write plus fleet_operations:update",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "fleet.operation.paused; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestFleetOperation_PauseResume"
-    ],
-    "security_registry_id": "fleet-operation-pause"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/fleet-operations/{id}/resume/",
-    "handler_owner": "handler.FleetOperationHandler",
-    "surface": "legacy Fleet-named multi-cluster operation resume",
-    "auth": "bearer/session auth",
-    "rbac": "API token clusters:write plus fleet_operations:update",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "fleet.operation.resumed; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestFleetOperation_PauseResume"
-    ],
-    "security_registry_id": "fleet-operation-resume"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/*/fleet-operations/{id}/retry-failed/",
-    "handler_owner": "handler.FleetOperationHandler",
-    "surface": "legacy Fleet-named multi-cluster failed-target retry",
-    "auth": "bearer/session auth",
-    "rbac": "API token clusters:write plus fleet_operations:update",
-    "csrf": "required for browser cookie mutation by authenticated router",
-    "audit": "fleet.operation.retry_failed; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestFleetOperation_RetryFailed"
-    ],
-    "security_registry_id": "fleet-operation-retry-failed"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/fleet-operations/{id}/targets/",
-    "handler_owner": "handler.FleetOperationHandler",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
   },
   {
     "method": "GET",
@@ -9279,204 +9109,6 @@
     "risk_reason": "A git provider cannot present a JWT, so this push endpoint is deliberately outside the auth chain: the handler compares the X-Astronomer-Webhook-Secret (or bearer) against the configured shared secret in constant time and 503s when no secret is configured. It triggers a sync of the one source named in the path and nothing else."
   },
   {
-    "method": "CONNECT",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*",
-    "handler_owner": "handler.ArgoCD internal Kubernetes proxy",
-    "surface": "cluster-scoped machine-to-machine Kubernetes proxy for built-in Argo CD",
-    "auth": "cluster-scoped argocd cluster proxy token only",
-    "rbac": "not user RBAC; token hash must match the requested cluster",
-    "csrf": "not applicable: machine-to-machine bearer token",
-    "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
-      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
-      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
-      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
-      "TestInternalArgoCDProxyRouterRetainsRateLimit",
-      "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
-      "TestArgoCDInternalK8sProxyMutationsAreAudited",
-      "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
-    ],
-    "security_registry_id": "argocd-k8s-proxy"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*",
-    "handler_owner": "handler.ArgoCD internal Kubernetes proxy",
-    "surface": "cluster-scoped machine-to-machine Kubernetes proxy for built-in Argo CD",
-    "auth": "cluster-scoped argocd cluster proxy token only",
-    "rbac": "not user RBAC; token hash must match the requested cluster",
-    "csrf": "not applicable: machine-to-machine bearer token",
-    "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
-      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
-      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
-      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
-      "TestInternalArgoCDProxyRouterRetainsRateLimit",
-      "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
-      "TestArgoCDInternalK8sProxyMutationsAreAudited",
-      "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
-    ],
-    "security_registry_id": "argocd-k8s-proxy"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*",
-    "handler_owner": "handler.ArgoCD internal Kubernetes proxy",
-    "surface": "cluster-scoped machine-to-machine Kubernetes proxy for built-in Argo CD",
-    "auth": "cluster-scoped argocd cluster proxy token only",
-    "rbac": "not user RBAC; token hash must match the requested cluster",
-    "csrf": "not applicable: machine-to-machine bearer token",
-    "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
-      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
-      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
-      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
-      "TestInternalArgoCDProxyRouterRetainsRateLimit",
-      "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
-      "TestArgoCDInternalK8sProxyMutationsAreAudited",
-      "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
-    ],
-    "security_registry_id": "argocd-k8s-proxy"
-  },
-  {
-    "method": "HEAD",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*",
-    "handler_owner": "handler.ArgoCD internal Kubernetes proxy",
-    "surface": "cluster-scoped machine-to-machine Kubernetes proxy for built-in Argo CD",
-    "auth": "cluster-scoped argocd cluster proxy token only",
-    "rbac": "not user RBAC; token hash must match the requested cluster",
-    "csrf": "not applicable: machine-to-machine bearer token",
-    "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
-      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
-      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
-      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
-      "TestInternalArgoCDProxyRouterRetainsRateLimit",
-      "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
-      "TestArgoCDInternalK8sProxyMutationsAreAudited",
-      "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
-    ],
-    "security_registry_id": "argocd-k8s-proxy"
-  },
-  {
-    "method": "OPTIONS",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*",
-    "handler_owner": "handler.ArgoCD internal Kubernetes proxy",
-    "surface": "cluster-scoped machine-to-machine Kubernetes proxy for built-in Argo CD",
-    "auth": "cluster-scoped argocd cluster proxy token only",
-    "rbac": "not user RBAC; token hash must match the requested cluster",
-    "csrf": "not applicable: machine-to-machine bearer token",
-    "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
-      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
-      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
-      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
-      "TestInternalArgoCDProxyRouterRetainsRateLimit",
-      "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
-      "TestArgoCDInternalK8sProxyMutationsAreAudited",
-      "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
-    ],
-    "security_registry_id": "argocd-k8s-proxy"
-  },
-  {
-    "method": "PATCH",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*",
-    "handler_owner": "handler.ArgoCD internal Kubernetes proxy",
-    "surface": "cluster-scoped machine-to-machine Kubernetes proxy for built-in Argo CD",
-    "auth": "cluster-scoped argocd cluster proxy token only",
-    "rbac": "not user RBAC; token hash must match the requested cluster",
-    "csrf": "not applicable: machine-to-machine bearer token",
-    "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
-      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
-      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
-      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
-      "TestInternalArgoCDProxyRouterRetainsRateLimit",
-      "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
-      "TestArgoCDInternalK8sProxyMutationsAreAudited",
-      "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
-    ],
-    "security_registry_id": "argocd-k8s-proxy"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*",
-    "handler_owner": "handler.ArgoCD internal Kubernetes proxy",
-    "surface": "cluster-scoped machine-to-machine Kubernetes proxy for built-in Argo CD",
-    "auth": "cluster-scoped argocd cluster proxy token only",
-    "rbac": "not user RBAC; token hash must match the requested cluster",
-    "csrf": "not applicable: machine-to-machine bearer token",
-    "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
-      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
-      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
-      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
-      "TestInternalArgoCDProxyRouterRetainsRateLimit",
-      "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
-      "TestArgoCDInternalK8sProxyMutationsAreAudited",
-      "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
-    ],
-    "security_registry_id": "argocd-k8s-proxy"
-  },
-  {
-    "method": "PUT",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*",
-    "handler_owner": "handler.ArgoCD internal Kubernetes proxy",
-    "surface": "cluster-scoped machine-to-machine Kubernetes proxy for built-in Argo CD",
-    "auth": "cluster-scoped argocd cluster proxy token only",
-    "rbac": "not user RBAC; token hash must match the requested cluster",
-    "csrf": "not applicable: machine-to-machine bearer token",
-    "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
-      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
-      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
-      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
-      "TestInternalArgoCDProxyRouterRetainsRateLimit",
-      "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
-      "TestArgoCDInternalK8sProxyMutationsAreAudited",
-      "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
-    ],
-    "security_registry_id": "argocd-k8s-proxy"
-  },
-  {
-    "method": "TRACE",
-    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*",
-    "handler_owner": "handler.ArgoCD internal Kubernetes proxy",
-    "surface": "cluster-scoped machine-to-machine Kubernetes proxy for built-in Argo CD",
-    "auth": "cluster-scoped argocd cluster proxy token only",
-    "rbac": "not user RBAC; token hash must match the requested cluster",
-    "csrf": "not applicable: machine-to-machine bearer token",
-    "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
-      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
-      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
-      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
-      "TestInternalArgoCDProxyRouterRetainsRateLimit",
-      "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
-      "TestArgoCDInternalK8sProxyMutationsAreAudited",
-      "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
-    ],
-    "security_registry_id": "argocd-k8s-proxy"
-  },
-  {
     "method": "GET",
     "pattern": "/api/v1/projects/{id}/quota/",
     "handler_owner": "handler.QuotaHandler",
@@ -10076,258 +9708,6 @@
       "TestDirectExecAndLogsStreamsAuditOpen"
     ],
     "security_registry_id": "logs-websocket"
-  },
-  {
-    "method": "CONNECT",
-    "pattern": "/argocd",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
-    "audit": "route should add explicit Argo UI access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-root"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/argocd",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
-    "audit": "route should add explicit Argo UI access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-root"
-  },
-  {
-    "method": "GET",
-    "pattern": "/argocd",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
-    "audit": "route should add explicit Argo UI access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-root"
-  },
-  {
-    "method": "HEAD",
-    "pattern": "/argocd",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
-    "audit": "route should add explicit Argo UI access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-root"
-  },
-  {
-    "method": "OPTIONS",
-    "pattern": "/argocd",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
-    "audit": "route should add explicit Argo UI access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-root"
-  },
-  {
-    "method": "PATCH",
-    "pattern": "/argocd",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
-    "audit": "route should add explicit Argo UI access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-root"
-  },
-  {
-    "method": "POST",
-    "pattern": "/argocd",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
-    "audit": "route should add explicit Argo UI access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-root"
-  },
-  {
-    "method": "PUT",
-    "pattern": "/argocd",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
-    "audit": "route should add explicit Argo UI access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-root"
-  },
-  {
-    "method": "TRACE",
-    "pattern": "/argocd",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
-    "audit": "route should add explicit Argo UI access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-root"
-  },
-  {
-    "method": "CONNECT",
-    "pattern": "/argocd/*",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
-    "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-suffix"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/argocd/*",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
-    "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-suffix"
-  },
-  {
-    "method": "GET",
-    "pattern": "/argocd/*",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
-    "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-suffix"
-  },
-  {
-    "method": "HEAD",
-    "pattern": "/argocd/*",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
-    "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-suffix"
-  },
-  {
-    "method": "OPTIONS",
-    "pattern": "/argocd/*",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
-    "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-suffix"
-  },
-  {
-    "method": "PATCH",
-    "pattern": "/argocd/*",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
-    "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-suffix"
-  },
-  {
-    "method": "POST",
-    "pattern": "/argocd/*",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
-    "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-suffix"
-  },
-  {
-    "method": "PUT",
-    "pattern": "/argocd/*",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
-    "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-suffix"
-  },
-  {
-    "method": "TRACE",
-    "pattern": "/argocd/*",
-    "handler_owner": "internal/handler.ArgoCDUIProxy",
-    "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
-    "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
-    "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
-    "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests"
-    ],
-    "security_registry_id": "argocd-ui-suffix"
   },
   {
     "method": "GET",

@@ -33,11 +33,11 @@ type fakeAutoAttachClusterQuerier struct {
 	mu sync.Mutex
 
 	// Sprint 074 state.
-	config       sqlc.PlatformConfiguration
-	templates    map[uuid.UUID]sqlc.ClusterTemplate
-	templateErr  error
-	configErr    error
-	upserts      []sqlc.UpsertClusterTemplateApplicationParams
+	config        sqlc.PlatformConfiguration
+	templates     map[uuid.UUID]sqlc.ClusterTemplate
+	templateErr   error
+	configErr     error
+	upserts       []sqlc.UpsertClusterTemplateApplicationParams
 	upsertErr     error
 	createCalled  int
 	createErr     error
@@ -223,12 +223,6 @@ func (q *fakeAutoAttachClusterQuerier) DeleteClusterRegistryConfig(context.Conte
 func (q *fakeAutoAttachClusterQuerier) GetPlatformSetting(context.Context, string) (sqlc.PlatformSetting, error) {
 	return sqlc.PlatformSetting{}, pgx.ErrNoRows
 }
-func (q *fakeAutoAttachClusterQuerier) ListArgoCDManagedClustersByCluster(context.Context, uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
-	return nil, nil
-}
-func (q *fakeAutoAttachClusterQuerier) ListArgoCDApplicationsByManagedClusterTargets(context.Context, sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams) ([]sqlc.ArgocdApplication, error) {
-	return nil, nil
-}
 func (q *fakeAutoAttachClusterQuerier) ListClusterConditionRemediationByCluster(context.Context, uuid.UUID) ([]sqlc.ClusterConditionRemediationAttempt, error) {
 	return nil, nil
 }
@@ -293,7 +287,7 @@ func TestClusterHandler_Create_DuplicateNameReturns409(t *testing.T) {
 	// real pooled pgx error often does not unwrap to *pgconn.PgError via
 	// errors.As, so isUniqueViolation must also match the SQLSTATE text.
 	cases := map[string]error{
-		"typed":  &pgconn.PgError{Code: "23505"},
+		"typed": &pgconn.PgError{Code: "23505"},
 		"wrapped string": errors.New(
 			`ERROR: duplicate key value violates unique constraint "clusters_name_key" (SQLSTATE 23505)`),
 	}
@@ -321,11 +315,9 @@ func TestClusterHandler_Create_DuplicateNameReturns409(t *testing.T) {
 	}
 }
 
-// TestPlatformDefaultTemplate_ClusterCreateAutoAttachesDefault confirms
-// the happy path: a cluster Create with a configured platform default
-// writes exactly one cluster_template_applications row pointing at the
-// default, and stamps the audit trail with the auto_attached action.
-func TestPlatformDefaultTemplate_ClusterCreateAutoAttachesDefault(t *testing.T) {
+// A configured legacy default template must not bypass the explicit
+// registration choice or the Ready Flux inventory gate.
+func TestPlatformDefaultTemplate_ClusterCreateDoesNotAutoAttach(t *testing.T) {
 	templateID := uuid.New()
 	q := newFakeAutoAttachClusterQuerier()
 	q.config = sqlc.PlatformConfiguration{
@@ -349,19 +341,11 @@ func TestPlatformDefaultTemplate_ClusterCreateAutoAttachesDefault(t *testing.T) 
 	if q.createCalled != 1 {
 		t.Fatalf("CreateCluster called %d times, want 1", q.createCalled)
 	}
-	if len(q.upserts) != 1 {
-		t.Fatalf("auto-attach upserts = %d, want 1", len(q.upserts))
-	}
-	if q.upserts[0].TemplateID != templateID {
-		t.Errorf("auto-attached template_id = %s, want %s", q.upserts[0].TemplateID, templateID)
+	if len(q.upserts) != 0 {
+		t.Fatalf("legacy auto-attach upserts = %d, want 0", len(q.upserts))
 	}
 
-	// Audit trail must show both the cluster.create and the template
-	// auto-attach actions. Order is create-first, attach-second.
-	wantActions := map[string]bool{
-		"cluster.create":                 false,
-		"cluster.template.auto_attached": false,
-	}
+	wantActions := map[string]bool{"cluster.create": false}
 	for _, a := range q.auditOps {
 		if _, ok := wantActions[a]; ok {
 			wantActions[a] = true
@@ -496,53 +480,6 @@ func TestClusterDeleteCreatesDecommissionAndTaskOutboxAtomically(t *testing.T) {
 	}
 	if payload.DecommissionID != arg.ID.String() {
 		t.Fatalf("payload decommission_id = %q, want %s", payload.DecommissionID, arg.ID)
-	}
-}
-
-func TestPlatformDefaultTemplate_ClusterCreateAutoAttachWritesTaskOutbox(t *testing.T) {
-	templateID := uuid.New()
-	q := newFakeAutoAttachClusterQuerier()
-	q.config = sqlc.PlatformConfiguration{
-		ID:                       1,
-		DefaultClusterTemplateID: pgtype.UUID{Bytes: templateID, Valid: true},
-	}
-	q.templates[templateID] = sqlc.ClusterTemplate{
-		ID:   templateID,
-		Name: "Platform baseline",
-		Spec: json.RawMessage(`{"tools":[{"slug":"trivy-operator"}]}`),
-	}
-	outbox := &fakeRegistrationTaskOutbox{}
-	h := NewClusterHandler(q)
-	h.SetTaskOutbox(outbox)
-
-	w := httptest.NewRecorder()
-	h.Create(w, createReq(t, "prod-apply"))
-
-	if w.Code != http.StatusCreated {
-		t.Fatalf("Create status = %d, body=%s", w.Code, w.Body.String())
-	}
-	if len(q.upserts) != 1 {
-		t.Fatalf("auto-attach upserts = %d, want 1", len(q.upserts))
-	}
-	clusterID := q.upserts[0].ClusterID
-	args := outbox.all()
-	if len(args) != 1 {
-		t.Fatalf("outbox writes = %d, want 1", len(args))
-	}
-	arg := args[0]
-	if arg.TaskType != tasks.ClusterTemplateApplyType {
-		t.Fatalf("TaskType = %q, want %q", arg.TaskType, tasks.ClusterTemplateApplyType)
-	}
-	assertClusterTemplateApplyDedupeKey(t, arg.DedupeKey, clusterID)
-	if arg.QueueName != tasks.ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
-		t.Fatalf("outbox options queue/max_retry/max_delivery = %s/%d/%d", arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
-	}
-	var payload tasks.ClusterTemplateApplyPayload
-	if err := json.Unmarshal(arg.Payload, &payload); err != nil {
-		t.Fatalf("payload JSON: %v", err)
-	}
-	if payload.ClusterID != clusterID.String() {
-		t.Fatalf("payload cluster_id = %q, want %s", payload.ClusterID, clusterID)
 	}
 }
 

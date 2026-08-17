@@ -56,8 +56,8 @@ func queueTerminalFailureAllowed(taskType string) bool {
 		TypeHealthCheck: {}, TypeAlertEvaluation: {}, TypeCatalogSync: {}, TypeMetricsAggregation: {}, TypeMonitoringReconcile: {},
 		TypeBackupExecution: {}, TypeSecurityScan: {}, TypeSecurityIngest: {}, TypeNotificationSend: {}, TypeAgentManifest: {},
 		TypeRunScheduledBackups: {}, TypeRunRestore: {}, TypeProjectReconcile: {}, TypeClusterDecommission: {},
-		TypeArgoCDRefreshManagedClusterLabels: {}, TypeArgoCDAutoRegisterCluster: {}, TypeClusterTemplateApply: {}, TypeClusterApplyRegistrySecret: {},
-		TypeClusterSnapshotPoll: {}, TypeCloudCredentialMaterialize: {}, TypeFleetOrchestrate: {}, TypeDispatchDeferred: {}, TypeToolDriftSweep: {},
+		TypeClusterTemplateApply: {}, TypeClusterApplyRegistrySecret: {}, TypeClusterSnapshotPoll: {}, TypeCloudCredentialMaterialize: {},
+		TypeDispatchDeferred: {}, TypeToolDriftSweep: {},
 		tasks.GitOpsSyncType: {}, tasks.NetworkPolicyApplyType: {}, tasks.ApiserverAllowlistReconcileType: {}, tasks.ClusterConditionReconcileType: {},
 	}[taskType]
 	return allowed

@@ -68,6 +68,8 @@ func TestValuesSchemaRequiresProductionWiring(t *testing.T) {
 		"/networkPolicy/kubernetesAPIEgressCIDRs",
 		"/gateway/hosts",
 		"/tls/secretName",
+		"/delivery/artifacts/fluxDistribution",
+		"/delivery/artifacts/builtInBundles",
 	} {
 		if !strings.Contains(errOut, want) {
 			t.Fatalf("schema error missing %q:\n%s", want, errOut)
@@ -81,27 +83,14 @@ func TestValuesSchemaAcceptsProductionWiring(t *testing.T) {
 		t.Fatal("runtime.Caller(0) failed")
 	}
 	prodValues := filepath.Join(filepath.Dir(here), "chart", "values-production.yaml")
-	out := helmTemplateWithValueFiles(t, []string{prodValues},
-		"config.serverURL=https://astronomer.example.com",
-		"gateway.hosts[0]=astronomer.example.com",
-		"tls.source=secret",
-		"tls.secretName=astronomer-tls",
-		"postgres.external.dsnSecretRef.name=astronomer-postgres-dsn",
-		"redis.external.address=redis.astronomer.svc.cluster.local:6379",
-		"secrets.secretKey=prod-jwt-signing-key",
-		"secrets.encryptionKey=prod-fernet-key",
-		"bootstrap.email=admin@example.com",
-		// F8: production render requires a pinned bootstrap password (or an
-		// existingSecret) so a GitOps re-render can't rotate the admin password.
-		"bootstrap.password=prod-admin-initial",
+	sets := append([]string{}, productionWiringSets...)
+	sets = append(sets,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
 		// OPS-01: production preflight requires key-wrap when backups are on.
 		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap",
-		"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
-		"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
-		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
 	)
+	out := helmTemplateWithValueFiles(t, []string{prodValues}, sets...)
 	assertRenderedContains(t, out,
 		"ENV: \"production\"",
 		"SERVER_URL: \"https://astronomer.example.com\"",

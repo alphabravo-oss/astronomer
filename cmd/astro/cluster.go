@@ -255,7 +255,7 @@ func newClusterSelfTestCmd() *cobra.Command {
 				return err
 			}
 			var out agentSelfTestEnvelope
-			if err := client.Do(cmd.Context(), "POST", "/api/v1/agents/fleet/"+args[0]+"/self-test/", map[string]any{}, &out); err != nil {
+			if err := client.Do(cmd.Context(), "POST", "/api/v1/cluster-agents/"+args[0]+"/self-test/", map[string]any{}, &out); err != nil {
 				return err
 			}
 			return render(cmd, out.Data, func(w io.Writer) error {

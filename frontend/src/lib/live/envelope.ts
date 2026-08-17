@@ -9,7 +9,7 @@
  * exactly one place.
  */
 
-import { camelizeKeys } from '@/lib/camelize';
+import { camelizeKeys } from "@/lib/camelize";
 
 /**
  * Server-side event types the bus produces today. Purely advisory — the
@@ -18,34 +18,37 @@ import { camelizeKeys } from '@/lib/camelize';
  * gives subscribers compile-time autocomplete.
  */
 export type LiveEventType =
-  | 'cluster.connected'
-  | 'cluster.disconnected'
-  | 'cluster.heartbeat'
-  | 'cluster.metrics'
-  | 'cluster.status_changed'
-  | 'cluster.created'
-  | 'cluster.updated'
-  | 'cluster.deleted'
-  | 'cluster.k8s_changed'
-  | 'agent.reconnecting'
-  | 'agent.failed'
-  | 'cluster.registration.step'
-  | 'cluster.registration.phase'
-  | 'sys.ping'
+  | "cluster.connected"
+  | "cluster.disconnected"
+  | "cluster.heartbeat"
+  | "cluster.metrics"
+  | "cluster.status_changed"
+  | "cluster.created"
+  | "cluster.updated"
+  | "cluster.deleted"
+  | "cluster.k8s_changed"
+  | "agent.reconnecting"
+  | "agent.failed"
+  | "cluster.registration.step"
+  | "cluster.registration.phase"
+  | "sys.ping"
   // P4.5 domain publishers — metadata-only `<resource>.changed` events.
-  | 'backup.changed'
-  | 'fleet_operation.changed'
-  | 'logging_operation.changed'
-  | 'tool_operation.changed'
-  | 'cis_scan.changed'
-  | 'image_scan.changed'
-  | 'argocd.changed'
-  | 'admin_queue.changed'
-  | 'siem_forwarder.changed'
-  | 'agent_fleet.changed'
-  | 'template_binding.changed'
-  | 'registry.changed'
-  | 'snapshot.changed';
+  | "backup.changed"
+  | "logging_operation.changed"
+  | "tool_operation.changed"
+  | "cis_scan.changed"
+  | "image_scan.changed"
+  | "admin_queue.changed"
+  | "siem_forwarder.changed"
+  | "cluster_agents.changed"
+  | "delivery_source.changed"
+  | "component_bundle.changed"
+  | "delivery_target.changed"
+  | "delivery_rollout.changed"
+  | "cluster_deployment.changed"
+  | "template_binding.changed"
+  | "registry.changed"
+  | "snapshot.changed";
 
 /** Parsed live event delivered to subscribers (data already camelCase). */
 export interface LiveEvent<T = unknown> {
@@ -104,20 +107,26 @@ export type Unsubscribe = () => void;
  * defaults to 0.
  */
 export function parseFrame(raw: unknown): LiveEvent | null {
-  if (typeof raw !== 'string' || raw === '') return null;
+  if (typeof raw !== "string" || raw === "") return null;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
     return null;
   }
-  if (!parsed || typeof parsed !== 'object') return null;
-  const frame = parsed as { id?: unknown; type?: unknown; time?: unknown; data?: unknown };
-  if (typeof frame.type !== 'string' || frame.type === '') return null;
+  if (!parsed || typeof parsed !== "object") return null;
+  const frame = parsed as {
+    id?: unknown;
+    type?: unknown;
+    time?: unknown;
+    data?: unknown;
+  };
+  if (typeof frame.type !== "string" || frame.type === "") return null;
   return {
-    id: typeof frame.id === 'number' ? frame.id : 0,
+    id: typeof frame.id === "number" ? frame.id : 0,
     type: frame.type,
-    time: typeof frame.time === 'string' ? frame.time : new Date().toISOString(),
+    time:
+      typeof frame.time === "string" ? frame.time : new Date().toISOString(),
     data: frame.data === undefined ? undefined : camelizeKeys(frame.data),
   };
 }

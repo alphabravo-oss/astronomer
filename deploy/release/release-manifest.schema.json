@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astronomer.io/schemas/release-manifest-v1.json",
+  "title": "Astronomer immutable release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "release",
+    "compatibility",
+    "astronomer",
+    "flux",
+    "built_in_bundles",
+    "charlie"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "source_commit", "generated_at", "install_mode", "artifact_signing_policy"],
+      "properties": {
+        "version": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "source_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "install_mode": {"const": "fresh_only"},
+        "artifact_signing_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["certificate_oidc_issuer", "certificate_identity"],
+          "properties": {
+            "certificate_oidc_issuer": {"const": "https://token.actions.githubusercontent.com"},
+            "certificate_identity": {
+              "type": "string",
+              "pattern": "^https://github.com/alphabravo-oss/astronomer/.github/workflows/release\\.yaml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$"
+            }
+          }
+        }
+      }
+    },
+    "compatibility": {"$ref": "#/$defs/compatibility"},
+    "astronomer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chart", "images", "runtime_images"],
+      "properties": {
+        "chart": {"$ref": "#/$defs/artifact"},
+        "images": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {"$ref": "#/$defs/artifact"}
+        },
+        "runtime_images": {
+          "type": "array",
+          "minItems": 6,
+          "items": {"$ref": "#/$defs/runtimeImage"}
+        }
+      }
+    },
+    "flux": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "distribution", "controllers", "apis"],
+      "properties": {
+        "version": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "distribution": {"$ref": "#/$defs/artifact"},
+        "controllers": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {"$ref": "#/$defs/artifact"}
+        },
+        "apis": {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z0-9.]+/v[0-9a-z]+/[A-Za-z]+$"}
+        }
+      }
+    },
+    "built_in_bundles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "catalog_digest", "components"],
+      "properties": {
+        "artifact": {"$ref": "#/$defs/artifact"},
+        "catalog_digest": {"$ref": "#/$defs/digest"},
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slug", "chart", "chart_version", "chart_digest", "images"],
+            "properties": {
+              "slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+              "chart": {"type": "string", "minLength": 1},
+              "chart_version": {"type": "string", "minLength": 1},
+              "chart_digest": {"$ref": "#/$defs/digest"},
+              "images": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"$ref": "#/$defs/immutableReference"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "charlie": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["qualified_version", "artifact", "capability_disclosure_digest", "artifact_signing_policy"],
+      "properties": {
+        "qualified_version": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "artifact": {"$ref": "#/$defs/artifact"},
+        "capability_disclosure_digest": {"$ref": "#/$defs/digest"},
+        "artifact_signing_policy": {"$ref": "#/$defs/externalSigningPolicy"}
+      }
+    }
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "immutableReference": {
+      "type": "string",
+      "pattern": "^(?:oci://)?[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]{1,5})?/[a-z0-9][a-z0-9._/-]*@sha256:[a-f0-9]{64}$"
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signature", "sbom", "provenance"],
+      "properties": {
+        "signature": {"type": "string", "pattern": "^cosign://.+@sha256:[a-f0-9]{64}$"},
+        "sbom": {"type": "string", "pattern": "^cosign-attestation://.+@sha256:[a-f0-9]{64}#spdxjson$"},
+        "provenance": {"type": "string", "pattern": "^cosign-attestation://.+@sha256:[a-f0-9]{64}#slsaprovenance$"}
+      }
+    },
+    "externalSigningPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["certificate_oidc_issuer", "certificate_identity"],
+      "properties": {
+        "certificate_oidc_issuer": {"const": "https://token.actions.githubusercontent.com"},
+        "certificate_identity": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$"
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "reference", "content_digest", "evidence"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"},
+        "kind": {"enum": ["container_image", "helm_chart", "oci_artifact"]},
+        "reference": {"$ref": "#/$defs/immutableReference"},
+        "content_digest": {"$ref": "#/$defs/digest"},
+        "evidence": {"$ref": "#/$defs/evidence"}
+      }
+    },
+    "runtimeImage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_reference", "reference"],
+      "properties": {
+        "source_reference": {"type": "string", "minLength": 1},
+        "reference": {"$ref": "#/$defs/immutableReference"}
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kubernetes", "agent_protocol", "postgresql", "browsers"],
+      "properties": {
+        "kubernetes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum_minor", "maximum_minor"],
+          "properties": {
+            "minimum_minor": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+            "maximum_minor": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"}
+          }
+        },
+        "agent_protocol": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "minimum", "maximum"],
+          "properties": {
+            "name": {"const": "astronomer.delivery"},
+            "minimum": {"type": "integer", "minimum": 2},
+            "maximum": {"type": "integer", "minimum": 2}
+          }
+        },
+        "postgresql": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["supported_majors"],
+          "properties": {
+            "supported_majors": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {"type": "integer", "minimum": 14}
+            }
+          }
+        },
+        "browsers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["support_policy", "minimum_versions"],
+          "properties": {
+            "support_policy": {"type": "string", "minLength": 1},
+            "minimum_versions": {"type": "object"}
+          }
+        }
+      }
+    }
+  }
+}

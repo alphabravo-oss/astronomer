@@ -51,7 +51,7 @@ type Publisher interface {
 //   - The cluster handler (POST /clusters/, PUT /options/, POST /confirm/,
 //     POST /retry/, POST /cancel/)
 //   - The tunnel hub on first agent.connected
-//   - The cluster_template:apply task on start/per-tool/end
+//   - The built-in Flux delivery provisioner on start/end
 //
 // Centralising the logic means each caller doesn't have to remember to
 // write a step row + publish an event after every DB write — they
@@ -426,8 +426,9 @@ func WithError(msg string) AdvanceOption {
 // OnAgentConnected is the tunnel-hub hook. Called every time an agent
 // completes the CONNECT_ACK handshake. The first heartbeat for a
 // cluster in `awaiting_agent` advances it through `connected`, then
-// either straight to `ready` (when install_baseline=false) or holds
-// at `connected` waiting for the apply task (when install_baseline=true).
+// either straight to `ready` (when install_baseline=false) or holds at
+// `connected` until a compatible Ready Flux inventory triggers normal delivery
+// rollouts (when install_baseline=true).
 //
 // Idempotent: subsequent heartbeats for a cluster already past
 // `connected` are no-ops (the phase machine treats them as such).
@@ -455,8 +456,8 @@ func (s *Service) OnAgentConnected(ctx context.Context, clusterID uuid.UUID, age
 	//
 	// install_baseline is NULL for any cluster attached outside the wizard — a
 	// raw `kubectl apply` of the agent manifest never records a baseline choice.
-	// Only an explicit `true` means "a template apply is coming, wait for
-	// EventTemplateApplied". NULL means nobody ever scheduled one, so requiring
+	// Only an explicit `true` means "built-in deliveries are coming, wait for
+	// EventDeliveryApplied". NULL means nobody ever scheduled one, so requiring
 	// `.Valid` here left those clusters pinned at `connected` forever, showing a
 	// warning badge while every condition was healthy. Treat "no explicit yes"
 	// as nothing-to-provision.
@@ -468,59 +469,29 @@ func (s *Service) OnAgentConnected(ctx context.Context, clusterID uuid.UUID, age
 	return nil
 }
 
-// OnTemplateApplyStart is the apply-worker hook on task start.
-// Writes a `template_applying` step and advances the cluster's phase
-// into `provisioning` from whatever terminal-ish state it was in.
-//
-// Two entry paths into "we're applying again":
-//
-//   - Happy path: phase is `connected` (operator just confirmed the
-//     wizard). EventTemplateApplying transitions connected →
-//     provisioning.
-//
-//   - Retry path: phase is `failed` (a previous apply failed and the
-//     operator clicked reapply or the periodic recovery sweep
-//     re-enqueued the task). The phase machine rejects
-//     EventTemplateApplying from `failed` — we must first emit
-//     EventRetry (failed → provisioning), then the apply-success path
-//     will transition provisioning → ready cleanly.
-//
-// Idempotent / nil-safe; phase-machine ErrIllegalTransition is treated
-// as a no-op so a double-fire (e.g. async retry race) doesn't error
-// the caller.
-func (s *Service) OnTemplateApplyStart(ctx context.Context, clusterID uuid.UUID) error {
+// OnDeliveryApplyStart records that normal Flux rollouts for the built-in
+// platform components have started. Repeated inventory observations while the
+// cluster is already provisioning are an idempotent no-op.
+func (s *Service) OnDeliveryApplyStart(ctx context.Context, clusterID uuid.UUID) error {
 	if s == nil || s.q == nil {
 		return nil
 	}
-	// Close any prior `template_applying` row still marked running.
-	// Without this, the orchestrator's auto-retry path leaves orphan
-	// "running" timeline rows that never resolve — see sprint 086.
-	_ = s.q.CloseRunningStepsForCluster(ctx, sqlc.CloseRunningStepsForClusterParams{
-		ClusterID: clusterID,
-		StepName:  "template_applying",
-	})
-	_, _ = s.WriteStep(ctx, clusterID, StepInput{
-		StepName: "template_applying",
-		Status:   "running",
-	})
-
-	// Recovery rewind: a cluster sitting in `failed` from a previous
-	// apply needs to rewind to `provisioning` before the regular
-	// applying-event will be accepted. Best-effort — if we can't read
-	// the record we fall through and let the EventTemplateApplying
-	// branch handle whatever illegal-transition the machine reports.
-	if rec, rerr := s.q.GetClusterRegistrationRecord(ctx, clusterID); rerr == nil && rec.RegistrationPhase == string(PhaseFailed) {
-		if _, err := s.Advance(ctx, clusterID, EventRetry, WithSkipAutoStep()); err != nil && !s.isIllegal(err) {
-			return err
-		}
-		// Phase is now `provisioning`. EventTemplateApplying from
-		// provisioning is illegal too (it expects `connected`), so
-		// return early — the apply task's success/failure event will
-		// drive the next transition from provisioning.
+	rec, err := s.q.GetClusterRegistrationRecord(ctx, clusterID)
+	if err != nil {
+		return err
+	}
+	if rec.RegistrationPhase == string(PhaseProvisioning) || rec.RegistrationPhase == string(PhaseFailed) {
 		return nil
 	}
-
-	if _, err := s.Advance(ctx, clusterID, EventTemplateApplying, WithSkipAutoStep()); err != nil {
+	_ = s.q.CloseRunningStepsForCluster(ctx, sqlc.CloseRunningStepsForClusterParams{
+		ClusterID: clusterID,
+		StepName:  "delivery_applying",
+	})
+	_, _ = s.WriteStep(ctx, clusterID, StepInput{
+		StepName: "delivery_applying",
+		Status:   "running",
+	})
+	if _, err := s.Advance(ctx, clusterID, EventDeliveryApplying, WithSkipAutoStep()); err != nil {
 		if s.isIllegal(err) {
 			return nil
 		}
@@ -544,25 +515,25 @@ func (s *Service) isIllegal(err error) bool {
 	return len(msg) >= 26 && msg[:26] == "illegal phase transition: "
 }
 
-// OnTemplateApplySuccess is the apply-worker hook on successful end.
-// Writes a `template_applied` step and advances provisioning → ready.
-func (s *Service) OnTemplateApplySuccess(ctx context.Context, clusterID uuid.UUID) error {
+// OnDeliveryApplySuccess writes a success step and advances provisioning to
+// ready after all built-in cluster deployments report Ready.
+func (s *Service) OnDeliveryApplySuccess(ctx context.Context, clusterID uuid.UUID) error {
 	if s == nil || s.q == nil {
 		return nil
 	}
 	if err := s.q.FinishRunningStepsForCluster(ctx, sqlc.FinishRunningStepsForClusterParams{
 		ClusterID:    clusterID,
-		StepName:     "template_applying",
+		StepName:     "delivery_applying",
 		Status:       "success",
 		ErrorMessage: "",
 	}); err != nil {
-		return fmt.Errorf("finish template_applying timeline step: %w", err)
+		return fmt.Errorf("finish delivery_applying timeline step: %w", err)
 	}
 	_, _ = s.WriteStep(ctx, clusterID, StepInput{
-		StepName: "template_applied",
+		StepName: "delivery_applied",
 		Status:   "success",
 	})
-	if _, err := s.Advance(ctx, clusterID, EventTemplateApplied, WithSkipAutoStep()); err != nil {
+	if _, err := s.Advance(ctx, clusterID, EventDeliveryApplied, WithSkipAutoStep()); err != nil {
 		if errors.Is(err, ErrIllegalTransition) {
 			return nil
 		}
@@ -574,26 +545,26 @@ func (s *Service) OnTemplateApplySuccess(ctx context.Context, clusterID uuid.UUI
 	return nil
 }
 
-// OnTemplateApplyFailure is the apply-worker hook on terminal failure.
-// Writes a `template_failed` step and advances provisioning → failed.
-func (s *Service) OnTemplateApplyFailure(ctx context.Context, clusterID uuid.UUID, errMsg string) error {
+// OnDeliveryApplyFailure writes a bounded delivery failure and advances
+// provisioning to failed. Retry remains an explicit operator action.
+func (s *Service) OnDeliveryApplyFailure(ctx context.Context, clusterID uuid.UUID, errMsg string) error {
 	if s == nil || s.q == nil {
 		return nil
 	}
 	if err := s.q.FinishRunningStepsForCluster(ctx, sqlc.FinishRunningStepsForClusterParams{
 		ClusterID:    clusterID,
-		StepName:     "template_applying",
+		StepName:     "delivery_applying",
 		Status:       "failed",
 		ErrorMessage: errMsg,
 	}); err != nil {
-		return fmt.Errorf("finish failed template_applying timeline step: %w", err)
+		return fmt.Errorf("finish failed delivery_applying timeline step: %w", err)
 	}
 	_, _ = s.WriteStep(ctx, clusterID, StepInput{
-		StepName:     "template_failed",
+		StepName:     "delivery_failed",
 		Status:       "failed",
 		ErrorMessage: errMsg,
 	})
-	if _, err := s.Advance(ctx, clusterID, EventTemplateFailed, WithSkipAutoStep()); err != nil {
+	if _, err := s.Advance(ctx, clusterID, EventDeliveryFailed, WithSkipAutoStep()); err != nil {
 		if errors.Is(err, ErrIllegalTransition) {
 			return nil
 		}

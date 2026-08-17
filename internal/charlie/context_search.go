@@ -17,7 +17,7 @@ const (
 )
 
 type contextSearchQueries interface {
-	CharlieAgentFleetList(context.Context, sqlc.CharlieAgentFleetListParams) ([]sqlc.CharlieAgentFleetListRow, error)
+	CharlieClusterAgentList(context.Context, sqlc.CharlieClusterAgentListParams) ([]sqlc.CharlieClusterAgentListRow, error)
 }
 
 type ContextSearchResult struct {
@@ -62,7 +62,7 @@ func (s *ContextSearchService) Search(ctx context.Context, actorID uuid.UUID, qu
 	}
 	// Opening the picker presents a compact, useful set of management-plane
 	// scopes. Individual agent connections are searched only after the operator
-	// types a query so a large fleet cannot bury the standard choices.
+	// types a query so a large cluster-agent population cannot bury the standard choices.
 	if query == "" {
 		sort.SliceStable(results, func(i, j int) bool { return results[i].Label < results[j].Label })
 		if len(results) > int(limit) {
@@ -70,7 +70,7 @@ func (s *ContextSearchService) Search(ctx context.Context, actorID uuid.UUID, qu
 		}
 		return results, nil
 	}
-	rows, err := s.queries.CharlieAgentFleetList(ctx, sqlc.CharlieAgentFleetListParams{
+	rows, err := s.queries.CharlieClusterAgentList(ctx, sqlc.CharlieClusterAgentListParams{
 		Environment: pgtype.Text{}, Region: pgtype.Text{}, ConnectionState: pgtype.Text{},
 		PageOffset: 0, PageLimit: maxContextSearchRows,
 	})
@@ -106,13 +106,13 @@ func (s *ContextSearchService) canRead(ctx context.Context, actorID uuid.UUID, c
 func staticContextCandidates() []ContextSearchResult {
 	results := []ContextSearchResult{
 		{Type: "installation", ID: "local", RequiredVerb: "read", Label: "Astronomer installation", Summary: "This Astronomer management-plane installation"},
-		{Type: "agent_fleet", ID: "fleet", RequiredVerb: "read", Label: "Cluster-agent fleet", Summary: "Astronomer-owned connection health and fleet patterns"},
+		{Type: "cluster_agents", ID: "cluster-agents", RequiredVerb: "read", Label: "Cluster agents", Summary: "Astronomer-owned connection health and cross-cluster patterns"},
 		{Type: "tunnel", ID: "management-plane", RequiredVerb: "read", Label: "Agent tunnel", Summary: "Astronomer management-plane tunnel and locator health"},
 		{Type: "alert", ID: "active", RequiredVerb: "read", Label: "Active management alerts", Summary: "Authorized Astronomer management-plane alerts"},
 		{Type: "backup", ID: "overview", RequiredVerb: "read", Label: "Management backups", Summary: "Astronomer management-plane backup health"},
 		{Type: "self_management_application", ID: "astronomer", RequiredVerb: "read", Label: "Astronomer GitOps application", Summary: "Astronomer-owned self-management reconciliation"},
 	}
-	for _, component := range []string{"server", "worker", "frontend", "postgres", "redis", "ingress", "argocd"} {
+	for _, component := range []string{"server", "worker", "frontend", "postgres", "redis", "ingress", "delivery"} {
 		results = append(results, ContextSearchResult{Type: "management_component", ID: component, RequiredVerb: "read", Label: "Astronomer " + component, Summary: "Astronomer management-plane component"})
 	}
 	return results

@@ -23,7 +23,6 @@ type fakeApplyQuerier struct {
 	cluster              sqlc.Cluster
 	application          sqlc.ClusterTemplateApplication
 	tools                map[string]sqlc.ClusterTool
-	settings             map[string]sqlc.PlatformSetting
 	projects             map[string]sqlc.Project // key: cluster_id.name
 	policies             map[uuid.UUID]sqlc.ClusterRegistrationPolicy
 	installedCharts      map[uuid.UUID][]sqlc.InstalledChart
@@ -41,7 +40,6 @@ func newFakeApplyQuerier(cluster sqlc.Cluster, app sqlc.ClusterTemplateApplicati
 		cluster:         cluster,
 		application:     app,
 		tools:           map[string]sqlc.ClusterTool{},
-		settings:        map[string]sqlc.PlatformSetting{},
 		projects:        map[string]sqlc.Project{},
 		policies:        map[uuid.UUID]sqlc.ClusterRegistrationPolicy{},
 		installedCharts: map[uuid.UUID][]sqlc.InstalledChart{},
@@ -110,16 +108,6 @@ func (f *fakeApplyQuerier) GetToolBySlug(_ context.Context, slug string) (sqlc.C
 		return sqlc.ClusterTool{}, pgx.ErrNoRows
 	}
 	return t, nil
-}
-
-func (f *fakeApplyQuerier) GetPlatformSetting(_ context.Context, key string) (sqlc.PlatformSetting, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	row, ok := f.settings[key]
-	if !ok {
-		return sqlc.PlatformSetting{}, pgx.ErrNoRows
-	}
-	return row, nil
 }
 
 func (f *fakeApplyQuerier) GetProjectByNameAndCluster(_ context.Context, arg sqlc.GetProjectByNameAndClusterParams) (sqlc.Project, error) {
@@ -216,11 +204,6 @@ func (f *fakeInstaller) EnsureInstalled(_ context.Context, clusterID uuid.UUID, 
 	return sqlc.InstalledChart{}, nil
 }
 
-func clusterTemplateBoolSetting(key string, v bool) sqlc.PlatformSetting {
-	raw, _ := json.Marshal(v)
-	return sqlc.PlatformSetting{Key: key, Value: raw}
-}
-
 // ────────────────────────────────────────────────────────────────────────
 // Tests
 // ────────────────────────────────────────────────────────────────────────
@@ -257,12 +240,11 @@ func TestClusterTemplate_Apply_SetsLabelsAndEnvironment(t *testing.T) {
 func TestClusterTemplate_Apply_EnqueuesToolInstalls(t *testing.T) {
 	clusterID := uuid.New()
 	tmplID := uuid.New()
-	spec := json.RawMessage(`{"tools":[{"slug":"argocd","preset":"ha"},{"slug":"cert-manager"}]}`)
+	spec := json.RawMessage(`{"tools":[{"slug":"velero","preset":"ha"},{"slug":"cert-manager"}]}`)
 	q := newFakeApplyQuerier(
 		sqlc.Cluster{ID: clusterID, Name: "demo", Environment: "development", Labels: json.RawMessage(`{}`)},
 		sqlc.ClusterTemplateApplication{ClusterID: clusterID, TemplateID: tmplID, SpecSnapshot: spec, Status: "pending"},
 	)
-	q.settings[platformSettingArgoCDManageBaselineKey] = clusterTemplateBoolSetting(platformSettingArgoCDManageBaselineKey, false)
 	installer := &fakeInstaller{}
 	deps := ClusterTemplateApplyDeps{Queries: q, Installer: installer}
 	if err := runClusterTemplateApply(context.Background(), deps, clusterID); err != nil {
@@ -271,39 +253,11 @@ func TestClusterTemplate_Apply_EnqueuesToolInstalls(t *testing.T) {
 	if len(installer.installs) != 2 {
 		t.Fatalf("installer received %d installs, want 2", len(installer.installs))
 	}
-	if installer.installs[0].Slug != "argocd" || installer.installs[0].Preset != "ha" {
+	if installer.installs[0].Slug != "velero" || installer.installs[0].Preset != "ha" {
 		t.Errorf("installs[0]=%+v", installer.installs[0])
 	}
 	if installer.installs[1].Slug != "cert-manager" {
 		t.Errorf("installs[1]=%+v", installer.installs[1])
-	}
-}
-
-func TestClusterTemplate_Apply_SkipsOnlyApplicationSetManagedBaselineTools(t *testing.T) {
-	clusterID := uuid.New()
-	tmplID := uuid.New()
-	spec := json.RawMessage(`{"tools":[{"slug":"argocd"},{"slug":"cert-manager"},{"slug":"fluent-bit"},{"slug":"kube-state-metrics"},{"slug":"prometheus-node-exporter"}]}`)
-	q := newFakeApplyQuerier(
-		sqlc.Cluster{ID: clusterID, Name: "demo", Environment: "development", Labels: json.RawMessage(`{}`), IsLocal: false},
-		sqlc.ClusterTemplateApplication{ClusterID: clusterID, TemplateID: tmplID, SpecSnapshot: spec, Status: "pending"},
-	)
-	installer := &fakeInstaller{}
-	deps := ClusterTemplateApplyDeps{Queries: q, Installer: installer}
-
-	if err := runClusterTemplateApply(context.Background(), deps, clusterID); err != nil {
-		t.Fatalf("runClusterTemplateApply: %v", err)
-	}
-	if len(installer.installs) != 3 {
-		t.Fatalf("installer received %d installs, want 3", len(installer.installs))
-	}
-	if installer.installs[0].Slug != "argocd" {
-		t.Fatalf("installed slug = %q, want argocd", installer.installs[0].Slug)
-	}
-	if installer.installs[1].Slug != "cert-manager" {
-		t.Fatalf("installed slug = %q, want cert-manager", installer.installs[1].Slug)
-	}
-	if installer.installs[2].Slug != "fluent-bit" {
-		t.Fatalf("installed slug = %q, want fluent-bit", installer.installs[2].Slug)
 	}
 }
 

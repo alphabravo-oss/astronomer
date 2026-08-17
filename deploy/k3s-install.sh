@@ -5,7 +5,8 @@
 # Stands up the full stack the way we want it, from scratch:
 #   k3s (NO flannel, NO traefik)  ->  Calico CNI  ->  cert-manager
 #   ->  ingress-nginx  ->  import images  ->  helm install astronomer
-# ArgoCD is bundled in the astronomer chart (astro-argocd subchart), not here.
+# The management-plane chart is dependency-free. Managed-cluster agents install
+# the exact release-pinned Flux distribution downstream after enrollment.
 #
 # Why Calico (not flannel): flannel + k3s kube-proxy on this host drifted such
 # that new pods couldn't reach ClusterIPs (CoreDNS/postgres). Calico is the
@@ -26,7 +27,6 @@ POD_CIDR="${POD_CIDR:-10.42.0.0/16}"          # k3s default; Calico pool must ma
 CALICO_VERSION="${CALICO_VERSION:-v3.29.1}"
 CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.20.2}"
 INGRESS_NGINX_VERSION="${INGRESS_NGINX_VERSION:-4.15.1}"
-ARGOCD_CHART_VERSION="${ARGOCD_CHART_VERSION:-9.5.21}"
 
 # Astronomer image tags (locally-built, imported into k3s containerd).
 IMG_SERVER="${IMG_SERVER:-dd-53367c3}"
@@ -116,10 +116,6 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   --set controller.ingressClass=nginx \
   --set controller.service.type=LoadBalancer --wait --timeout 5m
 
-# NOTE: ArgoCD is NOT installed standalone here — it ships as the astro-argocd
-# subchart of the astronomer chart (deploy/chart), so `helm install astronomer`
-# below brings it up in the astronomer namespace.
-
 # ── 4. Import locally-built Astronomer images into k3s containerd ──────────────
 log "Importing Astronomer images into containerd"
 import_img(){ docker save "$1" | k3s ctr images import - >/dev/null && echo "  imported $1"; }
@@ -130,7 +126,7 @@ import_img "astronomer-go-migrate:${IMG_MIGRATE}"
 import_img "astronomer-go-agent:${IMG_AGENT}"
 
 # ── 5. Astronomer (fresh helm install; migrate.enabled=true runs all migrations) ─
-log "helm install astronomer (bundles astro-argocd subchart)"
+log "helm install astronomer"
 # The chart ships no default key material (it used to default to a JWT signing
 # key and Fernet key published in this repository), so the authoritative values
 # file carrying secrets.secretKey / secrets.encryptionKey — or a pre-created
@@ -141,7 +137,6 @@ if [[ ! -f "$VALUES" ]]; then
   echo "  the bootstrap credentials, and the postgres password. Set VALUES=/path/to/values.yaml." >&2
   exit 1
 fi
-helm dependency build "${REPO_DIR}/deploy/chart"   # vendor argo-cd subchart
 helm upgrade --install astronomer "${REPO_DIR}/deploy/chart" \
   --namespace astronomer --create-namespace \
   ${VALUES:+-f "$VALUES"} \

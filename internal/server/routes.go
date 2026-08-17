@@ -3,14 +3,12 @@ package server
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -20,11 +18,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	deliveryhandler "github.com/alphabravocompany/astronomer-go/internal/handler/delivery"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/remoteproxy"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -35,15 +33,14 @@ import (
 
 // RouterDependencies contains the optional dependencies used to register API routes.
 type RouterDependencies struct {
-	JWT               *iauth.JWTManager
-	Encryptor         *iauth.Encryptor
-	AuthQueries       appmiddleware.TokenUserQuerier
-	AuditWriter       any
-	ArgoCDProxyTokens ArgoCDClusterProxyTokenQuerier
-	PlatformHealth    *handler.PlatformHealthHandler
-	AdminQueues       *handler.AdminQueuesHandler
-	AdminTaskOutbox   *handler.AdminTaskOutboxHandler
-	AdminDrill        *handler.AdminDrillHandler
+	JWT             *iauth.JWTManager
+	Encryptor       *iauth.Encryptor
+	AuthQueries     appmiddleware.TokenUserQuerier
+	AuditWriter     any
+	PlatformHealth  *handler.PlatformHealthHandler
+	AdminQueues     *handler.AdminQueuesHandler
+	AdminTaskOutbox *handler.AdminTaskOutboxHandler
+	AdminDrill      *handler.AdminDrillHandler
 	// ManagementLogs is the read-side complement of the chart-side
 	// Fluent Bit DaemonSet — GET /api/v1/admin/management-logs/.
 	// Superuser-gated inside the handler. Nil-safe: omitted from the
@@ -118,11 +115,6 @@ type RouterDependencies struct {
 	// typed cluster resource routes. False = the routes use the standard
 	// RequirePermission (unchanged behavior).
 	NamespaceScopedRBAC bool
-	// FleetOperations owns /api/v1/fleet-operations/* — coordinated
-	// multi-cluster actions (drain, tool upgrade, apply-template fanout)
-	// with label-selector targeting and bounded blast radius
-	// (migration 056). Nil-safe.
-	FleetOperations *handler.FleetOperationHandler
 	// NetworkPolicies owns /api/v1/admin/network-policy-templates/* (CRUD)
 	// and /api/v1/clusters/{cluster_id}/network-policies/applications/*
 	// (per-cluster apply/list/delete) — migration 068. Nil-safe.
@@ -132,13 +124,23 @@ type RouterDependencies struct {
 	// apply through the tunnel, and authored-record CRUD.
 	Gatekeeper *handler.GatekeeperConstraintsHandler
 	Projects   *handler.ProjectHandler
-	Tools      *handler.ToolHandler
-	Audit      *handler.AuditHandler
-	Alerting   *handler.AlertingHandler
-	Anomaly    *handler.AnomalyHandler
-	ArgoCD     *handler.ArgoCDHandler
-	Backups    *handler.BackupHandler
-	Catalog    *handler.CatalogHandler
+	// Delivery handlers own the project-scoped Flux-native control-plane
+	// surface. Inventory also serves the separately authorized platform-wide
+	// compatibility projection.
+	// Nil-safe so partial test/bootstrap routers simply omit these routes.
+	DeliverySources     *deliveryhandler.SourceHandler
+	DeliveryBundles     *deliveryhandler.BundleHandler
+	DeliveryTargets     *deliveryhandler.TargetHandler
+	DeliveryRollouts    *deliveryhandler.RolloutHandler
+	DeliveryDeployments *deliveryhandler.DeploymentHandler
+	DeliveryInventory   *deliveryhandler.InventoryHandler
+	DeliverySystem      *deliveryhandler.SystemRolloutHandler
+	Tools               *handler.ToolHandler
+	Audit               *handler.AuditHandler
+	Alerting            *handler.AlertingHandler
+	Anomaly             *handler.AnomalyHandler
+	Backups             *handler.BackupHandler
+	Catalog             *handler.CatalogHandler
 	// ChartRatings owns /api/v1/charts/{chart_id}/ratings/* and
 	// /api/v1/catalog/recommendations/{popular,similar}/* — the
 	// migration-055 catalog rating surface. Nil-safe: routes are
@@ -193,9 +195,9 @@ type RouterDependencies struct {
 	// ResourcesSearch fans a single resource-list query out across every
 	// active cluster (Phase A3 of the Rancher-parity plan).
 	ResourcesSearch *handler.ResourcesSearchHandler
-	// AgentFleet exposes read-only fleet inventory for connected and
+	// ClusterAgent exposes read-only fleet inventory for connected and
 	// disconnected adopted-cluster agents.
-	AgentFleet *handler.AgentFleetHandler
+	ClusterAgent *handler.ClusterAgentHandler
 	// ApiserverAudit ingests kube-apiserver audit events streamed by the
 	// per-cluster agent and exposes them for operator read-back
 	// (migration 112). Nil-safe — when unwired the routes are omitted.
@@ -205,10 +207,6 @@ type RouterDependencies struct {
 	// DexConfig owns CRUD for Dex connectors / settings and renders the
 	// running Dex instance's ConfigMap (Phase B4 of the Rancher-parity plan).
 	DexConfig *handler.DexHandler
-	// ArgoCDUIProxy reverse-proxies browser traffic to the in-cluster
-	// argocd-server, gated by Astronomer's JWT (header) or
-	// astronomer_session cookie. Mounted at top-level `/argocd/*`.
-	ArgoCDUIProxy *handler.ArgoCDUIProxy
 	// SupportBundle generates a downloadable zip of platform diagnostics.
 	// Superuser-gated inside the handler itself.
 	SupportBundle *handler.SupportBundleHandler
@@ -374,12 +372,6 @@ func longRunningCharlieAdminMutation(method, path string) bool {
 	}
 	switch path {
 	case "/api/v1/admin/charlie/onboarding/consume",
-		"/api/v1/admin/charlie/disconnect",
-		"/api/v1/admin/charlie/agent/install",
-		"/api/v1/admin/charlie/agent/upgrade",
-		"/api/v1/admin/charlie/agent/rollback",
-		"/api/v1/admin/charlie/agent/rotate",
-		"/api/v1/admin/charlie/agent/uninstall",
 		"/api/v1/admin/charlie/mode":
 		return true
 	default:
@@ -400,7 +392,7 @@ func apiRequestTimeout(duration time.Duration) func(http.Handler) http.Handler {
 				return
 			}
 			// Charlie installation, replacement, Kubernetes visibility, and mode
-			// transitions synchronously verify an Argo reconciliation and a
+			// transitions synchronously verify a delivery reconciliation and a
 			// two-replica StatefulSet rollout. The ordinary REST deadline can
 			// expire after Kubernetes accepted the least-authority ceiling but
 			// before the audited database transition commits. Keep these exact
@@ -414,11 +406,6 @@ func apiRequestTimeout(duration time.Duration) func(http.Handler) http.Handler {
 			timed.ServeHTTP(w, r)
 		})
 	}
-}
-
-type ArgoCDClusterProxyTokenQuerier interface {
-	GetArgoCDClusterProxyTokenByHash(ctx context.Context, tokenHash string) (sqlc.ArgocdClusterProxyToken, error)
-	TouchArgoCDClusterProxyToken(ctx context.Context, id uuid.UUID) error
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -437,17 +424,20 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 
 	// Middleware
 	r.Use(appmiddleware.RequestID)
-	r.Use(chimiddleware.RealIP)
+	r.Use(appmiddleware.TrustedRealIP(cfg.TrustedProxyCIDRs))
 	r.Use(appmiddleware.SecurityHeaders)
 	r.Use(appmiddleware.RequestLogger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(appmiddleware.Metrics)
+	// Keep the server-level ReadTimeout at zero for WebSockets/SSE while still
+	// bounding every REST/SCIM mutation body by bytes and socket read time.
+	r.Use(appmiddleware.BoundRequestBodies(appmiddleware.DefaultMaxRequestBodyBytes, appmiddleware.DefaultRequestBodyTimeout))
 	// Normalise `/api/v1/foo` → `/api/v1/foo/` before chi matches so
 	// the frontend's no-trailing-slash REST calls hit the same route
 	// the trailing-slash form does. Without this, DELETE /clusters/{id}
 	// 404s because the route is mounted as /{id}/ — the user-facing
 	// symptom is "the cluster delete button in the UI silently fails."
-	// Scoped to /api/v1/* so static helm-repo / argocd assets aren't
+	// Scoped to /api/v1/* so static helm-repo assets are not
 	// affected.
 	r.Use(appmiddleware.NormalizeAPITrailingSlash)
 	// Rename the otelhttp server span to use chi's route pattern
@@ -499,30 +489,6 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	if deps.Readyz != nil {
 		r.Handle("/readyz", deps.Readyz)
 		r.Handle("/readyz/", deps.Readyz)
-	}
-
-	// ArgoCD UI reverse proxy — top-level `/argocd/*` (NOT under `/api/v1`)
-	// because the upstream argocd-server is configured with
-	// `server.rootpath: /argocd` and emits its SPA's asset / API URLs under
-	// that prefix. Mounting here means we forward the path unchanged.
-	//
-	// Auth: Astronomer JWT carried either as `Authorization: Bearer <jwt>`
-	// (XHR from inside the SPA bundle) or as the `astronomer_session`
-	// cookie (top-level browser navigation). On unauthenticated browser
-	// nav we redirect to /auth/login?returnTo=... instead of a JSON 401.
-	if deps.ArgoCDUIProxy != nil {
-		argoAuth := func(next http.Handler) http.Handler { return next }
-		if deps.JWT != nil {
-			argoAuth = appmiddleware.AuthBrowserOrBearer(deps.JWT, deps.AuthQueries, "/auth/login")
-		}
-		// Authorization gate (R-01): authentication alone is not enough — the
-		// proxy injects the shared upstream ArgoCD admin token, so without an
-		// RBAC check any authenticated viewer would be logged into ArgoCD as
-		// admin. ArgoCDAuthz fails closed when the RBAC engine/querier are nil,
-		// so it's safe to mount unconditionally after argoAuth.
-		argoAuthz := appmiddleware.ArgoCDAuthz(deps.RBACEngine, deps.RBACQueries, newLocalClusterResolver(deps.RemoteQueries))
-		r.With(argoAuth, argoAuthz).Handle("/argocd", deps.ArgoCDUIProxy)
-		r.With(argoAuth, argoAuthz).Handle("/argocd/*", deps.ArgoCDUIProxy)
 	}
 
 	// SCIM 2.0 provisioning (migration 114). Mounted at top-level
@@ -1171,22 +1137,6 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			auditK8sProxyMutations(deps.AuditWriter),
 		).
 			HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
-		if deps.ArgoCDProxyTokens != nil {
-			// Compatibility front door for installations whose explicit cluster
-			// proxy base URL still targets the public listener. New registrations
-			// default to :8090; retaining this route avoids breaking existing ArgoCD
-			// cluster Secrets. Both listeners enforce the identical machine identity.
-			// It deliberately does not accept user JWTs or user API tokens:
-			// the bearer token is cluster-scoped and validated by hash
-			// against argocd_cluster_proxy_tokens before the shared tunnel
-			// proxy sees the request.
-			r.With(
-				rateLimit(appmiddleware.ClassArgoCDProxy),
-				requireArgoCDClusterProxyToken(deps.ArgoCDProxyTokens),
-				auditArgoCDK8sProxyMutations(deps.AuditWriter),
-			).
-				HandleFunc("/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
-		}
 	}
 	if deps.InternalK8s != nil {
 		// Cross-pod fallback for the server-internal K8sRequester.
@@ -1580,37 +1530,6 @@ func auditK8sProxySecretReads(auditWriter any) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-// NewInternalArgoCDProxyRouter builds the handler for the dedicated internal
-// ArgoCD->adopted-cluster k8s proxy listener (config.ArgoCDInternalProxyAddr).
-//
-// This listener has the same per-cluster token gate as the compatibility route
-// on the public listener. Bundled ArgoCD stores the token in the standard
-// cluster Secret config.bearerToken field and client-go sends it on discovery,
-// cache, and apply requests. The separate port and NetworkPolicy remain a
-// second, independent control; they are not the caller identity boundary.
-func NewInternalArgoCDProxyRouter(deps RouterDependencies) http.Handler {
-	r := chi.NewRouter()
-	r.Use(appmiddleware.NormalizeAPITrailingSlash)
-	if deps.Proxy == nil {
-		return r
-	}
-	rateLimit := func(class appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler {
-		return appmiddleware.APIRateLimit(context.Background(), class, nil)
-	}
-	r.With(
-		rateLimit(appmiddleware.ClassArgoCDProxy),
-		requireArgoCDClusterProxyToken(deps.ArgoCDProxyTokens),
-		auditArgoCDK8sProxyMutations(deps.AuditWriter),
-	).HandleFunc("/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
-	return r
-}
-
-func auditArgoCDK8sProxyMutations(auditWriter any) func(http.Handler) http.Handler {
-	return auditK8sProxyMutationsWithAction(auditWriter, "argocd.k8s_proxy.forwarded", map[string]any{
-		"proxy": "argocd_internal",
-	})
 }
 
 func auditK8sProxyMutationsWithAction(auditWriter any, action string, extraDetail map[string]any) func(http.Handler) http.Handler {
@@ -2070,56 +1989,6 @@ func requireServiceProxyScope() func(http.Handler) http.Handler {
 	return requireK8sProxyScope()
 }
 
-func requireArgoCDClusterProxyToken(queries ArgoCDClusterProxyTokenQuerier) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if queries == nil {
-				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "ArgoCD cluster proxy authentication is not configured")
-				return
-			}
-			clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
-			if err != nil {
-				writeRouteAuthError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
-				return
-			}
-			token, ok := bearerToken(r)
-			if !ok || !strings.HasPrefix(token, iauth.ArgoCDClusterProxyTokenPrefix) {
-				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Valid ArgoCD cluster proxy token is required")
-				return
-			}
-			tokenHash := iauth.HashArgoCDClusterProxyToken(token)
-			row, err := queries.GetArgoCDClusterProxyTokenByHash(r.Context(), tokenHash)
-			if err != nil || !validArgoCDClusterProxyTokenRow(row, tokenHash, clusterID, time.Now()) {
-				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Invalid ArgoCD cluster proxy token")
-				return
-			}
-			_ = queries.TouchArgoCDClusterProxyToken(r.Context(), row.ID)
-			// Positive machine-origin marker (design doc §10.1). Stamped here,
-			// on the single gate both the internal listener and the public
-			// compatibility route share, so neither can drift: the token is
-			// cluster-scoped and this middleware deliberately never accepts a
-			// user JWT, so there is provably no human behind the request.
-			//
-			// It is NOT inferred from the absence of a user — §7 invariant 4 —
-			// and it matters beyond attribution: ArgoCD's cluster cache LISTs
-			// every registered resource type, so an impersonated identity here
-			// would fail the whole cache sync and pin every Application at
-			// sync=Unknown, silently.
-			next.ServeHTTP(w, r.WithContext(callerid.WithMachine(r.Context(), callerid.SourceArgoCDProxy)))
-		})
-	}
-}
-
-func validArgoCDClusterProxyTokenRow(row sqlc.ArgocdClusterProxyToken, tokenHash string, clusterID uuid.UUID, now time.Time) bool {
-	if row.ClusterID != clusterID || row.Purpose != "argocd_cluster_proxy" || row.IsRevoked {
-		return false
-	}
-	if subtle.ConstantTimeCompare([]byte(row.TokenHash), []byte(tokenHash)) != 1 {
-		return false
-	}
-	return !row.ExpiresAt.Valid || row.ExpiresAt.Time.After(now)
-}
-
 func requireStreamTicketOrAuth(jwt *iauth.JWTManager, queries appmiddleware.TokenUserQuerier, tickets *iauth.StreamTicketStore, kind string, clusterParam string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2146,15 +2015,6 @@ func requireStreamTicketOrAuth(jwt *iauth.JWTManager, queries appmiddleware.Toke
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-func bearerToken(r *http.Request) (string, bool) {
-	header := r.Header.Get("Authorization")
-	parts := strings.SplitN(header, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
-		return "", false
-	}
-	return strings.TrimSpace(parts[1]), true
 }
 
 func writeRouteAuthError(w http.ResponseWriter, status int, code, message string) {
@@ -2250,6 +2110,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	registerClusterRoutes(r, deps)
 	registerClusterAddonRoutes(r, deps)
 	registerProjectRoutes(r, deps)
+	registerDeliveryRoutes(r, deps)
 	registerDashboardRoutes(r, deps)
 	registerToolsControlPlaneRoutes(r, deps)
 	registerRBACAuditAgentRoutes(r, deps)
@@ -2372,45 +2233,5 @@ func keyStatusHandler(cfg *config.Config, deps RouterDependencies) http.HandlerF
 			"insecure_dev_keys": insecureDevKeys,
 			"as_of":             time.Now().UTC().Format(time.RFC3339),
 		})
-	}
-}
-
-// newLocalClusterResolver returns an appmiddleware.LocalClusterResolver that
-// finds the management ("local") cluster id the same way
-// localClusterArgoCDTokenSource does — by scanning the cluster list for the
-// is_local row. The id never changes once bootstrapped, so the first non-nil
-// result is cached for the process lifetime; until then each call re-queries
-// (the local-cluster row is created after the router is built). Returns nil
-// when no querier is wired, which leaves the ArgoCD authz check at global
-// scope (only global/superuser grants pass — still fail-closed).
-func newLocalClusterResolver(queries *sqlc.Queries) appmiddleware.LocalClusterResolver {
-	if queries == nil {
-		return nil
-	}
-	var (
-		mu     sync.Mutex
-		cached uuid.UUID
-	)
-	return func(ctx context.Context) (uuid.UUID, error) {
-		mu.Lock()
-		if cached != uuid.Nil {
-			id := cached
-			mu.Unlock()
-			return id, nil
-		}
-		mu.Unlock()
-		clusters, err := queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 200, Offset: 0})
-		if err != nil {
-			return uuid.Nil, err
-		}
-		for _, c := range clusters {
-			if c.IsLocal {
-				mu.Lock()
-				cached = c.ID
-				mu.Unlock()
-				return c.ID, nil
-			}
-		}
-		return uuid.Nil, nil
 	}
 }

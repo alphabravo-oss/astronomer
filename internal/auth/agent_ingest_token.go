@@ -49,7 +49,7 @@ const AgentIngestTokenPrefix = "astro_agent_ingest_"
 // GenerateAgentIngestToken mints a fresh scoped ingest token for an agent. The
 // plaintext is returned to the caller once at issuance time; only the SHA-256
 // hash (HashAgentIngestToken) is persisted, sharing the opaque-token contract
-// used by the SCIM / argocd-proxy tokens so a DB compromise yields no usable
+// used by other opaque machine tokens so a DB compromise yields no usable
 // credential.
 func GenerateAgentIngestToken() (string, error) {
 	var raw [32]byte

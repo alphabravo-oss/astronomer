@@ -79,7 +79,7 @@ const (
 const projectPolicyLabelKey = "astronomer.io/project"
 
 // Valid per-project Pod Security profiles. Keep in sync with the CHECK
-// constraint in internal/db/migrations/040_project_policy.up.sql.
+// constraint in internal/db/migrations/001_initial.up.sql.
 const (
 	PodSecurityProfilePrivileged = "privileged"
 	PodSecurityProfileBaseline   = "baseline"

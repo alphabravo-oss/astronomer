@@ -144,18 +144,7 @@ func TestDefaultDenySelectsOnlyAstronomerOwnedPlatformPods(t *testing.T) {
 			t.Errorf("default-deny does not select platform %s/%s labels %#v", workload.kind, workload.name, labels)
 		}
 	}
-	argoServer := findRenderedDoc(t, docs, "Deployment", "astro-argocd-server")
-	argoLabels := nestedStringMap(argoServer, "spec", "template", "metadata", "labels")
-	if matchExactLabels(selector, argoLabels) {
-		t.Errorf("default-deny unexpectedly captures rendered bundled Argo CD labels %#v", argoLabels)
-	}
-
 	for name, labels := range map[string]map[string]string{
-		"bundled Argo CD": {
-			"app.kubernetes.io/name":     "argocd-server",
-			"app.kubernetes.io/instance": "astronomer",
-			"app.kubernetes.io/part-of":  "argocd",
-		},
 		"NGF generated Gateway data plane": {
 			"app.kubernetes.io/name":                 "astronomer-nginx",
 			"app.kubernetes.io/instance":             "ngf",
@@ -234,15 +223,8 @@ func TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase(t *testing
 				identity := stringValue(doc["kind"]) + "/" + stringAt(doc, "metadata", "name")
 				seen[identity] = true
 
-				if labels["app.kubernetes.io/part-of"] == "argocd" {
-					if matchExactLabels(selector, labels) {
-						t.Errorf("default-deny captures bundled Argo workload %s labels %#v", identity, labels)
-					}
-					continue
-				}
-
 				if !matchExactLabels(selector, labels) {
-					t.Errorf("rendered non-Argo workload %s is outside the exact Astronomer ownership contract: %#v", identity, labels)
+					t.Errorf("rendered platform workload %s is outside the exact Astronomer ownership contract: %#v", identity, labels)
 				}
 				if labels["app.kubernetes.io/component"] == "" {
 					t.Errorf("rendered Astronomer workload %s has no dedicated component label: %#v", identity, labels)
@@ -286,22 +268,18 @@ func TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege(t *testi
 		policyWeight int
 		jobWeight    int
 		helmHook     string
-		argoHook     string
-		argoDelete   string
 		helmDelete   string
 	}{
 		{phase: "fresh", absentName: prepareName + "," + cleanupName},
 		{
 			phase: "prepare", presentName: prepareName, absentName: cleanupName,
 			component: "dex-legacy-prepare", policyWeight: -10, jobWeight: -5,
-			helmHook: "pre-upgrade", argoHook: "PreSync",
-			argoDelete: "BeforeHookCreation", helmDelete: "before-hook-creation",
+			helmHook: "pre-upgrade", helmDelete: "before-hook-creation",
 		},
 		{
 			phase: "cutover", presentName: cleanupName, absentName: prepareName,
 			component: "dex-legacy-cleanup", policyWeight: 5, jobWeight: 10,
-			helmHook: "post-upgrade", argoHook: "PostSync",
-			argoDelete: "BeforeHookCreation", helmDelete: "before-hook-creation",
+			helmHook: "post-upgrade", helmDelete: "before-hook-creation",
 		},
 	} {
 		t.Run(tt.phase, func(t *testing.T) {
@@ -357,10 +335,8 @@ func TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege(t *testi
 			policyAnnotations := nestedMap(policy, "metadata", "annotations")
 			jobAnnotations := nestedMap(job, "metadata", "annotations")
 			for key, want := range map[string]string{
-				"helm.sh/hook":                          tt.helmHook,
-				"argocd.argoproj.io/hook":               tt.argoHook,
-				"helm.sh/hook-delete-policy":            tt.helmDelete,
-				"argocd.argoproj.io/hook-delete-policy": tt.argoDelete,
+				"helm.sh/hook":               tt.helmHook,
+				"helm.sh/hook-delete-policy": tt.helmDelete,
 			} {
 				if got := stringValue(policyAnnotations[key]); got != want {
 					t.Errorf("%s policy annotation %s = %q, want %q", tt.presentName, key, got, want)
@@ -386,12 +362,9 @@ func TestDexCleanupNonJobPrerequisitesOutliveTheJobStart(t *testing.T) {
 		resource := findRenderedDoc(t, docs, kind, name)
 		annotations := nestedMap(resource, "metadata", "annotations")
 		for key, want := range map[string]string{
-			"helm.sh/hook":                          "post-upgrade",
-			"helm.sh/hook-weight":                   "5",
-			"helm.sh/hook-delete-policy":            "before-hook-creation",
-			"argocd.argoproj.io/hook":               "PostSync",
-			"argocd.argoproj.io/sync-wave":          "5",
-			"argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation",
+			"helm.sh/hook":               "post-upgrade",
+			"helm.sh/hook-weight":        "5",
+			"helm.sh/hook-delete-policy": "before-hook-creation",
 		} {
 			if got := stringValue(annotations[key]); got != want {
 				t.Errorf("%s/%s annotation %s = %q, want %q", kind, name, key, got, want)
@@ -406,12 +379,9 @@ func TestDexCleanupNonJobPrerequisitesOutliveTheJobStart(t *testing.T) {
 	job := findRenderedDoc(t, docs, "Job", name)
 	jobAnnotations := nestedMap(job, "metadata", "annotations")
 	for key, want := range map[string]string{
-		"helm.sh/hook":                          "post-upgrade",
-		"helm.sh/hook-weight":                   "10",
-		"helm.sh/hook-delete-policy":            "before-hook-creation,hook-succeeded",
-		"argocd.argoproj.io/hook":               "PostSync",
-		"argocd.argoproj.io/sync-wave":          "10",
-		"argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation,HookSucceeded",
+		"helm.sh/hook":               "post-upgrade",
+		"helm.sh/hook-weight":        "10",
+		"helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded",
 	} {
 		if got := stringValue(jobAnnotations[key]); got != want {
 			t.Errorf("Job/%s annotation %s = %q, want %q", name, key, got, want)
@@ -519,24 +489,13 @@ func matchExactLabels(selector map[string]any, labels map[string]string) bool {
 
 func TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs(t *testing.T) {
 	prodValues := filepath.Join("chart", "values-production.yaml")
-	out := helmTemplateWithValueFiles(t, []string{prodValues},
-		"config.serverURL=https://astronomer.example.com",
-		"gateway.hosts[0]=astronomer.example.com",
-		"tls.source=secret",
-		"tls.secretName=astronomer-tls",
-		"postgres.external.dsnSecretRef.name=astronomer-postgres-dsn",
-		"redis.external.address=redis.astronomer.svc.cluster.local:6379",
-		"secrets.secretKey=prod-jwt-signing-key",
-		"secrets.encryptionKey=prod-fernet-key",
-		"bootstrap.email=admin@example.com",
-		"bootstrap.password=prod-admin-initial",
+	sets := append([]string{}, productionWiringSets...)
+	sets = append(sets,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
 		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap",
-		"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
-		"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
-		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
 	)
+	out := helmTemplateWithValueFiles(t, []string{prodValues}, sets...)
 	if strings.Contains(out, `cidr: "0.0.0.0/0"`) {
 		t.Fatalf("production render should not include broad external egress:\n%s", out)
 	}

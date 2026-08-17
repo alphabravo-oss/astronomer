@@ -21,7 +21,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/registration"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // fakeRegistrationQuerier is a tiny in-memory backing store for the
@@ -286,11 +285,8 @@ func TestRegistrationWizard_ConfirmAdvancesPhaseHandler(t *testing.T) {
 	}
 }
 
-func TestRegistrationWizard_ConfirmBaselineWritesTaskOutbox(t *testing.T) {
+func TestRegistrationWizard_ConfirmBaselineWaitsForReadyFluxInventory(t *testing.T) {
 	h, q, id := setupHandler(t)
-	h.SetBaselineTemplateID(uuid.New())
-	outbox := &fakeRegistrationTaskOutbox{}
-	h.SetTaskOutbox(outbox)
 	router := routerForRegistration(h)
 
 	body := bytes.NewBufferString(`{"install_baseline": true}`)
@@ -308,30 +304,24 @@ func TestRegistrationWizard_ConfirmBaselineWritesTaskOutbox(t *testing.T) {
 		t.Fatalf("confirm POST: status=%d body=%s", w.Code, w.Body.String())
 	}
 
-	args := outbox.all()
-	if len(args) != 1 {
-		t.Fatalf("outbox writes = %d, want 1", len(args))
+	rec, err := q.GetClusterRegistrationRecord(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if args[0].TaskType != "cluster_template:apply" {
-		t.Fatalf("task type = %q", args[0].TaskType)
-	}
-	if args[0].QueueName != "tunnel" {
-		t.Fatalf("queue = %q, want tunnel", args[0].QueueName)
-	}
-	wantDedupe := "cluster_registration:confirm:cluster_template_apply:" + id.String()
-	if !args[0].DedupeKey.Valid || args[0].DedupeKey.String != wantDedupe {
-		t.Fatalf("dedupe = %#v, want %q", args[0].DedupeKey, wantDedupe)
-	}
-	if string(args[0].Payload) != `{"cluster_id":"`+id.String()+`"}` {
-		t.Fatalf("payload = %s", string(args[0].Payload))
+	if rec.RegistrationPhase != string(registration.PhaseAwaitingAgent) {
+		t.Fatalf("phase = %s, want awaiting_agent", rec.RegistrationPhase)
 	}
 	if _, ok := q.templApp[id]; !ok {
-		t.Fatalf("expected template application row to be upserted")
+		// Expected: registration confirmation never creates the legacy
+		// cluster_template application. The post-status provisioner owns the
+		// first normal delivery rollout after Flux reports Ready.
+	} else {
+		t.Fatal("legacy cluster template was attached during confirmation")
 	}
 }
 
-func TestRegistrationWizard_ConfirmRejectsUnavailableBaseline(t *testing.T) {
-	h, q, id := setupHandler(t)
+func TestRegistrationWizard_ConfirmBaselineNeedsNoLegacyTemplateConfiguration(t *testing.T) {
+	h, _, id := setupHandler(t)
 	router := routerForRegistration(h)
 
 	body := bytes.NewBufferString(`{"install_baseline": true}`)
@@ -345,68 +335,8 @@ func TestRegistrationWizard_ConfirmRejectsUnavailableBaseline(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+id.String()+"/registration/confirm/", nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	if w.Code != http.StatusConflict {
-		t.Fatalf("confirm POST: status=%d, want %d; body=%s", w.Code, http.StatusConflict, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "Platform baseline is not configured") {
-		t.Fatalf("confirm POST did not explain the unavailable baseline: %s", w.Body.String())
-	}
-
-	rec, err := q.GetClusterRegistrationRecord(context.Background(), id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rec.RegistrationPhase != string(registration.PhaseCreated) {
-		t.Fatalf("registration advanced despite unavailable baseline: got %s", rec.RegistrationPhase)
-	}
-}
-
-func TestRegistrationWizard_RetryArgoCDAdoptionWritesTaskOutbox(t *testing.T) {
-	h, q, id := setupHandler(t)
-	q.regs[id].RegistrationPhase = string(registration.PhaseFailed)
-	stepID := uuid.New()
-	q.steps = append(q.steps, sqlc.ClusterRegistrationStep{
-		ID:          stepID,
-		ClusterID:   id,
-		StepName:    "argocd_registration_failed",
-		Label:       "ArgoCD registration failed",
-		Status:      "failed",
-		ProgressPct: 0,
-		StepOrder:   2,
-	})
-	outbox := &fakeRegistrationTaskOutbox{}
-	h.SetTaskOutbox(outbox)
-	router := routerForRegistration(h)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+id.String()+"/registration/retry/"+stepID.String()+"/", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("retry POST: status=%d body=%s", w.Code, w.Body.String())
-	}
-	args := outbox.all()
-	if len(args) != 1 {
-		t.Fatalf("outbox writes = %d, want 1", len(args))
-	}
-	if args[0].TaskType != tasks.ArgoCDAutoRegisterClusterType {
-		t.Fatalf("task type = %q, want %q", args[0].TaskType, tasks.ArgoCDAutoRegisterClusterType)
-	}
-	if args[0].QueueName != "default" || args[0].MaxRetry != 5 {
-		t.Fatalf("queue/max_retry = %s/%d, want default/5", args[0].QueueName, args[0].MaxRetry)
-	}
-	var payload tasks.ArgoCDAutoRegisterClusterPayload
-	if err := json.Unmarshal(args[0].Payload, &payload); err != nil {
-		t.Fatalf("payload JSON: %v", err)
-	}
-	if payload.ClusterID != id.String() {
-		t.Fatalf("payload cluster_id = %q, want %s", payload.ClusterID, id)
-	}
-	step, err := q.GetClusterRegistrationStep(context.Background(), stepID)
-	if err != nil {
-		t.Fatalf("step lookup: %v", err)
-	}
-	if step.Status != "pending" || step.ProgressPct != 0 {
-		t.Fatalf("step after retry = %+v, want pending progress 0", step)
+		t.Fatalf("confirm POST: status=%d, want %d; body=%s", w.Code, http.StatusOK, w.Body.String())
 	}
 }
 

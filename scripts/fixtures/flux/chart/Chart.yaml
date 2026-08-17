@@ -1,0 +1,6 @@
+apiVersion: v2
+name: astronomer-flux-integration
+description: Synthetic chart for the disposable Astronomer Flux integration gate
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

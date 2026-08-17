@@ -1,67 +1,55 @@
 # Secret Column Inventory
 
-Date: 2026-06-12
+Date: 2026-08-17
 
-This inventory classifies secret-looking Postgres columns. New migrations that
-add `password`, `secret`, `token`, `credential`, `access_key`, `secret_key`,
-or similar column names must be added to the migration guard in
-`internal/db/migrations/migration_secret_columns_test.go` with an explicit
-classification.
+The greenfield database is defined only by `001_initial.up.sql`. Every
+secret-looking text, JSON, UUID, or byte column in that file is classified by
+`internal/db/migrations/migration_secret_columns_test.go`; adding an
+unclassified column fails CI.
 
-## Encrypted Or Hashed
+## Encrypted or hashed material
 
-| Table / Column | Classification | Notes |
+| Table / column | Classification | Runtime rule |
 | --- | --- | --- |
-| `users.password` | hashed | Bcrypt password hash, not plaintext. |
-| `sso_configurations.client_secret_encrypted` | encrypted | Fernet ciphertext. |
-| `api_tokens.token_hash` | hashed | API tokens are stored by hash. |
-| `argocd_instances.auth_token_encrypted` | encrypted | Fernet ciphertext. |
-| `backup_storage_configs.encrypted_credentials` | encrypted | Fernet ciphertext for object-store credentials; new backup storage writes use this column when a Fernet key is configured. |
-| `user_totp_enrollments.secret_encrypted` | encrypted | Fernet ciphertext for TOTP shared secret. |
-| `smtp_settings.password_encrypted` | encrypted | Fernet ciphertext. |
-| `password_reset_tokens.token_hash` | hashed | Reset token hash only. |
-| `password_reset_tokens.password_hash_at_issue` | hashed snapshot | Used to invalidate reset tokens after password changes. |
-| `webhook_subscriptions.secret_encrypted` | encrypted | Fernet ciphertext for webhook signing secrets. |
-| `sso_sessions.upstream_id_token_encrypted` | encrypted | Fernet ciphertext for upstream logout/session token. |
-| `argocd_cluster_proxy_tokens.token_hash` | hashed | Lookup hash for ArgoCD proxy service token. |
-| `argocd_cluster_proxy_tokens.token_encrypted` | encrypted | Fernet ciphertext for service token material. |
-| `cluster_registration_tokens.token_hash` | hashed | Lookup hash for short-lived cluster registration tokens. |
-| `cluster_agent_tokens.token_hash` | hashed | Lookup hash for durable cluster agent tokens. |
-| `cluster_agent_tokens.previous_token_hash` | hashed | Lookup hash for the previous durable agent token during a rotation grace window; cleared once the agent adopts the new token (or by the grace-TTL backstop). |
-| `cluster_registry_configs.registry_password_encrypted` | encrypted | Fernet ciphertext for registry passwords; new registry writes use this column when a Fernet key is configured. |
-| `scim_tokens.token_hash` | hashed | Lookup hash for SCIM provisioning bearer tokens; plaintext is shown once at creation and never stored. |
-| `dex_settings.public_clients_encrypted` | encrypted | Fernet ciphertext containing canonical Dex static-client JSON. It becomes authoritative after the explicit quiesced cutover. |
-| `helm_repositories.auth_config_encrypted` | encrypted | Fernet ciphertext over the COMPLETE chart-repository auth_config document (migration 145). Authoritative whenever non-empty; `auth_config` then holds only the non-secret projection (username, charts, allow_catalog). |
-| `monitoring_backends.auth_config_encrypted` | encrypted | Fernet ciphertext over the COMPLETE monitoring-backend auth_config document (migration 146). Authoritative whenever non-empty; `auth_config` then holds only the non-secret projection. The projection is an ALLOW-LIST (`operationPolicies`, `sharedThanos`, `sharedAlertmanager`, `sharedAlertingAssets`, `status`) rather than 145's secret deny-list, because this column is a config bag wrapped around an unbounded operator-authored credential portion. |
-| `charlie_connections.local_trust_material_encrypted` | encrypted | Fernet ciphertext containing only Astronomer-owned local CA/private-key and bridge/MCP TLS material. No Charlie central runtime credential is persisted. |
-| `charlie_action_receipts.arguments_encrypted` | encrypted | Fernet ciphertext containing the bounded, schema-validated action arguments needed only for post-crash postcondition reconciliation; never included in logs, metrics, findings summaries, or support bundles. |
-| `charlie_action_receipts.result_encrypted` | encrypted | Fernet ciphertext containing the bounded terminal action result needed for exact idempotent replay; never included in logs, metrics, findings summaries, or support bundles. |
-| `charlie_delegations.authorization_hash` | hashed | SHA-256 lookup hash for the opaque, short-lived product authorization reference; plaintext is returned once and never stored. |
-| `charlie_connections.agent_secret_hmac` | keyed digest | HMAC used only to reconcile deterministic Kubernetes Secret content without retaining a plaintext or offline-verifiable credential hash. |
+| `users.password` | Password hash | Never plaintext. |
+| `sso_configurations.client_secret_encrypted` | Fernet ciphertext | Write-only secret. |
+| `smtp_settings.password_encrypted` | Fernet ciphertext | Write-only secret. |
+| `user_totp_enrollments.secret_encrypted` | Fernet ciphertext | Never returned. |
+| `webhook_subscriptions.secret_encrypted` | Fernet ciphertext | Never returned. |
+| `sso_sessions.upstream_id_token_encrypted` | Fernet ciphertext | Used only for upstream session lifecycle. |
+| `backup_storage_configs.encrypted_credentials` | Fernet ciphertext | Complete object-store credential envelope. |
+| `cluster_registry_configs.registry_password_encrypted` | Fernet ciphertext | Complete cluster registry password. |
+| `project_registry_credentials.registry_credential_encrypted` | Fernet ciphertext | Complete project registry credential. |
+| `delivery_sources.credential_encrypted` | Fernet ciphertext | Complete write-only delivery-source credential map. |
+| `api_tokens.token_hash` | Password-style token hash | Plaintext is returned once. |
+| `cluster_registration_tokens.token_hash` | Token hash | Registration authentication uses only the hash. |
+| `cluster_agent_tokens.token_hash` | Token hash | Active agent authentication uses only the hash. |
+| `cluster_agent_tokens.previous_token_hash` | Token hash | Rotation grace window only. |
+| `password_reset_tokens.token_hash` | Token hash | Plaintext is returned once. |
+| `password_reset_tokens.password_hash_at_issue` | Password-hash snapshot | Invalidates reset tokens after a password change. |
+| `scim_tokens.token_hash` | Token hash | Plaintext is returned once. |
+| `charlie_connections.local_trust_material_encrypted` | Fernet ciphertext | Astronomer-owned local CA/private-key and bridge/MCP TLS material only. |
+| `charlie_action_receipts.arguments_encrypted` | Fernet ciphertext | Bounded postcondition-reconciliation input; excluded from logs and support bundles. |
+| `charlie_action_receipts.result_encrypted` | Fernet ciphertext | Bounded idempotent replay result; excluded from logs and support bundles. |
+| `charlie_delegations.authorization_hash` | SHA-256 lookup hash | Hash of an opaque, short-lived authorization reference. |
+| `charlie_connections.agent_secret_hmac` | Keyed digest | Reconciles deterministic Kubernetes Secret content without retaining the secret. |
 
-## Legacy Plaintext To Migrate
+## References and non-secret metadata
 
-| Table / Column | Current State | Required Fix |
-| --- | --- | --- |
-| `cluster_registration_tokens.token` | deprecated plaintext token | New writes store only `token_hash`; keep this column for one release so existing plaintext rows can be backfilled and expired safely. |
-| `cluster_agent_tokens.token` | deprecated plaintext token | New writes store only `token_hash`; keep existing plaintext rows for one release so currently enrolled agents can reconnect and rotate safely. |
-| `cluster_registry_configs.registry_password` | deprecated plaintext credential | New encrypted writes blank this column; `security:migrate_plaintext_credentials` encrypts and blanks legacy rows when a Fernet key is configured. |
-| `backup_storage_configs.access_key` | deprecated plaintext credential | New encrypted writes blank this column; `security:migrate_plaintext_credentials` encrypts and blanks legacy rows when a Fernet key is configured. |
-| `backup_storage_configs.secret_key` | deprecated plaintext credential | New encrypted writes blank this column; `security:migrate_plaintext_credentials` encrypts and blanks legacy rows when a Fernet key is configured. |
-| `dex_settings.public_clients` | mixed-version compatibility credential | Dual-written only until `keyrotate --dex-public-clients-cutover-confirmed` CAS-scrubs it and stamps `public_clients_cutover_at`; later writes are DB-rejected. |
-| `helm_repositories.auth_config` | non-secret projection, plus pre-145 legacy rows | New writes strip every secret key into `auth_config_encrypted`. Rows created before migration 145 still hold the whole document, including the password, and are readable as such until `security:migrate_plaintext_credentials` (@every 6h) seals them. Readers disambiguate on `auth_config_encrypted = ''`, never by inspecting the bytes. |
-| `monitoring_backends.auth_config` | non-secret projection, plus pre-146 legacy rows | Fixed in migration 146 (it was the item 145 named as deliberately deferred). New writes strip every non-allow-listed key into `auth_config_encrypted`. Rows created before 146 still hold the whole document, including the credential, and are readable as such until `security:migrate_plaintext_credentials` (@every 6h) seals them. Readers disambiguate on `auth_config_encrypted = ''`, never by inspecting the bytes. All five read-modify-write sites (`UpdateBackendConfig`, `updateSharedThanosMetadata`, `updateSharedAlertmanagerMetadata`, `persistSharedAlertingAssetHashes`, `reconcileMonitoringBackend`) resolve → mutate → re-seal through `monitoring.SealInto`, the single helper that sets both columns together. Because `UpdateBackendConfig` is now a read-modify-write, its response is redacted exactly like the read: the document it renders is the caller's input merged over the stored one, so echoing it would disclose a credential the caller never supplied. |
+| Column family | Classification |
+| --- | --- |
+| `*_secret_name`, `runtime_secret_name`, `object_storage_secret_name`, `agent_secret_name` | Kubernetes Secret object name only. |
+| `credential_id` | Foreign-key reference, not credential material. |
+| `credential_state` | Bounded lifecycle enum. |
+| `delivery_sources.credential_key_version`, `delivery_sources.credential_epoch` | Encryption-key and rotation generation metadata. |
+| `delivery_assignment_receipts.credential_content_digest` | SHA-256 over deployment IDs and credential epochs; no secret or ciphertext input. |
 
-## Non-Secret References Or Metadata
+## Deprecated blank-only compatibility fields
 
-| Table / Column | Classification | Notes |
-| --- | --- | --- |
-| `cluster_monitoring_configs.object_storage_secret_name` | Kubernetes Secret reference | Name only; secret material is not stored in this column. |
-| `argocd_managed_clusters.cluster_secret_name` | Kubernetes Secret reference | Name of ArgoCD cluster Secret. |
-| `cluster_registry_configs.secret_name` | Kubernetes Secret reference | Target pull-secret name. |
-| `cloud_credential_materializations.credential_id` | foreign key | References credential metadata; not secret material. |
-| `cloud_credential_materializations.secret_name` | Kubernetes Secret reference | Target materialized Secret name. |
-| `argocd_cluster_proxy_tokens.token_prefix` | token metadata | Prefix only for display/audit correlation. |
-| `dex_settings.runtime_secret_name` | Kubernetes Secret reference | Stable retained Dex runtime Secret name; contains no credential material. |
-| `charlie_connections.agent_secret_name` | Kubernetes Secret reference | Deterministic name of the agent enrollment/TLS Kubernetes Secret; contains no secret value. |
-| `agent_operational_statuses.credential_state` | credential lifecycle metadata | Bounded enum (`unknown`, `valid`, `expiring`, `expired`, `revoked`) only; no credential value or identifier. |
+`backup_storage_configs.access_key`, `backup_storage_configs.secret_key`,
+`cluster_registry_configs.registry_password`, `cluster_registration_tokens.token`,
+and `cluster_agent_tokens.token` remain structurally present for subsystems not
+being redesigned in this delivery cutover. Production writers store empty
+strings and use their encrypted or hashed counterparts. The credential
+migration worker fails closed if it encounters non-empty historical values.
+They are not used by the Flux delivery implementation.

@@ -139,6 +139,10 @@ type RuntimeDependencies struct {
 	Log                     *slog.Logger
 	AgentImageRepo          string
 	AgentImageTag           string
+	SystemArtifactURL       string
+	SystemArtifactDigest    string
+	SystemOIDCIssuer        string
+	SystemOIDCIdentity      string
 	PlatformName            string
 	ServerURL               string
 	AuditLogRetentionMonths int

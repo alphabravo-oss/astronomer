@@ -31,6 +31,11 @@ const OCIPrefix = "oci://"
 // hours later had 3, with nothing to explain it.
 const MaxIndexVersionsPerChart = 3
 
+// MaxIndexBytes bounds Helm repository metadata before YAML expansion/parsing.
+// Eight MiB is well above normal public indexes while protecting shared
+// server/worker replicas from an attacker-controlled streaming body.
+const MaxIndexBytes int64 = 8 << 20
+
 // CompareVersionsDesc orders two version strings newest-first, for
 // slices.SortStableFunc. Parseable semver sorts by precedence and always
 // outranks unparseable tags; unparseable tags fall back to reverse

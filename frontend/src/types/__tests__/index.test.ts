@@ -23,8 +23,6 @@ import type {
   User,
   PolicyRule,
   RoleBinding,
-  ArgoInstance,
-  ArgoApplication,
   TimeSeriesPoint,
   MetricsSummary,
   SSOProvider,
@@ -275,51 +273,6 @@ describe('RBAC types', () => {
       createdAt: '2024-01-01T00:00:00Z',
     };
     expect(binding.subjects).toHaveLength(1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// ArgoCD types
-// ---------------------------------------------------------------------------
-
-describe('ArgoCD types', () => {
-  it('ArgoInstance can be created', () => {
-    const instance: ArgoInstance = {
-      id: 'argo-1',
-      name: 'production-argo',
-      url: 'https://argocd.example.com',
-      clusterId: 'c-1',
-      clusterName: 'prod',
-      version: '2.10.0',
-      applicationCount: 15,
-      status: 'connected',
-      createdAt: '2024-01-01T00:00:00Z',
-    };
-    expect(instance.status).toBe('connected');
-  });
-
-  it('ArgoApplication can be created', () => {
-    const app: ArgoApplication = {
-      name: 'my-app',
-      namespace: 'argocd',
-      project: 'default',
-      clusterId: 'c-1',
-      clusterName: 'prod',
-      argoInstanceId: 'argo-1',
-      syncStatus: 'Synced',
-      healthStatus: 'Healthy',
-      source: {
-        repoURL: 'https://github.com/org/repo',
-        path: 'charts/app',
-        targetRevision: 'main',
-      },
-      destination: {
-        server: 'https://kubernetes.default.svc',
-        namespace: 'default',
-      },
-      createdAt: '2024-01-01T00:00:00Z',
-    };
-    expect(app.syncStatus).toBe('Synced');
   });
 });
 

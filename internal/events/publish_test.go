@@ -20,15 +20,13 @@ var changedTypeContract = []struct {
 	clusterScoped bool
 }{
 	{"backup", TypeBackupChanged, true},
-	{"fleet_operation", TypeFleetOperationChanged, true},
 	{"logging_operation", TypeLoggingOperationChanged, true},
 	{"tool_operation", TypeToolOperationChanged, true},
 	{"cis_scan", TypeCISScanChanged, true},
 	{"image_scan", TypeImageScanChanged, true},
-	{"argocd", TypeArgoCDChanged, true},
 	{"admin_queue", TypeAdminQueueChanged, false},
 	{"siem_forwarder", TypeSIEMForwarderChanged, false},
-	{"agent_fleet", TypeAgentFleetChanged, true},
+	{"cluster_agents", TypeClusterAgentChanged, true},
 	{"template_binding", TypeTemplateBindingChanged, true},
 	{"registry", TypeRegistryChanged, true},
 	{"snapshot", TypeSnapshotChanged, true},
@@ -90,15 +88,13 @@ func TestChangedTypeConstantsAllInContractTable(t *testing.T) {
 	// type without deciding its cluster scoping.
 	all := []Type{
 		TypeBackupChanged,
-		TypeFleetOperationChanged,
 		TypeLoggingOperationChanged,
 		TypeToolOperationChanged,
 		TypeCISScanChanged,
 		TypeImageScanChanged,
-		TypeArgoCDChanged,
 		TypeAdminQueueChanged,
 		TypeSIEMForwarderChanged,
-		TypeAgentFleetChanged,
+		TypeClusterAgentChanged,
 		TypeTemplateBindingChanged,
 		TypeRegistryChanged,
 		TypeSnapshotChanged,

@@ -36,8 +36,6 @@ rules:
     verbs: [read, list, create, update, delete]
   - resource: security
     verbs: [read, list]
-  - resource: argocd
-    verbs: [read, list, sync]
   - resource: custom_resources
     verbs: [create, read, update, delete, list, watch]
   - resource: audit_logs

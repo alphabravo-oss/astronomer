@@ -45,7 +45,7 @@ describe('ThemeProvider', () => {
     document.documentElement.style.colorScheme = '';
   });
 
-  it('uses the literal astronomer-theme storage key (never bare `theme` — ArgoCD JSON-parses it)', () => {
+  it('uses the literal astronomer-theme storage key rather than bare `theme`', () => {
     // The key is load-bearing: assert the literal, not just the constant.
     expect(THEME_STORAGE_KEY).toBe('astronomer-theme');
     render(

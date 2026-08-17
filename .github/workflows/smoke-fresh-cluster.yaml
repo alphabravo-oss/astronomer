@@ -27,15 +27,15 @@ jobs:
     # Hard cap so a stuck wait never burns a full job-timeout budget.
     # The one-time six-image build takes roughly 15 minutes on a cold hosted
     # runner. Keep an outer bound while allowing clean-user baseline
-    # convergence up to the same ten-minute budget used by fleet
-    # qualification; inner timeouts still identify the operation that failed.
+    # convergence up to the ten-minute delivery qualification budget; inner
+    # timeouts still identify the operation that failed.
     timeout-minutes: 40
 
     env:
       CGO_ENABLED: "0"
       DOCKER_BUILDKIT: "1"
-      # NGF 2.6.0 requires Kubernetes >= 1.31. k3d 5.7 defaulted to 1.30.4.
-      K3S_IMAGE: rancher/k3s:v1.32.8-k3s1
+      # This clean-user lane exercises the newest qualified Kubernetes minor.
+      K3S_IMAGE: rancher/k3s:v1.35.0-k3s1
       # Keep the failed adopted cluster until the diagnostic steps have read it.
       SMOKE_CLUSTER: astronomer-smoke-${{ github.run_id }}
       SMOKE_DELETE: "0"
@@ -145,9 +145,13 @@ jobs:
           kubectl --context k3d-astronomer-mgmt -n astronomer logs \
             deploy/astronomer-worker -c worker --previous --tail=400 \
             > /tmp/smoke-artifacts/worker-previous.log 2>&1 || true
-          kubectl --context k3d-astronomer-mgmt -n astronomer get \
-            applications.argoproj.io,applicationsets.argoproj.io -o yaml \
-            > /tmp/smoke-artifacts/argocd-baseline.yaml 2>&1 || true
+          kubectl --context "k3d-$SMOKE_CLUSTER" -n astronomer-delivery-system get \
+            deployments,pods -o yaml \
+            > /tmp/smoke-artifacts/flux-controllers.yaml 2>&1 || true
+          kubectl --context "k3d-$SMOKE_CLUSTER" get \
+            gitrepositories.source.toolkit.fluxcd.io,ocirepositories.source.toolkit.fluxcd.io,helmrepositories.source.toolkit.fluxcd.io,kustomizations.kustomize.toolkit.fluxcd.io,helmreleases.helm.toolkit.fluxcd.io \
+            --all-namespaces -o yaml \
+            > /tmp/smoke-artifacts/delivery-inventory.yaml 2>&1 || true
 
       - name: Upload failure artifacts
         if: failure()

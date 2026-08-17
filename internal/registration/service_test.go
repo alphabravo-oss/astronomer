@@ -347,14 +347,14 @@ func TestRegistrationWizard_TemplateApplyAdvancesPhase(t *testing.T) {
 	q.seed(id, PhaseConnected, &yes)
 	svc := New(q, nil)
 
-	if err := svc.OnTemplateApplyStart(context.Background(), id); err != nil {
+	if err := svc.OnDeliveryApplyStart(context.Background(), id); err != nil {
 		t.Fatalf("apply-start: %v", err)
 	}
 	rec, _ := q.GetClusterRegistrationRecord(context.Background(), id)
 	if rec.RegistrationPhase != string(PhaseProvisioning) {
 		t.Fatalf("after start: want provisioning, got %s", rec.RegistrationPhase)
 	}
-	if err := svc.OnTemplateApplySuccess(context.Background(), id); err != nil {
+	if err := svc.OnDeliveryApplySuccess(context.Background(), id); err != nil {
 		t.Fatalf("apply-success: %v", err)
 	}
 	rec, _ = q.GetClusterRegistrationRecord(context.Background(), id)
@@ -365,7 +365,7 @@ func TestRegistrationWizard_TemplateApplyAdvancesPhase(t *testing.T) {
 		t.Error("registration_completed_at should be stamped on terminal phase")
 	}
 	steps, _ := q.ListClusterRegistrationSteps(context.Background(), id)
-	wantNames := []string{"template_applying", "template_applied"}
+	wantNames := []string{"delivery_applying", "delivery_applied"}
 	if len(steps) != 2 {
 		t.Fatalf("want 2 steps, got %d (%#v)", len(steps), steps)
 	}
@@ -375,7 +375,7 @@ func TestRegistrationWizard_TemplateApplyAdvancesPhase(t *testing.T) {
 		}
 	}
 	if steps[0].Status != "success" || !steps[0].CompletedAt.Valid || steps[0].ProgressPct != 100 {
-		t.Fatalf("template_applying step was not completed on success: %+v", steps[0])
+		t.Fatalf("delivery_applying step was not completed on success: %+v", steps[0])
 	}
 }
 
@@ -388,10 +388,10 @@ func TestRegistrationWizard_TemplateApplyFailureAdvancesToFailed(t *testing.T) {
 	q.seed(id, PhaseConnected, &yes)
 	svc := New(q, nil)
 
-	if err := svc.OnTemplateApplyStart(context.Background(), id); err != nil {
+	if err := svc.OnDeliveryApplyStart(context.Background(), id); err != nil {
 		t.Fatalf("apply-start: %v", err)
 	}
-	if err := svc.OnTemplateApplyFailure(context.Background(), id, "ImagePullBackOff"); err != nil {
+	if err := svc.OnDeliveryApplyFailure(context.Background(), id, "ImagePullBackOff"); err != nil {
 		t.Fatalf("apply-failure: %v", err)
 	}
 	rec, _ := q.GetClusterRegistrationRecord(context.Background(), id)
@@ -399,11 +399,11 @@ func TestRegistrationWizard_TemplateApplyFailureAdvancesToFailed(t *testing.T) {
 		t.Fatalf("want failed, got %s", rec.RegistrationPhase)
 	}
 	steps, _ := q.ListClusterRegistrationSteps(context.Background(), id)
-	if len(steps) != 2 || steps[0].StepName != "template_applying" || steps[1].StepName != "template_failed" {
-		t.Fatalf("expected completed template_applying + template_failed steps, got %#v", steps)
+	if len(steps) != 2 || steps[0].StepName != "delivery_applying" || steps[1].StepName != "delivery_failed" {
+		t.Fatalf("expected completed delivery_applying + delivery_failed steps, got %#v", steps)
 	}
 	if steps[0].Status != "failed" || !steps[0].CompletedAt.Valid || steps[0].ErrorMessage != "ImagePullBackOff" {
-		t.Errorf("template_applying failure not finalized: %+v", steps[0])
+		t.Errorf("delivery_applying failure not finalized: %+v", steps[0])
 	}
 	if steps[1].ErrorMessage != "ImagePullBackOff" {
 		t.Errorf("error_message lost in translation: %q", steps[1].ErrorMessage)
@@ -447,7 +447,7 @@ func TestRegistrationWizard_SSEStreamEmitsStepEvents(t *testing.T) {
 // A cluster attached outside the wizard (a raw `kubectl apply` of the agent
 // manifest) never records a baseline choice, so install_baseline stays NULL and
 // no template apply is ever scheduled. Nothing will ever deliver
-// EventTemplateApplied, so if the connect handshake doesn't advance it, the
+// EventDeliveryApplied, so if the connect handshake doesn't advance it, the
 // cluster sits at `connected` forever — healthy on every condition, but wearing
 // a warning badge and never reaching ready.
 func TestOnAgentConnected_NullInstallBaselineReachesReady(t *testing.T) {

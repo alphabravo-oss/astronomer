@@ -52,6 +52,7 @@ const (
 	OpHelmUninstall        = "helm.uninstall"
 	OpClusterTemplateApply = "cluster_template.apply"
 	OpCharlieAction        = "charlie.action"
+	OpDeliveryRollout      = "delivery.rollout"
 )
 
 // KnownOperationTypes is the set of operation types the platform currently
@@ -69,6 +70,7 @@ var KnownOperationTypes = []string{
 	OpHelmUninstall,
 	OpClusterTemplateApply,
 	OpCharlieAction,
+	OpDeliveryRollout,
 }
 
 // Window is the package-local mirror of sqlc.MaintenanceWindow with the

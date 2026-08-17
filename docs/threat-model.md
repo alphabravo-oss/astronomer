@@ -9,13 +9,14 @@ Astronomer is a high-privilege Kubernetes management plane. The main security ob
 | Asset | Protection goal |
 |-------|-----------------|
 | Browser session cookies and stream tickets | Prevent theft, replay, and leakage through URLs/logs. |
-| API tokens and ArgoCD proxy tokens | Hash lookup material, encrypt reusable plaintext, scope use to intended routes/clusters. |
+| API tokens and source credentials | Hash lookup material where applicable, encrypt reusable plaintext, and scope use to intended routes/projects/providers. |
 | Agent tunnel | Accept only registered agents and route traffic only to the owning cluster. |
 | Adopted cluster Kubernetes API | Require Astronomer auth/RBAC before proxying; strip caller-controlled upstream credentials and impersonation headers. |
 | Postgres | Durable source of truth for users, RBAC, audit, credentials, inventory, and operation rows. |
 | Redis/asynq | Ephemeral queue and scheduling state; must not be the only durable record of an operator decision. |
-| Management CRDs | Kubernetes-facing desired-state API for clusters, projects, baselines, bundles, agent profiles, and GitOps targets. |
-| ArgoCD cluster Secrets and ApplicationSets | Deployment reconciliation surface, not the product database. |
+| Management CRDs | Kubernetes-facing desired-state API for clusters, projects, and agent profiles. |
+| Delivery intent and rollout records | PostgreSQL-owned project intent, immutable revisions, frozen placement, approval, audit, and generation fencing. |
+| Downstream Flux resources and checkpoints | Agent-owned reconciliation state and prune evidence, never the product database or placement authority. |
 | Management-plane Helm release | Deployment security boundary for network policy, pod security contexts, bootstrap credentials, ingress/TLS, and backup jobs. |
 | Management backups | Durable copy of Postgres state; must remain encrypted/separated from encryption keys and periodically restore-tested. |
 | Container images, Helm repos, and generated manifests | Supply-chain inputs that can change runtime permissions or code paths. |
@@ -43,7 +44,7 @@ Controls:
 Review checks:
 
 - Any new browser-authenticated mutation must either use bearer/API-token auth or pass CSRF validation.
-- No new browser stream URL may carry a JWT, refresh token, API token, or ArgoCD proxy token.
+- No new browser stream URL may carry a JWT, refresh token, API token, or delivery-source credential.
 - Session cookie changes must include auth middleware tests.
 
 ## Agent Tunnel
@@ -158,50 +159,67 @@ Review checks:
 - Follow [Charlie operations and runbooks](charlie-operations.md) for incidents,
   rotation, rollback, disconnect, and stop conditions.
 
-## ArgoCD Cluster Proxy
+## Flux-native delivery
 
-Trust boundary: ArgoCD controller to Astronomer internal cluster proxy to adopted-cluster agent.
+Trust boundaries: browser/API to the delivery control plane; resolver to Git,
+OCI, and chart providers; management plane to the outbound cluster agent; agent
+to the fixed local Flux APIs; Flux to the target Kubernetes API.
 
 Threats:
 
-- ArgoCD token reused against unrelated Astronomer APIs.
-- Token for one cluster used against another cluster.
-- ArgoCD and Helm-over-tunnel both owning the same baseline components.
-- Lost ArgoCD Secret or DB row causing silent drift.
+- a mutable branch or tag changing after approval;
+- cross-project source, bundle, target, deployment, or catalog access;
+- selector drift changing a rollout's membership after it starts;
+- source SSRF, redirect/DNS rebinding, oversized responses, credential leakage,
+  or unverified artifacts;
+- replayed/stale assignments, forged status, concurrent writers, or unsafe
+  pruning after a disconnect;
+- arbitrary Flux objects, cross-namespace references, remote bases, or service
+  accounts escaping the intended namespace/scope boundary;
+- controller-version drift, a fourth controller, or mutable controller images;
+- model or automation output bypassing approval, RBAC, maintenance windows,
+  failure budgets, or rollout fencing.
 
 Controls:
 
-- ArgoCD uses a dedicated internal listener for
-  `/api/v1/internal/argocd/clusters/{id}/k8s/*`; the compatibility route on the
-  public listener has the identical machine-auth contract.
-- Proxy tokens use `astro_argocd_*` material, encrypted reusable plaintext,
-  SHA-256 lookup and constant-time hash verification, purpose and cluster ID
-  binding, expiration, and revocation checks. A missing token querier fails
-  closed.
-- The bundled chart 9.5.21 deploys ArgoCD v3.4.3. Its cluster Secret decoder
-  populates `Cluster.Config.BearerToken`; `Cluster.RawRestConfig` copies that
-  value into client-go's `rest.Config`, which is used by cluster discovery,
-  cache, and sync. Therefore every request reaches this route with the
-  per-cluster bearer credential; discovery and apply are not anonymous.
-- Port 8090 is absent from public ingress and NetworkPolicy admits only the
-  bundled ArgoCD application-controller and server pods. These are
-  defense-in-depth controls and do not replace bearer authentication.
-- Token rows are deleted during cluster decommission. Periodic auto-adoption
-  repairs a missing DB token by minting/upserting it and repairs a missing
-  ArgoCD cluster Secret by upserting cluster registration with the reusable
-  encrypted token.
-- Generic public k8s proxy remains human/API-token auth plus RBAC.
-- Baseline cluster-template apply skips ArgoCD-owned baseline tools when ArgoCD baseline ownership is enabled.
-- Cluster responses and CRD status expose ArgoCD adoption and baseline ownership state.
+- PostgreSQL owns sources, immutable bundle versions, frozen placement,
+  rollouts, approvals, deployments, generations, fences, audit, and status.
+- Every project-scoped route normalizes one authoritative project and checks
+  dedicated delivery RBAC. Mutable lifecycle commands require current
+  `If-Match` state. The catalog enforces project visibility for both list and
+  object lookup.
+- Source resolution pins an immutable commit or digest, verifies configured
+  identity/signature policy, bounds redirects/pages/bytes, and rejects private,
+  reserved, link-local, loopback, and rebinding destinations unless an explicit
+  reviewed policy permits the exact host.
+- Placement is deterministic and frozen before release. Strategies, cohorts,
+  approvals, windows, budgets, retries, and rollback use durable leases and
+  generation fences; a retry cannot silently widen membership.
+- Agent snapshots are cluster-bound, ETagged, generation-monotonic, size/object
+  bounded, and checkpointed. Stale/replayed input and ambiguous prune evidence
+  fail closed. Disconnect retains the last accepted desired state.
+- The agent accepts only typed source/renderer/scope variants and materializes
+  deterministic objects in reserved project control namespaces. Namespace
+  assignments use bounded Roles; platform assignments may bind only the fixed
+  platform-applier ClusterRole. Cross-namespace references and remote
+  Kustomize bases are disabled.
+- Releases ship exactly the digest-pinned source, Kustomize, and Helm
+  controllers from an authenticated Flux release, with fixed API versions,
+  network policy, non-root security context, and no generic Flux UI/API.
+- Status ingestion verifies cluster/session/generation ownership, normalizes
+  bounded conditions/events, coalesces noise, and marks stale data explicitly.
 
 Review checks:
 
-- ArgoCD proxy tokens must never be accepted by general API auth middleware.
-- Token creation/rotation/deletion must update decommission and repair paths.
-- Changes to the bundled ArgoCD version must re-confirm that cluster Secret
-  `config.bearerToken` still populates the REST transport used by discovery,
-  cache, and sync before rollout.
-- Baseline ownership changes must update `docs/control-plane-state-contract.md`.
+- New source or renderer variants require a typed schema, immutable resolution,
+  verification, egress policy, size/page bounds, redaction, and materializer
+  negative tests.
+- New rollout actions require RBAC, audit, idempotency, current-state CAS,
+  failure/rollback semantics, and project-isolation tests.
+- Changes to object materialization must prove namespace/scope confinement,
+  stable naming, takeover refusal, complete checkpointing, and safe pruning.
+- Flux/controller changes must update the signed release contract, compatibility
+  matrix, air-gap inventory, provenance, and live version qualification.
 
 ## Service Proxy
 
@@ -253,12 +271,13 @@ Review checks:
 
 ## Control-Plane State Split
 
-Trust boundary: Postgres, Kubernetes CRDs, Argo CD, Redis, and target clusters each own different state.
+Trust boundary: PostgreSQL, management CRDs, Redis, cluster agents, local Flux,
+and target clusters each own different state.
 
 Threats:
 
 - Duplicate state owners racing and overwriting each other.
-- Redis or Argo CD being treated as the durable source for user decisions.
+- Redis or downstream Flux being treated as the durable source for user decisions.
 - CRD reconciliation broadening tenant scope beyond the selected project/cluster.
 - Target-cluster cached inventory becoming stale but still shown as authoritative.
 
@@ -266,40 +285,38 @@ Controls:
 
 - Postgres is the durable product source for users, RBAC, audit, inventory metadata, credentials, and operation history.
 - Redis/asynq stores queue state only; durable operations are persisted in Postgres before execution.
-- Argo CD owns deployment convergence for registered clusters and generated ApplicationSets.
-- Management CRDs provide declarative intent and status, but their controllers enforce ownership labels, finalizers, version pins, project selectors, and same-namespace reference rules before writing Argo resources or DB annotations.
+- PostgreSQL owns delivery intent and rollout history; agents own materialization,
+  while local Flux owns source and workload convergence for the last accepted generation.
+- Management CRDs cover only clusters, projects, and agent profiles. Their
+  controllers enforce ownership, finalizers, and same-namespace profile
+  references before writing product rows or status.
 - Target clusters remain source of truth for live Kubernetes objects; mirrored/cache views must surface stale or degraded collection state.
 
 Review checks:
 
 - Any new durable decision must land in Postgres or a Kubernetes CRD with status/finalizer semantics, not only Redis or process memory.
-- Any new CRD-to-Argo writer must enforce Astronomer ownership labels and refuse to overwrite unowned resources.
-- Any new selector that can target clusters must prove it is bounded by `astronomer.io/managed-by=astronomer` and tenant/project constraints.
+- Any new downstream writer must enforce Astronomer ownership metadata and refuse to overwrite unowned resources.
+- Any selector that can target clusters must prove project authorization,
+  deterministic evaluation, frozen rollout membership, and bounded preview.
 
-## GitOps Baseline And Argo CD
+## Built-in platform bundles
 
-Trust boundary: Astronomer-generated ApplicationSets in Argo CD to adopted-cluster deployments.
+Trust boundary: the reviewed release bundle catalog through the normal delivery
+control plane to platform-scoped resources in an adopted cluster.
 
-Threats:
+Threats include a retagged chart/image, a built-in escaping its reviewed
+platform scope, user-owned object takeover, or baseline failure blocking cluster
+registration without useful diagnostics.
 
-- ApplicationSet selectors accidentally targeting non-Astronomer Argo cluster Secrets.
-- Baseline components being deployed in the wrong order or replacing user-owned resources.
-- Lost Argo cluster Secrets or stale labels silently breaking fan-out.
-- Manual sync-window override bypassing maintenance controls without accountability.
+Built-ins use immutable chart and image digests, the same source verification,
+placement, rollout, assignment, materialization, status, and audit paths as user
+delivery, and stable release-derived identities. They bind only the fixed
+platform-applier role and refuse unowned objects. Compatibility requirements
+and images are part of the signed release manifest and air-gap kit.
 
-Controls:
-
-- Built-in baseline ApplicationSets use Astronomer-owned labels, sync phases/waves, and per-component ownership metadata.
-- User-created ApplicationSet generators are constrained to Astronomer-managed cluster labels.
-- Orphan and stale ApplicationSet/Application detection compares cached state and live Argo state.
-- Sync-window overrides require a reason that is persisted in operation payload/events/audit metadata.
-- Baseline ownership decisions for adopt, leave unmanaged, and replace are explicit and audited.
-
-Review checks:
-
-- New baseline components must declare namespace, chart/repo, sync phase, selector labels, catalog seed behavior, and ownership migration behavior.
-- New Argo actions must be permission-gated, audited, and visible in operation history.
-- Any replacement/adoption flow must refuse unsafe local-cluster or unregistered-cluster cases.
+New built-ins must declare source/chart/image digests, namespace, release name,
+scope, values, health behavior, Kubernetes bounds, required capabilities,
+ownership/takeover behavior, rollback, and connected plus disconnected tests.
 
 ## Management-Plane Deployment
 
@@ -309,13 +326,10 @@ Threats:
 
 - Lateral movement from one management-plane pod to another through open namespace networking.
 - Hook or backup jobs running with weaker security contexts than the steady-state deployments.
-- Ingress/Gateway, Argo CD, external DB/Redis, and Kubernetes API egress being broader than intended.
+- Ingress/Gateway, source resolution, external DB/Redis, and Kubernetes API egress being broader than intended.
 - Bootstrap credentials or generated secrets becoming long-lived unknowns.
-- Argo CD persisting inline Helm credentials in Application spec, compared
-  source, operation results, history, API responses, or controller logs. The
-  self-manage path therefore accepts only closed-vocabulary non-sensitive
-  values plus native Secret references, scrubs legacy copies with the
-  controller stopped, and requires digest-bound operator approval before prune.
+- Helm values or delivery credentials leaking through rendered manifests,
+  rollout events, API responses, logs, support bundles, or status payloads.
 
 Controls:
 
@@ -357,7 +371,8 @@ Review checks:
 
 ## Supply Chain
 
-Trust boundary: source repository, CI, Helm chart, container images, third-party charts, and Argo sources.
+Trust boundary: source repository, CI, Helm chart, container images, upstream
+Flux release, delivery artifacts, and third-party charts.
 
 Threats:
 
@@ -370,12 +385,15 @@ Controls:
 
 - CI runs Go tests, frontend type checks/lint, route-security checks, Helm lint/render, and chart render contract tests.
 - Chart values centralize image registries, pull secrets, and third-party image overrides for air-gapped installs.
-- ComponentBundle and GitOpsTarget references enforce version pins and same-namespace governed template/schema references.
+- The signed release manifest binds the management chart/images, agent, exact
+  Flux distribution, built-in bundles, SBOMs, provenance, and air-gap inventory.
+- Delivery bundle versions resolve to immutable commits/digests and preserve
+  verification evidence before rollout.
 - High-risk routes are tracked in `docs/security-sensitive-routes.json`.
 
 Review checks:
 
-- Image, chart, or Argo source changes must document pinning, registry/mirror behavior, and required RBAC.
+- Image, chart, Flux, or delivery-source changes must document pinning, verification, registry/mirror behavior, and required RBAC.
 - New CRD fields must update schema, deepcopy/status tests, controller validation, docs, and ownership contracts.
 - New high-risk routes must update the route registry and tests in the same change.
 
@@ -387,5 +405,5 @@ Use this checklist for security-sensitive pull requests:
 - State the new or changed attacker path and the control that blocks it.
 - Confirm route auth, RBAC, API-token scope, CSRF, audit, and proxy/header behavior when routes changed.
 - Confirm new secrets are hash-only, encrypted, or intentionally external, and that rotation/redaction paths are updated.
-- Confirm CRD/Postgres/Argo ownership changes preserve a single durable source of truth.
+- Confirm CRD/PostgreSQL/Flux ownership changes preserve a single durable source of truth.
 - Confirm chart changes preserve default-deny NetworkPolicy, least-privilege containers, and production preflight posture.

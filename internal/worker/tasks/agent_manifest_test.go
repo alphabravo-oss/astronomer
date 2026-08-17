@@ -77,12 +77,11 @@ func TestRenderAgentManifestSupportsOperatorPrivilegeProfile(t *testing.T) {
 		}
 	}
 	// operator must never be cluster-admin: no wildcard WRITE. A read-only
-	// wildcard IS expected and required — ArgoCD adopts this profile and its
-	// cluster cache lists every resource type registered in the cluster
-	// (including CRDs added after adoption), so an enumerated allowlist always
-	// eventually misses one and silently pins every Application at sync=Unknown.
-	// See deploy/agent/template.go and TestArgoManagedProfilesGrantClusterWideRead
-	// / TestOperatorWildcardIsReadOnly, which pin both halves of that contract.
+	// wildcard IS expected and required: the discovery and inventory paths list
+	// every resource type registered in the cluster, including CRDs added after
+	// enrollment. An enumerated allowlist would eventually miss one and make the
+	// management plane's observed inventory incomplete. The wildcard remains
+	// read-only; TestOperatorWildcardIsReadOnly pins that half of the contract.
 	if strings.Contains(manifest, `verbs: ["*"]`) {
 		t.Fatalf("operator manifest rendered admin wildcard VERBS (cluster-admin):\n%s", manifest)
 	}

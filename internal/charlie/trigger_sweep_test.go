@@ -12,11 +12,11 @@ import (
 
 type triggerSweepFake struct {
 	triggerIngestFake
-	connection   sqlc.CharlieConnection
-	rules        []sqlc.CharlieTriggerRule
-	fleet        []sqlc.CharlieAgentFleetListRow
-	distribution []sqlc.CharlieTunnelReplicaDistributionRow
-	tunnel       sqlc.CharlieTunnelHealthRow
+	connection    sqlc.CharlieConnection
+	rules         []sqlc.CharlieTriggerRule
+	clusterAgents []sqlc.CharlieClusterAgentListRow
+	distribution  []sqlc.CharlieTunnelReplicaDistributionRow
+	tunnel        sqlc.CharlieTunnelHealthRow
 }
 
 func (f *triggerSweepFake) GetActiveCharlieConnection(context.Context) (sqlc.CharlieConnection, error) {
@@ -25,13 +25,13 @@ func (f *triggerSweepFake) GetActiveCharlieConnection(context.Context) (sqlc.Cha
 func (f *triggerSweepFake) ListEnabledCharlieTriggerRules(context.Context, uuid.UUID) ([]sqlc.CharlieTriggerRule, error) {
 	return f.rules, nil
 }
-func (f *triggerSweepFake) CharlieAgentFleetList(_ context.Context, params sqlc.CharlieAgentFleetListParams) ([]sqlc.CharlieAgentFleetListRow, error) {
+func (f *triggerSweepFake) CharlieClusterAgentList(_ context.Context, params sqlc.CharlieClusterAgentListParams) ([]sqlc.CharlieClusterAgentListRow, error) {
 	start := int(params.PageOffset)
-	if start >= len(f.fleet) {
+	if start >= len(f.clusterAgents) {
 		return nil, nil
 	}
-	end := min(start+int(params.PageLimit), len(f.fleet))
-	return f.fleet[start:end], nil
+	end := min(start+int(params.PageLimit), len(f.clusterAgents))
+	return f.clusterAgents[start:end], nil
 }
 func (f *triggerSweepFake) CharlieTunnelReplicaDistribution(context.Context) ([]sqlc.CharlieTunnelReplicaDistributionRow, error) {
 	return f.distribution, nil
@@ -45,7 +45,7 @@ func TestTriggerSweeperEvaluatesPersistentProductOwnedState(t *testing.T) {
 	ruleNames := []string{
 		"agent_heartbeat_stale", "agent_downstream_api_unreachable_reported", "agent_version_unsupported",
 		"agent_credential_invalid", "agent_upgrade_failed_or_stalled", "agent_ingestion_failed", "agent_command_expired",
-		"fleet_simultaneous_disconnect", "tunnel_replica_concentration", "tunnel_locator_failure",
+		"cluster_agents_simultaneous_disconnect", "tunnel_replica_concentration", "tunnel_locator_failure",
 	}
 	rules := make([]sqlc.CharlieTriggerRule, 0, len(ruleNames))
 	for _, name := range ruleNames {
@@ -54,7 +54,7 @@ func TestTriggerSweeperEvaluatesPersistentProductOwnedState(t *testing.T) {
 	clusterA, clusterB := uuid.New(), uuid.New()
 	store := &triggerSweepFake{
 		connection: readySessionConnection(), rules: rules,
-		fleet: []sqlc.CharlieAgentFleetListRow{
+		clusterAgents: []sqlc.CharlieClusterAgentListRow{
 			{ClusterID: clusterA, Environment: "prod", Region: "east", ConnectionState: "disconnected", LastHeartbeat: pgtype.Timestamptz{Time: now.Add(-10 * time.Minute), Valid: true}, ProtocolCompatible: pgtype.Bool{Bool: false, Valid: true}, CredentialState: "revoked", UpgradeState: "stalled", ExpiredCommandCount: 1, DownstreamApiReachable: pgtype.Bool{Bool: false, Valid: true}, AuditIngestionState: "failed"},
 			{ClusterID: clusterB, Environment: "prod", Region: "east", ConnectionState: "disconnected", LastHeartbeat: pgtype.Timestamptz{Time: now, Valid: true}, ProtocolCompatible: pgtype.Bool{Bool: true, Valid: true}, DownstreamApiReachable: pgtype.Bool{Bool: true, Valid: true}},
 		},
@@ -90,8 +90,8 @@ func TestTriggerSweeperIsInactiveAndBounded(t *testing.T) {
 	if err := sweeper.Sweep(context.Background()); err != nil || len(store.created) != 0 {
 		t.Fatalf("inactive sweep performed work: err=%v created=%d", err, len(store.created))
 	}
-	if fleetDisconnectThreshold([]sqlc.CharlieAgentFleetListRow{{ConnectionState: "disconnected"}}) {
-		t.Fatal("single downstream agent was classified as a fleet incident")
+	if simultaneousClusterAgentDisconnectThreshold([]sqlc.CharlieClusterAgentListRow{{ConnectionState: "disconnected"}}) {
+		t.Fatal("single downstream agent was classified as a multi-cluster incident")
 	}
 	if concentratedTunnel([]sqlc.CharlieTunnelReplicaDistributionRow{{ServerReplica: "server-a", ConnectionCount: 1}}) {
 		t.Fatal("single connection was classified as tunnel concentration")

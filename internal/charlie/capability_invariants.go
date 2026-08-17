@@ -37,7 +37,7 @@ func validateV1CapabilityDescriptor(descriptor CapabilityDescriptor) error {
 			return fmt.Errorf("Charlie v1 read descriptor is unsafe")
 		}
 	case EffectWrite:
-		if descriptor.Risk != v1WriteRisk || descriptor.TargetBounds != v1WriteTargetBounds || descriptor.Impact != v1WriteImpact || descriptor.Reversibility != v1WriteReversibility || descriptor.Rollback != v1WriteRollback || descriptor.RBACVerb != "update" ||
+		if descriptor.Risk != v1WriteRisk || descriptor.TargetBounds != v1WriteTargetBounds || descriptor.Impact != v1WriteImpact || descriptor.Reversibility != v1WriteReversibility || descriptor.Rollback != v1WriteRollback || descriptor.RBACVerb != expectedWriteRBACVerb(descriptor.Name) ||
 			!descriptor.Idempotent || !descriptor.RequiresPrecondition || !descriptor.RequiresVerification ||
 			!containsDescriptorField(descriptor.AcceptedFields, "operation_id") || !containsDescriptorField(descriptor.AcceptedFields, "resource_id") {
 			return fmt.Errorf("Charlie v1 write descriptor is destructive or irreversible")
@@ -46,6 +46,17 @@ func validateV1CapabilityDescriptor(descriptor CapabilityDescriptor) error {
 		return fmt.Errorf("Charlie v1 capability effect is invalid")
 	}
 	return nil
+}
+
+func expectedWriteRBACVerb(name string) string {
+	switch name {
+	case "astronomer.delivery.rollout_approve":
+		return "approve"
+	case "astronomer.delivery.rollout_rollback":
+		return "rollback"
+	default:
+		return "update"
+	}
 }
 
 func containsDescriptorField(fields []string, wanted string) bool {
@@ -59,7 +70,7 @@ func containsDescriptorField(fields []string, wanted string) bool {
 
 func validCapabilitySource(source CapabilitySource) bool {
 	switch source {
-	case SourceAstronomerDatabase, SourceAstronomerServer, SourceManagementKubernetes, SourceManagementArgo, SourceManagementQueue:
+	case SourceAstronomerDatabase, SourceAstronomerServer, SourceManagementKubernetes, SourceManagementQueue:
 		return true
 	default:
 		return false

@@ -146,7 +146,7 @@ function LoginPage() {
             </div>
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-status-info" />
-              GitOps with ArgoCD
+              Flux-native continuous delivery
             </div>
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-violet-400" />

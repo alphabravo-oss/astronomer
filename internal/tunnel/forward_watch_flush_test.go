@@ -48,7 +48,7 @@ func (f *flushSignalWriter) body() string {
 // pod forwards to the owner and must flush each event to the client as it
 // arrives. Before the fix it piped the body with io.Copy and a single trailing
 // Flush, so small events were held in the front pod's bufio buffer until ~2KB
-// accumulated or the watch ended — freezing the browser/ArgoCD watch.
+// accumulated or the watch ended — freezing the browser watch.
 //
 // The upstream owner sends event 1, flushes, then BLOCKS until the test observes
 // that event 1 reached the client. With the fix the first chunk is flushed
