@@ -40,7 +40,7 @@ func newDeliverySourceCmd() *cobra.Command {
 		newDeliveryGetCmd("source", "/api/v1/delivery/sources/%s/"),
 		newDeliveryMutationCmd("create", "Create a delivery source", http.MethodPost, "/api/v1/delivery/sources/", false),
 		newDeliveryMutationCmd("update <id>", "Update credential-free source metadata", http.MethodPatch, "/api/v1/delivery/sources/%s/", true),
-		newDeliveryDeleteCmd("source", "/api/v1/delivery/sources/%s/"),
+		newDeliveryDeleteCmd("source", "/api/v1/delivery/sources/%s/", false),
 		newDeliveryMutationCmd("verify <id>", "Queue source resolution and trust verification", http.MethodPost, "/api/v1/delivery/sources/%s/verify/", true),
 		newDeliveryMutationCmd("rotate-credential <id>", "Rotate a source credential", http.MethodPost, "/api/v1/delivery/sources/%s/rotate-credential/", true),
 	)
@@ -53,7 +53,7 @@ func newDeliveryBundleCmd() *cobra.Command {
 		newDeliveryListCmd("bundle", "/api/v1/delivery/bundles/"),
 		newDeliveryGetCmd("bundle", "/api/v1/delivery/bundles/%s/"),
 		newDeliveryMutationCmd("create", "Create a delivery bundle", http.MethodPost, "/api/v1/delivery/bundles/", false),
-		newDeliveryDeleteCmd("bundle", "/api/v1/delivery/bundles/%s/"),
+		newDeliveryDeleteCmd("bundle", "/api/v1/delivery/bundles/%s/", false),
 		newDeliveryBundleVersionListCmd(),
 		newDeliveryMutationCmd("version-create <bundle-id>", "Create an immutable bundle version", http.MethodPost, "/api/v1/delivery/bundles/%s/versions/", true),
 		newDeliveryBundleVersionGetCmd(),
@@ -139,7 +139,7 @@ func newDeliveryMutationCmd(use, short, method, path string, hasID bool) *cobra.
 	return cmd
 }
 
-func newDeliveryDeleteCmd(noun, path string) *cobra.Command {
+func newDeliveryDeleteCmd(noun, path string, requireMatch bool) *cobra.Command {
 	var project string
 	var yes bool
 	cmd := &cobra.Command{
@@ -157,7 +157,19 @@ func newDeliveryDeleteCmd(noun, path string) *cobra.Command {
 			if _, err := parseUUID("id", args[0]); err != nil {
 				return err
 			}
-			return runAPICommand(cmd, http.MethodDelete, fmt.Sprintf(path, args[0])+"?project_id="+url.QueryEscape(projectID), nil, "")
+			headers := map[string]string{}
+			if requireMatch {
+				current, err := getDeliveryObject(cmd, fmt.Sprintf(path, args[0])+"?project_id="+url.QueryEscape(projectID))
+				if err != nil {
+					return err
+				}
+				request, err := deliveryTargetDeleteRequest(projectID, args[0], current)
+				if err != nil {
+					return err
+				}
+				return runAPICommandWithHeaders(cmd, request.Method, request.Path, request.Body, request.Headers, "")
+			}
+			return runAPICommandWithHeaders(cmd, http.MethodDelete, fmt.Sprintf(path, args[0])+"?project_id="+url.QueryEscape(projectID), nil, headers, "")
 		},
 	}
 	addDeliveryProjectFlag(cmd, &project)
@@ -214,6 +226,25 @@ func newDeliveryBundleVersionGetCmd() *cobra.Command {
 func addDeliveryProjectFlag(cmd *cobra.Command, destination *string) {
 	cmd.Flags().StringVar(destination, "project", "", "project UUID")
 	_ = cmd.MarkFlagRequired("project")
+}
+
+type deliveryHTTPRequest struct {
+	Method  string
+	Path    string
+	Headers map[string]string
+	Body    any
+}
+
+func deliveryTargetDeleteRequest(projectID, targetID string, target map[string]any) (deliveryHTTPRequest, error) {
+	version := deliveryResourceVersion(target)
+	if version < 1 {
+		return deliveryHTTPRequest{}, fmt.Errorf("target delete requires a positive resource_version for If-Match")
+	}
+	return deliveryHTTPRequest{
+		Method:  http.MethodDelete,
+		Path:    fmt.Sprintf("/api/v1/delivery/targets/%s/?project_id=%s", targetID, url.QueryEscape(projectID)),
+		Headers: map[string]string{"If-Match": quotedEntityTag(version)},
+	}, nil
 }
 
 func quotedEntityTag(version int64) string {

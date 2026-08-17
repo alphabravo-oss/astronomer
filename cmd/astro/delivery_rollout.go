@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -42,21 +43,23 @@ func newDeliveryRolloutStartCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			payload, err := optionalJSONInput(body)
+			userPayload, err := optionalJSONObject(body)
 			if err != nil {
 				return err
-			}
-			if payload == nil {
-				payload = map[string]any{"project_id": projectID}
 			}
 			current, err := getDeliveryObject(cmd, fmt.Sprintf("/api/v1/delivery/targets/%s/?project_id=%s", targetID, url.QueryEscape(projectID)))
 			if err != nil {
 				return err
 			}
-			generation := deliveryGeneration(current)
-			headers := map[string]string{"If-Match": quotedEntityTag(generation)}
-			path := fmt.Sprintf("/api/v1/delivery/targets/%s/rollouts/?project_id=%s", targetID, url.QueryEscape(projectID))
-			return runAPICommandWithHeaders(cmd, http.MethodPost, path, payload, headers, "")
+			preview, err := postDeliveryPreview(cmd, projectID, targetID)
+			if err != nil {
+				return err
+			}
+			request, err := deliveryRolloutStartRequest(projectID, targetID, current, preview, userPayload)
+			if err != nil {
+				return err
+			}
+			return runAPICommandWithHeaders(cmd, request.Method, request.Path, request.Body, request.Headers, "")
 		},
 	}
 	addDeliveryProjectFlag(cmd, &project)
@@ -173,6 +176,74 @@ func deliveryFence(object map[string]any) int64 {
 	}
 }
 
+func deliveryDefaultRolloutStrategy() map[string]any {
+	return map[string]any{
+		"type":                        "all_at_once",
+		"max_concurrent":              10,
+		"max_unavailable":             map[string]any{"type": "count", "value": 0},
+		"min_ready":                   "0s",
+		"progress_deadline":           "30m",
+		"failure_threshold":           map[string]any{"type": "count", "value": 1},
+		"on_failure":                  "pause",
+		"respect_maintenance_windows": true,
+	}
+}
+
+func deliveryRolloutStartRequest(projectID, targetID string, target, preview, userPayload map[string]any) (deliveryHTTPRequest, error) {
+	generation := deliveryGeneration(target)
+	if generation < 1 {
+		return deliveryHTTPRequest{}, fmt.Errorf("rollout start requires a positive target generation for If-Match")
+	}
+	digest := deliveryPreviewDigest(preview)
+	if digest == "" {
+		return deliveryHTTPRequest{}, fmt.Errorf("rollout start requires a frozen sha256 preview_digest")
+	}
+	body := map[string]any{
+		"project_id":           projectID,
+		"preview_digest":       digest,
+		"confirm_all_clusters": deliveryBool(preview["requires_all_confirmation"]),
+		"strategy":             deliveryDefaultRolloutStrategy(),
+	}
+	for key, value := range userPayload {
+		if key == "preview_digest" && strings.TrimSpace(fmt.Sprint(value)) == "" {
+			continue
+		}
+		if key == "strategy" && value == nil {
+			continue
+		}
+		body[key] = value
+	}
+	if strings.TrimSpace(fmt.Sprint(body["preview_digest"])) == "" {
+		body["preview_digest"] = digest
+	}
+	return deliveryHTTPRequest{
+		Method:  http.MethodPost,
+		Path:    fmt.Sprintf("/api/v1/delivery/targets/%s/rollouts/?project_id=%s", targetID, url.QueryEscape(projectID)),
+		Headers: map[string]string{"If-Match": quotedEntityTag(generation)},
+		Body:    body,
+	}, nil
+}
+
+func deliveryPreviewDigest(preview map[string]any) string {
+	value := strings.TrimSpace(fmt.Sprint(preview["preview_digest"]))
+	if value == "" || value == "<nil>" {
+		return ""
+	}
+	if !strings.HasPrefix(value, "sha256:") || len(value) != len("sha256:")+64 {
+		return ""
+	}
+	return value
+}
+
+func deliveryBool(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	default:
+		return false
+	}
+}
+
 func getDeliveryObject(cmd *cobra.Command, path string) (map[string]any, error) {
 	client, _, err := authedClient(cmd)
 	if err != nil {
@@ -182,19 +253,33 @@ func getDeliveryObject(cmd *cobra.Command, path string) (map[string]any, error) 
 	if err := client.Do(cmd.Context(), http.MethodGet, path, nil, &response); err != nil {
 		return nil, err
 	}
-	if data, ok := response["data"].(map[string]any); ok {
-		if nested, ok := data["target"].(map[string]any); ok {
-			return nested, nil
-		}
-		if nested, ok := data["rollout"].(map[string]any); ok {
-			return nested, nil
-		}
-		if nested, ok := data["deployment"].(map[string]any); ok {
-			return nested, nil
-		}
-		return data, nil
+	return unwrapDeliveryData(response), nil
+}
+
+func postDeliveryPreview(cmd *cobra.Command, projectID, targetID string) (map[string]any, error) {
+	client, _, err := authedClient(cmd)
+	if err != nil {
+		return nil, err
 	}
-	return response, nil
+	path := fmt.Sprintf("/api/v1/delivery/targets/%s/preview/?project_id=%s", targetID, url.QueryEscape(projectID))
+	var response map[string]any
+	if err := client.Do(cmd.Context(), http.MethodPost, path, map[string]any{"project_id": projectID}, &response); err != nil {
+		return nil, err
+	}
+	return unwrapDeliveryData(response), nil
+}
+
+func unwrapDeliveryData(response map[string]any) map[string]any {
+	data, ok := response["data"].(map[string]any)
+	if !ok {
+		return response
+	}
+	for _, key := range []string{"target", "rollout", "deployment"} {
+		if nested, ok := data[key].(map[string]any); ok {
+			return nested
+		}
+	}
+	return data
 }
 
 func optionalJSONInput(value string) (any, error) {
@@ -202,4 +287,24 @@ func optionalJSONInput(value string) (any, error) {
 		return nil, nil
 	}
 	return readJSONInput(value)
+}
+
+func optionalJSONObject(value string) (map[string]any, error) {
+	raw, err := optionalJSONInput(value)
+	if err != nil || raw == nil {
+		return nil, err
+	}
+	message, ok := raw.(json.RawMessage)
+	if !ok {
+		encoded, err := json.Marshal(raw)
+		if err != nil {
+			return nil, fmt.Errorf("start data must be one JSON object")
+		}
+		message = encoded
+	}
+	var object map[string]any
+	if err := json.Unmarshal(message, &object); err != nil || object == nil {
+		return nil, fmt.Errorf("start data must be one JSON object")
+	}
+	return object, nil
 }

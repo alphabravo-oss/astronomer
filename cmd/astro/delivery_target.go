@@ -21,7 +21,7 @@ func newDeliveryTargetCmd() *cobra.Command {
 		newDeliveryListCmd("target", "/api/v1/delivery/targets/"),
 		newDeliveryGetCmd("target", "/api/v1/delivery/targets/%s/"),
 		newDeliveryTargetApplyCmd(),
-		newDeliveryDeleteCmd("target", "/api/v1/delivery/targets/%s/"),
+		newDeliveryDeleteCmd("target", "/api/v1/delivery/targets/%s/", true),
 		newDeliveryTargetPreviewCmd(),
 	)
 	return cmd

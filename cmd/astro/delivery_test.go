@@ -137,3 +137,80 @@ func TestQuotedEntityTagIsStrong(t *testing.T) {
 		t.Fatalf("If-Match tag = %q", got)
 	}
 }
+
+func TestDeliveryTargetDeleteRequestSendsIfMatchResourceVersion(t *testing.T) {
+	projectID := "18fc69f4-5763-4541-bafb-1ef22192bcfa"
+	targetID := "2bfdd32f-713e-4c03-8e7c-968aed474a65"
+	request, err := deliveryTargetDeleteRequest(projectID, targetID, map[string]any{"resource_version": float64(4)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Method != "DELETE" {
+		t.Fatalf("method = %s", request.Method)
+	}
+	if request.Headers["If-Match"] != `"4"` {
+		t.Fatalf("If-Match = %q", request.Headers["If-Match"])
+	}
+	if !strings.Contains(request.Path, targetID) || !strings.Contains(request.Path, "project_id="+projectID) {
+		t.Fatalf("path = %s", request.Path)
+	}
+	if _, err := deliveryTargetDeleteRequest(projectID, targetID, map[string]any{}); err == nil {
+		t.Fatal("accepted a delete without resource_version")
+	}
+}
+
+func TestDeliveryRolloutStartRequestFreezesPreviewDigest(t *testing.T) {
+	projectID := "18fc69f4-5763-4541-bafb-1ef22192bcfa"
+	targetID := "2bfdd32f-713e-4c03-8e7c-968aed474a65"
+	digest := "sha256:" + strings.Repeat("ab", 32)
+	request, err := deliveryRolloutStartRequest(projectID, targetID,
+		map[string]any{"generation": float64(7)},
+		map[string]any{"preview_digest": digest, "requires_all_confirmation": true},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Method != "POST" || request.Headers["If-Match"] != `"7"` {
+		t.Fatalf("start request = %#v", request)
+	}
+	body, ok := request.Body.(map[string]any)
+	if !ok {
+		t.Fatalf("body type %T", request.Body)
+	}
+	if body["preview_digest"] != digest {
+		t.Fatalf("preview_digest = %#v", body["preview_digest"])
+	}
+	if body["confirm_all_clusters"] != true {
+		t.Fatalf("confirm_all_clusters = %#v", body["confirm_all_clusters"])
+	}
+	strategy, ok := body["strategy"].(map[string]any)
+	if !ok || strategy["type"] != "all_at_once" || strategy["max_concurrent"] != 10 {
+		t.Fatalf("default strategy = %#v", body["strategy"])
+	}
+	if _, err := deliveryRolloutStartRequest(projectID, targetID, map[string]any{"generation": float64(7)}, map[string]any{}, nil); err == nil {
+		t.Fatal("accepted a start without a frozen preview digest")
+	}
+}
+
+func TestDeliveryRolloutStartRequestKeepsFrozenDigestWhenUserOmitsIt(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("cd", 32)
+	request, err := deliveryRolloutStartRequest(
+		"18fc69f4-5763-4541-bafb-1ef22192bcfa",
+		"2bfdd32f-713e-4c03-8e7c-968aed474a65",
+		map[string]any{"generation": float64(3)},
+		map[string]any{"preview_digest": digest},
+		map[string]any{"preview_digest": "", "strategy": map[string]any{"type": "rolling", "max_concurrent": 2}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := request.Body.(map[string]any)
+	if body["preview_digest"] != digest {
+		t.Fatalf("user empty digest replaced the freeze: %#v", body["preview_digest"])
+	}
+	strategy := body["strategy"].(map[string]any)
+	if strategy["type"] != "rolling" || strategy["max_concurrent"] != 2 {
+		t.Fatalf("user strategy was dropped: %#v", strategy)
+	}
+}
