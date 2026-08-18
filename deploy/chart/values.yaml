@@ -384,6 +384,17 @@ migrate:
 
 preflight:
   enabled: true
+  image:
+    # astronomer-shell is built from deploy/docker/Dockerfile.shell —
+    # alpine + kubectl pinned at v1.35.2, fetched from dl.k8s.io. It
+    # replaced the previous bitnami/kubectl default after Broadcom
+    # 404'd docker.io/bitnami/kubectl during the Aug 2025 retag.
+    # Same image runs the in-browser kubectl shell pods, so air-gapped
+    # operators only need to mirror one image for both surfaces.
+    repository: astronomer-shell
+    tag: "v1.0.0"
+    digest: ""
+    registry: ""    # T23 air-gapped override; falls back to image.registry
   # v1 is fresh-install-only. The external-database hook admits an empty
   # database or an already-clean v1 singleton migration. It rejects dirty,
   # v0 multi-migration, unknown-version, and legacy delivery-table states
@@ -404,17 +415,6 @@ preflight:
     capabilities:
       drop:
         - ALL
-  image:
-    # astronomer-shell is built from deploy/docker/Dockerfile.shell —
-    # alpine + kubectl pinned at v1.35.2, fetched from dl.k8s.io. It
-    # replaced the previous bitnami/kubectl default after Broadcom
-    # 404'd docker.io/bitnami/kubectl during the Aug 2025 retag.
-    # Same image runs the in-browser kubectl shell pods, so air-gapped
-    # operators only need to mirror one image for both surfaces.
-    repository: astronomer-shell
-    tag: "v1.0.0"
-    digest: ""
-    registry: ""    # T23 air-gapped override; falls back to image.registry
 
 # =============================================================================
 # Connection strings (consumed by server + worker)
