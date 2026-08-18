@@ -24,7 +24,7 @@ func helmTemplateExpectErrorWithFlags(t *testing.T, valueFiles, flags []string, 
 	}
 	chartDir := filepath.Join(filepath.Dir(here), "chart")
 	valuesFile := filepath.Join(chartDir, "values.yaml")
-	args := []string{"template", "astronomer", chartDir, "-f", valuesFile}
+	args := []string{"template", "astronomer", chartDir, "-f", valuesFile, "--kube-version", "1.35.0"}
 	args = append(args, flags...)
 	for _, file := range valueFiles {
 		args = append(args, "-f", file)

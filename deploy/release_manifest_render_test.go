@@ -77,6 +77,7 @@ func TestReleaseManifestIsValidatedAndMountedByChart(t *testing.T) {
 func renderChartWithReleaseManifest(path string, mappingPath ...string) (string, string, error) {
 	arguments := []string{
 		"helm", "template", "astronomer", "chart", "-f", "chart/values.yaml",
+		"--kube-version", "1.35.0",
 		"--set", testRenderSecretKeySet,
 		"--set", testRenderEncryptionKeySet,
 		"--set-file", "release.manifest=" + path,

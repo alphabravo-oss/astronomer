@@ -51,7 +51,7 @@ func helmTemplateWithValueFiles(t *testing.T, valueFiles []string, sets ...strin
 	chartDir := filepath.Join(filepath.Dir(here), "chart")
 	valuesFile := filepath.Join(chartDir, "values.yaml")
 
-	args := []string{"template", "astronomer", chartDir, "-f", valuesFile}
+	args := []string{"template", "astronomer", chartDir, "-f", valuesFile, "--kube-version", "1.35.0"}
 	for _, file := range valueFiles {
 		args = append(args, "-f", file)
 	}
