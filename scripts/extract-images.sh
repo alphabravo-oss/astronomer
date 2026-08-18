@@ -53,18 +53,22 @@ fi
 # render fails without them), so every call passes throwaway values — nothing
 # here ever reaches a cluster, we only want the image refs.
 extract_images() {
+    # Pin kube-version so CI (no cluster) stays inside Chart.yaml kubeVersion.
+    # Do not swallow helm errors: an empty render used to look like a valid,
+    # just-shorter inventory.
     # shellcheck disable=SC2068
     helm template astronomer "$CHART_DIR" \
+        --kube-version 1.35.0 \
         --set secrets.secretKey=extract-images-render-only \
         --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo= \
-        $@ 2>/dev/null \
+        $@ \
         | grep -oE 'image: "?[^"]+"?' \
         | sed -E 's/^image: //; s/^"//; s/"$//'
 }
 
 # Default (dev) render — covers server/worker/migrate/frontend/postgres/
 # redis/shell/busybox and anything else on by default.
-dev_images="$(extract_images -f "$CHART_DIR/values.yaml" || true)"
+dev_images="$(extract_images -f "$CHART_DIR/values.yaml")"
 
 # Production-like optional components. These stay off in values.yaml so a
 # laptop install doesn't pull them, but values-production.yaml (or an
@@ -83,11 +87,10 @@ prod_like_images="$(
         --set managementRestoreDrill.enabled=true \
         --set managementRestoreDrill.decryptCheck.wrappingSecretRef.name=airgap-extract-dummy \
         --set managementLogging.enabled=true \
-        --set managementLogging.endpoint=http://loki.observability.svc:3100 \
-        || true
+        --set managementLogging.endpoint=http://loki.observability.svc:3100
 )"
 
-images="$(printf '%s\n%s' "$dev_images" "$prod_like_images" | sed '/^$/d' | sort -u)"
+images="$(printf '%s\n%s' "$dev_images" "$prod_like_images" | sed '/^$/d' | LC_ALL=C sort -u)"
 
 # The agent image isn't in any Deployment — it's referenced when the
 # server renders the install.yaml that operators apply in a new member
@@ -102,7 +105,7 @@ if [[ -n "$agent_repo" && -n "$agent_tag" ]]; then
     # matching what the configmap renders into adopted-cluster manifests.
     agent_ref="$agent_repo:$agent_tag"
     [[ -n "$agent_reg" ]] && agent_ref="$agent_reg/$agent_ref"
-    images="$(printf '%s\n%s' "$images" "$agent_ref" | sort -u)"
+    images="$(printf '%s\n%s' "$images" "$agent_ref" | LC_ALL=C sort -u)"
 fi
 
 # Flux runs downstream only, so Helm cannot discover these images. The release
@@ -120,7 +123,7 @@ downstream_images="$(jq -er '
     echo "extract-images: expected exactly three downstream controller images" >&2
     exit 2
 }
-images="$(printf '%s\n%s' "$images" "$downstream_images" | sed '/^$/d' | sort -u)"
+images="$(printf '%s\n%s' "$images" "$downstream_images" | sed '/^$/d' | LC_ALL=C sort -u)"
 
 # Built-in bundles are normal delivery artifacts and their workload images must
 # be mirrored even though they are absent from the management chart render.
@@ -131,7 +134,7 @@ builtin_images="$(jq -er '
   else error("invalid built-in bundle image identity")
   end
 ' "$BUNDLE_CATALOG")"
-images="$(printf '%s\n%s' "$images" "$builtin_images" | sed '/^$/d' | sort -u)"
+images="$(printf '%s\n%s' "$images" "$builtin_images" | sed '/^$/d' | LC_ALL=C sort -u)"
 
 # Emit a stable, comment-prefixed header so the file is self-describing.
 cat <<EOF

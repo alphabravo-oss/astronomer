@@ -74,6 +74,11 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.16.4
+
       - name: Verify release and Gateway compatibility contracts
         run: |
           ./scripts/check-build-capacity.sh --path .
