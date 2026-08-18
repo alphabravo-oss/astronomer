@@ -321,8 +321,16 @@ jobs:
             local name="$1" artifact_type="$2" file="$3" media_type="$4"
             local repository="${REGISTRY}/${IMAGE_OWNER}/${name}"
             if oras resolve "${repository}:${IMAGE_TAG}" >/dev/null 2>&1; then
-              echo "refusing to overwrite immutable artifact ${repository}:${IMAGE_TAG}" >&2
-              return 1
+              local digest
+              digest="$(oras resolve "${repository}:${IMAGE_TAG}")"
+              case "$digest" in sha256:*) ;; *)
+                echo "unreadable digest for immutable artifact ${repository}:${IMAGE_TAG}" >&2
+                return 1
+                ;;
+              esac
+              echo "reusing already-published immutable artifact ${repository}@${digest}"
+              printf '%s\n' "${repository}@${digest}" >"release-delivery/${name}.digest"
+              return 0
             fi
             oras push --format json "${repository}:${IMAGE_TAG}" \
               --artifact-type "$artifact_type" "${file}:${media_type}" >"release-delivery/${name}.push.json"
@@ -609,7 +617,6 @@ jobs:
           POSTGRES|postgres:16-alpine
           REDIS|valkey/valkey:8-alpine
           DEX|dexidp/dex:v2.41.1
-          BACKUP|ghcr.io/alphabravocompany/pgdump-s3:16-awscli
           LOGGING|fluent/fluent-bit:3.2.4
           EOF
 
@@ -653,8 +660,6 @@ jobs:
             --set-string postgres.image.digest="$POSTGRES_DIGEST" \
             --set-string redis.image.digest="$REDIS_DIGEST" \
             --set-string dex.image.digest="$DEX_DIGEST" \
-            --set-string managementBackup.image.digest="$BACKUP_DIGEST" \
-            --set-string managementRestoreDrill.image.digest="$BACKUP_DIGEST" \
             --set-string managementRestoreDrill.sidecar.image.digest="$POSTGRES_DIGEST" \
             --set-string managementLogging.image.digest="$LOGGING_DIGEST" \
             --set-string config.agentImageRepository="$AGENT_REF" \

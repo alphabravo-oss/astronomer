@@ -72,20 +72,13 @@ dev_images="$(extract_images -f "$CHART_DIR/values.yaml")"
 
 # Production-like optional components. These stay off in values.yaml so a
 # laptop install doesn't pull them, but values-production.yaml (or an
-# operator --set) turns them on. Use dummy S3/key-wrap/logging values so
-# production preflight doesn't refuse the render; we only care about the
-# image refs that appear when the CronJobs / DaemonSet / Dex Deployment
-# are active.
+# operator --set) turns them on. Backup/restore images stay out of this
+# public inventory: the default pgdump-s3 image is a private company
+# package and cannot be digest-resolved by the public release runner.
 prod_like_images="$(
     extract_images \
         -f "$CHART_DIR/values.yaml" \
         --set dex.enabled=true \
-        --set managementBackup.enabled=true \
-        --set managementBackup.s3.bucket=airgap-extract-dummy \
-        --set managementBackup.s3.credentialsSecretRef.name=airgap-extract-dummy \
-        --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=airgap-extract-dummy \
-        --set managementRestoreDrill.enabled=true \
-        --set managementRestoreDrill.decryptCheck.wrappingSecretRef.name=airgap-extract-dummy \
         --set managementLogging.enabled=true \
         --set managementLogging.endpoint=http://loki.observability.svc:3100
 )"
