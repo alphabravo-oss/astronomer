@@ -427,6 +427,7 @@ export interface OpenAPIComponents {
         };
     CharlieAdminConnection: {
           "connected": boolean;
+          "endpoint"?: string;
           "product_id"?: string;
           "product_slug"?: string;
           "deployment_id"?: string;
