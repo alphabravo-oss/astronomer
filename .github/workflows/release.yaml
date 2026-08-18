@@ -132,17 +132,28 @@ jobs:
         run: echo "build_date=$(git show -s --format=%cI '${{ github.sha }}')" >> "$GITHUB_OUTPUT"
 
       - name: Refuse to overwrite an existing exact tag
+        id: existing
         env:
           IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
         run: |
           image="${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}:${IMAGE_TAG}"
-          if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
-            echo "refusing to overwrite immutable image tag $image" >&2
-            exit 1
+          if ! docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+            echo "exists=false" >>"$GITHUB_OUTPUT"
+            exit 0
           fi
+          digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')"
+          case "$digest" in sha256:*) ;; *)
+            echo "refusing to overwrite immutable image tag $image: unreadable digest" >&2
+            exit 1
+            ;;
+          esac
+          echo "reusing already-published immutable image ${image}@${digest}"
+          echo "exists=true" >>"$GITHUB_OUTPUT"
+          echo "digest=${digest}" >>"$GITHUB_OUTPUT"
 
       - name: Build & push exact tag
         id: build
+        if: steps.existing.outputs.exists != 'true'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ${{ matrix.component.context }}
@@ -157,9 +168,26 @@ jobs:
           provenance: mode=max
           sbom: false
 
+      - name: Bind immutable image digest
+        id: image
+        env:
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+        run: |
+          if [ "${{ steps.existing.outputs.exists }}" = true ]; then
+            digest="${{ steps.existing.outputs.digest }}"
+          else
+            digest="${{ steps.build.outputs.digest }}"
+          fi
+          case "$digest" in sha256:*) ;; *)
+            echo "missing immutable digest for ${IMAGE_TAG}" >&2
+            exit 1
+            ;;
+          esac
+          echo "digest=${digest}" >>"$GITHUB_OUTPUT"
+
       - name: Verify multi-platform manifest
         env:
-          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}@${{ steps.image.outputs.digest }}
         run: |
           docker buildx imagetools inspect "$IMAGE_REF" --raw > manifest.json
           python3 - <<'PY'
@@ -185,7 +213,7 @@ jobs:
       - name: Sign image by digest
         env:
           COSIGN_EXPERIMENTAL: "1"
-        run: cosign sign --yes "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}"
+        run: cosign sign --yes "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.image.outputs.digest }}"
 
       - name: Install syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
@@ -196,26 +224,26 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: |
-          syft "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}" \
+          syft "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.image.outputs.digest }}" \
             -o spdx-json > "sbom-${{ matrix.component.name }}.spdx.json"
           python3 -c "import json; json.load(open('sbom-${{ matrix.component.name }}.spdx.json'))"
           cosign attest --yes \
             --predicate "sbom-${{ matrix.component.name }}.spdx.json" \
             --type spdxjson \
-            "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}"
+            "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.image.outputs.digest }}"
           jq -n \
             --arg source "https://github.com/${{ github.repository }}@${{ github.sha }}" \
             --arg workflow "https://github.com/${{ github.repository }}/.github/workflows/release.yaml@refs/tags/${{ needs.preflight.outputs.image-tag }}" \
             --arg dockerfile "${{ matrix.component.dockerfile }}" \
-            '{buildDefinition:{buildType:"https://astronomer.io/build-types/docker-v1",externalParameters:{source:$source,dockerfile:$dockerfile}},runDetails:{builder:{id:$workflow}}}' \
+            '{builder:{id:$workflow},buildType:"https://astronomer.io/build-types/docker-v1",invocation:{configSource:{uri:$source},parameters:{dockerfile:$dockerfile}}}' \
             > "provenance-${{ matrix.component.name }}.slsa.json"
           cosign attest --yes \
             --predicate "provenance-${{ matrix.component.name }}.slsa.json" \
             --type slsaprovenance \
-            "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}"
+            "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.image.outputs.digest }}"
           printf '%s@%s\n' \
             "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}" \
-            "${{ steps.build.outputs.digest }}" \
+            "${{ steps.image.outputs.digest }}" \
             > "${{ matrix.component.name }}.digest"
 
       - name: Upload SBOM
@@ -308,7 +336,7 @@ jobs:
               --arg source "https://github.com/${{ github.repository }}@${{ github.sha }}" \
               --arg workflow "https://github.com/${{ github.repository }}/.github/workflows/release.yaml@refs/tags/${IMAGE_TAG}" \
               --arg input "${file}" \
-              '{buildDefinition:{buildType:"https://astronomer.io/build-types/reproducible-oci-artifact-v1",externalParameters:{source:$source,input:$input}},runDetails:{builder:{id:$workflow}}}' \
+              '{builder:{id:$workflow},buildType:"https://astronomer.io/build-types/reproducible-oci-artifact-v1",invocation:{configSource:{uri:$source},parameters:{input:$input}}}' \
               >"release-delivery/provenance-${name}.slsa.json"
             cosign attest --yes --predicate "release-delivery/provenance-${name}.slsa.json" --type slsaprovenance "$reference"
             printf '%s\n' "$reference" >"release-delivery/${name}.digest"
@@ -428,7 +456,7 @@ jobs:
           jq -n \
             --arg source "https://github.com/${{ github.repository }}@${{ github.sha }}" \
             --arg workflow "https://github.com/${{ github.repository }}/.github/workflows/release.yaml@refs/tags/${IMAGE_TAG}" \
-            '{buildDefinition:{buildType:"https://astronomer.io/build-types/helm-chart-v1",externalParameters:{source:$source}},runDetails:{builder:{id:$workflow}}}' \
+            '{builder:{id:$workflow},buildType:"https://astronomer.io/build-types/helm-chart-v1",invocation:{configSource:{uri:$source}}}' \
             > provenance-chart.slsa.json
           cosign attest --yes --predicate provenance-chart.slsa.json --type slsaprovenance "$chart_ref"
           printf '%s\n' "$chart_ref" > chart.digest
