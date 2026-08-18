@@ -449,13 +449,15 @@ jobs:
           set -euo pipefail
           echo "$GHCR_TOKEN" | helm registry login ghcr.io -u "$GHCR_USERNAME" --password-stdin
           echo "$GHCR_TOKEN" | oras login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-          if helm show chart "oci://ghcr.io/alphabravo-oss/charts/astronomer" --version "$CHART_VERSION" >/dev/null 2>&1; then
-            echo "refusing to overwrite immutable chart version ${CHART_VERSION}" >&2
-            exit 1
-          fi
           helm package deploy/chart --version "$CHART_VERSION"
-          helm push "astronomer-${CHART_VERSION}.tgz" "oci://ghcr.io/alphabravo-oss/charts" | tee chart-push.log
-          chart_digest="$(awk '$1 == "Digest:" {digest=$2} END {print digest}' chart-push.log)"
+          chart_digest=""
+          if helm show chart "oci://ghcr.io/alphabravo-oss/charts/astronomer" --version "$CHART_VERSION" >/dev/null 2>&1; then
+            chart_digest="$(oras resolve "ghcr.io/alphabravo-oss/charts/astronomer:${CHART_VERSION}")"
+            echo "reusing already-published immutable chart astronomer:${CHART_VERSION}@${chart_digest}"
+          else
+            helm push "astronomer-${CHART_VERSION}.tgz" "oci://ghcr.io/alphabravo-oss/charts" 2>&1 | tee chart-push.log
+            chart_digest="$(awk '$1 == "Digest:" {digest=$2} END {print digest}' chart-push.log)"
+          fi
           [[ "$chart_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
           chart_ref="ghcr.io/alphabravo-oss/charts/astronomer@${chart_digest}"
           cosign sign --yes "$chart_ref"
