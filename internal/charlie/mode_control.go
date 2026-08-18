@@ -184,9 +184,13 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 	// the runtime owner before any remote call so a disable cannot remain live
 	// while signed confirmation is slow or unavailable.
 	notifyActivationChanged(ctx, c.bridge)
-	if c.rollout == nil || c.rollout.Reconcile(ctx, ModeCeilingTarget{ConnectionID: current.ConnectionID, ExpectedRequested: desired, ExpectedRevision: requested.Revision, Desired: desired}) != nil {
+	if c.rollout == nil {
 		logModeTransitionFailure(ctx, "mode.ceiling_rollout_unavailable")
 		return requested, fmt.Errorf("Charlie mode-ceiling rollout was not verified")
+	}
+	if err := c.rollout.Reconcile(ctx, ModeCeilingTarget{ConnectionID: current.ConnectionID, ExpectedRequested: desired, ExpectedRevision: requested.Revision, Desired: desired}); err != nil {
+		logModeTransitionFailure(ctx, "mode.ceiling_rollout_unavailable")
+		return requested, fmt.Errorf("Charlie mode-ceiling rollout was not verified: %w", err)
 	}
 	latest, loadErr := c.store.LoadModeState(ctx)
 	if loadErr != nil || latest.ConnectionID != current.ConnectionID || latest.Requested != desired || latest.Revision != requested.Revision || latest.EmergencyDisabled {
@@ -205,22 +209,22 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 	}
 	if !remote.Active {
 		logModeTransitionFailure(ctx, "mode.remote_inactive")
-		return requested, fmt.Errorf("Charlie mode readback did not confirm the request")
+		return requested, fmt.Errorf("Charlie mode readback did not confirm the request: product is not enabled")
 	}
 	if remote.Verified != desired {
 		logModeTransitionFailure(ctx, "mode.remote_mode_mismatch")
-		return requested, fmt.Errorf("Charlie mode readback did not confirm the request")
+		return requested, fmt.Errorf("Charlie mode readback did not confirm the request: central mode is %s", remote.Verified)
 	}
 	// The product-local CAS and Charlie can advance to the same revision for a
 	// single transition. Equality is therefore an authoritative confirmation,
 	// while any lower revision is stale and must remain fail-closed.
 	if remote.Revision < requested.Revision {
 		logModeTransitionFailure(ctx, "mode.remote_revision_stale")
-		return requested, fmt.Errorf("Charlie mode readback did not confirm the request")
+		return requested, fmt.Errorf("Charlie mode readback did not confirm the request: central revision %d is behind %d", remote.Revision, requested.Revision)
 	}
 	if remote.DisclosureDigest == "" {
 		logModeTransitionFailure(ctx, "mode.remote_disclosure_missing")
-		return requested, fmt.Errorf("Charlie mode readback did not confirm the request")
+		return requested, fmt.Errorf("Charlie mode readback did not confirm the request: disclosure digest is empty")
 	}
 	verified, err := c.store.SetVerifiedMode(ctx, current.ConnectionID, remote.Verified, requested.Revision, remote.Revision, remote.DisclosureDigest)
 	if err != nil {

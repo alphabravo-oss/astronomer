@@ -43,14 +43,19 @@ components:
     CharlieOnboardingRequest:
       type: object
       additionalProperties: false
-      required:
-        - package
-        - signing_public_key
-        - confirmed_signing_key_id
-        - confirmed_signing_fingerprint
-        - expected_deployment_id
-        - expected_route_id
+      description: |
+        Prefer Charlie endpoint plus a one-time connect token issued by Charlie
+        Admin. The legacy package fields remain for air-gapped file import.
       properties:
+        endpoint:
+          type: string
+          format: uri
+          writeOnly: true
+          description: Charlie central HTTPS origin, matching the issued connect token.
+        connect_token:
+          type: string
+          writeOnly: true
+          description: One-time charlie.connect.v1 token issued by Charlie Admin.
         package:
           type: object
           writeOnly: true
@@ -371,6 +376,7 @@ components:
       required: [connected, disclosure_acknowledged]
       properties:
         connected: {type: boolean}
+        endpoint: {type: string, format: uri}
         product_id: {type: string}
         product_slug: {type: string}
         deployment_id: {type: string}
@@ -19301,9 +19307,9 @@ paths:
       operationId: adminCharlieOnboardingValidate
       summary: Verify a signed Charlie onboarding package locally
       description: |
-        Validates the pinned schema, expiry, product and route tuple, central
-        CA, artifact digests, credential purposes, and operator-confirmed
-        Ed25519 signature without contacting Charlie central.
+        Prefer a Charlie endpoint plus one-time connect token. Validates the
+        pinned schema, expiry, endpoint binding, central CA, artifact digests,
+        and Ed25519 signature without contacting Charlie central.
       tags: [platform-admin-settings]
       security:
         - bearerJWT: []
@@ -19366,6 +19372,26 @@ paths:
           description: Onboarding request exceeds 256 KiB.
         '415':
           description: Content-Type is not application/json.
+  /api/v1/charlie/activation/:
+    get:
+      operationId: charlieActivation
+      summary: Whether Charlie is connected and user-facing surfaces should activate
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      responses:
+        '200':
+          description: Dormant until a signed package has been consumed.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [activated]
+                properties:
+                  activated: {type: boolean}
+                  endpoint: {type: string, format: uri}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/admin/charlie/status/:
     get:
       operationId: adminCharlieStatus
@@ -19376,6 +19402,25 @@ paths:
         '200': {description: Connection, product-agent, and authoritative mode status., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminStatus'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/disconnect/:
+    post:
+      operationId: adminCharlieDisconnect
+      summary: Disconnect Charlie after typed confirmation
+      description: |
+        Deactivates the local Charlie connection after the operator types
+        DISCONNECT CHARLIE. Charlie surfaces hide, mode is disabled, and a new
+        signed onboarding package is required to reconnect. This is distinct
+        from emergency disable, which fails closed while keeping the connection.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionRequest'}}}}
+      responses:
+        '200': {description: Disconnected connection, product-agent, and mode status., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminStatus'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/admin/charlie/mode/:
     patch:

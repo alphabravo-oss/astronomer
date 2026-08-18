@@ -11,6 +11,10 @@ export interface CharlieOnboardingInput {
   expectedDeploymentId: string;
   expectedRouteId: string;
 }
+export interface CharlieConnectInput {
+  endpoint: string;
+  connectToken: string;
+}
 export interface CharlieOnboardingView {
   packageId: string;
   productId: string;
@@ -39,6 +43,7 @@ export interface CharlieOnboardingView {
 }
 export interface CharlieConnectionView {
   connected: boolean;
+  endpoint?: string;
   productId?: string;
   productSlug?: string;
   deploymentId?: string;
@@ -270,6 +275,12 @@ function onboardingWire(input: CharlieOnboardingInput) {
     expected_route_id: input.expectedRouteId,
   };
 }
+function connectWire(input: CharlieConnectInput) {
+  return {
+    endpoint: input.endpoint.trim(),
+    connect_token: input.connectToken.replace(/\s+/g, ""),
+  };
+}
 function payload<T>(data: unknown): T {
   const value = data as { data?: T };
   return (value?.data ?? data) as T;
@@ -293,9 +304,39 @@ export async function consumeCharlieOnboarding(
   );
   return payload(data);
 }
+export async function validateCharlieConnect(
+  input: CharlieConnectInput,
+): Promise<CharlieOnboardingView> {
+  const { data } = await api.post(
+    "/admin/charlie/onboarding/validate/",
+    connectWire(input),
+  );
+  return payload(data);
+}
+export async function consumeCharlieConnect(
+  input: CharlieConnectInput,
+): Promise<CharlieOnboardingView> {
+  const { data } = await api.post(
+    "/admin/charlie/onboarding/consume/",
+    connectWire(input),
+  );
+  return payload(data);
+}
 async function getCharlieAdminStatus(): Promise<CharlieAdminStatusView> {
   const { data } = await api.get("/admin/charlie/status/");
   return payload(data);
+}
+export async function getCharlieActivation(): Promise<{
+  activated: boolean;
+  endpoint?: string;
+}> {
+  const { data } = await api.get("/charlie/activation/");
+  const value = payload<{ activated?: boolean; endpoint?: string }>(data);
+  const endpoint = value.endpoint?.trim();
+  return {
+    activated: value.activated === true,
+    endpoint: endpoint || undefined,
+  };
 }
 export async function getCharlieConnection(): Promise<CharlieConnectionView> {
   return (await getCharlieAdminStatus()).connection;
@@ -326,17 +367,31 @@ export async function updateCharlieMode(
   mode: CharlieMode,
   revision: number,
 ): Promise<CharlieModeView> {
-  const { data } = await api.patch("/admin/charlie/mode/", { mode, revision });
+  const { data } = await api.patch(
+    "/admin/charlie/mode/",
+    { mode, revision },
+    { timeout: 180_000 },
+  );
   return payload(data);
+}
+export async function disconnectCharlie(): Promise<CharlieConnectionView> {
+  const { data } = await api.post("/admin/charlie/disconnect/", {
+    confirmation: "DISCONNECT CHARLIE",
+  });
+  return payload<CharlieAdminStatusView>(data).connection;
 }
 export async function emergencyDisableCharlie(
   revision: number,
 ): Promise<CharlieModeView> {
-  const { data } = await api.patch("/admin/charlie/mode/", {
-    mode: "disabled",
-    revision,
-    emergency_disable: true,
-  });
+  const { data } = await api.patch(
+    "/admin/charlie/mode/",
+    {
+      mode: "disabled",
+      revision,
+      emergency_disable: true,
+    },
+    { timeout: 180_000 },
+  );
   return payload(data);
 }
 export async function acknowledgeCharlieDisclosure(
@@ -358,11 +413,15 @@ export async function getCharlieAutomation(): Promise<CharlieAutomationView> {
     }
   >(data);
   if (value && !Array.isArray(value) && 'rules' in value && Array.isArray(value.rules)) {
-    return { ...value, actionPolicies: value.actionPolicies ?? [] };
+    return {
+      ...value,
+      actionPolicies: value.actionPolicies ?? [],
+      rules: value.rules.map(normalizeTriggerRule),
+    };
   }
   if (value && !Array.isArray(value) && 'items' in value && Array.isArray(value.items)) {
     return {
-      rules: value.items,
+      rules: value.items.map(normalizeTriggerRule),
       actionPolicies: [],
       defaultsRevision: value.defaultsRevision ?? 0,
       serviceIdentityEnabled: value.serviceIdentityEnabled ?? false,
@@ -447,6 +506,14 @@ export async function updateCharlieActionPolicy(
     }
     throw new Error("Astronomer could not confirm the action-policy update.");
   }
+}
+
+function normalizeTriggerRule(rule: CharlieTriggerRule): CharlieTriggerRule {
+  return {
+    ...rule,
+    severities: rule.severities ?? [],
+    scopes: rule.scopes ?? [],
+  };
 }
 
 function triggerRuleWire(rule: CharlieTriggerRule) {

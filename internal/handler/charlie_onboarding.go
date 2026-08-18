@@ -33,6 +33,8 @@ func NewCharlieOnboardingHandler(consumer CharlieOnboardingConsumer) *CharlieOnb
 
 // openapi:request CharlieOnboardingRequest
 type charlieOnboardingRequest struct {
+	Endpoint                    string          `json:"endpoint"`
+	ConnectToken                string          `json:"connect_token"`
 	Package                     json.RawMessage `json:"package"`
 	SigningPublicKey            string          `json:"signing_public_key"`
 	ConfirmedSigningKeyID       string          `json:"confirmed_signing_key_id"`
@@ -79,7 +81,7 @@ func (h *CharlieOnboardingHandler) validateRequest(w http.ResponseWriter, r *htt
 		RespondRequestError(w, r, http.StatusUnsupportedMediaType, apierror.InvalidRequest, "Content-Type must be application/json")
 		return charlie.ValidatedOnboarding{}, false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, charlie.MaxOnboardingPackageBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, charlie.MaxOnboardingPackageBytes*2)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	var request charlieOnboardingRequest
@@ -92,8 +94,7 @@ func (h *CharlieOnboardingHandler) validateRequest(w http.ResponseWriter, r *htt
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid onboarding request")
 		return charlie.ValidatedOnboarding{}, false
 	}
-	if err := ensureJSONEOF(decoder); err != nil || len(request.Package) == 0 ||
-		strings.TrimSpace(request.SigningPublicKey) == "" || strings.TrimSpace(request.ConfirmedSigningFingerprint) == "" {
+	if err := ensureJSONEOF(decoder); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid onboarding request")
 		return charlie.ValidatedOnboarding{}, false
 	}
@@ -101,12 +102,28 @@ func (h *CharlieOnboardingHandler) validateRequest(w http.ResponseWriter, r *htt
 	if h != nil && h.now != nil {
 		now = h.now().UTC()
 	}
-	validated, err := charlie.ValidateOnboardingPackage(request.Package, charlie.OnboardingConfirmation{
+	pkg := request.Package
+	confirmation := charlie.OnboardingConfirmation{
 		SigningPublicKeyBase64: request.SigningPublicKey, ConfirmedSigningKeyID: request.ConfirmedSigningKeyID,
 		ConfirmedSigningFingerprint: request.ConfirmedSigningFingerprint,
 		ExpectedDeploymentID:        request.ExpectedDeploymentID, ExpectedRouteID: request.ExpectedRouteID, Now: now,
 		ExpectedMCPURL: "https://astronomer-charlie-mcp.astronomer.svc:7444/mcp",
-	})
+	}
+	if strings.TrimSpace(request.ConnectToken) != "" || strings.TrimSpace(request.Endpoint) != "" {
+		decoded, parsed, err := charlie.ParseConnectToken(request.Endpoint, request.ConnectToken)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Charlie connect token verification failed")
+			return charlie.ValidatedOnboarding{}, false
+		}
+		pkg = decoded
+		parsed.Now = now
+		parsed.ExpectedMCPURL = confirmation.ExpectedMCPURL
+		confirmation = parsed
+	} else if len(request.Package) == 0 || strings.TrimSpace(request.SigningPublicKey) == "" || strings.TrimSpace(request.ConfirmedSigningFingerprint) == "" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid onboarding request")
+		return charlie.ValidatedOnboarding{}, false
+	}
+	validated, err := charlie.ValidateOnboardingPackage(pkg, confirmation)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Onboarding package verification failed")
 		return charlie.ValidatedOnboarding{}, false

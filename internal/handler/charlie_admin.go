@@ -15,6 +15,7 @@ import (
 
 type CharlieAdminBackend interface {
 	Status(context.Context) (charlie.AdminStatusView, error)
+	Disconnect(context.Context) (charlie.AdminStatusView, error)
 	UpdateMode(context.Context, charlie.Mode, int64, bool, uuid.UUID) (charlie.AdminModeView, error)
 	AcknowledgeDisclosure(context.Context, string) (charlie.AdminModeView, error)
 	Automation(context.Context) (charlie.AdminAutomationView, error)
@@ -84,6 +85,58 @@ func (h *CharlieAdminHandler) Status(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, r, err)
 		return
 	}
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) Activation(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.backend == nil {
+		RespondJSON(w, http.StatusOK, map[string]any{"activated": false})
+		return
+	}
+	if h.features != nil && !h.features.BoolValue(r.Context(), "feature.charlie", false) {
+		RespondJSON(w, http.StatusOK, map[string]any{"activated": false})
+		return
+	}
+	local, ok := h.backend.(charlieAdminLocalBackend)
+	if !ok {
+		RespondJSON(w, http.StatusOK, map[string]any{"activated": false})
+		return
+	}
+	view, err := local.LocalStatus(r.Context())
+	if err != nil {
+		RespondJSON(w, http.StatusOK, map[string]any{"activated": false})
+		return
+	}
+	body := map[string]any{"activated": view.Connection.Connected}
+	if endpoint := strings.TrimSpace(view.Connection.Endpoint); endpoint != "" {
+		body["endpoint"] = endpoint
+	}
+	RespondJSON(w, http.StatusOK, body)
+}
+
+const charlieDisconnectConfirmation = "DISCONNECT CHARLIE"
+
+func (h *CharlieAdminHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	var request charlieAdminActionRequest
+	if !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	if request.Confirmation != charlieDisconnectConfirmation {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Exact Charlie disconnect confirmation is required")
+		return
+	}
+	if !h.requireAuthorityAudit(w, r, "admin.charlie.disconnect", "charlie_connection", "current", nil) {
+		return
+	}
+	view, err := h.backend.Disconnect(r.Context())
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.disconnect", "charlie_connection", "current", nil)
 	RespondJSON(w, http.StatusOK, view)
 }
 
@@ -482,11 +535,22 @@ func (h *CharlieAdminHandler) RetryTriggerEvent(w http.ResponseWriter, r *http.R
 	RespondJSON(w, http.StatusAccepted, map[string]any{"event": view})
 }
 
+type charlieAdminAccessActor interface {
+	AccessForActor(context.Context, uuid.UUID) (charlie.AdminAccessView, error)
+}
+
 func (h *CharlieAdminHandler) Access(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.actor(w, r); !ok {
+	actor, ok := h.actor(w, r)
+	if !ok {
 		return
 	}
-	view, err := h.backend.Access(r.Context())
+	var view charlie.AdminAccessView
+	var err error
+	if actorBackend, ok := h.backend.(charlieAdminAccessActor); ok {
+		view, err = actorBackend.AccessForActor(r.Context(), mustUserID(actor))
+	} else {
+		view, err = h.backend.Access(r.Context())
+	}
 	if err != nil {
 		h.respondError(w, r, err)
 		return
@@ -562,10 +626,22 @@ func (h *CharlieAdminHandler) respondError(w http.ResponseWriter, r *http.Reques
 	case errors.Is(err, charlie.ErrAdminNotConfigured):
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Charlie is not configured")
 	case errors.Is(err, charlie.ErrAdminConflict):
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie administration prerequisites are incomplete or changed")
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, charlieConflictMessage(err))
 	default:
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie administration is unavailable")
 	}
+}
+
+func charlieConflictMessage(err error) string {
+	const fallback = "Charlie administration prerequisites are incomplete or changed"
+	if err == nil {
+		return fallback
+	}
+	prefix := charlie.ErrAdminConflict.Error() + ": "
+	if msg := strings.TrimSpace(strings.TrimPrefix(err.Error(), prefix)); msg != "" && msg != err.Error() {
+		return msg
+	}
+	return fallback
 }
 
 func (h *CharlieAdminHandler) requireAuthorityAudit(w http.ResponseWriter, r *http.Request, action, resourceType, resourceID string, fields map[string]any) bool {

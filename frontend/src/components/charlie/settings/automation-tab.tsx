@@ -298,7 +298,7 @@ export function AutomationTab() {
         <Section
           key={r.id || `new-${i}`}
           title={r.name || "New trigger rule"}
-          description={`${r.sourceType} · service identity ${r.serviceIdentity}`}
+          description={`${r.enabled ? "Enabled" : "Disabled"} · ${r.sourceType} · ${r.modeCeiling.replaceAll("_", " ")}`}
         >
           <label className="flex gap-2 text-sm">
             <input
@@ -308,7 +308,14 @@ export function AutomationTab() {
             />
             Enabled
           </label>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <details
+            className="rounded-lg border border-border bg-background p-3"
+            open={r.enabled || !r.id || draft.rules.length <= 2}
+          >
+            <summary className="cursor-pointer text-sm font-medium">
+              Edit trigger rule
+            </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Field
               label="Rule name"
               value={r.name}
@@ -321,7 +328,7 @@ export function AutomationTab() {
             />
             <Field
               label="Severities (comma separated)"
-              value={r.severities.join(", ")}
+              value={(r.severities ?? []).join(", ")}
               set={(v) =>
                 update(i, {
                   severities: v
@@ -399,7 +406,7 @@ export function AutomationTab() {
             />
             <Field
               label="Scopes (comma separated)"
-              value={r.scopes.join(", ")}
+              value={(r.scopes ?? []).join(", ")}
               set={(v) =>
                 update(i, {
                   scopes: v
@@ -410,6 +417,7 @@ export function AutomationTab() {
               }
             />
           </div>
+          </details>
           <div className="flex flex-wrap gap-4">
             <label className="flex gap-2 text-sm">
               <input

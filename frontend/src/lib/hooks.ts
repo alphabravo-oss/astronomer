@@ -19,6 +19,7 @@ import type {
 import type { AuditLogQueryParams, GeneralSettings } from './api';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import { liveFallback } from '@/lib/live/status-store';
+import { getCharlieActivation } from '@/lib/api/charlie-admin';
 
 // Query key factory lives in ./query-keys.ts (single source of truth).
 // Imported here and re-exported so existing `import { queryKeys } from '@/lib/hooks'`
@@ -32,6 +33,24 @@ export function useFeatureFlags() {
     queryFn: () => apiClient.getFeatureFlags(),
     staleTime: 30_000,
   });
+}
+
+export function useCharlieActivated() {
+  const flags = useFeatureFlags();
+  const enabled = flags.data?.["feature.charlie"] === true;
+  const activation = useQuery({
+    queryKey: queryKeys.charlie.activation,
+    queryFn: getCharlieActivation,
+    enabled,
+    retry: false,
+    staleTime: 15_000,
+  });
+  return {
+    featureEnabled: enabled,
+    activated: enabled && activation.data?.activated === true,
+    endpoint: activation.data?.endpoint,
+    isLoading: flags.isLoading || (enabled && activation.isLoading && !activation.data),
+  };
 }
 
 // ============================================================

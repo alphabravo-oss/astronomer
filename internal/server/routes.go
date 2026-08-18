@@ -372,6 +372,7 @@ func longRunningCharlieAdminMutation(method, path string) bool {
 	}
 	switch path {
 	case "/api/v1/admin/charlie/onboarding/consume",
+		"/api/v1/admin/charlie/disconnect",
 		"/api/v1/admin/charlie/mode":
 		return true
 	default:

@@ -72,6 +72,13 @@ func (m *ManagedBridge) SetAdminMode(ctx context.Context, desired Mode) (AdminBr
 		return AdminBridgeStatus{}, err
 	}
 	revision := string(status.IntegrationRevision)
+	current := adminBridgeStatus(status)
+	if modeAlreadyConfirmed(current, desired) {
+		if desired == ModeDisabled {
+			current.EffectiveMode = string(ModeDisabled)
+		}
+		return current, nil
+	}
 	if desired == ModeDisabled {
 		request := contract.ActivationRequest{ExpectedRevision: contract.OpaqueId(revision), ProductEnabled: false}
 		if err := bridge.runtime.DoJSON(ctx, http.MethodPut, "/activation", uuid.NewString(), request, &status); err != nil {
@@ -101,6 +108,14 @@ func (m *ManagedBridge) SetAdminMode(ctx context.Context, desired Mode) (AdminBr
 	return result, nil
 }
 
+func modeAlreadyConfirmed(status AdminBridgeStatus, desired Mode) bool {
+	if desired == ModeDisabled {
+		return !status.ProductEnabled
+	}
+	return Mode(status.CentralMode) == desired && Mode(status.ProductModeCeiling) == desired &&
+		status.ProductEnabled && status.EffectiveMode == string(desired)
+}
+
 func adminBridgeStatus(status contract.BridgeStatus) AdminBridgeStatus {
 	return AdminBridgeStatus{
 		CentralHealth: string(status.CentralHealth), LogicalAgentID: string(status.LogicalAgentId),
@@ -126,10 +141,6 @@ func NewManagedModeBridge(bridge *ManagedBridge) AgentModeBridge {
 }
 
 func (b *managedModeBridge) SetMode(ctx context.Context, mode Mode, revision int64) (ModeState, error) {
-	if current, currentErr := b.bridge.AdminStatus(ctx); currentErr == nil &&
-		Mode(current.ProductModeCeiling) == mode && (mode != ModeDisabled && current.ProductEnabled || mode == ModeDisabled && !current.ProductEnabled) {
-		return modeStateFromBridge(current, revision+1), nil
-	}
 	status, err := b.bridge.SetAdminMode(ctx, mode)
 	if err != nil {
 		return ModeState{}, err

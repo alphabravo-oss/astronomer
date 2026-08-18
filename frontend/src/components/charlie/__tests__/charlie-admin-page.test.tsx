@@ -7,9 +7,13 @@ import type { User } from "@/types";
 const api = vi.hoisted(() => ({
   acknowledgeCharlieDisclosure: vi.fn(),
   consumeCharlieOnboarding: vi.fn(),
+  consumeCharlieConnect: vi.fn(),
+  validateCharlieConnect: vi.fn(),
   deleteCharlieAutomationRule: vi.fn(),
+  disconnectCharlie: vi.fn(),
   emergencyDisableCharlie: vi.fn(),
   getCharlieAccess: vi.fn(),
+  getCharlieActivation: vi.fn(),
   getCharlieAgent: vi.fn(),
   getCharlieAlertPolicy: vi.fn(),
   getCharlieAutomation: vi.fn(),
@@ -65,6 +69,7 @@ vi.mock("@/lib/toast", () => ({ toastApiError: vi.fn(), toastSuccess: vi.fn() })
 vi.mock("@/lib/api/charlie-admin", () => api);
 
 import {
+  AccessTab,
   AgentTab,
   AlertsTab,
   AutomationTab,
@@ -119,6 +124,10 @@ beforeEach(() => {
   navigation.params = new URLSearchParams("tab=connection&context=cluster-a");
   feature.value = { data: { "feature.charlie": true }, isError: false, refetch: vi.fn() };
   auth.user = { id: "admin", isSuperuser: true } as User;
+  api.getCharlieActivation.mockResolvedValue({
+    activated: true,
+    endpoint: "https://charlie.example.test",
+  });
   api.getCharlieConnection.mockResolvedValue({
     connected: true,
     productId: "astronomer",
@@ -219,6 +228,7 @@ beforeEach(() => {
     availableProfiles: ["disabled", "product_namespace", "cluster_diagnostics"],
     scopeSummary: "Product-owned management resources plus bounded cluster diagnostics; downstream clusters excluded",
   });
+  api.disconnectCharlie.mockResolvedValue({ connected: false });
   api.validateCharlieOnboarding.mockResolvedValue(safeReview);
   api.updateCharlieActionPolicy.mockImplementation(async (policy) => ({
     capability: policy.capability,
@@ -256,7 +266,7 @@ describe("Charlie administration acceptance", () => {
     renderWithClient(<KubernetesTab />);
     expect(await screen.findByText("Kubernetes API visibility")).toBeInTheDocument();
     expect(screen.getByText(/Downstream clusters, Secret values, exec, attach/i)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Kubernetes visibility profile"), { target: { value: "product_namespace" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Product namespace" }));
     fireEvent.click(screen.getByRole("button", { name: "Save visibility policy" }));
     await waitFor(() => expect(api.updateCharlieKubernetesVisibility).toHaveBeenCalledWith({
       profile: "product_namespace", podLogs: false, revision: 4,
@@ -276,15 +286,33 @@ describe("Charlie administration acceptance", () => {
     );
   });
 
+  it("separates operator Charlie grants from the automation identity", async () => {
+    api.getCharlieAccess.mockResolvedValue({
+      effectivePermissions: [
+        { permission: "charlie:manage", scope: "global", source: "superuser" },
+      ],
+      automationGrants: [
+        { permission: "charlie:read", scope: "global", source: "global_role:Charlie Automation" },
+      ],
+    });
+    renderWithClient(<AccessTab />);
+    expect(await screen.findByText("Your Charlie permissions")).toBeInTheDocument();
+    expect(screen.getByText("Automation service identity")).toBeInTheDocument();
+    expect(screen.getByText("charlie:manage")).toBeInTheDocument();
+    expect(screen.getByText(/superuser/)).toBeInTheDocument();
+    expect(screen.getByText("charlie:read")).toBeInTheDocument();
+    expect(screen.queryByText("Effective user permissions")).toBeNull();
+  });
+
   it("covers disabled, loading, denied, and authorized feature/permission states", async () => {
     feature.value = { data: { "feature.charlie": false }, isError: false, refetch: vi.fn() };
     const disabled = renderWithClient(<CharlieAdminPage />);
     expect(screen.getByText("Charlie is disabled")).toBeInTheDocument();
-    expect(await screen.findByText("Current connection")).toBeInTheDocument();
+    expect(await screen.findByText("Charlie is connected")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Connection" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Diagnostics" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Agent" })).toBeNull();
-    expect(screen.queryByText("Connect or replace Charlie")).toBeNull();
+    expect(screen.queryByText("Connect Charlie")).toBeNull();
     expect(api.getCharlieAgent).not.toHaveBeenCalled();
     expect(api.getCharlieMode).not.toHaveBeenCalled();
     expect(api.getCharlieAutomation).not.toHaveBeenCalled();
@@ -324,13 +352,74 @@ describe("Charlie administration acceptance", () => {
     expect(screen.getByRole("tab", { name: "Agent" })).toHaveAttribute("tabindex", "-1");
   });
 
+  it("requires a typed disconnect confirmation before deactivating Charlie", async () => {
+    renderWithClient(<ConnectionTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
+    expect(screen.getByText("Disconnect Charlie")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Charlie navigation, findings, sessions, and the product agent stop/i),
+    ).toBeInTheDocument();
+    const dialogConfirm = screen.getAllByRole("button", { name: "Disconnect" }).at(-1);
+    expect(dialogConfirm).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText("DISCONNECT CHARLIE"), {
+      target: { value: "DISABLE CHARLIE" },
+    });
+    expect(dialogConfirm).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText("DISCONNECT CHARLIE"), {
+      target: { value: "DISCONNECT CHARLIE" },
+    });
+    expect(dialogConfirm).toBeEnabled();
+    fireEvent.click(dialogConfirm!);
+    await waitFor(() => expect(api.disconnectCharlie).toHaveBeenCalledTimes(1));
+  });
+
+  it("hides disconnect when Charlie is not connected", async () => {
+    api.getCharlieActivation.mockResolvedValue({ activated: false });
+    api.getCharlieConnection.mockResolvedValue({ connected: false });
+    renderWithClient(<ConnectionTab />);
+    expect(await screen.findByText("Connect Charlie")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
+  });
+
+  it("hides connect until the current Charlie connection is disconnected", async () => {
+    renderWithClient(<ConnectionTab />);
+    expect(await screen.findByText("Charlie is connected")).toBeInTheDocument();
+    expect(screen.getByText("https://charlie.example.test")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Connect token")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Validate connection" })).toBeNull();
+  });
+
+  it("connects Charlie with endpoint and connect token", async () => {
+    api.getCharlieActivation.mockResolvedValue({ activated: false });
+    api.validateCharlieConnect.mockResolvedValue(safeReview);
+    api.consumeCharlieConnect.mockResolvedValue({ ...safeReview, state: "consumed" });
+    renderWithClient(<ConnectionTab />);
+    fireEvent.change(await screen.findByLabelText("Charlie endpoint"), {
+      target: { value: "https://charlie.example.test" },
+    });
+    fireEvent.change(screen.getByLabelText("Connect token"), {
+      target: { value: "charlie.connect.v1.abc" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Validate connection" }));
+    await waitFor(() =>
+      expect(api.validateCharlieConnect).toHaveBeenCalledWith({
+        endpoint: "https://charlie.example.test",
+        connectToken: "charlie.connect.v1.abc",
+      }),
+    );
+    expect(await screen.findByText("Validated package")).toBeInTheDocument();
+  });
+
   it("renders only verified safe onboarding metadata and never package credentials", async () => {
+    api.getCharlieActivation.mockResolvedValue({ activated: false });
     const secret = "enrollment-secret-dom-canary";
     const artifactCredential = "artifact-secret-dom-canary";
     const signature = "signed-package-dom-canary";
     const certificatePrivateKey = "certificate-private-key-dom-canary";
     const runtimeToken = "runtime-token-dom-canary";
     const view = renderWithClient(<ConnectionTab />);
+    expect(await screen.findByText("Connect Charlie")).toBeInTheDocument();
     const file = {
       name: "charlie-onboarding.json",
       text: async () => JSON.stringify({
@@ -373,11 +462,7 @@ describe("Charlie administration acceptance", () => {
     renderWithClient(<AgentTab />);
     expect((await screen.findAllByText("instance-0")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("instance-1").length).toBeGreaterThan(0);
-    expect(screen.getByText("Lifecycle is managed by Flux delivery")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open Continuous Delivery" })).toHaveAttribute(
-      "href",
-      "/dashboard/delivery",
-    );
+    expect(screen.getByText(/installed from Charlie when you connect/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /install|upgrade|rollback|rotate|uninstall/i })).toBeNull();
   });
 
@@ -391,14 +476,70 @@ describe("Charlie administration acceptance", () => {
       replicas: [],
     });
     renderWithClient(<AgentTab />);
-    expect(await screen.findByText("Lifecycle is managed by Flux delivery")).toBeInTheDocument();
+    expect(await screen.findByText(/installed from Charlie when you connect/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /install|upgrade|rollback|rotate|uninstall/i })).toBeNull();
   });
 
   it("keeps Charlie-owned intelligence configuration out of Astronomer", async () => {
+    api.getCharlieActivation.mockResolvedValue({ activated: false });
     renderWithClient(<ConnectionTab />);
-    expect(await screen.findByText(/Model providers, LLM routing, RAG/i)).toBeInTheDocument();
-    expect(screen.getByText(/remain administered in the separate Charlie service/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Model providers, knowledge packs, and routes stay in Charlie/i)).toBeInTheDocument();
+    expect(screen.getByText(/not a durable Charlie API key/i)).toBeInTheDocument();
+  });
+
+  it("accepts a rediscovered catalog on Astronomer so mode can be raised", async () => {
+    const candidate = "a".repeat(64);
+    api.getCharlieMode.mockResolvedValue({
+      requested: "disabled",
+      authoritative: "disabled",
+      revision: 4,
+      emergencyDisabled: false,
+      disablePending: false,
+      effects: ["Configuration, diagnostics, and audit remain available"],
+      workloadCeiling: "disabled",
+      workloadCeilingReady: true,
+    });
+    api.getCharlieKubernetesVisibility.mockResolvedValue({
+      schema: "charlie.kubernetes-visibility/v1",
+      profile: "product_namespace",
+      revision: 4,
+      state: "enabled",
+      instanceId: "astronomer-management-plane",
+      namespaces: ["astronomer"],
+      productOwnedOnly: true,
+      clusterScoped: false,
+      podLogs: false,
+      downstreamTargets: false,
+      secretValues: false,
+      exec: false,
+      attach: false,
+      portForward: false,
+      apiProxy: false,
+      requiresRediscovery: false,
+      requiresCentralReview: true,
+      requiresProductAcknowledgement: false,
+      candidateDisclosureDigest: candidate,
+      availableProfiles: ["disabled", "product_namespace", "cluster_diagnostics"],
+      scopeSummary: "Product-owned resources in the Astronomer management namespace",
+    });
+    api.acknowledgeCharlieDisclosure.mockResolvedValue({
+      requested: "disabled",
+      authoritative: "disabled",
+      revision: 4,
+      emergencyDisabled: false,
+      disclosureDigest: candidate,
+      acknowledgedDisclosureDigest: candidate,
+      effects: [],
+      workloadCeiling: "disabled",
+      workloadCeilingReady: true,
+    });
+    renderWithClient(<ModeTab />);
+    expect(await screen.findByRole("button", { name: "Accept rediscovered catalog" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^read only/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Accept rediscovered catalog" }));
+    await waitFor(() =>
+      expect(api.acknowledgeCharlieDisclosure).toHaveBeenCalledWith(candidate),
+    );
   });
 
   it("explains every authority mode and blocks elevation until disclosure acknowledgement", async () => {
@@ -411,7 +552,8 @@ describe("Charlie administration acceptance", () => {
     expect(screen.getAllByText("Approval required").length).toBeGreaterThan(1);
     expect(screen.queryByText("auto", { exact: true })).toBeNull();
     expect(screen.getByRole("button", { name: "Emergency Disable" })).toBeEnabled();
-    expect(screen.getByText(/Review and acknowledge/)).toHaveAttribute("role", "status");
+    expect(screen.getByText(/Accept the rediscovered catalog/)).toHaveAttribute("role", "status");
+    expect(screen.getByRole("button", { name: "Accept rediscovered catalog" })).toBeEnabled();
   });
 
   it("uses product mode labels while sending stable wire values", async () => {
@@ -458,6 +600,32 @@ describe("Charlie administration acceptance", () => {
       "ready",
     );
     expect(screen.getByText(/Mode ready for work/i)).toBeInTheDocument();
+  });
+
+  it("does not call a pending Charlie confirmation an unverified agent ceiling", async () => {
+    api.getCharlieMode.mockResolvedValue({
+      requested: "read_only",
+      authoritative: "disabled",
+      revision: 4,
+      emergencyDisabled: false,
+      disablePending: false,
+      disclosureDigest: digest("d"),
+      acknowledgedDisclosureDigest: digest("d"),
+      effects: ["Fail closed"],
+      autoReadiness: { ready: false, blockers: [] },
+      workloadCeiling: "read_only",
+      workloadCeilingReady: true,
+    });
+    renderWithClient(<ModeTab />);
+    expect(
+      await screen.findByText("Mode change is not yet confirmed"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Both product-agent replicas already report Read only/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Agent ceiling not fully verified")).toBeNull();
   });
 
   it("shows validating state until agent ceiling is ready after mode change", async () => {
@@ -508,6 +676,36 @@ describe("Charlie administration acceptance", () => {
       "verifying",
     );
     expect(screen.getByText(/Validating product agents/i)).toBeInTheDocument();
+  });
+
+  it("renders trigger rules when Charlie returns null scopes", async () => {
+    api.getCharlieAutomation.mockResolvedValue({
+      defaultsRevision: 3,
+      serviceIdentityEnabled: true,
+      actionPolicies: [],
+      rules: [{
+        id: "rule-null-scopes",
+        name: "agent_disconnected",
+        enabled: false,
+        sourceType: "agent_disconnected",
+        severities: ["warning"],
+        scopes: null as unknown as string[],
+        cooldownSeconds: 1800,
+        gracePeriodSeconds: 300,
+        flapWindowSeconds: 300,
+        flapCount: 1,
+        fleetThresholdPercent: 0,
+        suppressed: false,
+        maximumAttempts: 8,
+        deadLetterEnabled: true,
+        serviceIdentity: "system:charlie-automation",
+        modeCeiling: "read_only",
+      }],
+    });
+    renderWithClient(<AutomationTab />);
+    expect(await screen.findByLabelText("Rule name")).toHaveValue("agent_disconnected");
+    expect(screen.getByLabelText("Scopes (comma separated)")).toHaveValue("");
+    expect(screen.queryByText(/Automation configuration unavailable/i)).toBeNull();
   });
 
   it("exposes all automation policy fields and validates new rules before save", async () => {

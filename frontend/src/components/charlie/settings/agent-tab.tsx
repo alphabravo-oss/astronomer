@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { GitBranch, Loader2 } from "lucide-react";
-import { Link } from "@/lib/link";
+import { Loader2 } from "lucide-react";
 import { StatePanel } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -14,7 +13,7 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { formatRelativeTime } from "@/lib/utils";
 import { getCharlieAgent } from "@/lib/api/charlie-admin";
-import { Meta, Section, Unavailable, button } from "./shared";
+import { Meta, Section, Unavailable } from "./shared";
 
 export function AgentTab() {
   const q = useQuery({
@@ -34,19 +33,33 @@ export function AgentTab() {
   if (q.isError || !q.data)
     return <Unavailable name="Agent status" retry={() => void q.refetch()} />;
   const a = q.data;
+  const workloadReady =
+    a.desiredReplicas > 0 && a.readyReplicas >= a.desiredReplicas;
+  const authorityIdle =
+    a.applicationState === "inactive" || a.applicationState === "disabled";
   return (
     <Section
       title="Charlie product agent"
-      description="Read-only product-agent status reported by the management plane. Charlie central remains a separate service."
+      description="Replica readiness is the local Charlie agent StatefulSet. Leader and heartbeat fields appear after the agent enrolls with Charlie."
     >
       <div aria-live="polite">
         <StatusBadge
-          status={a.applicationState}
-          label={`Agent state: ${a.applicationState.replaceAll("_", " ")}`}
+          status={workloadReady ? "ready" : a.applicationState}
+          label={
+            workloadReady && authorityIdle
+              ? "Workload ready · Charlie disabled"
+              : `Agent state: ${a.applicationState.replaceAll("_", " ")}`
+          }
         />
       </div>
+      {workloadReady && authorityIdle && (
+        <p className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+          Both replicas are running. Charlie authority is disabled, so the agent
+          stays idle until you raise mode.
+        </p>
+      )}
       <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Meta label="Delivery assignment" value={a.applicationState} />
+        <Meta label="Workload state" value={a.applicationState} />
         <Meta
           label="Replicas"
           value={`${a.readyReplicas}/${a.desiredReplicas} ready`}
@@ -110,16 +123,10 @@ export function AgentTab() {
           </TableBody>
         </Table>
       </div>
-      <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm">
-        <p className="font-medium text-foreground">Lifecycle is managed by Flux delivery</p>
-        <p className="mt-1 text-muted-foreground">
-          Install, upgrade, rollback, credential rotation, and removal are declared through
-          versioned delivery bundles and targets, with preview and rollout controls.
-        </p>
-        <Link href="/dashboard/delivery" className={`${button} mt-3 inline-flex`}>
-          <GitBranch className="h-4 w-4" />
-          Open Continuous Delivery
-        </Link>
+      <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+        The generic Charlie agent is installed from Charlie when you connect, and
+        removed when you disconnect. Charlie publishes a new digest and Astronomer
+        upgrades the same StatefulSet.
       </div>
     </Section>
   );

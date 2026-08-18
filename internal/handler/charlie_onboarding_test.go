@@ -19,13 +19,28 @@ func TestCharlieOnboardingHandlerEnforcesMediaTypeAndSize(t *testing.T) {
 		t.Fatalf("missing Content-Type status=%d", missingTypeResponse.Code)
 	}
 
-	oversized := `{"package":"` + strings.Repeat("x", charlie.MaxOnboardingPackageBytes) + `"}`
+	oversized := `{"package":"` + strings.Repeat("x", charlie.MaxOnboardingPackageBytes*2) + `"}`
 	oversizedRequest := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(oversized))
 	oversizedRequest.Header.Set("Content-Type", "application/json")
 	oversizedResponse := httptest.NewRecorder()
 	handler.Validate(oversizedResponse, oversizedRequest)
 	if oversizedResponse.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized request status=%d body=%s", oversizedResponse.Code, oversizedResponse.Body.String())
+	}
+}
+
+func TestCharlieOnboardingHandlerAcceptsConnectTokenWithoutEchoingIt(t *testing.T) {
+	handler := NewCharlieOnboardingHandler(nil)
+	token := "charlie.connect.v1." + strings.Repeat("A", 80)
+	request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"endpoint":"https://charlie.example.test","connect_token":"`+token+`"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.Validate(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("invalid token status=%d body=%s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), token) {
+		t.Fatalf("error response echoed connect token: %s", response.Body.String())
 	}
 }
 

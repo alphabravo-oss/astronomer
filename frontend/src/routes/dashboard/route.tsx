@@ -15,7 +15,7 @@ import { CharlieShell } from '@/components/charlie/charlie-shell';
 import { ExtensionProvider } from '@/components/extensions/ExtensionProvider';
 import { EmptyState, StatePanel } from '@/components/ui/empty-state';
 import { useAuthStore } from '@/lib/store';
-import { useCurrentUser, useFeatureFlags } from '@/lib/hooks';
+import { useCharlieActivated, useCurrentUser, useFeatureFlags } from '@/lib/hooks';
 import type { FeatureFlags, FeatureFlagKey } from '@/lib/api';
 import { useLiveClusterMetricsMerger } from '@/lib/live/cluster-merger';
 import { useLiveEvents } from '@/lib/live/hooks';
@@ -112,10 +112,15 @@ function DashboardLayout() {
   const updateUser = useAuthStore((s) => s.updateUser);
   const { data: currentUser, isFetched: currentUserFetched } = useCurrentUser();
   const { data: featureFlags } = useFeatureFlags();
+  const { activated: charlieActivated } = useCharlieActivated();
   const mustChangePassword = currentUser
     ? currentUser.mustChangePassword || currentUser.must_change_password
     : false;
   const disabledFeature = disabledFeatureForPath(pathname, featureFlags);
+  const charlieNotActivated =
+    (pathname === '/dashboard/charlie' || pathname.startsWith('/dashboard/charlie/')) &&
+    featureFlags?.['feature.charlie'] === true &&
+    !charlieActivated;
   // UX-05: surface browser offline so hung tables/mutations are explained.
   const [online, setOnline] = useState(true);
   useEffect(() => {
@@ -171,7 +176,13 @@ function DashboardLayout() {
           )}
           <main className="flex-1 min-h-0 overflow-y-auto">
             <div className="p-6 max-w-[1600px] mx-auto animate-fade-in">
-              {disabledFeature ? <FeatureDisabledState /> : <Outlet />}
+              {disabledFeature ? (
+                <FeatureDisabledState />
+              ) : charlieNotActivated ? (
+                <CharlieDormantState />
+              ) : (
+                <Outlet />
+              )}
             </div>
           </main>
         </div>
@@ -189,7 +200,7 @@ function DashboardLayout() {
     // ExtensionProvider wraps the whole dashboard shell once: it fetches
     // GET /extensions/mounts/ a single time and exposes the indexed registry.
     <ExtensionProvider>
-      {featureFlags?.['feature.charlie'] === true
+      {featureFlags?.['feature.charlie'] === true && charlieActivated
         ? <CharlieShell>{appShell}</CharlieShell>
         : appShell}
     </ExtensionProvider>
@@ -211,6 +222,16 @@ function disabledFeatureForPath(pathname: string, flags?: FeatureFlags): Feature
   const match = featurePathPrefixes.find(({ prefix }) => pathname === prefix || pathname.startsWith(`${prefix}/`));
   if (!match) return null;
   return flags[match.flag] === false ? match.flag : null;
+}
+
+function CharlieDormantState() {
+  return (
+    <EmptyState
+      icon={Lock}
+      title="Charlie is not connected"
+      description="Charlie ships dormant in Astronomer. An administrator can connect it under Settings → Charlie. The Charlie agent is pulled only after that connection is accepted."
+    />
+  );
 }
 
 function FeatureDisabledState() {

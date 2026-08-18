@@ -53,6 +53,12 @@ export function DiagnosticsTab() {
       title="Independent diagnostic checks"
       description="Charlie health never participates in Astronomer's core readiness. Failures degrade only Charlie features."
     >
+      {q.data?.overall === "inactive" && (
+        <p className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+          Charlie authority is disabled, so connectivity checks are skipped. Raise
+          mode on the Mode tab to probe the agent and Charlie.
+        </p>
+      )}
       <div className="flex items-center justify-between">
         <StatusBadge
           status={q.data?.overall ?? "unknown"}

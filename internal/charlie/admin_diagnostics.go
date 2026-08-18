@@ -148,7 +148,7 @@ func diagnosticNextAction(id, state string) string {
 		return "No operator action is required."
 	}
 	if state == "inactive" {
-		return "Enable Charlie explicitly before running connectivity diagnostics; no request is sent while disabled."
+		return "Charlie authority is disabled. Raise mode above Disabled to run connectivity checks; no agent or central request is sent while fail-closed."
 	}
 	actions := map[string]string{
 		"local_config":        "Verify the signed onboarding package and local Charlie configuration, then rerun diagnostics.",

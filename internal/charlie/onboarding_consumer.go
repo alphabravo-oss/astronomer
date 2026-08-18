@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -75,13 +76,15 @@ func (s PGOnboardingTransactionStore) WithinOnboardingTransaction(ctx context.Co
 }
 
 type OnboardingConsumer struct {
-	Store           OnboardingTransactionStore
-	Secrets         AgentSecretWriter
-	Encryptor       *auth.Encryptor
-	BridgeServerDNS string
-	MCPServerDNS    string
-	Now             func() time.Time
-	Auditor         AuthorityMutationAuditor
+	Store            OnboardingTransactionStore
+	Secrets          AgentSecretWriter
+	Encryptor        *auth.Encryptor
+	BridgeServerDNS  string
+	MCPServerDNS     string
+	ProductNamespace string
+	Runtime          AgentInstaller
+	Now              func() time.Time
+	Auditor          AuthorityMutationAuditor
 }
 
 func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnboarding, actorID uuid.UUID) (OnboardingStatus, error) {
@@ -97,7 +100,14 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 	}); err != nil {
 		return OnboardingStatus{}, failOnboarding("onboarding.audit_unavailable", fmt.Errorf("Charlie onboarding audit is unavailable"))
 	}
+	if c.Runtime != nil {
+		if err := c.Runtime.Prepare(ctx); err != nil {
+			return OnboardingStatus{}, failOnboarding("onboarding.namespace_failed", err)
+		}
+	}
 	var result OnboardingStatus
+	var generated GeneratedLocalTrust
+	var installationID string
 	var rollbacks []func(context.Context) error
 	err := c.Store.WithinOnboardingTransaction(ctx, func(tx OnboardingTransaction) error {
 		existing, err := tx.GetCharlieConnectionByPackageID(ctx, validated.PackageID)
@@ -119,6 +129,8 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 		if err != nil {
 			return failOnboarding("onboarding.local_trust_failed", err)
 		}
+		generated = trust
+		installationID = platform.InstanceID.String()
 		// Flux owns the workload and therefore needs one stable Secret reference.
 		// Replacement onboarding packages rotate this exact Secret atomically;
 		// package identity remains durable in the connection row and payload.
@@ -203,6 +215,29 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 			}
 		}
 		return OnboardingStatus{}, err
+	}
+	if c.Runtime != nil {
+		productNamespace := strings.TrimSpace(c.ProductNamespace)
+		if productNamespace == "" {
+			productNamespace = "astronomer"
+		}
+		if installationID == "" {
+			if platErr := c.Store.WithinOnboardingTransaction(ctx, func(tx OnboardingTransaction) error {
+				platform, err := tx.GetPlatformConfig(ctx)
+				if err != nil {
+					return err
+				}
+				installationID = platform.InstanceID.String()
+				return nil
+			}); platErr != nil {
+				return OnboardingStatus{}, failOnboarding("onboarding.installation_identity_failed", platErr)
+			}
+		}
+		if actErr := c.Runtime.Activate(ctx, ActivationRequest{
+			Validated: validated, Trust: generated, InstallationID: installationID, ProductNamespace: productNamespace,
+		}); actErr != nil {
+			return OnboardingStatus{}, failOnboarding("onboarding.runtime_activation_failed", actErr)
+		}
 	}
 	return result, nil
 }

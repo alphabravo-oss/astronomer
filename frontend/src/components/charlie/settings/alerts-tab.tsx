@@ -9,6 +9,7 @@ import {
   updateCharlieAlertPolicy,
   type CharlieAlertPolicy,
 } from "@/lib/api/charlie-admin";
+import { Link } from "@/lib/link";
 import { Field, NumberField, Section, Unavailable, field, primary } from "./shared";
 
 export function AlertsTab() {
@@ -153,7 +154,11 @@ export function AlertsTab() {
         ) : (
           <p className="text-sm text-muted-foreground">
             No supported notification channels are enabled. Configure Slack,
-            PagerDuty, Teams, or a webhook under Alerting first.
+            PagerDuty, Teams, or a webhook under{" "}
+            <Link className="underline underline-offset-2" href="/dashboard/alerting">
+              Alerting
+            </Link>{" "}
+            first. Findings still appear in Charlie regardless.
           </p>
         )}
         <div className="flex items-center justify-between gap-3">

@@ -162,6 +162,17 @@ func (w *fakeAgentSecretWriter) WriteAgentSecret(_ context.Context, bundle Agent
 	}}, nil
 }
 
+type fakeAgentInstaller struct {
+	prepares  int
+	activates int
+}
+
+func (f *fakeAgentInstaller) Prepare(context.Context) error { f.prepares++; return nil }
+func (f *fakeAgentInstaller) Activate(context.Context, ActivationRequest) error {
+	f.activates++
+	return nil
+}
+
 func TestOnboardingConsumerRollsBackRetriesAndReplaysIdempotently(t *testing.T) {
 	fixture := newOnboardingFixture(t)
 	validated, err := ValidateOnboardingPackage(fixture.signed(t), fixture.confirmation)
@@ -173,10 +184,12 @@ func TestOnboardingConsumerRollsBackRetriesAndReplaysIdempotently(t *testing.T) 
 	store := &fakeOnboardingStore{installationID: uuid.MustParse("3c608d44-848c-45d6-bd86-246be0b880af"), failAdvance: 2}
 	events := []string{}
 	secrets := &fakeAgentSecretWriter{events: &events}
+	runtime := &fakeAgentInstaller{}
 	consumer := &OnboardingConsumer{
 		Store: store, Secrets: secrets, Encryptor: encryptor,
 		BridgeServerDNS: "charlie-agent-bridge.astronomer-charlie.svc",
 		MCPServerDNS:    "astronomer-charlie-mcp.astronomer.svc",
+		Runtime:         runtime,
 		Now:             func() time.Time { return fixture.now },
 		Auditor:         &authorityAuditFake{},
 	}
@@ -198,6 +211,9 @@ func TestOnboardingConsumerRollsBackRetriesAndReplaysIdempotently(t *testing.T) 
 	}
 	if status.State != "active" || status.Idempotent || store.connection == nil || store.connection.OnboardingState != "active" || !store.connection.Active || store.connection.HealthState != "installing" {
 		t.Fatalf("retry did not consume package: status=%+v connection=%+v", status, store.connection)
+	}
+	if runtime.prepares < 1 || runtime.activates != 1 {
+		t.Fatalf("Charlie agent activation was not triggered by consume: prepares=%d activates=%d", runtime.prepares, runtime.activates)
 	}
 	if len(store.created) != 1 || store.created[0].ReplicaCount != int32(validated.Package.ReplicaCount) {
 		t.Fatalf("signed replica count was not persisted: creates=%+v", store.created)

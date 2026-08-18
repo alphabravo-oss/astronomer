@@ -2,6 +2,23 @@ package charlie
 
 import "testing"
 
+func TestModeAlreadyConfirmedDoesNotNeedAnotherCentralWrite(t *testing.T) {
+	ready := AdminBridgeStatus{
+		CentralMode: "read_only", ProductModeCeiling: "read_only", EffectiveMode: "read_only",
+		ProductEnabled: true, DeploymentEnabled: true,
+	}
+	if !modeAlreadyConfirmed(ready, ModeReadOnly) {
+		t.Fatal("confirmed read_only ceiling was treated as a mode write")
+	}
+	if modeAlreadyConfirmed(ready, ModeApproval) {
+		t.Fatal("raise to approval must still write central mode")
+	}
+	disabled := AdminBridgeStatus{CentralMode: "read_only", ProductModeCeiling: "read_only", ProductEnabled: false}
+	if !modeAlreadyConfirmed(disabled, ModeDisabled) {
+		t.Fatal("already-disabled product enablement was treated as an activation write")
+	}
+}
+
 func TestModeStateUsesCharliesSignedIntegrationRevision(t *testing.T) {
 	state := modeStateFromBridge(AdminBridgeStatus{
 		CentralMode: "read_only", ProductModeCeiling: "read_only", EffectiveMode: "read_only",

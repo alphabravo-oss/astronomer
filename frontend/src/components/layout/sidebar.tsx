@@ -78,6 +78,7 @@ import {
   usePersistentVolumeClaims,
   useStorageClasses,
   useGenericResources,
+  useCharlieActivated,
   useFeatureFlags,
 } from '@/lib/hooks';
 
@@ -98,6 +99,7 @@ type NavItem = {
   };
   superuserOnly?: boolean;
   featureFlag?: FeatureFlagKey;
+  requiresCharlieActivated?: boolean;
 };
 
 type NavGroup = {
@@ -113,7 +115,7 @@ const globalNavGroups: NavGroup[] = [
     defaultOpen: true,
     items: [
       { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
-      { label: 'Charlie', href: '/dashboard/charlie', icon: Sparkles, permission: { resource: 'charlie', verb: 'read' }, featureFlag: 'feature.charlie' },
+      { label: 'Charlie', href: '/dashboard/charlie', icon: Sparkles, permission: { resource: 'charlie', verb: 'read' }, featureFlag: 'feature.charlie', requiresCharlieActivated: true },
       { label: 'Clusters', href: '/dashboard/clusters', icon: Server, permission: { resource: 'clusters', verb: 'list' } },
       { label: 'Cluster Agents', href: '/dashboard/agents', icon: Activity, permission: { resource: 'cluster_agents', verb: 'read' } },
       { label: 'Onboarding Bundles', href: '/dashboard/cluster-templates', icon: Layers, permission: { resource: 'cluster_templates', verb: 'list' } },
@@ -617,6 +619,7 @@ export function Sidebar() {
   const { sidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
   const user = useAuthStore((s) => s.user);
   const { data: featureFlags } = useFeatureFlags();
+  const { activated: charlieActivated } = useCharlieActivated();
 
   // Detect cluster context from URL. Static sub-routes (new, register) are NOT
   // cluster ids — treating them as such fires cluster-detail queries with a
@@ -639,8 +642,9 @@ export function Sidebar() {
         : globalNavGroups,
       user,
       featureFlags,
+      charlieActivated,
     ),
-    [cluster?.isLocal, clusterId, featureFlags, isClusterContext, user],
+    [charlieActivated, cluster?.isLocal, clusterId, featureFlags, isClusterContext, user],
   );
 
   // Multiple groups may stay open at once (the cluster nav has 7 groups; a
@@ -821,13 +825,15 @@ export function Sidebar() {
 function filterNavGroups(
   groups: NavGroup[],
   user: ReturnType<typeof useAuthStore.getState>['user'],
-  featureFlags?: FeatureFlags
+  featureFlags?: FeatureFlags,
+  charlieActivated = false,
 ): NavGroup[] {
   return groups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
         if (item.featureFlag && featureFlags?.[item.featureFlag] === false) return false;
+        if (item.requiresCharlieActivated && !charlieActivated) return false;
         if (item.superuserOnly) return isSuperuser(user);
         if (!item.permission) return true;
         return can(user, item.permission.resource, item.permission.verb);

@@ -35,6 +35,7 @@ func registerCharlieRoutes(r chi.Router, deps RouterDependencies, rateLimit func
 			// It still requires admin scope,
 			// charlie:manage, and CSRF protection.
 			r.With(admin, manage).Get("/admin/charlie/status/", deps.CharlieAdmin.Status)
+			r.With(admin, manage).Post("/admin/charlie/disconnect/", deps.CharlieAdmin.Disconnect)
 			r.With(admin, manage).Patch("/admin/charlie/mode/", deps.CharlieAdmin.Mode)
 			r.With(gate, admin, manage).Get("/admin/charlie/kubernetes-visibility/", deps.CharlieAdmin.KubernetesVisibility)
 			r.With(gate, admin, manage).Put("/admin/charlie/kubernetes-visibility/", deps.CharlieAdmin.UpdateKubernetesVisibility)
@@ -57,6 +58,9 @@ func registerCharlieRoutes(r chi.Router, deps RouterDependencies, rateLimit func
 		}
 
 		read := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCharlie, rbac.VerbRead)
+		if deps.CharlieAdmin != nil {
+			r.With(gate, read).Get("/charlie/activation/", deps.CharlieAdmin.Activation)
+		}
 		create := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCharlie, rbac.VerbCreate)
 		approve := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCharlie, rbac.VerbApprove)
 		if deps.CharlieSessions != nil {

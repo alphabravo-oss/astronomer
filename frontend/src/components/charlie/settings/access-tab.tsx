@@ -24,11 +24,11 @@ export function AccessTab() {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <GrantList
-        title="Effective user permissions"
+        title="Your Charlie permissions"
         items={q.data?.effectivePermissions ?? []}
       />
       <GrantList
-        title="Automation grants"
+        title="Automation service identity"
         items={q.data?.automationGrants ?? []}
       />
     </div>

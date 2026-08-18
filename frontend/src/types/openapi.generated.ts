@@ -672,12 +672,14 @@ export interface OpenAPIComponents {
           "acknowledge_disclosure_digest"?: string;
         };
     CharlieOnboardingRequest: {
-          "package": Record<string, unknown>;
-          "signing_public_key": string;
-          "confirmed_signing_key_id": string;
-          "confirmed_signing_fingerprint": string;
-          "expected_deployment_id": string;
-          "expected_route_id": string;
+          "endpoint"?: string;
+          "connect_token"?: string;
+          "package"?: Record<string, unknown>;
+          "signing_public_key"?: string;
+          "confirmed_signing_key_id"?: string;
+          "confirmed_signing_fingerprint"?: string;
+          "expected_deployment_id"?: string;
+          "expected_route_id"?: string;
         };
     CharlieOnboardingStatus: {
           "package_id": string;

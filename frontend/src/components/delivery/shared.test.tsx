@@ -1,6 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { deliveryPageRowCount, useDeliveryPageIndex } from "./shared";
+import {
+  deliveryPageRowCount,
+  deliveryProjectLabel,
+  useDeliveryPageIndex,
+} from "./shared";
 
 const nav = vi.hoisted(() => ({
   search: "",
@@ -53,6 +57,30 @@ describe("useDeliveryPageIndex", () => {
     expect(nav.replace).toHaveBeenCalledWith(
       "/dashboard/delivery/rollouts/rollout-1?project=project-1",
     );
+  });
+});
+
+describe("deliveryProjectLabel", () => {
+  it("uses the cluster name when the project is bound to a known cluster", () => {
+    expect(
+      deliveryProjectLabel(
+        {
+          name: "astronomer-system",
+          displayName: "Astronomer System",
+          clusterId: "cluster-a",
+        },
+        new Map([["cluster-a", "fleet-a"]]),
+      ),
+    ).toBe("fleet-a");
+  });
+
+  it("falls back to the project display name when the cluster is unknown", () => {
+    expect(
+      deliveryProjectLabel(
+        { name: "platform", displayName: "Platform", clusterId: "missing" },
+        new Map(),
+      ),
+    ).toBe("Platform");
   });
 });
 

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -50,6 +51,9 @@ type charlieAdminFake struct {
 	kubernetesVisibilityActor uuid.UUID
 	kubernetesVisibilityCalls int
 	kubernetesVisibilityErr   error
+	disconnectView            charlie.AdminStatusView
+	disconnectCalls           int
+	disconnectErr             error
 }
 
 func (f *charlieAdminFake) KubernetesVisibility(context.Context) (charlie.AdminKubernetesVisibilityView, error) {
@@ -114,6 +118,16 @@ func TestCharlieAdminKubernetesVisibilityRejectsMalformedAndConflictingUpdates(t
 	handler.UpdateKubernetesVisibility(conflict, authenticatedCharlieRequest(http.MethodPut, "/", `{"profile":"product_namespace","pod_logs":true,"revision":2}`, actor, "jwt"))
 	if conflict.Code != http.StatusConflict || fake.kubernetesVisibilityCalls != 1 {
 		t.Fatalf("Kubernetes visibility conflict=%d calls=%d body=%s", conflict.Code, fake.kubernetesVisibilityCalls, conflict.Body.String())
+	}
+}
+
+func TestCharlieConflictMessageSurfacesWrappedOperatorReason(t *testing.T) {
+	got := charlieConflictMessage(fmt.Errorf("%w: accept the rediscovered Kubernetes catalog in Astronomer before restoring Charlie authority", charlie.ErrAdminConflict))
+	if got != "accept the rediscovered Kubernetes catalog in Astronomer before restoring Charlie authority" {
+		t.Fatalf("conflict message = %q", got)
+	}
+	if charlieConflictMessage(charlie.ErrAdminConflict) != "Charlie administration prerequisites are incomplete or changed" {
+		t.Fatalf("bare conflict did not keep the fallback")
 	}
 }
 
@@ -233,6 +247,16 @@ func (f *charlieAdminFake) Status(context.Context) (charlie.AdminStatusView, err
 	f.statusCalls++
 	return f.status, nil
 }
+func (f *charlieAdminFake) Disconnect(context.Context) (charlie.AdminStatusView, error) {
+	f.disconnectCalls++
+	if f.disconnectErr != nil {
+		return charlie.AdminStatusView{}, f.disconnectErr
+	}
+	if f.disconnectView.Connection.Connected {
+		return f.disconnectView, nil
+	}
+	return charlie.AdminStatusView{Connection: charlie.AdminConnectionView{Connected: false}}, nil
+}
 func (f *charlieAdminFake) LocalStatus(context.Context) (charlie.AdminStatusView, error) {
 	f.localCalls++
 	return f.localStatus, nil
@@ -308,6 +332,27 @@ func TestCharlieAdminStatusReturnsOnlySafeMetadata(t *testing.T) {
 	}
 }
 
+func TestCharlieActivationUsesLocalConnectionAndReturnsEndpoint(t *testing.T) {
+	fake := &charlieAdminFake{
+		status: charlie.AdminStatusView{Connection: charlie.AdminConnectionView{Connected: false}},
+		localStatus: charlie.AdminStatusView{Connection: charlie.AdminConnectionView{
+			Connected: true, Endpoint: "https://charlie.example.test",
+		}},
+	}
+	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
+	recorder := httptest.NewRecorder()
+	handler.Activation(recorder, authenticatedCharlieRequest(http.MethodGet, "/", "", uuid.New(), "jwt"))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("activation status = %d %s", recorder.Code, recorder.Body.String())
+	}
+	if fake.statusCalls != 0 || fake.localCalls != 1 {
+		t.Fatalf("activation polled live status=%d local=%d", fake.statusCalls, fake.localCalls)
+	}
+	if !strings.Contains(recorder.Body.String(), `"activated":true`) || !strings.Contains(recorder.Body.String(), "https://charlie.example.test") {
+		t.Fatalf("activation body = %s", recorder.Body.String())
+	}
+}
+
 func TestCharlieAdminAlertPolicyUsesOnlyProductOwnedRoutingFields(t *testing.T) {
 	actor, channelID := uuid.New(), uuid.New()
 	fake := &charlieAdminFake{alertPolicy: charlie.AdminAlertPolicyView{Enabled: true, MinimumSeverity: "high", Revision: 2, ChannelIDs: []string{channelID.String()}, InAppEnabled: true}}
@@ -355,6 +400,36 @@ func TestCharlieAdminDisabledStatusAndDiagnosticsAreLocalOnly(t *testing.T) {
 	handler.Diagnostics(diagnostics, authenticatedCharlieRequest(http.MethodPost, "/", "{}", uuid.New(), "jwt"))
 	if diagnostics.Code != http.StatusOK || !strings.Contains(diagnostics.Body.String(), "inactive") || fake.localDiagnosticCalls != 1 || fake.diagnosticCalls != 0 {
 		t.Fatalf("disabled diagnostics were not local-only: code=%d local=%d remote=%d body=%s", diagnostics.Code, fake.localDiagnosticCalls, fake.diagnosticCalls, diagnostics.Body.String())
+	}
+}
+
+func TestCharlieAdminDisconnectRequiresExactConfirmation(t *testing.T) {
+	fake := &charlieAdminFake{}
+	writer := &charlieAuditWriterFake{}
+	handler := NewCharlieAdminHandler(fake, writer)
+
+	missing := httptest.NewRecorder()
+	handler.Disconnect(missing, authenticatedCharlieRequest(http.MethodPost, "/", `{}`, uuid.New(), "jwt"))
+	if missing.Code != http.StatusBadRequest || fake.disconnectCalls != 0 {
+		t.Fatalf("missing confirmation = %d calls=%d body=%s", missing.Code, fake.disconnectCalls, missing.Body.String())
+	}
+
+	wrong := httptest.NewRecorder()
+	handler.Disconnect(wrong, authenticatedCharlieRequest(http.MethodPost, "/", `{"confirmation":"DISABLE CHARLIE"}`, uuid.New(), "jwt"))
+	if wrong.Code != http.StatusBadRequest || fake.disconnectCalls != 0 {
+		t.Fatalf("wrong confirmation = %d calls=%d body=%s", wrong.Code, fake.disconnectCalls, wrong.Body.String())
+	}
+
+	ok := httptest.NewRecorder()
+	handler.Disconnect(ok, authenticatedCharlieRequest(http.MethodPost, "/", `{"confirmation":"DISCONNECT CHARLIE"}`, uuid.New(), "jwt"))
+	if ok.Code != http.StatusOK || fake.disconnectCalls != 1 || strings.Contains(ok.Body.String(), `"connected":true`) {
+		t.Fatalf("disconnect = %d calls=%d body=%s", ok.Code, fake.disconnectCalls, ok.Body.String())
+	}
+	if writer.row.Action != "admin.charlie.disconnect" || writer.row.ResourceType != "charlie_connection" || writer.row.ResourceID != "current" {
+		t.Fatalf("disconnect audit incomplete: %+v", writer.row)
+	}
+	if strings.Contains(string(writer.row.Detail), "DISCONNECT") || strings.Contains(strings.ToLower(string(writer.row.Detail)), "confirmation") {
+		t.Fatalf("disconnect audit leaked confirmation: %s", writer.row.Detail)
 	}
 }
 

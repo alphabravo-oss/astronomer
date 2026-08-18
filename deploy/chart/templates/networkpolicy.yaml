@@ -122,6 +122,16 @@ spec:
         - protocol: TCP
           port: {{ $.Values.redis.port }}
     {{- end }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: astronomer-charlie
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: charlie-agent
+      ports:
+        - protocol: TCP
+          port: 7443
     {{- if .Values.dex.enabled }}
     - to:
         - podSelector:

@@ -26,6 +26,7 @@ export const queryKeys = {
     findings: ["charlie", "findings"] as const,
     finding: (id?: string | null) => ["charlie", "finding", id] as const,
     approvals: ["charlie", "approvals"] as const,
+    activation: ["charlie", "activation"] as const,
     adminConnection: ["charlie", "admin", "connection"] as const,
     adminAgent: ["charlie", "admin", "agent"] as const,
     adminMode: ["charlie", "admin", "mode"] as const,

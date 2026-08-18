@@ -2,13 +2,21 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Loader2, Shield } from "lucide-react";
 import {
+  acknowledgeCharlieDisclosure,
   getCharlieKubernetesVisibility,
   updateCharlieKubernetesVisibility,
   type CharlieKubernetesVisibilityProfile,
 } from "@/lib/api/charlie-admin";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
-import { Meta, Section, Unavailable, primary } from "./shared";
+import { cn } from "@/lib/utils";
+import { Meta, Section, Unavailable, button, primary } from "./shared";
+
+const profileLabels: Record<CharlieKubernetesVisibilityProfile, string> = {
+  disabled: "Disabled",
+  product_namespace: "Product namespace",
+  cluster_diagnostics: "Cluster diagnostics",
+};
 
 const descriptions: Record<CharlieKubernetesVisibilityProfile, string> = {
   disabled: "No Kubernetes API capabilities are disclosed to Charlie.",
@@ -30,11 +38,14 @@ export function KubernetesTab() {
     setPodLogs(query.data.podLogs);
   }, [query.data]);
   const update = useMutation({
-    mutationFn: () => updateCharlieKubernetesVisibility({
-      profile,
-      podLogs: profile !== "disabled" && podLogs,
-      revision: query.data?.revision ?? -1,
-    }),
+    mutationFn: async () => {
+      const latest = await getCharlieKubernetesVisibility();
+      return updateCharlieKubernetesVisibility({
+        profile,
+        podLogs: profile !== "disabled" && podLogs,
+        revision: latest.revision,
+      });
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminKubernetesVisibility });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminMode });
@@ -42,6 +53,15 @@ export function KubernetesTab() {
       toastSuccess("Kubernetes visibility updated and catalog rediscovered");
     },
     onError: (error) => toastApiError("Kubernetes visibility update failed", error),
+  });
+  const acceptCatalog = useMutation({
+    mutationFn: (digest: string) => acknowledgeCharlieDisclosure(digest),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminKubernetesVisibility });
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminMode });
+      toastSuccess("Rediscovered catalog accepted");
+    },
+    onError: (error) => toastApiError("Catalog acceptance failed", error),
   });
   if (query.isLoading) return <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" />;
   if (query.isError || !query.data) return <Unavailable name="Kubernetes visibility" retry={() => void query.refetch()} />;
@@ -54,29 +74,47 @@ export function KubernetesTab() {
         title="Kubernetes API visibility"
         description="Choose what the Astronomer-owned MCP adapter may observe. This is independent from Charlie's read-only, approval, or automatic action mode."
       >
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Visibility profile</span>
-          <select
+        <div className="space-y-2">
+          <span className="text-sm font-medium">Visibility profile</span>
+          <div
+            role="radiogroup"
             aria-label="Kubernetes visibility profile"
-            className="field"
-            value={profile}
-            disabled={!configured}
-            onChange={(event) => setProfile(event.target.value as CharlieKubernetesVisibilityProfile)}
+            className="grid gap-2"
           >
-            {current.availableProfiles.map((value) => (
-              <option key={value} value={value}>{value.replaceAll("_", " ")}</option>
-            ))}
-          </select>
-        </label>
-        <p className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">{descriptions[profile]}</p>
-        <div className="flex items-start gap-3 rounded-lg border p-3 text-sm">
+            {current.availableProfiles.map((value) => {
+              const selected = profile === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-label={profileLabels[value]}
+                  aria-checked={selected}
+                  disabled={!configured}
+                  onClick={() => setProfile(value)}
+                  className={cn(
+                    "rounded-lg border p-3 text-left transition-colors motion-reduce:transition-none",
+                    selected
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border bg-background text-foreground hover:bg-accent",
+                    !configured && "cursor-not-allowed opacity-50",
+                  )}
+                >
+                  <span className="block text-sm font-medium">{profileLabels[value]}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">{descriptions[value]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-background p-3 text-sm">
           <input
             id="charlie-kubernetes-pod-logs"
             type="checkbox"
             checked={profile !== "disabled" && podLogs}
             disabled={!configured || profile === "disabled"}
             onChange={(event) => setPodLogs(event.target.checked)}
-            className="mt-0.5"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-border bg-background accent-primary"
           />
           <label htmlFor="charlie-kubernetes-pod-logs">
             <strong className="block">Bounded, redacted pod log tails</strong>
@@ -113,10 +151,23 @@ export function KubernetesTab() {
           <p className="rounded-lg border border-status-warning/30 bg-status-warning/5 p-3 text-xs">The connector catalog still requires rediscovery. Save the unchanged policy to retry the signed, installation-bound request.</p>
         )}
         {current.requiresCentralReview && (
-          <p className="rounded-lg border border-status-warning/30 bg-status-warning/5 p-3 text-xs">Rediscovery completed. Review candidate catalog <code>{current.candidateDisclosureDigest}</code> in Charlie. Charlie publishes the authoritative disclosure after any intentional mode or allowlist changes.</p>
+          <div className="space-y-2 rounded-lg border border-status-warning/30 bg-status-warning/5 p-3 text-xs">
+            <p>Rediscovery completed. Accept this catalog on Astronomer before raising mode. Charlie does not accept product capabilities.</p>
+            {current.candidateDisclosureDigest && (
+              <p className="break-all text-muted-foreground">Digest: {current.candidateDisclosureDigest}</p>
+            )}
+            <button
+              type="button"
+              className={button}
+              disabled={!current.candidateDisclosureDigest || acceptCatalog.isPending}
+              onClick={() => current.candidateDisclosureDigest && acceptCatalog.mutate(current.candidateDisclosureDigest)}
+            >
+              Accept rediscovered catalog
+            </button>
+          </div>
         )}
         {current.requiresProductAcknowledgement && (
-          <p className="rounded-lg border border-status-warning/30 bg-status-warning/5 p-3 text-xs">Charlie accepted the new catalog. Acknowledge Charlie's authoritative disclosure in Astronomer's Mode tab before restoring authority.</p>
+          <p className="rounded-lg border border-status-warning/30 bg-status-warning/5 p-3 text-xs">Accept the published disclosure on the Mode tab before restoring authority.</p>
         )}
       </Section>
     </div>

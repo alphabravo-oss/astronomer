@@ -134,7 +134,7 @@ export function GrantList({
   return (
     <Section
       title={title}
-      description="Derived from Astronomer RBAC; this is not a parallel Charlie role system."
+      description="Astronomer RBAC only. Charlie does not define its own roles."
     >
       {items.length ? (
         items.map((g, i) => (
@@ -152,7 +152,7 @@ export function GrantList({
           </div>
         ))
       ) : (
-        <p className="text-sm text-muted-foreground">No effective grants.</p>
+        <p className="text-sm text-muted-foreground">No Charlie grants on this identity.</p>
       )}
     </Section>
   );

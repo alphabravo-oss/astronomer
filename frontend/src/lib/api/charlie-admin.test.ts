@@ -4,6 +4,8 @@ vi.mock("@/lib/api", () => ({
   default: { post: vi.fn(), put: vi.fn(), patch: vi.fn(), get: vi.fn() },
 }));
 import {
+  disconnectCharlie,
+  validateCharlieConnect,
   listCharlieTriggerEvents,
   retryCharlieTriggerEvent,
   updateCharlieAlertPolicy,
@@ -15,6 +17,32 @@ const mockedApi = api as Mocked<typeof api>;
 
 describe("Charlie admin wire boundary", () => {
   beforeEach(() => vi.clearAllMocks());
+  it("sends Charlie endpoint and connect token on the wire", async () => {
+    mockedApi.post.mockResolvedValue({
+      data: { data: { packageId: "p", state: "validated" } },
+    });
+    await validateCharlieConnect({
+      endpoint: " https://charlie.example.test/charlie/v1/ ",
+      connectToken: "charlie.connect.v1.abc\n",
+    });
+    expect(mockedApi.post).toHaveBeenCalledWith(
+      "/admin/charlie/onboarding/validate/",
+      {
+        endpoint: "https://charlie.example.test/charlie/v1/",
+        connect_token: "charlie.connect.v1.abc",
+      },
+    );
+  });
+  it("sends the exact disconnect confirmation phrase", async () => {
+    mockedApi.post.mockResolvedValue({
+      data: { data: { connection: { connected: false }, agent: {}, mode: {} } },
+    });
+    const connection = await disconnectCharlie();
+    expect(connection).toEqual({ connected: false });
+    expect(mockedApi.post).toHaveBeenCalledWith("/admin/charlie/disconnect/", {
+      confirmation: "DISCONNECT CHARLIE",
+    });
+  });
   it("sends onboarding confirmation in the exact snake-case contract", async () => {
     mockedApi.post.mockResolvedValue({
       data: {

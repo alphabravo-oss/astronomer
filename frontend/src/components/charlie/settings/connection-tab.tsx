@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Loader2,
   Shield,
+  Unplug,
   Upload,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -11,8 +12,12 @@ import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { parseOnboardingFile } from "@/components/charlie/admin-utils";
 import {
+  consumeCharlieConnect,
   consumeCharlieOnboarding,
+  disconnectCharlie,
+  getCharlieActivation,
   getCharlieConnection,
+  validateCharlieConnect,
   validateCharlieOnboarding,
   type CharlieOnboardingView,
 } from "@/lib/api/charlie-admin";
@@ -21,45 +26,85 @@ import {
   Meta,
   Section,
   Unavailable,
+  button,
   emptyOnboarding,
   primary,
 } from "./shared";
 
 export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {}) {
   const qc = useQueryClient();
+  const activation = useQuery({
+    queryKey: queryKeys.charlie.activation,
+    queryFn: getCharlieActivation,
+    enabled: !localOnly,
+    retry: false,
+    staleTime: 15_000,
+  });
   const connection = useQuery({
     queryKey: queryKeys.charlie.adminConnection,
     queryFn: getCharlieConnection,
+    enabled: localOnly,
     retry: false,
   });
+  const [endpoint, setEndpoint] = useState("");
+  const [connectToken, setConnectToken] = useState("");
   const [input, setInput] = useState(emptyOnboarding);
   const [fileName, setFileName] = useState("");
   const [fileError, setFileError] = useState("");
   const [validated, setValidated] = useState<CharlieOnboardingView>();
-  const [confirm, setConfirm] = useState<"consume" | null>(null);
+  const [confirm, setConfirm] = useState<"consume" | "disconnect" | null>(null);
   const [disclosure, setDisclosure] = useState(false);
+  const useToken = connectToken.trim().length > 0;
+  const connected = localOnly
+    ? Boolean(connection.data?.connected)
+    : activation.data?.activated === true;
+  const loading = localOnly
+    ? connection.isLoading && !connection.data
+    : activation.isLoading && !activation.data;
+  const failed = localOnly ? connection.isError : activation.isError;
+  const retry = () => void (localOnly ? connection.refetch() : activation.refetch());
+  const accepted = () => {
+    setValidated(undefined);
+    setEndpoint("");
+    setConnectToken("");
+    setInput(emptyOnboarding);
+    setFileName("");
+    setConfirm(null);
+    setDisclosure(false);
+    void qc.invalidateQueries({ queryKey: queryKeys.charlie.activation });
+    void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminConnection });
+    toastSuccess("Charlie connected");
+  };
   const validate = useMutation({
-    mutationFn: validateCharlieOnboarding,
+    mutationFn: () =>
+      useToken
+        ? validateCharlieConnect({ endpoint, connectToken })
+        : validateCharlieOnboarding(input),
     onSuccess: (value) => {
       setValidated(value);
-      toastSuccess("Charlie package signature validated locally");
+      toastSuccess("Charlie connection validated locally");
     },
-    onError: (e) => toastApiError("Package validation failed", e),
+    onError: (e) => toastApiError("Charlie connection validation failed", e),
   });
   const consume = useMutation({
-    mutationFn: consumeCharlieOnboarding,
+    mutationFn: () =>
+      useToken
+        ? consumeCharlieConnect({ endpoint, connectToken })
+        : consumeCharlieOnboarding(input),
+    onSuccess: accepted,
+    onError: (e) => toastApiError("Charlie connect failed", e),
+  });
+  const disconnect = useMutation({
+    mutationFn: disconnectCharlie,
     onSuccess: () => {
-      setValidated(undefined);
-      setInput(emptyOnboarding);
-      setFileName("");
       setConfirm(null);
-      setDisclosure(false);
-      void qc.invalidateQueries({
-        queryKey: queryKeys.charlie.adminConnection,
-      });
-      toastSuccess("Charlie trust and product onboarding accepted");
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.activation });
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminConnection });
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminMode });
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminAgent });
+      toastSuccess("Charlie disconnected");
     },
-    onError: (e) => toastApiError("Charlie onboarding failed", e),
+    onError: (e) => toastApiError("Charlie disconnect failed", e),
   });
   const load = async (file: File | undefined) => {
     setFileError("");
@@ -104,136 +149,161 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
       setFileError(e instanceof Error ? e.message : "Invalid package");
     }
   };
-  const complete =
-    Object.keys(input.package).length > 0 &&
-    input.signingPublicKey &&
-    input.confirmedSigningKeyId &&
-    /^[a-f0-9]{64}$/.test(input.confirmedSigningFingerprint) &&
-    input.expectedDeploymentId &&
-    input.expectedRouteId;
-  const confirmValue = connection.data?.connected
-    ? `REPLACE ${validated?.deploymentId ?? ""}`
-    : `CONNECT ${validated?.deploymentId ?? ""}`;
-  return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      <Section
-        title="Current connection"
-        description="Only non-secret identifiers and digests are displayed. Credentials and private keys are never returned."
-      >
-        {connection.isLoading ? (
-          <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" />
-        ) : connection.isError ? (
-          <Unavailable
-            name="Connection status"
-            retry={() => void connection.refetch()}
-          />
-        ) : (
-          <dl className="grid grid-cols-2 gap-4">
+  const complete = useToken
+    ? Boolean(endpoint.trim() && connectToken.trim().startsWith("charlie.connect.v1."))
+    : Object.keys(input.package).length > 0 &&
+      input.signingPublicKey &&
+      input.confirmedSigningKeyId &&
+      /^[a-f0-9]{64}$/.test(input.confirmedSigningFingerprint) &&
+      input.expectedDeploymentId &&
+      input.expectedRouteId;
+
+  if (loading) {
+    return (
+      <Section title="Charlie connection">
+        <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" />
+      </Section>
+    );
+  }
+  if (failed) {
+    return <Unavailable name="Charlie connection" retry={retry} />;
+  }
+
+  if (connected) {
+    return (
+      <>
+        <Section
+          title="Charlie is connected"
+          description="This installation has one Charlie connection. Disconnect it before connecting to the same or another Charlie."
+        >
+          <dl>
             <Meta
-              label="Status"
-              value={connection.data?.connected ? "Connected" : "Not connected"}
-            />
-            <Meta label="Product" value={connection.data?.productId} />
-            <Meta label="Deployment" value={connection.data?.deploymentId} />
-            <Meta label="Route" value={connection.data?.routeId} />
-            <Meta
-              label="Central version"
-              value={connection.data?.centralVersion}
-            />
-            <Meta
-              label="Signing key ID"
-              value={connection.data?.signingKeyId}
-            />
-            <Meta
-              label="Signing fingerprint"
-              value={connection.data?.signingFingerprint}
-            />
-            <Meta
-              label="Package digest"
-              value={connection.data?.packageDigest}
-            />
-            <Meta
-              label="Disclosure digest"
-              value={connection.data?.disclosureDigest}
-            />
-            <Meta
-              label="Disclosure acknowledged"
-              value={connection.data?.disclosureAcknowledged ? "Yes" : "No"}
+              label="Charlie endpoint"
+              value={
+                (localOnly ? connection.data?.endpoint : activation.data?.endpoint) ||
+                "—"
+              }
             />
           </dl>
-        )}
-        {connection.data?.connected && (
-          <p className="mt-4 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-            Replace trust or route configuration by validating a new signed package. Product-agent
-            lifecycle changes are performed through Flux Continuous Delivery.
+          <p className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+            Charlie chat, findings, and the product agent stay available until you
+            disconnect. Connecting a different Charlie is a new one-time token after
+            disconnect.
           </p>
-        )}
-      </Section>
-      {!localOnly && <Section
-        title="Connect or replace Charlie"
-        description="Upload a signed onboarding package. It is held only in memory and sent to local validation; package contents are never rendered or persisted by the browser."
+          <button
+            onClick={() => setConfirm("disconnect")}
+            disabled={disconnect.isPending}
+            className={`${button} border-status-error text-status-error`}
+          >
+            <Unplug className="h-4 w-4" />
+            Disconnect
+          </button>
+        </Section>
+        <ConfirmDialog
+          open={confirm === "disconnect"}
+          onClose={() => setConfirm(null)}
+          onConfirm={() => disconnect.mutate()}
+          title="Disconnect Charlie"
+          description="This deactivates the Charlie connection. Charlie navigation, findings, sessions, and the product agent stop. Emergency Disable is different — it only fails closed while keeping the connection. Reconnecting requires a new signed onboarding package."
+          confirmText="Disconnect"
+          confirmValue="DISCONNECT CHARLIE"
+          variant="destructive"
+          loading={disconnect.isPending}
+        />
+      </>
+    );
+  }
+
+  if (localOnly) {
+    return (
+      <Section
+        title="Charlie is not connected"
+        description="Enable Charlie and paste a connect token to bind this installation."
+      />
+    );
+  }
+
+  return (
+    <div className="max-w-3xl">
+      <Section
+        title="Connect Charlie"
+        description="In Charlie, create a deployment connection. Paste the Charlie endpoint and one-time connect token here. Astronomer then installs the agent and turns the Charlie UI on."
       >
         <p className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-          Model providers, LLM routing, RAG, knowledge sources, and agentic
-          workflows remain administered in the separate Charlie service.
-          Astronomer stores only the product trust, route, mode, policy, and
-          product-agent integration needed to expose authorized capabilities.
+          Model providers, knowledge packs, and routes stay in Charlie. This
+          token is not a durable Charlie API key.
         </p>
-        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border p-5 text-sm hover:bg-accent">
-          <Upload className="h-4 w-4" />
-          <span>{fileName || "Choose JSON package"}</span>
-          <input
-            type="file"
-            accept="application/json,.json"
-            className="sr-only"
-            aria-describedby="charlie-package-safety"
-            onChange={(e) => void load(e.target.files?.[0])}
+        <Field label="Charlie endpoint" value={endpoint} set={setEndpoint} />
+        <label className="space-y-1 text-sm">
+          <span className="block font-medium">Connect token</span>
+          <textarea
+            className="min-h-28 w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
+            value={connectToken}
+            onChange={(e) => setConnectToken(e.target.value)}
+            placeholder="charlie.connect.v1."
+            spellCheck={false}
           />
         </label>
-        <p
-          id="charlie-package-safety"
-          className="text-xs text-muted-foreground"
-        >
-          The selected file name is visible; credential values and package
-          content are never added to the page.
-        </p>
-        {fileError && (
-          <p role="alert" className="text-sm text-status-error">
-            {fileError}
-          </p>
-        )}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field
-            label="Signing public key"
-            value={input.signingPublicKey}
-            set={(v) => setInput((x) => ({ ...x, signingPublicKey: v }))}
-          />
-          <Field
-            label="Signing key ID"
-            value={input.confirmedSigningKeyId}
-            set={(v) => setInput((x) => ({ ...x, confirmedSigningKeyId: v }))}
-          />
-          <Field
-            label="Confirmed SHA-256 fingerprint"
-            value={input.confirmedSigningFingerprint}
-            set={(v) =>
-              setInput((x) => ({ ...x, confirmedSigningFingerprint: v }))
-            }
-          />
-          <Field
-            label="Expected deployment ID"
-            value={input.expectedDeploymentId}
-            set={(v) => setInput((x) => ({ ...x, expectedDeploymentId: v }))}
-          />
-          <Field
-            label="Expected route ID"
-            value={input.expectedRouteId}
-            set={(v) => setInput((x) => ({ ...x, expectedRouteId: v }))}
-          />
-        </div>
+        <details className="rounded-lg border border-border p-3">
+          <summary className="cursor-pointer text-sm font-medium">Air-gapped package file</summary>
+          <div className="mt-3 space-y-3">
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border p-5 text-sm hover:bg-accent">
+              <Upload className="h-4 w-4" />
+              <span>{fileName || "Choose JSON package"}</span>
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                aria-describedby="charlie-package-safety"
+                onChange={(e) => void load(e.target.files?.[0])}
+              />
+            </label>
+            <p
+              id="charlie-package-safety"
+              className="text-xs text-muted-foreground"
+            >
+              The selected file name is visible; credential values and package
+              content are never added to the page.
+            </p>
+            {fileError && (
+              <p role="alert" className="text-sm text-status-error">
+                {fileError}
+              </p>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field
+                label="Signing public key"
+                value={input.signingPublicKey}
+                set={(v) => setInput((x) => ({ ...x, signingPublicKey: v }))}
+              />
+              <Field
+                label="Signing key ID"
+                value={input.confirmedSigningKeyId}
+                set={(v) => setInput((x) => ({ ...x, confirmedSigningKeyId: v }))}
+              />
+              <Field
+                label="Confirmed SHA-256 fingerprint"
+                value={input.confirmedSigningFingerprint}
+                set={(v) =>
+                  setInput((x) => ({ ...x, confirmedSigningFingerprint: v }))
+                }
+              />
+              <Field
+                label="Expected deployment ID"
+                value={input.expectedDeploymentId}
+                set={(v) => setInput((x) => ({ ...x, expectedDeploymentId: v }))}
+              />
+              <Field
+                label="Expected route ID"
+                value={input.expectedRouteId}
+                set={(v) => setInput((x) => ({ ...x, expectedRouteId: v }))}
+              />
+            </div>
+          </div>
+        </details>
         <button
           disabled={!complete || validate.isPending}
-          onClick={() => validate.mutate(input)}
+          onClick={() => validate.mutate()}
           className={primary}
         >
           {validate.isPending ? (
@@ -241,7 +311,7 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
           ) : (
             <Shield className="h-4 w-4" />
           )}
-          Validate signature locally
+          {useToken ? "Validate connection" : "Validate signature locally"}
         </button>
         {validated && (
           <div
@@ -310,27 +380,19 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
               onClick={() => setConfirm("consume")}
               className={primary}
             >
-              {connection.data?.connected
-                ? "Replace connection"
-                : "Connect Charlie"}
+              Connect Charlie
             </button>
           </div>
         )}
-      </Section>}
+      </Section>
       <ConfirmDialog
         open={confirm === "consume"}
         onClose={() => setConfirm(null)}
-        onConfirm={() => consume.mutate(input)}
-        title={
-          connection.data?.connected
-            ? "Replace Charlie connection"
-            : "Connect Charlie"
-        }
-        description="This consumes the one-time package and records the signed product trust and route. Product-agent artifacts are reconciled through Flux Continuous Delivery; existing authority is never expanded by the browser."
-        confirmText={
-          connection.data?.connected ? "Replace connection" : "Connect"
-        }
-        confirmValue={confirmValue}
+        onConfirm={() => consume.mutate()}
+        title="Connect Charlie"
+        description="This consumes the one-time Charlie connection and installs the product agent. Existing authority is never expanded by the browser."
+        confirmText="Connect"
+        confirmValue={`CONNECT ${validated?.deploymentId ?? ""}`}
         loading={consume.isPending}
       />
     </div>

@@ -1036,18 +1036,29 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	localChartVersion := strings.TrimSpace(os.Getenv("CHART_VERSION"))
 	charlieFeatures := charlieLiveFeatures{queries: queries}
 	var charlieOnboardingHandler *handler.CharlieOnboardingHandler
+	var charlieAgentRuntime *charlie.KubernetesRuntimeActivator
+	var charlieHelm charlie.HelmReleaser
 	if localK8s != nil && encryptor != nil {
 		secretWriter, err := charlie.NewKubernetesAgentSecretWriter(localK8s, "astronomer-charlie", []byte(cfg.SecretKey))
 		if err != nil {
 			charlie.LogOperationalFailure(context.Background(), logger, "bootstrap.secret_writer_unavailable", "")
 		} else {
+			charlieHelm = charlie.NewInClusterHelmReleaser("astronomer-charlie")
+			runtime, runtimeErr := charlie.NewKubernetesRuntimeActivator(localK8s, localNamespace, charlieHelm)
+			if runtimeErr != nil {
+				charlie.LogOperationalFailure(context.Background(), logger, "bootstrap.runtime_activator_unavailable", "")
+			} else {
+				charlieAgentRuntime = runtime
+			}
 			charlieOnboardingHandler = handler.NewCharlieOnboardingHandler(&charlie.OnboardingConsumer{
-				Store:           charlie.PGOnboardingTransactionStore{Pool: database.Pool()},
-				Secrets:         secretWriter,
-				Encryptor:       encryptor,
-				BridgeServerDNS: "charlie-agent-bridge.astronomer-charlie.svc",
-				MCPServerDNS:    "astronomer-charlie-mcp." + localNamespace + ".svc",
-				Auditor:         charlie.NewDBLifecycleAuditor(queries),
+				Store:            charlie.PGOnboardingTransactionStore{Pool: database.Pool()},
+				Secrets:          secretWriter,
+				Encryptor:        encryptor,
+				BridgeServerDNS:  "charlie-agent-bridge.astronomer-charlie.svc",
+				MCPServerDNS:     "astronomer-charlie-mcp." + localNamespace + ".svc",
+				ProductNamespace: localNamespace,
+				Runtime:          runtime,
+				Auditor:          charlie.NewDBLifecycleAuditor(queries),
 			})
 		}
 	}
@@ -1363,6 +1374,17 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	} else {
 		charlieAdminService = adminService
 		adminService.SetWriteFence(charlieWriteFence)
+		adminService.SetAgentRuntime(charlieAgentRuntime)
+		if localK8s != nil {
+			workload := charlie.NewKubernetesAgentWorkload(localK8s)
+			adminService.SetAgentWorkload(workload)
+			if charlieHelm != nil && managedCharlieBridge != nil {
+				adminService.SetModeCeilingRollout(&charlie.HelmModeCeilingRollout{
+					Queries: queries, Client: localK8s, Helm: charlieHelm,
+					Workload: workload, Bridge: managedCharlieBridge,
+				})
+			}
+		}
 		charlieAdminHandler = handler.NewCharlieAdminHandler(adminService, queries)
 		charlieAdminHandler.SetSettingsCache(settingsCache)
 	}
@@ -2121,6 +2143,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	}
 	if charlieFindingProjection != nil {
 		go charlieFindingProjection.Run(reconcileCtx)
+	}
+	if artifactReconciler := charlie.NewArtifactReconciler(queries, localK8s, charlieHelm); artifactReconciler != nil {
+		go artifactReconciler.Run(reconcileCtx)
 	}
 	// CORR-R06: under multi-replica server, only one pod runs reconcilers.
 	// Atomic claims (CORR-R01) still protect correctness when leadership is

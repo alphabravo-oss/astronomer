@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUIStore, useAuthStore } from '@/lib/store';
-import { useClusters, useAlertEvents, useFeatureFlags } from '@/lib/hooks';
+import { useClusters, useAlertEvents, useCharlieActivated, useFeatureFlags } from '@/lib/hooks';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime } from '@/lib/utils';
 import { GlobalSearch } from '@/components/layout/global-search';
@@ -128,10 +128,11 @@ export function Topbar() {
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const { data: alertEvents } = useAlertEvents({ status: 'firing' });
   const { data: featureFlags } = useFeatureFlags();
+  const { activated: charlieActivated } = useCharlieActivated();
   const { data: charlieFindings } = useQuery({
     queryKey: queryKeys.charlie.findings,
     queryFn: listCharlieFindings,
-    enabled: featureFlags?.['feature.charlie'] === true,
+    enabled: featureFlags?.['feature.charlie'] === true && charlieActivated,
     retry: false,
     // The findings endpoint performs a bounded, authorization-filtered sync
     // before returning durable local summaries. Polling while an operator is

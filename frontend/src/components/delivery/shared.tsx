@@ -1,7 +1,7 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { Link } from "@/lib/link";
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation";
-import { useProjects } from "@/lib/hooks";
+import { useClusters, useProjects } from "@/lib/hooks";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   EmptyState,
@@ -96,6 +96,16 @@ export function deliveryPageRowCount(
   return observed + (page.next ? 1 : 0);
 }
 
+export function deliveryProjectLabel(
+  project: { displayName: string; name: string; clusterId?: string },
+  clusterNames: Map<string, string>,
+) {
+  const clusterName = project.clusterId
+    ? clusterNames.get(project.clusterId)
+    : undefined;
+  return clusterName || project.displayName || project.name;
+}
+
 export function DeliveryShell({
   projectId,
   projects,
@@ -104,12 +114,25 @@ export function DeliveryShell({
   children,
 }: {
   projectId: string;
-  projects: Array<{ id: string; displayName: string; name: string }>;
+  projects: Array<{
+    id: string;
+    displayName: string;
+    name: string;
+    clusterId?: string;
+  }>;
   setProjectId: (id: string) => void;
   showProjectSelect?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const clusters = useClusters({ pageSize: 200 });
+  const clusterNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const cluster of clusters.data?.data ?? []) {
+      if (cluster.id && cluster.name) names.set(cluster.id, cluster.name);
+    }
+    return names;
+  }, [clusters.data?.data]);
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 border-b border-border pb-4 lg:flex-row lg:items-end lg:justify-between">
@@ -152,7 +175,7 @@ export function DeliveryShell({
               <option value="">Select a project</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
-                  {project.displayName || project.name}
+                  {deliveryProjectLabel(project, clusterNames)}
                 </option>
               ))}
             </select>

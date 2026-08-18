@@ -24,6 +24,7 @@ var (
 
 type AdminConnectionView struct {
 	Connected              bool   `json:"connected"`
+	Endpoint               string `json:"endpoint,omitempty"`
 	ProductID              string `json:"product_id,omitempty"`
 	ProductSlug            string `json:"product_slug,omitempty"`
 	DeploymentID           string `json:"deployment_id,omitempty"`
@@ -221,6 +222,8 @@ type AdminService struct {
 	now                   func() time.Time
 	triggers              *TriggerAdminService
 	auditor               AuthorityMutationAuditor
+	runtime               AgentDeactivator
+	workload              AgentWorkloadReader
 }
 
 func NewAdminService(pool *pgxpool.Pool, bridge *ManagedBridge) (*AdminService, error) {
@@ -246,9 +249,27 @@ func NewAdminService(pool *pgxpool.Pool, bridge *ManagedBridge) (*AdminService, 
 
 // SetWriteFence binds emergency administration to the same admission registry
 // used by the private MCP runtime.
+func (s *AdminService) SetAgentRuntime(runtime AgentDeactivator) {
+	if s != nil {
+		s.runtime = runtime
+	}
+}
+
+func (s *AdminService) SetAgentWorkload(workload AgentWorkloadReader) {
+	if s != nil {
+		s.workload = workload
+	}
+}
+
 func (s *AdminService) SetWriteFence(fence *WriteFence) {
 	if s != nil && s.mode != nil {
 		s.mode.SetWriteFence(fence)
+	}
+}
+
+func (s *AdminService) SetModeCeilingRollout(rollout ModeCeilingRollout) {
+	if s != nil && s.mode != nil {
+		s.mode.SetModeCeilingRollout(rollout)
 	}
 }
 
@@ -353,6 +374,9 @@ func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 	if err != nil {
 		return AdminStatusView{}, err
 	}
+	if !connection.Active || connection.HealthState == "disconnected" {
+		return disconnectedAdminStatus(connection), nil
+	}
 	view := AdminStatusView{
 		Connection: safeAdminConnection(connection),
 		Agent:      safeAdminAgent(connection),
@@ -379,8 +403,48 @@ func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 			applyBridgeStatus(&view, bridgeStatus)
 		}
 	}
+	if s.workload != nil {
+		if workload, workloadErr := s.workload.AgentWorkload(ctx); workloadErr == nil {
+			applyAgentWorkload(&view, workload)
+		}
+	}
 	view.Mode = s.enrichMode(ctx, view.Mode)
 	return view, nil
+}
+
+// Disconnect deactivates the current Charlie connection and removes the
+// product-agent runtime. Surfaces fail closed once the row is inactive.
+// Repeating disconnect after the row is already inactive still retries
+// leftover agent cleanup.
+func (s *AdminService) Disconnect(ctx context.Context) (AdminStatusView, error) {
+	connection, err := s.connection(ctx)
+	if err != nil {
+		return AdminStatusView{}, err
+	}
+	disconnected := connection
+	if connection.Active {
+		disconnected, err = s.queries.DisconnectCharlieConnection(ctx, connection.ID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			disconnected, err = s.connection(ctx)
+		}
+		if err != nil {
+			return AdminStatusView{}, ErrAdminUnavailable
+		}
+	}
+	if s.runtime != nil {
+		if err := s.runtime.Deactivate(ctx); err != nil {
+			return AdminStatusView{}, ErrAdminUnavailable
+		}
+	}
+	return disconnectedAdminStatus(disconnected), nil
+}
+
+func disconnectedAdminStatus(connection sqlc.CharlieConnection) AdminStatusView {
+	view := quiescedAdminStatus(connection)
+	view.Connection.Connected = false
+	view.Mode.DisablePending = false
+	view.Agent = AdminAgentView{ApplicationState: "not_installed", StandbyReplicas: []string{}, Replicas: []AdminAgentReplicaView{}}
+	return view
 }
 
 // LocalStatus returns only the durable product-owned projection. It never
@@ -435,10 +499,10 @@ func emptyAdminStatus() AdminStatusView {
 }
 
 func safeAdminConnection(row sqlc.CharlieConnection) AdminConnectionView {
-	connected := row.OnboardingState == "consumed" || row.OnboardingState == "active"
+	connected := row.Active && (row.OnboardingState == "consumed" || row.OnboardingState == "active")
 	connected = connected && row.HealthState != "disconnected"
 	return AdminConnectionView{
-		Connected: connected, ProductID: row.ProductID, ProductSlug: row.ProductSlug, DeploymentID: row.DeploymentID, RouteID: row.RouteID,
+		Connected: connected, Endpoint: row.CentralUrl, ProductID: row.ProductID, ProductSlug: row.ProductSlug, DeploymentID: row.DeploymentID, RouteID: row.RouteID,
 		CentralVersion: row.CentralApiVersion, SigningKeyID: row.SigningKeyID,
 		SigningFingerprint: row.SigningKeyFingerprint, PackageDigest: row.OnboardingPackageDigest,
 		DisclosureDigest:       row.DisclosureDigest,
@@ -586,8 +650,10 @@ func applyBridgeStatus(view *AdminStatusView, status AdminBridgeStatus) {
 		view.Mode.DisablePending = view.Mode.Requested == ModeDisabled && status.ProductEnabled
 	}
 	if ceiling := Mode(status.ProductModeCeiling); validMode(ceiling) {
+		// Heartbeat ceiling is one replica. Both-replica readiness stays
+		// with applyAgentWorkload so a raise cannot look unverified just
+		// because Charlie central has not caught up yet.
 		view.Mode.WorkloadCeiling = ceiling
-		view.Mode.WorkloadCeilingReady = ceiling == view.Mode.Authoritative
 	}
 }
 
@@ -611,7 +677,7 @@ func (s *AdminService) UpdateMode(ctx context.Context, desired Mode, revision in
 			state, err = s.mode.ClearEmergencyDisable(ctx, actor.String())
 		} else {
 			if desired != ModeDisabled && kubernetesVisibilityAuthorityPending(connection) {
-				return AdminModeView{}, fmt.Errorf("%w: acknowledge the reviewed Kubernetes visibility disclosure before restoring Charlie authority", ErrAdminConflict)
+				return AdminModeView{}, fmt.Errorf("%w: accept the rediscovered Kubernetes catalog in Astronomer before restoring Charlie authority", ErrAdminConflict)
 			}
 			prerequisites, prerequisitesErr := s.modePrerequisites(ctx)
 			if prerequisitesErr != nil {
@@ -653,14 +719,35 @@ func (s *AdminService) AcknowledgeDisclosure(ctx context.Context, digest string)
 	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.disclosure.acknowledge", ResourceType: "charlie_connection", ResourceID: connection.ID.String()}); err != nil {
 		return AdminModeView{}, err
 	}
-	result, err := s.pool.Exec(ctx, `UPDATE charlie_connections SET
-		acknowledged_disclosure_digest=$1,
-		kubernetes_visibility_candidate_digest=CASE WHEN kubernetes_visibility_rediscovery_state='review_required' THEN '' ELSE kubernetes_visibility_candidate_digest END,
-		kubernetes_visibility_rediscovery_state=CASE WHEN kubernetes_visibility_rediscovery_state='review_required' THEN 'ready' ELSE kubernetes_visibility_rediscovery_state END,
-		updated_at=now()
-		WHERE active=true AND disclosure_digest=$1`, digest)
-	if err != nil || result.RowsAffected() != 1 {
-		return AdminModeView{}, ErrAdminConflict
+	// Product-side accept: after visibility rediscovery the live disclosure is
+	// empty and the candidate is the catalog Astronomer observed. Charlie does
+	// not accept capabilities; the operator accepts that catalog here.
+	if connection.DisclosureDigest == "" &&
+		connection.KubernetesVisibilityRediscoveryState == "review_required" &&
+		normalizeDigest(connection.KubernetesVisibilityCandidateDigest) == normalizeDigest(digest) {
+		accepted := connection.KubernetesVisibilityCandidateDigest
+		result, execErr := s.pool.Exec(ctx, `UPDATE charlie_connections SET
+			disclosure_digest=$1,
+			acknowledged_disclosure_digest=$1,
+			kubernetes_visibility_candidate_digest='',
+			kubernetes_visibility_rediscovery_state='ready',
+			updated_at=now()
+			WHERE id=$2 AND active=true AND disclosure_digest=''
+			  AND kubernetes_visibility_rediscovery_state='review_required'
+			  AND kubernetes_visibility_candidate_digest=$1`, accepted, connection.ID)
+		if execErr != nil || result.RowsAffected() != 1 {
+			return AdminModeView{}, ErrAdminConflict
+		}
+	} else {
+		result, execErr := s.pool.Exec(ctx, `UPDATE charlie_connections SET
+			acknowledged_disclosure_digest=$1,
+			kubernetes_visibility_candidate_digest=CASE WHEN kubernetes_visibility_rediscovery_state='review_required' THEN '' ELSE kubernetes_visibility_candidate_digest END,
+			kubernetes_visibility_rediscovery_state=CASE WHEN kubernetes_visibility_rediscovery_state='review_required' THEN 'ready' ELSE kubernetes_visibility_rediscovery_state END,
+			updated_at=now()
+			WHERE active=true AND disclosure_digest=$1`, digest)
+		if execErr != nil || result.RowsAffected() != 1 {
+			return AdminModeView{}, ErrAdminConflict
+		}
 	}
 	connection, err = s.connection(ctx)
 	if err != nil {
@@ -869,9 +956,13 @@ func safeAdminTrigger(rule sqlc.CharlieTriggerRule) AdminTriggerRule {
 		}
 		return value
 	}
+	scopes := selectors.Scopes
+	if scopes == nil {
+		scopes = []string{}
+	}
 	return AdminTriggerRule{
 		ID: rule.ID.String(), Name: rule.Name, Enabled: rule.Enabled, SourceType: rule.RuleType,
-		Severities: []string{rule.MinimumSeverity}, Scopes: selectors.Scopes, CooldownSeconds: rule.CooldownSeconds,
+		Severities: []string{rule.MinimumSeverity}, Scopes: scopes, CooldownSeconds: rule.CooldownSeconds,
 		GracePeriodSeconds: integer("grace_period_seconds", rule.WindowSeconds), FlapWindowSeconds: integer("flap_window_seconds", rule.WindowSeconds),
 		FlapCount: integer("flap_count", integer("count", 1)), FleetThresholdPercent: integer("fleet_threshold_percent", 0),
 		MinimumAgentVersion: selectors.MinimumAgentVersion, Suppressed: selectors.Suppressed,
@@ -1125,17 +1216,49 @@ func hasAutomationWriteGrant(grants []AdminPermission) bool {
 }
 
 func (s *AdminService) Access(ctx context.Context) (AdminAccessView, error) {
+	return s.AccessForActor(ctx, uuid.Nil)
+}
+
+// AccessForActor reports the signed-in operator's Charlie grants separately
+// from the dedicated automation identity. Access() keeps the automation-only
+// view used by readiness checks.
+func (s *AdminService) AccessForActor(ctx context.Context, actor uuid.UUID) (AdminAccessView, error) {
+	automation, err := s.listRoleGrants(ctx, "u.username=$1", AutomationUsername)
+	if err != nil {
+		return AdminAccessView{}, err
+	}
+	effective := []AdminPermission{}
+	if actor != uuid.Nil {
+		effective, err = s.listRoleGrants(ctx, "u.id=$1", actor)
+		if err != nil {
+			return AdminAccessView{}, err
+		}
+		if user, userErr := s.queries.GetUserByID(ctx, actor); userErr == nil && user.IsSuperuser {
+			effective = append([]AdminPermission{{
+				Permission: "charlie:manage", Scope: "global", Source: "superuser",
+			}}, filterCharliePermissions(effective)...)
+		} else {
+			effective = filterCharliePermissions(effective)
+		}
+	}
+	return AdminAccessView{EffectivePermissions: effective, AutomationGrants: automation}, nil
+}
+
+func (s *AdminService) listRoleGrants(ctx context.Context, where string, arg any) ([]AdminPermission, error) {
+	if s == nil || s.pool == nil || (where != "u.username=$1" && where != "u.id=$1") {
+		return nil, ErrAdminUnavailable
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT role_name, rules, scope, source FROM (
 			SELECT gr.name role_name, gr.rules, 'global'::text scope, 'global_role'::text source
-			FROM users u JOIN global_role_bindings b ON b.user_id=u.id JOIN global_roles gr ON gr.id=b.role_id WHERE u.username=$1
+			FROM users u JOIN global_role_bindings b ON b.user_id=u.id JOIN global_roles gr ON gr.id=b.role_id WHERE `+where+`
 			UNION ALL
-			SELECT cr.name, cr.rules, 'cluster:'||b.cluster_id::text, 'cluster_role' FROM users u JOIN cluster_role_bindings b ON b.user_id=u.id JOIN cluster_roles cr ON cr.id=b.role_id WHERE u.username=$1
+			SELECT cr.name, cr.rules, 'cluster:'||b.cluster_id::text, 'cluster_role' FROM users u JOIN cluster_role_bindings b ON b.user_id=u.id JOIN cluster_roles cr ON cr.id=b.role_id WHERE `+where+`
 			UNION ALL
-			SELECT pr.name, pr.rules, 'project:'||b.project_id::text, 'project_role' FROM users u JOIN project_role_bindings b ON b.user_id=u.id JOIN project_roles pr ON pr.id=b.role_id WHERE u.username=$1
-		) grants ORDER BY scope, role_name`, AutomationUsername)
+			SELECT pr.name, pr.rules, 'project:'||b.project_id::text, 'project_role' FROM users u JOIN project_role_bindings b ON b.user_id=u.id JOIN project_roles pr ON pr.id=b.role_id WHERE `+where+`
+		) grants ORDER BY scope, role_name`, arg)
 	if err != nil {
-		return AdminAccessView{}, ErrAdminUnavailable
+		return nil, ErrAdminUnavailable
 	}
 	defer rows.Close()
 	grants := []AdminPermission{}
@@ -1143,7 +1266,7 @@ func (s *AdminService) Access(ctx context.Context) (AdminAccessView, error) {
 		var role, scope, source string
 		var raw []byte
 		if err := rows.Scan(&role, &raw, &scope, &source); err != nil {
-			return AdminAccessView{}, ErrAdminUnavailable
+			return nil, ErrAdminUnavailable
 		}
 		var rules []struct {
 			Resource string   `json:"resource"`
@@ -1159,8 +1282,17 @@ func (s *AdminService) Access(ctx context.Context) (AdminAccessView, error) {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return AdminAccessView{}, ErrAdminUnavailable
+		return nil, ErrAdminUnavailable
 	}
-	effective := append([]AdminPermission(nil), grants...)
-	return AdminAccessView{EffectivePermissions: effective, AutomationGrants: grants}, nil
+	return grants, nil
+}
+
+func filterCharliePermissions(grants []AdminPermission) []AdminPermission {
+	filtered := []AdminPermission{}
+	for _, grant := range grants {
+		if strings.HasPrefix(grant.Permission, "charlie:") {
+			filtered = append(filtered, grant)
+		}
+	}
+	return filtered
 }

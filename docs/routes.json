@@ -56,6 +56,10 @@
     "pattern": "/api/v1/admin/charlie/diagnostics/run"
   },
   {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/disconnect"
+  },
+  {
     "method": "GET",
     "pattern": "/api/v1/admin/charlie/kubernetes-visibility"
   },
@@ -798,6 +802,10 @@
   {
     "method": "POST",
     "pattern": "/api/v1/catalog/repositories/{id}/test-connection"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/activation"
   },
   {
     "method": "GET",

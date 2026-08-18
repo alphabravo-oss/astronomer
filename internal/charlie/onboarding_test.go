@@ -101,6 +101,27 @@ func (f onboardingFixture) signed(t *testing.T) []byte {
 	return raw
 }
 
+func TestParseConnectTokenValidatesEndpointAndFeedsOnboarding(t *testing.T) {
+	fixture := newOnboardingFixture(t)
+	raw := fixture.signed(t)
+	token, err := EncodeConnectToken("https://charlie.example.test/charlie/v1/", fixture.confirmation.SigningPublicKeyBase64, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkg, confirmation, err := ParseConnectToken("https://charlie.example.test", "\n"+token+"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirmation.ExpectedMCPURL = fixture.confirmation.ExpectedMCPURL
+	confirmation.Now = fixture.now
+	if _, err := ValidateOnboardingPackage(pkg, confirmation); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ParseConnectToken("https://evil.example.test", token); err == nil {
+		t.Fatal("mismatched endpoint was accepted")
+	}
+}
+
 func TestValidateOnboardingPackageValidAndContentFree(t *testing.T) {
 	fixture := newOnboardingFixture(t)
 	raw := fixture.signed(t)

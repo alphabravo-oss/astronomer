@@ -15,6 +15,7 @@ import {
   acknowledgeCharlieDisclosure,
   emergencyDisableCharlie,
   getCharlieAgent,
+  getCharlieKubernetesVisibility,
   getCharlieMode,
   updateCharlieMode,
   type CharlieMode,
@@ -138,6 +139,11 @@ export function ModeTab() {
     retry: false,
     enabled: settling || (!!q.data && !q.data.workloadCeilingReady),
     refetchInterval: settling ? 2000 : false,
+  });
+  const visibilityQ = useQuery({
+    queryKey: queryKeys.charlie.adminKubernetesVisibility,
+    queryFn: getCharlieKubernetesVisibility,
+    retry: false,
   });
 
   // After apply, poll until both mode ceiling and agent replicas are ready.
@@ -296,6 +302,25 @@ export function ModeTab() {
     !!m.disclosureDigest &&
     m.disclosureDigest !== m.acknowledgedDisclosureDigest;
   const workReady = charlieModeWorkReady(m, agentQ.data);
+  const disabledConfirmed = workReady && m.authoritative === "disabled";
+  const confirmationPending =
+    !workReady &&
+    m.requested !== m.authoritative &&
+    m.workloadCeilingReady &&
+    !m.emergencyDisabled;
+  const visibility = visibilityQ.data;
+  const visibilityPending =
+    !!visibility &&
+    (visibility.requiresRediscovery ||
+      visibility.requiresCentralReview ||
+      visibility.requiresProductAcknowledgement);
+  const acceptDigest =
+    visibility?.requiresCentralReview && visibility.candidateDisclosureDigest
+      ? visibility.candidateDisclosureDigest
+      : needsAck
+        ? m.disclosureDigest
+        : undefined;
+  const catalogBlocked = Boolean(acceptDigest) || visibilityPending;
   const modeBusy = change.isPending || disable.isPending || settling;
   return (
     <div className="space-y-4">
@@ -333,37 +358,49 @@ export function ModeTab() {
                 {transition.phase === "ready" && "Mode ready for work"}
                 {transition.phase === "failed" && "Mode change incomplete"}
                 {transition.phase === "idle" &&
-                  (workReady
-                    ? "Current mode is ready for work"
-                    : "Agent ceiling not fully verified")}
+                  (disabledConfirmed
+                    ? "Charlie is confirmed disabled"
+                    : workReady
+                      ? "Current mode is ready for work"
+                      : confirmationPending
+                        ? "Mode change is not yet confirmed"
+                        : "Agent ceiling not fully verified")}
               </p>
               <p className="text-xs text-muted-foreground">
                 {transition.message ||
-                  (workReady
-                    ? `${productModeLabel[m.authoritative]} is authoritative and both product-agent replicas match the ceiling.`
-                    : "Charlie stays fail-closed for elevated work until both replicas report the requested ceiling.")}
+                  (disabledConfirmed
+                    ? "Fail-closed is verified on both product-agent replicas. Raise mode after any pending catalog review."
+                    : workReady
+                      ? `${productModeLabel[m.authoritative]} is authoritative and both product-agent replicas match the ceiling.`
+                      : confirmationPending
+                        ? `Both product-agent replicas already report ${productModeLabel[m.requested]}. Charlie has not confirmed that as the live authority yet.`
+                        : "Charlie stays fail-closed for elevated work until both replicas report the requested ceiling.")}
               </p>
             </div>
             <StatusBadge
               status={
-                transition.phase === "ready" ||
-                (transition.phase === "idle" && workReady)
-                  ? "healthy"
-                  : transition.phase === "failed"
-                    ? "unavailable"
-                    : "degraded"
+                transition.phase === "idle" && disabledConfirmed
+                  ? "disabled"
+                  : transition.phase === "ready" ||
+                      (transition.phase === "idle" && workReady)
+                    ? "healthy"
+                    : transition.phase === "failed"
+                      ? "unavailable"
+                      : "degraded"
               }
               label={
                 transition.phase === "applying"
                   ? "Changing"
                   : transition.phase === "verifying"
                     ? "Validating"
-                    : transition.phase === "ready" ||
-                        (transition.phase === "idle" && workReady)
-                      ? "Ready"
-                      : transition.phase === "failed"
-                        ? "Failed"
-                        : "Not ready"
+                    : transition.phase === "idle" && disabledConfirmed
+                      ? "Disabled"
+                      : transition.phase === "ready" ||
+                          (transition.phase === "idle" && workReady)
+                        ? "Ready"
+                        : transition.phase === "failed"
+                          ? "Failed"
+                          : "Not ready"
               }
               pulse={settling}
               icon={
@@ -433,7 +470,7 @@ export function ModeTab() {
                 aria-pressed={m.authoritative === mode}
                 disabled={
                   m.authoritative === mode ||
-                  (needsAck && mode !== "disabled") ||
+                  (catalogBlocked && mode !== "disabled") ||
                   (mode === "auto" && m.autoReadiness?.ready === false) ||
                   modeBusy
                 }
@@ -456,10 +493,15 @@ export function ModeTab() {
             ),
           )}
         </div>
-        {needsAck && (
+        {visibility?.requiresRediscovery && (
+          <p role="status" className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 text-sm">
+            Kubernetes visibility is waiting for catalog rediscovery. Finish that on the Kubernetes tab before raising mode.
+          </p>
+        )}
+        {catalogBlocked && !visibility?.requiresRediscovery && (
           <p role="status" className="text-sm text-status-warning">
-            Review and acknowledge the current disclosure before enabling a
-            non-disabled authority mode.
+            Accept the rediscovered catalog below before enabling a non-disabled
+            authority mode. Acceptance is an Astronomer action, not a Charlie one.
           </p>
         )}
         <div className="rounded-lg border p-4">
@@ -536,17 +578,23 @@ export function ModeTab() {
             </p>
           )}
         </div>
-        {needsAck && (
+        {acceptDigest && (
           <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-4">
-            <p className="text-sm font-medium">Disclosure changed</p>
-            <p className="mt-1 break-all text-xs text-muted-foreground">
-              Digest: {m.disclosureDigest}
+            <p className="text-sm font-medium">Accept capability catalog</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Astronomer rediscovered this catalog after the Kubernetes visibility
+              change. Accept it here to restore the ability to raise mode. Charlie
+              does not accept product capabilities.
+            </p>
+            <p className="mt-2 break-all text-xs text-muted-foreground">
+              Digest: {acceptDigest}
             </p>
             <button
-              onClick={() => acknowledge.mutate(m.disclosureDigest!)}
+              onClick={() => acknowledge.mutate(acceptDigest)}
               className={`${button} mt-3`}
+              disabled={acknowledge.isPending}
             >
-              Acknowledge reviewed disclosure
+              Accept rediscovered catalog
             </button>
           </div>
         )}
