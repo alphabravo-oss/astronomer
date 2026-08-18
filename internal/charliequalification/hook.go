@@ -226,7 +226,10 @@ func NewHTTPServer(address string, handler http.Handler) (*http.Server, error) {
 	if err := ValidateLoopbackAddress(address); err != nil {
 		return nil, err
 	}
-	return &http.Server{Addr: address, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 70 * time.Second, WriteTimeout: 21 * time.Minute, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10}, nil
+	// ReadTimeout is a connection-wide read deadline. The candidate deploy
+	// hook runs a multi-minute operator via r.Context(); a short ReadTimeout
+	// cancels that work and returns 503. Bound only the header read here.
+	return &http.Server{Addr: address, Handler: handler, ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 21 * time.Minute, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10}, nil
 }
 
 func Unsupported(scenario string) ScenarioResult {

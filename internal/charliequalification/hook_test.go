@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeDriver struct {
@@ -34,6 +35,19 @@ func TestValidateLoopbackAddress(t *testing.T) {
 		if err := ValidateLoopbackAddress(address); err == nil {
 			t.Fatalf("expected %s to be rejected", address)
 		}
+	}
+}
+
+func TestHTTPServerDoesNotSetConnectionReadTimeout(t *testing.T) {
+	server, err := NewHTTPServer("127.0.0.1:9443", http.NotFoundHandler())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if server.ReadTimeout != 0 {
+		t.Fatalf("ReadTimeout = %s; a connection-wide read deadline cancels candidate deploys", server.ReadTimeout)
+	}
+	if server.ReadHeaderTimeout != 5*time.Second {
+		t.Fatalf("ReadHeaderTimeout = %s", server.ReadHeaderTimeout)
 	}
 }
 
