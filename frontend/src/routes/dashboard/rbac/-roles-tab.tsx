@@ -36,8 +36,8 @@ const globalRoleColumns: Column<GlobalRole>[] = [
   {
     key: 'rules',
     header: 'Rules',
-    accessor: (row) => <span className="tabular-nums text-sm">{row.rules.length}</span>,
-    sortAccessor: (row) => row.rules.length,
+    accessor: (row) => <span className="tabular-nums text-sm">{row.rules?.length ?? 0}</span>,
+    sortAccessor: (row) => row.rules?.length ?? 0,
     align: 'center',
   },
   {
@@ -71,7 +71,7 @@ const clusterRoleColumns: Column<ClusterRole>[] = [
   {
     key: 'rules',
     header: 'Rules',
-    accessor: (row) => <span className="tabular-nums text-sm">{row.rules.length}</span>,
+    accessor: (row) => <span className="tabular-nums text-sm">{row.rules?.length ?? 0}</span>,
     align: 'center',
   },
   {
@@ -105,7 +105,7 @@ const projectRoleColumns: Column<ProjectRole>[] = [
   {
     key: 'rules',
     header: 'Rules',
-    accessor: (row) => <span className="tabular-nums text-sm">{row.rules.length}</span>,
+    accessor: (row) => <span className="tabular-nums text-sm">{row.rules?.length ?? 0}</span>,
     align: 'center',
   },
   {

@@ -786,13 +786,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		tasks.SetControlPlaneSnapshotStatusReader(controlPlaneSnapshotHandler.ReadSnapshotJobStatus)
 	}
 
-	// Native per-CRD RBAC — an additive allow layer on the k8s-proxy authz
-	// hook, OFF unless native_rbac_enabled. Left nil, deps.NativeAuthz is nil
-	// (proxy authz unchanged) and the CRUD routes never register.
-	var nativeRBACAuthz *nativeRBACAuthorizer
+	// Native / CRD grants — additive allow on the k8s-proxy authz hook after a
+	// coarse deny. Always wired so CRD grants folded into cluster/project roles
+	// take effect. The standalone /native-rbac-rules CRUD stays behind the
+	// native_rbac_enabled flag.
+	nativeRBACAuthz := newNativeRBACAuthorizer(queries)
+	nativeRBACAuthz.setBindings(rbacQuerier)
 	var nativeRBACHandler *handler.NativeRBACHandler
 	if cfg.NativeRBACEnabled {
-		nativeRBACAuthz = newNativeRBACAuthorizer(queries)
 		nativeRBACHandler = handler.NewNativeRBACHandler(queries)
 		nativeRBACHandler.SetInvalidator(nativeRBACAuthz.Invalidate)
 		// Privilege-escalation guard on native-rule authoring: the caller must

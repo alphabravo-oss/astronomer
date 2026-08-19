@@ -814,7 +814,7 @@ export async function createGlobalRole(data: {
   name: string;
   displayName: string;
   description?: string;
-  rules: import('@/types').PolicyRule[];
+  rules: Array<import('@/types').PolicyRule | Record<string, unknown>>;
 }) {
   const res = await api.post<APIResponse<import('@/types').GlobalRole>>('/rbac/global-roles', data);
   return res.data.data;
@@ -824,7 +824,7 @@ export async function createClusterRole(data: {
   name: string;
   displayName: string;
   description?: string;
-  rules: import('@/types').PolicyRule[];
+  rules: Array<import('@/types').PolicyRule | Record<string, unknown>>;
 }) {
   const res = await api.post<APIResponse<import('@/types').ClusterRole>>('/rbac/cluster-roles', data);
   return res.data.data;
@@ -834,7 +834,7 @@ export async function createProjectRole(data: {
   name: string;
   displayName: string;
   description?: string;
-  rules: import('@/types').PolicyRule[];
+  rules: Array<import('@/types').PolicyRule | Record<string, unknown>>;
 }) {
   const res = await api.post<APIResponse<import('@/types').ProjectRole>>('/rbac/project-roles', data);
   return res.data.data;

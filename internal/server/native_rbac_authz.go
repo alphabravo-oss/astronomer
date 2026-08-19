@@ -24,11 +24,18 @@ type nativeRuleQuerier interface {
 	ListNativeRBACRulesByUser(ctx context.Context, userID uuid.UUID) ([]sqlc.NativeRbacRule, error)
 }
 
+// nativeBindingQuerier supplies the user's role bindings so CRD grants folded
+// into cluster/project roles can be evaluated without a separate rule table.
+type nativeBindingQuerier interface {
+	GetUserBindings(ctx context.Context, userID string) ([]rbac.RoleBinding, error)
+}
+
 // nativeRBACAuthorizer loads a user's native rules (short-TTL cached, since the
 // hook only fires on coarse-deny) and evaluates them with rbac.NativeAllow.
 type nativeRBACAuthorizer struct {
-	q   nativeRuleQuerier
-	ttl time.Duration
+	q        nativeRuleQuerier
+	bindings nativeBindingQuerier
+	ttl      time.Duration
 
 	mu    sync.Mutex
 	cache map[string]nativeCacheEntry
@@ -43,6 +50,12 @@ const nativeRBACCacheCap = 2000
 
 func newNativeRBACAuthorizer(q nativeRuleQuerier) *nativeRBACAuthorizer {
 	return &nativeRBACAuthorizer{q: q, ttl: 15 * time.Second, cache: map[string]nativeCacheEntry{}}
+}
+
+func (a *nativeRBACAuthorizer) setBindings(q nativeBindingQuerier) {
+	if a != nil {
+		a.bindings = q
+	}
 }
 
 // Invalidate drops a user's cached rules after an authoring change so a new
@@ -80,10 +93,13 @@ func (a *nativeRBACAuthorizer) load(ctx context.Context, userID string) ([]rbac.
 	if err != nil {
 		return nil, false
 	}
-	rows, err := a.q.ListNativeRBACRulesByUser(ctx, uid)
-	if err != nil {
-		// DB error → fail closed (no native grant); the coarse deny stands.
-		return nil, false
+	var rows []sqlc.NativeRbacRule
+	if a.q != nil {
+		// Table-backed per-user rules (legacy standalone API). A query error
+		// does not skip role-folded grants below.
+		if listed, lerr := a.q.ListNativeRBACRulesByUser(ctx, uid); lerr == nil {
+			rows = listed
+		}
 	}
 	rules := make([]rbac.NativeRule, 0, len(rows))
 	for _, r := range rows {
@@ -97,6 +113,11 @@ func (a *nativeRBACAuthorizer) load(ctx context.Context, userID string) ([]rbac.
 			nr.ClusterID = uuid.UUID(r.ClusterID.Bytes).String()
 		}
 		rules = append(rules, nr)
+	}
+	if a.bindings != nil {
+		if bindings, berr := a.bindings.GetUserBindings(ctx, userID); berr == nil {
+			rules = append(rules, rbac.NativeRulesFromBindings(bindings)...)
+		}
 	}
 
 	a.mu.Lock()

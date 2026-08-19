@@ -583,7 +583,7 @@ export function useCreateRole() {
       name: string;
       displayName: string;
       description?: string;
-      rules: PolicyRule[];
+      rules: Array<PolicyRule | Record<string, unknown>>;
     }) => {
       const { scope, ...roleData } = data;
       switch (scope) {

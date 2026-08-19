@@ -701,9 +701,11 @@ export interface ProjectRole {
 }
 
 export interface PolicyRule {
-  apiGroups: string[];
-  resources: string[];
+  resource?: string;
+  resources?: string[];
   verbs: string[];
+  apiGroups?: string[];
+  api_groups?: string[];
   resourceNames?: string[];
 }
 

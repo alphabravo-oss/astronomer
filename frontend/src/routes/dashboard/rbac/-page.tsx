@@ -127,7 +127,7 @@ export default function RBACPage() {
     <PageShell>
       <PageHeader
         title="RBAC"
-        description="Role-Based Access Control management"
+        description="Users, roles, and bindings. Cluster and project roles can also carry CRD grants for a single Custom Resource."
         actions={headerActions}
       />
 
