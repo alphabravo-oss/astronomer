@@ -155,6 +155,13 @@ describe('StatusBadge', () => {
     expect(pulseElement).not.toBeNull();
   });
 
+  it('shows pulse animation for ready and completed statuses', () => {
+    const { container: ready } = render(<StatusBadge status="ready" />);
+    expect(ready.querySelector('.animate-pulse-dot')).not.toBeNull();
+    const { container: completed } = render(<StatusBadge status="completed" />);
+    expect(completed.querySelector('.animate-pulse-dot')).not.toBeNull();
+  });
+
   it('shows pulse when explicitly set via pulse prop', () => {
     const { container } = render(<StatusBadge status="error" pulse={true} />);
     const pulseElement = container.querySelector('.animate-pulse-dot');

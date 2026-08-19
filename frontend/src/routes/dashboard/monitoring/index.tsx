@@ -6,6 +6,7 @@ import { useTabParam } from '@/lib/use-tab-param';
 import { useRollingMetrics } from '@/lib/use-rolling-metrics';
 import { Link } from '@/lib/link';
 import { MetricCard } from '@/components/ui/metric-card';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { MetricsChart } from '@/components/monitoring/metrics-chart';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { formatBytes, formatCPU, formatPercentage, cn } from '@/lib/utils';
@@ -145,13 +146,11 @@ function MonitoringPage() {
 
   if (!selectedClusterId) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Monitoring</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Cluster resource metrics and utilization
-          </p>
-        </div>
+      <PageShell>
+        <PageHeader
+          title="Monitoring"
+          description="Cluster resource metrics and utilization"
+        />
         <div className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card">
           <Server className="h-5 w-5 text-muted-foreground flex-shrink-0" />
           <p className="text-sm text-muted-foreground">
@@ -160,20 +159,16 @@ function MonitoringPage() {
               : 'Loading clusters...'}
           </p>
         </div>
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Monitoring</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Real-time resource metrics and utilization
-          </p>
-        </div>
+    <PageShell>
+      <PageHeader
+        title="Monitoring"
+        description="Real-time resource metrics and utilization"
+        actions={
         <div className="flex items-center gap-2">
           {/* Cluster picker (in-page; this is the only route that isn't already
               cluster-scoped via the URL slug). */}
@@ -233,7 +228,8 @@ function MonitoringPage() {
             ))}
           </div>
         </div>
-      </div>
+        }
+      />
 
       {/* Summary Cards — CPU/Mem/Pods come from metrics-server (always live).
           Disk/Network need node-exporter scraped by Prometheus, so they only
@@ -368,7 +364,7 @@ function MonitoringPage() {
           pageSize={10}
         />
       </div>
-    </div>
+    </PageShell>
   );
 }
 

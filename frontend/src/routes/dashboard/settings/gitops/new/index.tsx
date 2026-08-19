@@ -7,6 +7,8 @@ import { Link } from '@/lib/link';
 import { useRouter } from '@/lib/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { ActionButton } from '@/components/ui/action-button';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { useAppForm, useStore } from '@/lib/form';
 import { useCreateGitOpsSource } from '@/components/settings/hooks';
 import type { GitOpsSourceWriteRequest } from '@/lib/api/settings';
@@ -200,19 +202,18 @@ function GitOpsForm() {
         </p>
       ) : null}
       <div className="flex justify-end gap-2 pt-2">
-        <Link
-          href="/dashboard/settings/gitops"
-          className="inline-flex items-center h-9 px-4 rounded-lg border text-sm hover:bg-muted transition-colors"
-        >
+        <ActionButton type="button" onClick={() => router.push('/dashboard/settings/gitops')}>
           Cancel
-        </Link>
-        <button
+        </ActionButton>
+        <ActionButton
           type="submit"
+          intent="primary"
           disabled={create.isPending}
-          className="inline-flex items-center h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
+          loading={create.isPending}
+          loadingLabel="Creating…"
         >
-          {create.isPending ? 'Creating…' : 'Create source'}
-        </button>
+          Create source
+        </ActionButton>
       </div>
     </form>
   );
@@ -221,7 +222,7 @@ function GitOpsForm() {
 function NewGitOpsSourcePage() {
   return (
     <SettingsAuthGate>
-      <div className="space-y-6">
+      <PageShell>
         <Link
           href="/dashboard/settings/gitops"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -229,12 +230,9 @@ function NewGitOpsSourcePage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to GitOps sources
         </Link>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Settings · GitOps</p>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">New GitOps source</h1>
-        </div>
+        <PageHeader eyebrow="Settings · GitOps" title="New GitOps source" />
         <GitOpsForm />
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

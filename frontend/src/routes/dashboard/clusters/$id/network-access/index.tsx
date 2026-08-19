@@ -69,8 +69,8 @@ function ModeBadge({
       <span
         className={
           drift
-            ? 'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-amber-100 text-amber-800'
-            : 'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-green-100 text-green-800'
+            ? 'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-warning/10 text-status-warning'
+            : 'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-success/10 text-status-success'
         }
       >
         <Lock className="h-3 w-3" /> Apiserver: locked
@@ -78,7 +78,7 @@ function ModeBadge({
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-blue-100 text-blue-800">
+    <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-info/10 text-status-info">
       Apiserver: monitoring
     </span>
   );
@@ -93,7 +93,7 @@ function CIDRPill({ cidr, removable, onRemove }: { cidr: string; removable?: boo
         <button
           type="button"
           onClick={onRemove}
-          className="ml-1 text-slate-500 hover:text-red-600"
+          className="ml-1 text-slate-500 hover:text-status-error"
           aria-label={`remove ${cidr}`}
         >
           ×
@@ -229,7 +229,7 @@ function ClusterNetworkAccessPage() {
 
   if (isError || !data) {
     return (
-      <div className="p-6 text-sm text-red-700">
+      <div className="p-6 text-sm text-status-error">
         Failed to load network access. <button onClick={() => refetch()}>Retry</button>
       </div>
     );
@@ -252,12 +252,12 @@ function ClusterNetworkAccessPage() {
         </div>
         <div className="flex items-center gap-2">
           {data.drift && (
-            <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-amber-100 text-amber-800">
+            <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-warning/10 text-status-warning">
               <ShieldAlert className="h-3 w-3" /> Drift detected
             </span>
           )}
           {data.syncStatus === 'synced' && (
-            <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-green-100 text-green-800">
+            <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-success/10 text-status-success">
               <ShieldCheck className="h-3 w-3" /> Synced
             </span>
           )}
@@ -293,7 +293,7 @@ function ClusterNetworkAccessPage() {
           </div>
         </div>
         {data.lastError && (
-          <div className="col-span-3 flex items-start gap-2 rounded bg-amber-50 p-2 text-xs text-amber-800">
+          <div className="col-span-3 flex items-start gap-2 rounded bg-status-warning/10 p-2 text-xs text-status-warning">
             <AlertTriangle className="mt-0.5 h-3 w-3" />
             <span>{data.lastError}</span>
           </div>
@@ -333,7 +333,7 @@ function ClusterNetworkAccessPage() {
                   type="button"
                   onClick={handleSave}
                   disabled={updateMut.isPending}
-                  className="text-xs underline text-blue-700"
+                  className="text-xs underline text-status-info"
                 >
                   Save
                 </button>
@@ -436,7 +436,7 @@ function ClusterNetworkAccessPage() {
       <div className="rounded border p-4">
         <h2 className="font-medium mb-2 flex items-center gap-1">
           Desired
-          <CheckCircle2 className="h-3 w-3 text-green-600" />
+          <CheckCircle2 className="h-3 w-3 text-status-success" />
         </h2>
         <div className="flex flex-wrap gap-1 min-h-[2rem]">
           {data.desired.map((c) => (

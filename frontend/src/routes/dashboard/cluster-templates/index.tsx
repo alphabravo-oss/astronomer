@@ -17,6 +17,8 @@ import { useRouter } from '@/lib/navigation';
 import { Plus, Trash2, Layers } from 'lucide-react';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { LoadingState, PermissionState } from '@/components/ui/empty-state';
+import { ActionButton } from '@/components/ui/action-button';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { useCurrentUser } from '@/lib/hooks';
 import {
   useClusterTemplates,
@@ -40,8 +42,8 @@ function ClusterTemplatesPage() {
 
   if (!canRead) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Onboarding Bundles</h1>
+      <PageShell>
+        <PageHeader title="Onboarding Bundles" />
         <PermissionState
           permission="cluster_templates:read"
           description={
@@ -52,7 +54,7 @@ function ClusterTemplatesPage() {
           }
           className="rounded-lg border border-border bg-muted/30 p-6"
         />
-      </div>
+      </PageShell>
     );
   }
 
@@ -138,27 +140,18 @@ function ClusterTemplatesPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-            Onboarding Bundles
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Reusable bundles of tools, policy, and project defaults applied to a cluster after you
-            register it — they shape an adopted cluster, they don&apos;t create one.
-          </p>
-        </div>
-        {canWrite && (
-          <Link
-            href="/dashboard/cluster-templates/new"
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus className="h-4 w-4" />
-            New bundle
-          </Link>
-        )}
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Onboarding Bundles"
+        description="Reusable bundles of tools, policy, and project defaults applied to a cluster after you register it — they shape an adopted cluster, they don't create one."
+        actions={
+          canWrite ? (
+            <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => router.push('/dashboard/cluster-templates/new')}>
+              New bundle
+            </ActionButton>
+          ) : undefined
+        }
+      />
 
       {isLoading ? (
         <LoadingState title="Loading cluster templates" className="h-32 py-0" />
@@ -173,7 +166,7 @@ function ClusterTemplatesPage() {
           onRowClick={(row) => router.push(`/dashboard/cluster-templates/${row.id}`)}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
 

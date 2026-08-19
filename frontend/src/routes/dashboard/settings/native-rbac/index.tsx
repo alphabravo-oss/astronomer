@@ -18,7 +18,9 @@ import { Link } from '@/lib/link';
 import { ArrowLeft, KeyRound, Loader2, Plus, Trash2 } from 'lucide-react';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ActionButton } from '@/components/ui/action-button';
 import { ModalShell } from '@/components/ui/modal-shell';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { queryKeys, useClusters, useUsers } from '@/lib/hooks';
 import { useAppForm, useStore } from '@/lib/form';
@@ -168,14 +170,9 @@ function NativeRbacList() {
   return (
     <>
       <div className="flex items-center justify-end">
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          <Plus className="h-4 w-4" />
+        <ActionButton type="button" intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>
           New rule
-        </button>
+        </ActionButton>
       </div>
 
       <DataTable
@@ -432,7 +429,7 @@ function NewRuleModal({ onClose }: { onClose: () => void }) {
 function NativeRbacPage() {
   return (
     <SettingsAuthGate>
-      <div className="space-y-6">
+      <PageShell>
         <Link
           href="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -440,22 +437,20 @@ function NativeRbacPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
         </Link>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Settings · Native RBAC
-          </p>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">
-            Native per-CRD RBAC rules
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            An additive allow layer that grants access on an exact (apiGroup,
-            resource, verb) — scope a user to a single CRD without widening the
-            coarse <span className="font-mono">custom_resources</span> permission.
-            Escalation groups and exec/logs are never granted.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="Settings · Native RBAC"
+          title="Native per-CRD RBAC rules"
+          description={
+            <>
+              An additive allow layer that grants access on an exact (apiGroup,
+              resource, verb) — scope a user to a single CRD without widening the
+              coarse <span className="font-mono">custom_resources</span> permission.
+              Escalation groups and exec/logs are never granted.
+            </>
+          }
+        />
         <NativeRbacList />
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

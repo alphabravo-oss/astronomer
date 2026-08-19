@@ -20,6 +20,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useState } from 'react';
 import { useParams } from '@/lib/navigation';
 import { Plus, Loader2, Trash2, Link2 } from 'lucide-react';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { ModalShell } from '@/components/ui/modal-shell';
 import {
   useProjectCatalogs,
   useCreateProjectCatalog,
@@ -28,7 +31,7 @@ import {
   canEditProject,
 } from '@/components/projects/hooks';
 import { useCurrentUser } from '@/lib/hooks';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+
 import type { ProjectCatalog } from '@/lib/api/project-detail';
 import { cn, formatRelativeTime } from '@/lib/utils';
 
@@ -83,13 +86,9 @@ function ProjectCatalogsPage() {
           only.
         </p>
         {canEdit && (
-          <button
-            onClick={() => setShowAdd(true)}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus className="h-4 w-4" />
+          <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setShowAdd(true)}>
             Add private catalog
-          </button>
+          </ActionButton>
         )}
       </div>
 
@@ -160,66 +159,54 @@ function ProjectCatalogsPage() {
       )}
 
       {showAdd && (
-        <OverlayShell onClose={() => setShowAdd(false)}>
-          <form
-            onSubmit={handleAdd}
-            className="bg-card rounded-xl border border-border p-6 w-full max-w-md space-y-4"
+        <form onSubmit={handleAdd}>
+          <ModalShell
+            title="Add private catalog"
+            subtitle="Subscribes this project to a Helm chart repository. Only this project can see private catalogs."
+            onClose={() => setShowAdd(false)}
+            size="sm"
+            footerClassName="flex items-center justify-end gap-2"
+            footer={
+              <>
+                <ActionButton type="button" intent="ghost" onClick={() => setShowAdd(false)}>
+                  Cancel
+                </ActionButton>
+                <ActionButton type="submit" intent="primary" loading={createMutation.isPending} loadingLabel="Creating…">
+                  Create
+                </ActionButton>
+              </>
+            }
           >
-            <div>
-              <h3 className="text-lg font-semibold">Add private catalog</h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Subscribes this project to a Helm chart repository. Only this
-                project can see private catalogs.
-              </p>
-            </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-foreground">Name</label>
-              <input
+              <Input
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 required
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm"
               />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-foreground">Repository URL</label>
-              <input
+              <Input
                 type="url"
                 value={form.url}
                 onChange={(e) => setForm({ ...form, url: e.target.value })}
                 placeholder="https://charts.example.com/repo"
                 required
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
+                className="font-mono"
               />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-foreground">Description (optional)</label>
-              <input
+              <Input
                 type="text"
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm"
               />
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowAdd(false)}
-                className="h-9 px-4 rounded-md text-sm text-muted-foreground hover:text-foreground"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={createMutation.isPending}
-                className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
-              >
-                {createMutation.isPending ? 'Creating…' : 'Create'}
-              </button>
-            </div>
-          </form>
-        </OverlayShell>
+          </ModalShell>
+        </form>
       )}
     </div>
   );
@@ -236,11 +223,11 @@ function VisibilityBadge({ visibility }: { visibility: ProjectCatalog['visibilit
           : 'Global';
   const tone =
     visibility === 'own'
-      ? 'bg-blue-500/10 text-blue-500'
+      ? 'bg-status-info/10 text-status-info'
       : visibility === 'subscribed_public'
-        ? 'bg-green-500/10 text-green-500'
+        ? 'bg-status-success/10 text-status-success'
         : visibility === 'foreign_private'
-          ? 'bg-red-500/10 text-red-500'
+          ? 'bg-status-error/10 text-status-error'
           : 'bg-muted text-muted-foreground';
   return (
     <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium', tone)}>

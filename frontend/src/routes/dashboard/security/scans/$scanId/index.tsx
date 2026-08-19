@@ -8,6 +8,8 @@ import { cisScanReportCSVUrl } from '@/lib/api';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { ActionButton } from '@/components/ui/action-button';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   severityClass,
   findingStatusClass,
@@ -94,7 +96,7 @@ function ScanDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Link href="/dashboard/security" className="hover:text-foreground transition-colors">
@@ -106,10 +108,9 @@ function ScanDetailPage() {
         </span>
       </div>
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3 flex-wrap">
+      <PageHeader
+        title={
+          <span className="flex items-center gap-3 flex-wrap">
             <button
               onClick={() => router.push('/dashboard/security')}
               className="text-muted-foreground hover:text-foreground transition-colors"
@@ -117,68 +118,53 @@ function ScanDetailPage() {
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-              {cluster?.displayName ?? cluster?.name ?? scan.clusterId.slice(0, 8)}
-            </h1>
+            {cluster?.displayName ?? cluster?.name ?? scan.clusterId.slice(0, 8)}
             <StatusBadge status={scan.status} />
             {scan.status === 'running' && (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground font-normal">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Polling for results
               </span>
             )}
-          </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span>
-              Profile <span className="font-mono text-foreground">{scan.scanType}</span>
-            </span>
-            <span>·</span>
-            {scan.startedAt && (
-              <span>Started {formatDate(scan.startedAt, 'MMM d, HH:mm')}</span>
-            )}
-            {scan.completedAt && (
-              <>
-                <span>·</span>
-                <span>Completed {formatDate(scan.completedAt, 'MMM d, HH:mm')}</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Anchor with `download` so the browser saves the CSV instead of
-              navigating. The link goes through the API base URL so the auth
-              cookie / proxy still applies. */}
-          <a
-            href={cisScanReportCSVUrl(scan.id)}
-            download={`cis-scan-${scan.id}.csv`}
-            className={cn(
-              'inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border',
-              'text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors',
-              !isTerminal && 'opacity-50 pointer-events-none',
-            )}
-            aria-disabled={!isTerminal}
-            title={isTerminal ? 'Download CSV report' : 'Available once the scan completes'}
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
-          </a>
-          <button
-            type="button"
-            onClick={() => setShowRerun(true)}
-            disabled={createScan.isPending}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {createScan.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            Re-run Scan
-          </button>
-        </div>
-      </div>
+          </span>
+        }
+        description={
+          <>
+            Profile <span className="font-mono text-foreground">{scan.scanType}</span>
+            {scan.startedAt && <> · Started {formatDate(scan.startedAt, 'MMM d, HH:mm')}</>}
+            {scan.completedAt && <> · Completed {formatDate(scan.completedAt, 'MMM d, HH:mm')}</>}
+          </>
+        }
+        actions={
+          <>
+            {/* Anchor with `download` so the browser saves the CSV instead of
+                navigating. The link goes through the API base URL so the auth
+                cookie / proxy still applies. */}
+            <a
+              href={cisScanReportCSVUrl(scan.id)}
+              download={`cis-scan-${scan.id}.csv`}
+              className={cn(
+                'inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border',
+                'text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors',
+                !isTerminal && 'opacity-50 pointer-events-none',
+              )}
+              aria-disabled={!isTerminal}
+              title={isTerminal ? 'Download CSV report' : 'Available once the scan completes'}
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </a>
+            <ActionButton
+              intent="primary"
+              icon={<RefreshCw className="h-4 w-4" />}
+              onClick={() => setShowRerun(true)}
+              loading={createScan.isPending}
+            >
+              Re-run Scan
+            </ActionButton>
+          </>
+        }
+      />
 
       {scan.errorMessage && (
         <div className="rounded-md border border-status-error/30 bg-status-error/5 p-3">
@@ -202,7 +188,7 @@ function ScanDetailPage() {
         confirmText="Re-run"
         loading={createScan.isPending}
       />
-    </div>
+    </PageShell>
   );
 }
 

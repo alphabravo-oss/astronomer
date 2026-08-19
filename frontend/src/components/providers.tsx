@@ -2,10 +2,26 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { ThemeProvider } from '@/lib/theme';
+import { ThemeProvider, useTheme } from '@/lib/theme';
 import { Toaster } from 'sonner';
 import { useState, type ReactNode } from 'react';
 import { IS_DEV } from '@/lib/env';
+
+function ThemedToaster() {
+  const { theme } = useTheme();
+  return (
+    <Toaster
+      position="bottom-right"
+      theme={theme}
+      richColors
+      closeButton
+      toastOptions={{
+        className: 'border border-border',
+        duration: 4000,
+      }}
+    />
+  );
+}
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -35,16 +51,7 @@ export function Providers({ children }: { children: ReactNode }) {
           other co-hosted applications may also use that key) lives in @/lib/theme. */}
       <ThemeProvider>
         {children}
-        <Toaster
-          position="bottom-right"
-          theme="dark"
-          richColors
-          closeButton
-          toastOptions={{
-            className: 'border border-border',
-            duration: 4000,
-          }}
-        />
+        <ThemedToaster />
       </ThemeProvider>
       {IS_DEV && (
         <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />

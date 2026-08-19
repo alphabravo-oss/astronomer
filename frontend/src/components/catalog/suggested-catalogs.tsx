@@ -1,12 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Package, Check, Plus, Loader2, AlertTriangle } from 'lucide-react';
+import { Package, Check, Plus, AlertTriangle } from 'lucide-react';
+import { ActionButton } from '@/components/ui/action-button';
 import { ModalShell } from '@/components/ui/modal-shell';
 import { useCreateHelmRepository } from '@/lib/hooks';
 import { SUGGESTED_CATALOGS, normalizeRepoUrl, type SuggestedCatalog } from '@/lib/catalogs/suggested';
 import type { HelmRepository } from '@/types';
-import { cn } from '@/lib/utils';
 
 interface SuggestedCatalogsProps {
   /** Existing helm_repositories rows — used to determine "Added" state. */
@@ -94,7 +94,7 @@ export function SuggestedCatalogs({ existing, onJumpToExisting }: SuggestedCatal
               </div>
 
               {catalog.subscriptionRequired && (
-                <div className="inline-flex items-center gap-1.5 self-start rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-2xs font-medium text-amber-600 dark:text-amber-400">
+                <div className="inline-flex items-center gap-1.5 self-start rounded-md border border-status-warning/30 bg-status-warning/10 px-2 py-0.5 text-2xs font-medium text-status-warning">
                   <AlertTriangle className="h-3 w-3" />
                   Subscription required
                 </div>
@@ -105,31 +105,26 @@ export function SuggestedCatalogs({ existing, onJumpToExisting }: SuggestedCatal
                   {catalog.url}
                 </span>
                 {isAdded ? (
-                  <button
-                    type="button"
+                  <ActionButton
+                    size="sm"
+                    intent="ghost"
+                    icon={<Check className="h-3 w-3" />}
                     onClick={() => existingRepo && onJumpToExisting?.(existingRepo)}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-medium
-                      bg-status-success/10 text-status-success hover:bg-status-success/20 transition-colors"
+                    className="bg-status-success/10 text-status-success hover:bg-status-success/20 hover:text-status-success"
                     title="View in Your repositories"
                   >
-                    <Check className="h-3 w-3" />
                     Added
-                  </button>
+                  </ActionButton>
                 ) : (
-                  <button
-                    type="button"
+                  <ActionButton
+                    size="sm"
+                    intent="primary"
+                    icon={<Plus className="h-3 w-3" />}
+                    loading={isPending}
                     onClick={() => handleAddClick(catalog)}
-                    disabled={isPending}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-2xs font-medium
-                      bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
                   >
-                    {isPending ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Plus className="h-3 w-3" />
-                    )}
                     Add to catalog
-                  </button>
+                  </ActionButton>
                 )}
               </div>
             </div>
@@ -169,33 +164,19 @@ function DhiConfirmModal({
       title="Subscription required"
       onClose={onCancel}
       size="sm"
-      panelClassName="max-w-md bg-popover"
-      bodyClassName="space-y-3 py-4"
-      footerClassName="bg-muted/30"
-      titleIcon={<AlertTriangle className="h-5 w-5 text-amber-500" />}
+      footerClassName="flex items-center justify-end gap-2"
+      titleIcon={<AlertTriangle className="h-5 w-5 text-status-warning" />}
       footer={(
-        <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
+        <>
+          <ActionButton onClick={onCancel}>Cancel</ActionButton>
+          <ActionButton
             onClick={onConfirm}
-            disabled={pending}
-            className={cn(
-              'inline-flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-medium transition-opacity',
-              'bg-amber-500 text-white hover:opacity-90 disabled:opacity-50',
-            )}
+            loading={pending}
+            className="bg-status-warning text-white hover:bg-status-warning/90"
           >
-            {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             I have a subscription, add anyway
-          </button>
-        </div>
+          </ActionButton>
+        </>
       )}
     >
           <p className="text-sm text-foreground">

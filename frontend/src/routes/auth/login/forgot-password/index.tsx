@@ -9,9 +9,10 @@ import { createFileRoute } from '@tanstack/react-router';
 
 import { useState } from 'react';
 import { Link } from '@/lib/link';
-import { Orbit, Loader2, Mail, ArrowLeft, Check } from 'lucide-react';
+import { Orbit, Mail, ArrowLeft, Check } from 'lucide-react';
 import { toastApiError, toastError } from '@/lib/toast';
 import { requestPasswordReset } from '@/lib/api/account-security';
+import { ActionButton } from '@/components/ui/action-button';
 
 function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -90,13 +91,16 @@ function ForgotPasswordPage() {
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               </div>
             </div>
-            <button
+            <ActionButton
               type="submit"
+              intent="primary"
+              className="w-full"
               disabled={loading || !email}
-              className="w-full inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+              loading={loading}
+              loadingLabel="Send reset link"
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send reset link'}
-            </button>
+              Send reset link
+            </ActionButton>
             <div className="text-center">
               <Link
                 href="/auth/login"

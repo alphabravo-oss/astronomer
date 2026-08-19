@@ -2,11 +2,12 @@ import { createFileRoute } from '@tanstack/react-router';
 
 import { useState } from 'react';
 import { useRouter } from '@/lib/navigation';
-import { Orbit, Eye, EyeOff, Loader2, KeyRound, ArrowRight } from 'lucide-react';
+import { Orbit, Eye, EyeOff, KeyRound, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { changeOwnPassword } from '@/lib/api';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import { useAppForm, useStore } from '@/lib/form';
+import { ActionButton } from '@/components/ui/action-button';
 
 // Forced password-rotation screen for the bootstrap admin and for any user
 // whose `must_change_password` flag is set. Reachable directly at
@@ -137,15 +138,18 @@ function ChangePasswordPage() {
             )}
           </form.Field>
 
-          <button
+          <ActionButton
             type="submit"
+            intent="primary"
+            className="w-full"
             disabled={!canSubmit || loading}
-            className="w-full inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+            loading={loading}
+            loadingLabel="Update password"
+            icon={<KeyRound className="h-4 w-4" />}
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
             Update password
-            {!loading && <ArrowRight className="h-4 w-4" />}
-          </button>
+            <ArrowRight className="h-4 w-4" />
+          </ActionButton>
 
           {forced && (
             <button

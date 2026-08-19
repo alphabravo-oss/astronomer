@@ -67,17 +67,17 @@ export function CodeBlock({
       </div>
 
       {/* Code */}
-      <div className="overflow-x-auto bg-[#0a0a0f]">
+      <div className="overflow-x-auto bg-terminal text-terminal-foreground">
         <pre className="p-4 text-[13px] leading-6 font-mono">
           <code>
             {lines.map((line, i) => (
               <div key={i} className="flex">
                 {showLineNumbers && (
-                  <span className="select-none text-zinc-600 w-8 text-right mr-4 flex-shrink-0">
+                  <span className="mr-4 w-8 flex-shrink-0 select-none text-right text-muted-foreground">
                     {i + 1}
                   </span>
                 )}
-                <span className="text-zinc-300">{line}</span>
+                <span>{line}</span>
               </div>
             ))}
           </code>

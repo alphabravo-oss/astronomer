@@ -21,6 +21,7 @@ import { ChevronDown, ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useTools } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
 import { useAppForm } from '@/lib/form';
+import { ActionButton } from '@/components/ui/action-button';
 import type {
   ClusterTemplateWriteRequest,
   ClusterTemplateSpec,
@@ -298,26 +299,19 @@ export function TemplateForm({
 
       <div className="flex justify-end gap-2 pt-2">
         {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="h-9 px-4 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
+          <ActionButton type="button" onClick={onCancel}>
             Cancel
-          </button>
+          </ActionButton>
         )}
-        <button
+        <ActionButton
           type="button"
+          intent="primary"
           onClick={() => void form.handleSubmit()}
           disabled={submitting}
-          className={cn(
-            'inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity',
-            submitting && 'opacity-50 cursor-wait',
-          )}
+          loading={submitting}
         >
-          {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {isEdit ? 'Save template' : 'Create template'}
-        </button>
+        </ActionButton>
       </div>
     </div>
   );

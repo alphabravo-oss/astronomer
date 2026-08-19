@@ -15,6 +15,7 @@ import {
 } from '@/lib/api/account-security';
 import type { SSOProvider, User } from '@/types';
 import { toastApiError, toastError } from '@/lib/toast';
+import { ActionButton } from '@/components/ui/action-button';
 
 export const Route = createFileRoute('/auth/login/')({
   // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
@@ -294,22 +295,17 @@ function LoginPage() {
               )}
             </form.Field>
 
-            <button
+            <ActionButton
               type="submit"
+              intent="primary"
+              className="w-full"
               disabled={loading}
-              className="w-full inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg
-                bg-primary text-primary-foreground text-sm font-medium
-                hover:opacity-90 transition-opacity disabled:opacity-50"
+              loading={loading}
+              loadingLabel="Sign in"
             >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  Sign in
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </button>
+              Sign in
+              <ArrowRight className="h-4 w-4" />
+            </ActionButton>
 
             <div className="text-center">
               <Link
@@ -460,13 +456,17 @@ function TotpChallengeForm({
           }
         </form.Field>
       </div>
-      <button
+      <ActionButton
         type="submit"
+        intent="primary"
+        className="w-full"
         disabled={!code || busy || (!useRecovery && code.length !== 6)}
-        className="w-full inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
+        loading={busy}
+        loadingLabel="Verify"
       >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Verify<ArrowRight className="h-4 w-4" /></>}
-      </button>
+        Verify
+        <ArrowRight className="h-4 w-4" />
+      </ActionButton>
       <div className="flex items-center justify-between text-xs">
         <button
           type="button"

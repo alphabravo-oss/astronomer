@@ -13,6 +13,7 @@ import { Link } from '@/lib/link';
 import { ExtensionSlot } from '@/components/extensions/ExtensionSlot';
 import { useIsSuperuser } from '@/components/settings/hooks';
 import { PermissionState } from '@/components/ui/empty-state';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   Palette,
   Mail,
@@ -184,40 +185,36 @@ function SettingsHubPage() {
   // grid to a user who will turn out to lack all administration access.
   if (!ready || (!isSuperuser && featureFlags === undefined)) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground mt-1">Platform configuration and administration.</p>
-        </div>
-      </div>
+      <PageShell>
+        <PageHeader
+          title="Settings"
+          description="Platform configuration and administration."
+        />
+      </PageShell>
     );
   }
 
   if (!isSuperuser && !canManageCharlie) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Platform configuration and administration.
-          </p>
-        </div>
+      <PageShell>
+        <PageHeader
+          title="Settings"
+          description="Platform configuration and administration."
+        />
         <PermissionState
           title="Administration permission required"
           description="Platform settings require superuser access, or charlie:manage for the Charlie administration surface."
         />
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Platform configuration and administration. All surfaces below are admin-only.
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Settings"
+        description="Platform configuration and administration. All surfaces below are admin-only."
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {CARDS.filter((card) => isSuperuser
@@ -248,7 +245,7 @@ function SettingsHubPage() {
         point="settingsPage"
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
       />
-    </div>
+    </PageShell>
   );
 }
 

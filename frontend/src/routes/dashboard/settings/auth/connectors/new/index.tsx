@@ -16,6 +16,8 @@ import { useState } from 'react';
 import { Link } from '@/lib/link';
 import { useRouter } from '@/lib/navigation';
 import { ArrowLeft, Loader2, Search } from 'lucide-react';
+import { ActionButton } from '@/components/ui/action-button';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { extractApiErrorMessage } from '@/lib/api/errors';
 import { cn } from '@/lib/utils';
 import {
@@ -70,7 +72,7 @@ function NewConnectorPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <PageShell className="max-w-3xl mx-auto">
       <Link
         href="/dashboard/settings/auth"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -79,18 +81,16 @@ function NewConnectorPage() {
         Back to Auth
       </Link>
 
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Auth · New Connector
-        </p>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">
-          {step === 'pick'
+      <PageHeader
+        eyebrow="Auth · New Connector"
+        title={
+          step === 'pick'
             ? 'Choose a connector type'
             : step === 'configure'
               ? `Configure ${getConnectorMeta(selectedType?.type ?? '').label || selectedType?.type}`
-              : 'Apply to Dex?'}
-        </h1>
-      </div>
+              : 'Apply to Dex?'
+        }
+      />
 
       {step === 'pick' && (
         <>
@@ -180,16 +180,11 @@ function NewConnectorPage() {
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-end">
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard/settings/auth')}
-              className="h-9 px-4 rounded-lg border border-border text-sm font-medium
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
+            <ActionButton onClick={() => router.push('/dashboard/settings/auth')}>
               Apply later
-            </button>
-            <button
-              type="button"
+            </ActionButton>
+            <ActionButton
+              intent="primary"
               onClick={async () => {
                 try {
                   await applyMutation.mutateAsync();
@@ -198,17 +193,14 @@ function NewConnectorPage() {
                   /* mutation toasts on error */
                 }
               }}
-              disabled={applyMutation.isPending}
-              className="inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-                text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              loading={applyMutation.isPending}
             >
-              {applyMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Apply to Dex now
-            </button>
+            </ActionButton>
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

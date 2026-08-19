@@ -14,7 +14,7 @@ const TERMINAL = ['completed', 'failed', 'superseded'];
 
 function levelColor(level: string): string {
   if (level === 'error') return 'text-status-error';
-  if (level === 'warn' || level === 'warning') return 'text-amber-500';
+  if (level === 'warn' || level === 'warning') return 'text-status-warning';
   return 'text-muted-foreground';
 }
 

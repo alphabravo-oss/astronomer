@@ -39,7 +39,7 @@ export function StatusBadge({
   className,
 }: StatusBadgeProps) {
   const displayLabel = label || status.charAt(0).toUpperCase() + status.slice(1).replace(/([A-Z])/g, ' $1');
-  const isActive = ['active', 'healthy', 'running', 'synced', 'connected'].includes(
+  const isActive = ['active', 'healthy', 'running', 'ready', 'completed', 'succeeded', 'synced', 'connected'].includes(
     status.toLowerCase()
   );
 

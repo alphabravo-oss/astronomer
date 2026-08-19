@@ -20,6 +20,8 @@ import { ArrowLeft, ArrowRight, Check, Loader2, Server, Globe } from 'lucide-rea
 import { useClusters } from '@/lib/hooks';
 import { useAppForm, useStore } from '@/lib/form';
 import { useUpdateDexSettings } from '@/components/auth/hooks';
+import { ActionButton } from '@/components/ui/action-button';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
 import type { Cluster } from '@/types';
 
@@ -80,19 +82,19 @@ function InstallDexPage() {
   const installing = settingsMutation.isPending;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <PageShell className="max-w-3xl mx-auto">
       <BackLink />
 
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Auth · Install
-        </p>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">Install Dex</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Dex is bundled with the Astronomer management chart. Enable <span className="font-mono">dex.enabled</span>
-          in Helm first; this workflow only binds its issuer and target cluster. Kubernetes runtime identity stays chart-owned.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Auth · Install"
+        title="Install Dex"
+        description={
+          <>
+            Dex is bundled with the Astronomer management chart. Enable <span className="font-mono">dex.enabled</span>
+            {' '}in Helm first; this workflow only binds its issuer and target cluster. Kubernetes runtime identity stays chart-owned.
+          </>
+        }
+      />
 
       <Stepper step={step} />
 
@@ -126,43 +128,35 @@ function InstallDexPage() {
 
         {/* Footer */}
         <div className="flex items-center justify-between pt-4 border-t border-border">
-          <button
-            type="button"
+          <ActionButton
+            intent="ghost"
+            icon={<ArrowLeft className="h-3.5 w-3.5" />}
             onClick={() => setStep((s) => (s > 1 ? ((s - 1) as Step) : s))}
             disabled={step === 1}
-            className="inline-flex items-center gap-2 h-9 px-3 rounded-lg text-sm
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors
-              disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
             Back
-          </button>
+          </ActionButton>
           {step < 3 ? (
-            <button
-              type="button"
+            <ActionButton
+              intent="primary"
+              icon={<ArrowRight className="h-3.5 w-3.5" />}
               onClick={() => setStep((s) => ((s + 1) as Step))}
               disabled={!canAdvance}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-                text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               Continue
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
+            </ActionButton>
           ) : (
-            <button
-              type="button"
+            <ActionButton
+              intent="primary"
               onClick={() => void form.handleSubmit()}
-              disabled={installing}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-                text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              loading={installing}
             >
-              {installing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Save bundled Dex settings
-            </button>
+            </ActionButton>
           )}
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
 
@@ -223,6 +217,27 @@ function Stepper({ step }: { step: Step }) {
   );
 }
 
+function EmptyClusters() {
+  const router = useRouter();
+  return (
+    <div className="text-center py-10">
+      <Server className="h-8 w-8 mx-auto text-muted-foreground" />
+      <p className="text-sm text-foreground mt-3">No clusters registered yet.</p>
+      <p className="text-xs text-muted-foreground mt-1">
+        Register a cluster first — Dex needs somewhere to live.
+      </p>
+      <ActionButton
+        size="sm"
+        intent="primary"
+        className="mt-4"
+        onClick={() => router.push('/dashboard/clusters/register')}
+      >
+        Register Cluster
+      </ActionButton>
+    </div>
+  );
+}
+
 function ClusterPicker({
   clusters,
   loading,
@@ -242,21 +257,7 @@ function ClusterPicker({
     );
   }
   if (clusters.length === 0) {
-    return (
-      <div className="text-center py-10">
-        <Server className="h-8 w-8 mx-auto text-muted-foreground" />
-        <p className="text-sm text-foreground mt-3">No clusters registered yet.</p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Register a cluster first — Dex needs somewhere to live.
-        </p>
-        <Link
-          href="/dashboard/clusters/register"
-          className="inline-flex items-center gap-2 h-8 px-3 mt-4 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
-        >
-          Register Cluster
-        </Link>
-      </div>
-    );
+    return <EmptyClusters />;
   }
   return (
     <div className="space-y-3">

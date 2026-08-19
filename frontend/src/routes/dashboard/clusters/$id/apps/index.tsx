@@ -49,7 +49,7 @@ import { queryKeys, useCluster, useProjects } from '@/lib/hooks';
 import { liveFallback } from '@/lib/live/status-store';
 import { usePermissionDecision, permissionDeniedReason, toastPermissionDenied } from '@/lib/permission-hooks';
 import type { PermissionDecision } from '@/lib/permissions';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ModalShell } from '@/components/ui/modal-shell';
 import { ActionButton } from '@/components/ui/action-button';
 import {
   listClusterApps,
@@ -70,16 +70,16 @@ type Section = 'installed' | 'browse' | 'recommended';
 function statusTone(status: string): string {
   const s = status.toLowerCase();
   if (s === 'installed' || s === 'adopted' || s === 'ready') {
-    return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30';
+    return 'bg-status-success/10 text-status-success border-status-success/30';
   }
   if (s.startsWith('installing') || s.startsWith('upgrading') || s === 'pending_install' || s === 'pending_upgrade') {
     return 'bg-sky-500/10 text-sky-600 border-sky-500/30';
   }
   if (s.startsWith('uninstalling') || s === 'pending_uninstall') {
-    return 'bg-amber-500/10 text-amber-600 border-amber-500/30';
+    return 'bg-status-warning/10 text-status-warning border-status-warning/30';
   }
   if (s.includes('fail') || s === 'errored' || s === 'broken') {
-    return 'bg-red-500/10 text-red-600 border-red-500/30';
+    return 'bg-status-error/10 text-status-error border-status-error/30';
   }
   return 'bg-muted text-muted-foreground border-border';
 }
@@ -493,28 +493,20 @@ function DeleteFailedModal({
   const blockedReason = !confirmDecision.allowed ? permissionDeniedReason(confirmDecision) : undefined;
 
   return (
-    <OverlayShell onClose={onClose}>
-      <div className="bg-popover border border-border rounded-lg shadow-xl max-w-md w-full mx-4 p-5 space-y-3">
-        <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-          <Trash2 className="h-4 w-4 text-red-600" /> Delete failed installs
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Hard-delete {count} <code className="font-mono">installed_charts</code> row{count === 1 ? '' : 's'} in <code className="font-mono">failed_install</code> / <code className="font-mono">failed_uninstall</code> on this cluster.
-        </p>
-        <p className="text-xs text-muted-foreground">
-          No helm release uninstall is attempted — by definition these rows never deployed (or already failed to uninstall). If you suspect a stale release exists in-cluster, run <code className="font-mono">helm uninstall</code> via the kubectl shell first.
-        </p>
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={pending}
-            className="h-9 px-3 rounded-md border border-border text-sm hover:bg-accent disabled:opacity-50"
-          >
+    <ModalShell
+      title="Delete failed installs"
+      onClose={onClose}
+      size="sm"
+      titleIcon={<Trash2 className="h-4 w-4 text-status-error" />}
+      footerClassName="flex items-center justify-end gap-2"
+      footer={
+        <>
+          <ActionButton type="button" onClick={onClose} disabled={pending}>
             Cancel
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
             type="button"
+            intent="destructive"
             onClick={() => {
               if (!confirmDecision.allowed) {
                 toastPermissionDenied(confirmDecision);
@@ -523,15 +515,22 @@ function DeleteFailedModal({
               onConfirm();
             }}
             disabled={pending || !confirmDecision.allowed || count === 0}
-            title={blockedReason}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+            disabledReason={blockedReason}
+            loading={pending}
+            icon={<Trash2 className="h-3.5 w-3.5" />}
           >
-            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
             Delete {count} row{count === 1 ? '' : 's'}
-          </button>
-        </div>
-      </div>
-    </OverlayShell>
+          </ActionButton>
+        </>
+      }
+    >
+        <p className="text-sm text-muted-foreground">
+          Hard-delete {count} <code className="font-mono">installed_charts</code> row{count === 1 ? '' : 's'} in <code className="font-mono">failed_install</code> / <code className="font-mono">failed_uninstall</code> on this cluster.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          No helm release uninstall is attempted — by definition these rows never deployed (or already failed to uninstall). If you suspect a stale release exists in-cluster, run <code className="font-mono">helm uninstall</code> via the kubectl shell first.
+        </p>
+    </ModalShell>
   );
 }
 
@@ -604,8 +603,8 @@ function InstalledView({
   return (
     <div className="space-y-3">
       {failedCount > 0 && (
-        <div className="rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 text-xs flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+        <div className="rounded-md border border-status-error/40 bg-status-error/5 px-3 py-2 text-xs flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-status-error flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <div className="font-medium text-foreground">
               {failedCount} failed install{failedCount === 1 ? '' : 's'} on this cluster
@@ -621,15 +620,15 @@ function InstalledView({
             icon={<Trash2 className="h-3 w-3" />}
             disabled={!deleteDecision.allowed}
             disabledReason={!deleteDecision.allowed ? permissionDeniedReason(deleteDecision) : undefined}
-            className="border-red-500/40 text-red-600 hover:bg-red-500/10"
+            className="border-status-error/40 text-status-error hover:bg-status-error/10"
           >
             Delete {failedCount} failed
           </ActionButton>
         </div>
       )}
       {staleCount > 0 && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+        <div className="rounded-md border border-status-warning/40 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
           <div>
             <div className="font-medium text-foreground">
               {staleCount} release{staleCount === 1 ? '' : 's'} stuck in a transient state for over 10 minutes
@@ -745,7 +744,7 @@ function InstalledRow({
           </span>
           {stale && (
             <span
-              className="inline-flex items-center gap-1 text-[10px] text-amber-600"
+              className="inline-flex items-center gap-1 text-[10px] text-status-warning"
               title={`Stuck in '${row.status}' for ${ageMin} min. The helm operation may have stalled — check the worker queue or the cluster's agent connectivity.`}
             >
               <AlertTriangle className="h-3 w-3" /> stale {ageMin}m
@@ -787,7 +786,7 @@ function InstalledRow({
               title="Uninstall this release"
               size="sm"
               icon={<Trash2 className="h-3 w-3" />}
-              className="h-7 px-2 border-red-500/40 text-red-600 hover:bg-red-500/10"
+              className="h-7 px-2 border-status-error/40 text-status-error hover:bg-status-error/10"
             >
               Uninstall
             </ActionButton>
@@ -876,7 +875,7 @@ function BrowseView({
                       {c.displayName || c.name}
                     </div>
                     {c.deprecated && (
-                      <span className="text-[10px] text-amber-600 border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] text-status-warning border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 rounded">
                         deprecated
                       </span>
                     )}
@@ -886,7 +885,7 @@ function BrowseView({
                   )}
                   <div className="flex items-center justify-between gap-2 pt-1">
                     {existing ? (
-                      <span className="text-[11px] text-emerald-600 font-medium inline-flex items-center gap-1">
+                      <span className="text-[11px] text-status-success font-medium inline-flex items-center gap-1">
                         Installed
                         {existing.sourceKind === 'tool' && (
                           <span className="text-muted-foreground font-normal">(via Tools)</span>
@@ -970,7 +969,7 @@ function RecommendedView({
             className="border border-border rounded-lg p-3 bg-card space-y-2"
           >
             <div className="flex items-center gap-2">
-              <Star className="h-4 w-4 text-amber-500" />
+              <Star className="h-4 w-4 text-status-warning" />
               <div className="font-medium text-sm text-foreground">{c.name}</div>
             </div>
             <div className="text-xs text-muted-foreground space-y-0.5">
@@ -981,7 +980,7 @@ function RecommendedView({
               )}
             </div>
             {isInstalled ? (
-              <span className="text-[11px] text-emerald-600 font-medium">Already installed</span>
+              <span className="text-[11px] text-status-success font-medium">Already installed</span>
             ) : (
               <button
                 className="text-[11px] text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"

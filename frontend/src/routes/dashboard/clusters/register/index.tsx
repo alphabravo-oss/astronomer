@@ -11,11 +11,15 @@ import { createFileRoute } from '@tanstack/react-router';
 
 import { useRouter } from '@/lib/navigation';
 import { toastError } from '@/lib/toast';
-import { Server, Loader2, Info, AlertTriangle } from 'lucide-react';
+import { Server, Info, AlertTriangle } from 'lucide-react';
 import { createCluster } from '@/lib/api';
 import { setRegistrationOptions } from '@/lib/api';
 import { useClusters } from '@/lib/hooks';
 import { useAppForm, useStore } from '@/lib/form';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { ActionButton } from '@/components/ui/action-button';
 import type { ClusterEnvironment } from '@/types';
 
 function RegisterClusterWizardPage() {
@@ -101,7 +105,7 @@ function RegisterClusterWizardPage() {
         <Field label="Cluster name" required>
           <form.Field name="name">
             {(field) => (
-              <input
+              <Input
                 type="text"
                 value={field.state.value}
                 onChange={(e) =>
@@ -109,9 +113,7 @@ function RegisterClusterWizardPage() {
                 }
                 onBlur={field.handleBlur}
                 placeholder="my-cluster"
-                className={`w-full h-10 px-3 rounded-lg border bg-background text-sm ${
-                  nameTaken ? 'border-status-error' : 'border-border'
-                }`}
+                className={nameTaken ? 'border-status-error' : undefined}
                 autoFocus
               />
             )}
@@ -127,13 +129,12 @@ function RegisterClusterWizardPage() {
         <Field label="Display name">
           <form.Field name="displayName">
             {(field) => (
-              <input
+              <Input
                 type="text"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
                 placeholder="My Production Cluster"
-                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
               />
             )}
           </form.Field>
@@ -142,13 +143,13 @@ function RegisterClusterWizardPage() {
         <Field label="Description">
           <form.Field name="description">
             {(field) => (
-              <textarea
+              <Textarea
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
                 placeholder="Brief description..."
                 rows={2}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm resize-none"
+                className="min-h-0 resize-none text-sm font-sans"
               />
             )}
           </form.Field>
@@ -158,30 +159,28 @@ function RegisterClusterWizardPage() {
           <Field label="Environment">
             <form.Field name="environment">
               {(field) => (
-                <select
+                <Select
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value as ClusterEnvironment)}
                   onBlur={field.handleBlur}
-                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
                 >
                   <option value="development">Development</option>
                   <option value="staging">Staging</option>
                   <option value="production">Production</option>
                   <option value="testing">Testing</option>
-                </select>
+                </Select>
               )}
             </form.Field>
           </Field>
           <Field label="Region">
             <form.Field name="region">
               {(field) => (
-                <input
+                <Input
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   placeholder="us-east-1"
-                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
                 />
               )}
             </form.Field>
@@ -195,15 +194,14 @@ function RegisterClusterWizardPage() {
         <Field label="Agent privilege profile">
           <form.Field name="privilegeProfile">
             {(field) => (
-              <select
+              <Select
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
-                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
               >
                 <option value="viewer">Viewer — Astronomer observes (read-only)</option>
                 <option value="admin">Admin — Astronomer operates (governed by user RBAC)</option>
-              </select>
+              </Select>
             )}
           </form.Field>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -271,21 +269,18 @@ function RegisterClusterWizardPage() {
         </label>
 
         <div className="flex items-center justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard/clusters')}
-            className="h-10 px-4 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
-          >
+          <ActionButton type="button" onClick={() => router.push('/dashboard/clusters')}>
             Cancel
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
             type="submit"
+            intent="primary"
             disabled={!name || nameTaken || submitting}
-            className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+            loading={submitting}
+            loadingLabel="Next: Get install command →"
           >
-            {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Next: Get install command →
-          </button>
+          </ActionButton>
         </div>
       </form>
     </div>

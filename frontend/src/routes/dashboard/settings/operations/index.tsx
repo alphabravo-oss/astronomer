@@ -281,7 +281,7 @@ function QueueTable({
                 <TableCell className="px-3 py-2 text-right tabular-nums">{r.retry}</TableCell>
                 <TableCell
                   className={
-                    'px-3 py-2 text-right tabular-nums ' + (isStuck ? 'text-red-600 font-medium' : '')
+                    'px-3 py-2 text-right tabular-nums ' + (isStuck ? 'text-status-error font-medium' : '')
                   }
                 >
                   {r.archived}
@@ -291,11 +291,11 @@ function QueueTable({
                 </TableCell>
                 <TableCell className="px-3 py-2">
                   {r.paused ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-amber-600">
+                    <span className="inline-flex items-center gap-1 text-xs text-status-warning">
                       <AlertTriangle className="h-3 w-3" /> paused
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                    <span className="inline-flex items-center gap-1 text-xs text-status-success">
                       <CheckCircle2 className="h-3 w-3" /> running
                     </span>
                   )}
@@ -368,7 +368,7 @@ function DLQTable({
                 {row.id.length > 16 ? row.id.slice(0, 16) + '…' : row.id}
               </TableCell>
               <TableCell className="px-3 py-2 text-right tabular-nums">{row.retried}</TableCell>
-              <TableCell className="px-3 py-2 text-xs text-red-600 max-w-md truncate" title={row.last_err}>
+              <TableCell className="px-3 py-2 text-xs text-status-error max-w-md truncate" title={row.last_err}>
                 {row.last_err || '—'}
               </TableCell>
               <TableCell className="px-3 py-2 text-xs text-muted-foreground">
@@ -387,7 +387,7 @@ function DLQTable({
                   <button
                     onClick={() => onDiscard(row.id)}
                     disabled={pendingDiscard}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-border text-red-600 hover:bg-red-500/10 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-border text-status-error hover:bg-status-error/10 disabled:opacity-50"
                     title="Permanently delete this task"
                   >
                     <Trash2 className="h-3 w-3" /> Discard
@@ -464,7 +464,7 @@ function TaskOutboxTable({
               <TableCell className="px-3 py-2 text-xs text-muted-foreground">
                 {row.next_attempt_at ? new Date(row.next_attempt_at).toLocaleString() : '—'}
               </TableCell>
-              <TableCell className="px-3 py-2 max-w-md truncate text-xs text-red-600" title={row.last_error || ''}>
+              <TableCell className="px-3 py-2 max-w-md truncate text-xs text-status-error" title={row.last_error || ''}>
                 {row.last_error || '—'}
               </TableCell>
               <TableCell className="px-3 py-2 text-right">
@@ -489,13 +489,13 @@ function taskOutboxStatusClass(status: TaskOutboxStatus) {
   const base = 'inline-flex rounded px-1.5 py-0.5 text-xs font-medium';
   switch (status) {
     case 'dead':
-      return `${base} bg-red-500/10 text-red-600`;
+      return `${base} bg-status-error/10 text-status-error`;
     case 'failed':
-      return `${base} bg-amber-500/10 text-amber-600`;
+      return `${base} bg-status-warning/10 text-status-warning`;
     case 'delivered':
-      return `${base} bg-emerald-500/10 text-emerald-600`;
+      return `${base} bg-status-success/10 text-status-success`;
     case 'delivering':
-      return `${base} bg-blue-500/10 text-blue-600`;
+      return `${base} bg-status-info/10 text-status-info`;
     default:
       return `${base} bg-muted text-muted-foreground`;
   }

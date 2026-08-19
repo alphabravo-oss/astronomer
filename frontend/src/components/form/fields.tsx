@@ -1,24 +1,25 @@
 /**
  * Dumb field components for the form kit (P5.1) — label + control + error
- * line, styled with today's exact class strings. Each component reads its
- * field API from the kit context (`form.AppField` provides it), so callers
- * write `<field.TextField label="Host" />` and nothing else.
+ * line, styled with the shared Input/Select/Textarea/Switch primitives. Each
+ * component reads its field API from the kit context (`form.AppField` provides
+ * it), so callers write `<field.TextField label="Host" />` and nothing else.
  *
  * A11y (L6 strict improvement over today's label-without-htmlFor markup):
  * generated `id` + `htmlFor`, `aria-invalid` when errored, and the error
  * `<p>` wired via `aria-describedby`.
  */
 import { useId, useState } from 'react';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFieldContext, useFormContext } from '@/lib/form';
+import { Input, controlClassName } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { ActionButton } from '@/components/ui/action-button';
 
-/** Shared input class — today's exact string (connector-form / smtp et al). */
-export const inputClassName =
-  'w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring';
-
-const textareaClassName =
-  'w-full min-h-[120px] px-3 py-2 rounded-lg border border-border bg-background text-xs font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring';
+/** @deprecated Use `controlClassName` from `@/components/ui/input`. */
+export const inputClassName = controlClassName;
 
 const SECRET_PLACEHOLDER = '••••••••';
 
@@ -106,7 +107,7 @@ export function TextField({
   const error = firstError(field.state.meta);
   return (
     <FieldShell id={id} label={label} helper={helper} required={required} error={error}>
-      <input
+      <Input
         id={id}
         type={type}
         value={field.state.value ?? ''}
@@ -115,7 +116,7 @@ export function TextField({
         placeholder={placeholder}
         disabled={disabled}
         autoComplete={autoComplete}
-        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed', className)}
+        className={className}
         {...ariaProps(id, error)}
       />
     </FieldShell>
@@ -138,7 +139,7 @@ export function NumberField({
   const error = firstError(field.state.meta);
   return (
     <FieldShell id={id} label={label} helper={helper} required={required} error={error}>
-      <input
+      <Input
         id={id}
         type="number"
         value={field.state.value ?? ''}
@@ -149,7 +150,7 @@ export function NumberField({
         min={min}
         max={max}
         step={step}
-        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed', className)}
+        className={className}
         {...ariaProps(id, error)}
       />
     </FieldShell>
@@ -170,7 +171,7 @@ export function PasswordField({
   const error = firstError(field.state.meta);
   return (
     <FieldShell id={id} label={label} helper={helper} required={required} error={error}>
-      <input
+      <Input
         id={id}
         type="password"
         value={field.state.value ?? ''}
@@ -179,7 +180,7 @@ export function PasswordField({
         placeholder={placeholder}
         disabled={disabled}
         autoComplete={autoComplete}
-        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed', className)}
+        className={className}
         {...ariaProps(id, error)}
       />
     </FieldShell>
@@ -216,7 +217,7 @@ export function SecretField({
   const pristine = !field.state.meta.isDirty;
   const showStored = stored && pristine;
   const input = (
-    <input
+    <Input
       id={id}
       type={revealable && reveal ? 'text' : 'password'}
       value={field.state.value ?? ''}
@@ -225,12 +226,7 @@ export function SecretField({
       onBlur={field.handleBlur}
       disabled={disabled}
       autoComplete={autoComplete}
-      className={cn(
-        inputClassName,
-        disabled && 'opacity-60 cursor-not-allowed',
-        revealable && 'pr-9',
-        className,
-      )}
+      className={cn(revealable && 'pr-9', className)}
       {...ariaProps(id, error)}
     />
   );
@@ -279,7 +275,7 @@ export function TextareaField({
   const error = firstError(field.state.meta);
   return (
     <FieldShell id={id} label={label} helper={helper} required={required} error={error}>
-      <textarea
+      <Textarea
         id={id}
         value={field.state.value ?? ''}
         onChange={(e) => field.handleChange(e.target.value)}
@@ -287,7 +283,7 @@ export function TextareaField({
         placeholder={placeholder}
         disabled={disabled}
         rows={rows}
-        className={cn(textareaClassName, disabled && 'opacity-60 cursor-not-allowed', className)}
+        className={className}
         {...ariaProps(id, error)}
       />
     </FieldShell>
@@ -308,17 +304,17 @@ export function SelectField({
   const error = firstError(field.state.meta);
   return (
     <FieldShell id={id} label={label} helper={helper} required={required} error={error}>
-      <select
+      <Select
         id={id}
         value={field.state.value ?? ''}
         onChange={(e) => field.handleChange(e.target.value)}
         onBlur={field.handleBlur}
         disabled={disabled}
-        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed', className)}
+        className={className}
         {...ariaProps(id, error)}
       >
         {children}
-      </select>
+      </Select>
     </FieldShell>
   );
 }
@@ -341,27 +337,13 @@ export function SwitchField({
         </label>
         {helper && <p className="text-xs text-muted-foreground">{helper}</p>}
       </div>
-      <button
+      <Switch
         id={id}
-        type="button"
-        role="switch"
-        aria-checked={checked}
+        checked={checked}
         disabled={disabled}
-        onClick={() => field.handleChange(!checked)}
+        onCheckedChange={(next) => field.handleChange(next)}
         onBlur={field.handleBlur}
-        className={cn(
-          'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-          checked ? 'bg-status-success' : 'bg-muted',
-          disabled && 'opacity-60 cursor-not-allowed',
-        )}
-      >
-        <span
-          className={cn(
-            'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-            checked ? 'translate-x-6' : 'translate-x-1',
-          )}
-        />
-      </button>
+      />
     </div>
   );
 }
@@ -401,14 +383,9 @@ export function SubmitButton({ children }: { children: React.ReactNode }) {
   return (
     <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting] as const}>
       {([canSubmit, isSubmitting]) => (
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        <ActionButton type="submit" intent="primary" disabled={!canSubmit} loading={isSubmitting}>
           {children}
-        </button>
+        </ActionButton>
       )}
     </form.Subscribe>
   );

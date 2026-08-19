@@ -40,8 +40,9 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
 import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ModalShell } from '@/components/ui/modal-shell';
 import { ScaleDialog } from '@/components/workloads/scale-dialog';
 import { useWindowManagerStore } from '@/lib/window-manager-store';
 import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
@@ -1080,36 +1081,37 @@ function NamespacesTable({ clusterId }: { clusterId: string }) {
 
       {/* Create Namespace Dialog */}
       {showCreate && (
-        <OverlayShell onClose={() => setShowCreate(false)}>
-          <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4 animate-fade-in p-6">
-            <h3 className="text-base font-semibold text-foreground mb-4">Create Namespace</h3>
+        <ModalShell
+          title="Create Namespace"
+          onClose={() => setShowCreate(false)}
+          size="sm"
+          footerClassName="flex items-center justify-end gap-2"
+          footer={
+            <>
+              <ActionButton size="sm" intent="ghost" onClick={() => setShowCreate(false)}>Cancel</ActionButton>
+              <ActionButton
+                size="sm"
+                intent="primary"
+                onClick={handleCreateNamespace}
+                disabled={!newNsName.trim() || !permissions.update.allowed}
+                disabledReason={!permissions.update.allowed ? permissionDeniedReason(permissions.update) : undefined}
+              >
+                Create
+              </ActionButton>
+            </>
+          }
+        >
             <label className="block text-xs text-muted-foreground mb-1.5">Name</label>
-            <input
+            <Input
               type="text"
               value={newNsName}
               onChange={(e) => setNewNsName(e.target.value)}
               placeholder="my-namespace"
-              className="w-full h-8 px-3 rounded border border-border bg-background text-sm font-mono
-                focus:outline-none focus:ring-1 focus:ring-ring"
+              className="h-8 font-mono"
               autoFocus
               onKeyDown={(e) => { if (e.key === 'Enter') handleCreateNamespace(); }}
             />
-            <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => setShowCreate(false)}
-                className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateNamespace}
-                disabled={!newNsName.trim() || !permissions.update.allowed}
-                title={!permissions.update.allowed ? permissionDeniedReason(permissions.update) : undefined}
-                className="h-8 px-4 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90
-                  disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                Create
-              </button>
-            </div>
-          </div>
-        </OverlayShell>
+        </ModalShell>
       )}
     </>
   );

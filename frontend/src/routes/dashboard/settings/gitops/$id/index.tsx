@@ -12,6 +12,8 @@ import { Link } from '@/lib/link';
 import { useAppForm, useStore } from '@/lib/form';
 import { ArrowLeft, GitBranch, Loader2, Play, RefreshCw } from 'lucide-react';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { ActionButton } from '@/components/ui/action-button';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { StatusBadge } from '@/components/ui/status-badge';
 import {
   useGitOpsSource,
@@ -107,50 +109,37 @@ function DetailInner({ id }: { id: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <GitBranch className="h-5 w-5 text-muted-foreground" />
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">
-              {source.name}
-            </h2>
-            <p className="text-xs font-mono text-muted-foreground">
-              {source.repo_url} · {source.branch}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={async () => {
-              const r = await preview.mutateAsync(source.id);
-              setPreviewResult(r);
-            }}
-            disabled={preview.isPending}
-            className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border text-sm hover:bg-muted disabled:opacity-60"
-          >
-            {preview.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
-            Dry-run preview
-          </button>
-          <button
-            type="button"
-            onClick={() => sync.mutate(source.id)}
-            disabled={sync.isPending}
-            className="inline-flex items-center gap-2 h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm hover:opacity-90 disabled:opacity-60"
-          >
-            {sync.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            Sync now
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title={
+          <span className="flex items-center gap-3">
+            <GitBranch className="h-5 w-5 text-muted-foreground" />
+            {source.name}
+          </span>
+        }
+        description={<span className="font-mono">{source.repo_url} · {source.branch}</span>}
+        actions={
+          <>
+            <ActionButton
+              icon={<Play className="h-4 w-4" />}
+              onClick={async () => {
+                const r = await preview.mutateAsync(source.id);
+                setPreviewResult(r);
+              }}
+              loading={preview.isPending}
+            >
+              Dry-run preview
+            </ActionButton>
+            <ActionButton
+              intent="primary"
+              icon={<RefreshCw className="h-4 w-4" />}
+              onClick={() => sync.mutate(source.id)}
+              loading={sync.isPending}
+            >
+              Sync now
+            </ActionButton>
+          </>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-3 text-xs">
         <div>
@@ -330,13 +319,15 @@ function DetailInner({ id }: { id: string }) {
             selector={(s) => initial != null && JSON.stringify(s.values) !== JSON.stringify(initial)}
           >
             {(dirty) => (
-              <button
+              <ActionButton
                 type="submit"
+                intent="primary"
                 disabled={!dirty || update.isPending}
-                className="inline-flex items-center h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
+                loading={update.isPending}
+                loadingLabel="Saving…"
               >
-                {update.isPending ? 'Saving…' : 'Save changes'}
-              </button>
+                Save changes
+              </ActionButton>
             )}
           </form.Subscribe>
         </div>
@@ -402,7 +393,7 @@ function GitOpsSourceDetailPage() {
   const { id } = useParams<{ id: string }>();
   return (
     <SettingsAuthGate>
-      <div className="space-y-6">
+      <PageShell>
         <Link
           href="/dashboard/settings/gitops"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -411,7 +402,7 @@ function GitOpsSourceDetailPage() {
           Back to GitOps sources
         </Link>
         <DetailInner id={id} />
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

@@ -18,6 +18,7 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   useBackupDrillHistory,
   useLatestBackupDrill,
@@ -76,7 +77,7 @@ function LatestCard() {
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Latest drill</p>
           <div className="flex items-center gap-3">
             <StatusBadge status={statusToVariant(data.status)} label={data.status} size="sm" />
-            <span className={cn('text-xs', stale ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+            <span className={cn('text-xs', stale ? 'text-status-warning' : 'text-muted-foreground')}>
               {formatAge(data.ageSeconds)}
             </span>
           </div>
@@ -112,7 +113,7 @@ function LatestCard() {
         </div>
       </div>
       {stale && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+        <div className="rounded-lg border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs text-status-warning">
           Last drill is over a week old. Restore confidence is decaying — investigate the drill cron.
         </div>
       )}
@@ -218,7 +219,7 @@ function HistoryTable() {
 function BackupDrillPage() {
   return (
     <SettingsAuthGate>
-      <div className="max-w-4xl mx-auto space-y-6">
+      <PageShell className="max-w-4xl mx-auto">
         <Link
           href="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -226,19 +227,19 @@ function BackupDrillPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
         </Link>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Settings · Backup drill</p>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1 flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-muted-foreground" />
-            Backup restore drill
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Periodic restore checks against a scratch namespace. Latest result up top, full history below.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="Settings · Backup drill"
+          title={
+            <span className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-muted-foreground" />
+              Backup restore drill
+            </span>
+          }
+          description="Periodic restore checks against a scratch namespace. Latest result up top, full history below."
+        />
         <LatestCard />
         <HistoryTable />
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

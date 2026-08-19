@@ -13,6 +13,7 @@ import {
 import { Link } from '@/lib/link';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { ActivityDetailsDrawer, type ActivityDetailField } from '@/components/audit/activity-details-drawer';
 import { useAuditLogs } from '@/lib/hooks';
 import { getAuditLogExportURL, type AuditLogQueryParams } from '@/lib/api';
@@ -156,16 +157,17 @@ function AuditLogPage() {
   );
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Audit Log</h1>
-          <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+    <PageShell className="space-y-5">
+      <PageHeader
+        title="Audit Log"
+        description={
+          <span className="inline-flex items-center gap-3">
             <span>{total.toLocaleString()} rows</span>
             {activeFilterCount > 0 && <span>{activeFilterCount} filters</span>}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+          </span>
+        }
+        actions={
+          <div className="flex items-center gap-2">
           <Link
             href="/dashboard/audit/shell-sessions"
             className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -188,8 +190,9 @@ function AuditLogPage() {
             <RefreshCw className={cn('h-4 w-4', auditQuery.isFetching && 'animate-spin')} />
             Refresh
           </button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       <div className="space-y-3 border-y border-border py-4">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -269,7 +272,7 @@ function AuditLogPage() {
       />
 
       {selected && <AuditDetailsDrawer row={selected} onClose={() => setSelected(null)} />}
-    </div>
+    </PageShell>
   );
 }
 

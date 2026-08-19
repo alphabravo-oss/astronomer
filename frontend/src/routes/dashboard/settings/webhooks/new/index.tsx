@@ -15,14 +15,17 @@ import { useRouter } from '@/lib/navigation';
 import {
   ArrowLeft,
   Hash,
-  Loader2,
   Send,
   Settings2,
   Webhook,
 } from 'lucide-react';
 import { toastError } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+import { ActionButton } from '@/components/ui/action-button';
 import { CodeBlock } from '@/components/ui/code-block';
+import { Input } from '@/components/ui/input';
+import { PageHeader, PageShell } from '@/components/ui/page';
+import { Select } from '@/components/ui/select';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { useCreateWebhook } from '@/components/settings/hooks';
 import type { WebhookFilter, WebhookTemplate } from '@/lib/api/settings';
@@ -154,7 +157,7 @@ function NewWebhookWizard() {
         : 'Preview & create';
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <PageShell className="max-w-3xl mx-auto">
       <Link
         href="/dashboard/settings/webhooks"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -162,12 +165,7 @@ function NewWebhookWizard() {
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to webhooks
       </Link>
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Webhooks · New
-        </p>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">{title}</h1>
-      </div>
+      <PageHeader eyebrow="Webhooks · New" title={title} />
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {(['pick', 'configure', 'preview'] as Step[]).map((s, idx) => (
@@ -221,13 +219,12 @@ function NewWebhookWizard() {
             <label className="text-sm font-medium text-foreground">Name</label>
             <form.Field name="name">
               {(field) => (
-                <input
+                <Input
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   placeholder="On-call alerts"
-                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   autoFocus
                 />
               )}
@@ -238,13 +235,13 @@ function NewWebhookWizard() {
             <label className="text-sm font-medium text-foreground">URL</label>
             <form.Field name="url">
               {(field) => (
-                <input
+                <Input
                   type="url"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   placeholder={selected.urlPlaceholder}
-                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="font-mono"
                 />
               )}
             </form.Field>
@@ -256,13 +253,12 @@ function NewWebhookWizard() {
             </label>
             <form.Field name="secret">
               {(field) => (
-                <input
+                <Input
                   type="password"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   placeholder="HMAC secret used to sign the X-Astronomer-Signature header"
-                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               )}
             </form.Field>
@@ -309,38 +305,30 @@ function NewWebhookWizard() {
             <label className="text-sm font-medium text-foreground">Minimum severity</label>
             <form.Field name="minSeverity">
               {(field) => (
-                <select
+                <Select
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value as typeof minSeverity)}
                   onBlur={field.handleBlur}
-                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">No threshold</option>
                   <option value="info">Info or higher</option>
                   <option value="warning">Warning or higher</option>
                   <option value="critical">Critical only</option>
-                </select>
+                </Select>
               )}
             </form.Field>
           </div>
 
           <div className="flex justify-end gap-2 pt-2 border-t border-border">
-            <button
-              type="button"
-              onClick={() => setStep('pick')}
-              className="h-9 px-4 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              Back
-            </button>
-            <button
-              type="button"
+            <ActionButton onClick={() => setStep('pick')}>Back</ActionButton>
+            <ActionButton
+              intent="primary"
               onClick={() => setStep('preview')}
               disabled={!name || !url}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              icon={<Settings2 className="h-3.5 w-3.5" />}
             >
               Preview
-              <Settings2 className="h-3.5 w-3.5" />
-            </button>
+            </ActionButton>
           </div>
         </div>
       )}
@@ -375,26 +363,18 @@ function NewWebhookWizard() {
             </p>
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t border-border">
-            <button
-              type="button"
-              onClick={() => setStep('configure')}
-              className="h-9 px-4 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              Back
-            </button>
-            <button
-              type="button"
+            <ActionButton onClick={() => setStep('configure')}>Back</ActionButton>
+            <ActionButton
+              intent="primary"
               onClick={() => void form.handleSubmit()}
-              disabled={createMutation.isPending}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              loading={createMutation.isPending}
             >
-              {createMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Create webhook
-            </button>
+            </ActionButton>
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

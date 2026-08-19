@@ -15,6 +15,9 @@ import { useState } from 'react';
 import { Link } from '@/lib/link';
 import { useAnomalyBaselines } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { formatRelativeTime } from '@/lib/utils';
 import type { AnomalyBaseline } from '@/types';
 import { ArrowLeft, Activity, RefreshCw } from 'lucide-react';
@@ -84,43 +87,38 @@ function AnomalyBaselinesPage() {
   ];
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
+    <PageShell>
+      <PageHeader
+        eyebrow={
           <Link
             href="/dashboard/alerting"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1.5 hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Alerting
           </Link>
-          <h1 className="text-2xl font-semibold text-foreground mt-1 inline-flex items-center gap-2">
+        }
+        title={
+          <span className="inline-flex items-center gap-2">
             <Activity className="h-6 w-6" />
             Anomaly Baselines
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Rolling-window statistics per (cluster, metric, window) tuple. Maintained by the
-            anomaly:baseline_recompute worker every 5 minutes.
-          </p>
-        </div>
-        <button
-          onClick={() => refetch()}
-          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-background text-sm hover:bg-muted"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </button>
-      </div>
+          </span>
+        }
+        description="Rolling-window statistics per (cluster, metric, window) tuple. Maintained by the anomaly:baseline_recompute worker every 5 minutes."
+        actions={
+          <ActionButton icon={<RefreshCw className="h-4 w-4" />} onClick={() => refetch()}>
+            Refresh
+          </ActionButton>
+        }
+      />
 
       <div className="flex items-center gap-3">
         <label className="text-sm font-medium text-foreground">Filter by cluster ID:</label>
-        <input
-          type="text"
+        <Input
           value={clusterFilter}
           onChange={(e) => setClusterFilter(e.target.value)}
           placeholder="UUID (leave empty for all)"
-          className="flex-1 max-w-md h-9 px-3 rounded-md border border-border bg-background text-sm
-            placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="max-w-md flex-1"
         />
       </div>
 
@@ -137,7 +135,7 @@ function AnomalyBaselinesPage() {
         anomaly rule referencing this baseline to no-fire. That&apos;s expected for newly-created
         rules — wait until the window fills.
       </p>
-    </div>
+    </PageShell>
   );
 }
 

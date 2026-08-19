@@ -17,6 +17,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Info, Loader2, Server, Shield } from 'lucide-react';
 
 import { queryKeys, useCluster } from '@/lib/hooks';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { getServiceMeshMTLS, type MTLSBreakdownRow } from '@/lib/api/cluster-detail';
 
 // modeStyle picks a tailwind colour for a mode badge. STRICT is the
@@ -24,11 +25,11 @@ import { getServiceMeshMTLS, type MTLSBreakdownRow } from '@/lib/api/cluster-det
 function modeStyle(mode: string): string {
   switch (mode) {
     case 'STRICT':
-      return 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30';
+      return 'bg-status-success/15 text-status-success border-status-success/30';
     case 'PERMISSIVE':
-      return 'bg-amber-500/15 text-amber-500 border-amber-500/30';
+      return 'bg-status-warning/15 text-status-warning border-status-warning/30';
     case 'DISABLE':
-      return 'bg-red-500/15 text-red-500 border-red-500/30';
+      return 'bg-status-error/15 text-status-error border-status-error/30';
     default:
       return 'bg-muted text-muted-foreground border-border';
   }
@@ -75,29 +76,23 @@ function ClusterServiceMeshMTLSPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <Link
-            href={`/dashboard/clusters/${clusterId}/service-mesh/`}
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Back to service mesh
-          </Link>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">
-            mTLS posture
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Per-namespace PeerAuthentication / ServerAuthorization breakdown for {cluster.displayName}.
-          </p>
-        </div>
-      </div>
+    <PageShell>
+      <Link
+        href={`/dashboard/clusters/${clusterId}/service-mesh/`}
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+        Back to service mesh
+      </Link>
+      <PageHeader
+        title="mTLS posture"
+        description={`Per-namespace PeerAuthentication / ServerAuthorization breakdown for ${cluster.displayName}.`}
+      />
 
       {/* Aggregate summary */}
       {mtls && (
         <div className="rounded-lg border border-border bg-card p-4 flex items-center gap-4">
-          <Shield className="h-6 w-6 text-emerald-500 flex-shrink-0" />
+          <Shield className="h-6 w-6 text-status-success flex-shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-medium text-foreground">
               {mtls.mtlsCoveragePct}% of user namespaces covered
@@ -111,8 +106,8 @@ function ClusterServiceMeshMTLSPage() {
 
       {/* Notice (scaffolding-only fallback) */}
       {mtls?.notice && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 flex items-start gap-3">
-          <Info className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+        <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 p-4 flex items-start gap-3">
+          <Info className="h-5 w-5 text-status-warning flex-shrink-0 mt-0.5" />
           <p className="text-xs text-muted-foreground flex-1">{mtls.notice}</p>
         </div>
       )}
@@ -152,7 +147,7 @@ function ClusterServiceMeshMTLSPage() {
           </TableBody>
         </Table>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

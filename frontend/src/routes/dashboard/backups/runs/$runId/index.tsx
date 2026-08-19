@@ -23,6 +23,8 @@ import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { b2Keys, useB2Run, useB2StorageLocations } from '@/components/backups/hooks';
 import { PhaseBadge } from '@/components/backups/phase-badge';
 import { RestoreModal } from '@/components/backups/restore-modal';
+import { ActionButton } from '@/components/ui/action-button';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { cn, formatBytes, formatRelativeTime } from '@/lib/utils';
 
 function BackupRunDetailPage() {
@@ -75,7 +77,7 @@ function BackupRunDetailPage() {
     total > 0 ? Math.min(100, Math.round((done / total) * 100)) : completed ? 100 : 0;
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <div>
         <button
           onClick={() => router.push('/dashboard/backups?tab=runs')}
@@ -84,30 +86,25 @@ function BackupRunDetailPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to runs
         </button>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight break-all">
-              {run.name}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1 font-mono break-all">
-              {run.veleroBackupName ?? run.id}
-            </p>
-          </div>
-          <button
-            onClick={() => setShowRestore(true)}
-            disabled={!completed && !partial}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex-shrink-0"
-            title={
-              completed || partial
-                ? 'Restore resources from this backup'
-                : 'Restore is only available for Completed or PartiallyFailed runs'
-            }
-          >
-            <RotateCcw className="h-4 w-4" />
-            Restore from this Backup
-          </button>
-        </div>
+        <PageHeader
+          title={run.name}
+          description={<span className="font-mono break-all">{run.veleroBackupName ?? run.id}</span>}
+          actions={
+            <ActionButton
+              intent="primary"
+              icon={<RotateCcw className="h-4 w-4" />}
+              onClick={() => setShowRestore(true)}
+              disabled={!completed && !partial}
+              title={
+                completed || partial
+                  ? 'Restore resources from this backup'
+                  : 'Restore is only available for Completed or PartiallyFailed runs'
+              }
+            >
+              Restore from this Backup
+            </ActionButton>
+          }
+        />
       </div>
 
       {/* Phase + progress card */}
@@ -249,7 +246,7 @@ function BackupRunDetailPage() {
       </div>
 
       {showRestore && <RestoreModal backup={run} onClose={() => setShowRestore(false)} />}
-    </div>
+    </PageShell>
   );
 }
 

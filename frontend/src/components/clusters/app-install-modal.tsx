@@ -246,8 +246,8 @@ export function AppInstallModal({ projectId, clusterId, mode, onClose, submitDec
     >
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {(slowInstall || hasCRDs) && (
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs flex items-start gap-2">
-              <Info className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="rounded-md border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
+              <Info className="h-4 w-4 text-status-warning mt-0.5 flex-shrink-0" />
               <div className="space-y-0.5 text-foreground">
                 {slowInstall && (
                   <div>
@@ -415,7 +415,7 @@ export function AppUninstallModal({
       panelClassName="bg-popover"
       bodyClassName="p-5 space-y-3 text-sm"
       footerClassName="bg-muted/30"
-      titleIcon={<AlertTriangle className="h-5 w-5 text-red-500" />}
+      titleIcon={<AlertTriangle className="h-5 w-5 text-status-error" />}
       footer={
         <div className="flex items-center justify-end gap-2">
           <button
@@ -429,7 +429,7 @@ export function AppUninstallModal({
             onClick={handleConfirm}
             disabled={!confirmable}
             title={confirmBlockedReason}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-status-error text-white hover:bg-status-error disabled:opacity-50"
           >
             {pending ? (
               <>
@@ -447,8 +447,8 @@ export function AppUninstallModal({
         Workload pods + Services + ConfigMaps owned by the release will be deleted.
       </p>
       {crdsWillSurvive && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
-          <div className="font-medium text-amber-600 flex items-center gap-1.5">
+        <div className="rounded-md border border-status-warning/40 bg-status-warning/5 px-3 py-2 text-xs">
+          <div className="font-medium text-status-warning flex items-center gap-1.5">
             <AlertTriangle className="h-3.5 w-3.5" /> CRDs will not be removed
           </div>
           <p className="text-muted-foreground mt-1">

@@ -21,6 +21,7 @@ import {
 } from '@/components/projects/hooks';
 import { CredentialForm } from '@/components/projects/cloud-credentials/credential-form';
 import { ProviderBadge } from '@/components/projects/cloud-credentials/provider-badge';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { extractApiErrorMessage } from '@/lib/api/errors';
 import type { CloudCredentialProviderSpec } from '@/lib/api/project-detail';
 import { cn } from '@/lib/utils';
@@ -51,7 +52,7 @@ function NewCloudCredentialPage() {
   const backToList = `/dashboard/projects/${projectId}/cloud-credentials`;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <PageShell className="max-w-3xl mx-auto">
       <Link
         href={backToList}
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -60,16 +61,14 @@ function NewCloudCredentialPage() {
         Back to credentials
       </Link>
 
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Cloud Credentials · New
-        </p>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">
-          {step === 'pick'
+      <PageHeader
+        eyebrow="Cloud Credentials · New"
+        title={
+          step === 'pick'
             ? 'Choose a provider'
-            : `Configure ${selected?.displayName || selected?.provider}`}
-        </h1>
-      </div>
+            : `Configure ${selected?.displayName || selected?.provider}`
+        }
+      />
 
       {step === 'pick' && (
         <>
@@ -158,7 +157,7 @@ function NewCloudCredentialPage() {
           />
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

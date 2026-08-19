@@ -11,11 +11,15 @@ import { useRouter } from '@/lib/navigation';
 import {
   ArrowLeft,
   Gauge,
-  Loader2,
   Save,
 } from 'lucide-react';
 import { toastError } from '@/lib/toast';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { PageHeader, PageShell } from '@/components/ui/page';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { useCreateQuotaPlan } from '@/components/settings/hooks';
 import type { QuotaEnforcement, QuotaPlanWriteRequest } from '@/lib/api/settings';
 
@@ -47,12 +51,11 @@ function NumberField({
   return (
     <div className="space-y-1.5">
       <label className="text-sm font-medium text-foreground">{label}</label>
-      <input
+      <Input
         type="number"
         value={value}
         min={0}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
       />
     </div>
   );
@@ -87,12 +90,12 @@ function NewQuotaPlanForm() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
-            <input
+            <Input
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="enterprise-tier"
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="font-mono"
               autoFocus
             />
             <p className="text-xs text-muted-foreground">
@@ -101,35 +104,33 @@ function NewQuotaPlanForm() {
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Display name</label>
-            <input
+            <Input
               type="text"
               value={form.display_name}
               onChange={(e) => setForm({ ...form, display_name: e.target.value })}
               placeholder="Enterprise"
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Description</label>
-          <textarea
+          <Textarea
             value={form.description ?? ''}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             rows={2}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="min-h-0 text-sm font-sans"
           />
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Enforcement</label>
-          <select
+          <Select
             value={form.enforcement}
             onChange={(e) => setForm({ ...form, enforcement: e.target.value as QuotaEnforcement })}
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="hard">Hard — reject writes over cap</option>
             <option value="soft">Soft — warn but allow</option>
             <option value="disabled">Disabled — record only</option>
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -149,21 +150,17 @@ function NewQuotaPlanForm() {
       </div>
 
       <div className="flex items-center justify-end gap-2">
-        <Link
-          href="/dashboard/settings/quotas"
-          className="h-9 px-4 inline-flex items-center rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-        >
+        <ActionButton onClick={() => router.push('/dashboard/settings/quotas')}>
           Cancel
-        </Link>
-        <button
-          type="button"
+        </ActionButton>
+        <ActionButton
+          intent="primary"
           onClick={handleCreate}
-          disabled={create.isPending}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          loading={create.isPending}
+          icon={<Save className="h-3.5 w-3.5" />}
         >
-          {create.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
           Create plan
-        </button>
+        </ActionButton>
       </div>
     </div>
   );
@@ -172,7 +169,7 @@ function NewQuotaPlanForm() {
 function NewQuotaPlanPage() {
   return (
     <SettingsAuthGate>
-      <div className="max-w-3xl mx-auto space-y-6">
+      <PageShell className="max-w-3xl mx-auto">
         <Link
           href="/dashboard/settings/quotas"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -180,15 +177,17 @@ function NewQuotaPlanPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to quotas
         </Link>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Settings · Quotas · New</p>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1 flex items-center gap-2">
-            <Gauge className="h-5 w-5 text-muted-foreground" />
-            New quota plan
-          </h1>
-        </div>
+        <PageHeader
+          eyebrow="Settings · Quotas · New"
+          title={
+            <span className="flex items-center gap-2">
+              <Gauge className="h-5 w-5 text-muted-foreground" />
+              New quota plan
+            </span>
+          }
+        />
         <NewQuotaPlanForm />
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

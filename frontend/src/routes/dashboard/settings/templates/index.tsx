@@ -12,8 +12,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  */
 import { useEffect, useState } from 'react';
 import { Link } from '@/lib/link';
-import { ArrowLeft, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   listNotificationTemplates,
   type NotificationTemplateListItem,
@@ -47,29 +48,17 @@ function NotificationTemplatesList() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Link
-          href="/dashboard/settings"
-          className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-        >
-          <ArrowLeft className="h-4 w-4" /> Settings
-        </Link>
-      </div>
-      <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-          <FileText className="h-5 w-5 text-foreground" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-            Notification templates
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Customize the subject and body of every transactional email and webhook payload.
-            Built-in defaults apply when no override is saved.
-          </p>
-        </div>
-      </div>
+    <PageShell>
+      <Link
+        href="/dashboard/settings"
+        className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+      >
+        <ArrowLeft className="h-4 w-4" /> Settings
+      </Link>
+      <PageHeader
+        title="Notification templates"
+        description="Customize the subject and body of every transactional email and webhook payload. Built-in defaults apply when no override is saved."
+      />
 
       {error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -108,8 +97,8 @@ function NotificationTemplatesList() {
                       <span
                         className={`text-xs px-2 py-0.5 rounded-md ${
                           t.enabled
-                            ? 'bg-emerald-500/15 text-emerald-600'
-                            : 'bg-amber-500/15 text-amber-600'
+                            ? 'bg-status-success/15 text-status-success'
+                            : 'bg-status-warning/15 text-status-warning'
                         }`}
                       >
                         {t.enabled ? 'enabled' : 'disabled'}
@@ -139,7 +128,7 @@ function NotificationTemplatesList() {
           </Table>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

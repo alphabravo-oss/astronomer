@@ -254,7 +254,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
           {isLive ? (
             <button
               onClick={handleDisconnect}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-background hover:bg-muted text-red-600"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-background hover:bg-muted text-status-error"
               title="Close the WebSocket and tear down the in-cluster debug pod"
             >
               <Square className="h-3 w-3" />
@@ -282,8 +282,8 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
       </div>
 
       {errorMsg ? (
-        <div className="m-3 rounded border border-red-300 bg-red-50 dark:bg-red-950/30 p-3 text-sm flex items-start gap-2">
-          <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+        <div className="m-3 rounded border border-status-error bg-status-error/10 p-3 text-sm flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 text-status-error mt-0.5 shrink-0" />
           <div>
             <div className="font-medium">Failed to open shell</div>
             <div className="text-muted-foreground">{errorMsg}</div>
@@ -322,7 +322,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
           {(status === 'disconnected' || status === 'error') && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center max-w-sm pointer-events-auto">
-                <AlertCircle className={cn('h-8 w-8 mx-auto mb-3', status === 'error' ? 'text-red-500' : 'text-amber-500')} />
+                <AlertCircle className={cn('h-8 w-8 mx-auto mb-3', status === 'error' ? 'text-status-error' : 'text-status-warning')} />
                 <p className="text-sm font-medium text-foreground">
                   {status === 'error' ? 'Connection failed' : 'Session disconnected'}
                 </p>

@@ -8,9 +8,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * full form is re-rendered.
  */
 import { Link } from '@/lib/link';
-import { useParams } from '@/lib/navigation';
+import { useParams, useRouter } from '@/lib/navigation';
 import { ArrowLeft, PencilLine, Layers } from 'lucide-react';
+import { ActionButton } from '@/components/ui/action-button';
 import { ErrorState, LoadingState, PermissionState } from '@/components/ui/empty-state';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { useCurrentUser } from '@/lib/hooks';
 import {
   useClusterTemplate,
@@ -29,6 +31,7 @@ const statusStyles: Record<ClusterTemplateBoundCluster['status'], string> = {
 };
 
 function ClusterTemplateDetailPage() {
+  const router = useRouter();
   const params = useParams();
   const id = params.id as string;
   const { data: user } = useCurrentUser();
@@ -65,7 +68,7 @@ function ClusterTemplateDetailPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <PageShell className="max-w-4xl mx-auto">
       <Link
         href="/dashboard/cluster-templates"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -74,32 +77,27 @@ function ClusterTemplateDetailPage() {
         Back to bundles
       </Link>
 
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Onboarding Bundle
-          </p>
-          <div className="flex items-center gap-2 mt-1">
+      <PageHeader
+        eyebrow="Onboarding Bundle"
+        title={
+          <span className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-muted-foreground" />
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-              {template.displayName}
-            </h1>
-            <span className="text-xs text-muted-foreground font-mono">{template.name}</span>
-          </div>
-          {template.description && (
-            <p className="text-sm text-muted-foreground mt-2 max-w-2xl">{template.description}</p>
-          )}
-        </div>
-        {canWrite && (
-          <Link
-            href={`/dashboard/cluster-templates/${template.id}/edit`}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
-          >
-            <PencilLine className="h-3.5 w-3.5" />
-            Edit
-          </Link>
-        )}
-      </div>
+            {template.displayName}
+            <span className="text-xs text-muted-foreground font-mono font-normal">{template.name}</span>
+          </span>
+        }
+        description={template.description || undefined}
+        actions={
+          canWrite ? (
+            <ActionButton
+              icon={<PencilLine className="h-3.5 w-3.5" />}
+              onClick={() => router.push(`/dashboard/cluster-templates/${template.id}/edit`)}
+            >
+              Edit
+            </ActionButton>
+          ) : undefined
+        }
+      />
 
       {/* Summary */}
       <section className="rounded-xl border border-border bg-card p-5 space-y-3">
@@ -216,7 +214,7 @@ function ClusterTemplateDetailPage() {
           </TableBody>
         </Table>
       </section>
-    </div>
+    </PageShell>
   );
 }
 

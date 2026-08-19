@@ -245,7 +245,7 @@ function WidgetsAdminPage() {
       </div>
 
       {error || widgetsQuery.isError ? (
-        <div className="text-sm text-red-600">
+        <div className="text-sm text-status-error">
           {error ??
             (widgetsQuery.error instanceof Error ? widgetsQuery.error.message : 'Failed to load widgets')}
         </div>
@@ -412,7 +412,7 @@ function WidgetsAdminPage() {
                       <button onClick={() => startEdit(w)} className="text-xs text-primary hover:underline mr-2">
                         Edit
                       </button>
-                      <button onClick={() => setDeleteWidgetTarget(w)} className="text-xs text-red-600 hover:underline inline-flex items-center gap-1">
+                      <button onClick={() => setDeleteWidgetTarget(w)} className="text-xs text-status-error hover:underline inline-flex items-center gap-1">
                         <Trash2 className="h-3 w-3" /> Delete
                       </button>
                     </TableCell>
@@ -437,7 +437,7 @@ function WidgetsAdminPage() {
           )}
         </div>
         {dsError || datasourcesQuery.isError ? (
-          <div className="text-sm text-red-600">
+          <div className="text-sm text-status-error">
             {dsError ??
               (datasourcesQuery.error instanceof Error
                 ? datasourcesQuery.error.message
@@ -463,7 +463,7 @@ function WidgetsAdminPage() {
                   <TableCell className="px-3 py-2 text-muted-foreground">{d.hasAuth ? 'yes' : 'none'}</TableCell>
                   <TableCell className="px-3 py-2">
                     {testStatus[d.id] ? (
-                      <span className={`inline-flex items-center gap-1 text-xs ${testStatus[d.id].ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                      <span className={`inline-flex items-center gap-1 text-xs ${testStatus[d.id].ok ? 'text-status-success' : 'text-status-error'}`}>
                         {testStatus[d.id].ok ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                         <span className="truncate max-w-[12rem]" title={testStatus[d.id].msg}>{testStatus[d.id].msg}</span>
                       </span>
@@ -475,7 +475,7 @@ function WidgetsAdminPage() {
                     <button onClick={() => runTest(d.id)} className="text-xs text-primary hover:underline mr-2 inline-flex items-center gap-1">
                       <FlaskConical className="h-3 w-3" /> Test
                     </button>
-                    <button onClick={() => setDeleteDatasourceTarget(d)} className="text-xs text-red-600 hover:underline">
+                    <button onClick={() => setDeleteDatasourceTarget(d)} className="text-xs text-status-error hover:underline">
                       Delete
                     </button>
                   </TableCell>

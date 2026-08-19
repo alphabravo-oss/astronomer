@@ -97,7 +97,7 @@ export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty, title }: { fetch
   }
   if (error) {
     return (
-      <div className="flex items-center gap-2 text-sm text-red-600 py-6">
+      <div className="flex items-center gap-2 text-sm text-status-error py-6">
         <AlertCircle className="h-4 w-4" />
         <span>Widgets: {error}</span>
       </div>
@@ -142,7 +142,7 @@ function WidgetBody({ widget }: { widget: RenderedWidget }) {
   const data = widget.data ?? {};
   if (data.error) {
     return (
-      <div className="flex-1 text-xs text-amber-600 flex items-center gap-1">
+      <div className="flex-1 text-xs text-status-warning flex items-center gap-1">
         <AlertCircle className="h-3 w-3" />
         <span className="truncate" title={data.error}>{data.error}</span>
       </div>

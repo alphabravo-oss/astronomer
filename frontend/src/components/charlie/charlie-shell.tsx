@@ -152,7 +152,7 @@ function CharlieProgressIndicator({ progress }: { progress: CharlieTurnProgress 
         {delayed ? <span>Last update {quietSeconds}s ago</span> : null}
       </div>
       {stalled ? (
-        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+        <p className="mt-2 text-xs text-status-warning">
           This step is taking longer than expected. Charlie will stop it at the configured deadline; you can keep waiting or stop the request.
         </p>
       ) : null}

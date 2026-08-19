@@ -15,14 +15,19 @@ import { createFileRoute } from '@tanstack/react-router';
  */
 import { useEffect, useState } from "react";
 import { Link } from "@/lib/link";
-import { ArrowLeft, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
+import { useRouter } from "@/lib/navigation";
+import { ArrowLeft, ExternalLink, ShieldCheck } from "lucide-react";
 import {
   isDexRuntimeApplied,
   useDexSettings,
   useRegisterDexAsSSO,
 } from "@/components/auth/hooks";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { PageHeader, PageShell } from "@/components/ui/page";
 
 function RegisterAsSSOPage() {
+  const router = useRouter();
   const { data: settings } = useDexSettings();
   const registerMutation = useRegisterDexAsSSO();
 
@@ -70,7 +75,7 @@ function RegisterAsSSOPage() {
   const issuerConfigured = !!settings?.issuerUrl;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <PageShell className="max-w-2xl mx-auto">
       <Link
         href="/dashboard/settings/auth"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -79,20 +84,11 @@ function RegisterAsSSOPage() {
         Back to Auth
       </Link>
 
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Auth · Register SSO
-        </p>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">
-          Register Dex as the platform&apos;s SSO provider
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Astronomer&apos;s OIDC SSO manager (Phase A1) will treat Dex like any
-          other upstream OIDC IdP. After this, your login screen shows the
-          &ldquo;{displayName}&rdquo; button and Dex handles the upstream IdP
-          fan-out.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Auth · Register SSO"
+        title="Register Dex as the platform's SSO provider"
+        description={`Astronomer's OIDC SSO manager (Phase A1) will treat Dex like any other upstream OIDC IdP. After this, your login screen shows the “${displayName}” button and Dex handles the upstream IdP fan-out.`}
+      />
 
       {!issuerConfigured && (
         <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 flex items-start gap-2">
@@ -153,20 +149,12 @@ function RegisterAsSSOPage() {
             {displayName}&rdquo; button on the login screen.
           </p>
           <div className="flex items-center gap-2 pt-2">
-            <Link
-              href="/dashboard/settings/auth"
-              className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-border text-sm
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
+            <ActionButton onClick={() => router.push("/dashboard/settings/auth")}>
               Back to Auth
-            </Link>
-            <button
-              type="button"
-              onClick={() => setSuccess(null)}
-              className="inline-flex items-center h-9 px-3 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
+            </ActionButton>
+            <ActionButton intent="ghost" onClick={() => setSuccess(null)}>
               Edit again
-            </button>
+            </ActionButton>
           </div>
         </div>
       ) : (
@@ -176,12 +164,11 @@ function RegisterAsSSOPage() {
             required
             helper="Defaults to `astronomer`. Must match a `staticClients[*].id` configured in Dex."
           >
-            <input
+            <Input
               type="text"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
               placeholder="astronomer"
-              className={inputCls}
             />
           </FieldRow>
 
@@ -189,13 +176,12 @@ function RegisterAsSSOPage() {
             label="Dex client secret"
             helper="Match the `staticClients[*].secret` you set under Dex Settings → Static clients. Leave blank for public clients."
           >
-            <input
+            <Input
               type="password"
               value={clientSecret}
               onChange={(e) => setClientSecret(e.target.value)}
               placeholder="••••••••"
               autoComplete="new-password"
-              className={inputCls}
             />
           </FieldRow>
 
@@ -203,12 +189,11 @@ function RegisterAsSSOPage() {
             label="Display name"
             helper="Shown on the platform's login button."
           >
-            <input
+            <Input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Sign in with Dex"
-              className={inputCls}
             />
           </FieldRow>
 
@@ -230,38 +215,27 @@ function RegisterAsSSOPage() {
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
-            <Link
-              href="/dashboard/settings/auth"
-              className="h-9 px-4 rounded-lg border border-border text-sm font-medium
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors inline-flex items-center"
-            >
+            <ActionButton onClick={() => router.push("/dashboard/settings/auth")}>
               Cancel
-            </Link>
-            <button
-              type="button"
+            </ActionButton>
+            <ActionButton
+              intent="primary"
               onClick={handleSubmit}
               disabled={
                 registerMutation.isPending ||
                 !issuerConfigured ||
                 !clientId.trim()
               }
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-                text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              loading={registerMutation.isPending}
             >
-              {registerMutation.isPending && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              )}
               Register
-            </button>
+            </ActionButton>
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
-
-const inputCls =
-  "w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
 function FieldRow({
   label,

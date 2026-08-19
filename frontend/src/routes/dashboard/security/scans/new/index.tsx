@@ -6,12 +6,13 @@ import { useClusters } from '@/lib/hooks';
 import { useCISProfiles, useCreateCISScan } from '@/lib/hooks';
 import { CIS_NOT_INSTALLED_HINT } from '@/components/security/cis-scans-tab';
 import { distributionDisplayName, cn } from '@/lib/utils';
+import { ActionButton } from '@/components/ui/action-button';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   ArrowLeft,
   ArrowRight,
   ChevronRight,
   CheckCircle2,
-  Loader2,
   ShieldAlert,
   ShieldCheck,
   AlertTriangle,
@@ -82,7 +83,7 @@ function NewScanWizardPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <PageShell className="max-w-3xl">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Link href="/dashboard/security" className="hover:text-foreground transition-colors">
@@ -92,12 +93,10 @@ function NewScanWizardPage() {
         <span className="text-foreground">New CIS Scan</span>
       </div>
 
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Run CIS Scan</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Run a CIS Kubernetes Benchmark via the cis-operator on a registered cluster.
-        </p>
-      </div>
+      <PageHeader
+        title="Run CIS Scan"
+        description="Run a CIS Kubernetes Benchmark via the cis-operator on a registered cluster."
+      />
 
       {/* Step indicator */}
       <ol className="flex items-center gap-2">
@@ -273,46 +272,36 @@ function NewScanWizardPage() {
 
       {/* Footer */}
       <div className="flex items-center justify-between">
-        <button
-          type="button"
+        <ActionButton
+          icon={<ArrowLeft className="h-4 w-4" />}
           onClick={() => (step > 1 ? setStep((s) => (s - 1) as WizardStep) : router.push('/dashboard/security'))}
           disabled={createScan.isPending}
-          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg border border-border text-sm font-medium
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
         >
-          <ArrowLeft className="h-4 w-4" />
           {step > 1 ? 'Back' : 'Cancel'}
-        </button>
+        </ActionButton>
 
         {step < 3 ? (
-          <button
-            type="button"
+          <ActionButton
+            intent="primary"
+            icon={<ArrowRight className="h-4 w-4" />}
             onClick={() => setStep((s) => (s + 1) as WizardStep)}
             disabled={!canAdvance}
-            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             Next
-            <ArrowRight className="h-4 w-4" />
-          </button>
+          </ActionButton>
         ) : (
-          <button
-            type="button"
+          <ActionButton
+            intent="primary"
+            icon={<ShieldCheck className="h-4 w-4" />}
             onClick={handleSubmit}
             disabled={createScan.isPending || !clusterId}
-            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+            loading={createScan.isPending}
           >
-            {createScan.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ShieldCheck className="h-4 w-4" />
-            )}
             Run Scan
-          </button>
+          </ActionButton>
         )}
       </div>
-    </div>
+    </PageShell>
   );
 }
 

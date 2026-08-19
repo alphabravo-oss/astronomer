@@ -75,7 +75,9 @@ import {
 } from '@/lib/api/cluster-detail';
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ActionButton } from '@/components/ui/action-button';
+import { ModalShell } from '@/components/ui/modal-shell';
+import { PageHeader, PageShell } from '@/components/ui/page';
 
 // ─── Phase pill ─────────────────────────────────────────────────────────────
 function PhasePill({ phase }: { phase: SnapshotPhase }) {
@@ -87,7 +89,7 @@ function PhasePill({ phase }: { phase: SnapshotPhase }) {
       case 'New':
         return 'bg-status-info/10 text-status-info border-status-info/20';
       case 'PartiallyFailed':
-        return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+        return 'bg-status-warning/10 text-status-warning border-status-warning/20';
       case 'Failed':
       case 'FailedValidation':
         return 'bg-status-error/10 text-status-error border-status-error/20';
@@ -235,21 +237,16 @@ function ClusterVeleroSnapshotsPage() {
   const showBslBanner = veleroStatus?.installed && !veleroStatus.bslReady;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Snapshots</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Velero-backed snapshots and scheduled snapshots for {cluster.displayName}.
-          </p>
-        </div>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Snapshots"
+        description={`Velero-backed snapshots and scheduled snapshots for ${cluster.displayName}.`}
+      />
 
       {/* Velero install banner */}
       {showInstallBanner && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 flex items-start gap-3">
-          <ShieldAlert className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+        <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 p-4 flex items-start gap-3">
+          <ShieldAlert className="h-5 w-5 text-status-warning flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground">Velero is not installed</p>
             <p className="text-xs text-muted-foreground mt-1">
@@ -269,8 +266,8 @@ function ClusterVeleroSnapshotsPage() {
 
       {/* BSL banner */}
       {showBslBanner && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+        <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-status-warning flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground">Backup storage location not ready</p>
             <p className="text-xs text-muted-foreground mt-1">
@@ -397,7 +394,7 @@ function ClusterVeleroSnapshotsPage() {
         variant="destructive"
         loading={deleteSched.isPending}
       />
-    </div>
+    </PageShell>
   );
 }
 
@@ -1120,28 +1117,20 @@ function Modal({
   children: React.ReactNode;
 }) {
   return (
-    <OverlayShell onClose={onClose}>
-      <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl border border-border bg-popover shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            {icon && (
-              <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground flex-shrink-0">
-                {icon}
-              </div>
-            )}
-            <h3 className="text-lg font-semibold text-foreground truncate">{title}</h3>
+    <ModalShell
+      title={title}
+      onClose={onClose}
+      size="md"
+      titleIcon={
+        icon ? (
+          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground flex-shrink-0">
+            {icon}
           </div>
-          <button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-            aria-label="Close"
-          >
-            <XCircle className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="p-6 space-y-4 overflow-y-auto">{children}</div>
-      </div>
-    </OverlayShell>
+        ) : undefined
+      }
+    >
+      {children}
+    </ModalShell>
   );
 }
 
@@ -1161,24 +1150,22 @@ function ModalFooter({
   return (
     <div className="flex items-center justify-end gap-2 pt-2 border-t border-border -mx-6 px-6 pb-0 mt-2">
       <div className="pt-3 flex items-center gap-2">
-        <button
+        <ActionButton
           onClick={onCancel}
           disabled={loading}
-          className="inline-flex items-center h-9 px-3 rounded text-sm
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          intent="ghost"
         >
           Cancel
-        </button>
-        <button
+        </ActionButton>
+        <ActionButton
           onClick={onSubmit}
           disabled={loading || disabled}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded text-sm font-medium
-            bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
-            disabled:opacity-50 disabled:cursor-not-allowed"
+          intent="primary"
+          loading={loading}
+          icon={<RefreshCw className="h-3.5 w-3.5" />}
         >
-          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
           {submitLabel}
-        </button>
+        </ActionButton>
       </div>
     </div>
   );
@@ -1296,35 +1283,24 @@ export function ClusterControlPlaneSnapshotsPage() {
   }
 
   const header = (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-          Control-plane snapshots
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-          Point-in-time etcd/control-plane snapshots for {cluster.displayName}. Restore is a
-          guided, out-of-band procedure — this page surfaces the runbook, it does not perform an
-          automated restore.
-        </p>
-      </div>
-      {!managed && (
-        <button
-          onClick={() => canWrite && takeSnapshot.mutate()}
-          disabled={!canWrite || takeSnapshot.isPending}
-          title={canWrite ? undefined : reason}
-          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium
-            bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
-            disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-        >
-          {takeSnapshot.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Plus className="h-3.5 w-3.5" />
-          )}
-          Take snapshot
-        </button>
-      )}
-    </div>
+    <PageHeader
+      title="Control-plane snapshots"
+      description={`Point-in-time etcd/control-plane snapshots for ${cluster.displayName}. Restore is a guided, out-of-band procedure — this page surfaces the runbook, it does not perform an automated restore.`}
+      actions={
+        !managed ? (
+          <ActionButton
+            intent="primary"
+            onClick={() => canWrite && takeSnapshot.mutate()}
+            disabled={!canWrite || takeSnapshot.isPending}
+            disabledReason={canWrite ? undefined : reason}
+            loading={takeSnapshot.isPending}
+            icon={<Plus className="h-3.5 w-3.5" />}
+          >
+            Take snapshot
+          </ActionButton>
+        ) : undefined
+      }
+    />
   );
 
   // Managed control planes (eks / aks / gke) have no operator-accessible etcd.
@@ -1467,30 +1443,23 @@ function RestoreGuidanceModal({
   });
 
   return (
-    <OverlayShell onClose={onClose}>
-      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl border border-border bg-popover shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground flex-shrink-0">
-              <BookOpen className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-lg font-semibold text-foreground truncate">Restore runbook</h3>
-              <p className="text-xs text-muted-foreground font-mono truncate">
-                {snapshot.name || snapshot.id}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-            aria-label="Close"
-          >
-            <XCircle className="h-5 w-5" />
-          </button>
+    <ModalShell
+      title="Restore runbook"
+      subtitle={<span className="font-mono">{snapshot.name || snapshot.id}</span>}
+      onClose={onClose}
+      size="lg"
+      titleIcon={
+        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground flex-shrink-0">
+          <BookOpen className="h-4 w-4" />
         </div>
-
-        <div className="p-6 space-y-4 overflow-y-auto">
+      }
+      footerClassName="flex items-center justify-end gap-2"
+      footer={
+        <ActionButton intent="ghost" onClick={onClose}>
+          Close
+        </ActionButton>
+      }
+    >
           <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning flex items-start gap-2">
             <Lock className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
             <span>
@@ -1532,18 +1501,6 @@ function RestoreGuidanceModal({
               )}
             </div>
           )}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 px-6 py-3 border-t border-border flex-shrink-0">
-          <button
-            onClick={onClose}
-            className="inline-flex items-center h-9 px-3 rounded text-sm text-muted-foreground
-              hover:text-foreground hover:bg-accent transition-colors"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </OverlayShell>
+    </ModalShell>
   );
 }

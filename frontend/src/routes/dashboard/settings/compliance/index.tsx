@@ -12,13 +12,15 @@ import {
   ArrowLeft,
   Download,
   FileArchive,
-  Loader2,
   Plus,
 } from 'lucide-react';
 import { toastError, toastInfo, toastSuccess } from '@/lib/toast';
 import { cn, formatBytes, formatRelativeTime, downloadBlob } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
 import { ModalShell } from '@/components/ui/modal-shell';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   downloadComplianceExportBlob,
   getComplianceExport,
@@ -39,9 +41,9 @@ function thirtyDaysAgoIso() {
 function StatusPill({ status }: { status: ComplianceExportSummary['status'] }) {
   const palette: Record<string, string> = {
     pending: 'bg-muted text-muted-foreground border-border',
-    running: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30',
-    ready: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-    failed: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
+    running: 'bg-status-info/10 text-status-info border-status-info/30',
+    ready: 'bg-status-success/10 text-status-success border-status-success/30',
+    failed: 'bg-status-error/10 text-status-error border-status-error/30',
   };
   const key = status ?? 'pending';
   return (
@@ -128,14 +130,13 @@ function ComplianceForm() {
             window into a signed ZIP suitable for compliance archives.
           </p>
         </div>
-        <button
-          type="button"
+        <ActionButton
+          intent="primary"
+          icon={<Plus className="h-3.5 w-3.5" />}
           onClick={() => setOpen(true)}
-          className="inline-flex flex-shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
         >
-          <Plus className="h-3.5 w-3.5" />
           New export
-        </button>
+        </ActionButton>
       </div>
 
       {open && (
@@ -146,42 +147,33 @@ function ComplianceForm() {
           onClose={() => setOpen(false)}
           footer={
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="h-9 px-4 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
+              <ActionButton onClick={() => setOpen(false)}>Cancel</ActionButton>
+              <ActionButton
+                intent="primary"
                 onClick={handleExport}
-                disabled={submitting}
-                className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                loading={submitting}
+                icon={<Download className="h-3.5 w-3.5" />}
               >
-                {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                 Export
-              </button>
+              </ActionButton>
             </div>
           }
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">From</label>
-              <input
+              <Input
                 type="date"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">To</label>
-              <input
+              <Input
                 type="date"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
           </div>
@@ -203,21 +195,20 @@ function ComplianceForm() {
               </p>
             </div>
             {job.status === 'ready' && (
-              <button
-                type="button"
+              <ActionButton
+                intent="primary"
+                icon={<Download className="h-3.5 w-3.5" />}
                 onClick={handleDownloadReady}
-                className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
               >
-                <Download className="h-3.5 w-3.5" />
                 Download ZIP
-              </button>
+              </ActionButton>
             )}
           </div>
           {job.progress != null && job.status !== 'ready' && (
             <div className="space-y-1">
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
-                  className="h-full bg-blue-500 transition-all"
+                  className="h-full bg-status-info transition-all"
                   style={{ width: `${Math.max(0, Math.min(100, job.progress))}%` }}
                 />
               </div>
@@ -236,7 +227,7 @@ function ComplianceForm() {
 function CompliancePage() {
   return (
     <SettingsAuthGate>
-      <div className="max-w-3xl mx-auto space-y-6">
+      <PageShell className="max-w-3xl mx-auto">
         <Link
           href="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -244,17 +235,16 @@ function CompliancePage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
         </Link>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Settings · Compliance</p>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1 flex items-center gap-2">
-            <FileArchive className="h-5 w-5 text-muted-foreground" />
-            Compliance exports
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Build a ZIP of audit + RBAC + config for a date range. Large windows may take
-            longer, but the export downloads directly when complete.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="Settings · Compliance"
+          title={
+            <span className="flex items-center gap-2">
+              <FileArchive className="h-5 w-5 text-muted-foreground" />
+              Compliance exports
+            </span>
+          }
+          description="Build a ZIP of audit + RBAC + config for a date range. Large windows may take longer, but the export downloads directly when complete."
+        />
         <ComplianceForm />
         <div className="border rounded p-4 bg-card">
           <h2 className="font-semibold text-sm">Compliance baselines</h2>
@@ -270,7 +260,7 @@ function CompliancePage() {
             Open baselines
           </Link>
         </div>
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

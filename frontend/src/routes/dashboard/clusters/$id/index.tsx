@@ -276,7 +276,7 @@ function ClusterDetailPage() {
                   onClick={handleDirectAccessDownload}
                   className="w-full flex items-start gap-2 px-2.5 py-2 rounded text-xs text-left text-popover-foreground hover:bg-accent"
                 >
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                  <AlertTriangle className="h-3.5 w-3.5 text-status-warning shrink-0 mt-0.5" />
                   <span className="flex-1">
                     <span className="block font-medium">
                       Download with direct access
@@ -789,9 +789,9 @@ function MeshHeaderBadge({ clusterId, mesh }: { clusterId: string; mesh: Service
   if (!label) return null;
   const tone =
     mesh === 'istio'
-      ? 'border-blue-500/30 text-blue-500 bg-blue-500/10'
+      ? 'border-status-info/30 text-status-info bg-status-info/10'
       : mesh === 'linkerd'
-        ? 'border-emerald-500/30 text-emerald-500 bg-emerald-500/10'
+        ? 'border-status-success/30 text-status-success bg-status-success/10'
         : 'border-border text-muted-foreground bg-muted/30';
   return (
     <Link
@@ -826,9 +826,9 @@ function RegistrationPhaseHeaderBadge({ clusterId }: { clusterId: string }) {
   if (!phase || phase === 'ready') return null; // collapse when done
   const tone =
     phase === 'failed'
-      ? 'border-red-500/30 text-red-500 bg-red-500/10'
+      ? 'border-status-error/30 text-status-error bg-status-error/10'
       : phase === 'provisioning' || phase === 'awaiting_agent' || phase === 'connected'
-        ? 'border-yellow-500/30 text-yellow-500 bg-yellow-500/10'
+        ? 'border-status-warning/30 text-status-warning bg-status-warning/10'
         : 'border-border text-muted-foreground bg-muted/30';
   const label =
     phase === 'awaiting_agent' ? 'waiting for agent' :

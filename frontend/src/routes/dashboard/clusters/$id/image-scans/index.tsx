@@ -48,20 +48,20 @@ import {
 import { Download, TrendingDown, TrendingUp, Minus } from 'lucide-react';
 
 const SEVERITIES: { key: keyof ImageVulnSummary; label: string; tone: string }[] = [
-  { key: 'critical', label: 'Critical', tone: 'bg-red-500/10 text-red-500 border-red-500/30' },
-  { key: 'high', label: 'High', tone: 'bg-orange-500/10 text-orange-500 border-orange-500/30' },
-  { key: 'medium', label: 'Medium', tone: 'bg-amber-500/10 text-amber-500 border-amber-500/30' },
+  { key: 'critical', label: 'Critical', tone: 'bg-status-error/10 text-status-error border-status-error/30' },
+  { key: 'high', label: 'High', tone: 'bg-status-high/10 text-status-high border-status-high/30' },
+  { key: 'medium', label: 'Medium', tone: 'bg-status-warning/10 text-status-warning border-status-warning/30' },
   { key: 'low', label: 'Low', tone: 'bg-sky-500/10 text-sky-500 border-sky-500/30' },
 ];
 
 function cveToneFor(severity: CVESeverity): string {
   switch (severity) {
     case 'CRITICAL':
-      return 'bg-red-500/10 text-red-500 border-red-500/30';
+      return 'bg-status-error/10 text-status-error border-status-error/30';
     case 'HIGH':
-      return 'bg-orange-500/10 text-orange-500 border-orange-500/30';
+      return 'bg-status-high/10 text-status-high border-status-high/30';
     case 'MEDIUM':
-      return 'bg-amber-500/10 text-amber-500 border-amber-500/30';
+      return 'bg-status-warning/10 text-status-warning border-status-warning/30';
     case 'LOW':
       return 'bg-sky-500/10 text-sky-500 border-sky-500/30';
     default:
@@ -320,9 +320,9 @@ function ClusterImageScansPage() {
                 const d = diff.data.delta?.[sev] ?? 0;
                 const tone =
                   d > 0
-                    ? 'text-red-500 border-red-500/30 bg-red-500/5'
+                    ? 'text-status-error border-status-error/30 bg-status-error/5'
                     : d < 0
-                      ? 'text-emerald-500 border-emerald-500/30 bg-emerald-500/5'
+                      ? 'text-status-success border-status-success/30 bg-status-success/5'
                       : 'text-muted-foreground border-border';
                 const Icon = d > 0 ? TrendingUp : d < 0 ? TrendingDown : Minus;
                 return (
@@ -376,9 +376,9 @@ function ClusterImageScansPage() {
                       {new Date(p.scannedAt).toLocaleString()}
                     </span>
                     <span className="flex items-center gap-1.5 text-foreground">
-                      <span className="text-red-500 font-medium tabular-nums">{p.critical}</span>
-                      <span className="text-orange-500 tabular-nums">{p.high}</span>
-                      <span className="text-amber-500 tabular-nums">{p.medium}</span>
+                      <span className="text-status-error font-medium tabular-nums">{p.critical}</span>
+                      <span className="text-status-high tabular-nums">{p.high}</span>
+                      <span className="text-status-warning tabular-nums">{p.medium}</span>
                       <span className="text-sky-500 tabular-nums">{p.low}</span>
                     </span>
                   </div>
@@ -486,10 +486,10 @@ function ClusterImageScansPage() {
                   <TableCell className="px-3 py-2">
                     {r.workloadKind} / {r.workloadName}
                   </TableCell>
-                  <TableCell className="px-3 py-2 text-right font-semibold text-red-500">
+                  <TableCell className="px-3 py-2 text-right font-semibold text-status-error">
                     {r.criticalCount}
                   </TableCell>
-                  <TableCell className="px-3 py-2 text-right font-semibold text-orange-500">
+                  <TableCell className="px-3 py-2 text-right font-semibold text-status-high">
                     {r.highCount}
                   </TableCell>
                   <TableCell className="px-3 py-2 text-right">{total}</TableCell>
@@ -566,9 +566,9 @@ function ClusterImageScansPage() {
                           {new Date(p.scannedAt).toLocaleString()}
                         </span>
                         <span className="flex items-center gap-1.5">
-                          <span className="text-red-500 font-medium tabular-nums" title="Critical">{p.critical}</span>
-                          <span className="text-orange-500 tabular-nums" title="High">{p.high}</span>
-                          <span className="text-amber-500 tabular-nums" title="Medium">{p.medium}</span>
+                          <span className="text-status-error font-medium tabular-nums" title="Critical">{p.critical}</span>
+                          <span className="text-status-high tabular-nums" title="High">{p.high}</span>
+                          <span className="text-status-warning tabular-nums" title="Medium">{p.medium}</span>
                           <span className="text-sky-500 tabular-nums" title="Low">{p.low}</span>
                         </span>
                       </div>
@@ -811,8 +811,8 @@ function ScanProgressBanner({
     else ageStr = `${Math.round(age / 86400)}d ago`;
   }
   return (
-    <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 px-4 py-2.5 text-sm flex items-center gap-2">
-      <ShieldAlert className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+    <div className="rounded-lg border border-status-success/40 bg-status-success/5 px-4 py-2.5 text-sm flex items-center gap-2">
+      <ShieldAlert className="h-4 w-4 text-status-success flex-shrink-0" />
       <span className="text-foreground">
         All scans current — {progress.reportsCount} workload{progress.reportsCount === 1 ? '' : 's'} indexed, last scan {ageStr}.
       </span>

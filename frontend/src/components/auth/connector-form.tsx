@@ -27,10 +27,11 @@
  * preserves the previous ciphertext.
  */
 import { useEffect, useId, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppForm, useFieldContext } from '@/lib/form';
 import { inputClassName } from '@/components/form/fields';
+import { ActionButton } from '@/components/ui/action-button';
 import { isStoredSecret, stripUntouchedSecrets } from '@/components/form/secrets';
 import type { DexConnectorTypeSpec } from '@/types';
 import { getConnectorMeta, humaniseFieldName, type FieldMeta } from './connector-meta';
@@ -302,25 +303,19 @@ export function ConnectorForm({
 
       <div className="flex items-center justify-end gap-2 pt-2">
         {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
+          <ActionButton type="button" onClick={onCancel}>
             Cancel
-          </button>
+          </ActionButton>
         )}
-        <button
+        <ActionButton
           type="button"
+          intent="primary"
           onClick={() => void form.handleSubmit()}
           disabled={submitting}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-            text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          loading={submitting}
         >
-          {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {submitLabel}
-        </button>
+        </ActionButton>
       </div>
     </div>
   );

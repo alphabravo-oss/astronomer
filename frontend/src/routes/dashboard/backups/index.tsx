@@ -35,9 +35,11 @@ import { useClusters } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { ActionButton } from '@/components/ui/action-button';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { PhaseBadge } from '@/components/backups/phase-badge';
 import { RestoreModal } from '@/components/backups/restore-modal';
@@ -429,43 +431,33 @@ function BackupsPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-            Application Backups (Velero)
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+    <PageShell>
+      <PageHeader
+        title="Application Backups (Velero)"
+        description={
+          <>
             Velero backups of application state — namespaces and persistent volumes — with storage
             locations, schedules, runs, and restores.
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            These are application-level backups, not control-plane or etcd disaster recovery.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {canMutateBackups && tab === 'storage' && (
-            <button
-              onClick={() => router.push('/dashboard/backups/storage/new')}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-                text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              <Plus className="h-4 w-4" />
-              Add Storage
-            </button>
-          )}
-          {canMutateBackups && tab === 'schedules' && (
-            <button
-              onClick={() => router.push('/dashboard/backups/schedules/new')}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-                text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              <Plus className="h-4 w-4" />
-              Create Schedule
-            </button>
-          )}
-        </div>
-      </div>
+            <span className="mt-1 block text-xs">
+              These are application-level backups, not control-plane or etcd disaster recovery.
+            </span>
+          </>
+        }
+        actions={
+          <>
+            {canMutateBackups && tab === 'storage' && (
+              <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => router.push('/dashboard/backups/storage/new')}>
+                Add Storage
+              </ActionButton>
+            )}
+            {canMutateBackups && tab === 'schedules' && (
+              <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => router.push('/dashboard/backups/schedules/new')}>
+                Create Schedule
+              </ActionButton>
+            )}
+          </>
+        }
+      />
 
       <div className="border-b border-border">
         <nav className="flex gap-6">
@@ -587,7 +579,7 @@ function BackupsPage() {
         variant="destructive"
         loading={deleteScheduleMu.isPending}
       />
-    </div>
+    </PageShell>
   );
 }
 

@@ -20,6 +20,7 @@ import { useClusters } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { b2Keys, useB2Restore, useB2Run } from '@/components/backups/hooks';
 import { PhaseBadge } from '@/components/backups/phase-badge';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { cn, formatRelativeTime } from '@/lib/utils';
 
 function RestoreDetailPage() {
@@ -67,7 +68,7 @@ function RestoreDetailPage() {
   const includedRestore = restore.includedNamespaces ?? [];
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <div>
         <button
           onClick={() => router.push('/dashboard/backups?tab=runs')}
@@ -76,10 +77,10 @@ function RestoreDetailPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to backups
         </button>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight break-all">
-          {restore.veleroRestoreName ?? 'Restore'}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1 font-mono break-all">{restore.id}</p>
+        <PageHeader
+          title={restore.veleroRestoreName ?? 'Restore'}
+          description={<span className="font-mono break-all">{restore.id}</span>}
+        />
       </div>
 
       <div className="rounded-xl border border-border bg-card p-6 space-y-4">
@@ -214,7 +215,7 @@ function RestoreDetailPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageShell>
   );
 }
 

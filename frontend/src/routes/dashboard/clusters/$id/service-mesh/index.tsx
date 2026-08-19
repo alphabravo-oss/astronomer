@@ -18,6 +18,7 @@ import { useParams } from '@/lib/navigation';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -65,13 +66,13 @@ function meshLabel(kind: ServiceMeshKind): string {
 function meshAccent(kind: ServiceMeshKind): string {
   switch (kind) {
     case 'istio':
-      return 'text-blue-500';
+      return 'text-status-info';
     case 'linkerd':
-      return 'text-emerald-500';
+      return 'text-status-success';
     case 'kuma':
       return 'text-purple-500';
     case 'cilium':
-      return 'text-amber-500';
+      return 'text-status-warning';
     case 'none':
       return 'text-muted-foreground';
     default:
@@ -118,7 +119,7 @@ function HeroCard({ detection, clusterId }: { detection: ServiceMeshDetection; c
               )}
             </p>
             {detection.lastError && (
-              <p className="text-xs text-amber-500 mt-2 flex items-start gap-1.5">
+              <p className="text-xs text-status-warning mt-2 flex items-start gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
                 <span>{detection.lastError}</span>
               </p>
@@ -187,7 +188,7 @@ function InventoryPanel({
           <p className="text-xs text-muted-foreground mt-1">{inventory.totalCount} resources tracked</p>
         </div>
         {inventory.notice && (
-          <span className="text-xs text-amber-500 text-right max-w-md">{inventory.notice}</span>
+          <span className="text-xs text-status-warning text-right max-w-md">{inventory.notice}</span>
         )}
       </div>
       <div className="overflow-x-auto">
@@ -243,7 +244,7 @@ function InventoryPanel({
                   </TableCell>
                   <TableCell className="px-5 py-3 whitespace-nowrap">
                     {gitOpsOwned > 0 ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-1 text-xs text-amber-500">
+                      <span className="inline-flex items-center gap-1 rounded bg-status-warning/10 px-2 py-1 text-xs text-status-warning">
                         <Shield className="h-3 w-3" />
                         {gitOpsOwned} GitOps owned
                       </span>
@@ -320,8 +321,8 @@ spec:
               <div
                 className={`rounded border px-3 py-2 text-xs ${
                   result.applyAllowed
-                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
-                    : 'border-amber-500/30 bg-amber-500/10 text-amber-500'
+                    ? 'border-status-success/30 bg-status-success/10 text-status-success'
+                    : 'border-status-warning/30 bg-status-warning/10 text-status-warning'
                 }`}
               >
                 {result.applyAllowed
@@ -425,15 +426,14 @@ function ClusterServiceMeshPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Service mesh</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Detect and monitor the service mesh installed on {cluster.displayName}.
-          </p>
-        </div>
+        <PageHeader
+          className="flex-1"
+          title="Service mesh"
+          description={`Detect and monitor the service mesh installed on ${cluster.displayName}.`}
+        />
         <button
           onClick={() => reDetect.mutate()}
           disabled={reDetect.isPending}
@@ -490,7 +490,7 @@ function ClusterServiceMeshPage() {
       {detection && detection.detectedMesh !== 'none' && detection.detectedMesh !== 'unknown' && (
         <div className="rounded-lg border border-border bg-card p-4 flex items-center justify-between">
           <div className="flex items-start gap-3">
-            <Shield className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+            <Shield className="h-5 w-5 text-status-success flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-medium text-foreground">mTLS posture</p>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -536,7 +536,7 @@ function ClusterServiceMeshPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

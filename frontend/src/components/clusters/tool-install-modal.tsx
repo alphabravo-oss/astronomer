@@ -6,6 +6,9 @@ import yaml from 'js-yaml';
 import * as apiClient from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 import { ModalShell } from '@/components/ui/modal-shell';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Loader2, FileCode2, SlidersHorizontal } from 'lucide-react';
 import { permissionDeniedReason } from '@/lib/permission-hooks';
 import type { PermissionDecision } from '@/lib/permissions';
@@ -174,23 +177,16 @@ export function ToolInstallModal({
             <span />
           )}
           <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="h-9 px-4 rounded-lg border border-border text-sm font-medium
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              Cancel
-            </button>
-            <button
+            <ActionButton onClick={onClose}>Cancel</ActionButton>
+            <ActionButton
+              intent="primary"
               onClick={handleConfirm}
               disabled={installing || isLoading || !!confirmBlockedReason}
-              title={confirmBlockedReason}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-                text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              disabledReason={confirmBlockedReason}
+              loading={installing}
             >
-              {installing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Install
-            </button>
+            </ActionButton>
           </div>
         </div>
       }
@@ -199,19 +195,17 @@ export function ToolInstallModal({
         <label htmlFor="tool-preset" className="text-sm font-medium text-foreground">
           Preset
         </label>
-        <select
+        <Select
           id="tool-preset"
           value={selectedPreset}
           onChange={(e) => setSelectedPreset(e.target.value)}
-          className="w-full h-9 px-2 rounded-md border border-border bg-background text-sm
-            focus:outline-none focus:ring-1 focus:ring-ring"
         >
           {PRESET_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
           ))}
-        </select>
+        </Select>
         <p className="text-xs text-muted-foreground">
           Sizing and replica defaults for this install. Defaults to the cluster&apos;s environment.
         </p>
@@ -275,8 +269,6 @@ function FormFieldRow({
   onChange: (v: string) => void;
   onClassChange: (v: string) => void;
 }) {
-  const inputCls =
-    'h-8 px-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring';
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_220px] items-center gap-3">
       <div>
@@ -295,35 +287,35 @@ function FormFieldRow({
           <span className="text-xs text-muted-foreground">{value === 'true' ? 'Enabled' : 'Disabled'}</span>
         </label>
       ) : field.type === 'select' ? (
-        <select value={value} onChange={(e) => onChange(e.target.value)} className={`${inputCls} w-full`}>
+        <Select value={value} onChange={(e) => onChange(e.target.value)} className="h-8">
           {(field.options ?? []).map((opt) => (
             <option key={opt} value={opt}>
               {opt}
             </option>
           ))}
-        </select>
+        </Select>
       ) : field.type === 'storage' ? (
         <div className="flex gap-2">
-          <input
+          <Input
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder={field.placeholder || '10Gi'}
-            className={`${inputCls} w-24`}
+            className="h-8 w-24"
           />
-          <input
+          <Input
             value={classValue}
             onChange={(e) => onClassChange(e.target.value)}
             placeholder="storageClass"
-            className={`${inputCls} flex-1`}
+            className="h-8 flex-1"
           />
         </div>
       ) : (
-        <input
+        <Input
           type={field.type === 'number' ? 'number' : 'text'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
-          className={`${inputCls} w-full`}
+          className="h-8"
         />
       )}
     </div>

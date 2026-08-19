@@ -37,6 +37,10 @@ import {
   useB2CreateStorageLocation,
   useB2TestStorageLocation,
 } from '@/components/backups/hooks';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { PageHeader, PageShell } from '@/components/ui/page';
+import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type {
   BackupBackendKind,
@@ -190,7 +194,7 @@ function StorageWizardPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <PageShell className="max-w-3xl mx-auto">
       <div>
         <button
           onClick={() => router.push('/dashboard/backups')}
@@ -199,10 +203,10 @@ function StorageWizardPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to backups
         </button>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Add Storage Location</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Register a Velero BackupStorageLocation on the cluster Velero is running on.
-        </p>
+        <PageHeader
+          title="Add Storage Location"
+          description="Register a Velero BackupStorageLocation on the cluster Velero is running on."
+        />
       </div>
 
       {/* Step indicator */}
@@ -243,14 +247,12 @@ function StorageWizardPage() {
               <label className="text-sm font-medium text-foreground">Name</label>
               <wizardForm.Field name="name">
                 {(field) => (
-                  <input
+                  <Input
                     type="text"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
                     placeholder="prod-s3-backups"
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 )}
               </wizardForm.Field>
@@ -262,12 +264,10 @@ function StorageWizardPage() {
               <label className="text-sm font-medium text-foreground">Cluster</label>
               <wizardForm.Field name="clusterId">
                 {(field) => (
-                  <select
+                  <Select
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     <option value="">Select a cluster…</option>
                     {clusters.map((c) => (
@@ -275,7 +275,7 @@ function StorageWizardPage() {
                         {c.displayName || c.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 )}
               </wizardForm.Field>
               <p className="text-xs text-muted-foreground">
@@ -508,30 +508,25 @@ function StorageWizardPage() {
 
       {/* Footer */}
       <div className="flex items-center justify-between">
-        <button
+        <ActionButton
+          icon={<ArrowLeft className="h-3.5 w-3.5" />}
           onClick={handleBack}
           disabled={create.isPending}
-          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg border border-border text-sm font-medium
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
         >
-          <ArrowLeft className="h-3.5 w-3.5" />
           {step === 0 ? 'Cancel' : 'Back'}
-        </button>
-        <button
+        </ActionButton>
+        <ActionButton
+          intent="primary"
           onClick={handleNext}
           disabled={!stepValid || create.isPending || (step === 3 && !testRan)}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-            text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          loading={create.isPending || (step === 3 && !testRan)}
         >
-          {(create.isPending || (step === 3 && !testRan)) && (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          )}
           {step === STEPS.length - 1
             ? 'Finish'
             : step === 2
               ? 'Create & Test'
               : 'Continue'}
-        </button>
+        </ActionButton>
       </div>
 
       {clustersQ.isLoading && (
@@ -540,7 +535,7 @@ function StorageWizardPage() {
           Loading clusters…
         </p>
       )}
-    </div>
+    </PageShell>
   );
 }
 
@@ -565,14 +560,12 @@ function Field({
         {label}
         {required && <span className="text-status-error ml-0.5">*</span>}
       </label>
-      <input
+      <Input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         autoComplete={type === 'password' ? 'new-password' : 'off'}
-        className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-          placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
       />
     </div>
   );

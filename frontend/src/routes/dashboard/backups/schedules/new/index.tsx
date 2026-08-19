@@ -26,6 +26,10 @@ import {
   useB2StorageLocations,
 } from '@/components/backups/hooks';
 import { CRON_PRESETS, cronToHuman, isPlausibleCron } from '@/components/backups/cron';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { PageHeader, PageShell } from '@/components/ui/page';
+import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
 const STEPS = ['Identity', 'Schedule', 'Scope', 'Retention', 'Review'] as const;
@@ -140,7 +144,7 @@ function ScheduleWizardPage() {
   const namespaceList = (namespacesQ.data ?? []).map((n) => n.name);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <PageShell className="max-w-3xl mx-auto">
       <div>
         <button
           onClick={() => router.push('/dashboard/backups')}
@@ -149,10 +153,10 @@ function ScheduleWizardPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to backups
         </button>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Create Schedule</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Define a Velero Schedule CR that emits Backup CRs on a cron expression.
-        </p>
+        <PageHeader
+          title="Create Schedule"
+          description="Define a Velero Schedule CR that emits Backup CRs on a cron expression."
+        />
       </div>
 
       {/* Step indicator */}
@@ -193,14 +197,12 @@ function ScheduleWizardPage() {
               <label className="text-sm font-medium text-foreground">Name</label>
               <wizardForm.Field name="name">
                 {(field) => (
-                  <input
+                  <Input
                     type="text"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
                     placeholder="daily-platform-backup"
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 )}
               </wizardForm.Field>
@@ -218,12 +220,10 @@ function ScheduleWizardPage() {
               ) : (
                 <wizardForm.Field name="storageId">
                   {(field) => (
-                    <select
+                    <Select
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
-                      className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                        focus:outline-none focus:ring-1 focus:ring-ring"
                     >
                       <option value="">Select…</option>
                       {(storageQ.data?.data ?? []).map((s) => (
@@ -231,7 +231,7 @@ function ScheduleWizardPage() {
                           {s.name} ({s.bucket})
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   )}
                 </wizardForm.Field>
               )}
@@ -285,33 +285,30 @@ function ScheduleWizardPage() {
             {form.cronMode === 'preset' ? (
               <wizardForm.Field name="cron">
                 {(field) => (
-                  <select
+                  <Select
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     {CRON_PRESETS.map((p) => (
                       <option key={p.value} value={p.value}>
                         {p.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 )}
               </wizardForm.Field>
             ) : (
               <wizardForm.Field name="cron">
                 {(field) => (
-                  <input
+                  <Input
                     type="text"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
                     placeholder="0 2 * * *"
                     spellCheck={false}
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="font-mono"
                   />
                 )}
               </wizardForm.Field>
@@ -376,15 +373,14 @@ function ScheduleWizardPage() {
               <label className="text-sm font-medium text-foreground">TTL (days)</label>
               <wizardForm.Field name="ttlDays">
                 {(field) => (
-                  <input
+                  <Input
                     type="number"
                     min={0}
                     max={3650}
                     value={field.state.value}
                     onChange={(e) => field.handleChange(parseInt(e.target.value, 10) || 0)}
                     onBlur={field.handleBlur}
-                    className="w-32 h-9 px-3 rounded-md border border-border bg-background text-sm
-                      focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-32"
                   />
                 )}
               </wizardForm.Field>
@@ -396,15 +392,14 @@ function ScheduleWizardPage() {
               <label className="text-sm font-medium text-foreground">Retention count</label>
               <wizardForm.Field name="retentionCount">
                 {(field) => (
-                  <input
+                  <Input
                     type="number"
                     min={1}
                     max={365}
                     value={field.state.value}
                     onChange={(e) => field.handleChange(parseInt(e.target.value, 10) || 1)}
                     onBlur={field.handleBlur}
-                    className="w-32 h-9 px-3 rounded-md border border-border bg-background text-sm
-                      focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-32"
                   />
                 )}
               </wizardForm.Field>
@@ -456,26 +451,23 @@ function ScheduleWizardPage() {
       </div>
 
       <div className="flex items-center justify-between">
-        <button
+        <ActionButton
+          icon={<ArrowLeft className="h-3.5 w-3.5" />}
           onClick={handleBack}
           disabled={create.isPending}
-          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg border border-border text-sm font-medium
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
         >
-          <ArrowLeft className="h-3.5 w-3.5" />
           {step === 0 ? 'Cancel' : 'Back'}
-        </button>
-        <button
+        </ActionButton>
+        <ActionButton
+          intent="primary"
           onClick={handleNext}
           disabled={!stepValid || create.isPending}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-            text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          loading={create.isPending}
         >
-          {create.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {step === STEPS.length - 1 ? 'Create' : 'Continue'}
-        </button>
+        </ActionButton>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

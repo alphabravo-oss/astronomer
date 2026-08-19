@@ -11,6 +11,7 @@ import { lazy, Suspense, useMemo, useState } from 'react';
 import { useParams } from '@/lib/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -45,7 +46,7 @@ const MonacoEditor = lazy(() => import('@monaco-editor/react'));
 
 function EditorLoading() {
   return (
-    <div className="flex items-center justify-center h-full bg-[#1e1e1e]">
+    <div className="flex items-center justify-center h-full bg-terminal">
       <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
     </div>
   );
@@ -193,15 +194,11 @@ function ClusterTemplatePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Template</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Cluster template applied to {cluster.displayName}.
-          </p>
-        </div>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Template"
+        description={`Cluster template applied to ${cluster.displayName}.`}
+      />
 
       {bindingLoading ? (
         <div className="rounded-lg border border-border bg-card p-12 flex items-center justify-center">
@@ -368,7 +365,7 @@ function ClusterTemplatePage() {
         variant="destructive"
         loading={detachMutation.isPending}
       />
-    </div>
+    </PageShell>
   );
 }
 

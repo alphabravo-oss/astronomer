@@ -7,6 +7,7 @@ import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import { WidgetGrid } from '@/components/dashboards/widget-grid';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { ExtensionSlot } from '@/components/extensions/ExtensionSlot';
 import { renderGlobal } from '@/lib/api/dashboards';
 import {
@@ -64,16 +65,11 @@ function DashboardPage() {
   const totalTools = Array.isArray(tools) ? tools.length : 0;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-          Platform Overview
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Real-time status of your Kubernetes infrastructure
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Platform Overview"
+        description="Real-time status of your Kubernetes infrastructure"
+      />
 
       {/* At-a-glance metric strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -213,13 +209,13 @@ function DashboardPage() {
                     <TableCell className="px-4 py-2 text-right font-mono text-xs">{cluster.nodeCount}</TableCell>
                     <TableCell className="px-4 py-2 text-right font-mono text-xs">{cluster.podCount}</TableCell>
                     <TableCell className={cn('px-4 py-2 text-right font-mono text-xs',
-                      cluster.cpuPercentage >= 90 ? 'text-red-500' :
-                      cluster.cpuPercentage >= 75 ? 'text-yellow-500' : 'text-muted-foreground')}>
+                      cluster.cpuPercentage >= 90 ? 'text-status-error' :
+                      cluster.cpuPercentage >= 75 ? 'text-status-warning' : 'text-muted-foreground')}>
                       {cluster.cpuPercentage != null ? `${cluster.cpuPercentage.toFixed(0)}%` : '—'}
                     </TableCell>
                     <TableCell className={cn('px-4 py-2 text-right font-mono text-xs',
-                      cluster.memoryPercentage >= 90 ? 'text-red-500' :
-                      cluster.memoryPercentage >= 75 ? 'text-yellow-500' : 'text-muted-foreground')}>
+                      cluster.memoryPercentage >= 90 ? 'text-status-error' :
+                      cluster.memoryPercentage >= 75 ? 'text-status-warning' : 'text-muted-foreground')}>
                       {cluster.memoryPercentage != null ? `${cluster.memoryPercentage.toFixed(0)}%` : '—'}
                     </TableCell>
                   </TableRow>
@@ -252,13 +248,13 @@ function DashboardPage() {
                       <div
                         className={`mt-0.5 h-2 w-2 rounded-full flex-shrink-0 ${
                           event.type === 'cluster'
-                            ? 'bg-blue-400'
+                            ? 'bg-status-info'
                             : event.type === 'workload'
-                              ? 'bg-green-400'
+                              ? 'bg-status-success'
                               : event.type === 'deployment'
                                 ? 'bg-violet-400'
                                 : event.type === 'rbac'
-                                  ? 'bg-yellow-400'
+                                  ? 'bg-status-warning'
                                   : 'bg-zinc-400'
                         }`}
                       />
@@ -353,7 +349,7 @@ function DashboardPage() {
         point="dashboardWidget"
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
       />
-    </div>
+    </PageShell>
   );
 }
 
@@ -373,12 +369,12 @@ function MetricTile({
   tone: 'default' | 'warning' | 'error';
 }) {
   const toneRing =
-    tone === 'error' ? 'ring-red-500/20 hover:ring-red-500/40' :
-    tone === 'warning' ? 'ring-yellow-500/20 hover:ring-yellow-500/40' :
+    tone === 'error' ? 'ring-status-error/20 hover:ring-status-error/40' :
+    tone === 'warning' ? 'ring-status-warning/20 hover:ring-status-warning/40' :
     'ring-transparent';
   const toneValue =
-    tone === 'error' ? 'text-red-500' :
-    tone === 'warning' ? 'text-yellow-500' :
+    tone === 'error' ? 'text-status-error' :
+    tone === 'warning' ? 'text-status-warning' :
     'text-foreground';
   return (
     <Link
@@ -444,9 +440,9 @@ function HealthRow({
   hint?: string;
 }) {
   const dot =
-    tone === 'error' ? 'bg-red-500' :
-    tone === 'warning' ? 'bg-yellow-500' :
-    tone === 'success' ? 'bg-green-500' :
+    tone === 'error' ? 'bg-status-error' :
+    tone === 'warning' ? 'bg-status-warning' :
+    tone === 'success' ? 'bg-status-success' :
     'bg-zinc-400';
   return (
     <Link

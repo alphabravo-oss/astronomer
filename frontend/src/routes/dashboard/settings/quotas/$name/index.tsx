@@ -18,8 +18,13 @@ import {
   Trash2,
 } from 'lucide-react';
 import { toastError } from '@/lib/toast';
+import { ActionButton } from '@/components/ui/action-button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
+import { Input } from '@/components/ui/input';
+import { PageHeader, PageShell } from '@/components/ui/page';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {
   useDeleteQuotaPlan,
@@ -64,12 +69,11 @@ function NumberField({
   return (
     <div className="space-y-1.5">
       <label className="text-sm font-medium text-foreground">{label}</label>
-      <input
+      <Input
         type="number"
         value={value}
         min={0}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
       />
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
@@ -104,44 +108,42 @@ function QuotaPlanForm({ initial }: { initial: QuotaPlan }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
-            <input
+            <Input
               type="text"
               value={form.name}
               disabled
-              className="w-full h-10 px-3 rounded-lg border border-border bg-muted text-sm font-mono text-muted-foreground"
+              className="bg-muted font-mono text-muted-foreground"
             />
             <p className="text-xs text-muted-foreground">Plan name is immutable.</p>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Display name</label>
-            <input
+            <Input
               type="text"
               value={form.displayName}
               onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Description</label>
-          <textarea
+          <Textarea
             value={form.description ?? ''}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             rows={2}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="min-h-0 text-sm font-sans"
           />
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Enforcement</label>
-          <select
+          <Select
             value={form.enforcement}
             onChange={(e) => setForm({ ...form, enforcement: e.target.value as QuotaEnforcement })}
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="hard">Hard — reject writes over cap</option>
             <option value="soft">Soft — warn but allow</option>
             <option value="disabled">Disabled — record only</option>
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -164,25 +166,24 @@ function QuotaPlanForm({ initial }: { initial: QuotaPlan }) {
       </div>
 
       <div className="flex items-center justify-between sticky bottom-4 z-10 rounded-xl border border-border bg-popover/80 backdrop-blur p-3 shadow-sm">
-        <button
-          type="button"
+        <ActionButton
+          intent="destructive"
+          icon={<Trash2 className="h-3.5 w-3.5" />}
           onClick={() => setConfirmDelete(true)}
-          className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-border text-sm font-medium text-status-error hover:bg-status-error/10 transition-colors"
         >
-          <Trash2 className="h-3.5 w-3.5" />
           Delete plan
-        </button>
+        </ActionButton>
         <div className="flex items-center gap-3">
           <p className="text-xs text-muted-foreground">{dirty ? 'Unsaved changes' : 'Saved'}</p>
-          <button
-            type="button"
+          <ActionButton
+            intent="primary"
             onClick={handleSave}
             disabled={!dirty || update.isPending}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+            loading={update.isPending}
+            icon={<Save className="h-3.5 w-3.5" />}
           >
-            {update.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             Save changes
-          </button>
+          </ActionButton>
         </div>
       </div>
 
@@ -232,7 +233,7 @@ function QuotaPlanInner() {
 function QuotaPlanDetailPage() {
   return (
     <SettingsAuthGate>
-      <div className="max-w-3xl mx-auto space-y-6">
+      <PageShell className="max-w-3xl mx-auto">
         <Link
           href="/dashboard/settings/quotas"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -240,15 +241,17 @@ function QuotaPlanDetailPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to quotas
         </Link>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Settings · Quota plan</p>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1 flex items-center gap-2">
-            <Gauge className="h-5 w-5 text-muted-foreground" />
-            Edit plan
-          </h1>
-        </div>
+        <PageHeader
+          eyebrow="Settings · Quota plan"
+          title={
+            <span className="flex items-center gap-2">
+              <Gauge className="h-5 w-5 text-muted-foreground" />
+              Edit plan
+            </span>
+          }
+        />
         <QuotaPlanInner />
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

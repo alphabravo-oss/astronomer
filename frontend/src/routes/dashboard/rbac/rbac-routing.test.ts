@@ -1,4 +1,4 @@
-import { adminUserHref, isUserLocked, isValidNamespace } from './-page';
+import { adminUserHref, isUserLocked, isValidNamespace } from './-utils';
 
 // F-03 regression: the RBAC users table must link each row to the admin
 // user-security detail, and lock state must be derivable for the badge.
