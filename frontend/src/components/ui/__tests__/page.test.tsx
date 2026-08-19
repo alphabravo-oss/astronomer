@@ -10,7 +10,7 @@ describe('Page layout primitives', () => {
     );
 
     expect(screen.getByText('Content')).toBeInTheDocument();
-    expect(container.firstChild).toHaveClass('space-y-6', 'max-w-4xl', 'mx-auto');
+    expect(container.firstChild).toHaveClass('space-y-6');
   });
 
   it('renders title, description, eyebrow, and actions', () => {

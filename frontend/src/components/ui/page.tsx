@@ -8,7 +8,7 @@ export function PageShell({
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={cn('mx-auto max-w-4xl space-y-6', className)}>{children}</div>;
+  return <div className={cn('space-y-6', className)}>{children}</div>;
 }
 
 export function PageHeader({

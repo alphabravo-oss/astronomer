@@ -48,7 +48,7 @@ export function ToolInstallProgress({ operationId, toolName, onClose }: ToolInst
 
   return (
     <div className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-popover shadow-2xl">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto w-[80%]">
         <header className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border">
           <div className="flex items-center gap-2.5">
             <Terminal className="h-4 w-4 text-muted-foreground" />

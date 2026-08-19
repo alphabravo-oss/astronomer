@@ -175,7 +175,7 @@ function DashboardLayout() {
             </div>
           )}
           <main className="flex-1 min-h-0 overflow-y-auto">
-            <div className="p-6 max-w-4xl mx-auto animate-fade-in">
+            <div className="animate-fade-in px-[10%] py-6">
               {disabledFeature ? (
                 <FeatureDisabledState />
               ) : charlieNotActivated ? (
