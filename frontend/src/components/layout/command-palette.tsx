@@ -39,7 +39,6 @@ const pages = [
   { name: 'Delivery Bundles', href: '/dashboard/delivery/bundles', icon: Boxes },
   { name: 'Delivery Targets', href: '/dashboard/delivery/targets', icon: Route },
   { name: 'Delivery Rollouts', href: '/dashboard/delivery/rollouts', icon: Rocket },
-  { name: 'Catalog', href: '/dashboard/catalog', icon: Box },
   { name: 'RBAC', href: '/dashboard/rbac', icon: Shield },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
@@ -48,6 +47,7 @@ const pages = [
 // sidebar. Surfaced in the palette when the user is inside a cluster context so
 // keyboard users can jump straight to them.
 const clusterPages: Array<{ name: string; suffix: string; icon: LucideIcon; description: string }> = [
+  { name: 'Apps', suffix: '/apps', icon: Box, description: 'Helm charts, installed apps, and repositories' },
   { name: 'Registries', suffix: '/registries', icon: Boxes, description: 'Private image-pull credentials' },
   { name: 'Snapshots', suffix: '/snapshots', icon: Camera, description: 'Velero workload snapshots' },
   { name: 'Network & Access', suffix: '/network-access', icon: Route, description: 'Apiserver allow-list' },

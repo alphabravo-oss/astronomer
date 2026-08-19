@@ -3483,6 +3483,7 @@ type FeatureFlags struct {
 	FeatureBackups    *bool `json:"feature.backups,omitempty"`
 	FeatureCatalog    *bool `json:"feature.catalog,omitempty"`
 	FeatureCharlie    *bool `json:"feature.charlie,omitempty"`
+	FeatureExtensions *bool `json:"feature.extensions,omitempty"`
 	FeatureMonitoring *bool `json:"feature.monitoring,omitempty"`
 	FeatureProjects   *bool `json:"feature.projects,omitempty"`
 	FeatureSecurity   *bool `json:"feature.security,omitempty"`

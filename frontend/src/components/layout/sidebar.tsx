@@ -101,6 +101,10 @@ type NavItem = {
   };
   superuserOnly?: boolean;
   featureFlag?: FeatureFlagKey;
+  // Opt-in flags stay hidden until the flags payload explicitly enables them
+  // (missing/loading counts as off). Default-on flags still use === false so
+  // they remain visible while the flags query hydrates.
+  optIn?: boolean;
   requiresCharlieActivated?: boolean;
 };
 
@@ -152,8 +156,9 @@ const globalNavGroups: NavGroup[] = [
     label: 'Integrations',
     items: [
       { label: 'Cluster Tools', href: '/dashboard/tools', icon: Wrench, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
-      { label: 'Catalog', href: '/dashboard/catalog', icon: Package, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
-      { label: 'Extensions', href: '/dashboard/extensions', icon: Puzzle, permission: { resource: 'settings', verb: 'read' } },
+      // Helm marketplace lives on the cluster (Apps), matching Rancher Apps.
+      // Fleet-wide repos stay reachable from Apps → Repositories.
+      { label: 'Extensions', href: '/dashboard/extensions', icon: Puzzle, permission: { resource: 'settings', verb: 'read' }, featureFlag: 'feature.extensions', optIn: true },
     ],
   },
   {
@@ -844,7 +849,13 @@ function filterNavGroups(
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        if (item.featureFlag && featureFlags?.[item.featureFlag] === false) return false;
+        if (item.featureFlag) {
+          if (item.optIn) {
+            if (featureFlags?.[item.featureFlag] !== true) return false;
+          } else if (featureFlags?.[item.featureFlag] === false) {
+            return false;
+          }
+        }
         if (item.requiresCharlieActivated && !charlieActivated) return false;
         if (item.superuserOnly) return isSuperuser(user);
         if (!item.permission) return true;

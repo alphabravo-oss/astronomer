@@ -1251,6 +1251,8 @@ components:
           type: boolean
         feature.charlie:
           type: boolean
+        feature.extensions:
+          type: boolean
     ExtensionManifest:
       type: object
       required:

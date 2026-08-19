@@ -94,6 +94,7 @@ export function useSavePlatformSettings() {
       api.savePlatformSettingsBatch(updates),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.platform });
+      qc.invalidateQueries({ queryKey: queryKeys.featureFlags });
       toastSuccess('Platform settings saved');
     },
     onError: (err: Error) => {

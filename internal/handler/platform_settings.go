@@ -128,6 +128,10 @@ var settingsRegistry = map[string]settingSpec{
 	"feature.security":       {Type: typeBool, Default: true, Description: "Security / CIS scans tab"},
 	"feature.backups":        {Type: typeBool, Default: true, Description: "Backup and restore tab"},
 	"feature.charlie":        {Type: typeBool, Default: false, Description: "Charlie SRE assistant integration"},
+	// Off until the extension marketplace has something to install. Same
+	// fail-closed posture as Charlie: no DB row means the SPA hides the
+	// page and FeatureGateDefault 404s the API.
+	"feature.extensions": {Type: typeBool, Default: false, Description: "UI extension registry (off until the marketplace is built out)"},
 	// New opt-in features — Default FALSE (disabled until an operator enables).
 	// NOTE: the FeatureGate middleware hard-codes a true fallback, so these are
 	// additionally gated server-side (config flag for control-plane snapshots;

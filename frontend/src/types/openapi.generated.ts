@@ -1714,6 +1714,7 @@ export interface OpenAPIComponents {
           "feature.security"?: boolean;
           "feature.backups"?: boolean;
           "feature.charlie"?: boolean;
+          "feature.extensions"?: boolean;
         };
     HelmChart: {
           "id"?: string;

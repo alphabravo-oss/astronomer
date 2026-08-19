@@ -3,8 +3,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 /**
  * Per-cluster Apps tab — sprint 082+.
  *
- * Three sections (radio-toggled) over the existing helm catalog
- * infrastructure:
+ * Four sections over the existing helm catalog infrastructure, matching
+ * Rancher Apps (Installed / Charts / Repositories):
  *
  *   1. Installed — calls GET /api/v1/clusters/{id}/apps/ which LEFT-
  *      JOINs installed_charts → helm_chart_versions → helm_charts →
@@ -14,6 +14,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  *      install modal (sprint 27).
  *   3. Recommended — GET /catalog/recommendations/popular/. Same card
  *      layout as Browse.
+ *   4. Repositories — fleet-wide Helm sources (Astronomer repos are
+ *      global, unlike Rancher ClusterRepo CRs).
  *
  * Tool-installed rows (source_kind="tool") get a "Managed by Tools"
  * pivot pill so the Tools tab remains the canonical place to manage
@@ -42,10 +44,20 @@ import {
   Box,
   ArrowUpCircle,
   Trash2,
+  Plus,
 } from 'lucide-react';
 import { Link } from '@/lib/link';
 
-import { queryKeys, useCluster, useProjects } from '@/lib/hooks';
+import {
+  queryKeys,
+  useCluster,
+  useProjects,
+  useHelmRepositories,
+  useSyncHelmRepository,
+  useDeleteHelmRepository,
+} from '@/lib/hooks';
+import { AddRepositoryModal } from '../../../catalog/-add-repository-modal';
+import { RepositoriesTab } from '../../../catalog/-repositories-tab';
 import { liveFallback } from '@/lib/live/status-store';
 import { usePermissionDecision, permissionDeniedReason, toastPermissionDenied } from '@/lib/permission-hooks';
 import type { PermissionDecision } from '@/lib/permissions';
@@ -61,7 +73,7 @@ import {
 } from '@/lib/api/cluster-detail';
 import { AppInstallModal, AppUninstallModal } from '@/components/clusters/app-install-modal';
 
-type Section = 'installed' | 'browse' | 'recommended';
+type Section = 'installed' | 'browse' | 'recommended' | 'repositories';
 
 // Coarse status → tone mapping. We don't try to enumerate every
 // helm-release state; just bucket into the four colors operators
@@ -220,6 +232,10 @@ function ClusterAppsPage() {
     onError: (err) => toastApiError('Delete failed', err),
   });
   const [showDeleteFailed, setShowDeleteFailed] = useState(false);
+  const [showRepoModal, setShowRepoModal] = useState(false);
+  const { data: repos, isLoading: reposLoading } = useHelmRepositories();
+  const syncRepo = useSyncHelmRepository();
+  const deleteRepo = useDeleteHelmRepository();
 
   // Browse is fetched on mount but the (200ms-debounced) query string
   // updates the key so typing in the search box re-fetches without
@@ -320,39 +336,45 @@ function ClusterAppsPage() {
           </p>
         </div>
         <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            Project visibility
-            <select
-              aria-label="Catalog project"
-              value={projectId}
-              onChange={(event) => setProjectId(event.target.value)}
-              className="h-9 min-w-56 rounded-md border border-border bg-background px-3 text-sm text-foreground"
-              disabled={projectsQuery.isLoading}
+          {section !== 'repositories' && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              Project visibility
+              <select
+                aria-label="Catalog project"
+                value={projectId}
+                onChange={(event) => setProjectId(event.target.value)}
+                className="h-9 min-w-56 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+                disabled={projectsQuery.isLoading}
+              >
+                <option value="">Select a project</option>
+                {clusterProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.displayName || project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {section === 'repositories' && (
+            <ActionButton
+              intent="primary"
+              icon={<Plus className="h-4 w-4" />}
+              onClick={() => setShowRepoModal(true)}
             >
-              <option value="">Select a project</option>
-              {clusterProjects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.displayName || project.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Link
-            href={`/dashboard/catalog?cluster_id=${clusterId}${projectId ? `&project=${encodeURIComponent(projectId)}` : ''}`}
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            Manage catalog repos <ExternalLink className="h-3.5 w-3.5" />
-          </Link>
+              Add Repository
+            </ActionButton>
+          )}
         </div>
       </header>
 
       <nav className="flex items-center gap-1 border-b border-border">
-        {(['installed', 'browse', 'recommended'] as Section[]).map((s) => {
+        {(['installed', 'browse', 'recommended', 'repositories'] as Section[]).map((s) => {
           const active = section === s;
           const count =
             s === 'installed' ? installed.data?.total :
             s === 'browse' ? browse.data?.total :
-            recommended.data?.length;
+            s === 'recommended' ? recommended.data?.length :
+            repos?.length;
           return (
             <button
               key={s}
@@ -406,6 +428,21 @@ function ClusterAppsPage() {
           onInstall={openInstall}
         />
       )}
+      {section === 'repositories' && (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Helm repositories are shared across the fleet. Charts from these sources
+            are available to install on every cluster.
+          </p>
+          <RepositoriesTab
+            repos={repos}
+            loading={reposLoading}
+            onSync={(id) => syncRepo.mutate(id)}
+            onDelete={(id) => deleteRepo.mutate(id)}
+            syncPending={syncRepo.isPending}
+          />
+        </div>
+      )}
       {section === 'recommended' && projectId && (
         <RecommendedView
           q={recommended}
@@ -455,6 +492,9 @@ function ClusterAppsPage() {
           onClose={() => setModal({ kind: 'none' })}
           onConfirm={() => uninstall.mutate(modal.installedChartId)}
         />
+      )}
+      {showRepoModal && (
+        <AddRepositoryModal onClose={() => setShowRepoModal(false)} />
       )}
       {showDeleteFailed && (
         <DeleteFailedModal
@@ -849,8 +889,7 @@ function BrowseView({
         <div className="rounded-lg border border-dashed border-border p-6 text-center">
           <p className="text-sm font-medium text-foreground">No matching charts</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Try a broader search, or add a new repository under{' '}
-            <Link href={`/dashboard/catalog?cluster_id=${clusterId}`} className="underline">catalog repos</Link>.
+            Try a broader search, or add a repository on the Repositories tab.
           </p>
         </div>
       ) : (

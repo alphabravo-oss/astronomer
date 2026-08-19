@@ -46,6 +46,7 @@ interface SettingsCard {
   description: string;
   icon: React.ElementType;
   charlie?: boolean;
+  featureFlag?: 'feature.extensions';
 }
 
 const CARDS: SettingsCard[] = [
@@ -133,6 +134,7 @@ const CARDS: SettingsCard[] = [
     title: 'Extensions',
     description: 'Manifest validation, permissions review, and enablement controls.',
     icon: Puzzle,
+    featureFlag: 'feature.extensions',
   },
   {
     href: '/dashboard/settings/vault',
@@ -217,9 +219,12 @@ function SettingsHubPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {CARDS.filter((card) => isSuperuser
-          ? (!card.charlie || canManageCharlie)
-          : card.charlie && canManageCharlie).map((card) => {
+        {CARDS.filter((card) => {
+          if (card.featureFlag && featureFlags?.[card.featureFlag] !== true) return false;
+          return isSuperuser
+            ? (!card.charlie || canManageCharlie)
+            : card.charlie && canManageCharlie;
+        }).map((card) => {
           const Icon = card.icon;
           return (
             <Link

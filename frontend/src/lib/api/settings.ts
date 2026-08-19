@@ -115,6 +115,7 @@ export interface PlatformSettingsGrouped {
     monitoring: boolean;
     security: boolean;
     backups: boolean;
+    extensions: boolean;
   };
   tokens: {
     defaultTtlSeconds: number;

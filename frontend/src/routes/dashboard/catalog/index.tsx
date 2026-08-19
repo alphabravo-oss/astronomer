@@ -117,7 +117,7 @@ function CatalogPage() {
       <div>
         <PageHeader
           title="Catalog"
-          description="Browse, install, and manage Helm charts across your clusters"
+          description="Fleet Helm repositories. Browse and install charts from a cluster's Apps page."
           actions={
             <>
               <label className="flex items-center gap-2 text-xs text-muted-foreground">

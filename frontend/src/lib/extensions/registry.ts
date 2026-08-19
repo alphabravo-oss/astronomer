@@ -8,6 +8,7 @@
 // here (see the design doc: "Tier is derived, not authored").
 
 import { useQuery } from '@tanstack/react-query';
+import { getFeatureFlags } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 import * as extensionsApi from '@/lib/api/extensions';
 import type {
@@ -78,9 +79,16 @@ export function indexMounts(res: ExtensionMountsResponse | undefined): Extension
 // directly. Cached under queryKeys.extensions.mounts so Disable (which drops a
 // mount from /mounts/) takes effect on the next refetch/invalidate.
 export function useEnabledExtensions() {
+  const flags = useQuery({
+    queryKey: queryKeys.featureFlags,
+    queryFn: getFeatureFlags,
+    staleTime: 30_000,
+  });
+  const enabled = flags.data?.['feature.extensions'] === true;
   return useQuery({
     queryKey: queryKeys.extensions.mounts,
     queryFn: () => extensionsApi.getExtensionMounts(),
+    enabled,
     // Mounts change rarely (admin install/enable/disable); avoid refetch churn.
     staleTime: 60_000,
     select: indexMounts,

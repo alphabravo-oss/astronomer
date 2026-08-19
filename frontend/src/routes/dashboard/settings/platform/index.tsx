@@ -52,6 +52,7 @@ const DEFAULTS: PlatformSettingsGrouped = {
     monitoring: true,
     security: true,
     backups: true,
+    extensions: false,
   },
   tokens: {
     defaultTtlSeconds: 86400,
@@ -80,11 +81,12 @@ const FLAT_KEYS: Record<string, (g: PlatformSettingsGrouped) => unknown> = {
   'banners.login_banner_text': (g) => g.banners.loginBannerText,
   'banners.global_banner_text': (g) => g.banners.globalBannerText,
   'banners.global_banner_color': (g) => g.banners.globalBannerColor,
-  'features.catalog': (g) => g.features.catalog,
-  'features.projects': (g) => g.features.projects,
-  'features.monitoring': (g) => g.features.monitoring,
-  'features.security': (g) => g.features.security,
-  'features.backups': (g) => g.features.backups,
+  'feature.catalog': (g) => g.features.catalog,
+  'feature.projects': (g) => g.features.projects,
+  'feature.monitoring': (g) => g.features.monitoring,
+  'feature.security': (g) => g.features.security,
+  'feature.backups': (g) => g.features.backups,
+  'feature.extensions': (g) => g.features.extensions,
   'tokens.default_ttl_seconds': (g) => g.tokens.defaultTtlSeconds,
   'tokens.max_ttl_seconds': (g) => g.tokens.maxTtlSeconds,
   'session.timeout_minutes': (g) => g.session.timeoutMinutes,
@@ -114,11 +116,12 @@ function hydrate(flat: Array<{ key: string; value: unknown }>): PlatformSettings
       globalBannerColor: get('banners.global_banner_color', DEFAULTS.banners.globalBannerColor),
     },
     features: {
-      catalog: get('features.catalog', DEFAULTS.features.catalog),
-      projects: get('features.projects', DEFAULTS.features.projects),
-      monitoring: get('features.monitoring', DEFAULTS.features.monitoring),
-      security: get('features.security', DEFAULTS.features.security),
-      backups: get('features.backups', DEFAULTS.features.backups),
+      catalog: get('feature.catalog', DEFAULTS.features.catalog),
+      projects: get('feature.projects', DEFAULTS.features.projects),
+      monitoring: get('feature.monitoring', DEFAULTS.features.monitoring),
+      security: get('feature.security', DEFAULTS.features.security),
+      backups: get('feature.backups', DEFAULTS.features.backups),
+      extensions: get('feature.extensions', DEFAULTS.features.extensions),
     },
     tokens: {
       defaultTtlSeconds: get('tokens.default_ttl_seconds', DEFAULTS.tokens.defaultTtlSeconds),
@@ -319,6 +322,14 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
         <form.AppField name="features.monitoring">{(field) => <field.SwitchField label="Monitoring" />}</form.AppField>
         <form.AppField name="features.security">{(field) => <field.SwitchField label="Security" />}</form.AppField>
         <form.AppField name="features.backups">{(field) => <field.SwitchField label="Backups" />}</form.AppField>
+        <form.AppField name="features.extensions">
+          {(field) => (
+            <field.SwitchField
+              label="Extensions"
+              helper="UI extension registry. Leave off until the marketplace is ready."
+            />
+          )}
+        </form.AppField>
       </Section>
 
       <Section title="Token TTL" description="Defaults applied to newly minted API tokens.">
