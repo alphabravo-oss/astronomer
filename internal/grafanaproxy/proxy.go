@@ -149,7 +149,11 @@ func (p *proxy) authFromRequest(r *http.Request) (grafanaAuth, error) {
 }
 
 func (p *proxy) redirectToMint(w http.ResponseWriter, r *http.Request) {
-	returnURL := "https://" + p.cfg.GrafanaHost + "/auth/callback"
+	scheme := "https"
+	if strings.HasPrefix(strings.ToLower(p.cfg.AstronomerURL), "http://") {
+		scheme = "http"
+	}
+	returnURL := scheme + "://" + p.cfg.GrafanaHost + "/auth/callback"
 	mint := strings.TrimRight(p.cfg.AstronomerURL, "/") + "/api/v1/observability/grafana-ticket?return=" + url.QueryEscape(returnURL)
 	http.Redirect(w, r, mint, http.StatusFound)
 }
@@ -186,7 +190,7 @@ func (p *proxy) handleCallback(w http.ResponseWriter, r *http.Request) {
 		Value:    signed,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   strings.HasPrefix(strings.ToLower(p.cfg.AstronomerURL), "https://"),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(ttl / time.Second),
 	})
@@ -256,7 +260,34 @@ func isMutatingDatasources(r *http.Request) bool {
 		return false
 	}
 	p := strings.ToLower(r.URL.Path)
-	return p == "/api/datasources" || strings.HasPrefix(p, "/api/datasources/")
+	p = strings.TrimSuffix(p, "/")
+	if p == "/api/datasources" {
+		return true
+	}
+	if !strings.HasPrefix(p, "/api/datasources/") {
+		return false
+	}
+	rest := strings.TrimPrefix(p, "/api/datasources/")
+	segs := strings.Split(rest, "/")
+	if segs[0] == "proxy" {
+		return false
+	}
+	if segs[0] == "uid" {
+		if len(segs) >= 3 {
+			switch segs[2] {
+			case "proxy", "resources", "health":
+				return false
+			}
+		}
+		return true
+	}
+	if len(segs) >= 2 {
+		switch segs[1] {
+		case "proxy", "resources", "health":
+			return false
+		}
+	}
+	return true
 }
 
 func stripHopByHop(h http.Header) {

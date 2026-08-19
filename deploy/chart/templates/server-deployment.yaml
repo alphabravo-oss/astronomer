@@ -122,6 +122,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             # L19: lets the server self-check that a multi-replica deployment has
             # ASTRONOMER_POD_IP set (else the cross-pod tunnel locator silently
             # disables and non-owning replicas 503). Readiness fails loudly if not.

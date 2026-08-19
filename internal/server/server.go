@@ -557,9 +557,17 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	monitoringHandler.SetGrafanaTickets(grafanaTickets)
 	monitoringHandler.SetUserLookup(queries)
 	monitoringHandler.SetServerURL(cfg.ServerURL)
-	if img := os.Getenv("ASTRONOMER_SERVER_IMAGE"); img != "" {
-		monitoringHandler.SetGrafanaProxyImage(img)
-	}
+	monitoringHandler.SetGrafanaProxyImage(os.Getenv("ASTRONOMER_SERVER_IMAGE"))
+	monitoringHandler.SetGrafanaExpose(handler.GrafanaExpose{
+		GatewayClass:      os.Getenv("ASTRONOMER_GATEWAY_CLASS"),
+		IngressClass:      os.Getenv("ASTRONOMER_INGRESS_CLASS"),
+		GatewayName:       os.Getenv("ASTRONOMER_GATEWAY_NAME"),
+		PlatformNamespace: os.Getenv("POD_NAMESPACE"),
+	})
+	grafanaSessionTTL := newSessionTimeoutResolver(queries, logger)
+	monitoringHandler.SetSessionTTL(func(ctx context.Context) time.Duration {
+		return time.Duration(grafanaSessionTTL(ctx)) * time.Minute
+	})
 	// Migration 146: the Thanos/Prometheus/Alertmanager credential is
 	// Fernet-sealed at rest. This handler both reads it (to build a monitoring
 	// client) and read-modify-writes the column it lives in.

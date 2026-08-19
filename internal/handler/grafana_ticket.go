@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -45,6 +46,25 @@ func (h *MonitoringHandler) SetGrafanaProxyImage(image string) {
 	h.proxyImage = strings.TrimSpace(image)
 }
 
+func (h *MonitoringHandler) SetGrafanaExpose(expose GrafanaExpose) {
+	if h == nil {
+		return
+	}
+	h.grafanaExpose = GrafanaExpose{
+		GatewayClass:      strings.TrimSpace(expose.GatewayClass),
+		IngressClass:      strings.TrimSpace(expose.IngressClass),
+		GatewayName:       strings.TrimSpace(expose.GatewayName),
+		PlatformNamespace: strings.TrimSpace(expose.PlatformNamespace),
+	}
+}
+
+func (h *MonitoringHandler) SetSessionTTL(fn func(context.Context) time.Duration) {
+	if h == nil {
+		return
+	}
+	h.sessionTTL = fn
+}
+
 // MintGrafanaTicket is GET /api/v1/observability/grafana-ticket?return=.
 // Session + monitoring:read (any scope). Allow-lists return. Does not log
 // ticket or return.
@@ -68,7 +88,7 @@ func (h *MonitoringHandler) MintGrafanaTicket(w http.ResponseWriter, r *http.Req
 	}
 
 	grafanaHost := h.resolvedGrafanaHost(r)
-	returnURL, err := allowListedGrafanaReturn(r.URL.Query().Get("return"), grafanaHost)
+	returnURL, err := allowListedGrafanaReturn(r.URL.Query().Get("return"), grafanaHost, publicScheme(h.serverURL))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "return URL is not allow-listed")
 		return
@@ -79,7 +99,7 @@ func (h *MonitoringHandler) MintGrafanaTicket(w http.ResponseWriter, r *http.Req
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "authenticated user has no email")
 		return
 	}
-	token, _, err := h.grafanaTickets.Issue(userID, email, role, explore, admin, grafanaCookieTTL())
+	token, _, err := h.grafanaTickets.Issue(userID, email, role, explore, admin, h.grafanaCookieTTL(r.Context()))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TicketError, "Failed to issue Grafana ticket")
 		return
@@ -191,11 +211,15 @@ func stripHostScheme(host string) string {
 	return host
 }
 
-// allowListedGrafanaReturn accepts only https://<grafanaHost>/ or
-// https://<grafanaHost>/auth/callback. No open redirect, no //, no other hosts.
-func allowListedGrafanaReturn(raw, grafanaHost string) (string, error) {
+// allowListedGrafanaReturn accepts only <scheme>://<grafanaHost>/ or
+// /auth/callback. Scheme matches the Astronomer public URL (https unless
+// ServerURL is http). No open redirect, no //, no other hosts.
+func allowListedGrafanaReturn(raw, grafanaHost, scheme string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	grafanaHost = stripHostScheme(grafanaHost)
+	if scheme == "" {
+		scheme = "https"
+	}
 	if raw == "" || grafanaHost == "" {
 		return "", errGrafanaReturnRejected
 	}
@@ -206,7 +230,7 @@ func allowListedGrafanaReturn(raw, grafanaHost string) (string, error) {
 	if err != nil || !u.IsAbs() {
 		return "", errGrafanaReturnRejected
 	}
-	if !strings.EqualFold(u.Scheme, "https") {
+	if !strings.EqualFold(u.Scheme, scheme) {
 		return "", errGrafanaReturnRejected
 	}
 	if u.User != nil {
@@ -225,7 +249,7 @@ func allowListedGrafanaReturn(raw, grafanaHost string) (string, error) {
 	if strings.Contains(path, "//") {
 		return "", errGrafanaReturnRejected
 	}
-	return (&url.URL{Scheme: "https", Host: grafanaHost, Path: path}).String(), nil
+	return (&url.URL{Scheme: scheme, Host: grafanaHost, Path: path}).String(), nil
 }
 
 func appendTicketQuery(returnURL, ticket string) string {
@@ -239,8 +263,20 @@ func appendTicketQuery(returnURL, ticket string) string {
 	return u.String()
 }
 
-func grafanaCookieTTL() time.Duration {
+func (h *MonitoringHandler) grafanaCookieTTL(ctx context.Context) time.Duration {
+	if h != nil && h.sessionTTL != nil {
+		if d := h.sessionTTL(ctx); d > 0 {
+			return d
+		}
+	}
 	return time.Duration(sessionpolicy.DefaultMinutes) * time.Minute
+}
+
+func publicScheme(serverURL string) string {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(serverURL)), "http://") {
+		return "http"
+	}
+	return "https"
 }
 
 var errGrafanaReturnRejected = errors.New("grafana return URL rejected")

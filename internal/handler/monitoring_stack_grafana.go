@@ -26,7 +26,6 @@ const (
 	sharedGrafanaAuthModeClusterIP = "clusterip"
 	sharedGrafanaAuthModeProxy     = "proxy"
 	grafanaProxySecretName         = "astronomer-grafana-proxy-key"
-	grafanaProxyDefaultImage       = "astronomer-go-server:v1.0.0"
 	grafanaProxyListenPort         = 8080
 )
 
@@ -68,6 +67,12 @@ func (h *MonitoringHandler) sharedGrafanaPayload(ctx context.Context, r *http.Re
 	}
 	if req.IngressHost == "" {
 		req.IngressHost = defaultGrafanaHost(h.serverURL)
+	}
+	if req.IngressHost == "" {
+		return SharedGrafanaRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("ingressHost is required (set ServerURL so grafana.<host> can be derived; never values.ingress.host)")
+	}
+	if h == nil || strings.TrimSpace(h.proxyImage) == "" {
+		return SharedGrafanaRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("grafana-proxy image is not configured (ASTRONOMER_SERVER_IMAGE)")
 	}
 
 	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
@@ -195,11 +200,13 @@ func (h *MonitoringHandler) sharedGrafanaHelmValues(req SharedGrafanaRequest, ba
 	}
 	image := ""
 	serverURL := ""
+	var expose GrafanaExpose
 	if h != nil {
 		image = h.proxyImage
 		serverURL = h.serverURL
+		expose = h.grafanaExpose
 	}
-	extra := grafanaFamilyExtraObjects(req, backend, image, serverURL)
+	extra := grafanaFamilyExtraObjects(req, backend, image, serverURL, expose)
 	grafanaHost := stripHostScheme(req.IngressHost)
 	rootURL := ""
 	if grafanaHost != "" {
@@ -216,6 +223,7 @@ func (h *MonitoringHandler) sharedGrafanaHelmValues(req SharedGrafanaRequest, ba
 			"type":    "ClusterIP",
 			"port":    80,
 		},
+		"fullnameOverride": req.ReleaseName,
 		"ingress": map[string]any{
 			"enabled": false,
 		},
@@ -273,9 +281,9 @@ func (h *MonitoringHandler) sharedGrafanaHelmValues(req SharedGrafanaRequest, ba
 	}
 }
 
-func grafanaFamilyExtraObjects(req SharedGrafanaRequest, backend sqlc.MonitoringBackend, proxyImage, serverURL string) []any {
+func grafanaFamilyExtraObjects(req SharedGrafanaRequest, backend sqlc.MonitoringBackend, proxyImage, serverURL string, expose GrafanaExpose) []any {
 	objects := grafanaOwnedConfigMaps(req, backend)
-	objects = append(objects, grafanaProxyExtraObjects(req, proxyImage, serverURL)...)
+	objects = append(objects, grafanaProxyExtraObjects(req, proxyImage, serverURL, expose)...)
 	return objects
 }
 
@@ -283,14 +291,15 @@ func grafanaProxyServiceName(release string) string {
 	return defaultString(release, sharedGrafanaDefaultRelease) + "-grafana-proxy"
 }
 
-func grafanaProxyExtraObjects(req SharedGrafanaRequest, proxyImage, serverURL string) []any {
+func grafanaServiceName(release string) string {
+	return defaultString(release, sharedGrafanaDefaultRelease)
+}
+
+func grafanaProxyExtraObjects(req SharedGrafanaRequest, proxyImage, serverURL string, expose GrafanaExpose) []any {
 	ns := defaultString(req.Namespace, "monitoring")
 	release := defaultString(req.ReleaseName, sharedGrafanaDefaultRelease)
 	host := stripHostScheme(req.IngressHost)
-	if proxyImage == "" {
-		proxyImage = grafanaProxyDefaultImage
-	}
-	upstream := fmt.Sprintf("http://%s.%s.svc.cluster.local", release, ns)
+	upstream := fmt.Sprintf("http://%s.%s.svc.cluster.local:80", grafanaServiceName(release), ns)
 	astroURL := strings.TrimRight(strings.TrimSpace(serverURL), "/")
 	svcName := grafanaProxyServiceName(release)
 	labels := map[string]any{
@@ -302,15 +311,21 @@ func grafanaProxyExtraObjects(req SharedGrafanaRequest, proxyImage, serverURL st
 		grafanaProxyKeySecret(ns),
 		grafanaProxyDeployment(ns, release, svcName, labels, proxyImage, upstream, astroURL, host),
 		grafanaProxyService(ns, svcName, labels),
-		grafanaProxyNetworkPolicy(ns, release, labels),
+		grafanaLockdownNetworkPolicy(ns, release, labels),
+		grafanaProxyListenNetworkPolicy(ns, svcName, labels),
 	}
-	if host != "" {
+	if host == "" {
+		return objects
+	}
+	useGateway := expose.GatewayClass != "" && expose.PlatformNamespace != "" && expose.GatewayName != ""
+	if useGateway {
 		objects = append(objects,
-			grafanaProxyIngress(ns, svcName, host),
-			grafanaProxyGateway(ns, host),
-			grafanaProxyHTTPRoute(ns, svcName, host),
+			grafanaProxyPlatformHTTPRoute(expose.PlatformNamespace, expose.GatewayName, ns, svcName, host),
+			grafanaProxyReferenceGrant(ns, svcName, expose.PlatformNamespace),
 		)
+		return objects
 	}
+	objects = append(objects, grafanaProxyIngress(ns, svcName, host, expose.IngressClass))
 	return objects
 }
 
@@ -419,7 +434,7 @@ func grafanaProxyService(namespace, name string, labels map[string]any) map[stri
 	}
 }
 
-func grafanaProxyNetworkPolicy(namespace, release string, proxyLabels map[string]any) map[string]any {
+func grafanaLockdownNetworkPolicy(namespace, release string, proxyLabels map[string]any) map[string]any {
 	return map[string]any{
 		"apiVersion": "networking.k8s.io/v1",
 		"kind":       "NetworkPolicy",
@@ -446,28 +461,50 @@ func grafanaProxyNetworkPolicy(namespace, release string, proxyLabels map[string
 	}
 }
 
-func grafanaProxyIngress(namespace, svcName, host string) map[string]any {
+func grafanaProxyListenNetworkPolicy(namespace, name string, labels map[string]any) map[string]any {
+	// Ingress/Gateway controllers typically live outside this namespace and
+	// have no portable labels (same as chart allowPublicIngress).
 	return map[string]any{
 		"apiVersion": "networking.k8s.io/v1",
-		"kind":       "Ingress",
+		"kind":       "NetworkPolicy",
 		"metadata": map[string]any{
-			"name":      svcName,
+			"name":      name + "-ingress",
 			"namespace": namespace,
 		},
 		"spec": map[string]any{
-			"rules": []any{
+			"podSelector": map[string]any{"matchLabels": labels},
+			"policyTypes": []any{"Ingress"},
+			"ingress": []any{
 				map[string]any{
-					"host": host,
-					"http": map[string]any{
-						"paths": []any{
-							map[string]any{
-								"path":     "/",
-								"pathType": "Prefix",
-								"backend": map[string]any{
-									"service": map[string]any{
-										"name": svcName,
-										"port": map[string]any{"number": grafanaProxyListenPort},
-									},
+					"ports": []any{
+						map[string]any{"protocol": "TCP", "port": grafanaProxyListenPort},
+					},
+				},
+			},
+		},
+	}
+}
+
+func grafanaProxyIngress(namespace, svcName, host, ingressClass string) map[string]any {
+	spec := map[string]any{
+		"tls": []any{
+			map[string]any{
+				"hosts":      []any{host},
+				"secretName": "astronomer-grafana-tls",
+			},
+		},
+		"rules": []any{
+			map[string]any{
+				"host": host,
+				"http": map[string]any{
+					"paths": []any{
+						map[string]any{
+							"path":     "/",
+							"pathType": "Prefix",
+							"backend": map[string]any{
+								"service": map[string]any{
+									"name": svcName,
+									"port": map[string]any{"number": grafanaProxyListenPort},
 								},
 							},
 						},
@@ -476,26 +513,41 @@ func grafanaProxyIngress(namespace, svcName, host string) map[string]any {
 			},
 		},
 	}
-}
-
-func grafanaProxyGateway(namespace, host string) map[string]any {
+	if ingressClass != "" {
+		spec["ingressClassName"] = ingressClass
+	}
 	return map[string]any{
-		"apiVersion": "gateway.networking.k8s.io/v1",
-		"kind":       "Gateway",
+		"apiVersion": "networking.k8s.io/v1",
+		"kind":       "Ingress",
 		"metadata": map[string]any{
-			"name":      "astronomer-grafana",
+			"name":      svcName,
 			"namespace": namespace,
 		},
+		"spec": spec,
+	}
+}
+
+func grafanaProxyPlatformHTTPRoute(platformNS, gatewayName, grafanaNS, svcName, host string) map[string]any {
+	return map[string]any{
+		"apiVersion": "gateway.networking.k8s.io/v1",
+		"kind":       "HTTPRoute",
+		"metadata": map[string]any{
+			"name":      svcName,
+			"namespace": platformNS,
+		},
 		"spec": map[string]any{
-			"gatewayClassName": "nginx",
-			"listeners": []any{
+			"parentRefs": []any{
+				map[string]any{"name": gatewayName},
+			},
+			"hostnames": []any{host},
+			"rules": []any{
 				map[string]any{
-					"name":     "http",
-					"hostname": host,
-					"port":     80,
-					"protocol": "HTTP",
-					"allowedRoutes": map[string]any{
-						"namespaces": map[string]any{"from": "Same"},
+					"backendRefs": []any{
+						map[string]any{
+							"name":      svcName,
+							"namespace": grafanaNS,
+							"port":      grafanaProxyListenPort,
+						},
 					},
 				},
 			},
@@ -503,27 +555,27 @@ func grafanaProxyGateway(namespace, host string) map[string]any {
 	}
 }
 
-func grafanaProxyHTTPRoute(namespace, svcName, host string) map[string]any {
+func grafanaProxyReferenceGrant(grafanaNS, svcName, platformNS string) map[string]any {
 	return map[string]any{
-		"apiVersion": "gateway.networking.k8s.io/v1",
-		"kind":       "HTTPRoute",
+		"apiVersion": "gateway.networking.k8s.io/v1beta1",
+		"kind":       "ReferenceGrant",
 		"metadata": map[string]any{
-			"name":      svcName,
-			"namespace": namespace,
+			"name":      svcName + "-from-gateway",
+			"namespace": grafanaNS,
 		},
 		"spec": map[string]any{
-			"parentRefs": []any{
-				map[string]any{"name": "astronomer-grafana"},
-			},
-			"hostnames": []any{host},
-			"rules": []any{
+			"from": []any{
 				map[string]any{
-					"backendRefs": []any{
-						map[string]any{
-							"name": svcName,
-							"port": grafanaProxyListenPort,
-						},
-					},
+					"group":     "gateway.networking.k8s.io",
+					"kind":      "HTTPRoute",
+					"namespace": platformNS,
+				},
+			},
+			"to": []any{
+				map[string]any{
+					"group": "",
+					"kind":  "Service",
+					"name":  svcName,
 				},
 			},
 		},

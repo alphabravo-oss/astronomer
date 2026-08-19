@@ -28,6 +28,16 @@ data:
   TRUSTED_PROXY_CIDRS: {{ join "," .Values.config.trustedProxyCIDRs | quote }}
   # External URL of this install; seeds platform_configuration.server_url.
   SERVER_URL: {{ .Values.config.serverURL | default "" | quote }}
+  # Running server image — grafana-proxy extraObjects must use this, not a
+  # hardcoded v1.0.0 tag. Honour registry + digest the same as the server pod.
+  ASTRONOMER_SERVER_IMAGE: {{ include "astronomer.image" (dict "context" . "component" "server") | quote }}
+  {{- if .Values.gateway.enabled }}
+  ASTRONOMER_GATEWAY_CLASS: {{ .Values.gateway.className | quote }}
+  ASTRONOMER_GATEWAY_NAME: {{ include "astronomer.fullname" . | quote }}
+  {{- end }}
+  {{- if .Values.ingress.enabled }}
+  ASTRONOMER_INGRESS_CLASS: {{ .Values.ingress.className | quote }}
+  {{- end }}
   # Agent image the server renders into install.yaml for adopted clusters.
   # Derives from image.agent (registry-aware: GHCR online, mirror in air-gap) so
   # adopted clusters pull from the same place as the management plane. An

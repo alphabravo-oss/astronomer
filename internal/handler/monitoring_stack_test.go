@@ -174,6 +174,7 @@ func newStackLifecycleHandler(t *testing.T) (*MonitoringHandler, *stackLifecycle
 	k8s := grafanaPassingK8sFake(t)
 	h := NewMonitoringHandlerWithDeps(q, k8s, stackLifecycleHelmStub{})
 	h.SetServerURL("https://astronomer.example.com")
+	h.SetGrafanaProxyImage("ghcr.io/alphabravo-oss/astronomer-go-server:test-pr3")
 	return h, q
 }
 

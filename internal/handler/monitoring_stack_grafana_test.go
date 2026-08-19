@@ -159,21 +159,41 @@ func TestSharedGrafanaPreviewIsClusterIPOnly(t *testing.T) {
 	if proxyAuth["enabled"] != true {
 		t.Fatalf("auth.proxy.enabled = %v", proxyAuth["enabled"])
 	}
-	var sawProxyIngress, sawProxyBackend bool
+	if wrap.Data.Values["fullnameOverride"] != sharedGrafanaDefaultRelease {
+		t.Fatalf("fullnameOverride = %v, want %s so Grafana Service matches GRAFANA_UPSTREAM", wrap.Data.Values["fullnameOverride"], sharedGrafanaDefaultRelease)
+	}
+	if !strings.Contains(s, "ghcr.io/alphabravo-oss/astronomer-go-server:test-pr3") {
+		t.Fatalf("proxy image must equal the configured server image")
+	}
+	if strings.Contains(s, "astronomer-go-server:v1.0.0") {
+		t.Errorf("must not fall back to a registry-less v1.0.0 tag")
+	}
+	var sawProxyIngress, sawProxyBackend, sawGateway, sawHTTPRoute bool
 	extra, _ := wrap.Data.Values["extraObjects"].([]any)
 	for _, obj := range extra {
 		m, _ := obj.(map[string]any)
 		kind, _ := m["kind"].(string)
-		if kind == "Ingress" || kind == "HTTPRoute" {
+		rawObj, _ := json.Marshal(m)
+		switch kind {
+		case "Ingress":
 			sawProxyIngress = true
-			rawObj, _ := json.Marshal(m)
 			if strings.Contains(string(rawObj), grafanaProxyServiceName(sharedGrafanaDefaultRelease)) {
 				sawProxyBackend = true
 			}
+			if !strings.Contains(string(rawObj), `"tls"`) || !strings.Contains(string(rawObj), "grafana.astronomer.example.com") {
+				t.Errorf("Ingress missing tls hosts: %s", rawObj)
+			}
+		case "Gateway":
+			sawGateway = true
+		case "HTTPRoute":
+			sawHTTPRoute = true
 		}
 	}
 	if !sawProxyIngress || !sawProxyBackend {
-		t.Fatalf("expected Ingress/HTTPRoute backend=grafana-proxy, ingress=%v backend=%v", sawProxyIngress, sawProxyBackend)
+		t.Fatalf("expected Ingress backend=grafana-proxy, ingress=%v backend=%v", sawProxyIngress, sawProxyBackend)
+	}
+	if sawGateway || sawHTTPRoute {
+		t.Fatalf("default expose is Ingress only (no Gateway CRDs); gateway=%v httproute=%v", sawGateway, sawHTTPRoute)
 	}
 	if len(extra) < 8 {
 		t.Fatalf("extraObjects = %d, want at least 8 dashboard ConfigMaps plus proxy objects", len(extra))
@@ -392,6 +412,106 @@ func TestSharedGrafanaRejectsMultilineLogDatasourceURL(t *testing.T) {
 	h.PreviewSharedGrafanaStack(rec, grafanaAuthed(http.MethodPost, "/api/v1/settings/monitoring/grafana/preview/", body))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSharedGrafanaPreviewRequiresHostAndImage(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
+	h.SetServerURL("")
+	rec := httptest.NewRecorder()
+	h.PreviewSharedGrafanaStack(rec, grafanaAuthed(http.MethodPost, "/api/v1/settings/monitoring/grafana/preview/", sharedGrafanaBody))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty ServerURL status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "ingressHost") {
+		t.Fatalf("body = %s, want ingressHost required", rec.Body.String())
+	}
+
+	h.SetServerURL("https://astronomer.example.com")
+	h.SetGrafanaProxyImage("")
+	rec = httptest.NewRecorder()
+	h.PreviewSharedGrafanaStack(rec, grafanaAuthed(http.MethodPost, "/api/v1/settings/monitoring/grafana/preview/", sharedGrafanaBody))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty image status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSharedGrafanaUpstreamUsesFullnameOverrideForNonGrafanaRelease(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
+	body := `{"managementClusterId":"` + stackTestClusterID + `","releaseName":"obs"}`
+	rec := httptest.NewRecorder()
+	h.PreviewSharedGrafanaStack(rec, grafanaAuthed(http.MethodPost, "/api/v1/settings/monitoring/grafana/preview/", body))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var wrap struct {
+		Data struct {
+			Values map[string]any `json:"values"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
+		t.Fatal(err)
+	}
+	if wrap.Data.Values["fullnameOverride"] != "obs" {
+		t.Fatalf("fullnameOverride = %v, want obs", wrap.Data.Values["fullnameOverride"])
+	}
+	raw, _ := json.Marshal(wrap.Data.Values)
+	if !strings.Contains(string(raw), "http://obs.monitoring.svc.cluster.local:80") {
+		t.Fatalf("GRAFANA_UPSTREAM missing deterministic service: %s", raw)
+	}
+	if strings.Contains(string(raw), "http://obs-grafana.") {
+		t.Fatalf("must not use chart default fullname obs-grafana: %s", raw)
+	}
+}
+
+func TestSharedGrafanaGatewayExposeEmitsPlatformHTTPRoute(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
+	h.SetGrafanaExpose(GrafanaExpose{
+		GatewayClass:      "nginx",
+		GatewayName:       "astronomer",
+		PlatformNamespace: "astronomer",
+	})
+	rec := httptest.NewRecorder()
+	h.PreviewSharedGrafanaStack(rec, grafanaAuthed(http.MethodPost, "/api/v1/settings/monitoring/grafana/preview/", sharedGrafanaBody))
+	var wrap struct {
+		Data struct {
+			Values map[string]any `json:"values"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
+		t.Fatal(err)
+	}
+	var sawIngress, sawHTTPRoute, sawGrant, sawLocalGateway bool
+	extra, _ := wrap.Data.Values["extraObjects"].([]any)
+	for _, obj := range extra {
+		m, _ := obj.(map[string]any)
+		kind, _ := m["kind"].(string)
+		raw, _ := json.Marshal(m)
+		switch kind {
+		case "Ingress":
+			sawIngress = true
+		case "Gateway":
+			sawLocalGateway = true
+		case "HTTPRoute":
+			sawHTTPRoute = true
+			if !strings.Contains(string(raw), `"namespace":"astronomer"`) {
+				t.Errorf("HTTPRoute should live in the platform namespace: %s", raw)
+			}
+			if !strings.Contains(string(raw), grafanaProxyServiceName(sharedGrafanaDefaultRelease)) {
+				t.Errorf("HTTPRoute backend missing proxy service: %s", raw)
+			}
+		case "ReferenceGrant":
+			sawGrant = true
+		}
+	}
+	if sawIngress || sawLocalGateway {
+		t.Fatalf("gateway expose must not emit Ingress or a second Gateway, ingress=%v gw=%v", sawIngress, sawLocalGateway)
+	}
+	if !sawHTTPRoute || !sawGrant {
+		t.Fatalf("expected platform HTTPRoute + ReferenceGrant, route=%v grant=%v", sawHTTPRoute, sawGrant)
 	}
 }
 

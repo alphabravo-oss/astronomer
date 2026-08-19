@@ -127,6 +127,32 @@ func TestAdminExploreAllowed(t *testing.T) {
 	}
 }
 
+func TestViewerDatasourceProxyAllowedCreateForbidden(t *testing.T) {
+	p, key := testProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}), nil)
+	cookie := viewerCookie(t, key)
+	for _, path := range []string{
+		"/api/datasources/proxy/1/api/v1/query_range",
+		"/api/datasources/uid/thanos/resources/api/v1/query",
+	} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+		req.AddCookie(&http.Cookie{Name: grafanaAuthCookie, Value: cookie})
+		rec := httptest.NewRecorder()
+		p.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", path, rec.Code)
+		}
+	}
+	create := httptest.NewRequest(http.MethodPost, "/api/datasources", strings.NewReader(`{"name":"x"}`))
+	create.AddCookie(&http.Cookie{Name: grafanaAuthCookie, Value: cookie})
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(rec, create)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("POST /api/datasources status = %d, want 403", rec.Code)
+	}
+}
+
 func TestViewerAdminAPIForbidden(t *testing.T) {
 	p, key := testProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("upstream should not be called for viewer /api/admin")
@@ -154,6 +180,36 @@ func TestMissingCookieRedirectsToMint(t *testing.T) {
 	}
 	if strings.Contains(loc, "ticket=") {
 		t.Fatal("mint redirect must not include a ticket")
+	}
+}
+
+func TestCallbackCookieSecureFollowsAstronomerScheme(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	up, _ := url.Parse("http://127.0.0.1:9")
+	h := New(Config{
+		Upstream:      up,
+		AstronomerURL: "http://astronomer.example.com",
+		GrafanaHost:   "grafana.example.com",
+		HMACKey:       key,
+		Redeem: func(string) (redeemResult, error) {
+			return redeemResult{Email: "a@example.com", Role: "Viewer", TTL: 60}, nil
+		},
+		Now: time.Now,
+	})
+	req := httptest.NewRequest(http.MethodGet, "/auth/callback?ticket=x", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var cookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == grafanaAuthCookie {
+			cookie = c
+		}
+	}
+	if cookie == nil {
+		t.Fatal("missing cookie")
+	}
+	if cookie.Secure {
+		t.Fatal("Secure cookie on http Astronomer URL")
 	}
 }
 

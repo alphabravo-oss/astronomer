@@ -51,6 +51,17 @@ type MonitoringHandler struct {
 	users          UserByIDQuerier
 	serverURL      string
 	proxyImage     string
+	grafanaExpose  GrafanaExpose
+	sessionTTL     func(context.Context) time.Duration
+}
+
+// GrafanaExpose describes how grafana-proxy is published. Gateway (platform
+// HTTPRoute) is preferred when GatewayClass is set; otherwise Ingress.
+type GrafanaExpose struct {
+	GatewayClass      string
+	IngressClass      string
+	GatewayName       string
+	PlatformNamespace string
 }
 
 // SetEncryptor wires the Fernet encryptor used for the monitoring-backend
@@ -544,7 +555,7 @@ func (h *MonitoringHandler) applySharedGrafanaStack(ctx context.Context, msgType
 	}
 	if h.queries != nil {
 		if backend, err := h.queries.GetDefaultMonitoringBackend(ctx); err == nil {
-			values["extraObjects"] = grafanaFamilyExtraObjects(req, backend, h.proxyImage, h.serverURL)
+			values["extraObjects"] = grafanaFamilyExtraObjects(req, backend, h.proxyImage, h.serverURL, h.grafanaExpose)
 		}
 	}
 	return h.helm.Do(ctx, req.ManagementClusterID, msgType, protocol.HelmRequestPayload{

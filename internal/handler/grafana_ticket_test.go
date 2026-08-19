@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -145,10 +146,38 @@ func TestGrafanaTicketMintRequiresMonitoringRead(t *testing.T) {
 }
 
 func TestAllowListedGrafanaReturn(t *testing.T) {
-	if _, err := allowListedGrafanaReturn("https://grafana.example.com/", "grafana.example.com"); err != nil {
+	if _, err := allowListedGrafanaReturn("https://grafana.example.com/", "grafana.example.com", "https"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := allowListedGrafanaReturn("https://evil.com/", "grafana.example.com"); err == nil {
+	if _, err := allowListedGrafanaReturn("https://evil.com/", "grafana.example.com", "https"); err == nil {
 		t.Fatal("expected reject")
+	}
+	if _, err := allowListedGrafanaReturn("http://grafana.example.com/", "grafana.example.com", "http"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGrafanaCookieTTLUsesSessionSetting(t *testing.T) {
+	h := grafanaTicketHandler(t, grantMonitoring())
+	h.SetSessionTTL(func(context.Context) time.Duration { return 15 * time.Minute })
+	mint := httptest.NewRecorder()
+	h.MintGrafanaTicket(mint, grafanaTicketAuthed("ops@example.com"))
+	loc, err := mint.Result().Location()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticket := loc.Query().Get("ticket")
+	rec := httptest.NewRecorder()
+	h.RedeemGrafanaTicket(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"ticket":"`+ticket+`"}`)))
+	var wrap struct {
+		Data struct {
+			TTL int `json:"ttl"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
+		t.Fatal(err)
+	}
+	if wrap.Data.TTL != 15*60 {
+		t.Fatalf("ttl = %d, want 900 (session.timeout_minutes)", wrap.Data.TTL)
 	}
 }
