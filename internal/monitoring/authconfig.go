@@ -75,6 +75,7 @@ var ErrAuthConfigUnavailable = credential.ErrUnavailable
 //	sharedThanos         shared Thanos stack deployment metadata + status
 //	sharedAlertmanager   shared Alertmanager deployment metadata + status
 //	sharedGrafana        shared Grafana stack deployment metadata + status
+//	sharedLoki           shared Loki stack deployment metadata + status
 //	sharedAlertingAssets rendered rule/routing/silence ConfigMap hashes
 //	status               backend health, read by the monitoring summary
 //
@@ -88,6 +89,7 @@ var NonSecretAuthConfigKeys = []string{
 	"sharedThanos",
 	"sharedAlertmanager",
 	"sharedGrafana",
+	"sharedLoki",
 	"sharedAlertingAssets",
 	"status",
 }

@@ -789,6 +789,9 @@ type sizerK8sFake struct {
 
 func (f *sizerK8sFake) Do(_ context.Context, _, method, path string, _ []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
 	f.calls = append(f.calls, method+" "+path)
+	if strings.Contains(path, "persistentvolumeclaims") {
+		return sizerWALProbeResponse(method), nil
+	}
 	if method != http.MethodGet {
 		f.t.Errorf("sizer issued mutating call %s %s", method, path)
 		return &protocol.K8sResponsePayload{StatusCode: http.StatusMethodNotAllowed}, nil
@@ -813,6 +816,19 @@ func (f *sizerK8sFake) Do(_ context.Context, _, method, path string, _ []byte, _
 		return sizerK8sJSON(sc), nil
 	default:
 		return &protocol.K8sResponsePayload{StatusCode: http.StatusNotFound}, nil
+	}
+}
+
+func sizerWALProbeResponse(method string) *protocol.K8sResponsePayload {
+	switch method {
+	case http.MethodPost:
+		return sizerK8sJSON(map[string]any{"status": map[string]any{"phase": "Bound"}})
+	case http.MethodGet:
+		return sizerK8sJSON(map[string]any{"status": map[string]any{"phase": "Bound"}})
+	case http.MethodDelete:
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusOK}
+	default:
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusMethodNotAllowed}
 	}
 }
 

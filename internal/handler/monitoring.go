@@ -220,6 +220,24 @@ type SharedGrafanaRequest struct {
 	AutoRollbackOnFailure *bool  `json:"autoRollbackOnFailure"`
 }
 
+// SharedLokiRequest is the camelCase body for the shared Loki family.
+// ingestHostname is required and never derived from the Astronomer ingress host.
+type SharedLokiRequest struct {
+	ManagementClusterID     string `json:"managementClusterId"`
+	Namespace               string `json:"namespace"`
+	ReleaseName             string `json:"releaseName"`
+	ChartVersion            string `json:"chartVersion"`
+	StorageConfigID         string `json:"storageConfigId"`
+	ObjectStorageSecretName string `json:"objectStorageSecretName"`
+	IngestHostname          string `json:"ingestHostname"`
+	StorageClass            string `json:"storageClass"`
+	WalStorageSize          string `json:"walStorageSize"`
+	Mode                    string `json:"mode"`
+	Retention               string `json:"retention"`
+	SkipDiskCheck           *bool  `json:"skipDiskCheck"`
+	AutoRollbackOnFailure   *bool  `json:"autoRollbackOnFailure"`
+}
+
 type objectStoreSecretSpec struct {
 	Name            string
 	Key             string
@@ -543,6 +561,25 @@ func (h *MonitoringHandler) applySharedAlertmanager(ctx context.Context, msgType
 	})
 }
 
+func (h *MonitoringHandler) applySharedLokiStack(ctx context.Context, msgType protocol.MessageType, req SharedLokiRequest, values map[string]any) (*protocol.HelmResultPayload, error) {
+	if h.helm == nil {
+		return nil, fmt.Errorf("helm requester not configured")
+	}
+	if values == nil {
+		values = map[string]any{}
+	}
+	values["extraObjects"] = lokiFamilyExtraObjects(req, h.proxyImage)
+	return h.helm.Do(ctx, req.ManagementClusterID, msgType, protocol.HelmRequestPayload{
+		ReleaseName: req.ReleaseName,
+		Namespace:   req.Namespace,
+		ChartName:   sharedLokiChartName,
+		RepoURL:     sharedLokiChartRepo,
+		Version:     req.ChartVersion,
+		Values:      values,
+		Timeout:     1200,
+	})
+}
+
 func (h *MonitoringHandler) applySharedGrafanaStack(ctx context.Context, msgType protocol.MessageType, req SharedGrafanaRequest, values map[string]any) (*protocol.HelmResultPayload, error) {
 	if h.helm == nil {
 		return nil, fmt.Errorf("helm requester not configured")
@@ -585,7 +622,7 @@ func sanitizeMonitoringValues(values map[string]any) map[string]any {
 func redactSensitiveMap(data map[string]any) {
 	for key, value := range data {
 		lower := strings.ToLower(key)
-		if strings.Contains(lower, "secret") || strings.Contains(lower, "password") || strings.Contains(lower, "token") || strings.Contains(lower, "access_key") || strings.Contains(lower, "secret_key") || strings.Contains(lower, "objstoreconfig") {
+		if strings.Contains(lower, "secret") || strings.Contains(lower, "password") || strings.Contains(lower, "token") || strings.Contains(lower, "access_key") || strings.Contains(lower, "accesskey") || strings.Contains(lower, "secret_key") || strings.Contains(lower, "objstoreconfig") {
 			data[key] = "***redacted***"
 			continue
 		}

@@ -3130,6 +3130,21 @@
     ]
   },
   {
+    "id": "monitoring-shared-loki-preview",
+    "route": "/api/v1/settings/monitoring/loki/preview/",
+    "sample_path": "/api/v1/settings/monitoring/loki/preview/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "shared Loki stack helm values preview",
+    "auth": "bearer/session auth; feature.hosted_loki FeatureGateDefault false",
+    "rbac": "monitoring:read",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "read-side preview; no helm mutation, no PVC probe, and no secrets in the rendered values",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
     "id": "charlie-onboarding-validate",
     "route": "/api/v1/admin/charlie/onboarding/validate/",
     "sample_path": "/api/v1/admin/charlie/onboarding/validate/",

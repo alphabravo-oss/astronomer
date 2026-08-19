@@ -1247,6 +1247,8 @@ components:
           type: boolean
         feature.fleet_grafana:
           type: boolean
+        feature.hosted_loki:
+          type: boolean
         feature.security:
           type: boolean
         feature.backups:

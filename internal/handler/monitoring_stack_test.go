@@ -271,6 +271,7 @@ const (
 	sharedThanosBody       = `{"managementClusterId":"` + stackTestClusterID + `","storageConfigId":"` + stackTestStorageID + `"}`
 	sharedAlertmanagerBody = `{"managementClusterId":"` + stackTestClusterID + `"}`
 	sharedGrafanaBody      = `{"managementClusterId":"` + stackTestClusterID + `"}`
+	sharedLokiBody         = `{"managementClusterId":"` + stackTestClusterID + `","storageConfigId":"` + stackTestStorageID + `","ingestHostname":"loki-ingest.example.com"}`
 	clusterStackBody       = `{"releaseName":"prometheus","namespace":"monitoring"}`
 )
 
@@ -315,6 +316,28 @@ func sharedGrafanaCases() []stackLifecycleCase {
 			audit:  "monitoring.shared_grafana.uninstall", details: sharedAuditDetailKeys},
 		{name: "status", method: http.MethodGet, target: base + "/status/",
 			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.GetSharedGrafanaStatus }},
+	}
+}
+
+func sharedLokiCases() []stackLifecycleCase {
+	base := "/api/v1/settings/monitoring/loki"
+	return []stackLifecycleCase{
+		{name: "preview", method: http.MethodPost, target: base + "/preview/", body: sharedLokiBody,
+			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.PreviewSharedLokiStack }},
+		{name: "install", method: http.MethodPost, target: base + "/install/", body: sharedLokiBody,
+			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.InstallSharedLokiStack },
+			audit:  "monitoring.shared_loki.install", details: sharedAuditDetailKeys},
+		{name: "upgrade", method: http.MethodPut, target: base + "/upgrade/", body: sharedLokiBody,
+			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.UpgradeSharedLokiStack },
+			audit:  "monitoring.shared_loki.upgrade", details: sharedAuditDetailKeys},
+		{name: "replace", method: http.MethodPost, target: base + "/replace/", body: sharedLokiBody,
+			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.ReplaceSharedLokiStack },
+			audit:  "monitoring.shared_loki.replace", details: sharedAuditDetailKeys},
+		{name: "uninstall", method: http.MethodDelete, target: base + "/uninstall/?clusterId=" + stackTestClusterID,
+			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.UninstallSharedLokiStack },
+			audit:  "monitoring.shared_loki.uninstall", details: sharedAuditDetailKeys},
+		{name: "status", method: http.MethodGet, target: base + "/status/",
+			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.GetSharedLokiStatus }},
 	}
 }
 
@@ -396,6 +419,7 @@ func TestSharedStackLifecycleDeniesCallerWithoutMonitoringPermission(t *testing.
 		"shared_thanos":       sharedThanosCases(),
 		"shared_alertmanager": sharedAlertmanagerCases(),
 		"shared_grafana":      sharedGrafanaCases(),
+		"shared_loki":         sharedLokiCases(),
 	}
 	for family, cases := range families {
 		for _, tc := range cases {
@@ -531,7 +555,7 @@ func TestClusterStackResolvesClusterIDFromTheRoutedParam(t *testing.T) {
 // needed a fabricated `cluster_id` param because the handlers read one no route
 // supplied. See TestClusterStackResolvesClusterIDFromTheRoutedParam.
 func TestStackLifecycleAuditEventsUnchanged(t *testing.T) {
-	all := append(append(append(sharedThanosCases(), sharedAlertmanagerCases()...), sharedGrafanaCases()...), clusterStackCases()...)
+	all := append(append(append(append(sharedThanosCases(), sharedAlertmanagerCases()...), sharedGrafanaCases()...), sharedLokiCases()...), clusterStackCases()...)
 	for _, tc := range all {
 		if tc.audit == "" {
 			continue

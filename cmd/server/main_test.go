@@ -61,6 +61,19 @@ func TestHandleCLIGrafanaProxyRequiresEnv(t *testing.T) {
 	}
 }
 
+func TestHandleCLILokiAuthRequiresEnv(t *testing.T) {
+	t.Setenv("LOKI_UPSTREAM", "")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, exitCode := handleCLI([]string{"loki-auth"}, &stdout, &stderr)
+	if !handled || exitCode == 0 {
+		t.Fatalf("handleCLI(loki-auth) = handled %v, exit %d; want true, nonzero", handled, exitCode)
+	}
+	if !strings.Contains(stderr.String(), "loki-auth") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestHandleCLIRejectsUnknownArgumentsBeforeStartup(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

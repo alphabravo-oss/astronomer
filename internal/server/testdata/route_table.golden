@@ -69,6 +69,7 @@ DELETE /api/v1/security/policies/{id}
 DELETE /api/v1/security/templates/{id}
 DELETE /api/v1/settings/monitoring/alertmanager/uninstall
 DELETE /api/v1/settings/monitoring/grafana/uninstall
+DELETE /api/v1/settings/monitoring/loki/uninstall
 DELETE /api/v1/settings/monitoring/thanos/uninstall
 DELETE /api/v1/settings/sso/{id}
 DELETE /api/v1/settings/tokens/{id}
@@ -358,6 +359,7 @@ GET /api/v1/settings/general
 GET /api/v1/settings/monitoring/alertmanager/status
 GET /api/v1/settings/monitoring/backend
 GET /api/v1/settings/monitoring/grafana/status
+GET /api/v1/settings/monitoring/loki/status
 GET /api/v1/settings/monitoring/operations
 GET /api/v1/settings/monitoring/operations/{id}
 GET /api/v1/settings/monitoring/sizer
@@ -621,6 +623,9 @@ POST /api/v1/settings/monitoring/alertmanager/replace
 POST /api/v1/settings/monitoring/grafana/install
 POST /api/v1/settings/monitoring/grafana/preview
 POST /api/v1/settings/monitoring/grafana/replace
+POST /api/v1/settings/monitoring/loki/install
+POST /api/v1/settings/monitoring/loki/preview
+POST /api/v1/settings/monitoring/loki/replace
 POST /api/v1/settings/monitoring/operations/{id}/retry
 POST /api/v1/settings/monitoring/thanos/install
 POST /api/v1/settings/monitoring/thanos/preview
@@ -692,6 +697,7 @@ PUT /api/v1/settings/general
 PUT /api/v1/settings/monitoring/alertmanager/upgrade
 PUT /api/v1/settings/monitoring/backend
 PUT /api/v1/settings/monitoring/grafana/upgrade
+PUT /api/v1/settings/monitoring/loki/upgrade
 PUT /api/v1/settings/monitoring/thanos/upgrade
 PUT /api/v1/tools/{slug}/upgrade
 PUT /api/v1/users/{id}

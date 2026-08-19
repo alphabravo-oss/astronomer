@@ -36,7 +36,9 @@ vi.mock('@/lib/link', () => ({
 vi.mock('@/lib/hooks', () => ({
   useClusters: vi.fn(),
   useCluster: vi.fn(),
-  useFeatureFlags: () => ({ data: { 'feature.fleet_grafana': true } }),
+  useFeatureFlags: vi.fn(() => ({
+    data: { 'feature.fleet_grafana': true, 'feature.hosted_loki': true },
+  })),
 }));
 
 vi.mock('@/components/backups/hooks', () => ({
@@ -53,11 +55,13 @@ vi.mock('@/lib/api/monitoring-stack', async (importOriginal) => {
     listMonitoringOperations: vi.fn(),
     getMonitoringOperation: vi.fn(),
     retryMonitoringOperation: vi.fn(),
+    getMonitoringSizer: vi.fn(),
   };
 });
 
 import {
   getMonitoringOperation,
+  getMonitoringSizer,
   getStackStatus,
   listMonitoringOperations,
   previewStack,
@@ -66,7 +70,7 @@ import {
   type MonitoringStackStatusBase,
   type MonitoringStackTarget,
 } from '@/lib/api/monitoring-stack';
-import { useCluster, useClusters } from '@/lib/hooks';
+import { useCluster, useClusters, useFeatureFlags } from '@/lib/hooks';
 import { useB2StorageLocations } from '@/components/backups/hooks';
 import { useAuthStore } from '@/lib/store';
 import { SharedMonitoringStacksPage } from '@/components/monitoring/shared-stacks-page';
@@ -167,7 +171,7 @@ function Wrapper({ children }: { children: ReactNode }) {
 // ─────────────────────────────────────────────────────────────────────
 
 interface FamilyCase {
-  key: 'cluster' | 'thanos' | 'alertmanager' | 'grafana';
+  key: 'cluster' | 'thanos' | 'alertmanager' | 'grafana' | 'loki';
   name: string;
   targetType: string;
   releaseName: string;
@@ -267,6 +271,35 @@ const FAMILIES: FamilyCase[] = [
     renderPage: () => render(<SharedMonitoringStacksPage />, { wrapper: Wrapper }),
     fullGrant: ['read', 'update'],
   },
+  {
+    key: 'loki',
+    name: 'shared Loki',
+    targetType: 'shared_loki',
+    releaseName: 'astronomer-loki',
+    namespace: 'monitoring',
+    installedStatus: {
+      status: 'healthy',
+      namespace: 'monitoring',
+      releaseName: 'astronomer-loki',
+      chartVersion: '6.27.0',
+      managementClusterId: CLUSTER_ID,
+      storageConfigId: 'storage-1',
+      ingestHostname: 'loki-ingest.example.com',
+      ingestPublic: false,
+      skipDiskCheck: false,
+      autoRollbackOnFailure: false,
+    } as MonitoringStackStatusBase,
+    renderPage: () => render(<SharedMonitoringStacksPage />, { wrapper: Wrapper }),
+    prepareInstall: (panel) => {
+      fireEvent.change(within(panel).getByLabelText('Object storage'), {
+        target: { value: 'storage-1' },
+      });
+      fireEvent.change(within(panel).getByLabelText('Ingest hostname'), {
+        target: { value: 'loki-ingest.example.com' },
+      });
+    },
+    fullGrant: ['read', 'update'],
+  },
 ];
 
 /** Answer status per family so the shared page's two panels differ. */
@@ -299,6 +332,17 @@ beforeEach(() => {
   clusterHook.mockReturnValue({ data: { id: CLUSTER_ID, displayName: 'Management' } } as never);
   storageHook.mockReturnValue({
     data: { data: [{ id: 'storage-1', name: 'metrics', bucket: 'astronomer-metrics' }] },
+  } as never);
+  vi.mocked(getMonitoringSizer).mockResolvedValue({
+    verdicts: {
+      grafana: { result: 'pass', reasons: [] },
+      loki: { result: 'fail', reasons: ['single_node_small'] },
+      thanosReceive: { result: 'fail', reasons: ['receive_not_offered'] },
+    },
+    objectStorage: { computedLokiPrefix: 'loki' },
+  });
+  vi.mocked(useFeatureFlags).mockReturnValue({
+    data: { 'feature.fleet_grafana': true, 'feature.hosted_loki': true },
   } as never);
 });
 
@@ -471,6 +515,20 @@ describe.each(FAMILIES)('$name lifecycle screen', (family) => {
     expect(within(panel).queryByText('Desired configuration')).not.toBeInTheDocument();
     // Preview is monitoring:read on the backend, so it stays.
     expect(within(panel).getByRole('button', { name: 'Preview' })).toBeInTheDocument();
+  });
+});
+
+describe('hosted Loki feature flag', () => {
+  it('hides the Loki panel unless feature.hosted_loki is exactly true', async () => {
+    grant(['read', 'update']);
+    vi.mocked(useFeatureFlags).mockReturnValue({
+      data: { 'feature.fleet_grafana': true },
+    } as never);
+    statusPerTarget({ thanos: { status: 'not_configured' } });
+    render(<SharedMonitoringStacksPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByTestId('stack-panel-thanos'));
+    expect(screen.queryByTestId('stack-panel-loki')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('loki-sizer-banner')).not.toBeInTheDocument();
   });
 });
 

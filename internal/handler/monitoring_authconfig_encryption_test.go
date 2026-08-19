@@ -392,6 +392,32 @@ func TestUpdateSharedGrafanaMetadataPreservesCredential(t *testing.T) {
 // Proceeding would stamp the metadata and delete the credential, converting a
 // recoverable key-management problem (wrong ASTRONOMER_ENCRYPTION_KEY, a
 // rotation that dropped a key too early) into a permanent data loss.
+func TestUpdateSharedLokiMetadataPreservesCredential(t *testing.T) {
+	enc := newMonitoringTestEncryptor(t)
+	backend := sealedMonitoringBackend(t, enc, `{"token":"`+monitoringTestToken+`"}`)
+	q := &monitoringAuthConfigQuerier{backend: backend}
+	h := NewMonitoringHandlerWithQueries(q, nil)
+	h.SetEncryptor(enc)
+
+	if err := h.updateSharedLokiMetadata(context.Background(), backend, SharedLokiRequest{
+		ManagementClusterID: uuid.New().String(),
+		Namespace:           "monitoring",
+		ReleaseName:         sharedLokiDefaultRelease,
+		ChartVersion:        sharedLokiDefaultChart,
+		IngestHostname:      "loki-ingest.example.com",
+	}, "installing"); err != nil {
+		t.Fatalf("updateSharedLokiMetadata: %v", err)
+	}
+	doc := assertCredentialSurvived(t, enc, q.upserts[0])
+	shared, _ := doc["sharedLoki"].(map[string]any)
+	if shared["status"] != "installing" {
+		t.Fatalf("the metadata stamp this call exists to make was lost: %v", doc)
+	}
+	if shared["ingestPublic"] != false {
+		t.Fatalf("ingestPublic = %v, want false", shared["ingestPublic"])
+	}
+}
+
 func TestMonitoringWritesAbortWhenTheCredentialCannotBeDecrypted(t *testing.T) {
 	sealingEnc := newMonitoringTestEncryptor(t)
 	backend := sealedMonitoringBackend(t, sealingEnc, `{"token":"`+monitoringTestToken+`"}`)

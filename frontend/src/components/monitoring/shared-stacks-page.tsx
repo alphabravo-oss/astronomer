@@ -19,12 +19,15 @@
  * monitoring:update at GLOBAL scope.
  */
 import { Link } from '@/lib/link';
-import { ArrowLeft, BarChart3, Database } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, BarChart3, Database } from 'lucide-react';
 
 import { PageHeader, PageShell } from '@/components/ui/page';
 import { PermissionState } from '@/components/ui/empty-state';
 import { usePermissionDecision } from '@/lib/permission-hooks';
+import { useQuery } from '@tanstack/react-query';
 import { useClusters, useFeatureFlags } from '@/lib/hooks';
+import { queryKeys } from '@/lib/query-keys';
+import { getMonitoringSizer } from '@/lib/api/monitoring-stack';
 import { useB2StorageLocations } from '@/components/backups/hooks';
 import {
   StackLifecyclePanel,
@@ -34,12 +37,14 @@ import {
 import {
   SHARED_ALERTMANAGER_FAMILY,
   SHARED_GRAFANA_FAMILY,
+  SHARED_LOKI_FAMILY,
   SHARED_THANOS_FAMILY,
 } from '@/components/monitoring/stack-spec';
 
 const THANOS_TARGET = { kind: 'thanos' } as const;
 const ALERTMANAGER_TARGET = { kind: 'alertmanager' } as const;
 const GRAFANA_TARGET = { kind: 'grafana' } as const;
+const LOKI_TARGET = { kind: 'loki' } as const;
 
 export function SharedMonitoringStacksPage() {
   const read = usePermissionDecision('monitoring', 'read');
@@ -56,6 +61,13 @@ export function SharedMonitoringStacksPage() {
   const { data: featureFlags } = useFeatureFlags();
   // Hide only when the flag is exactly false. Missing/loading defaults on.
   const showGrafana = featureFlags?.['feature.fleet_grafana'] !== false;
+  const showLoki = featureFlags?.['feature.hosted_loki'] === true;
+
+  const sizerQuery = useQuery({
+    queryKey: queryKeys.monitoringStack.sizer,
+    queryFn: getMonitoringSizer,
+    enabled: read.allowed && showLoki,
+  });
 
   const clustersQuery = useClusters({ pageSize: 100 });
   // Backup storage configs double as the object-storage source for Thanos
@@ -134,6 +146,24 @@ export function SharedMonitoringStacksPage() {
               seedOverrides={seedOverrides}
             />
           ) : null}
+          {showLoki ? (
+            <>
+              <LokiSizerBanner
+                result={sizerQuery.data?.verdicts.loki.result}
+                mode={sizerQuery.data?.verdicts.loki.mode}
+                reasons={sizerQuery.data?.verdicts.loki.reasons}
+                prefix={sizerQuery.data?.objectStorage?.computedLokiPrefix}
+              />
+              <StackLifecyclePanel
+                target={LOKI_TARGET}
+                spec={SHARED_LOKI_FAMILY}
+                permissions={permissions}
+                clusterOptions={clusterOptions}
+                storageOptions={storageOptions}
+                seedOverrides={seedOverrides}
+              />
+            </>
+          ) : null}
           <StackLifecyclePanel
             target={ALERTMANAGER_TARGET}
             spec={SHARED_ALERTMANAGER_FAMILY}
@@ -144,5 +174,38 @@ export function SharedMonitoringStacksPage() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+function LokiSizerBanner({
+  result,
+  mode,
+  reasons,
+  prefix,
+}: {
+  result?: string;
+  mode?: string | null;
+  reasons?: string[];
+  prefix?: string;
+}) {
+  const pass = result === 'pass';
+  return (
+    <div
+      data-testid="loki-sizer-banner"
+      className={
+        pass
+          ? 'flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground'
+          : 'flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive'
+      }
+    >
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+      <p>
+        Loki sizer: <span className="font-medium">{result || 'unknown'}</span>
+        {mode ? ` (${mode})` : ''}.
+        {reasons && reasons.length > 0 ? ` ${reasons.join(', ')}.` : ''}
+        {prefix ? ` Object prefix ${prefix}.` : ''} ClusterIP only — ingest is not public until
+        tokens exist.
+      </p>
+    </div>
   );
 }

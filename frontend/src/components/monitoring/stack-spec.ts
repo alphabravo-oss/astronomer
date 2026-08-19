@@ -59,7 +59,7 @@ export interface StackField {
 
 export interface StackFamilySpec {
   /** Matches MonitoringStackTarget['kind']. */
-  key: 'cluster' | 'thanos' | 'alertmanager' | 'grafana';
+  key: 'cluster' | 'thanos' | 'alertmanager' | 'grafana' | 'loki';
   title: string;
   description: string;
   /**
@@ -466,6 +466,107 @@ export const SHARED_GRAFANA_FAMILY: StackFamilySpec = {
     storageSize: '',
     ingressHost: '',
     logDatasourceUrl: '',
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// Shared Loki (sizer-gated ClusterIP warehouse; no Ingress until tokens)
+// ─────────────────────────────────────────────────────────────────────
+
+export const SHARED_LOKI_FAMILY: StackFamilySpec = {
+  key: 'loki',
+  title: 'Shared Loki',
+  description:
+    'Optional Astronomer log warehouse on the management cluster. Install is refused unless the sizer passes. Gateway and loki-auth stay ClusterIP until ingest tokens exist. Object storage uses the same backup-storage config as Thanos, with prefix join(prefix, "loki").',
+  destroys:
+    'the Loki Helm release and its WAL disks. Index and chunks in object storage (computed Loki prefix) are NOT deleted',
+  fields: [
+    {
+      name: 'managementClusterId',
+      label: 'Management cluster',
+      kind: 'cluster',
+      required: true,
+      help: 'Cluster the shared Loki release runs on.',
+    },
+    {
+      name: 'storageConfigId',
+      label: 'Object storage',
+      kind: 'storageConfig',
+      required: true,
+      replaceTrigger: true,
+      help: 'Same backup-storage config as Thanos. Loki writes under join(prefix, "loki"), never Thanos objstore.yml.',
+    },
+    {
+      name: 'ingestHostname',
+      label: 'Ingest hostname',
+      kind: 'text',
+      required: true,
+      placeholder: 'loki-ingest.example.com',
+      help: 'Required and explicit. Never derived from the Astronomer ingress host. Ingress is not created until tokens exist.',
+    },
+    {
+      name: 'namespace',
+      label: 'Namespace',
+      kind: 'text',
+      placeholder: 'monitoring',
+      replaceTrigger: true,
+    },
+    {
+      name: 'releaseName',
+      label: 'Release name',
+      kind: 'text',
+      placeholder: 'astronomer-loki',
+      replaceTrigger: true,
+    },
+    { name: 'chartVersion', label: 'Chart version', kind: 'text', placeholder: '6.27.0' },
+    {
+      name: 'storageClass',
+      label: 'Storage class',
+      kind: 'text',
+      placeholder: 'default',
+      replaceTrigger: true,
+      help: 'RWO class for WAL disks.',
+    },
+    {
+      name: 'walStorageSize',
+      label: 'WAL size',
+      kind: 'text',
+      placeholder: '10Gi',
+      replaceTrigger: true,
+    },
+    {
+      name: 'mode',
+      label: 'Mode',
+      kind: 'text',
+      placeholder: 'singleBinary',
+      replaceTrigger: true,
+      help: 'Empty = sizer pick. May only narrow (singleBinary when SimpleScalable was selected). Mode change replaces the release (WAL lost, bucket kept).',
+    },
+    { name: 'retention', label: 'Retention', kind: 'text', placeholder: '14d' },
+    {
+      name: 'skipDiskCheck',
+      label: 'Skip WAL disk check',
+      kind: 'tristate',
+      unsetLabel: 'Probe WAL on install/replace',
+    },
+    {
+      name: 'autoRollbackOnFailure',
+      label: 'Roll back on failure',
+      kind: 'tristate',
+      unsetLabel: PLATFORM_DEFAULT,
+    },
+  ],
+  defaults: {
+    managementClusterId: '',
+    storageConfigId: '',
+    ingestHostname: '',
+    namespace: 'monitoring',
+    releaseName: 'astronomer-loki',
+    chartVersion: '6.27.0',
+    storageClass: 'default',
+    walStorageSize: '10Gi',
+    mode: '',
+    retention: '14d',
   },
 };
 

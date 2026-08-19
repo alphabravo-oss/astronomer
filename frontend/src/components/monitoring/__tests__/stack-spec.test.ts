@@ -11,6 +11,7 @@ import {
   CLUSTER_STACK_FAMILY,
   SHARED_ALERTMANAGER_FAMILY,
   SHARED_GRAFANA_FAMILY,
+  SHARED_LOKI_FAMILY,
   SHARED_THANOS_FAMILY,
   SERVER_BLIND_FIELDS,
   buildStackBody,
@@ -111,6 +112,19 @@ describe('seedStackValues', () => {
         grafanaHost: 'grafana.example.com',
       }),
     ).toBeNull();
+  });
+
+  it('seeds Loki chartVersion, skipDiskCheck and ingestHostname from status', () => {
+    const values = seedStackValues(SHARED_LOKI_FAMILY, {
+      status: 'healthy',
+      chartVersion: '6.27.0',
+      skipDiskCheck: true,
+      ingestHostname: 'loki-ingest.example.com',
+      ingestPublic: false,
+    } as MonitoringStackStatusBase);
+    expect(values.chartVersion).toBe('6.27.0');
+    expect(values.skipDiskCheck).toBe('true');
+    expect(values.ingestHostname).toBe('loki-ingest.example.com');
   });
 
   it('seeds Grafana chartVersion and autoRollbackOnFailure from status (not SERVER_BLIND)', () => {

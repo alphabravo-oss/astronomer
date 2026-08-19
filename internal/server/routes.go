@@ -673,6 +673,13 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 					monitoringMutate.Put("/monitoring/grafana/upgrade/", deps.Monitoring.UpgradeSharedGrafanaStack)
 					monitoringMutate.Post("/monitoring/grafana/replace/", deps.Monitoring.ReplaceSharedGrafanaStack)
 					monitoringMutate.Delete("/monitoring/grafana/uninstall/", deps.Monitoring.UninstallSharedGrafanaStack)
+					lokiGate := appmiddleware.FeatureGateDefault("feature.hosted_loki", deps.SettingsCache, false)
+					monitoringAuthed.With(lokiGate).Get("/monitoring/loki/status/", deps.Monitoring.GetSharedLokiStatus)
+					monitoringAuthed.With(lokiGate).Post("/monitoring/loki/preview/", deps.Monitoring.PreviewSharedLokiStack)
+					monitoringMutate.With(lokiGate).Post("/monitoring/loki/install/", deps.Monitoring.InstallSharedLokiStack)
+					monitoringMutate.With(lokiGate).Put("/monitoring/loki/upgrade/", deps.Monitoring.UpgradeSharedLokiStack)
+					monitoringMutate.With(lokiGate).Post("/monitoring/loki/replace/", deps.Monitoring.ReplaceSharedLokiStack)
+					monitoringMutate.With(lokiGate).Delete("/monitoring/loki/uninstall/", deps.Monitoring.UninstallSharedLokiStack)
 				}
 			})
 			// The user directory (usernames, emails, last-login, active state) is

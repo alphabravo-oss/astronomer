@@ -297,6 +297,7 @@ export const queryKeys = {
     operationsAll: ["monitoring-stack", "operations"] as const,
     operation: (id: string) =>
       ["monitoring-stack", "operations", "detail", id] as const,
+    sizer: ["monitoring-stack", "sizer"] as const,
   },
   clusterGroups: {
     all: ["cluster-groups"] as const,

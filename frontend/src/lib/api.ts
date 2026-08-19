@@ -56,7 +56,8 @@ function csrfHeaders(): Record<string, string> {
  *
  * Exported for the round-trip test in src/lib/__tests__/api-camelize.test.ts.
  */
-const MONITORING_PREVIEW_PATH = /\/monitoring\/(?:stack|thanos|alertmanager)\/preview\/?(?:\?|$)/;
+const MONITORING_PREVIEW_PATH =
+  /\/monitoring\/(?:stack|thanos|alertmanager|grafana|loki)\/preview\/?(?:\?|$)/;
 
 export function isMonitoringPreviewPath(url: string | undefined): boolean {
   return !!url && MONITORING_PREVIEW_PATH.test(url);

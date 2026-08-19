@@ -38,6 +38,8 @@ describe('isMonitoringPreviewPath', () => {
     expect(isMonitoringPreviewPath('/clusters/c1/monitoring/stack/preview/')).toBe(true);
     expect(isMonitoringPreviewPath('/settings/monitoring/thanos/preview/')).toBe(true);
     expect(isMonitoringPreviewPath('/settings/monitoring/alertmanager/preview/')).toBe(true);
+    expect(isMonitoringPreviewPath('/settings/monitoring/grafana/preview/')).toBe(true);
+    expect(isMonitoringPreviewPath('/settings/monitoring/loki/preview/')).toBe(true);
 
     // Status/install/upgrade/replace/uninstall answer plain camelCase envelopes
     // and MUST keep going through the interceptor.

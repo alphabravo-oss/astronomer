@@ -95,7 +95,8 @@ export type MonitoringOperationTargetType =
   | 'cluster_stack'
   | 'shared_thanos'
   | 'shared_alertmanager'
-  | 'shared_grafana';
+  | 'shared_grafana'
+  | 'shared_loki';
 
 /** monitoring_operations.operation_type — the four mutating lifecycle verbs. */
 export type MonitoringOperationType = 'install' | 'upgrade' | 'replace' | 'uninstall';
@@ -235,6 +236,23 @@ export interface SharedGrafanaRequest {
   autoRollbackOnFailure?: boolean;
 }
 
+/** SharedLokiRequest. managementClusterId, storageConfigId, ingestHostname required. ClusterIP only. */
+export interface SharedLokiRequest {
+  managementClusterId: string;
+  storageConfigId: string;
+  ingestHostname: string;
+  namespace?: string;
+  releaseName?: string;
+  chartVersion?: string;
+  objectStorageSecretName?: string;
+  storageClass?: string;
+  walStorageSize?: string;
+  mode?: string;
+  retention?: string;
+  skipDiskCheck?: boolean;
+  autoRollbackOnFailure?: boolean;
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Preview + status responses
 // ─────────────────────────────────────────────────────────────────────
@@ -345,6 +363,48 @@ export interface SharedGrafanaStatus extends MonitoringStackStatusBase {
   authMode?: 'clusterip' | 'proxy' | string;
   autoRollbackOnFailure?: boolean;
   managedAssetHashes?: Record<string, unknown>;
+}
+
+/** GET /settings/monitoring/loki/status/ */
+export interface SharedLokiStatus extends MonitoringStackStatusBase {
+  managementClusterId?: string;
+  storageConfigId?: string;
+  objectStorageSecretName?: string;
+  ingestHostname?: string;
+  ingestPublic?: boolean;
+  storageClass?: string;
+  walStorageSize?: string;
+  mode?: string;
+  retention?: string;
+  skipDiskCheck?: boolean;
+  autoRollbackOnFailure?: boolean;
+  computedLokiPrefix?: string;
+  lastSizerVerdict?: {
+    result?: string;
+    mode?: string | null;
+    reasons?: string[];
+    warnings?: string[];
+  };
+  queryUrl?: string;
+  authUrl?: string;
+}
+
+export interface MonitoringSizerVerdict {
+  result: string;
+  mode?: string | null;
+  reasons?: string[];
+  warnings?: string[];
+}
+
+export interface MonitoringSizerResponse {
+  managementClusterId?: string;
+  verdicts: {
+    grafana: MonitoringSizerVerdict;
+    loki: MonitoringSizerVerdict;
+    thanosReceive: MonitoringSizerVerdict;
+  };
+  objectStorage?: { configured?: boolean; computedLokiPrefix?: string };
+  skipDiskCheck?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -629,6 +689,61 @@ export async function uninstallSharedGrafana(clusterId?: string): Promise<Monito
   return unwrapData(res.data);
 }
 
+export async function getMonitoringSizer(): Promise<MonitoringSizerResponse> {
+  const res = await api.get<APIResponse<MonitoringSizerResponse>>('/settings/monitoring/sizer/');
+  return unwrapData(res.data);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Shared Loki — /settings/monitoring/loki/*
+// Feature-gated: feature.hosted_loki must be exactly true. ClusterIP only.
+// ─────────────────────────────────────────────────────────────────────
+
+export async function getSharedLokiStatus(): Promise<SharedLokiStatus> {
+  const res = await api.get<APIResponse<SharedLokiStatus>>('/settings/monitoring/loki/status/');
+  return unwrapData(res.data);
+}
+
+export async function previewSharedLoki(body: SharedLokiRequest): Promise<MonitoringStackPreview> {
+  const res = await api.post<APIResponse<MonitoringStackPreview>>(
+    '/settings/monitoring/loki/preview/',
+    body,
+  );
+  return unwrapData(res.data);
+}
+
+export async function installSharedLoki(body: SharedLokiRequest): Promise<MonitoringOperation> {
+  const res = await api.post<APIResponse<MonitoringOperation>>(
+    '/settings/monitoring/loki/install/',
+    body,
+  );
+  return unwrapData(res.data);
+}
+
+export async function upgradeSharedLoki(body: SharedLokiRequest): Promise<MonitoringOperation> {
+  const res = await api.put<APIResponse<MonitoringOperation>>(
+    '/settings/monitoring/loki/upgrade/',
+    body,
+  );
+  return unwrapData(res.data);
+}
+
+export async function replaceSharedLoki(body: SharedLokiRequest): Promise<MonitoringOperation> {
+  const res = await api.post<APIResponse<MonitoringOperation>>(
+    '/settings/monitoring/loki/replace/',
+    body,
+  );
+  return unwrapData(res.data);
+}
+
+export async function uninstallSharedLoki(clusterId?: string): Promise<MonitoringOperation> {
+  const res = await api.delete<APIResponse<MonitoringOperation>>(
+    '/settings/monitoring/loki/uninstall/',
+    clusterId ? { params: { clusterId } } : undefined,
+  );
+  return unwrapData(res.data);
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Operations queue — /settings/monitoring/operations/*
 // ─────────────────────────────────────────────────────────────────────
@@ -697,13 +812,15 @@ export type MonitoringStackTarget =
   | { kind: 'cluster'; clusterId: string }
   | { kind: 'thanos' }
   | { kind: 'alertmanager' }
-  | { kind: 'grafana' };
+  | { kind: 'grafana' }
+  | { kind: 'loki' };
 
 export type MonitoringStackRequestBody =
   | ClusterStackRequest
   | SharedThanosRequest
   | SharedAlertmanagerRequest
-  | SharedGrafanaRequest;
+  | SharedGrafanaRequest
+  | SharedLokiRequest;
 
 export type MonitoringStackStatusFor<T extends MonitoringStackTarget> = T extends {
   kind: 'cluster';
@@ -713,7 +830,9 @@ export type MonitoringStackStatusFor<T extends MonitoringStackTarget> = T extend
     ? SharedThanosStatus
     : T extends { kind: 'alertmanager' }
       ? SharedAlertmanagerStatus
-      : SharedGrafanaStatus;
+      : T extends { kind: 'grafana' }
+        ? SharedGrafanaStatus
+        : SharedLokiStatus;
 
 /** (targetType, targetKey) as monitoring_operations records them for a target. */
 export function operationTargetOf(target: MonitoringStackTarget): {
@@ -729,6 +848,8 @@ export function operationTargetOf(target: MonitoringStackTarget): {
       return { targetType: 'shared_alertmanager', targetKey: 'shared' };
     case 'grafana':
       return { targetType: 'shared_grafana', targetKey: 'shared' };
+    case 'loki':
+      return { targetType: 'shared_loki', targetKey: 'shared' };
   }
 }
 
@@ -743,6 +864,8 @@ export function stackTargetLabel(target: MonitoringStackTarget): string {
       return 'shared Alertmanager';
     case 'grafana':
       return 'shared Grafana';
+    case 'loki':
+      return 'shared Loki';
   }
 }
 
@@ -758,6 +881,8 @@ export async function getStackStatus(
       return getSharedAlertmanagerStatus();
     case 'grafana':
       return getSharedGrafanaStatus();
+    case 'loki':
+      return getSharedLokiStatus();
   }
 }
 
@@ -774,6 +899,8 @@ export async function previewStack(
       return previewSharedAlertmanager(body as SharedAlertmanagerRequest);
     case 'grafana':
       return previewSharedGrafana(body as SharedGrafanaRequest);
+    case 'loki':
+      return previewSharedLoki(body as SharedLokiRequest);
   }
 }
 
@@ -818,6 +945,13 @@ export async function runStackLifecycle(
       if (verb === 'upgrade') return upgradeSharedGrafana(payload);
       if (verb === 'replace') return replaceSharedGrafana(payload);
       return uninstallSharedGrafana(payload?.managementClusterId);
+    }
+    case 'loki': {
+      const payload = body as SharedLokiRequest;
+      if (verb === 'install') return installSharedLoki(payload);
+      if (verb === 'upgrade') return upgradeSharedLoki(payload);
+      if (verb === 'replace') return replaceSharedLoki(payload);
+      return uninstallSharedLoki(payload?.managementClusterId);
     }
   }
 }

@@ -25,6 +25,13 @@ import {
   upgradeSharedGrafana,
   replaceSharedGrafana,
   uninstallSharedGrafana,
+  getSharedLokiStatus,
+  previewSharedLoki,
+  installSharedLoki,
+  upgradeSharedLoki,
+  replaceSharedLoki,
+  uninstallSharedLoki,
+  getMonitoringSizer,
   listMonitoringOperations,
   getMonitoringOperation,
   retryMonitoringOperation,
@@ -186,6 +193,41 @@ describe('shared Grafana endpoints', () => {
   });
 });
 
+describe('shared Loki endpoints', () => {
+  it('covers status, preview, sizer and the write verbs under /settings/monitoring/loki/', async () => {
+    const body = {
+      managementClusterId: 'mgmt-1',
+      storageConfigId: 's-1',
+      ingestHostname: 'loki-ingest.example.com',
+    };
+    await getSharedLokiStatus();
+    expect(mockedApi.get).toHaveBeenCalledWith('/settings/monitoring/loki/status/');
+
+    await previewSharedLoki(body);
+    expect(mockedApi.post).toHaveBeenCalledWith('/settings/monitoring/loki/preview/', body);
+
+    await installSharedLoki(body);
+    expect(mockedApi.post).toHaveBeenCalledWith('/settings/monitoring/loki/install/', body);
+
+    await upgradeSharedLoki(body);
+    expect(mockedApi.put).toHaveBeenCalledWith('/settings/monitoring/loki/upgrade/', body);
+
+    await replaceSharedLoki(body);
+    expect(mockedApi.post).toHaveBeenCalledWith('/settings/monitoring/loki/replace/', body);
+
+    await uninstallSharedLoki('mgmt-1');
+    expect(mockedApi.delete).toHaveBeenCalledWith('/settings/monitoring/loki/uninstall/', {
+      params: { clusterId: 'mgmt-1' },
+    });
+
+    mockedApi.get.mockResolvedValueOnce({
+      data: { data: { verdicts: { loki: { result: 'fail', reasons: ['single_node_small'] } } } },
+    } as never);
+    await getMonitoringSizer();
+    expect(mockedApi.get).toHaveBeenCalledWith('/settings/monitoring/sizer/');
+  });
+});
+
 describe('shared Alertmanager endpoints', () => {
   it('covers status, preview and the three write verbs under /settings/monitoring/alertmanager/', async () => {
     const body = { managementClusterId: 'mgmt-1', replicas: 2 };
@@ -279,6 +321,10 @@ describe('target dispatch', () => {
       targetType: 'shared_grafana',
       targetKey: 'shared',
     });
+    expect(operationTargetOf({ kind: 'loki' })).toEqual({
+      targetType: 'shared_loki',
+      targetKey: 'shared',
+    });
   });
 
   it('routes every verb of every family to the right endpoint', async () => {
@@ -301,6 +347,17 @@ describe('target dispatch', () => {
     });
     expect(mockedApi.post).toHaveBeenCalledWith('/settings/monitoring/grafana/install/', {
       managementClusterId: 'mgmt-1',
+    });
+
+    await runStackLifecycle({ kind: 'loki' }, 'install', {
+      managementClusterId: 'mgmt-1',
+      storageConfigId: 's-1',
+      ingestHostname: 'loki-ingest.example.com',
+    });
+    expect(mockedApi.post).toHaveBeenCalledWith('/settings/monitoring/loki/install/', {
+      managementClusterId: 'mgmt-1',
+      storageConfigId: 's-1',
+      ingestHostname: 'loki-ingest.example.com',
     });
   });
 });
