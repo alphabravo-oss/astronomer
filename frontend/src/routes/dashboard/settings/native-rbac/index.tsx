@@ -16,9 +16,11 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@/lib/link';
 import { ArrowLeft, KeyRound, Loader2, Plus, Trash2 } from 'lucide-react';
+import { isAxiosError } from 'axios';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ActionButton } from '@/components/ui/action-button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { ModalShell } from '@/components/ui/modal-shell';
 import { PageHeader, PageShell } from '@/components/ui/page';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
@@ -64,6 +66,8 @@ function NativeRbacList() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<NativeRule | null>(null);
+  const featureDisabled =
+    rulesQuery.isError && isAxiosError(rulesQuery.error) && rulesQuery.error.response?.status === 404;
 
   const del = useMutation({
     mutationFn: (id: string) => deleteNativeRule(id),
@@ -127,7 +131,7 @@ function NativeRbacList() {
       sortable: false,
       accessor: (row) => (
         <div className="flex flex-wrap gap-1">
-          {row.verbs.map((v) => (
+          {(row.verbs ?? []).map((v) => (
             <span
               key={v}
               className="px-1.5 py-0.5 rounded bg-muted text-2xs font-mono text-muted-foreground"
@@ -169,23 +173,33 @@ function NativeRbacList() {
 
   return (
     <>
-      <div className="flex items-center justify-end">
-        <ActionButton type="button" intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>
-          New rule
-        </ActionButton>
-      </div>
+      {!featureDisabled && (
+        <div className="flex items-center justify-end">
+          <ActionButton type="button" intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>
+            New rule
+          </ActionButton>
+        </div>
+      )}
 
-      <DataTable
-        data={rulesQuery.data ?? []}
-        columns={columns}
-        keyExtractor={(row) => row.id}
-        loading={rulesQuery.isLoading}
-        isError={rulesQuery.isError}
-        errorMessage="Could not load native RBAC rules. The feature may be disabled server-side (native_rbac_enabled)."
-        onRetry={() => rulesQuery.refetch()}
-        emptyMessage="No native RBAC rules defined"
-        searchPlaceholder="Search rules..."
-      />
+      {featureDisabled ? (
+        <EmptyState
+          icon={KeyRound}
+          title="Native RBAC is not enabled"
+          description="The management plane does not have native_rbac_enabled turned on, so per-CRD allow rules cannot be authored here yet."
+        />
+      ) : (
+        <DataTable
+          data={rulesQuery.data ?? []}
+          columns={columns}
+          keyExtractor={(row) => row.id}
+          loading={rulesQuery.isLoading}
+          isError={rulesQuery.isError}
+          errorMessage="Could not load native RBAC rules."
+          onRetry={() => rulesQuery.refetch()}
+          emptyMessage="No native RBAC rules defined"
+          searchPlaceholder="Search rules..."
+        />
+      )}
 
       {showCreate && <NewRuleModal onClose={() => setShowCreate(false)} />}
 

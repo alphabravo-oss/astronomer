@@ -131,55 +131,67 @@ function ProjectsPage() {
     {
       key: 'namespaces',
       header: 'Namespaces',
-      accessor: (row) => (
-        <div className="flex flex-wrap gap-1">
-          {row.namespaces.length === 0 ? (
-            <span className="text-xs text-muted-foreground">None</span>
-          ) : (
-            <>
-              {row.namespaces.slice(0, 3).map((ns) => (
-                <span key={ns} className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">
-                  {ns}
-                </span>
-              ))}
-              {row.namespaces.length > 3 && (
-                <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                  +{row.namespaces.length - 3}
-                </span>
-              )}
-            </>
-          )}
-        </div>
-      ),
+      accessor: (row) => {
+        const namespaces = row.namespaces ?? [];
+        return (
+          <div className="flex flex-wrap gap-1">
+            {namespaces.length === 0 ? (
+              <span className="text-xs text-muted-foreground">None</span>
+            ) : (
+              <>
+                {namespaces.slice(0, 3).map((ns) => (
+                  <span key={ns} className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">
+                    {ns}
+                  </span>
+                ))}
+                {namespaces.length > 3 && (
+                  <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                    +{namespaces.length - 3}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        );
+      },
       sortable: false,
     },
     {
       key: 'members',
       header: 'Members',
-      accessor: (row) => (
-        <div className="flex items-center gap-1.5">
-          <Users className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="tabular-nums text-sm">{row.members.length}</span>
-        </div>
-      ),
-      sortAccessor: (row) => row.members.length,
+      accessor: (row) => {
+        const count = row.members?.length;
+        return (
+          <div className="flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="tabular-nums text-sm">{count == null ? '—' : count}</span>
+          </div>
+        );
+      },
+      sortAccessor: (row) => row.members?.length ?? -1,
       align: 'center',
     },
     {
       key: 'resourceQuota',
       header: 'Resource Quota',
       accessor: (row) => {
-        if (!row.resourceQuota) {
+        const extra = row as Project & {
+          resourceQuotaCpuLimit?: string;
+          resourceQuotaMemoryLimit?: string;
+        };
+        const cpu = row.resourceQuota?.cpuLimit || extra.resourceQuotaCpuLimit;
+        const mem = row.resourceQuota?.memoryLimit || extra.resourceQuotaMemoryLimit;
+        if (!cpu && !mem) {
           return <span className="text-xs text-muted-foreground">No quota</span>;
         }
         return (
           <div className="flex flex-wrap gap-1">
-            <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
-              CPU: {row.resourceQuota.cpuLimit}
-            </span>
-            <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
-              Mem: {row.resourceQuota.memoryLimit}
-            </span>
+            {cpu ? (
+              <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">CPU: {cpu}</span>
+            ) : null}
+            {mem ? (
+              <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">Mem: {mem}</span>
+            ) : null}
           </div>
         );
       },
