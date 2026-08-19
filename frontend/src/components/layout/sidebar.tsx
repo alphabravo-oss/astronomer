@@ -152,6 +152,7 @@ const globalNavGroups: NavGroup[] = [
     label: 'Integrations',
     items: [
       { label: 'Cluster Tools', href: '/dashboard/tools', icon: Wrench, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
+      { label: 'Catalog', href: '/dashboard/catalog', icon: Package, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
       { label: 'Extensions', href: '/dashboard/extensions', icon: Puzzle, permission: { resource: 'settings', verb: 'read' } },
     ],
   },
@@ -167,13 +168,9 @@ const globalNavGroups: NavGroup[] = [
       { label: 'Projects', href: '/dashboard/projects', icon: FolderKanban, permission: { resource: 'projects', verb: 'list' }, featureFlag: 'feature.projects' },
       { label: 'RBAC', href: '/dashboard/rbac', icon: Shield, permission: { resource: 'rbac', verb: 'read' } },
       { label: 'Audit Log', href: '/dashboard/audit', icon: FileText, permission: { resource: 'audit_logs', verb: 'read' } },
-      { label: 'Catalog', href: '/dashboard/catalog', icon: Package, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
-      { label: 'Auth', href: '/dashboard/settings/auth', icon: KeyRound, superuserOnly: true },
-      // Mark Settings as exact so /dashboard/settings/auth doesn't double-highlight
-      // both rows (the active-route matcher otherwise prefix-matches both).
-      // UX-07: Settings hub is superuser-only on the backend; align nav so
-      // non-superusers with settings:read do not see a dead link.
-      { label: 'Settings', href: '/dashboard/settings', icon: Settings, exact: true, superuserOnly: true },
+      // Superuser-only hub. Prefix-match so Dex/SSO under /settings/auth
+      // highlights Settings instead of a sibling Auth row.
+      { label: 'Settings', href: '/dashboard/settings', icon: Settings, superuserOnly: true },
     ],
   },
 ];
