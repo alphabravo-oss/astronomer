@@ -1027,7 +1027,13 @@ func (h *MonitoringHandler) verifySharedThanosReadiness(ctx context.Context, ope
 	h.recordMonitoringOperationEvent(ctx, operationID, "info", "smoke", "running shared Thanos PromQL smoke query", map[string]any{
 		"service": serviceName,
 	})
-	return h.waitForServiceProxySuccess(ctx, req.ManagementClusterID, req.Namespace, serviceName, "9090", "/api/v1/query", "query=vector(1)", 90*time.Second)
+	if err := h.waitForServiceProxySuccess(ctx, req.ManagementClusterID, req.Namespace, serviceName, "9090", "/api/v1/query", "query=vector(1)", 90*time.Second); err != nil {
+		return err
+	}
+	if err := h.syncGrafanaThanosDatasource(ctx); err != nil && h.log != nil {
+		h.log.Warn("sync grafana thanos datasource after Thanos readiness", "error", err)
+	}
+	return nil
 }
 
 func (h *MonitoringHandler) verifySharedAlertmanagerReadiness(ctx context.Context, operationID uuid.UUID, req SharedAlertmanagerRequest) error {
@@ -1045,7 +1051,10 @@ func (h *MonitoringHandler) verifySharedGrafanaReadiness(ctx context.Context, op
 		"service":   serviceName,
 		"namespace": req.Namespace,
 	})
-	return h.waitForServiceProxySuccess(ctx, req.ManagementClusterID, req.Namespace, serviceName, "80", "/api/health", "", 90*time.Second)
+	if err := h.waitForServiceProxySuccess(ctx, req.ManagementClusterID, req.Namespace, serviceName, "80", "/api/health", "", 90*time.Second); err != nil {
+		return err
+	}
+	return h.stampSharedGrafanaHealth(ctx, req)
 }
 
 func (h *MonitoringHandler) verifyClusterMonitoringReadiness(ctx context.Context, operationID uuid.UUID, clusterID string, req MonitoringStackRequest) error {

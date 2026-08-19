@@ -530,6 +530,17 @@ func (h *MonitoringHandler) applySharedGrafanaStack(ctx context.Context, msgType
 	if h.helm == nil {
 		return nil, fmt.Errorf("helm requester not configured")
 	}
+	// Re-render sidecar ConfigMaps from live backend metadata so a Thanos
+	// family that became healthy after enqueue is included without a second
+	// form submit.
+	if values == nil {
+		values = map[string]any{}
+	}
+	if h.queries != nil {
+		if backend, err := h.queries.GetDefaultMonitoringBackend(ctx); err == nil {
+			values["extraObjects"] = grafanaOwnedConfigMaps(req, backend)
+		}
+	}
 	return h.helm.Do(ctx, req.ManagementClusterID, msgType, protocol.HelmRequestPayload{
 		ReleaseName: req.ReleaseName,
 		Namespace:   req.Namespace,

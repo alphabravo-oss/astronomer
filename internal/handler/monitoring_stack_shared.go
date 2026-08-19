@@ -21,11 +21,11 @@ import (
 
 // sharedStackLifecycle drives the six /settings/monitoring lifecycle endpoints
 // — Preview, Install, Upgrade, Replace, Uninstall, Status — for ONE shared
-// monitoring stack family. Three families are instantiated below: shared
-// Thanos, shared Alertmanager, and shared Grafana.
+// monitoring stack family. Shared families instantiated below: Thanos,
+// Alertmanager, and Grafana (Loki is the next family, not a new driver).
 //
-// It exists for the authorization preamble, not for the line count. The two
-// families were written by copying one another, and the copy dropped
+// It exists for the authorization preamble, not for the line count. The first
+// two families were written by copying one another, and the copy dropped
 //
 //	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbRead)
 //
@@ -36,9 +36,11 @@ import (
 //
 // Here the preamble is written exactly once per verb, inside this type, and it
 // is the first statement of the only six bodies that exist. A family is a data
-// literal — it supplies charts, payload decoding, persistence and enqueue, and
-// has no way to express "and skip the check", because there is no body of its
-// own to omit it from. A SEVENTH FAMILY therefore gets all six gates free.
+// literal — it supplies charts, payload decoding, persistence, enqueue, and an
+// optional precheck hook, and has no way to express "and skip the check",
+// because there is no body of its own to omit it from. A NEW FAMILY therefore
+// gets all six gates free. TestSharedStackHandlersOnlyDelegateToTheLifecycleDriver
+// counts 6 handlers per family (currently 18).
 //
 // A seventh ENDPOINT is the direction the original bug came from, and a comment
 // promising that the next author will copy the preamble is worth nothing, so it
@@ -50,16 +52,18 @@ import (
 // monitoring_stack_shared_gate_test.go and neither consults a list of endpoint
 // names, so adding one cannot outrun them.
 //
-// Deliberately NOT generalised to a third family: the per-cluster stack
-// (monitoring_stack_cluster.go) is gated by requirePermission middleware at
-// routes_clusters.go rather than in the handler, persists a typed row rather
-// than a JSON metadata bag, and has a materially different Uninstall. Folding
-// it in would need an optional Resource field — an "authorization is somebody
-// else's job" escape hatch on the very type whose job is to make that
-// impossible. See the file comment there for the fence that covers it instead.
+// Deliberately NOT generalised to the per-cluster stack
+// (monitoring_stack_cluster.go): that family is gated by requirePermission
+// middleware at routes_clusters.go rather than in the handler, persists a
+// typed row rather than a JSON metadata bag, and has a materially different
+// Uninstall. Folding it in would need an optional Resource field — an
+// "authorization is somebody else's job" escape hatch on the very type whose
+// job is to make that impossible. See the file comment there for the fence
+// that covers it instead.
 //
-// Everything the two families genuinely differ on is a field. There are no
-// per-family conditionals in any of the six methods.
+// Everything the shared families genuinely differ on is a field. There are no
+// per-family conditionals in any of the six methods (precheck is a hook;
+// Thanos/Alertmanager leave it nil).
 type sharedStackLifecycle[Req any] struct {
 	h *MonitoringHandler
 

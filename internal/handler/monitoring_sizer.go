@@ -421,6 +421,13 @@ type sizerSnapshot struct {
 }
 
 func (h *MonitoringHandler) collectSizerSnapshot(ctx context.Context, storageClassName, storageConfigID string) sizerSnapshot {
+	return h.collectSizerSnapshotFor(ctx, "", storageClassName, storageConfigID)
+}
+
+// collectSizerSnapshotFor evaluates leftover on clusterID when set (Grafana
+// install/replace precheck). Empty clusterID keeps the GET /sizer/ pick
+// (is_local, else Thanos/Loki managementClusterId).
+func (h *MonitoringHandler) collectSizerSnapshotFor(ctx context.Context, clusterID, storageClassName, storageConfigID string) sizerSnapshot {
 	snap := sizerSnapshot{
 		storageClass: sizerStorageClass{Name: defaultString(storageClassName, sizerDefaultStorageClass)},
 		thanos:       sizerThanos{Status: "not_configured"},
@@ -467,6 +474,18 @@ func (h *MonitoringHandler) collectSizerSnapshot(ctx context.Context, storageCla
 		snap.managementClusterID = cluster.ID.String()
 		snap.isLocal = cluster.IsLocal
 		snap.kubernetesVersion = cluster.KubernetesVersion
+	}
+	if clusterID != "" {
+		snap.managementClusterID = clusterID
+		snap.isLocal = false
+		snap.kubernetesVersion = ""
+		for _, c := range clusters {
+			if c.ID.String() == clusterID {
+				snap.isLocal = c.IsLocal
+				snap.kubernetesVersion = c.KubernetesVersion
+				break
+			}
+		}
 	}
 
 	snap.objectStorage = h.collectSizerObjectStorage(ctx, storageConfigID)

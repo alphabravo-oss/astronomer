@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"sigs.k8s.io/yaml"
+
 	"github.com/alphabravocompany/astronomer-go/deploy/dashboards"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -54,6 +56,9 @@ func (h *MonitoringHandler) sharedGrafanaPayload(ctx context.Context, r *http.Re
 	if req.Replicas <= 0 {
 		req.Replicas = 1
 	}
+	if strings.ContainsAny(req.LogDatasourceURL, "\n\r\t") {
+		return SharedGrafanaRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("logDatasourceUrl must be a single-line URL")
+	}
 
 	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
 	if err != nil {
@@ -66,7 +71,7 @@ func (h *MonitoringHandler) sharedGrafanaPrecheck(ctx context.Context, req Share
 	if op != "install" && op != "replace" {
 		return 0, "", "", true
 	}
-	snap := h.collectSizerSnapshot(ctx, req.StorageClass, "")
+	snap := h.collectSizerSnapshotFor(ctx, req.ManagementClusterID, req.StorageClass, "")
 	eval := evaluateSizer(snap.input)
 	if eval.Verdicts.Grafana.Result != "fail" {
 		return 0, "", "", true
@@ -82,6 +87,7 @@ func (h *MonitoringHandler) updateSharedGrafanaMetadata(ctx context.Context, bac
 	if h.queries == nil {
 		return nil
 	}
+	resolvedRollback := h.resolveAutoRollbackPolicy(backend, req.AutoRollbackOnFailure)
 	appliedSpecHash := specHash(map[string]any{
 		"managementClusterId":   req.ManagementClusterID,
 		"namespace":             defaultString(req.Namespace, "monitoring"),
@@ -92,7 +98,7 @@ func (h *MonitoringHandler) updateSharedGrafanaMetadata(ctx context.Context, bac
 		"storageSize":           req.StorageSize,
 		"ingressHost":           req.IngressHost,
 		"logDatasourceUrl":      req.LogDatasourceURL,
-		"autoRollbackOnFailure": boolPtrValue(req.AutoRollbackOnFailure),
+		"autoRollbackOnFailure": resolvedRollback,
 	})
 	authCfg, err := resolveMonitoringBackendAuthConfig(backend, h.monitoringDecryptor())
 	if err != nil {
@@ -112,7 +118,7 @@ func (h *MonitoringHandler) updateSharedGrafanaMetadata(ctx context.Context, bac
 		"logDatasourceUrl":      req.LogDatasourceURL,
 		"grafanaHost":           req.IngressHost,
 		"authMode":              sharedGrafanaAuthModeClusterIP,
-		"autoRollbackOnFailure": boolPtrValue(req.AutoRollbackOnFailure),
+		"autoRollbackOnFailure": resolvedRollback,
 		"thanosDatasource":      thanosOK,
 		"lastAppliedSpecHash":   appliedSpecHash,
 		"updatedAt":             time.Now().UTC().Format(time.RFC3339),
@@ -308,7 +314,7 @@ datasources:
       timeInterval: 30s
       timeout: 60
       prometheusType: Thanos
-`, url)) + "\n"
+`, yamlQuotedString(url))) + "\n"
 }
 
 func grafanaBYOLokiDatasourceYAML(url string) string {
@@ -323,7 +329,15 @@ datasources:
     editable: false
     jsonData:
       timeout: 60
-`, url)) + "\n"
+`, yamlQuotedString(url))) + "\n"
+}
+
+func yamlQuotedString(s string) string {
+	raw, err := yaml.Marshal(s)
+	if err != nil {
+		return `""`
+	}
+	return strings.TrimSpace(string(raw))
 }
 
 func thanosDatasourceURL(backend sqlc.MonitoringBackend) (string, bool) {
@@ -341,4 +355,126 @@ func thanosDatasourceURL(backend sqlc.MonitoringBackend) (string, bool) {
 // interpolated by the chart's extraObjects tpl.
 func helmTplEscape(s string) string {
 	return strings.ReplaceAll(s, "{{", `{{"{{"}}`)
+}
+
+func grafanaStackPresent(status string) bool {
+	switch status {
+	case "", "not_configured", "uninstalled":
+		return false
+	default:
+		return true
+	}
+}
+
+func grafanaRequestFromMetadata(meta map[string]any) SharedGrafanaRequest {
+	req := SharedGrafanaRequest{
+		ManagementClusterID: stringFromMap(meta, "managementClusterId"),
+		Namespace:           stringFromMap(meta, "namespace"),
+		ReleaseName:         stringFromMap(meta, "releaseName"),
+		ChartVersion:        stringFromMap(meta, "chartVersion"),
+		StorageClass:        stringFromMap(meta, "storageClass"),
+		StorageSize:         stringFromMap(meta, "storageSize"),
+		IngressHost:         stringFromMap(meta, "ingressHost"),
+		LogDatasourceURL:    stringFromMap(meta, "logDatasourceUrl"),
+	}
+	switch n := meta["replicas"].(type) {
+	case float64:
+		req.Replicas = int32(n)
+	case int:
+		req.Replicas = int32(n)
+	case int32:
+		req.Replicas = n
+	case json.Number:
+		if v, err := n.Int64(); err == nil {
+			req.Replicas = int32(v)
+		}
+	}
+	if _, ok := meta["autoRollbackOnFailure"]; ok {
+		v := boolFromAny(meta["autoRollbackOnFailure"])
+		req.AutoRollbackOnFailure = &v
+	}
+	return req
+}
+
+func (h *MonitoringHandler) stampSharedGrafanaHealth(ctx context.Context, req SharedGrafanaRequest) error {
+	if h.queries == nil {
+		return nil
+	}
+	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
+	if err != nil {
+		return err
+	}
+	status := "healthy"
+	if _, ok := thanosDatasourceURL(backend); !ok {
+		status = "degraded"
+	}
+	return h.updateSharedGrafanaMetadata(ctx, backend, req, status)
+}
+
+func (h *MonitoringHandler) syncGrafanaThanosDatasource(ctx context.Context) error {
+	if h.queries == nil || h.requester == nil {
+		return nil
+	}
+	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
+	if err != nil {
+		return nil
+	}
+	meta := sharedStackMetadata(backend, "sharedGrafana")
+	if !grafanaStackPresent(stringFromMap(meta, "status")) {
+		return nil
+	}
+	url, ok := thanosDatasourceURL(backend)
+	if !ok {
+		return nil
+	}
+	req := grafanaRequestFromMetadata(meta)
+	ns := defaultString(req.Namespace, "monitoring")
+	release := defaultString(req.ReleaseName, sharedGrafanaDefaultRelease)
+	cm := grafanaDatasourceConfigMap(release+"-thanos-datasource", grafanaThanosDatasourceYAML(url))
+	if err := h.ensureGrafanaConfigMap(ctx, req.ManagementClusterID, ns, cm); err != nil {
+		return err
+	}
+	status := stringFromMap(meta, "status")
+	if status == "degraded" || status == "healthy" || status == "reinstalled" || status == "configured" || status == "drifted" {
+		if err := h.updateSharedGrafanaMetadata(ctx, backend, req, "healthy"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *MonitoringHandler) ensureGrafanaConfigMap(ctx context.Context, clusterID, namespace string, obj map[string]any) error {
+	if h.requester == nil {
+		return nil
+	}
+	if clusterID == "" || namespace == "" {
+		return fmt.Errorf("grafana configmap target is incomplete")
+	}
+	meta, _ := obj["metadata"].(map[string]any)
+	if meta == nil {
+		return fmt.Errorf("grafana configmap missing metadata")
+	}
+	name, _ := meta["name"].(string)
+	if name == "" {
+		return fmt.Errorf("grafana configmap missing name")
+	}
+	meta["namespace"] = namespace
+	body, err := json.Marshal(obj)
+	if err != nil {
+		return err
+	}
+	patchPath := fmt.Sprintf("/api/v1/namespaces/%s/configmaps/%s", namespace, name)
+	resp, err := h.requester.Do(ctx, clusterID, http.MethodPatch, patchPath, body, requestHeaders("application/merge-patch+json"))
+	if err == nil && resp != nil && resp.StatusCode != http.StatusNotFound {
+		return ensureSuccess(resp)
+	}
+	createPath := fmt.Sprintf("/api/v1/namespaces/%s/configmaps", namespace)
+	resp, err = h.requester.Do(ctx, clusterID, http.MethodPost, createPath, body, requestHeaders("application/json"))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode == http.StatusConflict {
+		return nil
+	}
+	return ensureSuccess(resp)
 }

@@ -41,10 +41,11 @@ import (
 
 type stackLifecycleQuerier struct {
 	MonitoringQuerier
-	backend    sqlc.MonitoringBackend
-	storage    sqlc.BackupStorageConfig
-	clusterCfg sqlc.ClusterMonitoringConfig
-	clusterErr error
+	backend       sqlc.MonitoringBackend
+	storage       sqlc.BackupStorageConfig
+	clusterCfg    sqlc.ClusterMonitoringConfig
+	clusterErr    error
+	extraClusters []sqlc.Cluster
 
 	audits []sqlc.CreateAuditLogV1Params
 }
@@ -116,13 +117,14 @@ func (q *stackLifecycleQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.Cre
 }
 
 func (q *stackLifecycleQuerier) ListClusters(context.Context, sqlc.ListClustersParams) ([]sqlc.Cluster, error) {
-	return []sqlc.Cluster{{
+	rows := []sqlc.Cluster{{
 		ID:                uuid.MustParse(stackTestClusterID),
 		Name:              "local",
 		IsLocal:           true,
 		KubernetesVersion: "v1.31.4",
 		LastHeartbeat:     pgtype.Timestamptz{Time: time.Now(), Valid: true},
-	}}, nil
+	}}
+	return append(rows, q.extraClusters...), nil
 }
 
 func (q *stackLifecycleQuerier) GetClusterMonitoringContext(context.Context, uuid.UUID) (sqlc.GetClusterMonitoringContextRow, error) {
