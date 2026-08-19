@@ -176,7 +176,13 @@ function AuditLogPage() {
     <PageShell>
       <PageHeader
         title="Audit Log"
-        description={`${total.toLocaleString()} events`}
+        description={
+          filters.audience === 'system'
+            ? `${total.toLocaleString()} automated system events`
+            : filters.audience === 'all'
+              ? `${total.toLocaleString()} events`
+              : `${total.toLocaleString()} operator actions`
+        }
         actions={
           <div className="flex items-center gap-2">
             <Link
@@ -217,16 +223,25 @@ function AuditLogPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Select
+              value={filters.audience}
+              onChange={(e) => updateFilter('audience', e.target.value)}
+              className="w-[10.5rem]"
+              aria-label="Activity"
+            >
+              <option value="people">People</option>
+              <option value="system">System</option>
+              <option value="all">Everything</option>
+            </Select>
+            <Select
               value={filters.actionClass}
               onChange={(e) => updateFilter('actionClass', e.target.value)}
               className="w-[8.5rem]"
               aria-label="Event class"
             >
-              <option value="all">All classes</option>
-              <option value="mutation">Mutation</option>
-              <option value="read">Read</option>
-              <option value="auth">Auth</option>
-              <option value="system">System</option>
+              <option value="all">All kinds</option>
+              <option value="mutation">Changes</option>
+              <option value="auth">Sign-in</option>
+              <option value="read">Reads</option>
             </Select>
             <Select
               value={filters.result}

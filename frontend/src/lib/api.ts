@@ -1071,6 +1071,8 @@ export type AuditLogQueryParams = {
   to?: string;
   // action_class: "mutation" | "read" | "auth" | "system" — migration 063.
   action_class?: string;
+  // audience: people (operators/users) | system (workers/agents) | all
+  audience?: 'people' | 'system' | 'all' | string;
 };
 
 function auditLogRequestParams(params?: AuditLogQueryParams): Record<string, string | number> | undefined {
@@ -1087,6 +1089,7 @@ function auditLogRequestParams(params?: AuditLogQueryParams): Record<string, str
     ['user_id', params.user_id],
     ['action', params.action],
     ['action_class', params.action_class],
+    ['audience', params.audience],
     ['target', params.target],
     ['resource_type', params.resource_type],
     ['resource_id', params.resource_id],

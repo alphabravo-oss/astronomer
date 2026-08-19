@@ -55,6 +55,9 @@ type Event struct {
 	Before          any
 	After           any
 	Tags            map[string]string
+	// ActionClass is mutation/read/auth/system. Empty is classified from
+	// Action and Source in buildRow.
+	ActionClass string
 }
 
 var secretKeys = map[string]struct{}{
@@ -286,6 +289,7 @@ func buildRow(event Event) (sqlc.CreateAuditLogV1Params, bool) {
 		IpAddress:       event.IPAddress,
 		UserAgent:       event.UserAgent,
 		Detail:          raw,
+		ActionClass:     ClassifyActionClass(event.Action, event.Source, event.ActionClass),
 	}, true
 }
 

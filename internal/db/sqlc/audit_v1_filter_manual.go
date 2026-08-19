@@ -33,9 +33,35 @@ type AuditLogFilterParams struct {
 	To            time.Time   `json:"to"`
 	HasTo         bool        `json:"has_to"`
 	Q             string      `json:"q"`
-	Limit         int32       `json:"limit"`
-	Offset        int32       `json:"offset"`
+	// Audience is people (default from the UI), system, or all.
+	Audience string `json:"audience"`
+	Limit    int32  `json:"limit"`
+	Offset   int32  `json:"offset"`
 }
+
+// Keep in sync with audit.PeopleActivitySQL / SystemActivitySQL / EffectiveClassSQL.
+const auditPeopleActivitySQL = `NOT (
+	a.action_class = 'system'
+	OR a.source = 'worker'
+	OR a.action LIKE 'agent.%'
+	OR a.action LIKE 'audit_log%'
+	OR a.action LIKE '%sync_failed'
+)`
+
+const auditSystemActivitySQL = `(
+	a.action_class = 'system'
+	OR a.source = 'worker'
+	OR a.action LIKE 'agent.%'
+	OR a.action LIKE 'audit_log%'
+	OR a.action LIKE '%sync_failed'
+)`
+
+const auditEffectiveClassSQL = `(CASE
+	WHEN a.action LIKE 'auth.%' OR a.action LIKE 'sso.%' THEN 'auth'
+	WHEN a.action LIKE 'read.%' OR a.action = 'charlie.http.read' OR a.action_class = 'read' THEN 'read'
+	WHEN a.action_class = 'system' OR a.source = 'worker' OR a.action LIKE 'agent.%' OR a.action LIKE 'audit_log%' OR a.action LIKE '%sync_failed' THEN 'system'
+	ELSE 'mutation'
+END)`
 
 const auditLogV1SelectColumns = `
 a.id, a.created_at, a.schema_version, a.source, a.correlation_id, a.user_id, a.actor_auth_method, a.action, a.resource_type, a.resource_id, a.resource_name, a.http_method, a.path, a.status_code, a.duration_ms, a.request_id, a.ip_address, a.user_agent, a.detail, a.action_class
@@ -139,7 +165,15 @@ func buildAuditLogV1FilterWhere(arg AuditLogFilterParams) (string, []any) {
 		)`, pattern)
 	}
 	addText("action", strings.TrimSpace(arg.Action))
-	addText("action_class", strings.TrimSpace(arg.ActionClass))
+	if cls := strings.TrimSpace(arg.ActionClass); cls != "" {
+		add(auditEffectiveClassSQL+" = $%d", cls)
+	}
+	switch strings.ToLower(strings.TrimSpace(arg.Audience)) {
+	case "people":
+		clauses = append(clauses, auditPeopleActivitySQL)
+	case "system":
+		clauses = append(clauses, auditSystemActivitySQL)
+	}
 	if arg.HasStatusCode {
 		add("a.status_code = $%d", arg.StatusCode)
 	}

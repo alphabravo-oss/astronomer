@@ -4,6 +4,7 @@ export const PAGE_SIZE = 50;
 
 export type AuditFilters = {
   q: string;
+  audience: string;
   actor: string;
   target: string;
   action: string;
@@ -19,6 +20,7 @@ export type AuditFilters = {
 
 export const emptyFilters: AuditFilters = {
   q: '',
+  audience: 'people',
   actor: '',
   target: '',
   action: '',
@@ -46,6 +48,7 @@ const ADVANCED_KEYS: (keyof AuditFilters)[] = [
 
 export function isFilterActive(key: keyof AuditFilters, value: string): boolean {
   if (key === 'actionClass' || key === 'result') return value !== 'all';
+  if (key === 'audience') return value !== 'people';
   return Boolean(value.trim());
 }
 
@@ -71,6 +74,7 @@ export function buildAuditQuery(filters: AuditFilters, page: number): AuditLogQu
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     q: filters.q.trim() || undefined,
+    audience: filters.audience || 'people',
     actor: filters.actor.trim() || undefined,
     target: filters.target.trim() || undefined,
     action: filters.action.trim() || undefined,
@@ -97,6 +101,8 @@ export function auditFilterChips(
     chips.push({ key, label: `${label}: ${value}` });
   };
   push('q', 'Search', filters.q.trim());
+  if (filters.audience === 'system') chips.push({ key: 'audience', label: 'System activity' });
+  if (filters.audience === 'all') chips.push({ key: 'audience', label: 'All activity' });
   if (filters.actionClass !== 'all') chips.push({ key: 'actionClass', label: `Class: ${filters.actionClass}` });
   if (filters.result !== 'all') chips.push({ key: 'result', label: `Result: ${filters.result}` });
   push('actor', 'Actor', filters.actor.trim());
@@ -123,5 +129,6 @@ export function auditFilterChips(
 
 export function clearFilterValue(key: keyof AuditFilters): string {
   if (key === 'actionClass' || key === 'result') return 'all';
+  if (key === 'audience') return 'people';
   return '';
 }

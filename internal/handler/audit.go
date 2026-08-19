@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
@@ -86,7 +87,7 @@ func auditLogToResponse(a sqlc.AuditLog) AuditLogResponse {
 		Source:          a.Source,
 		CorrelationID:   a.CorrelationID,
 		Action:          a.Action,
-		ActionClass:     a.ActionClass,
+		ActionClass:     audit.ClassifyActionClass(a.Action, a.Source, a.ActionClass),
 		ResourceType:    a.ResourceType,
 		ResourceID:      a.ResourceID,
 		ResourceName:    a.ResourceName,
@@ -118,8 +119,8 @@ func auditLogToResponse(a sqlc.AuditLog) AuditLogResponse {
 
 // List handles GET /api/v1/audit/.
 // Supports optional query params: user_id, actor, resource_type, target,
-// action, action_class, result, correlation_id, request_id, cluster_id,
-// project_id, from, and to.
+// action, action_class, audience (people|system|all), result, correlation_id,
+// request_id, cluster_id, project_id, from, and to.
 func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit := auditQueryLimit(r)
 	offset := int32(queryInt(r, "offset", 0))
@@ -416,6 +417,7 @@ func auditFilterFromRequest(r *http.Request, limit, offset int32) (sqlc.AuditLog
 	q := r.URL.Query()
 	filter := sqlc.AuditLogFilterParams{
 		Q:             strings.TrimSpace(q.Get("q")),
+		Audience:      strings.TrimSpace(q.Get("audience")),
 		Actor:         strings.TrimSpace(q.Get("actor")),
 		ResourceType:  strings.TrimSpace(q.Get("resource_type")),
 		ResourceID:    strings.TrimSpace(q.Get("resource_id")),
@@ -453,6 +455,11 @@ func auditFilterFromRequest(r *http.Request, limit, offset int32) (sqlc.AuditLog
 			return filter, fmt.Errorf("invalid user_id")
 		}
 		filter.UserID = pgtype.UUID{Bytes: uid, Valid: true}
+	}
+	switch filter.Audience {
+	case "", "people", "system", "all":
+	default:
+		return filter, fmt.Errorf("audience must be people, system, or all")
 	}
 	switch filter.Result {
 	case "", "success", "failure", "error":

@@ -32,11 +32,17 @@ describe('audit filters', () => {
     const query = buildAuditQuery({ ...emptyFilters, q: '  login  ', result: 'failure' }, 2);
     expect(query).toMatchObject({
       q: 'login',
+      audience: 'people',
       result: 'failure',
       limit: 50,
       offset: 100,
     });
     expect(query.action_class).toBeUndefined();
+  });
+
+  it('does not treat the people audience as an extra filter', () => {
+    expect(countActiveFilters(emptyFilters)).toBe(0);
+    expect(countActiveFilters({ ...emptyFilters, audience: 'system' })).toBe(1);
   });
 
   it('renders chips with cluster names', () => {

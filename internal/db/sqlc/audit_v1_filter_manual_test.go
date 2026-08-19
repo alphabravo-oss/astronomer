@@ -6,6 +6,25 @@ import (
 	"time"
 )
 
+func TestResolveAuditActionClass(t *testing.T) {
+	cases := []struct {
+		action, source, stored, want string
+	}{
+		{"auth.login", "service", "", "auth"},
+		{"catalog.repo.sync_failed", "worker", "", "system"},
+		{"request.post", "http", "mutation", "mutation"},
+		{"read.audit", "http", "read", "read"},
+		{"agent.connected", "tunnel", "", "system"},
+	}
+	for _, tc := range cases {
+		got := resolveAuditActionClass(tc.action, tc.source, tc.stored)
+		if got != tc.want {
+			t.Errorf("resolveAuditActionClass(%q,%q,%q)=%q want %q",
+				tc.action, tc.source, tc.stored, got, tc.want)
+		}
+	}
+}
+
 func TestBuildAuditLogV1FilterWhereComposesFilters(t *testing.T) {
 	from := time.Date(2026, 6, 14, 10, 0, 0, 0, time.UTC)
 	to := from.Add(time.Hour)
@@ -26,7 +45,7 @@ func TestBuildAuditLogV1FilterWhereComposesFilters(t *testing.T) {
 		"EXISTS",
 		"lower(u.email) LIKE $1",
 		"lower(a.resource_name) LIKE $2",
-		"a.action_class = $3",
+		auditEffectiveClassSQL + " = $3",
 		"a.status_code >= 400",
 		"a.detail->>'cluster_id' = $4",
 		"a.detail->>'project_id' = $5",
@@ -42,6 +61,16 @@ func TestBuildAuditLogV1FilterWhereComposesFilters(t *testing.T) {
 	}
 	if len(args) != 7 {
 		t.Fatalf("args = %d, want 7 (%#v)", len(args), args)
+	}
+}
+
+func TestBuildAuditLogV1FilterWherePeopleAudienceHidesSystem(t *testing.T) {
+	where, args := buildAuditLogV1FilterWhere(AuditLogFilterParams{Audience: "people"})
+	if !strings.Contains(where, "a.source = 'worker'") || !strings.Contains(where, "NOT") {
+		t.Fatalf("people audience WHERE:\n%s", where)
+	}
+	if len(args) != 0 {
+		t.Fatalf("people audience should not bind args, got %#v", args)
 	}
 }
 

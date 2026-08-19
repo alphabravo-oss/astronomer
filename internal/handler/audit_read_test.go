@@ -282,6 +282,23 @@ func TestAuditHandlerListSupportsComposableSearchFilters(t *testing.T) {
 	}
 }
 
+func TestAuditHandlerListAcceptsAudience(t *testing.T) {
+	fake := &filteredAuditQueries{
+		fakeAuditQueries: fakeAuditQueries{
+			v1Log: sqlc.AuditLog{ID: uuid.New(), Action: "role.create", CreatedAt: time.Unix(1, 0).UTC()},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/audit/?audience=people", nil)
+	rr := httptest.NewRecorder()
+	NewAuditHandler(fake).List(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rr.Code, rr.Body.String())
+	}
+	if !fake.filterCalled || fake.filterArg.Audience != "people" {
+		t.Fatalf("audience = %q, called=%v", fake.filterArg.Audience, fake.filterCalled)
+	}
+}
+
 func TestAuditHandlerListAcceptsQSearch(t *testing.T) {
 	fake := &filteredAuditQueries{
 		fakeAuditQueries: fakeAuditQueries{

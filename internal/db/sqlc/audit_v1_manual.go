@@ -88,11 +88,37 @@ type ListAuditLogsSinceParams struct {
 	Limit   int32     `json:"limit"`
 }
 
-func (q *Queries) CreateAuditLogV1(ctx context.Context, arg CreateAuditLogV1Params) error {
-	cls := arg.ActionClass
-	if cls == "" {
-		cls = "mutation"
+// resolveAuditActionClass mirrors audit.ClassifyActionClass so direct
+// CreateAuditLogV1 callers (worker jobs) get the same class without an
+// import cycle. Keep the two in lockstep (see TestResolveAuditActionClassMatches).
+func resolveAuditActionClass(action, source, stored string) string {
+	switch stored {
+	case "read", "auth", "system":
+		return stored
 	}
+	a := strings.ToLower(strings.TrimSpace(action))
+	s := strings.ToLower(strings.TrimSpace(source))
+	switch {
+	case strings.HasPrefix(a, "auth.") || strings.HasPrefix(a, "sso."):
+		return "auth"
+	case strings.HasPrefix(a, "read.") || a == "charlie.http.read":
+		return "read"
+	case s == "worker",
+		strings.HasPrefix(a, "agent."),
+		strings.HasPrefix(a, "audit_log"),
+		strings.Contains(a, "sync_failed"),
+		strings.Contains(a, "ensure_partition"),
+		strings.Contains(a, "enforce_retention"):
+		return "system"
+	case stored != "":
+		return stored
+	default:
+		return "mutation"
+	}
+}
+
+func (q *Queries) CreateAuditLogV1(ctx context.Context, arg CreateAuditLogV1Params) error {
+	cls := resolveAuditActionClass(arg.Action, arg.Source, arg.ActionClass)
 	_, err := q.db.Exec(ctx, createAuditLogV1,
 		arg.Source,
 		arg.CorrelationID,
@@ -198,10 +224,7 @@ func (q *Queries) execBatchInsertAuditLog(ctx context.Context, rows []CreateAudi
 			sb.WriteString(strconv.Itoa(i*auditLogColumnsPerRow + j + 1))
 		}
 		sb.WriteString(")")
-		cls := r.ActionClass
-		if cls == "" {
-			cls = "mutation"
-		}
+		cls := resolveAuditActionClass(r.Action, r.Source, r.ActionClass)
 		args = append(args,
 			r.Source,
 			r.CorrelationID,
