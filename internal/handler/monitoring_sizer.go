@@ -163,6 +163,10 @@ type sizerEvalInput struct {
 	ObservedLogBytesPerDay   int64
 	WALCapacityKnown         bool
 	WALCapacityBytes         int64
+	// ClustersUnreadable is set when adopted-cluster listing failed or the
+	// querier cannot list clusters. Loki must not treat that as 0 members
+	// (which would match singleBinary).
+	ClustersUnreadable bool
 }
 
 type sizerEvalResult struct {
@@ -177,6 +181,8 @@ type sizerEvalResult struct {
 type sizerClusterLister interface {
 	ListClusters(ctx context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error)
 }
+
+var _ sizerClusterLister = (*sqlc.Queries)(nil)
 
 // GetMonitoringSizer handles GET /api/v1/settings/monitoring/sizer/.
 // Read-only: it never creates or deletes PVCs. walCapacityKnown is true only
@@ -342,6 +348,9 @@ func evaluateLokiSizer(in sizerEvalInput, leftoverCPU, leftoverMem, usableCPU, u
 	if usableCPU < sizerSingleBinaryCPUMilli || usableMem < sizerSingleBinaryMemBytes {
 		return fail("below_singlebinary_floor")
 	}
+	if in.ClustersUnreadable {
+		return fail("clusters_unreadable")
+	}
 
 	var mode string
 	switch {
@@ -448,14 +457,18 @@ func (h *MonitoringHandler) collectSizerSnapshot(ctx context.Context, storageCla
 		}
 	}
 
-	cluster, ok := h.sizerManagementCluster(ctx, thanosMeta, lokiMeta)
-	if ok {
+	clusters, listErr := h.sizerListAllClusters(ctx)
+	if listErr != nil {
+		snap.input.ClustersUnreadable = true
+	} else {
+		snap.input.ConnectedClusters = countConnectedAdoptedClusters(clusters, time.Now())
+	}
+	if cluster, ok := sizerPickManagementCluster(clusters, thanosMeta, lokiMeta); ok {
 		snap.managementClusterID = cluster.ID.String()
 		snap.isLocal = cluster.IsLocal
 		snap.kubernetesVersion = cluster.KubernetesVersion
 	}
 
-	snap.input.ConnectedClusters = h.countConnectedAdoptedClusters(ctx)
 	snap.objectStorage = h.collectSizerObjectStorage(ctx, storageConfigID)
 	snap.input.ObjectStorageOK = snap.objectStorage.Configured
 
@@ -512,8 +525,7 @@ func lokiRunning(meta map[string]any) bool {
 	}
 }
 
-func (h *MonitoringHandler) sizerManagementCluster(ctx context.Context, thanosMeta, lokiMeta map[string]any) (sqlc.Cluster, bool) {
-	clusters := h.sizerListAllClusters(ctx)
+func sizerPickManagementCluster(clusters []sqlc.Cluster, thanosMeta, lokiMeta map[string]any) (sqlc.Cluster, bool) {
 	for _, c := range clusters {
 		if c.IsLocal {
 			return c, true
@@ -538,32 +550,38 @@ func (h *MonitoringHandler) sizerManagementCluster(ctx context.Context, thanosMe
 	return sqlc.Cluster{ID: parsed}, true
 }
 
-func (h *MonitoringHandler) sizerListAllClusters(ctx context.Context) []sqlc.Cluster {
+func (h *MonitoringHandler) sizerListAllClusters(ctx context.Context) ([]sqlc.Cluster, error) {
 	if h == nil || h.queries == nil {
-		return nil
+		return nil, fmt.Errorf("monitoring store not configured")
 	}
 	lister, ok := h.queries.(sizerClusterLister)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("cluster lister not configured")
 	}
 	const page int32 = 500
 	var all []sqlc.Cluster
 	for offset := int32(0); ; offset += page {
 		rows, err := lister.ListClusters(ctx, sqlc.ListClustersParams{Limit: page, Offset: offset})
 		if err != nil {
-			return all
+			return nil, err
 		}
 		all = append(all, rows...)
 		if int32(len(rows)) < page {
-			return all
+			return all, nil
 		}
 	}
 }
 
-func (h *MonitoringHandler) countConnectedAdoptedClusters(ctx context.Context) int {
-	now := time.Now()
+// countConnectedAdoptedClusters counts member clusters with a fresh agent
+// heartbeat. The local management plane is excluded: Loki attach/log
+// estimates are about member shippers, and including is_local would push a
+// 5-member fleet over the SingleBinary cluster cap.
+func countConnectedAdoptedClusters(clusters []sqlc.Cluster, now time.Time) int {
 	n := 0
-	for _, c := range h.sizerListAllClusters(ctx) {
+	for _, c := range clusters {
+		if c.IsLocal {
+			continue
+		}
 		if !c.LastHeartbeat.Valid {
 			continue
 		}
@@ -670,19 +688,41 @@ func (h *MonitoringHandler) sizerSumPodRequests(ctx context.Context, clusterID s
 	}
 }
 
+func resourceRequestMilliBytes(list corev1.ResourceList) (cpuMilli, memBytes int64) {
+	if len(list) == 0 {
+		return 0, 0
+	}
+	return list.Cpu().MilliValue(), list.Memory().Value()
+}
+
+func initContainerIsSidecar(c corev1.Container) bool {
+	return c.RestartPolicy != nil && *c.RestartPolicy == corev1.ContainerRestartPolicyAlways
+}
+
+// podRequestTotals matches kubelet effective requests: max(non-sidecar init)
+// + sum(app containers) + sum(sidecar inits). Limits and missing requests are 0.
 func podRequestTotals(pod corev1.Pod) (cpuMilli, memBytes int64) {
-	add := func(list corev1.ResourceList) {
-		if len(list) == 0 {
-			return
-		}
-		cpuMilli += list.Cpu().MilliValue()
-		memBytes += list.Memory().Value()
-	}
-	for _, c := range pod.Spec.Containers {
-		add(c.Resources.Requests)
-	}
+	var maxInitCPU, maxInitMem int64
 	for _, c := range pod.Spec.InitContainers {
-		add(c.Resources.Requests)
+		cpu, mem := resourceRequestMilliBytes(c.Resources.Requests)
+		if initContainerIsSidecar(c) {
+			cpuMilli += cpu
+			memBytes += mem
+			continue
+		}
+		if cpu > maxInitCPU {
+			maxInitCPU = cpu
+		}
+		if mem > maxInitMem {
+			maxInitMem = mem
+		}
+	}
+	cpuMilli += maxInitCPU
+	memBytes += maxInitMem
+	for _, c := range pod.Spec.Containers {
+		cpu, mem := resourceRequestMilliBytes(c.Resources.Requests)
+		cpuMilli += cpu
+		memBytes += mem
 	}
 	return cpuMilli, memBytes
 }

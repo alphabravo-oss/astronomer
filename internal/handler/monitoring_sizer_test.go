@@ -334,6 +334,17 @@ func TestEvaluateSizerFirstMatchWins(t *testing.T) {
 			t.Fatalf("got %+v, want wal_too_small", got.Verdicts.Loki)
 		}
 	})
+	t.Run("clusters_unreadable before singleBinary", func(t *testing.T) {
+		in := sizerOKStorage()
+		in.ReadySchedulableCount = 3
+		in.CPUAllocatableMillicores = 24000
+		in.MemoryAllocatableBytes = 96 << 30
+		in.ClustersUnreadable = true
+		got := evaluateSizer(in)
+		if got.Verdicts.Loki.Result != "fail" || got.Verdicts.Loki.Reasons[0] != "clusters_unreadable" {
+			t.Fatalf("got %+v, want clusters_unreadable", got.Verdicts.Loki)
+		}
+	})
 	t.Run("grafana tight_fit when leftover passes but usable does not", func(t *testing.T) {
 		in := sizerEvalInput{
 			ReadySchedulableCount:    1,
@@ -485,6 +496,9 @@ func TestGetMonitoringSizerNeverMutatesDisks(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
 	}
+	if len(k8s.calls) == 0 {
+		t.Fatal("expected GET nodes/pods/storageclasses")
+	}
 	for _, call := range k8s.calls {
 		if !strings.HasPrefix(call, http.MethodGet+" ") {
 			t.Errorf("GET /sizer/ must not mutate disks, saw %s", call)
@@ -510,6 +524,12 @@ func TestGetMonitoringSizerNeverMutatesDisks(t *testing.T) {
 	}
 	if wrap.Data.Verdicts.ThanosReceive.Reasons[0] != "receive_not_offered" {
 		t.Errorf("thanosReceive = %+v", wrap.Data.Verdicts.ThanosReceive)
+	}
+	body := rec.Body.String()
+	for _, secret := range []string{"access_key", "secret_key", "encryptedCredentials", "encrypted_credentials"} {
+		if strings.Contains(body, secret) {
+			t.Errorf("response leaked %s: %s", secret, body)
+		}
 	}
 }
 
@@ -581,6 +601,111 @@ func TestSizerPodListHonorsContinueAndCap(t *testing.T) {
 	}
 }
 
+func TestCountConnectedAdoptedClustersSkipsLocal(t *testing.T) {
+	now := time.Now()
+	hb := func(age time.Duration) pgtype.Timestamptz {
+		return pgtype.Timestamptz{Time: now.Add(-age), Valid: true}
+	}
+	clusters := []sqlc.Cluster{
+		{ID: uuid.New(), Name: "local", IsLocal: true, LastHeartbeat: hb(time.Minute)},
+		{ID: uuid.New(), Name: "m1", LastHeartbeat: hb(time.Minute)},
+		{ID: uuid.New(), Name: "m2", LastHeartbeat: hb(time.Minute)},
+		{ID: uuid.New(), Name: "m3", LastHeartbeat: hb(time.Minute)},
+		{ID: uuid.New(), Name: "m4", LastHeartbeat: hb(time.Minute)},
+		{ID: uuid.New(), Name: "m5", LastHeartbeat: hb(time.Minute)},
+		{ID: uuid.New(), Name: "stale", LastHeartbeat: hb(10 * time.Minute)},
+		{ID: uuid.New(), Name: "nohb"},
+	}
+	if got := countConnectedAdoptedClusters(clusters, now); got != 5 {
+		t.Fatalf("connectedClusters = %d, want 5 (local + stale + no heartbeat excluded)", got)
+	}
+}
+
+func TestSizerListClustersFailClosed(t *testing.T) {
+	storageID := uuid.New()
+	clusterID := uuid.MustParse(stackTestClusterID)
+	backend := sqlc.MonitoringBackend{
+		ID:         uuid.New(),
+		AuthConfig: json.RawMessage(`{"sharedThanos":{"status":"healthy","managementClusterId":"` + clusterID.String() + `","storageConfigId":"` + storageID.String() + `"}}`),
+	}
+	storage := sqlc.BackupStorageConfig{ID: storageID, Bucket: "metrics"}
+	k8s := &sizerK8sFake{
+		t:     t,
+		nodes: []corev1.Node{sizerTestNode("ready", "16", "64Gi", true, false)},
+		storage: storageClassWire{Metadata: struct {
+			Name        string            `json:"name"`
+			Annotations map[string]string `json:"annotations"`
+		}{Name: "local-path", Annotations: map[string]string{"storageclass.kubernetes.io/is-default-class": "true"}}},
+	}
+
+	t.Run("missing lister", func(t *testing.T) {
+		q := &sizerNoListQuerier{backend: backend, storage: storage}
+		h := NewMonitoringHandlerWithQueries(q, k8s)
+		if _, err := h.sizerListAllClusters(context.Background()); err == nil {
+			t.Fatal("want error when querier cannot list clusters")
+		}
+		snap := h.collectSizerSnapshot(context.Background(), "", storageID.String())
+		if !snap.input.ClustersUnreadable {
+			t.Fatal("want ClustersUnreadable when ListClusters is missing")
+		}
+		got := evaluateSizer(snap.input)
+		if got.Verdicts.Loki.Result == "pass" {
+			t.Fatalf("Loki must not pass when fleet is unreadable: %+v", got.Verdicts.Loki)
+		}
+		if got.Verdicts.Loki.Reasons[0] != "clusters_unreadable" {
+			t.Fatalf("reasons = %v, want clusters_unreadable", got.Verdicts.Loki.Reasons)
+		}
+	})
+	t.Run("list error", func(t *testing.T) {
+		q := &sizerErrListQuerier{
+			sizerTestQuerier: sizerTestQuerier{backend: backend, storage: storage},
+			err:              fmt.Errorf("db down"),
+		}
+		h := NewMonitoringHandlerWithQueries(q, k8s)
+		if _, err := h.sizerListAllClusters(context.Background()); err == nil {
+			t.Fatal("want list error")
+		}
+		snap := h.collectSizerSnapshot(context.Background(), "", storageID.String())
+		if !snap.input.ClustersUnreadable {
+			t.Fatal("want ClustersUnreadable on ListClusters error")
+		}
+		got := evaluateSizer(snap.input)
+		if got.Verdicts.Loki.Reasons[0] != "clusters_unreadable" {
+			t.Fatalf("reasons = %v, want clusters_unreadable", got.Verdicts.Loki.Reasons)
+		}
+	})
+}
+
+func TestPodRequestTotalsKubeletFormula(t *testing.T) {
+	always := corev1.ContainerRestartPolicyAlways
+	pod := corev1.Pod{Spec: corev1.PodSpec{
+		InitContainers: []corev1.Container{
+			{Name: "init-small", Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("64Mi"),
+			}}},
+			{Name: "init-big", Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("200m"), corev1.ResourceMemory: resource.MustParse("128Mi"),
+			}}},
+			{Name: "sidecar", RestartPolicy: &always, Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("50m"), corev1.ResourceMemory: resource.MustParse("32Mi"),
+			}}},
+		},
+		Containers: []corev1.Container{
+			{Name: "app", Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("80m"), corev1.ResourceMemory: resource.MustParse("40Mi"),
+			}}},
+		},
+	}}
+	cpu, mem := podRequestTotals(pod)
+	// max(100,200) + 80 + 50 = 330m; max(64,128)+40+32 = 200Mi
+	if cpu != 330 {
+		t.Fatalf("cpu = %d, want 330 (max init + app + sidecar, not sum of inits)", cpu)
+	}
+	if mem != 200<<20 {
+		t.Fatalf("mem = %d, want 200Mi", mem)
+	}
+}
+
 func TestSizerStorageClassRWOFromAccessModes(t *testing.T) {
 	got := storageClassFromWire(storageClassWire{
 		Metadata: struct {
@@ -624,6 +749,34 @@ func (q *sizerTestQuerier) GetBackupStorageConfigByID(context.Context, uuid.UUID
 
 func (q *sizerTestQuerier) GetClusterMonitoringContext(context.Context, uuid.UUID) (sqlc.GetClusterMonitoringContextRow, error) {
 	return sqlc.GetClusterMonitoringContextRow{}, fmt.Errorf("no context")
+}
+
+// sizerNoListQuerier satisfies MonitoringQuerier but not sizerClusterLister.
+type sizerNoListQuerier struct {
+	MonitoringQuerier
+	backend sqlc.MonitoringBackend
+	storage sqlc.BackupStorageConfig
+}
+
+func (q *sizerNoListQuerier) GetDefaultMonitoringBackend(context.Context) (sqlc.MonitoringBackend, error) {
+	return q.backend, nil
+}
+
+func (q *sizerNoListQuerier) GetBackupStorageConfigByID(context.Context, uuid.UUID) (sqlc.BackupStorageConfig, error) {
+	return q.storage, nil
+}
+
+func (q *sizerNoListQuerier) GetClusterMonitoringContext(context.Context, uuid.UUID) (sqlc.GetClusterMonitoringContextRow, error) {
+	return sqlc.GetClusterMonitoringContextRow{}, fmt.Errorf("no context")
+}
+
+type sizerErrListQuerier struct {
+	sizerTestQuerier
+	err error
+}
+
+func (q *sizerErrListQuerier) ListClusters(context.Context, sqlc.ListClustersParams) ([]sqlc.Cluster, error) {
+	return nil, q.err
 }
 
 type sizerK8sFake struct {
