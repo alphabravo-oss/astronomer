@@ -82,8 +82,8 @@ const runbookLinks = [
   },
   {
     name: 'Backup recovery',
-    href: '/dashboard/backups',
-    description: 'Snapshots, restores, restore drills',
+    href: '/dashboard/settings/backup',
+    description: 'Astronomer dump, restore drill, encryption-key wrapping',
   },
   {
     name: 'Operations queues',

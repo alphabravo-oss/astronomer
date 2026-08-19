@@ -18,6 +18,11 @@ describe("Charlie safe UI boundary", () => {
     expect(contextForRoute("/dashboard/backups/run-1")[0]).toMatchObject({
       type: "backup",
       id: "run-1",
+      label: "Astronomer backup",
+    });
+    expect(contextForRoute("/dashboard/settings/backup")[0]).toMatchObject({
+      type: "backup",
+      id: "management",
     });
     expect(contextForRoute("/dashboard/delivery/targets/target-1")[0].type).toBe(
       "self_management_application",

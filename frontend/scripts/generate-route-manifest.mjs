@@ -27,7 +27,7 @@ const outputPath = path.join(frontendRoot, 'tests/e2e-smoke/route-manifest.gener
 // The current route inventory has one `[[...slug]]` optional catch-all
 // (custom-resources). Its TanStack port is an `index.tsx` + `$.tsx` pair, so
 // the manifest deliberately crawls both the empty and populated variants.
-const EXPECTED_ROUTE_COUNT = 117;
+const EXPECTED_ROUTE_COUNT = 118;
 
 // One fixture per `$param` name, shared across every route that uses it.
 // The route-smoke stubs answer any /api/v1 GET, so the values only need to

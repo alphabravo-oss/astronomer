@@ -22,7 +22,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 import { useMemo, useState } from 'react';
 import { useAppForm, useStore } from '@/lib/form';
-import { Link } from '@/lib/link';
 import { useParams } from '@/lib/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
@@ -155,7 +154,7 @@ function ClusterVeleroSnapshotsPage() {
   const { canWrite, reason } = useClustersUpdate(clusterId);
 
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
-  const { data: veleroStatus } = useQuery({
+  const { data: veleroStatus, isLoading: veleroLoading } = useQuery({
     queryKey: queryKeys.clusterPages.veleroStatus(clusterId),
     queryFn: () => getVeleroStatus(clusterId),
     enabled: !!clusterId,
@@ -164,6 +163,10 @@ function ClusterVeleroSnapshotsPage() {
   });
 
   const veleroReady = !!veleroStatus?.installed;
+  const defaultStorageLocation =
+    veleroStatus?.storageLocations?.find((s) => s.default && s.phase === 'Available')?.name ??
+    veleroStatus?.storageLocations?.find((s) => s.phase === 'Available')?.name ??
+    veleroStatus?.storageLocations?.[0]?.name;
 
   const { data: snapshots, isLoading: snapsLoading } = useQuery({
     queryKey: queryKeys.clusterPages.snapshots(clusterId),
@@ -216,7 +219,7 @@ function ClusterVeleroSnapshotsPage() {
   });
 
   // ─── Loading / not-found ────────────────────────────────────────────────
-  if (clusterLoading) {
+  if (clusterLoading || veleroLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -232,9 +235,31 @@ function ClusterVeleroSnapshotsPage() {
     );
   }
 
+  if (!veleroReady) {
+    return (
+      <PageShell>
+        <PageHeader
+          title="Snapshots"
+          description={`Velero-backed workload snapshots for ${cluster.displayName}.`}
+        />
+        <EmptyState
+          icon={ShieldAlert}
+          title="Velero is not installed"
+          description={
+            veleroStatus?.reason
+              ? `Workload snapshots show up here after Velero is installed on this cluster. ${veleroStatus.reason}`
+              : 'Workload snapshots show up here after Velero is installed on this cluster. Install it from Cluster Tools, then return to take and schedule snapshots.'
+          }
+          actionLabel="Install Velero"
+          actionHref={`/dashboard/clusters/${clusterId}/apps?section=browse&install=velero`}
+          actionIcon={Plus}
+        />
+      </PageShell>
+    );
+  }
+
   // ─── Banners ────────────────────────────────────────────────────────────
-  const showInstallBanner = veleroStatus && !veleroStatus.installed;
-  const showBslBanner = veleroStatus?.installed && !veleroStatus.bslReady;
+  const showBslBanner = veleroReady && !veleroStatus?.storageReady;
 
   return (
     <PageShell>
@@ -243,26 +268,6 @@ function ClusterVeleroSnapshotsPage() {
         description={`Velero-backed snapshots and scheduled snapshots for ${cluster.displayName}.`}
       />
 
-      {/* Velero install banner */}
-      {showInstallBanner && (
-        <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 p-4 flex items-start gap-3">
-          <ShieldAlert className="h-5 w-5 text-status-warning flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">Velero is not installed</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Install Velero on this cluster to enable on-demand and scheduled snapshots.
-            </p>
-          </div>
-          <Link
-            href={`/dashboard/clusters/${clusterId}/apps?section=browse&install=velero`}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
-              bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex-shrink-0"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Install Velero
-          </Link>
-        </div>
-      )}
 
       {/* BSL banner */}
       {showBslBanner && (
@@ -271,7 +276,7 @@ function ClusterVeleroSnapshotsPage() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground">Backup storage location not ready</p>
             <p className="text-xs text-muted-foreground mt-1">
-              {veleroStatus?.message ||
+              {veleroStatus?.reason ||
                 'Velero is installed but the backup storage location is not yet Available. Snapshots will fail until it reconciles.'}
             </p>
           </div>
@@ -340,7 +345,7 @@ function ClusterVeleroSnapshotsPage() {
         <NewSnapshotDialog
           clusterId={clusterId}
           onClose={() => setNewSnapshotOpen(false)}
-          defaultStorageLocation={veleroStatus?.storageLocation}
+          defaultStorageLocation={defaultStorageLocation}
         />
       )}
 

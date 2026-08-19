@@ -1574,7 +1574,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// Admin backup-restore drill viewer — reads rows that the
 		// management-plane-restore-drill CronJob writes to
 		// backup_drill_results. Superuser-gated inside the handler.
-		AdminDrill: handler.NewAdminDrillHandler(queries),
+		AdminDrill: func() *handler.AdminDrillHandler {
+			h := handler.NewAdminDrillHandler(queries)
+			if localK8s != nil && localNamespace != "" {
+				h.SetKubernetes(localK8s, localNamespace, os.Getenv("RELEASE_NAME"))
+			}
+			return h
+		}(),
 		// Management-plane log tail (T03 FEATURES-051226). Only wired
 		// when the in-cluster k8s client is available — laptop dev /
 		// test fakes get a nil-safe omission instead of a panicking

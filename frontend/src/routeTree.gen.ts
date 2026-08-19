@@ -51,6 +51,7 @@ import { Route as DashboardDeliveryTargetsIndexRouteImport } from './routes/dash
 import { Route as DashboardProjectsIdIndexRouteImport } from './routes/dashboard/projects/$id/index'
 import { Route as DashboardSettingsAuthIndexRouteImport } from './routes/dashboard/settings/auth/index'
 import { Route as DashboardSettingsBackupDrillIndexRouteImport } from './routes/dashboard/settings/backup-drill/index'
+import { Route as DashboardSettingsBackupIndexRouteImport } from './routes/dashboard/settings/backup/index'
 import { Route as DashboardSettingsCharlieIndexRouteImport } from './routes/dashboard/settings/charlie/index'
 import { Route as DashboardSettingsClusterGroupsIndexRouteImport } from './routes/dashboard/settings/cluster-groups/index'
 import { Route as DashboardSettingsComplianceIndexRouteImport } from './routes/dashboard/settings/compliance/index'
@@ -360,6 +361,12 @@ const DashboardSettingsBackupDrillIndexRoute =
   DashboardSettingsBackupDrillIndexRouteImport.update({
     id: '/settings/backup-drill/',
     path: '/settings/backup-drill/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardSettingsBackupIndexRoute =
+  DashboardSettingsBackupIndexRouteImport.update({
+    id: '/settings/backup/',
+    path: '/settings/backup/',
     getParentRoute: () => DashboardRouteRoute,
   } as any)
 const DashboardSettingsCharlieIndexRoute =
@@ -874,6 +881,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/projects/$id/': typeof DashboardProjectsIdIndexRoute
   '/dashboard/settings/auth/': typeof DashboardSettingsAuthIndexRoute
   '/dashboard/settings/backup-drill/': typeof DashboardSettingsBackupDrillIndexRoute
+  '/dashboard/settings/backup/': typeof DashboardSettingsBackupIndexRoute
   '/dashboard/settings/charlie/': typeof DashboardSettingsCharlieIndexRoute
   '/dashboard/settings/cluster-groups/': typeof DashboardSettingsClusterGroupsIndexRoute
   '/dashboard/settings/compliance/': typeof DashboardSettingsComplianceIndexRoute
@@ -993,6 +1001,7 @@ export interface FileRoutesByTo {
   '/dashboard/projects/$id': typeof DashboardProjectsIdIndexRoute
   '/dashboard/settings/auth': typeof DashboardSettingsAuthIndexRoute
   '/dashboard/settings/backup-drill': typeof DashboardSettingsBackupDrillIndexRoute
+  '/dashboard/settings/backup': typeof DashboardSettingsBackupIndexRoute
   '/dashboard/settings/charlie': typeof DashboardSettingsCharlieIndexRoute
   '/dashboard/settings/cluster-groups': typeof DashboardSettingsClusterGroupsIndexRoute
   '/dashboard/settings/compliance': typeof DashboardSettingsComplianceIndexRoute
@@ -1116,6 +1125,7 @@ export interface FileRoutesById {
   '/dashboard/projects/$id/': typeof DashboardProjectsIdIndexRoute
   '/dashboard/settings/auth/': typeof DashboardSettingsAuthIndexRoute
   '/dashboard/settings/backup-drill/': typeof DashboardSettingsBackupDrillIndexRoute
+  '/dashboard/settings/backup/': typeof DashboardSettingsBackupIndexRoute
   '/dashboard/settings/charlie/': typeof DashboardSettingsCharlieIndexRoute
   '/dashboard/settings/cluster-groups/': typeof DashboardSettingsClusterGroupsIndexRoute
   '/dashboard/settings/compliance/': typeof DashboardSettingsComplianceIndexRoute
@@ -1240,6 +1250,7 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$id/'
     | '/dashboard/settings/auth/'
     | '/dashboard/settings/backup-drill/'
+    | '/dashboard/settings/backup/'
     | '/dashboard/settings/charlie/'
     | '/dashboard/settings/cluster-groups/'
     | '/dashboard/settings/compliance/'
@@ -1359,6 +1370,7 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$id'
     | '/dashboard/settings/auth'
     | '/dashboard/settings/backup-drill'
+    | '/dashboard/settings/backup'
     | '/dashboard/settings/charlie'
     | '/dashboard/settings/cluster-groups'
     | '/dashboard/settings/compliance'
@@ -1481,6 +1493,7 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$id/'
     | '/dashboard/settings/auth/'
     | '/dashboard/settings/backup-drill/'
+    | '/dashboard/settings/backup/'
     | '/dashboard/settings/charlie/'
     | '/dashboard/settings/cluster-groups/'
     | '/dashboard/settings/compliance/'
@@ -1864,6 +1877,13 @@ declare module '@tanstack/react-router' {
       path: '/settings/backup-drill'
       fullPath: '/dashboard/settings/backup-drill/'
       preLoaderRoute: typeof DashboardSettingsBackupDrillIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/settings/backup/': {
+      id: '/dashboard/settings/backup/'
+      path: '/settings/backup'
+      fullPath: '/dashboard/settings/backup/'
+      preLoaderRoute: typeof DashboardSettingsBackupIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/settings/charlie/': {
@@ -2563,6 +2583,7 @@ interface DashboardRouteRouteChildren {
   DashboardDeliveryTargetsIndexRoute: typeof DashboardDeliveryTargetsIndexRoute
   DashboardSettingsAuthIndexRoute: typeof DashboardSettingsAuthIndexRoute
   DashboardSettingsBackupDrillIndexRoute: typeof DashboardSettingsBackupDrillIndexRoute
+  DashboardSettingsBackupIndexRoute: typeof DashboardSettingsBackupIndexRoute
   DashboardSettingsCharlieIndexRoute: typeof DashboardSettingsCharlieIndexRoute
   DashboardSettingsClusterGroupsIndexRoute: typeof DashboardSettingsClusterGroupsIndexRoute
   DashboardSettingsComplianceIndexRoute: typeof DashboardSettingsComplianceIndexRoute
@@ -2651,6 +2672,7 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardSettingsAuthIndexRoute: DashboardSettingsAuthIndexRoute,
   DashboardSettingsBackupDrillIndexRoute:
     DashboardSettingsBackupDrillIndexRoute,
+  DashboardSettingsBackupIndexRoute: DashboardSettingsBackupIndexRoute,
   DashboardSettingsCharlieIndexRoute: DashboardSettingsCharlieIndexRoute,
   DashboardSettingsClusterGroupsIndexRoute:
     DashboardSettingsClusterGroupsIndexRoute,

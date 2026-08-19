@@ -306,23 +306,23 @@ function DashboardPage() {
               hint="across all clusters"
             />
             <HealthRow
-              href="/dashboard/settings/backup-drill"
+              href="/dashboard/settings/backup"
               icon={<ShieldCheck className="h-4 w-4" />}
-              label="Backup restore drill"
-              value={latestDrill?.status ?? '—'}
+              label="Astronomer backup"
+              value={latestDrill?.latest?.status ?? '—'}
               tone={
-                latestDrill?.status === 'success'
+                latestDrill?.latest?.status === 'success'
                   ? 'success'
-                  : latestDrill?.status === 'failure'
+                  : latestDrill?.latest?.status === 'failure'
                     ? 'error'
-                    : latestDrill?.status === 'partial'
+                    : latestDrill?.latest?.status === 'partial'
                       ? 'warning'
                       : 'default'
               }
               hint={
-                latestDrill?.completedAt
-                  ? `last run ${formatRelativeTime(latestDrill.completedAt)}`
-                  : 'never run'
+                latestDrill?.latest?.finishedAt
+                  ? `last drill ${formatRelativeTime(latestDrill.latest.finishedAt)}`
+                  : 'drill never run'
               }
             />
           </div>

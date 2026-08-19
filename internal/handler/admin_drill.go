@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -39,9 +40,13 @@ type AdminDrillQuerier interface {
 	CountBackupDrillResults(ctx context.Context) (int64, error)
 }
 
-// AdminDrillHandler wraps GET /api/v1/admin/backup-drill/*.
+// AdminDrillHandler wraps GET /api/v1/admin/backup-drill/* and
+// GET /api/v1/admin/management-backup/.
 type AdminDrillHandler struct {
-	queries AdminDrillQuerier
+	queries     AdminDrillQuerier
+	k8s         kubernetes.Interface
+	namespace   string
+	releaseName string
 }
 
 // NewAdminDrillHandler returns a usable handler. queries may be nil for
@@ -170,13 +175,17 @@ func toWireResult(row sqlc.BackupDrillResult) BackupDrillResult {
 // Mirrors the pattern in admin_queues.go so behaviour is identical
 // (401 unauth → 403 not-superuser → audit row on success).
 func (h *AdminDrillHandler) gate(w http.ResponseWriter, r *http.Request) bool {
+	return h.gateAction(w, r, "admin.backup_drill.viewed")
+}
+
+func (h *AdminDrillHandler) gateAction(w http.ResponseWriter, r *http.Request, action string) bool {
 	if _, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
 		StoreUnavailableMessage: "Admin store not configured",
-		ForbiddenMessage:        "Backup drill view requires superuser privileges",
+		ForbiddenMessage:        "Astronomer backup view requires superuser privileges",
 	}); !ok {
 		return false
 	}
-	recordAudit(r, h.queries, "admin.backup_drill.viewed", "platform", "", "backup_drill", map[string]any{
+	recordAudit(r, h.queries, action, "platform", "", "management_backup", map[string]any{
 		"path": r.URL.Path,
 	})
 	return true

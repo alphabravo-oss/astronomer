@@ -209,7 +209,6 @@ function DashboardLayout() {
 
 const featurePathPrefixes: Array<{ prefix: string; flag: FeatureFlagKey }> = [
   { prefix: '/dashboard/projects', flag: 'feature.projects' },
-  { prefix: '/dashboard/backups', flag: 'feature.backups' },
   { prefix: '/dashboard/catalog', flag: 'feature.catalog' },
   { prefix: '/dashboard/tools', flag: 'feature.catalog' },
   { prefix: '/dashboard/monitoring', flag: 'feature.monitoring' },

@@ -75,9 +75,15 @@ export const charlieContextRegistry: CharlieRouteContextAdapter[] = [
   },
   {
     id: "backups",
-    match: (p) => p[1] === "backups",
+    match: (p) =>
+      p[1] === "backups" || (p[1] === "settings" && p[2] === "backup"),
     contexts: (p) => [
-      item("backup", p[2] || "overview", "Backups", "Authorized backup scope"),
+      item(
+        "backup",
+        p[1] === "settings" ? "management" : p[2] || "overview",
+        "Astronomer backup",
+        "Management-plane dump status; workload snapshots stay on the cluster",
+      ),
     ],
   },
   {

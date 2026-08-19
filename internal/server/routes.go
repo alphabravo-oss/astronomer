@@ -777,6 +777,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		if deps.AdminDrill != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/backup-drill/", deps.AdminDrill.GetLatest)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/backup-drill/history/", deps.AdminDrill.ListHistory)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/management-backup/", deps.AdminDrill.GetStatus)
 		}
 
 		// Management-plane log tail (FEATURES-051226 T03) — the

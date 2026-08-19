@@ -445,15 +445,61 @@ export type BackupDrillStatus = 'success' | 'failure' | 'partial' | 'running';
 
 export interface BackupDrillResult {
   id: string;
-  status: BackupDrillStatus;
-  schemaVersion: string;
   startedAt: string;
-  completedAt?: string;
-  durationSeconds?: number;
-  ageSeconds: number;
-  backupId?: string;
-  restoredObjects?: number;
+  finishedAt?: string;
+  status: BackupDrillStatus;
+  backupKey: string;
+  schemaVersion?: number;
   errorMessage?: string;
+  createdAt: string;
+}
+
+export interface BackupDrillLatest {
+  latest: BackupDrillResult | null;
+  latestSuccess: BackupDrillResult | null;
+  latestSuccessAgeSeconds: number | null;
+}
+
+export interface ManagementCronJobStatus {
+  name: string;
+  schedule: string;
+  suspended: boolean;
+  lastScheduleTime?: string;
+  lastSuccessfulTime?: string;
+}
+
+export interface ManagementBackupDestination {
+  bucket: string;
+  prefix: string;
+  region: string;
+  endpoint?: string;
+}
+
+export interface ManagementBackupRetention {
+  daily?: string;
+  weekly?: string;
+  monthly?: string;
+}
+
+export interface ManagementBackupJob {
+  name: string;
+  startTime?: string;
+  completionTime?: string;
+  succeeded: number;
+  failed: number;
+  active: number;
+  durationSeconds?: number;
+}
+
+export interface ManagementBackupStatus {
+  enabled: boolean;
+  reason?: string;
+  cronjob?: ManagementCronJobStatus;
+  destination?: ManagementBackupDestination;
+  retention?: ManagementBackupRetention;
+  encryptionKeyBackup: { wrappingConfigured: boolean };
+  lastJob?: ManagementBackupJob;
+  drill?: ManagementCronJobStatus;
 }
 
 // ============================================================
@@ -719,14 +765,20 @@ export async function downloadComplianceExportBlob(downloadUrl: string): Promise
 // Backup Drill — API funcs
 // ============================================================
 
-export async function getLatestBackupDrill(): Promise<BackupDrillResult | null> {
+export async function getLatestBackupDrill(): Promise<BackupDrillLatest> {
   try {
-    const res = await api.get<APIResponse<BackupDrillResult>>('/admin/backup-drill');
-    return res.data.data ?? (res.data as unknown as BackupDrillResult);
+    const res = await api.get<APIResponse<BackupDrillLatest>>('/admin/backup-drill');
+    const payload = unwrapData(res.data);
+    return {
+      latest: payload.latest ?? null,
+      latestSuccess: payload.latestSuccess ?? null,
+      latestSuccessAgeSeconds: payload.latestSuccessAgeSeconds ?? null,
+    };
   } catch (err) {
-    // 404 = no drill has run yet; surface as null instead of throwing.
     const status = (err as { response?: { status?: number } })?.response?.status;
-    if (status === 404) return null;
+    if (status === 404) {
+      return { latest: null, latestSuccess: null, latestSuccessAgeSeconds: null };
+    }
     throw err;
   }
 }
@@ -740,6 +792,11 @@ export async function listBackupDrillHistory(params?: {
     { params },
   );
   return res.data;
+}
+
+export async function getManagementBackupStatus(): Promise<ManagementBackupStatus> {
+  const res = await api.get<APIResponse<ManagementBackupStatus>>('/admin/management-backup');
+  return unwrapData(res.data);
 }
 
 // ============================================================

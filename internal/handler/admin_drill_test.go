@@ -235,6 +235,7 @@ func TestBackupDrillHandler_RequiresSuperuser(t *testing.T) {
 	}{
 		{"GetLatest", "/api/v1/admin/backup-drill/", h.GetLatest},
 		{"ListHistory", "/api/v1/admin/backup-drill/history/", h.ListHistory},
+		{"GetStatus", "/api/v1/admin/management-backup/", h.GetStatus},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

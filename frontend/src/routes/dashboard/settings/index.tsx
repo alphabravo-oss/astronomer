@@ -111,9 +111,9 @@ const CARDS: SettingsCard[] = [
     icon: FileArchive,
   },
   {
-    href: '/dashboard/settings/backup-drill',
-    title: 'Backup drill',
-    description: 'Latest restore drill result + history.',
+    href: '/dashboard/settings/backup',
+    title: 'Astronomer backup',
+    description: 'Nightly management-plane dump, destination, encryption-key wrapping, restore drill.',
     icon: ShieldCheck,
   },
   {

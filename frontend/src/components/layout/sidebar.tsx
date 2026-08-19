@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { usePathname, useRouter } from '@/lib/navigation';
 import { Link } from '@/lib/link';
 import {
@@ -22,7 +23,6 @@ import {
   ScrollText,
   FolderKanban,
   Package,
-  Archive,
   ArrowLeft,
   Box,
   Database,
@@ -62,6 +62,7 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { can, isSuperuser, type PermissionVerb } from '@/lib/permissions';
 import type { FeatureFlags, FeatureFlagKey } from '@/lib/api';
 import {
+  queryKeys,
   useCluster,
   useClusters,
   useClusterNodes,
@@ -81,6 +82,7 @@ import {
   useCharlieActivated,
   useFeatureFlags,
 } from '@/lib/hooks';
+import { getVeleroStatus } from '@/lib/api/cluster-detail';
 
 // APP_VERSION is baked at build time via the vite `define` (VERSION env →
 // __APP_VERSION__), which the release workflow stamps from the git tag; see
@@ -166,7 +168,6 @@ const globalNavGroups: NavGroup[] = [
       { label: 'RBAC', href: '/dashboard/rbac', icon: Shield, permission: { resource: 'rbac', verb: 'read' } },
       { label: 'Audit Log', href: '/dashboard/audit', icon: FileText, permission: { resource: 'audit_logs', verb: 'read' } },
       { label: 'Catalog', href: '/dashboard/catalog', icon: Package, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
-      { label: 'Backups', href: '/dashboard/backups', icon: Archive, permission: { resource: 'backups', verb: 'read' }, featureFlag: 'feature.backups' },
       { label: 'Auth', href: '/dashboard/settings/auth', icon: KeyRound, superuserOnly: true },
       // Mark Settings as exact so /dashboard/settings/auth doesn't double-highlight
       // both rows (the active-route matcher otherwise prefix-matches both).
@@ -178,7 +179,10 @@ const globalNavGroups: NavGroup[] = [
 ];
 
 // Cluster-context navigation - Rancher-style resource browser
-function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}): NavGroup[] {
+function getClusterNavGroups(
+  clusterId: string,
+  opts: { isLocal?: boolean; veleroInstalled?: boolean } = {},
+): NavGroup[] {
   const base = `/dashboard/clusters/${clusterId}`;
   // Tabs that need a real outbound tunnel to a remote cluster agent.
   // Hidden for the management plane's own cluster (is_local=true) where
@@ -193,12 +197,15 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
         // page itself renders a "not available" state for managed control
         // planes and degrades gracefully when the feature is off server-side.
         { label: 'Control-plane DR', href: `${base}/control-plane-snapshots`, icon: Database, permission: { resource: 'backups', verb: 'read' as const } },
-        // Registries (image-pull secrets), Velero workload Snapshots, and the
-        // apiserver Network & Access allow-list all drive the member cluster
-        // through the outbound tunnel — same agent-required gating as the
-        // items above (hidden for the management plane's local agent).
+        // Registries (image-pull secrets) and the apiserver Network & Access
+        // allow-list drive the member cluster through the outbound tunnel.
         { label: 'Registries', href: `${base}/registries`, icon: Boxes, permission: { resource: 'clusters', verb: 'read' as const } },
-        { label: 'Snapshots', href: `${base}/snapshots`, icon: Camera, permission: { resource: 'backups', verb: 'read' as const } },
+        // Velero workload snapshots: only listed when Velero is actually
+        // installed on this cluster. The snapshots route still renders an
+        // empty-state install CTA if someone hits the URL directly.
+        ...(opts.veleroInstalled
+          ? [{ label: 'Snapshots', href: `${base}/snapshots`, icon: Camera, permission: { resource: 'backups', verb: 'read' as const } }]
+          : []),
         { label: 'Network & Access', href: `${base}/network-access`, icon: Route, permission: { resource: 'security', verb: 'read' as const } },
       ];
   return [
@@ -633,17 +640,26 @@ export function Sidebar() {
 
   // Fetch cluster name for header
   const { data: cluster } = useCluster(clusterId || '');
+  const { data: veleroStatus } = useQuery({
+    queryKey: queryKeys.clusterPages.veleroStatus(clusterId || ''),
+    queryFn: () => getVeleroStatus(clusterId!),
+    enabled: isClusterContext && !!clusterId && !cluster?.isLocal,
+    staleTime: 30_000,
+  });
 
   const navGroups = useMemo(
     () => filterNavGroups(
       isClusterContext
-        ? getClusterNavGroups(clusterId!, { isLocal: cluster?.isLocal })
+        ? getClusterNavGroups(clusterId!, {
+            isLocal: cluster?.isLocal,
+            veleroInstalled: !!veleroStatus?.installed,
+          })
         : globalNavGroups,
       user,
       featureFlags,
       charlieActivated,
     ),
-    [charlieActivated, cluster?.isLocal, clusterId, featureFlags, isClusterContext, user],
+    [charlieActivated, cluster?.isLocal, clusterId, featureFlags, isClusterContext, user, veleroStatus?.installed],
   );
 
   // Multiple groups may stay open at once (the cluster nav has 7 groups; a

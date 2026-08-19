@@ -476,8 +476,23 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === "/admin/backup-drill") {
       return route.fulfill({
-        status: 404,
-        json: { code: "not_found", message: "No drill has run" },
+        json: apiResponse({
+          latest: null,
+          latest_success: null,
+          latest_success_age_seconds: null,
+        }),
+      });
+    }
+    if (path === "/admin/backup-drill/history") {
+      return route.fulfill({ json: paginated([]) });
+    }
+    if (path === "/admin/management-backup") {
+      return route.fulfill({
+        json: apiResponse({
+          enabled: false,
+          reason: "not wired in e2e",
+          encryption_key_backup: { wrapping_configured: false },
+        }),
       });
     }
     return route.fulfill({ json: apiResponse([]) });
@@ -616,7 +631,8 @@ test("Charlie launcher exposes only bounded route context across product surface
     ["/dashboard/clusters/cluster-1/tools", "Cluster agent connection"],
     ["/dashboard/alerting", "Alerts"],
     ["/dashboard/agents", "Cluster agents"],
-    ["/dashboard/backups", "Backups"],
+    ["/dashboard/backups", "Astronomer backup"],
+    ["/dashboard/settings/backup", "Astronomer backup"],
     ["/dashboard/delivery", "Continuous delivery"],
   ] as const;
 

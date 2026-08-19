@@ -69,6 +69,7 @@ export const settingsKeys = {
   backupDrill: ['settings', 'backup-drill'] as const,
   backupDrillHistory: (params?: Record<string, unknown>) =>
     ['settings', 'backup-drill', 'history', params] as const,
+  managementBackup: ['settings', 'management-backup'] as const,
   gitopsSources: ['settings', 'gitops-sources'] as const,
   gitopsSource: (id: string) => ['settings', 'gitops-sources', id] as const,
   gitopsClusters: (id: string) =>
@@ -376,6 +377,13 @@ export function useBackupDrillHistory(params?: { page?: number; page_size?: numb
   return useQuery({
     queryKey: settingsKeys.backupDrillHistory(params),
     queryFn: () => api.listBackupDrillHistory(params),
+  });
+}
+
+export function useManagementBackupStatus() {
+  return useQuery({
+    queryKey: settingsKeys.managementBackup,
+    queryFn: () => api.getManagementBackupStatus(),
   });
 }
 

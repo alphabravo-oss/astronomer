@@ -44,9 +44,9 @@ test.describe('permission-gated UI', () => {
     });
   });
 
-  test('backups page hides Add Storage for readers without backups write', async ({ page }) => {
+  test('global backups URL redirects away from Velero console', async ({ page }) => {
     await page.goto('/dashboard/backups');
-    // Reader without backups:update should not see primary create.
+    await expect(page).toHaveURL(/\/dashboard\/settings\/backup/);
     await expect(page.getByRole('button', { name: /Add Storage/i })).toHaveCount(0);
   });
 });

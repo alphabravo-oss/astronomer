@@ -6506,6 +6506,24 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+  /api/v1/admin/management-backup/:
+    get:
+      tags:
+        - Settings
+      summary: Astronomer management-plane backup status
+      description: >-
+        Superuser-only status of the nightly pg_dump CronJob (schedule,
+        destination bucket/prefix/region, last Job, whether the encryption
+        key is wrapped into object storage). Credentials and wrapping
+        passphrases are never returned.
+      responses:
+        '200':
+          description: Management-plane backup status
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
   /api/v1/extensions/:
     get:
       tags:

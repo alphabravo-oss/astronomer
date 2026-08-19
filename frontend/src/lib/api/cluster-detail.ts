@@ -64,13 +64,20 @@ export interface SnapshotSchedule {
   updatedAt: string;
 }
 
+export interface VeleroBSLSummary {
+  name: string;
+  provider: string;
+  default: boolean;
+  phase: string;
+  bucket: string;
+}
+
 export interface VeleroStatus {
   installed: boolean;
-  bslReady: boolean;
-  vslReady?: boolean;
-  version?: string;
-  storageLocation?: string;
-  message?: string;
+  namespace?: string;
+  storageReady: boolean;
+  storageLocations?: VeleroBSLSummary[];
+  reason?: string;
 }
 
 export async function getVeleroStatus(clusterId: string): Promise<VeleroStatus> {
