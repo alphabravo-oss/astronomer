@@ -19,6 +19,12 @@ import {
   upgradeSharedAlertmanager,
   replaceSharedAlertmanager,
   uninstallSharedAlertmanager,
+  getSharedGrafanaStatus,
+  previewSharedGrafana,
+  installSharedGrafana,
+  upgradeSharedGrafana,
+  replaceSharedGrafana,
+  uninstallSharedGrafana,
   listMonitoringOperations,
   getMonitoringOperation,
   retryMonitoringOperation,
@@ -155,6 +161,31 @@ describe('shared Thanos endpoints', () => {
   });
 });
 
+describe('shared Grafana endpoints', () => {
+  it('covers status, preview and the three write verbs under /settings/monitoring/grafana/', async () => {
+    const body = { managementClusterId: 'mgmt-1', replicas: 1 };
+    await getSharedGrafanaStatus();
+    expect(mockedApi.get).toHaveBeenCalledWith('/settings/monitoring/grafana/status/');
+
+    await previewSharedGrafana(body);
+    expect(mockedApi.post).toHaveBeenCalledWith('/settings/monitoring/grafana/preview/', body);
+
+    await installSharedGrafana(body);
+    expect(mockedApi.post).toHaveBeenCalledWith('/settings/monitoring/grafana/install/', body);
+
+    await upgradeSharedGrafana(body);
+    expect(mockedApi.put).toHaveBeenCalledWith('/settings/monitoring/grafana/upgrade/', body);
+
+    await replaceSharedGrafana(body);
+    expect(mockedApi.post).toHaveBeenCalledWith('/settings/monitoring/grafana/replace/', body);
+
+    await uninstallSharedGrafana('mgmt-1');
+    expect(mockedApi.delete).toHaveBeenCalledWith('/settings/monitoring/grafana/uninstall/', {
+      params: { clusterId: 'mgmt-1' },
+    });
+  });
+});
+
 describe('shared Alertmanager endpoints', () => {
   it('covers status, preview and the three write verbs under /settings/monitoring/alertmanager/', async () => {
     const body = { managementClusterId: 'mgmt-1', replicas: 2 };
@@ -244,6 +275,10 @@ describe('target dispatch', () => {
       targetType: 'shared_alertmanager',
       targetKey: 'shared',
     });
+    expect(operationTargetOf({ kind: 'grafana' })).toEqual({
+      targetType: 'shared_grafana',
+      targetKey: 'shared',
+    });
   });
 
   it('routes every verb of every family to the right endpoint', async () => {
@@ -260,6 +295,13 @@ describe('target dispatch', () => {
       '/settings/monitoring/alertmanager/uninstall/',
       { params: { clusterId: 'mgmt-1' } },
     );
+
+    await runStackLifecycle({ kind: 'grafana' }, 'install', {
+      managementClusterId: 'mgmt-1',
+    });
+    expect(mockedApi.post).toHaveBeenCalledWith('/settings/monitoring/grafana/install/', {
+      managementClusterId: 'mgmt-1',
+    });
   });
 });
 

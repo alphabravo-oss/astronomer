@@ -1711,6 +1711,7 @@ export interface OpenAPIComponents {
           "feature.catalog"?: boolean;
           "feature.projects"?: boolean;
           "feature.monitoring"?: boolean;
+          "feature.fleet_grafana"?: boolean;
           "feature.security"?: boolean;
           "feature.backups"?: boolean;
           "feature.charlie"?: boolean;

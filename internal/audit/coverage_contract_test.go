@@ -148,6 +148,10 @@ func TestKeyMutatingHandlersEmitAudit(t *testing.T) {
 			"UpgradeSharedAlertmanager",
 			"ReplaceSharedAlertmanager",
 			"UninstallSharedAlertmanager",
+			"InstallSharedGrafanaStack",
+			"UpgradeSharedGrafanaStack",
+			"ReplaceSharedGrafanaStack",
+			"UninstallSharedGrafanaStack",
 		},
 		"../handler/monitoring_stack_cluster.go": {
 			"UpdateClusterConfig",

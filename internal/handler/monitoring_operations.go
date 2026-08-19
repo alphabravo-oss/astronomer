@@ -205,6 +205,40 @@ func (h *MonitoringHandler) enqueueSharedThanosOperation(ctx context.Context, us
 	return op, err
 }
 
+func (h *MonitoringHandler) enqueueSharedGrafanaOperation(ctx context.Context, userID pgtype.UUID, opType string, req SharedGrafanaRequest, values map[string]any) (sqlc.MonitoringOperation, error) {
+	rawReq, err := json.Marshal(req)
+	if err != nil {
+		return sqlc.MonitoringOperation{}, err
+	}
+	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
+	if err != nil {
+		return sqlc.MonitoringOperation{}, err
+	}
+	payload, err := json.Marshal(monitoringOperationEnvelope{
+		ClusterID:                req.ManagementClusterID,
+		Request:                  rawReq,
+		Values:                   values,
+		ResolvedAutoRollback:     h.resolveAutoRollbackPolicy(backend, req.AutoRollbackOnFailure),
+		ResolvedMaxRetryAttempts: h.resolveMaxRetryAttempts(backend),
+	})
+	if err != nil {
+		return sqlc.MonitoringOperation{}, err
+	}
+	params := sqlc.CreateMonitoringOperationParams{
+		TargetType:    "shared_grafana",
+		TargetKey:     "shared",
+		OperationType: opType,
+		Payload:       payload,
+		Status:        OpStatusPending,
+		CreatedByID:   userID,
+	}
+	op, err := h.createMonitoringOperation(ctx, params)
+	if err == nil {
+		h.TriggerReconcile()
+	}
+	return op, err
+}
+
 func (h *MonitoringHandler) enqueueSharedAlertmanagerOperation(ctx context.Context, userID pgtype.UUID, opType string, req SharedAlertmanagerRequest, values map[string]any) (sqlc.MonitoringOperation, error) {
 	rawReq, err := json.Marshal(req)
 	if err != nil {
@@ -440,7 +474,7 @@ func (h *MonitoringHandler) canReadMonitoringOperation(ctx context.Context, bind
 
 func (h *MonitoringHandler) canAccessMonitoringOperation(ctx context.Context, bindings []rbac.RoleBinding, op sqlc.MonitoringOperation, verb rbac.Verb) (bool, error) {
 	switch op.TargetType {
-	case "shared_thanos", "shared_alertmanager":
+	case "shared_thanos", "shared_alertmanager", "shared_grafana":
 		return h.authz.allowsGlobal(bindings, rbac.ResourceMonitoring, verb), nil
 	case "cluster_stack":
 		clusterID, err := uuid.Parse(op.TargetKey)
@@ -657,6 +691,59 @@ func (h *MonitoringHandler) executeMonitoringOperation(ctx context.Context, op s
 			return h.verifySharedAlertmanagerReadiness(ctx, op.ID, req)
 		case "uninstall":
 			h.recordMonitoringOperationEvent(ctx, op.ID, "info", "uninstall", "uninstalling shared Alertmanager release", map[string]any{"clusterId": req.ManagementClusterID, "releaseName": req.ReleaseName, "namespace": req.Namespace})
+			_, err := h.helm.Do(ctx, req.ManagementClusterID, protocol.MsgHelmUninstall, protocol.HelmRequestPayload{ReleaseName: req.ReleaseName, Namespace: req.Namespace, Timeout: 900})
+			if err != nil && !isReleaseMissing(err) {
+				return err
+			}
+			return nil
+		}
+	case "shared_grafana":
+		var req SharedGrafanaRequest
+		if err := json.Unmarshal(env.Request, &req); err != nil {
+			return err
+		}
+		switch op.OperationType {
+		case "install":
+			h.recordMonitoringOperationEvent(ctx, op.ID, "info", "render", "applying shared Grafana install", map[string]any{"clusterId": req.ManagementClusterID, "releaseName": req.ReleaseName, "namespace": req.Namespace})
+			_, err := h.applySharedGrafanaStack(ctx, protocol.MsgHelmInstall, req, env.Values)
+			if err != nil {
+				return err
+			}
+			if err := h.waitForReleaseReadiness(ctx, op.ID, req.ManagementClusterID, req.Namespace, req.ReleaseName, 1, 90*time.Second); err != nil {
+				return err
+			}
+			return h.verifySharedGrafanaReadiness(ctx, op.ID, req)
+		case "upgrade":
+			previousRevision := h.currentReleaseRevision(ctx, req.ManagementClusterID, req.ReleaseName, req.Namespace)
+			h.recordMonitoringOperationEvent(ctx, op.ID, "info", "render", "applying shared Grafana upgrade", map[string]any{"clusterId": req.ManagementClusterID, "releaseName": req.ReleaseName, "namespace": req.Namespace})
+			_, err := h.applySharedGrafanaStack(ctx, protocol.MsgHelmUpgrade, req, env.Values)
+			if err != nil {
+				return err
+			}
+			if err := h.waitForReleaseReadiness(ctx, op.ID, req.ManagementClusterID, req.Namespace, req.ReleaseName, 1, 90*time.Second); err != nil {
+				return h.rollbackIfConfigured(ctx, op.ID, err, env.ResolvedAutoRollback, req.ManagementClusterID, req.ReleaseName, req.Namespace, previousRevision)
+			}
+			if err := h.verifySharedGrafanaReadiness(ctx, op.ID, req); err != nil {
+				return h.rollbackIfConfigured(ctx, op.ID, err, env.ResolvedAutoRollback, req.ManagementClusterID, req.ReleaseName, req.Namespace, previousRevision)
+			}
+			return nil
+		case "replace":
+			h.recordMonitoringOperationEvent(ctx, op.ID, "info", "uninstall", "uninstalling existing shared Grafana release", map[string]any{"clusterId": req.ManagementClusterID, "releaseName": req.ReleaseName, "namespace": req.Namespace})
+			_, err := h.helm.Do(ctx, req.ManagementClusterID, protocol.MsgHelmUninstall, protocol.HelmRequestPayload{ReleaseName: req.ReleaseName, Namespace: req.Namespace, Timeout: 900})
+			if err != nil && !isReleaseMissing(err) {
+				return err
+			}
+			h.recordMonitoringOperationEvent(ctx, op.ID, "info", "install", "installing replacement shared Grafana release", map[string]any{"clusterId": req.ManagementClusterID, "releaseName": req.ReleaseName, "namespace": req.Namespace})
+			_, err = h.applySharedGrafanaStack(ctx, protocol.MsgHelmInstall, req, env.Values)
+			if err != nil {
+				return err
+			}
+			if err := h.waitForReleaseReadiness(ctx, op.ID, req.ManagementClusterID, req.Namespace, req.ReleaseName, 1, 90*time.Second); err != nil {
+				return err
+			}
+			return h.verifySharedGrafanaReadiness(ctx, op.ID, req)
+		case "uninstall":
+			h.recordMonitoringOperationEvent(ctx, op.ID, "info", "uninstall", "uninstalling shared Grafana release", map[string]any{"clusterId": req.ManagementClusterID, "releaseName": req.ReleaseName, "namespace": req.Namespace})
 			_, err := h.helm.Do(ctx, req.ManagementClusterID, protocol.MsgHelmUninstall, protocol.HelmRequestPayload{ReleaseName: req.ReleaseName, Namespace: req.Namespace, Timeout: 900})
 			if err != nil && !isReleaseMissing(err) {
 				return err
@@ -950,6 +1037,15 @@ func (h *MonitoringHandler) verifySharedAlertmanagerReadiness(ctx context.Contex
 		"namespace": req.Namespace,
 	})
 	return h.waitForServiceProxySuccess(ctx, req.ManagementClusterID, req.Namespace, serviceName, "9093", "/-/healthy", "", 90*time.Second)
+}
+
+func (h *MonitoringHandler) verifySharedGrafanaReadiness(ctx context.Context, operationID uuid.UUID, req SharedGrafanaRequest) error {
+	serviceName := defaultString(req.ReleaseName, sharedGrafanaDefaultRelease)
+	h.recordMonitoringOperationEvent(ctx, operationID, "info", "service", "checking shared Grafana health", map[string]any{
+		"service":   serviceName,
+		"namespace": req.Namespace,
+	})
+	return h.waitForServiceProxySuccess(ctx, req.ManagementClusterID, req.Namespace, serviceName, "80", "/api/health", "", 90*time.Second)
 }
 
 func (h *MonitoringHandler) verifyClusterMonitoringReadiness(ctx context.Context, operationID uuid.UUID, clusterID string, req MonitoringStackRequest) error {

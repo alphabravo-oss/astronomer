@@ -3114,6 +3114,22 @@
     ]
   },
   {
+    "id": "monitoring-shared-grafana-preview",
+    "route": "/api/v1/settings/monitoring/grafana/preview/",
+    "sample_path": "/api/v1/settings/monitoring/grafana/preview/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "shared Grafana stack helm values preview",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "read-side preview; no helm mutation and no secrets in the rendered values",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMonitoringSettingsReadRoutesRequireMonitoringRBAC"
+    ]
+  },
+  {
     "id": "charlie-onboarding-validate",
     "route": "/api/v1/admin/charlie/onboarding/validate/",
     "sample_path": "/api/v1/admin/charlie/onboarding/validate/",

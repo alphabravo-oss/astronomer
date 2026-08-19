@@ -36,6 +36,7 @@ vi.mock('@/lib/link', () => ({
 vi.mock('@/lib/hooks', () => ({
   useClusters: vi.fn(),
   useCluster: vi.fn(),
+  useFeatureFlags: () => ({ data: { 'feature.fleet_grafana': true } }),
 }));
 
 vi.mock('@/components/backups/hooks', () => ({
@@ -166,7 +167,7 @@ function Wrapper({ children }: { children: ReactNode }) {
 // ─────────────────────────────────────────────────────────────────────
 
 interface FamilyCase {
-  key: 'cluster' | 'thanos' | 'alertmanager';
+  key: 'cluster' | 'thanos' | 'alertmanager' | 'grafana';
   name: string;
   targetType: string;
   releaseName: string;
@@ -244,6 +245,24 @@ const FAMILIES: FamilyCase[] = [
       releaseName: 'astronomer-alertmanager',
       chartVersion: '1.18.0',
       managementClusterId: CLUSTER_ID,
+    } as MonitoringStackStatusBase,
+    renderPage: () => render(<SharedMonitoringStacksPage />, { wrapper: Wrapper }),
+    fullGrant: ['read', 'update'],
+  },
+  {
+    key: 'grafana',
+    name: 'shared Grafana',
+    targetType: 'shared_grafana',
+    releaseName: 'astronomer-grafana',
+    namespace: 'monitoring',
+    installedStatus: {
+      status: 'healthy',
+      namespace: 'monitoring',
+      releaseName: 'astronomer-grafana',
+      chartVersion: '8.12.1',
+      managementClusterId: CLUSTER_ID,
+      authMode: 'clusterip',
+      autoRollbackOnFailure: false,
     } as MonitoringStackStatusBase,
     renderPage: () => render(<SharedMonitoringStacksPage />, { wrapper: Wrapper }),
     fullGrant: ['read', 'update'],
@@ -489,8 +508,10 @@ describe('shared monitoring stacks page', () => {
     render(<SharedMonitoringStacksPage />, { wrapper: Wrapper });
 
     const thanos = await screen.findByTestId('stack-panel-thanos');
+    const grafana = await screen.findByTestId('stack-panel-grafana');
     const alertmanager = await screen.findByTestId('stack-panel-alertmanager');
     await waitFor(() => expect(within(thanos).getByText('Healthy')).toBeInTheDocument());
+    expect(within(grafana).getByText('Not installed')).toBeInTheDocument();
     expect(within(alertmanager).getByText('Not installed')).toBeInTheDocument();
     // Progressive disclosure: an absent stack offers a "Set up …" entry point,
     // an installed one offers "Edit configuration" — the actual Install/Upgrade

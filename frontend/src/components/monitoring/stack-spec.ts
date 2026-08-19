@@ -1,5 +1,5 @@
 /**
- * The three monitoring-stack families, described as data.
+ * The monitoring-stack families, described as data.
  *
  * The lifecycle SCREENS are one component (stack-lifecycle-panel.tsx) driven by
  * the specs below, for the same reason the backend collapsed its two shared
@@ -58,7 +58,7 @@ export interface StackField {
 
 export interface StackFamilySpec {
   /** Matches MonitoringStackTarget['kind']. */
-  key: 'cluster' | 'thanos' | 'alertmanager';
+  key: 'cluster' | 'thanos' | 'alertmanager' | 'grafana';
   title: string;
   description: string;
   /**
@@ -380,6 +380,83 @@ export const SHARED_ALERTMANAGER_FAMILY: StackFamilySpec = {
     storageClass: '',
     storageSize: '2Gi',
     // autoRollbackOnFailure absent — see SERVER_BLIND_FIELDS.
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// Shared Grafana (ClusterIP only — no Open button)
+// ─────────────────────────────────────────────────────────────────────
+
+export const SHARED_GRAFANA_FAMILY: StackFamilySpec = {
+  key: 'grafana',
+  title: 'Shared Grafana',
+  description:
+    'Fleet Grafana on the management cluster. ClusterIP only — datasources are shared Thanos (when installed) and an optional BYO Loki URL. There is no public URL or Open button in this release.',
+  destroys:
+    'the Grafana Helm release on the management cluster and its provisioned dashboard/datasource ConfigMaps. Per-cluster Grafana is not touched',
+  fields: [
+    {
+      name: 'managementClusterId',
+      label: 'Management cluster',
+      kind: 'cluster',
+      required: true,
+      help: 'Cluster the shared Grafana release runs on.',
+    },
+    {
+      name: 'namespace',
+      label: 'Namespace',
+      kind: 'text',
+      placeholder: 'monitoring',
+      replaceTrigger: true,
+    },
+    {
+      name: 'releaseName',
+      label: 'Release name',
+      kind: 'text',
+      placeholder: 'astronomer-grafana',
+      replaceTrigger: true,
+    },
+    { name: 'chartVersion', label: 'Chart version', kind: 'text', placeholder: '8.12.1' },
+    { name: 'replicas', label: 'Replicas', kind: 'number', placeholder: '1' },
+    {
+      name: 'storageClass',
+      label: 'Storage class',
+      kind: 'text',
+      placeholder: 'default',
+      replaceTrigger: true,
+      help: 'Used only when a PVC is requested below.',
+    },
+    {
+      name: 'storageSize',
+      label: 'Storage size',
+      kind: 'text',
+      placeholder: '1Gi',
+      replaceTrigger: true,
+      help: 'Optional 1Gi PVC for stars and prefs. Leave empty to stay stateless. Dashboards and datasources stay sidecar ConfigMaps.',
+    },
+    {
+      name: 'logDatasourceUrl',
+      label: 'BYO Loki URL',
+      kind: 'text',
+      placeholder: 'http://loki.example:3100',
+      help: 'Optional Grafana-owned Loki datasource. Astronomer Loki is a later family.',
+    },
+    {
+      name: 'autoRollbackOnFailure',
+      label: 'Roll back on failure',
+      kind: 'tristate',
+      unsetLabel: PLATFORM_DEFAULT,
+    },
+  ],
+  defaults: {
+    managementClusterId: '',
+    namespace: 'monitoring',
+    releaseName: 'astronomer-grafana',
+    chartVersion: '8.12.1',
+    replicas: '1',
+    storageClass: '',
+    storageSize: '',
+    logDatasourceUrl: '',
   },
 };
 

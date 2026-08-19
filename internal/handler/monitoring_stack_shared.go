@@ -21,8 +21,8 @@ import (
 
 // sharedStackLifecycle drives the six /settings/monitoring lifecycle endpoints
 // — Preview, Install, Upgrade, Replace, Uninstall, Status — for ONE shared
-// monitoring stack family. Two families are instantiated below: shared Thanos
-// and shared Alertmanager.
+// monitoring stack family. Three families are instantiated below: shared
+// Thanos, shared Alertmanager, and shared Grafana.
 //
 // It exists for the authorization preamble, not for the line count. The two
 // families were written by copying one another, and the copy dropped
@@ -103,6 +103,12 @@ type sharedStackLifecycle[Req any] struct {
 	// statusFields projects the persisted metadata into the family's status
 	// response. The driver adds the observed release, drift and pod count.
 	statusFields func(map[string]any, sqlc.MonitoringBackend) map[string]any
+	// precheck runs after authorize + payload, before persist.
+	// ok=true → continue. ok=false → write status/code/msg and return.
+	// Thanos/Alertmanager leave this nil (treated as ok). Preview does not
+	// call it. Grafana install/replace 412 on leftover-floor fail; upgrade
+	// skips the floor.
+	precheck func(ctx context.Context, req Req, op string) (status int, code, msg string, ok bool)
 }
 
 func (l sharedStackLifecycle[Req]) preview(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +144,9 @@ func (l sharedStackLifecycle[Req]) install(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
+	if !l.runPrecheck(w, r, req, "install") {
+		return
+	}
 	if err := l.persist(r.Context(), backend, req, "installing"); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, l.persistFailure())
 		return
@@ -159,6 +168,9 @@ func (l sharedStackLifecycle[Req]) upgrade(w http.ResponseWriter, r *http.Reques
 	req, values, secretSpec, backend, err := l.payload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		return
+	}
+	if !l.runPrecheck(w, r, req, "upgrade") {
 		return
 	}
 	if replaceRequired, reasons := l.replaceRequired(sharedStackMetadata(backend, l.metadataKey), req); replaceRequired {
@@ -191,6 +203,9 @@ func (l sharedStackLifecycle[Req]) replace(w http.ResponseWriter, r *http.Reques
 	req, values, secretSpec, backend, err := l.payload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		return
+	}
+	if !l.runPrecheck(w, r, req, "replace") {
 		return
 	}
 	metadata := sharedStackMetadata(backend, l.metadataKey)
@@ -309,6 +324,24 @@ func (l sharedStackLifecycle[Req]) status(w http.ResponseWriter, r *http.Request
 
 func (l sharedStackLifecycle[Req]) persistFailure() string {
 	return "Failed to persist shared " + l.noun + " metadata"
+}
+
+func (l sharedStackLifecycle[Req]) runPrecheck(w http.ResponseWriter, r *http.Request, req Req, op string) bool {
+	if l.precheck == nil {
+		return true
+	}
+	status, code, msg, ok := l.precheck(r.Context(), req, op)
+	if ok {
+		return true
+	}
+	if status == 0 {
+		status = http.StatusPreconditionFailed
+	}
+	if code == "" {
+		code = apierror.SizerFailed
+	}
+	RespondRequestError(w, r, status, code, msg)
+	return false
 }
 
 // recordLifecycleAudit emits the family's audit row. Action name and detail
@@ -433,7 +466,66 @@ func (h *MonitoringHandler) sharedAlertmanagerLifecycle() sharedStackLifecycle[S
 	}
 }
 
-// The twelve exported entry points. Each is a route target and nothing else —
+func (h *MonitoringHandler) sharedGrafanaLifecycle() sharedStackLifecycle[SharedGrafanaRequest] {
+	return sharedStackLifecycle[SharedGrafanaRequest]{
+		h:              h,
+		auditPrefix:    "monitoring.shared_grafana",
+		noun:           "Grafana",
+		metadataKey:    "sharedGrafana",
+		opTargetType:   "shared_grafana",
+		chartRepo:      sharedGrafanaChartRepo,
+		chartName:      sharedGrafanaChartName,
+		defaultRelease: sharedGrafanaDefaultRelease,
+		payload: func(ctx context.Context, r *http.Request) (SharedGrafanaRequest, map[string]any, *objectStoreSecretSpec, sqlc.MonitoringBackend, error) {
+			req, values, backend, err := h.sharedGrafanaPayload(ctx, r)
+			return req, values, nil, backend, err
+		},
+		replaceRequired: sharedGrafanaReplaceRequired,
+		persist:         h.updateSharedGrafanaMetadata,
+		enqueue: func(ctx context.Context, userID pgtype.UUID, opType string, req SharedGrafanaRequest, values map[string]any, _ *objectStoreSecretSpec) (sqlc.MonitoringOperation, error) {
+			return h.enqueueSharedGrafanaOperation(ctx, userID, opType, req, values)
+		},
+		target: func(req SharedGrafanaRequest) (string, string, string) {
+			return req.ManagementClusterID, req.Namespace, req.ReleaseName
+		},
+		retarget: func(req SharedGrafanaRequest, clusterID, namespace, releaseName string) SharedGrafanaRequest {
+			return SharedGrafanaRequest{
+				ManagementClusterID:   clusterID,
+				Namespace:             namespace,
+				ReleaseName:           releaseName,
+				ChartVersion:          req.ChartVersion,
+				Replicas:              req.Replicas,
+				StorageClass:          req.StorageClass,
+				StorageSize:           req.StorageSize,
+				IngressHost:           req.IngressHost,
+				LogDatasourceURL:      req.LogDatasourceURL,
+				AutoRollbackOnFailure: req.AutoRollbackOnFailure,
+			}
+		},
+		statusFields: func(metadata map[string]any, backend sqlc.MonitoringBackend) map[string]any {
+			return map[string]any{
+				"status":                sharedGrafanaProjectedStatus(metadata, backend),
+				"managementClusterId":   stringFromMap(metadata, "managementClusterId"),
+				"namespace":             stringFromMap(metadata, "namespace"),
+				"releaseName":           stringFromMap(metadata, "releaseName"),
+				"chartVersion":          stringFromMap(metadata, "chartVersion"),
+				"replicas":              metadata["replicas"],
+				"storageClass":          stringFromMap(metadata, "storageClass"),
+				"storageSize":           stringFromMap(metadata, "storageSize"),
+				"ingressHost":           stringFromMap(metadata, "ingressHost"),
+				"logDatasourceUrl":      stringFromMap(metadata, "logDatasourceUrl"),
+				"grafanaHost":           stringFromMap(metadata, "grafanaHost"),
+				"authMode":              defaultString(stringFromMap(metadata, "authMode"), sharedGrafanaAuthModeClusterIP),
+				"autoRollbackOnFailure": boolFromAny(metadata["autoRollbackOnFailure"]),
+				"desiredSpecHash":       stringFromMap(metadata, "lastAppliedSpecHash"),
+				"managedAssetHashes":    mapFromMapValue(metadata["managedAssetHashes"]),
+			}
+		},
+		precheck: h.sharedGrafanaPrecheck,
+	}
+}
+
+// The eighteen exported entry points. Each is a route target and nothing else —
 // there is no body here to leave a check out of.
 
 func (h *MonitoringHandler) PreviewSharedThanosStack(w http.ResponseWriter, r *http.Request) {
@@ -482,6 +574,30 @@ func (h *MonitoringHandler) UninstallSharedAlertmanager(w http.ResponseWriter, r
 
 func (h *MonitoringHandler) GetSharedAlertmanagerStatus(w http.ResponseWriter, r *http.Request) {
 	h.sharedAlertmanagerLifecycle().status(w, r)
+}
+
+func (h *MonitoringHandler) PreviewSharedGrafanaStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedGrafanaLifecycle().preview(w, r)
+}
+
+func (h *MonitoringHandler) InstallSharedGrafanaStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedGrafanaLifecycle().install(w, r)
+}
+
+func (h *MonitoringHandler) UpgradeSharedGrafanaStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedGrafanaLifecycle().upgrade(w, r)
+}
+
+func (h *MonitoringHandler) ReplaceSharedGrafanaStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedGrafanaLifecycle().replace(w, r)
+}
+
+func (h *MonitoringHandler) UninstallSharedGrafanaStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedGrafanaLifecycle().uninstall(w, r)
+}
+
+func (h *MonitoringHandler) GetSharedGrafanaStatus(w http.ResponseWriter, r *http.Request) {
+	h.sharedGrafanaLifecycle().status(w, r)
 }
 
 func (h *MonitoringHandler) sharedThanosPayload(ctx context.Context, r *http.Request) (SharedThanosStackRequest, map[string]any, objectStoreSecretSpec, sqlc.MonitoringBackend, error) {

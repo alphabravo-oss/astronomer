@@ -1,10 +1,11 @@
 'use client';
 
 /**
- * /dashboard/settings/monitoring — lifecycle for the two SHARED monitoring
- * stacks: Thanos (long-term metrics) and Alertmanager (alert routing). Both run
- * on one management cluster and serve every managed cluster, which is why they live
- * under settings rather than on a cluster.
+ * /dashboard/settings/monitoring — lifecycle for the SHARED monitoring
+ * stacks: Thanos (long-term metrics), Alertmanager (alert routing), and
+ * Grafana (ClusterIP lobby). They run on one management cluster and serve
+ * every managed cluster, which is why they live under settings rather than
+ * on a cluster.
  *
  * Not wrapped in SettingsAuthGate. That gate is superuser-only, and these
  * endpoints are not: the backend authorizes them with
@@ -23,7 +24,7 @@ import { ArrowLeft, BarChart3, Database } from 'lucide-react';
 import { PageHeader, PageShell } from '@/components/ui/page';
 import { PermissionState } from '@/components/ui/empty-state';
 import { usePermissionDecision } from '@/lib/permission-hooks';
-import { useClusters } from '@/lib/hooks';
+import { useClusters, useFeatureFlags } from '@/lib/hooks';
 import { useB2StorageLocations } from '@/components/backups/hooks';
 import {
   StackLifecyclePanel,
@@ -32,11 +33,13 @@ import {
 } from '@/components/monitoring/stack-lifecycle-panel';
 import {
   SHARED_ALERTMANAGER_FAMILY,
+  SHARED_GRAFANA_FAMILY,
   SHARED_THANOS_FAMILY,
 } from '@/components/monitoring/stack-spec';
 
 const THANOS_TARGET = { kind: 'thanos' } as const;
 const ALERTMANAGER_TARGET = { kind: 'alertmanager' } as const;
+const GRAFANA_TARGET = { kind: 'grafana' } as const;
 
 export function SharedMonitoringStacksPage() {
   const read = usePermissionDecision('monitoring', 'read');
@@ -49,6 +52,10 @@ export function SharedMonitoringStacksPage() {
     update,
     uninstall: update,
   };
+
+  const { data: featureFlags } = useFeatureFlags();
+  // Hide only when the flag is exactly false. Missing/loading defaults on.
+  const showGrafana = featureFlags?.['feature.fleet_grafana'] !== false;
 
   const clustersQuery = useClusters({ pageSize: 100 });
   // Backup storage configs double as the object-storage source for Thanos
@@ -85,7 +92,7 @@ export function SharedMonitoringStacksPage() {
           </Link>
         }
         title="Shared observability stacks"
-        description="Optional deployment-wide tier: Thanos (long-term metric retention) and Alertmanager (alert routing). Per-cluster monitoring already runs in-cluster on short-lived rolling storage with no object storage — add Thanos here only to keep metrics beyond each cluster's local retention window. Every action is queued and reconciled server-side."
+        description="Optional deployment-wide tier: Thanos (long-term metric retention), Grafana (ClusterIP fleet lobby), and Alertmanager (alert routing). Per-cluster monitoring already runs in-cluster on short-lived rolling storage with no object storage — add Thanos here only to keep metrics beyond each cluster's local retention window. Every action is queued and reconciled server-side."
         actions={
           <Link
             href="/dashboard/monitoring"
@@ -118,6 +125,15 @@ export function SharedMonitoringStacksPage() {
             storageOptions={storageOptions}
             seedOverrides={seedOverrides}
           />
+          {showGrafana ? (
+            <StackLifecyclePanel
+              target={GRAFANA_TARGET}
+              spec={SHARED_GRAFANA_FAMILY}
+              permissions={permissions}
+              clusterOptions={clusterOptions}
+              seedOverrides={seedOverrides}
+            />
+          ) : null}
           <StackLifecyclePanel
             target={ALERTMANAGER_TARGET}
             spec={SHARED_ALERTMANAGER_FAMILY}

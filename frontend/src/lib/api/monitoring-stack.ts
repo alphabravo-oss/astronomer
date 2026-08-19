@@ -5,8 +5,8 @@
  *
  * Backend:
  *   internal/handler/monitoring_stack_cluster.go  (per-cluster kube-prometheus-stack)
- *   internal/handler/monitoring_stack_shared.go   (shared Thanos + shared Alertmanager,
- *                                                  both driven by sharedStackLifecycle)
+ *   internal/handler/monitoring_stack_shared.go   (shared Thanos + Alertmanager + Grafana,
+ *                                                  all driven by sharedStackLifecycle)
  *   internal/handler/monitoring_operations.go     (the async queue behind all of them)
  *
  * THREE THINGS ABOUT THESE ENDPOINTS ARE NOT THE HOUSE DEFAULT — read before editing.
@@ -94,7 +94,8 @@ export type MonitoringOperationStatus =
 export type MonitoringOperationTargetType =
   | 'cluster_stack'
   | 'shared_thanos'
-  | 'shared_alertmanager';
+  | 'shared_alertmanager'
+  | 'shared_grafana';
 
 /** monitoring_operations.operation_type — the four mutating lifecycle verbs. */
 export type MonitoringOperationType = 'install' | 'upgrade' | 'replace' | 'uninstall';
@@ -220,6 +221,20 @@ export interface SharedAlertmanagerRequest {
   autoRollbackOnFailure?: boolean;
 }
 
+/** SharedGrafanaRequest. Only managementClusterId is required. ClusterIP only. */
+export interface SharedGrafanaRequest {
+  managementClusterId: string;
+  namespace?: string;
+  releaseName?: string;
+  chartVersion?: string;
+  replicas?: number;
+  storageClass?: string;
+  storageSize?: string;
+  ingressHost?: string;
+  logDatasourceUrl?: string;
+  autoRollbackOnFailure?: boolean;
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Preview + status responses
 // ─────────────────────────────────────────────────────────────────────
@@ -316,6 +331,20 @@ export interface SharedAlertmanagerStatus extends MonitoringStackStatusBase {
   storageSize?: string;
   managedAssetHashes?: Record<string, unknown>;
   alertingAssetHashes?: Record<string, unknown>;
+}
+
+/** GET /settings/monitoring/grafana/status/ */
+export interface SharedGrafanaStatus extends MonitoringStackStatusBase {
+  managementClusterId?: string;
+  replicas?: number;
+  storageClass?: string;
+  storageSize?: string;
+  ingressHost?: string;
+  logDatasourceUrl?: string;
+  grafanaHost?: string;
+  authMode?: 'clusterip' | 'proxy' | string;
+  autoRollbackOnFailure?: boolean;
+  managedAssetHashes?: Record<string, unknown>;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -541,6 +570,66 @@ export async function uninstallSharedAlertmanager(
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Shared Grafana — /settings/monitoring/grafana/*
+// ClusterIP only. No Open button. Preview/status are monitoring:read.
+// ─────────────────────────────────────────────────────────────────────
+
+export async function getSharedGrafanaStatus(): Promise<SharedGrafanaStatus> {
+  const res = await api.get<APIResponse<SharedGrafanaStatus>>(
+    '/settings/monitoring/grafana/status/',
+  );
+  return unwrapData(res.data);
+}
+
+export async function previewSharedGrafana(
+  body: SharedGrafanaRequest,
+): Promise<MonitoringStackPreview> {
+  const res = await api.post<APIResponse<MonitoringStackPreview>>(
+    '/settings/monitoring/grafana/preview/',
+    body,
+  );
+  return unwrapData(res.data);
+}
+
+export async function installSharedGrafana(
+  body: SharedGrafanaRequest,
+): Promise<MonitoringOperation> {
+  const res = await api.post<APIResponse<MonitoringOperation>>(
+    '/settings/monitoring/grafana/install/',
+    body,
+  );
+  return unwrapData(res.data);
+}
+
+export async function upgradeSharedGrafana(
+  body: SharedGrafanaRequest,
+): Promise<MonitoringOperation> {
+  const res = await api.put<APIResponse<MonitoringOperation>>(
+    '/settings/monitoring/grafana/upgrade/',
+    body,
+  );
+  return unwrapData(res.data);
+}
+
+export async function replaceSharedGrafana(
+  body: SharedGrafanaRequest,
+): Promise<MonitoringOperation> {
+  const res = await api.post<APIResponse<MonitoringOperation>>(
+    '/settings/monitoring/grafana/replace/',
+    body,
+  );
+  return unwrapData(res.data);
+}
+
+export async function uninstallSharedGrafana(clusterId?: string): Promise<MonitoringOperation> {
+  const res = await api.delete<APIResponse<MonitoringOperation>>(
+    '/settings/monitoring/grafana/uninstall/',
+    clusterId ? { params: { clusterId } } : undefined,
+  );
+  return unwrapData(res.data);
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Operations queue — /settings/monitoring/operations/*
 // ─────────────────────────────────────────────────────────────────────
 
@@ -607,12 +696,14 @@ export async function retryMonitoringOperation(id: string): Promise<MonitoringOp
 export type MonitoringStackTarget =
   | { kind: 'cluster'; clusterId: string }
   | { kind: 'thanos' }
-  | { kind: 'alertmanager' };
+  | { kind: 'alertmanager' }
+  | { kind: 'grafana' };
 
 export type MonitoringStackRequestBody =
   | ClusterStackRequest
   | SharedThanosRequest
-  | SharedAlertmanagerRequest;
+  | SharedAlertmanagerRequest
+  | SharedGrafanaRequest;
 
 export type MonitoringStackStatusFor<T extends MonitoringStackTarget> = T extends {
   kind: 'cluster';
@@ -620,7 +711,9 @@ export type MonitoringStackStatusFor<T extends MonitoringStackTarget> = T extend
   ? ClusterStackStatus
   : T extends { kind: 'thanos' }
     ? SharedThanosStatus
-    : SharedAlertmanagerStatus;
+    : T extends { kind: 'alertmanager' }
+      ? SharedAlertmanagerStatus
+      : SharedGrafanaStatus;
 
 /** (targetType, targetKey) as monitoring_operations records them for a target. */
 export function operationTargetOf(target: MonitoringStackTarget): {
@@ -634,6 +727,8 @@ export function operationTargetOf(target: MonitoringStackTarget): {
       return { targetType: 'shared_thanos', targetKey: 'shared' };
     case 'alertmanager':
       return { targetType: 'shared_alertmanager', targetKey: 'shared' };
+    case 'grafana':
+      return { targetType: 'shared_grafana', targetKey: 'shared' };
   }
 }
 
@@ -646,6 +741,8 @@ export function stackTargetLabel(target: MonitoringStackTarget): string {
       return 'shared Thanos';
     case 'alertmanager':
       return 'shared Alertmanager';
+    case 'grafana':
+      return 'shared Grafana';
   }
 }
 
@@ -659,6 +756,8 @@ export async function getStackStatus(
       return getSharedThanosStatus();
     case 'alertmanager':
       return getSharedAlertmanagerStatus();
+    case 'grafana':
+      return getSharedGrafanaStatus();
   }
 }
 
@@ -673,6 +772,8 @@ export async function previewStack(
       return previewSharedThanos(body as SharedThanosRequest);
     case 'alertmanager':
       return previewSharedAlertmanager(body as SharedAlertmanagerRequest);
+    case 'grafana':
+      return previewSharedGrafana(body as SharedGrafanaRequest);
   }
 }
 
@@ -710,6 +811,13 @@ export async function runStackLifecycle(
       if (verb === 'upgrade') return upgradeSharedAlertmanager(payload);
       if (verb === 'replace') return replaceSharedAlertmanager(payload);
       return uninstallSharedAlertmanager(payload?.managementClusterId);
+    }
+    case 'grafana': {
+      const payload = body as SharedGrafanaRequest;
+      if (verb === 'install') return installSharedGrafana(payload);
+      if (verb === 'upgrade') return upgradeSharedGrafana(payload);
+      if (verb === 'replace') return replaceSharedGrafana(payload);
+      return uninstallSharedGrafana(payload?.managementClusterId);
     }
   }
 }

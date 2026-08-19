@@ -20,7 +20,7 @@ accompanies, and a short description. Codes are grouped by status family; a
 handful of codes legitimately appear under more than one status depending on
 context, so the grouping reflects the dominant usage, not an exhaustive contract.
 
-**Total codes: 217**
+**Total codes: 218**
 
 ## Codes by category
 
@@ -204,6 +204,7 @@ Dominant HTTP status: 409 / 412 / 500 / 503 · Provenance: codemod
 | `SSOUnavailable` | `sso_unavailable` | 409 / 412 / 500 / 503 | indicates a sso unavailable condition. |
 | `SearchUnavailable` | `search_unavailable` | 409 / 412 / 500 / 503 | indicates a search unavailable condition. |
 | `ShellUnavailable` | `shell_unavailable` | 409 / 412 / 500 / 503 | indicates a shell unavailable condition. |
+| `SizerFailed` | `sizer_failed` | 409 / 412 / 500 / 503 | indicates a management-cluster sizer precheck refused the install or replace (HTTP 412). Grafana uses leftover floor; Loki uses the fail-closed mode gate. |
 | `StoreUnavailable` | `store_unavailable` | 409 / 412 / 500 / 503 | indicates a store unavailable condition. |
 | `StreamTicketsUnavailable` | `stream_tickets_unavailable` | 409 / 412 / 500 / 503 | indicates a stream tickets unavailable condition. |
 | `TemplateInUse` | `template_in_use` | 409 / 412 / 500 / 503 | indicates a template in use condition. |

@@ -667,6 +667,12 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 					monitoringMutate.Put("/monitoring/alertmanager/upgrade/", deps.Monitoring.UpgradeSharedAlertmanager)
 					monitoringMutate.Post("/monitoring/alertmanager/replace/", deps.Monitoring.ReplaceSharedAlertmanager)
 					monitoringMutate.Delete("/monitoring/alertmanager/uninstall/", deps.Monitoring.UninstallSharedAlertmanager)
+					monitoringAuthed.Get("/monitoring/grafana/status/", deps.Monitoring.GetSharedGrafanaStatus)
+					monitoringAuthed.Post("/monitoring/grafana/preview/", deps.Monitoring.PreviewSharedGrafanaStack)
+					monitoringMutate.Post("/monitoring/grafana/install/", deps.Monitoring.InstallSharedGrafanaStack)
+					monitoringMutate.Put("/monitoring/grafana/upgrade/", deps.Monitoring.UpgradeSharedGrafanaStack)
+					monitoringMutate.Post("/monitoring/grafana/replace/", deps.Monitoring.ReplaceSharedGrafanaStack)
+					monitoringMutate.Delete("/monitoring/grafana/uninstall/", deps.Monitoring.UninstallSharedGrafanaStack)
 				}
 			})
 			// The user directory (usernames, emails, last-login, active state) is

@@ -188,6 +188,21 @@ type SharedAlertmanagerRequest struct {
 	AutoRollbackOnFailure *bool  `json:"autoRollbackOnFailure"`
 }
 
+// SharedGrafanaRequest is the camelCase body for the shared Grafana family.
+// ClusterIP only in this PR — ingressHost is stored for PR 3a, never applied.
+type SharedGrafanaRequest struct {
+	ManagementClusterID   string `json:"managementClusterId"`
+	Namespace             string `json:"namespace"`
+	ReleaseName           string `json:"releaseName"`
+	ChartVersion          string `json:"chartVersion"`
+	Replicas              int32  `json:"replicas"`
+	StorageClass          string `json:"storageClass"`
+	StorageSize           string `json:"storageSize"`
+	IngressHost           string `json:"ingressHost"`
+	LogDatasourceURL      string `json:"logDatasourceUrl"`
+	AutoRollbackOnFailure *bool  `json:"autoRollbackOnFailure"`
+}
+
 type objectStoreSecretSpec struct {
 	Name            string
 	Key             string
@@ -505,6 +520,21 @@ func (h *MonitoringHandler) applySharedAlertmanager(ctx context.Context, msgType
 		Namespace:   req.Namespace,
 		ChartName:   "alertmanager",
 		RepoURL:     "https://prometheus-community.github.io/helm-charts",
+		Version:     req.ChartVersion,
+		Values:      values,
+		Timeout:     1200,
+	})
+}
+
+func (h *MonitoringHandler) applySharedGrafanaStack(ctx context.Context, msgType protocol.MessageType, req SharedGrafanaRequest, values map[string]any) (*protocol.HelmResultPayload, error) {
+	if h.helm == nil {
+		return nil, fmt.Errorf("helm requester not configured")
+	}
+	return h.helm.Do(ctx, req.ManagementClusterID, msgType, protocol.HelmRequestPayload{
+		ReleaseName: req.ReleaseName,
+		Namespace:   req.Namespace,
+		ChartName:   "grafana",
+		RepoURL:     "https://grafana.github.io/helm-charts",
 		Version:     req.ChartVersion,
 		Values:      values,
 		Timeout:     1200,

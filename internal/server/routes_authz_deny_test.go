@@ -154,6 +154,7 @@ var monitoringSettingsReadRoutes = []struct {
 	{"sizer", http.MethodGet, "/api/v1/settings/monitoring/sizer/", http.StatusOK},
 	{"thanos_preview", http.MethodPost, "/api/v1/settings/monitoring/thanos/preview/", http.StatusBadRequest},
 	{"alertmanager_preview", http.MethodPost, "/api/v1/settings/monitoring/alertmanager/preview/", http.StatusBadRequest},
+	{"grafana_preview", http.MethodPost, "/api/v1/settings/monitoring/grafana/preview/", http.StatusBadRequest},
 }
 
 func newMonitoringAuthzRouter(jwtMgr *auth.JWTManager, bindings []rbac.RoleBinding) chi.Router {

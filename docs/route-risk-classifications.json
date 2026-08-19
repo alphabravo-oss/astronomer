@@ -62,7 +62,8 @@
       "patterns": [
         "/api/v1/settings/monitoring/backend",
         "/api/v1/settings/monitoring/thanos/preview",
-        "/api/v1/settings/monitoring/alertmanager/preview"
+        "/api/v1/settings/monitoring/alertmanager/preview",
+        "/api/v1/settings/monitoring/grafana/preview"
       ],
       "classification": "covered-rbac-global-monitoring",
       "reason": "The three routes that answered an unauthenticated caller before the 2026-07-28 fix: the backend read returned the decoded authConfig (operator-supplied backend auth material) and the two previews rendered the shared Thanos/Alertmanager helm values. They now sit behind requireAuth at the router and monitoring:read inside the handler, and each is additionally declared in docs/security-sensitive-routes.json so TestHighRiskRoutesDenyUnauthenticatedRequests asserts the 401."
@@ -84,7 +85,11 @@
         "/api/v1/settings/monitoring/alertmanager/install",
         "/api/v1/settings/monitoring/alertmanager/upgrade",
         "/api/v1/settings/monitoring/alertmanager/replace",
-        "/api/v1/settings/monitoring/alertmanager/uninstall"
+        "/api/v1/settings/monitoring/alertmanager/uninstall",
+        "/api/v1/settings/monitoring/grafana/install",
+        "/api/v1/settings/monitoring/grafana/upgrade",
+        "/api/v1/settings/monitoring/grafana/replace",
+        "/api/v1/settings/monitoring/grafana/uninstall"
       ],
       "classification": "covered-rbac-global-monitoring",
       "reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."

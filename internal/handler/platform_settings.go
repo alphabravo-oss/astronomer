@@ -125,6 +125,7 @@ var settingsRegistry = map[string]settingSpec{
 	"feature.catalog":        {Type: typeBool, Default: true, Description: "Helm chart catalog tab"},
 	"feature.projects":       {Type: typeBool, Default: true, Description: "Projects (multi-tenancy) tab"},
 	"feature.monitoring":     {Type: typeBool, Default: true, Description: "Cluster monitoring tab"},
+	"feature.fleet_grafana":  {Type: typeBool, Default: true, Description: "Fleet Grafana panel on Shared stacks (hide only when exactly false)"},
 	"feature.security":       {Type: typeBool, Default: true, Description: "Security / CIS scans tab"},
 	"feature.backups":        {Type: typeBool, Default: true, Description: "Backup and restore tab"},
 	"feature.charlie":        {Type: typeBool, Default: false, Description: "Charlie SRE assistant integration"},

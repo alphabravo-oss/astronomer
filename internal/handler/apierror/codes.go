@@ -472,6 +472,11 @@ const (
 	// ShellUnavailable indicates a shell unavailable condition.
 	ShellUnavailable Code = "shell_unavailable"
 
+	// SizerFailed indicates a management-cluster sizer precheck refused
+	// the install or replace (HTTP 412). Grafana uses leftover floor;
+	// Loki uses the fail-closed mode gate.
+	SizerFailed Code = "sizer_failed"
+
 	// StoreUnavailable indicates a store unavailable condition.
 	StoreUnavailable Code = "store_unavailable"
 

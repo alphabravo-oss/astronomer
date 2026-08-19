@@ -14,6 +14,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -21,8 +23,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
-// Three Preview/Install/Upgrade/Replace/Uninstall/Status families exist: shared
-// Thanos, shared Alertmanager, per-cluster. Each was written by copying the
+// Four Preview/Install/Upgrade/Replace/Uninstall/Status families exist: shared
+// Thanos, shared Alertmanager, shared Grafana, per-cluster. Each was written by copying the
 // last, and the copy dropped the authorization preamble from two of the three
 // Preview handlers — /settings/monitoring served rendered Helm values to a
 // caller with no monitoring grant until 3799088 put the line back by hand.
@@ -113,6 +115,20 @@ func (q *stackLifecycleQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.Cre
 	return nil
 }
 
+func (q *stackLifecycleQuerier) ListClusters(context.Context, sqlc.ListClustersParams) ([]sqlc.Cluster, error) {
+	return []sqlc.Cluster{{
+		ID:                uuid.MustParse(stackTestClusterID),
+		Name:              "local",
+		IsLocal:           true,
+		KubernetesVersion: "v1.31.4",
+		LastHeartbeat:     pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}}, nil
+}
+
+func (q *stackLifecycleQuerier) GetClusterMonitoringContext(context.Context, uuid.UUID) (sqlc.GetClusterMonitoringContextRow, error) {
+	return sqlc.GetClusterMonitoringContextRow{}, errors.New("no context")
+}
+
 type stackLifecycleHelmStub struct{}
 
 func (stackLifecycleHelmStub) Do(context.Context, string, protocol.MessageType, protocol.HelmRequestPayload) (*protocol.HelmResultPayload, error) {
@@ -153,8 +169,33 @@ func newStackLifecycleHandler(t *testing.T) (*MonitoringHandler, *stackLifecycle
 		},
 		clusterErr: pgx.ErrNoRows,
 	}
-	h := NewMonitoringHandlerWithDeps(q, nil, stackLifecycleHelmStub{})
+	k8s := grafanaPassingK8sFake(t)
+	h := NewMonitoringHandlerWithDeps(q, k8s, stackLifecycleHelmStub{})
 	return h, q
+}
+
+func grafanaPassingK8sFake(t *testing.T) *sizerK8sFake {
+	t.Helper()
+	return &sizerK8sFake{
+		t:     t,
+		nodes: []corev1.Node{sizerTestNode("n1", "4", "8Gi", true, false)},
+		pods:  []corev1.Pod{sizerTestPod("p1", "100m", "128Mi", "", "")},
+		storage: storageClassWire{
+			AccessModes: []string{"ReadWriteOnce"},
+		},
+	}
+}
+
+func grafanaBelowFloorK8sFake(t *testing.T) *sizerK8sFake {
+	t.Helper()
+	return &sizerK8sFake{
+		t:     t,
+		nodes: []corev1.Node{sizerTestNode("n1", "4", "8Gi", true, false)},
+		pods:  []corev1.Pod{sizerTestPod("p1", "3900m", "8Gi", "", "")},
+		storage: storageClassWire{
+			AccessModes: []string{"ReadWriteOnce"},
+		},
+	}
 }
 
 // grantMonitoring builds a caller who holds monitoring at every verb the
@@ -225,6 +266,7 @@ func (c stackLifecycleCase) request() *http.Request {
 const (
 	sharedThanosBody       = `{"managementClusterId":"` + stackTestClusterID + `","storageConfigId":"` + stackTestStorageID + `"}`
 	sharedAlertmanagerBody = `{"managementClusterId":"` + stackTestClusterID + `"}`
+	sharedGrafanaBody      = `{"managementClusterId":"` + stackTestClusterID + `"}`
 	clusterStackBody       = `{"releaseName":"prometheus","namespace":"monitoring"}`
 )
 
@@ -247,6 +289,28 @@ func sharedThanosCases() []stackLifecycleCase {
 			audit:  "monitoring.shared_thanos.uninstall", details: sharedAuditDetailKeys},
 		{name: "status", method: http.MethodGet, target: base + "/status/",
 			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.GetSharedThanosStatus }},
+	}
+}
+
+func sharedGrafanaCases() []stackLifecycleCase {
+	base := "/api/v1/settings/monitoring/grafana"
+	return []stackLifecycleCase{
+		{name: "preview", method: http.MethodPost, target: base + "/preview/", body: sharedGrafanaBody,
+			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.PreviewSharedGrafanaStack }},
+		{name: "install", method: http.MethodPost, target: base + "/install/", body: sharedGrafanaBody,
+			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.InstallSharedGrafanaStack },
+			audit:  "monitoring.shared_grafana.install", details: sharedAuditDetailKeys},
+		{name: "upgrade", method: http.MethodPut, target: base + "/upgrade/", body: sharedGrafanaBody,
+			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.UpgradeSharedGrafanaStack },
+			audit:  "monitoring.shared_grafana.upgrade", details: sharedAuditDetailKeys},
+		{name: "replace", method: http.MethodPost, target: base + "/replace/", body: sharedGrafanaBody,
+			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.ReplaceSharedGrafanaStack },
+			audit:  "monitoring.shared_grafana.replace", details: sharedAuditDetailKeys},
+		{name: "uninstall", method: http.MethodDelete, target: base + "/uninstall/?clusterId=" + stackTestClusterID,
+			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.UninstallSharedGrafanaStack },
+			audit:  "monitoring.shared_grafana.uninstall", details: sharedAuditDetailKeys},
+		{name: "status", method: http.MethodGet, target: base + "/status/",
+			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.GetSharedGrafanaStatus }},
 	}
 }
 
@@ -327,6 +391,7 @@ func TestSharedStackLifecycleDeniesCallerWithoutMonitoringPermission(t *testing.
 	families := map[string][]stackLifecycleCase{
 		"shared_thanos":       sharedThanosCases(),
 		"shared_alertmanager": sharedAlertmanagerCases(),
+		"shared_grafana":      sharedGrafanaCases(),
 	}
 	for family, cases := range families {
 		for _, tc := range cases {
@@ -462,7 +527,7 @@ func TestClusterStackResolvesClusterIDFromTheRoutedParam(t *testing.T) {
 // needed a fabricated `cluster_id` param because the handlers read one no route
 // supplied. See TestClusterStackResolvesClusterIDFromTheRoutedParam.
 func TestStackLifecycleAuditEventsUnchanged(t *testing.T) {
-	all := append(append(sharedThanosCases(), sharedAlertmanagerCases()...), clusterStackCases()...)
+	all := append(append(append(sharedThanosCases(), sharedAlertmanagerCases()...), sharedGrafanaCases()...), clusterStackCases()...)
 	for _, tc := range all {
 		if tc.audit == "" {
 			continue

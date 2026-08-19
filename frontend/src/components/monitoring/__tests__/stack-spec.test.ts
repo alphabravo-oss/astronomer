@@ -10,6 +10,7 @@
 import {
   CLUSTER_STACK_FAMILY,
   SHARED_ALERTMANAGER_FAMILY,
+  SHARED_GRAFANA_FAMILY,
   SHARED_THANOS_FAMILY,
   SERVER_BLIND_FIELDS,
   buildStackBody,
@@ -85,6 +86,17 @@ describe('seedStackValues', () => {
       chartVersion: '1.24.0',
     } as MonitoringStackStatusBase);
     expect(values.chartVersion).toBe('1.24.0');
+  });
+
+  it('seeds Grafana chartVersion and autoRollbackOnFailure from status (not SERVER_BLIND)', () => {
+    const values = seedStackValues(SHARED_GRAFANA_FAMILY, {
+      status: 'healthy',
+      chartVersion: '8.12.1',
+      autoRollbackOnFailure: true,
+      authMode: 'clusterip',
+    } as MonitoringStackStatusBase);
+    expect(values.chartVersion).toBe('8.12.1');
+    expect(values.autoRollbackOnFailure).toBe('true');
   });
 
   it('ignores a stale recorded spec once the stack has been uninstalled', () => {
