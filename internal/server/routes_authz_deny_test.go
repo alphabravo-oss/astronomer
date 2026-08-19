@@ -137,10 +137,9 @@ func TestControllersMutatingRoutesRequireSuperuser(t *testing.T) {
 	}
 }
 
-// monitoringSettingsReadRoutes are the three /settings/monitoring routes that
-// were registered on the bare settings group and carried no authorization call
-// of their own: GET backend returned the decoded authConfig, and both previews
-// rendered the shared stack's helm values, all to an anonymous caller.
+// monitoringSettingsReadRoutes are the /settings/monitoring routes that
+// authenticate at the router and authorize monitoring:read in the handler:
+// GET backend, GET sizer, and both shared-stack previews.
 var monitoringSettingsReadRoutes = []struct {
 	name string
 	// method + path as the frontend/CLI would call them.
@@ -152,6 +151,7 @@ var monitoringSettingsReadRoutes = []struct {
 	allowedStatus int
 }{
 	{"backend_config", http.MethodGet, "/api/v1/settings/monitoring/backend/", http.StatusOK},
+	{"sizer", http.MethodGet, "/api/v1/settings/monitoring/sizer/", http.StatusOK},
 	{"thanos_preview", http.MethodPost, "/api/v1/settings/monitoring/thanos/preview/", http.StatusBadRequest},
 	{"alertmanager_preview", http.MethodPost, "/api/v1/settings/monitoring/alertmanager/preview/", http.StatusBadRequest},
 }

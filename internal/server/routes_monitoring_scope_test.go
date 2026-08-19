@@ -205,6 +205,7 @@ var sharedMonitoringRoutes = []struct {
 	{"alertmanager_uninstall", http.MethodDelete, "/alertmanager/uninstall/"},
 	{"backend_get", http.MethodGet, "/backend/"},
 	{"backend_put", http.MethodPut, "/backend/"},
+	{"sizer", http.MethodGet, "/sizer/"},
 }
 
 // newSharedMonitoringAuthzRouter wires the /settings group as well, since the

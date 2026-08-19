@@ -643,6 +643,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 					// handler.
 					monitoringAuthed := r.With(requireAuth(deps.JWT, deps.AuthQueries))
 					monitoringAuthed.Get("/monitoring/backend/", deps.Monitoring.GetBackendConfig)
+					monitoringAuthed.Get("/monitoring/sizer/", deps.Monitoring.GetMonitoringSizer)
 					// PUT backend/ persists operator-supplied backend auth
 					// material and POST retry/ re-enqueues helm work, so both
 					// belong on the write-scope backstop alongside every other

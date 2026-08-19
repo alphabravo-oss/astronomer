@@ -357,6 +357,7 @@ GET /api/v1/settings/monitoring/alertmanager/status
 GET /api/v1/settings/monitoring/backend
 GET /api/v1/settings/monitoring/operations
 GET /api/v1/settings/monitoring/operations/{id}
+GET /api/v1/settings/monitoring/sizer
 GET /api/v1/settings/monitoring/thanos/status
 GET /api/v1/settings/registration
 GET /api/v1/settings/sso
