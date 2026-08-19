@@ -499,6 +499,43 @@ describe('per-cluster monitoring stack page', () => {
 });
 
 describe('shared monitoring stacks page', () => {
+  it('shows Open fleet Grafana only when authMode is proxy', async () => {
+    grant(['read', 'update']);
+    statusPerTarget({
+      grafana: {
+        status: 'healthy',
+        namespace: 'monitoring',
+        releaseName: 'astronomer-grafana',
+        chartVersion: '8.12.1',
+        managementClusterId: CLUSTER_ID,
+        authMode: 'clusterip',
+        grafanaHost: 'grafana.example.com',
+      } as MonitoringStackStatusBase,
+    });
+    const { unmount } = render(<SharedMonitoringStacksPage />, { wrapper: Wrapper });
+    const clusteripPanel = await panelFor(FAMILIES.find((f) => f.key === 'grafana')!);
+    await waitFor(() => expect(within(clusteripPanel).getByText('Healthy')).toBeInTheDocument());
+    expect(within(clusteripPanel).queryByRole('link', { name: 'Open fleet Grafana' })).not.toBeInTheDocument();
+    unmount();
+
+    statusPerTarget({
+      grafana: {
+        status: 'healthy',
+        namespace: 'monitoring',
+        releaseName: 'astronomer-grafana',
+        chartVersion: '8.12.1',
+        managementClusterId: CLUSTER_ID,
+        authMode: 'proxy',
+        grafanaHost: 'grafana.example.com',
+      } as MonitoringStackStatusBase,
+    });
+    render(<SharedMonitoringStacksPage />, { wrapper: Wrapper });
+    const proxyPanel = await panelFor(FAMILIES.find((f) => f.key === 'grafana')!);
+    await waitFor(() => expect(within(proxyPanel).getByText('Healthy')).toBeInTheDocument());
+    const open = within(proxyPanel).getByRole('link', { name: 'Open fleet Grafana' });
+    expect(open).toHaveAttribute('href', 'https://grafana.example.com/');
+  });
+
   it('renders Thanos and Alertmanager as independent panels', async () => {
     grant(['read', 'update']);
     statusPerTarget({

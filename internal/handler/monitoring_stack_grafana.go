@@ -24,6 +24,10 @@ const (
 	sharedGrafanaDefaultRelease    = "astronomer-grafana"
 	sharedGrafanaDefaultChart      = "8.12.1"
 	sharedGrafanaAuthModeClusterIP = "clusterip"
+	sharedGrafanaAuthModeProxy     = "proxy"
+	grafanaProxySecretName         = "astronomer-grafana-proxy-key"
+	grafanaProxyDefaultImage       = "astronomer-go-server:v1.0.0"
+	grafanaProxyListenPort         = 8080
 )
 
 func (h *MonitoringHandler) sharedGrafanaPayload(ctx context.Context, r *http.Request) (SharedGrafanaRequest, map[string]any, sqlc.MonitoringBackend, error) {
@@ -59,12 +63,18 @@ func (h *MonitoringHandler) sharedGrafanaPayload(ctx context.Context, r *http.Re
 	if strings.ContainsAny(req.LogDatasourceURL, "\n\r\t") {
 		return SharedGrafanaRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("logDatasourceUrl must be a single-line URL")
 	}
+	if strings.ContainsAny(req.IngressHost, "\n\r\t /") {
+		return SharedGrafanaRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("ingressHost must be a hostname")
+	}
+	if req.IngressHost == "" {
+		req.IngressHost = defaultGrafanaHost(h.serverURL)
+	}
 
 	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
 	if err != nil {
 		return SharedGrafanaRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("default monitoring backend is not configured")
 	}
-	return req, sharedGrafanaHelmValues(req, backend), backend, nil
+	return req, h.sharedGrafanaHelmValues(req, backend), backend, nil
 }
 
 func (h *MonitoringHandler) sharedGrafanaPrecheck(ctx context.Context, req SharedGrafanaRequest, op string) (int, string, string, bool) {
@@ -86,6 +96,9 @@ func (h *MonitoringHandler) sharedGrafanaPrecheck(ctx context.Context, req Share
 func (h *MonitoringHandler) updateSharedGrafanaMetadata(ctx context.Context, backend sqlc.MonitoringBackend, req SharedGrafanaRequest, status string) error {
 	if h.queries == nil {
 		return nil
+	}
+	if req.IngressHost == "" && h != nil {
+		req.IngressHost = defaultGrafanaHost(h.serverURL)
 	}
 	resolvedRollback := h.resolveAutoRollbackPolicy(backend, req.AutoRollbackOnFailure)
 	appliedSpecHash := specHash(map[string]any{
@@ -117,7 +130,7 @@ func (h *MonitoringHandler) updateSharedGrafanaMetadata(ctx context.Context, bac
 		"ingressHost":           req.IngressHost,
 		"logDatasourceUrl":      req.LogDatasourceURL,
 		"grafanaHost":           req.IngressHost,
-		"authMode":              sharedGrafanaAuthModeClusterIP,
+		"authMode":              sharedGrafanaAuthModeProxy,
 		"autoRollbackOnFailure": resolvedRollback,
 		"thanosDatasource":      thanosOK,
 		"lastAppliedSpecHash":   appliedSpecHash,
@@ -172,7 +185,7 @@ func sharedGrafanaProjectedStatus(metadata map[string]any, backend sqlc.Monitori
 	return status
 }
 
-func sharedGrafanaHelmValues(req SharedGrafanaRequest, backend sqlc.MonitoringBackend) map[string]any {
+func (h *MonitoringHandler) sharedGrafanaHelmValues(req SharedGrafanaRequest, backend sqlc.MonitoringBackend) map[string]any {
 	persistence := map[string]any{"enabled": false}
 	if req.StorageSize != "" {
 		persistence = map[string]any{"enabled": true, "size": req.StorageSize}
@@ -180,7 +193,22 @@ func sharedGrafanaHelmValues(req SharedGrafanaRequest, backend sqlc.MonitoringBa
 			persistence["storageClassName"] = req.StorageClass
 		}
 	}
-	extra := grafanaOwnedConfigMaps(req, backend)
+	image := ""
+	serverURL := ""
+	if h != nil {
+		image = h.proxyImage
+		serverURL = h.serverURL
+	}
+	extra := grafanaFamilyExtraObjects(req, backend, image, serverURL)
+	grafanaHost := stripHostScheme(req.IngressHost)
+	rootURL := ""
+	if grafanaHost != "" {
+		rootURL = "https://" + grafanaHost + "/"
+	}
+	csrfOrigins := grafanaHost
+	if astro := hostnameOf(serverURL); astro != "" && astro != grafanaHost {
+		csrfOrigins = strings.TrimSpace(csrfOrigins + " " + astro)
+	}
 	return map[string]any{
 		"replicas": req.Replicas,
 		"service": map[string]any{
@@ -209,15 +237,296 @@ func sharedGrafanaHelmValues(req SharedGrafanaRequest, backend sqlc.MonitoringBa
 			},
 		},
 		"grafana.ini": map[string]any{
+			"server": map[string]any{
+				"root_url":            rootURL,
+				"serve_from_sub_path": false,
+			},
 			"dataproxy": map[string]any{
 				"send_user_header": true,
 				"timeout":          "60",
 			},
+			"auth": map[string]any{
+				"disable_login_form":   true,
+				"disable_signout_menu": true,
+			},
 			"auth.anonymous": map[string]any{"enabled": false},
-			"users":          map[string]any{"allow_sign_up": false},
-			"live":           map[string]any{"enabled": false},
+			"auth.basic":     map[string]any{"enabled": false},
+			"auth.proxy": map[string]any{
+				"enabled":            true,
+				"header_name":        "X-WEBAUTH-USER",
+				"header_property":    "email",
+				"auto_sign_up":       true,
+				"enable_login_token": false,
+				"headers":            "Email:X-WEBAUTH-USER Name:X-WEBAUTH-USER Role:X-WEBAUTH-ROLE",
+			},
+			"users": map[string]any{
+				"allow_sign_up":        false,
+				"auto_assign_org":      true,
+				"auto_assign_org_role": "Viewer",
+			},
+			"live": map[string]any{"enabled": false},
+			"security": map[string]any{
+				"csrf_trusted_origins": csrfOrigins,
+			},
 		},
 		"extraObjects": extra,
+	}
+}
+
+func grafanaFamilyExtraObjects(req SharedGrafanaRequest, backend sqlc.MonitoringBackend, proxyImage, serverURL string) []any {
+	objects := grafanaOwnedConfigMaps(req, backend)
+	objects = append(objects, grafanaProxyExtraObjects(req, proxyImage, serverURL)...)
+	return objects
+}
+
+func grafanaProxyServiceName(release string) string {
+	return defaultString(release, sharedGrafanaDefaultRelease) + "-grafana-proxy"
+}
+
+func grafanaProxyExtraObjects(req SharedGrafanaRequest, proxyImage, serverURL string) []any {
+	ns := defaultString(req.Namespace, "monitoring")
+	release := defaultString(req.ReleaseName, sharedGrafanaDefaultRelease)
+	host := stripHostScheme(req.IngressHost)
+	if proxyImage == "" {
+		proxyImage = grafanaProxyDefaultImage
+	}
+	upstream := fmt.Sprintf("http://%s.%s.svc.cluster.local", release, ns)
+	astroURL := strings.TrimRight(strings.TrimSpace(serverURL), "/")
+	svcName := grafanaProxyServiceName(release)
+	labels := map[string]any{
+		"app.kubernetes.io/name":      "grafana-proxy",
+		"app.kubernetes.io/instance":  release,
+		"app.kubernetes.io/component": "grafana-proxy",
+	}
+	objects := []any{
+		grafanaProxyKeySecret(ns),
+		grafanaProxyDeployment(ns, release, svcName, labels, proxyImage, upstream, astroURL, host),
+		grafanaProxyService(ns, svcName, labels),
+		grafanaProxyNetworkPolicy(ns, release, labels),
+	}
+	if host != "" {
+		objects = append(objects,
+			grafanaProxyIngress(ns, svcName, host),
+			grafanaProxyGateway(ns, host),
+			grafanaProxyHTTPRoute(ns, svcName, host),
+		)
+	}
+	return objects
+}
+
+func grafanaProxyKeySecret(namespace string) map[string]any {
+	// Helm lookup keeps the HMAC key stable across upgrades and out of preview values.
+	lookup := `{{ $s := lookup "v1" "Secret" .Release.Namespace "` + grafanaProxySecretName + `" }}{{ if and $s $s.data }}{{ index $s.data "key" | b64dec }}{{ else }}{{ randAlphaNum 32 }}{{ end }}`
+	return map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Secret",
+		"metadata": map[string]any{
+			"name":      grafanaProxySecretName,
+			"namespace": namespace,
+			"annotations": map[string]any{
+				"helm.sh/resource-policy": "keep",
+			},
+		},
+		"type": "Opaque",
+		"stringData": map[string]any{
+			"key": lookup,
+		},
+	}
+}
+
+func grafanaProxyDeployment(namespace, release, svcName string, labels map[string]any, image, upstream, astroURL, grafanaHost string) map[string]any {
+	env := []any{
+		map[string]any{"name": "LISTEN_ADDR", "value": fmt.Sprintf(":%d", grafanaProxyListenPort)},
+		map[string]any{"name": "GRAFANA_UPSTREAM", "value": upstream},
+		map[string]any{"name": "ASTRONOMER_URL", "value": astroURL},
+		map[string]any{"name": "GRAFANA_HOST", "value": grafanaHost},
+		map[string]any{
+			"name": "GRAFANA_PROXY_KEY",
+			"valueFrom": map[string]any{
+				"secretKeyRef": map[string]any{
+					"name": grafanaProxySecretName,
+					"key":  "key",
+				},
+			},
+		},
+	}
+	return map[string]any{
+		"apiVersion": "apps/v1",
+		"kind":       "Deployment",
+		"metadata": map[string]any{
+			"name":      svcName,
+			"namespace": namespace,
+			"labels":    labels,
+		},
+		"spec": map[string]any{
+			"replicas": 1,
+			"selector": map[string]any{"matchLabels": labels},
+			"template": map[string]any{
+				"metadata": map[string]any{"labels": labels},
+				"spec": map[string]any{
+					"automountServiceAccountToken": false,
+					"securityContext": map[string]any{
+						"runAsNonRoot": true,
+						"runAsUser":    65534,
+						"runAsGroup":   65534,
+						"seccompProfile": map[string]any{
+							"type": "RuntimeDefault",
+						},
+					},
+					"containers": []any{
+						map[string]any{
+							"name":  "grafana-proxy",
+							"image": image,
+							"args":  []any{"grafana-proxy"},
+							"ports": []any{
+								map[string]any{"name": "http", "containerPort": grafanaProxyListenPort},
+							},
+							"env": env,
+							"resources": map[string]any{
+								"requests": map[string]any{"cpu": "50m", "memory": "64Mi"},
+								"limits":   map[string]any{"cpu": "200m", "memory": "128Mi"},
+							},
+							"securityContext": map[string]any{
+								"allowPrivilegeEscalation": false,
+								"readOnlyRootFilesystem":   true,
+								"runAsNonRoot":             true,
+								"capabilities":             map[string]any{"drop": []any{"ALL"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func grafanaProxyService(namespace, name string, labels map[string]any) map[string]any {
+	return map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Service",
+		"metadata": map[string]any{
+			"name":      name,
+			"namespace": namespace,
+			"labels":    labels,
+		},
+		"spec": map[string]any{
+			"type":     "ClusterIP",
+			"selector": labels,
+			"ports": []any{
+				map[string]any{"name": "http", "port": grafanaProxyListenPort, "targetPort": grafanaProxyListenPort},
+			},
+		},
+	}
+}
+
+func grafanaProxyNetworkPolicy(namespace, release string, proxyLabels map[string]any) map[string]any {
+	return map[string]any{
+		"apiVersion": "networking.k8s.io/v1",
+		"kind":       "NetworkPolicy",
+		"metadata": map[string]any{
+			"name":      release + "-grafana-lockdown",
+			"namespace": namespace,
+		},
+		"spec": map[string]any{
+			"podSelector": map[string]any{
+				"matchLabels": map[string]any{
+					"app.kubernetes.io/name":     "grafana",
+					"app.kubernetes.io/instance": release,
+				},
+			},
+			"policyTypes": []any{"Ingress"},
+			"ingress": []any{
+				map[string]any{
+					"from": []any{
+						map[string]any{"podSelector": map[string]any{"matchLabels": proxyLabels}},
+					},
+				},
+			},
+		},
+	}
+}
+
+func grafanaProxyIngress(namespace, svcName, host string) map[string]any {
+	return map[string]any{
+		"apiVersion": "networking.k8s.io/v1",
+		"kind":       "Ingress",
+		"metadata": map[string]any{
+			"name":      svcName,
+			"namespace": namespace,
+		},
+		"spec": map[string]any{
+			"rules": []any{
+				map[string]any{
+					"host": host,
+					"http": map[string]any{
+						"paths": []any{
+							map[string]any{
+								"path":     "/",
+								"pathType": "Prefix",
+								"backend": map[string]any{
+									"service": map[string]any{
+										"name": svcName,
+										"port": map[string]any{"number": grafanaProxyListenPort},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func grafanaProxyGateway(namespace, host string) map[string]any {
+	return map[string]any{
+		"apiVersion": "gateway.networking.k8s.io/v1",
+		"kind":       "Gateway",
+		"metadata": map[string]any{
+			"name":      "astronomer-grafana",
+			"namespace": namespace,
+		},
+		"spec": map[string]any{
+			"gatewayClassName": "nginx",
+			"listeners": []any{
+				map[string]any{
+					"name":     "http",
+					"hostname": host,
+					"port":     80,
+					"protocol": "HTTP",
+					"allowedRoutes": map[string]any{
+						"namespaces": map[string]any{"from": "Same"},
+					},
+				},
+			},
+		},
+	}
+}
+
+func grafanaProxyHTTPRoute(namespace, svcName, host string) map[string]any {
+	return map[string]any{
+		"apiVersion": "gateway.networking.k8s.io/v1",
+		"kind":       "HTTPRoute",
+		"metadata": map[string]any{
+			"name":      svcName,
+			"namespace": namespace,
+		},
+		"spec": map[string]any{
+			"parentRefs": []any{
+				map[string]any{"name": "astronomer-grafana"},
+			},
+			"hostnames": []any{host},
+			"rules": []any{
+				map[string]any{
+					"backendRefs": []any{
+						map[string]any{
+							"name": svcName,
+							"port": grafanaProxyListenPort,
+						},
+					},
+				},
+			},
+		},
 	}
 }
 

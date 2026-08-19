@@ -229,44 +229,63 @@ const redisTicketKeyPrefix = "streamticket:"
 // stalled Redis must fail fast rather than hang the handler.
 const redisTicketOpTimeout = 5 * time.Second
 
-// redisTicketBackend backs stream tickets with Redis so any replica can
+// redisTicketBackend backs single-use tickets with Redis so any replica can
 // atomically validate+consume a ticket minted by any other replica.
+// prefix isolates stream tickets (streamticket:) from Grafana tickets
+// (grafana-ticket:); an empty prefix falls back to redisTicketKeyPrefix.
 type redisTicketBackend struct {
-	rdb *redis.Client
+	rdb    *redis.Client
+	prefix string
 }
 
 // NewRedisStreamTicketBackend wraps a go-redis client as a shared,
 // cluster-wide single-use ticket store. Single-use is guaranteed by
 // GETDEL (atomic get-and-delete) in Take.
 func NewRedisStreamTicketBackend(rdb *redis.Client) StreamTicketBackend {
-	return &redisTicketBackend{rdb: rdb}
+	return &redisTicketBackend{rdb: rdb, prefix: redisTicketKeyPrefix}
+}
+
+func (b *redisTicketBackend) redisKey(key string) string {
+	prefix := b.prefix
+	if prefix == "" {
+		prefix = redisTicketKeyPrefix
+	}
+	return prefix + key
 }
 
 // NewRedisStreamTicketBackendFromURL builds a Redis backend from the same
 // connection string the rest of the platform uses (asynq parses it),
 // mirroring tunnel.NewLocatorFromAsynqRedisURL.
 func NewRedisStreamTicketBackendFromURL(redisURL string) (StreamTicketBackend, error) {
-	opt, err := asynq.ParseRedisURI(redisURL)
+	client, err := redisClientFromAsynqURL(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse redis url for stream tickets: %w", err)
 	}
+	return NewRedisStreamTicketBackend(client), nil
+}
+
+func redisClientFromAsynqURL(redisURL string) (*redis.Client, error) {
+	opt, err := asynq.ParseRedisURI(redisURL)
+	if err != nil {
+		return nil, err
+	}
 	client, ok := opt.MakeRedisClient().(*redis.Client)
 	if !ok {
-		return nil, errors.New("stream tickets: asynq redis backend is not a single-node go-redis client (cluster mode not supported)")
+		return nil, errors.New("asynq redis backend is not a single-node go-redis client (cluster mode not supported)")
 	}
-	return NewRedisStreamTicketBackend(client), nil
+	return client, nil
 }
 
 func (b *redisTicketBackend) Put(ctx context.Context, key, value string, ttl time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, redisTicketOpTimeout)
 	defer cancel()
-	return b.rdb.Set(ctx, redisTicketKeyPrefix+key, value, ttl).Err()
+	return b.rdb.Set(ctx, b.redisKey(key), value, ttl).Err()
 }
 
 func (b *redisTicketBackend) Take(ctx context.Context, key string) (string, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, redisTicketOpTimeout)
 	defer cancel()
-	value, err := b.rdb.GetDel(ctx, redisTicketKeyPrefix+key).Result()
+	value, err := b.rdb.GetDel(ctx, b.redisKey(key)).Result()
 	if errors.Is(err, redis.Nil) {
 		return "", false, nil
 	}

@@ -173,6 +173,7 @@ func newStackLifecycleHandler(t *testing.T) (*MonitoringHandler, *stackLifecycle
 	}
 	k8s := grafanaPassingK8sFake(t)
 	h := NewMonitoringHandlerWithDeps(q, k8s, stackLifecycleHelmStub{})
+	h.SetServerURL("https://astronomer.example.com")
 	return h, q
 }
 

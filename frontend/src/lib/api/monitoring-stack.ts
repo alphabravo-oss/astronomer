@@ -571,7 +571,7 @@ export async function uninstallSharedAlertmanager(
 
 // ─────────────────────────────────────────────────────────────────────
 // Shared Grafana — /settings/monitoring/grafana/*
-// ClusterIP only. No Open button. Preview/status are monitoring:read.
+// authMode=proxy after grafana-proxy + ticket bounce. Open button is UI-only.
 // ─────────────────────────────────────────────────────────────────────
 
 export async function getSharedGrafanaStatus(): Promise<SharedGrafanaStatus> {

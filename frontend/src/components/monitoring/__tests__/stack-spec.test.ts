@@ -14,6 +14,7 @@ import {
   SHARED_THANOS_FAMILY,
   SERVER_BLIND_FIELDS,
   buildStackBody,
+  fleetGrafanaOpenURL,
   missingRequiredFields,
   replaceTriggeringChanges,
   seedStackValues,
@@ -86,6 +87,30 @@ describe('seedStackValues', () => {
       chartVersion: '1.24.0',
     } as MonitoringStackStatusBase);
     expect(values.chartVersion).toBe('1.24.0');
+  });
+
+  it('exposes fleet Grafana URL only when authMode is proxy', () => {
+    expect(
+      fleetGrafanaOpenURL({
+        status: 'healthy',
+        authMode: 'clusterip',
+        grafanaHost: 'grafana.example.com',
+      }),
+    ).toBeNull();
+    expect(
+      fleetGrafanaOpenURL({
+        status: 'healthy',
+        authMode: 'proxy',
+        grafanaHost: 'grafana.example.com',
+      }),
+    ).toBe('https://grafana.example.com/');
+    expect(
+      fleetGrafanaOpenURL({
+        status: 'not_configured',
+        authMode: 'proxy',
+        grafanaHost: 'grafana.example.com',
+      }),
+    ).toBeNull();
   });
 
   it('seeds Grafana chartVersion and autoRollbackOnFailure from status (not SERVER_BLIND)', () => {

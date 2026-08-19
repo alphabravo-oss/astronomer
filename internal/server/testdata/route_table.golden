@@ -304,6 +304,7 @@ GET /api/v1/monitoring/metrics/cluster-overview/{cluster_id}
 GET /api/v1/monitoring/metrics/node/{cluster_id}/{node}
 GET /api/v1/monitoring/metrics/workload/{cluster_id}/{namespace}/{workload}
 GET /api/v1/native-rbac-rules
+GET /api/v1/observability/grafana-ticket
 GET /api/v1/projects
 GET /api/v1/projects/{id}
 GET /api/v1/projects/{id}/clusters
@@ -591,6 +592,7 @@ POST /api/v1/nodes/{cluster_id}/{node_name}/labels/remove
 POST /api/v1/nodes/{cluster_id}/{node_name}/taints
 POST /api/v1/nodes/{cluster_id}/{node_name}/taints/remove
 POST /api/v1/nodes/{cluster_id}/{node_name}/uncordon
+POST /api/v1/observability/grafana-ticket/redeem
 POST /api/v1/projects
 POST /api/v1/projects/{id}/add-namespace
 POST /api/v1/projects/{id}/ownership/takeover

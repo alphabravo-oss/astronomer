@@ -45,6 +45,12 @@ type MonitoringHandler struct {
 	// written to the plaintext JSONB column exactly as it was before 146,
 	// which is the row shape the resolver's legacy branch already handles.
 	encryptor *auth.Encryptor
+	// grafanaTickets is the dedicated mint/redeem store (prefix grafana-ticket:).
+	// Not StreamTicketStore. Nil disables the bounce endpoints.
+	grafanaTickets *auth.GrafanaTicketStore
+	users          UserByIDQuerier
+	serverURL      string
+	proxyImage     string
 }
 
 // SetEncryptor wires the Fernet encryptor used for the monitoring-backend
@@ -189,7 +195,7 @@ type SharedAlertmanagerRequest struct {
 }
 
 // SharedGrafanaRequest is the camelCase body for the shared Grafana family.
-// ClusterIP only in this PR — ingressHost is stored for PR 3a, never applied.
+// ingressHost overrides grafana.<ServerURL host>; never values.ingress.host.
 type SharedGrafanaRequest struct {
 	ManagementClusterID   string `json:"managementClusterId"`
 	Namespace             string `json:"namespace"`
@@ -538,7 +544,7 @@ func (h *MonitoringHandler) applySharedGrafanaStack(ctx context.Context, msgType
 	}
 	if h.queries != nil {
 		if backend, err := h.queries.GetDefaultMonitoringBackend(ctx); err == nil {
-			values["extraObjects"] = grafanaOwnedConfigMaps(req, backend)
+			values["extraObjects"] = grafanaFamilyExtraObjects(req, backend, h.proxyImage, h.serverURL)
 		}
 	}
 	return h.helm.Do(ctx, req.ManagementClusterID, msgType, protocol.HelmRequestPayload{

@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
-import { ArrowRight, Server } from 'lucide-react';
+import { ArrowRight, ExternalLink, Server } from 'lucide-react';
 import { useClusters } from '@/lib/hooks';
 import { Link } from '@/lib/link';
 import { useRouter, useSearchParams } from '@/lib/navigation';
@@ -10,6 +11,9 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { formatPercentage } from '@/lib/utils';
 import type { Cluster } from '@/types';
 import { LoadingState } from '@/components/ui/empty-state';
+import { getSharedGrafanaStatus } from '@/lib/api/monitoring-stack';
+import { queryKeys } from '@/lib/query-keys';
+import { fleetGrafanaOpenURL } from '@/components/monitoring/stack-spec';
 
 function clusterMetricsPath(clusterId: string, range?: string | null): string {
   const base = `/dashboard/clusters/${clusterId}/metrics`;
@@ -23,6 +27,11 @@ function MonitoringFleetPage() {
   const range = search.get('range');
   const { data: clustersData, isLoading, isError, refetch } = useClusters({ pageSize: 100 });
   const clusters = useMemo(() => clustersData?.data ?? [], [clustersData]);
+  const grafanaQuery = useQuery({
+    queryKey: queryKeys.monitoringStack.status('grafana'),
+    queryFn: getSharedGrafanaStatus,
+  });
+  const grafanaOpenURL = fleetGrafanaOpenURL(grafanaQuery.data);
 
   useEffect(() => {
     if (!clusterId) return;
@@ -102,6 +111,19 @@ function MonitoringFleetPage() {
       <PageHeader
         title="Fleet metrics"
         description="Open a cluster to see dashboards, node utilization, and the Prometheus stack for that environment."
+        actions={
+          grafanaOpenURL ? (
+            <a
+              href={grafanaOpenURL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-accent"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Open fleet Grafana
+            </a>
+          ) : null
+        }
       />
       {clusters.length === 0 && !isLoading ? (
         <div className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card">

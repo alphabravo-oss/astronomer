@@ -134,21 +134,49 @@ func TestSharedGrafanaPreviewIsClusterIPOnly(t *testing.T) {
 	}
 	ing, _ := wrap.Data.Values["ingress"].(map[string]any)
 	if ing["enabled"] != false {
-		t.Fatalf("ingress.enabled = %v, want false", ing["enabled"])
+		t.Fatalf("ingress.enabled = %v, want false (chart ingress stays off; extraObjects own the host)", ing["enabled"])
 	}
 	raw, _ := json.Marshal(wrap.Data.Values)
 	s := string(raw)
-	for _, banned := range []string{"grafana-proxy", "gateway", "Gateway", `"hosts"`} {
-		if strings.Contains(s, banned) {
-			t.Errorf("values must not include %s: %s", banned, s)
-		}
+	if strings.Contains(s, "astronomer.localtest.me") {
+		t.Errorf("must not derive host from values.ingress.host: %s", s)
 	}
 	if strings.Contains(s, `"adminPassword"`) || strings.Contains(s, "admin-password") {
 		t.Errorf("values leaked admin secret: %s", s)
 	}
+	if !strings.Contains(s, "grafana-proxy") {
+		t.Fatalf("values must include grafana-proxy extraObjects")
+	}
+	if strings.Contains(s, "REDIS_URL") || strings.Contains(s, "ASTRONOMER_SECRET_KEY") || strings.Contains(s, `"SECRET_KEY"`) {
+		t.Errorf("grafana-proxy must not mount Redis or ASTRONOMER_SECRET_KEY: %s", s)
+	}
+	ini, _ := wrap.Data.Values["grafana.ini"].(map[string]any)
+	live, _ := ini["live"].(map[string]any)
+	if live["enabled"] != false {
+		t.Fatalf("live.enabled = %v, want false", live["enabled"])
+	}
+	proxyAuth, _ := ini["auth.proxy"].(map[string]any)
+	if proxyAuth["enabled"] != true {
+		t.Fatalf("auth.proxy.enabled = %v", proxyAuth["enabled"])
+	}
+	var sawProxyIngress, sawProxyBackend bool
 	extra, _ := wrap.Data.Values["extraObjects"].([]any)
+	for _, obj := range extra {
+		m, _ := obj.(map[string]any)
+		kind, _ := m["kind"].(string)
+		if kind == "Ingress" || kind == "HTTPRoute" {
+			sawProxyIngress = true
+			rawObj, _ := json.Marshal(m)
+			if strings.Contains(string(rawObj), grafanaProxyServiceName(sharedGrafanaDefaultRelease)) {
+				sawProxyBackend = true
+			}
+		}
+	}
+	if !sawProxyIngress || !sawProxyBackend {
+		t.Fatalf("expected Ingress/HTTPRoute backend=grafana-proxy, ingress=%v backend=%v", sawProxyIngress, sawProxyBackend)
+	}
 	if len(extra) < 8 {
-		t.Fatalf("extraObjects = %d, want at least 8 dashboard ConfigMaps", len(extra))
+		t.Fatalf("extraObjects = %d, want at least 8 dashboard ConfigMaps plus proxy objects", len(extra))
 	}
 	sidecar, _ := wrap.Data.Values["sidecar"].(map[string]any)
 	dash, _ := sidecar["dashboards"].(map[string]any)
@@ -197,8 +225,11 @@ func TestSharedGrafanaStatusProjectsRequiredFields(t *testing.T) {
 	if wrap.Data["autoRollbackOnFailure"] != true {
 		t.Fatalf("autoRollbackOnFailure = %v, want true", wrap.Data["autoRollbackOnFailure"])
 	}
-	if wrap.Data["authMode"] != sharedGrafanaAuthModeClusterIP {
-		t.Fatalf("authMode = %v, want clusterip", wrap.Data["authMode"])
+	if wrap.Data["authMode"] != sharedGrafanaAuthModeProxy {
+		t.Fatalf("authMode = %v, want proxy", wrap.Data["authMode"])
+	}
+	if wrap.Data["grafanaHost"] != "grafana.astronomer.example.com" {
+		t.Fatalf("grafanaHost = %v", wrap.Data["grafanaHost"])
 	}
 	raw := rec.Body.String()
 	if strings.Contains(raw, "adminPassword") || strings.Contains(raw, "admin-password") {

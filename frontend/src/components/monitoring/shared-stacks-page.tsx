@@ -3,7 +3,7 @@
 /**
  * /dashboard/settings/monitoring — lifecycle for the SHARED monitoring
  * stacks: Thanos (long-term metrics), Alertmanager (alert routing), and
- * Grafana (ClusterIP lobby). They run on one management cluster and serve
+ * Grafana (ticket-bounce lobby). They run on one management cluster and serve
  * every managed cluster, which is why they live under settings rather than
  * on a cluster.
  *
@@ -92,7 +92,7 @@ export function SharedMonitoringStacksPage() {
           </Link>
         }
         title="Shared observability stacks"
-        description="Optional deployment-wide tier: Thanos (long-term metric retention), Grafana (ClusterIP fleet lobby), and Alertmanager (alert routing). Per-cluster monitoring already runs in-cluster on short-lived rolling storage with no object storage — add Thanos here only to keep metrics beyond each cluster's local retention window. Every action is queued and reconciled server-side."
+        description="Optional deployment-wide tier: Thanos (long-term metric retention), Grafana (fleet lobby on grafana.<host>), and Alertmanager (alert routing). Per-cluster monitoring already runs in-cluster on short-lived rolling storage with no object storage — add Thanos here only to keep metrics beyond each cluster's local retention window. Every action is queued and reconciled server-side."
         actions={
           <Link
             href="/dashboard/monitoring"

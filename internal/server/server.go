@@ -548,6 +548,18 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	helmRequester.SetInternalPSK(tunnel.DerivePSK(cfg.EncryptionKey))
 	monitoringHandler := handler.NewMonitoringHandlerWithDeps(queries, requester, helmRequester)
 	monitoringHandler.SetLogger(logger)
+	grafanaTickets := auth.NewGrafanaTicketStore(auth.GrafanaTicketTTL)
+	if gbackend, terr := auth.NewRedisGrafanaTicketBackendFromURL(cfg.RedisURL); terr != nil {
+		logger.Warn("grafana tickets: redis backend unavailable, using per-pod in-memory store", "error", terr)
+	} else {
+		grafanaTickets = auth.NewGrafanaTicketStoreWithBackend(auth.GrafanaTicketTTL, gbackend)
+	}
+	monitoringHandler.SetGrafanaTickets(grafanaTickets)
+	monitoringHandler.SetUserLookup(queries)
+	monitoringHandler.SetServerURL(cfg.ServerURL)
+	if img := os.Getenv("ASTRONOMER_SERVER_IMAGE"); img != "" {
+		monitoringHandler.SetGrafanaProxyImage(img)
+	}
 	// Migration 146: the Thanos/Prometheus/Alertmanager credential is
 	// Fernet-sealed at rest. This handler both reads it (to build a monitoring
 	// client) and read-modify-writes the column it lives in.

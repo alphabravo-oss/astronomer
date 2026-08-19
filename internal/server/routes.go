@@ -701,6 +701,15 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		if deps.StreamTickets != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/streams/tickets/", deps.StreamTickets.Create)
 		}
+		if deps.Monitoring != nil {
+			// Ticket bounce for fleet Grafana. Mint needs the session cookie
+			// (Astronomer origin). Redeem is called by grafana-proxy with the
+			// ticket as the only credential — no session, no Redis, no secret key.
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/observability/grafana-ticket", deps.Monitoring.MintGrafanaTicket)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/observability/grafana-ticket/", deps.Monitoring.MintGrafanaTicket)
+			r.Post("/observability/grafana-ticket/redeem", deps.Monitoring.RedeemGrafanaTicket)
+			r.Post("/observability/grafana-ticket/redeem/", deps.Monitoring.RedeemGrafanaTicket)
+		}
 
 		if deps.SupportBundle != nil {
 			// Authenticated; the handler enforces superuser gating itself so

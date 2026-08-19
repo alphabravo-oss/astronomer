@@ -383,7 +383,7 @@ func TestUpdateSharedGrafanaMetadataPreservesCredential(t *testing.T) {
 	if shared["status"] != "installing" {
 		t.Fatalf("the metadata stamp this call exists to make was lost: %v", doc)
 	}
-	if shared["authMode"] != sharedGrafanaAuthModeClusterIP {
+	if shared["authMode"] != sharedGrafanaAuthModeProxy {
 		t.Fatalf("authMode = %v", shared["authMode"])
 	}
 }
