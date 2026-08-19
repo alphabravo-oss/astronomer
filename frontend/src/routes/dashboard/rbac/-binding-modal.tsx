@@ -5,29 +5,53 @@ import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { toastError } from '@/lib/toast';
 import { useAppForm, useStore } from '@/lib/form';
-import { useClusterRoles, useClusters, useCreateClusterRoleBinding, useUsers } from '@/lib/hooks';
-import { isValidNamespace } from './-utils';
+import {
+  useClusterRoles,
+  useClusters,
+  useCreateAccessBinding,
+  useGlobalRoles,
+  useProjectRoles,
+  useProjects,
+  useUsers,
+} from '@/lib/hooks';
+import { clusterLabel, isValidNamespace, projectLabel, roleTitle, userLabel } from './-utils';
 
 export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) {
-  const { data: usersData } = useUsers();
+  const { data: usersData } = useUsers({ pageSize: 200 });
+  const { data: globalRoles } = useGlobalRoles();
   const { data: clusterRoles } = useClusterRoles();
-  const { data: clustersData } = useClusters();
-  const createBinding = useCreateClusterRoleBinding();
+  const { data: projectRoles } = useProjectRoles();
+  const { data: clustersData } = useClusters({ pageSize: 200 });
+  const { data: projectsData } = useProjects({ pageSize: 200 });
+  const createBinding = useCreateAccessBinding();
 
   const users = usersData?.data || [];
   const clusters = clustersData?.data || [];
-  const roles = clusterRoles || [];
+  const projects = projectsData?.data || [];
 
   const form = useAppForm({
-    defaultValues: { userId: '', roleId: '', clusterId: '', namespace: '' },
-    validators: {
-      // Old pre-submit check, ported 1:1 as a form-level onSubmit validator.
-      onSubmit: ({ value }) =>
-        !value.userId || !value.roleId || !value.clusterId || !isValidNamespace(value.namespace.trim())
-          ? 'Select a user, cluster role, and cluster; namespace must be a valid label'
-          : undefined,
+    defaultValues: {
+      scope: 'cluster' as 'global' | 'cluster' | 'project',
+      userId: '',
+      roleId: '',
+      clusterId: '',
+      projectId: '',
+      namespace: '',
     },
-    // Same UX as before: the failed check surfaces as a toast, not inline.
+    validators: {
+      onSubmit: ({ value }) => {
+        if (!value.userId || !value.roleId) {
+          return 'Select a user and a role';
+        }
+        if (value.scope === 'cluster' && (!value.clusterId || !isValidNamespace(value.namespace.trim()))) {
+          return 'Select a cluster; namespace must be a valid label';
+        }
+        if (value.scope === 'project' && !value.projectId) {
+          return 'Select a project';
+        }
+        return undefined;
+      },
+    },
     onSubmitInvalid: ({ formApi }) => {
       const err = formApi.state.errors.find((e) => typeof e === 'string');
       if (err) toastError(err);
@@ -35,9 +59,11 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
     onSubmit: async ({ value }) => {
       try {
         await createBinding.mutateAsync({
+          scope: value.scope,
           user_id: value.userId,
           role_id: value.roleId,
-          cluster_id: value.clusterId,
+          cluster_id: value.clusterId || undefined,
+          project_id: value.projectId || undefined,
           namespace: value.namespace.trim() || undefined,
         });
         onClose();
@@ -47,20 +73,23 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
     },
   });
 
+  const scope = useStore(form.store, (s) => s.values.scope);
   const namespaceValid = useStore(form.store, (s) => isValidNamespace(s.values.namespace.trim()));
-  // Old disabled gate, recomputed from form state 1:1.
-  const canSubmit = useStore(
-    form.store,
-    (s) =>
-      !!s.values.userId &&
-      !!s.values.roleId &&
-      !!s.values.clusterId &&
-      isValidNamespace(s.values.namespace.trim()),
-  );
+  const canSubmit = useStore(form.store, (s) => {
+    if (!s.values.userId || !s.values.roleId) return false;
+    if (s.values.scope === 'cluster') {
+      return !!s.values.clusterId && isValidNamespace(s.values.namespace.trim());
+    }
+    if (s.values.scope === 'project') return !!s.values.projectId;
+    return true;
+  });
+
+  const roles =
+    scope === 'global' ? globalRoles || [] : scope === 'project' ? projectRoles || [] : clusterRoles || [];
 
   return (
     <ModalShell
-      title="Create Cluster Binding"
+      title="Create Binding"
       onClose={onClose}
       size="md"
       footerClassName="flex items-center justify-end gap-2"
@@ -79,6 +108,26 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
       }
     >
       <div className="space-y-1.5">
+        <label className="text-sm font-medium text-foreground">Scope</label>
+        <form.Field name="scope">
+          {(field) => (
+            <Select
+              value={field.state.value}
+              onChange={(e) => {
+                field.handleChange(e.target.value as 'global' | 'cluster' | 'project');
+                form.setFieldValue('roleId', '');
+              }}
+              onBlur={field.handleBlur}
+            >
+              <option value="global">Global</option>
+              <option value="cluster">Cluster</option>
+              <option value="project">Project</option>
+            </Select>
+          )}
+        </form.Field>
+      </div>
+
+      <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">User</label>
         <form.Field name="userId">
           {(field) => (
@@ -90,7 +139,7 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
               <option value="">Select a user…</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.displayName || u.username}
+                  {userLabel(u)}
                 </option>
               ))}
             </Select>
@@ -99,7 +148,7 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Cluster Role</label>
+        <label className="text-sm font-medium text-foreground">Role</label>
         <form.Field name="roleId">
           {(field) => (
             <Select
@@ -107,10 +156,10 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
             >
-              <option value="">Select a cluster role…</option>
+              <option value="">Select a {scope} role…</option>
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.displayName || r.name}
+                  {roleTitle(r)}
                 </option>
               ))}
             </Select>
@@ -118,46 +167,72 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
         </form.Field>
       </div>
 
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Cluster</label>
-        <form.Field name="clusterId">
-          {(field) => (
-            <Select
-              value={field.state.value}
-              onChange={(e) => field.handleChange(e.target.value)}
-              onBlur={field.handleBlur}
-            >
-              <option value="">Select a cluster…</option>
-              {clusters.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          )}
-        </form.Field>
-      </div>
+      {scope === 'cluster' && (
+        <>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Cluster</label>
+            <form.Field name="clusterId">
+              {(field) => (
+                <Select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                >
+                  <option value="">Select a cluster…</option>
+                  {clusters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {clusterLabel(c)}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </form.Field>
+          </div>
 
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Namespace</label>
-        <form.Field name="namespace">
-          {(field) => (
-            <Input
-              type="text"
-              value={field.state.value}
-              onChange={(e) => field.handleChange(e.target.value)}
-              onBlur={field.handleBlur}
-              placeholder="leave blank for cluster-wide"
-              className={cn('font-mono', namespaceValid ? undefined : 'border-status-error')}
-            />
-          )}
-        </form.Field>
-        {!namespaceValid && (
-          <p className="text-xs text-status-error">
-            Must be a valid Kubernetes namespace (lowercase alphanumeric and dashes, ≤63 chars).
-          </p>
-        )}
-      </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Namespace</label>
+            <form.Field name="namespace">
+              {(field) => (
+                <Input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="leave blank for cluster-wide"
+                  className={cn('font-mono', namespaceValid ? undefined : 'border-status-error')}
+                />
+              )}
+            </form.Field>
+            {!namespaceValid && (
+              <p className="text-xs text-status-error">
+                Must be a valid Kubernetes namespace (lowercase alphanumeric and dashes, ≤63 chars).
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
+      {scope === 'project' && (
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Project</label>
+          <form.Field name="projectId">
+            {(field) => (
+              <Select
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+              >
+                <option value="">Select a project…</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {projectLabel(p)}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </form.Field>
+        </div>
+      )}
     </ModalShell>
   );
 }

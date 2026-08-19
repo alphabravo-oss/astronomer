@@ -207,7 +207,7 @@ export function EditUserModal({
       displayName: user.displayName,
       email: user.email,
       enabled: user.enabled,
-      globalRoles: [...user.globalRoles],
+      globalRoles: [...(user.globalRoles ?? [])],
     },
     onSubmit: async ({ value }) => {
       try {

@@ -575,6 +575,23 @@ export function useMyEffectivePermissions(params?: apiClient.EffectivePermission
   });
 }
 
+export function useEffectivePermissions(
+  userId: string | undefined,
+  params?: apiClient.EffectivePermissionParams,
+) {
+  const me = useCurrentUser();
+  const resolvedId = userId || me.data?.id || 'me';
+  const self = !userId || (!!me.data?.id && userId === me.data.id);
+  return useQuery({
+    queryKey: queryKeys.rbac.effectivePermissions(resolvedId, params),
+    queryFn: () =>
+      self
+        ? apiClient.getMyEffectivePermissions(params)
+        : apiClient.getEffectivePermissionsForUser(userId!, params),
+    enabled: self || !!userId,
+  });
+}
+
 export function useCreateRole() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -633,6 +650,20 @@ export function useClusterRoleBindings(params?: { cluster_id?: string }) {
   });
 }
 
+export function useGlobalRoleBindings() {
+  return useQuery({
+    queryKey: queryKeys.rbac.globalRoleBindings,
+    queryFn: () => apiClient.listGlobalRoleBindings(),
+  });
+}
+
+export function useProjectRoleBindings(params?: { project_id?: string }) {
+  return useQuery({
+    queryKey: queryKeys.rbac.projectRoleBindings(params),
+    queryFn: () => apiClient.listProjectRoleBindings(params),
+  });
+}
+
 export function useCreateClusterRoleBinding() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -652,6 +683,45 @@ export function useCreateClusterRoleBinding() {
   });
 }
 
+export function useCreateAccessBinding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      scope: 'global' | 'cluster' | 'project';
+      user_id: string;
+      role_id: string;
+      cluster_id?: string;
+      project_id?: string;
+      namespace?: string;
+    }) => {
+      switch (data.scope) {
+        case 'global':
+          return apiClient.createGlobalRoleBinding({ user_id: data.user_id, role_id: data.role_id });
+        case 'project':
+          return apiClient.createProjectRoleBinding({
+            user_id: data.user_id,
+            role_id: data.role_id,
+            project_id: data.project_id || '',
+          });
+        default:
+          return apiClient.createClusterRoleBinding({
+            user_id: data.user_id,
+            role_id: data.role_id,
+            cluster_id: data.cluster_id || '',
+            namespace: data.namespace,
+          });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
+      toastSuccess('Binding created');
+    },
+    onError: (error: Error) => {
+      toastApiError('Failed to create binding', error);
+    },
+  });
+}
+
 export function useDeleteClusterRoleBinding() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -662,6 +732,29 @@ export function useDeleteClusterRoleBinding() {
     },
     onError: (error: Error) => {
       toastApiError('Failed to revoke cluster role binding', error);
+    },
+  });
+}
+
+export function useDeleteAccessBinding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (binding: { scope: 'global' | 'cluster' | 'project'; id: string }) => {
+      switch (binding.scope) {
+        case 'global':
+          return apiClient.deleteGlobalRoleBinding(binding.id);
+        case 'project':
+          return apiClient.deleteProjectRoleBinding(binding.id);
+        default:
+          return apiClient.deleteClusterRoleBinding(binding.id);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
+      toastSuccess('Binding revoked');
+    },
+    onError: (error: Error) => {
+      toastApiError('Failed to revoke binding', error);
     },
   });
 }

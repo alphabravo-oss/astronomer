@@ -283,7 +283,16 @@ export async function getClusters(params?: {
   page?: number;
   pageSize?: number;
 }) {
-  const res = await api.get<PaginatedResponse<import('@/types').Cluster>>('/clusters', { params });
+  const res = await api.get<PaginatedResponse<import('@/types').Cluster>>('/clusters', {
+    params: {
+      status: params?.status,
+      provider: params?.provider,
+      environment: params?.environment,
+      search: params?.search,
+      limit: params?.pageSize,
+      offset: params?.page && params?.pageSize ? Math.max(0, params.page - 1) * params.pageSize : undefined,
+    },
+  });
   return res.data;
 }
 
@@ -791,21 +800,25 @@ export async function getWorkloadMetrics(
 
 // --- RBAC ---
 
+const RBAC_LIST_LIMIT = 200;
+
 export async function getGlobalRoles() {
-  const res = await api.get<APIResponse<import('@/types').GlobalRole[]>>('/rbac/global-roles');
+  const res = await api.get<APIResponse<import('@/types').GlobalRole[]>>('/rbac/global-roles', {
+    params: { limit: RBAC_LIST_LIMIT },
+  });
   return res.data.data;
 }
 
 export async function getClusterRoles(clusterId?: string) {
   const res = await api.get<APIResponse<import('@/types').ClusterRole[]>>('/rbac/cluster-roles', {
-    params: clusterId ? { clusterId } : undefined,
+    params: { limit: RBAC_LIST_LIMIT, ...(clusterId ? { clusterId } : {}) },
   });
   return res.data.data;
 }
 
 export async function getProjectRoles(projectId?: string) {
   const res = await api.get<APIResponse<import('@/types').ProjectRole[]>>('/rbac/project-roles', {
-    params: projectId ? { projectId } : undefined,
+    params: { limit: RBAC_LIST_LIMIT, ...(projectId ? { projectId } : {}) },
   });
   return res.data.data;
 }
@@ -862,7 +875,23 @@ export async function createRoleBinding(data: {
 export async function listClusterRoleBindings(params?: { cluster_id?: string }) {
   const res = await api.get<APIResponse<import('@/types').ClusterRoleBinding[]>>(
     '/rbac/cluster-role-bindings/',
-    { params }
+    { params: { limit: RBAC_LIST_LIMIT, ...params } }
+  );
+  return res.data.data;
+}
+
+export async function listGlobalRoleBindings() {
+  const res = await api.get<APIResponse<import('@/types').AccessBinding[]>>(
+    '/rbac/global-role-bindings/',
+    { params: { limit: RBAC_LIST_LIMIT } },
+  );
+  return res.data.data;
+}
+
+export async function listProjectRoleBindings(params?: { project_id?: string }) {
+  const res = await api.get<APIResponse<import('@/types').AccessBinding[]>>(
+    '/rbac/project-role-bindings/',
+    { params: { limit: RBAC_LIST_LIMIT, ...params } },
   );
   return res.data.data;
 }
@@ -873,15 +902,43 @@ export async function createClusterRoleBinding(data: {
   cluster_id: string;
   namespace?: string;
 }) {
-  const res = await api.post<APIResponse<import('@/types').ClusterRoleBinding>>(
+  const res = await api.post<APIResponse<import('@/types').AccessBinding>>(
     '/rbac/cluster-role-bindings/',
     data
   );
   return res.data.data;
 }
 
+export async function createGlobalRoleBinding(data: { user_id: string; role_id: string }) {
+  const res = await api.post<APIResponse<import('@/types').AccessBinding>>(
+    '/rbac/global-role-bindings/',
+    data,
+  );
+  return res.data.data;
+}
+
+export async function createProjectRoleBinding(data: {
+  user_id: string;
+  role_id: string;
+  project_id: string;
+}) {
+  const res = await api.post<APIResponse<import('@/types').AccessBinding>>(
+    '/rbac/project-role-bindings/',
+    data,
+  );
+  return res.data.data;
+}
+
 export async function deleteClusterRoleBinding(id: string) {
   await api.delete(`/rbac/cluster-role-bindings/${id}/`);
+}
+
+export async function deleteGlobalRoleBinding(id: string) {
+  await api.delete(`/rbac/global-role-bindings/${id}/`);
+}
+
+export async function deleteProjectRoleBinding(id: string) {
+  await api.delete(`/rbac/project-role-bindings/${id}/`);
 }
 
 export interface EffectivePermissionParams {
@@ -922,7 +979,15 @@ export async function previewPermissions(data: import('@/types').PermissionPrevi
 }
 
 export async function getUsers(params?: { search?: string; page?: number; pageSize?: number }) {
-  const res = await api.get<PaginatedResponse<import('@/types').User>>('/users', { params });
+  const pageSize = params?.pageSize;
+  const page = params?.page;
+  const res = await api.get<PaginatedResponse<import('@/types').User>>('/users', {
+    params: {
+      search: params?.search,
+      limit: pageSize,
+      offset: page && pageSize ? Math.max(0, page - 1) * pageSize : undefined,
+    },
+  });
   return res.data;
 }
 
@@ -1393,7 +1458,13 @@ export async function getReferenceGrants(clusterId: string) {
 // --- Projects ---
 
 export async function getProjects(params?: { search?: string; page?: number; pageSize?: number }) {
-  const res = await api.get<PaginatedResponse<import('@/types').Project>>('/projects', { params });
+  const res = await api.get<PaginatedResponse<import('@/types').Project>>('/projects', {
+    params: {
+      search: params?.search,
+      limit: params?.pageSize,
+      offset: params?.page && params?.pageSize ? Math.max(0, params.page - 1) * params.pageSize : undefined,
+    },
+  });
   return res.data;
 }
 

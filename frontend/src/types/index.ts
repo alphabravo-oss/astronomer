@@ -626,7 +626,7 @@ export interface User {
   displayName: string;
   avatarUrl?: string;
   provider: 'local' | 'github' | 'google' | 'oidc' | 'saml';
-  globalRoles: string[];
+  globalRoles?: string[];
   isSuperuser?: boolean;
   is_superuser?: boolean;
   roles?: {
@@ -671,8 +671,9 @@ export interface GlobalRole {
   name: string;
   displayName: string;
   description?: string;
-  builtin: boolean;
-  rules: PolicyRule[];
+  isBuiltin?: boolean;
+  builtin?: boolean;
+  rules?: PolicyRule[];
   createdAt: string;
 }
 
@@ -681,10 +682,9 @@ export interface ClusterRole {
   name: string;
   displayName: string;
   description?: string;
-  clusterId: string;
-  clusterName: string;
-  builtin: boolean;
-  rules: PolicyRule[];
+  isBuiltin?: boolean;
+  builtin?: boolean;
+  rules?: PolicyRule[];
   createdAt: string;
 }
 
@@ -693,10 +693,9 @@ export interface ProjectRole {
   name: string;
   displayName: string;
   description?: string;
-  projectId: string;
-  projectName: string;
-  builtin: boolean;
-  rules: PolicyRule[];
+  isBuiltin?: boolean;
+  builtin?: boolean;
+  rules?: PolicyRule[];
   createdAt: string;
 }
 
@@ -730,17 +729,35 @@ export interface RoleBindingSubject {
   namespace?: string;
 }
 
-// ClusterRoleBinding mirrors the backend `sqlc.ClusterRoleBinding` returned by
-// GET/POST /rbac/cluster-role-bindings/. An empty `namespace` means the binding
-// applies to the whole cluster; a non-empty value narrows it to one namespace.
+// ClusterRoleBinding is the camelized GET/POST /rbac/cluster-role-bindings/
+// row. Prefer AccessBinding in UI code. An empty `namespace` means cluster-wide.
+export type BindingScope = 'global' | 'cluster' | 'project';
+
+export interface AccessBinding {
+  id: string;
+  scope: BindingScope;
+  userId: string | null;
+  group: string;
+  roleId: string;
+  clusterId?: string;
+  projectId?: string;
+  namespace?: string;
+  createdAt: string;
+}
+
+/** @deprecated Use AccessBinding. Kept for existing call sites during the fold. */
 export interface ClusterRoleBinding {
   id: string;
-  user_id: string | null;
+  userId?: string | null;
+  user_id?: string | null;
   group: string;
-  role_id: string;
-  cluster_id: string;
+  roleId?: string;
+  role_id?: string;
+  clusterId?: string;
+  cluster_id?: string;
   namespace: string;
-  created_at: string;
+  createdAt?: string;
+  created_at?: string;
 }
 
 export interface RBACEngineRule {
@@ -772,7 +789,9 @@ export interface EffectivePermissionBinding {
   group?: string;
   clusterId?: string;
   projectId?: string;
-  rules: RBACEngineRule[];
+  namespace?: string;
+  superuser?: boolean;
+  rules?: RBACEngineRule[];
 }
 
 export interface EffectivePermissionContext {
@@ -788,6 +807,7 @@ export interface EffectivePermissionResponse {
     userId: string;
     self: boolean;
   };
+  superuser?: boolean;
   context: EffectivePermissionContext;
   bindings: EffectivePermissionBinding[];
   permissions: EffectivePermissionGrant[];

@@ -12,6 +12,7 @@ import { useCreateRole } from '@/lib/hooks';
 
 interface RoleEditorProps {
   onClose: () => void;
+  defaultScope?: 'global' | 'cluster' | 'project';
   initialRole?: {
     name: string;
     displayName: string;
@@ -59,9 +60,9 @@ const PLATFORM_RESOURCES = [
 const PLATFORM_VERBS = ['read', 'list', 'watch', 'create', 'update', 'delete'];
 const CRD_VERBS = ['read', 'list', 'watch', 'create', 'update', 'delete'];
 
-export function RoleEditor({ onClose, initialRole }: RoleEditorProps) {
+export function RoleEditor({ onClose, initialRole, defaultScope = 'cluster' }: RoleEditorProps) {
   const createRole = useCreateRole();
-  const [form, setForm] = useState(() => splitInitial(initialRole));
+  const [form, setForm] = useState(() => splitInitial(initialRole, defaultScope));
 
   const addPlatform = () => {
     setForm((f) => ({ ...f, platform: [...f.platform, { resource: 'workloads', verbs: ['read', 'list'] }] }));
@@ -356,7 +357,10 @@ function VerbPills({
   );
 }
 
-function splitInitial(initial?: RoleEditorProps['initialRole']) {
+function splitInitial(
+  initial?: RoleEditorProps['initialRole'],
+  defaultScope: 'global' | 'cluster' | 'project' = 'cluster',
+) {
   const platform: PolicyRuleInput[] = [];
   const crd: CRDGrantInput[] = [];
   for (const rule of initial?.rules ?? []) {
@@ -376,7 +380,7 @@ function splitInitial(initial?: RoleEditorProps['initialRole']) {
     name: initial?.name || '',
     displayName: initial?.displayName || '',
     description: initial?.description || '',
-    scope: initial?.scope || ('cluster' as 'global' | 'cluster' | 'project'),
+    scope: initial?.scope || defaultScope,
     platform: platform.length ? platform : [{ resource: 'workloads', verbs: ['read', 'list'] }],
     crd,
   };

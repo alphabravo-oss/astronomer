@@ -36,11 +36,11 @@ export function UsersTab({
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-800 flex items-center justify-center flex-shrink-0">
             <span className="text-xs font-medium text-zinc-300">
-              {(row.displayName || row.username).charAt(0).toUpperCase()}
+              {(row.displayName || row.username || '?').charAt(0).toUpperCase()}
             </span>
           </div>
           <div>
-            <p className="font-medium text-foreground">{row.displayName}</p>
+            <p className="font-medium text-foreground">{row.displayName || row.username}</p>
             <p className="text-xs text-muted-foreground">{row.username}</p>
           </div>
         </div>
@@ -65,11 +65,15 @@ export function UsersTab({
       header: 'Global Roles',
       accessor: (row) => (
         <div className="flex flex-wrap gap-1">
-          {row.globalRoles.map((role) => (
+          {row.isSuperuser && <Badge variant="warning">Superuser</Badge>}
+          {(row.globalRoles ?? []).map((role) => (
             <Badge key={role} variant="secondary">
               {role}
             </Badge>
           ))}
+          {!row.isSuperuser && (row.globalRoles ?? []).length === 0 && (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
         </div>
       ),
     },

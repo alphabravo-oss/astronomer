@@ -177,6 +177,42 @@ func TestMyEffectivePermissionsReturnsSelectedNamespaceContext(t *testing.T) {
 	}
 }
 
+func TestMyEffectivePermissionsSuperuser(t *testing.T) {
+	userID := "11111111-1111-1111-1111-111111111111"
+	h := &RBACHandler{}
+	h.SetAuthorization(rbac.NewEngine(), fakeEffectiveBindingQuerier{bindings: map[string][]rbac.RoleBinding{
+		userID: {{UserID: userID, IsSuperuser: true}},
+	}})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/rbac/my-permissions/", nil)
+	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: userID}))
+	rr := httptest.NewRecorder()
+	h.MyEffectivePermissions(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	var envelope struct {
+		Data effectivePermissionResponse `json:"data"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&envelope); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	got := envelope.Data
+	if !got.Superuser {
+		t.Fatalf("superuser flag unset: %+v", got)
+	}
+	if got.Permissions == nil {
+		t.Fatal("permissions must be [] not null")
+	}
+	if len(got.Bindings) != 1 || !got.Bindings[0].Superuser || got.Bindings[0].Rules == nil {
+		t.Fatalf("superuser binding = %+v", got.Bindings)
+	}
+	grant := effectiveGrantByKey(t, got.Permissions, "*", "*")
+	if !grant.AppliesToContext {
+		t.Fatalf("wildcard grant should apply: %+v", grant)
+	}
+}
+
 func TestMyEffectivePermissionsRejectsInvalidContext(t *testing.T) {
 	userID := "11111111-1111-1111-1111-111111111111"
 	h := &RBACHandler{}

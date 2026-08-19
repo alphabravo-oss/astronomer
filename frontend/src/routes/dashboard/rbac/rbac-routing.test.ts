@@ -1,4 +1,14 @@
-import { adminUserHref, isUserLocked, isValidNamespace } from './-utils';
+import {
+  adminUserHref,
+  bindingSubject,
+  bindingTarget,
+  crdGrantCount,
+  isBuiltinRole,
+  isUserLocked,
+  isValidNamespace,
+  roleTitle,
+  toAccessBinding,
+} from './-utils';
 
 // F-03 regression: the RBAC users table must link each row to the admin
 // user-security detail, and lock state must be derivable for the badge.
@@ -54,5 +64,72 @@ describe('isValidNamespace', () => {
     expect(isValidNamespace('trailing-')).toBe(false);
     expect(isValidNamespace('has space')).toBe(false);
     expect(isValidNamespace('a'.repeat(64))).toBe(false);
+  });
+});
+
+describe('role helpers', () => {
+  it('prefers displayName and isBuiltin after camelize', () => {
+    expect(roleTitle({ name: 'platform-admin', displayName: 'Platform Admin' })).toBe('Platform Admin');
+    expect(roleTitle({ name: 'platform-admin', displayName: '' })).toBe('platform-admin');
+    expect(isBuiltinRole({ name: 'x', isBuiltin: true })).toBe(true);
+    expect(isBuiltinRole({ name: 'x', builtin: true })).toBe(true);
+    expect(isBuiltinRole({ name: 'x' })).toBe(false);
+  });
+
+  it('counts CRD grants from either apiGroups spelling', () => {
+    expect(
+      crdGrantCount([
+        { resource: 'workloads', verbs: ['read'] },
+        { resource: 'certificates', verbs: ['read'], apiGroups: ['cert-manager.io'] },
+        { resource: 'helmreleases', verbs: ['list'], api_groups: ['helm.toolkit.fluxcd.io'] },
+      ]),
+    ).toBe(2);
+    expect(crdGrantCount(undefined)).toBe(0);
+  });
+});
+
+describe('toAccessBinding', () => {
+  it('normalizes camelized cluster binding rows', () => {
+    const binding = toAccessBinding('cluster', {
+      id: 'b1',
+      userId: 'u1',
+      group: '',
+      roleId: 'r1',
+      clusterId: 'c1',
+      namespace: 'payments',
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+    expect(binding).toMatchObject({
+      scope: 'cluster',
+      userId: 'u1',
+      roleId: 'r1',
+      clusterId: 'c1',
+      namespace: 'payments',
+    });
+  });
+});
+
+describe('binding labels', () => {
+  it('resolves users, clusters, and projects instead of raw ids', () => {
+    const binding = toAccessBinding('cluster', {
+      id: 'b1',
+      userId: 'u1',
+      roleId: 'r1',
+      clusterId: 'c1',
+      namespace: 'kube-system',
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+    expect(
+      bindingSubject(binding, [
+        { id: 'u1', username: 'ada', displayName: 'Ada', email: '', provider: 'local', enabled: true, lastLogin: '', createdAt: '' },
+      ]),
+    ).toBe('Ada');
+    expect(
+      bindingTarget(
+        binding,
+        [{ id: 'c1', name: 'local', displayName: 'Local' } as never],
+        [],
+      ),
+    ).toBe('Local / kube-system');
   });
 });
