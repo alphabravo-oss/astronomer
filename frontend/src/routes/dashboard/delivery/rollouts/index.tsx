@@ -6,9 +6,9 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
-  DeliveryShell,
+  RedirectDeliveryList,
   inputClass,
-  useDeliveryProjectScope,
+  useDeliveryWorkspace,
 } from "@/components/delivery/shared";
 import {
   listDeliveryRollouts,
@@ -40,9 +40,8 @@ const states: RolloutState[] = [
   "aborted",
 ];
 
-function RolloutsPage() {
-  const { projectId, projects, projectQuery, setProjectId } =
-    useDeliveryProjectScope();
+export function RolloutsPage() {
+  const { projectId, projects, projectQuery, listHref } = useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const allowed = can(user, "delivery_rollouts", "list", {
     type: "project",
@@ -67,7 +66,7 @@ function RolloutsPage() {
     else next.delete("state");
     if (nextPage) next.set("page", String(nextPage));
     else next.delete("page");
-    router.replace(`/dashboard/delivery/rollouts?${next.toString()}`);
+    router.replace(`${listHref("rollouts")}?${next.toString()}`);
   };
   const query = useQuery({
     queryKey: queryKeys.delivery.rollouts(projectId, params),
@@ -151,26 +150,20 @@ function RolloutsPage() {
     },
   ];
   return (
-    <DeliveryShell
+    <DeliveryProjectGate
       projectId={projectId}
-      projects={projects}
-      setProjectId={setProjectId}
+      loading={projectQuery.isLoading}
+      error={projectQuery.isError}
+      projectsCount={projects.length}
+      permission="delivery_rollouts:list"
+      allowed={allowed}
+      onRetry={() => void projectQuery.refetch()}
     >
-      <DeliveryProjectGate
-        projectId={projectId}
-        loading={projectQuery.isLoading}
-        error={projectQuery.isError}
-        projectsCount={projects.length}
-        permission="delivery_rollouts:list"
-        allowed={allowed}
-        onRetry={() => void projectQuery.refetch()}
-      >
-        <PageShell>
-          <PageHeader
-            eyebrow="Continuous Delivery"
-            title="Rollouts"
-            description="Immutable placement attempts with fenced actions, approvals, cohorts, budgets, and known-good rollback."
-          />
+      <PageShell>
+        <PageHeader
+          title="Rollouts"
+          description="Immutable placement attempts with fenced actions, approvals, cohorts, budgets, and known-good rollback."
+        />
           <DataTable
             data={query.data?.data ?? []}
             columns={columns}
@@ -209,9 +202,10 @@ function RolloutsPage() {
           />
         </PageShell>
       </DeliveryProjectGate>
-    </DeliveryShell>
   );
 }
 export const Route = createFileRoute("/dashboard/delivery/rollouts/")({
-  component: RolloutsPage,
+  component: function DeliveryRolloutsRedirect() {
+    return <RedirectDeliveryList tab="rollouts" />;
+  },
 });

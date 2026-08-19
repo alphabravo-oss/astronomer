@@ -1,8 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  clusterDeliveryPath,
   deliveryPageRowCount,
   deliveryProjectLabel,
+  projectBoundToCluster,
+  projectClusterId,
   useDeliveryPageIndex,
 } from "./shared";
 
@@ -81,6 +84,25 @@ describe("deliveryProjectLabel", () => {
         new Map(),
       ),
     ).toBe("Platform");
+  });
+});
+
+describe("cluster delivery paths", () => {
+  it("builds the Flux workspace URL for a cluster", () => {
+    expect(clusterDeliveryPath("cluster-1")).toBe(
+      "/dashboard/clusters/cluster-1/delivery",
+    );
+    expect(clusterDeliveryPath("cluster-1", "sources")).toBe(
+      "/dashboard/clusters/cluster-1/delivery/sources",
+    );
+  });
+
+  it("resolves the bound cluster from a project", () => {
+    expect(projectClusterId({ clusterId: "a" })).toBe("a");
+    expect(projectClusterId({ clusterIds: ["b"] })).toBe("b");
+    expect(projectBoundToCluster({ clusterId: "a" }, "a")).toBe(true);
+    expect(projectBoundToCluster({ clusterIds: ["b", "c"] }, "c")).toBe(true);
+    expect(projectBoundToCluster({ clusterId: "a" }, "b")).toBe(false);
   });
 });
 

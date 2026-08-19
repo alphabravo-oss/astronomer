@@ -35,10 +35,6 @@ const pages = [
   { name: 'Projects', href: '/dashboard/projects', icon: Folder },
   { name: 'Monitoring', href: '/dashboard/monitoring', icon: BarChart3 },
   { name: 'Continuous Delivery', href: '/dashboard/delivery', icon: Rocket },
-  { name: 'Delivery Sources', href: '/dashboard/delivery/sources', icon: Rocket },
-  { name: 'Delivery Bundles', href: '/dashboard/delivery/bundles', icon: Boxes },
-  { name: 'Delivery Targets', href: '/dashboard/delivery/targets', icon: Route },
-  { name: 'Delivery Rollouts', href: '/dashboard/delivery/rollouts', icon: Rocket },
   { name: 'RBAC', href: '/dashboard/rbac', icon: Shield },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
@@ -54,7 +50,7 @@ const clusterPages: Array<{ name: string; suffix: string; icon: LucideIcon; desc
   { name: 'Service Mesh', suffix: '/service-mesh', icon: Waypoints, description: 'mTLS + mesh status' },
   { name: 'Mirrored Resources', suffix: '/resources', icon: Layers, description: 'Read-only CRD mirror' },
   { name: 'Gatekeeper', suffix: '/gatekeeper', icon: Shield, description: 'OPA constraint authoring' },
-  { name: 'Delivery', suffix: '/delivery', icon: Rocket, description: 'Controller compatibility and deployments' },
+  { name: 'Delivery', suffix: '/delivery', icon: Rocket, description: 'Flux and delivery for this cluster' },
 ];
 
 // Extract the cluster id from a /dashboard/clusters/<id>/... path, skipping the

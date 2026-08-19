@@ -13,7 +13,7 @@ import {
   Unplug,
   X,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Link } from "@/lib/link";
 import { MetricCard } from "@/components/ui/metric-card";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -26,6 +26,8 @@ import {
   Detail,
   DetailGrid,
   ErrorMessage,
+  clusterDeliveryPath,
+  projectClusterId,
   useDeliveryProjectScope,
 } from "@/components/delivery/shared";
 import {
@@ -42,7 +44,7 @@ import {
   type DeliveryFleetCount,
 } from "@/lib/api/delivery";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useClusters, useCurrentUser } from "@/lib/hooks";
 import { can } from "@/lib/permissions";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
@@ -83,22 +85,20 @@ function DeliveryOverviewPage() {
     [queryKeys.delivery.fleet],
   );
   const showFleet = canReadFleet && !isForbiddenError(fleet.error);
+  if (showFleet) {
+    return <FleetDeliveryOverview query={fleet} />;
+  }
   return (
     <DeliveryShell
       projectId={projectId}
       projects={projects}
       setProjectId={setProjectId}
-      showProjectSelect={!showFleet}
     >
-      {showFleet ? (
-        <FleetDeliveryOverview query={fleet} />
-      ) : (
-        <ProjectDeliveryOverview
-          projectId={projectId}
-          projectQuery={projectQuery}
-          projectsCount={projects.length}
-        />
-      )}
+      <ProjectDeliveryOverview
+        projectId={projectId}
+        projectQuery={projectQuery}
+        projectsCount={projects.length}
+      />
     </DeliveryShell>
   );
 }
@@ -114,7 +114,7 @@ const fleetFocusLabels: Record<string, string> = {
 };
 
 function clusterHref(clusterId: string): string {
-  return `/dashboard/clusters/${clusterId}`;
+  return clusterDeliveryPath(clusterId);
 }
 
 function clusterMatchesFocus(
@@ -182,15 +182,19 @@ function FleetDeliveryOverview({
   const search = useSearchParams();
   const focus = search.get("focus") ?? "";
   const clusters = fleet?.clusters ?? [];
+  const clusterList = useClusters({ pageSize: 200 });
+  const environmentById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of clusterList.data?.data ?? []) {
+      if (item.id && item.environment) map.set(item.id, item.environment);
+    }
+    return map;
+  }, [clusterList.data?.data]);
   const visible = focus
     ? clusters.filter((cluster) => clusterMatchesFocus(cluster, focus))
     : clusters;
 
   const setFocus = (next: string) => {
-    if (next === "rollouts") {
-      router.push("/dashboard/delivery/rollouts");
-      return;
-    }
     const matches = clusters.filter((cluster) =>
       clusterMatchesFocus(cluster, next),
     );
@@ -222,6 +226,16 @@ function FleetDeliveryOverview({
         </div>
       ),
       sortAccessor: (row) => row.displayName || row.name,
+    },
+    {
+      key: "environment",
+      header: "Environment",
+      accessor: (row) => (
+        <span className="text-xs capitalize text-muted-foreground">
+          {environmentById.get(row.id) || "—"}
+        </span>
+      ),
+      sortAccessor: (row) => environmentById.get(row.id) || "",
     },
     {
       key: "role",
@@ -291,67 +305,78 @@ function FleetDeliveryOverview({
       <PageHeader
         eyebrow="Continuous Delivery"
         title="Fleet"
-        description="Click a tile to open or filter matching clusters. Click a cluster to enter it — the sidebar switcher keeps you there."
+        description="All environments. Click a cluster to open its Flux workspace — Sources, Bundles, Targets, Rollouts, and Deployments live there."
       />
       {query.isError && !isForbiddenError(query.error) && (
         <ErrorMessage error={query.error} />
       )}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
-        <FleetTile
-          icon={<Radio className="h-4 w-4" />}
-          title="Adopted"
-          value={summary?.adoptedClusters ?? "—"}
-          active={focus === "adopted"}
-          onClick={() => setFocus("adopted")}
-        />
-        <FleetTile
-          icon={<ServerCog className="h-4 w-4" />}
-          title="Flux ready"
-          value={summary?.fluxReady ?? "—"}
-          active={focus === "flux_ready"}
-          onClick={() => setFocus("flux_ready")}
-        />
-        <FleetTile
-          icon={<AlertTriangle className="h-4 w-4" />}
-          title="Incompatible"
-          value={summary?.incompatible ?? "—"}
-          active={focus === "incompatible"}
-          onClick={() => setFocus("incompatible")}
-        />
-        <FleetTile
-          icon={<Unplug className="h-4 w-4" />}
-          title="Disconnected"
-          value={summary?.disconnected ?? "—"}
-          active={focus === "disconnected"}
-          onClick={() => setFocus("disconnected")}
-        />
-        <FleetTile
-          icon={<Layers className="h-4 w-4" />}
-          title="Assignments"
-          value={summary?.assignments ?? "—"}
-          active={focus === "assignments"}
-          onClick={() => setFocus("assignments")}
-        />
-        <FleetTile
-          icon={<AlertTriangle className="h-4 w-4" />}
-          title="Failed"
-          value={summary?.failed ?? "—"}
-          active={focus === "failed"}
-          onClick={() => setFocus("failed")}
-        />
-        <FleetTile
-          icon={<GitBranch className="h-4 w-4" />}
-          title="Drifted"
-          value={summary?.drifted ?? "—"}
-          active={focus === "drifted"}
-          onClick={() => setFocus("drifted")}
-        />
-        <FleetTile
-          icon={<Rocket className="h-4 w-4" />}
-          title="Active rollouts"
-          value={summary?.activeRollouts ?? "—"}
-          onClick={() => setFocus("rollouts")}
-        />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-foreground">Cluster health</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <FleetTile
+              icon={<Radio className="h-4 w-4" />}
+              title="Adopted"
+              value={summary?.adoptedClusters ?? "—"}
+              active={focus === "adopted"}
+              onClick={() => setFocus("adopted")}
+            />
+            <FleetTile
+              icon={<ServerCog className="h-4 w-4" />}
+              title="Flux ready"
+              value={summary?.fluxReady ?? "—"}
+              active={focus === "flux_ready"}
+              onClick={() => setFocus("flux_ready")}
+            />
+            <FleetTile
+              icon={<AlertTriangle className="h-4 w-4" />}
+              title="Incompatible"
+              value={summary?.incompatible ?? "—"}
+              active={focus === "incompatible"}
+              onClick={() => setFocus("incompatible")}
+            />
+            <FleetTile
+              icon={<Unplug className="h-4 w-4" />}
+              title="Disconnected"
+              value={summary?.disconnected ?? "—"}
+              active={focus === "disconnected"}
+              onClick={() => setFocus("disconnected")}
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-foreground">Assignments</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <FleetTile
+              icon={<Layers className="h-4 w-4" />}
+              title="Assigned"
+              value={summary?.assignments ?? "—"}
+              active={focus === "assignments"}
+              onClick={() => setFocus("assignments")}
+            />
+            <FleetTile
+              icon={<AlertTriangle className="h-4 w-4" />}
+              title="Failed"
+              value={summary?.failed ?? "—"}
+              active={focus === "failed"}
+              onClick={() => setFocus("failed")}
+            />
+            <FleetTile
+              icon={<GitBranch className="h-4 w-4" />}
+              title="Drifted"
+              value={summary?.drifted ?? "—"}
+              active={focus === "drifted"}
+              onClick={() => setFocus("drifted")}
+            />
+            <FleetTile
+              icon={<Rocket className="h-4 w-4" />}
+              title="Active rollouts"
+              value={summary?.activeRollouts ?? "—"}
+              active={focus === "assignments"}
+              onClick={() => setFocus("assignments")}
+            />
+          </div>
+        </div>
       </div>
       <PageSection
         title="Needs attention"
@@ -387,9 +412,9 @@ function FleetDeliveryOverview({
       <div id="fleet-clusters">
       <PageSection
         title="Clusters"
-        description="Click a row to enter that cluster. The cluster switcher then stays on it while you browse."
+        description="Click a row to open that cluster's Flux workspace."
         actions={
-          focus && focus !== "rollouts" ? (
+          focus ? (
             <button
               type="button"
               onClick={() => setFocus("")}
@@ -439,11 +464,17 @@ function FleetTile({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-ring",
+        "flex items-start justify-between rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring",
         active && "ring-2 ring-ring",
       )}
     >
-      <MetricCard icon={icon} title={title} value={value} />
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-muted-foreground">{title}</p>
+        <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+          {value}
+        </p>
+      </div>
+      <div className="rounded-md bg-muted p-2 text-muted-foreground">{icon}</div>
     </button>
   );
 }
@@ -599,6 +630,10 @@ function ProjectDeliveryOverview({
     enabled: can(user, "delivery_platform", "read"),
     refetchInterval: liveFallback(30_000),
   });
+  const { projects } = useDeliveryProjectScope();
+  const clusterId = projectClusterId(
+    projects.find((project) => project.id === projectId) ?? {},
+  );
   const deploymentRows = deployments.data?.data ?? [];
   const failures = deploymentRows.filter(
     (item) =>
@@ -635,6 +670,7 @@ function ProjectDeliveryOverview({
           <MetricLink
             href="sources"
             projectId={projectId}
+            clusterId={clusterId}
             icon={GitBranch}
             label="Sources"
             value={sources.data?.count ?? "—"}
@@ -642,6 +678,7 @@ function ProjectDeliveryOverview({
           <MetricLink
             href="bundles"
             projectId={projectId}
+            clusterId={clusterId}
             icon={Boxes}
             label="Bundles"
             value={bundles.data?.count ?? "—"}
@@ -649,6 +686,7 @@ function ProjectDeliveryOverview({
           <MetricLink
             href="targets"
             projectId={projectId}
+            clusterId={clusterId}
             icon={Crosshair}
             label="Targets"
             value={targets.data?.count ?? "—"}
@@ -656,6 +694,7 @@ function ProjectDeliveryOverview({
           <MetricLink
             href="rollouts"
             projectId={projectId}
+            clusterId={clusterId}
             icon={Rocket}
             label="Active (latest 10)"
             value={
@@ -673,6 +712,7 @@ function ProjectDeliveryOverview({
           <MetricLink
             href="deployments"
             projectId={projectId}
+            clusterId={clusterId}
             icon={Layers}
             label="Drifted (loaded page)"
             value={drifted}
@@ -817,19 +857,24 @@ function ProjectDeliveryOverview({
 function MetricLink({
   href,
   projectId,
+  clusterId,
   icon: Icon,
   label,
   value,
 }: {
   href: string;
   projectId: string;
+  clusterId?: string;
   icon: typeof ServerCog;
   label: string;
   value: string | number;
 }) {
+  const target = clusterId
+    ? `${clusterDeliveryPath(clusterId, href)}?project=${encodeURIComponent(projectId)}`
+    : `/dashboard/delivery/${href}?project=${encodeURIComponent(projectId)}`;
   return (
     <Link
-      href={`/dashboard/delivery/${href}?project=${encodeURIComponent(projectId)}`}
+      href={target}
       className="block rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
     >
       <MetricCard

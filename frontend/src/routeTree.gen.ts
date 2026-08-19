@@ -42,6 +42,7 @@ import { Route as DashboardAuditShellSessionsIndexRouteImport } from './routes/d
 import { Route as DashboardClusterTemplatesIdIndexRouteImport } from './routes/dashboard/cluster-templates/$id/index'
 import { Route as DashboardClusterTemplatesNewIndexRouteImport } from './routes/dashboard/cluster-templates/new/index'
 import { Route as DashboardClustersIdIndexRouteImport } from './routes/dashboard/clusters/$id/index'
+import { Route as DashboardClustersIdDeliveryRouteRouteImport } from './routes/dashboard/clusters/$id/delivery/route'
 import { Route as DashboardClustersRegisterIndexRouteImport } from './routes/dashboard/clusters/register/index'
 import { Route as DashboardDeliveryBundlesIndexRouteImport } from './routes/dashboard/delivery/bundles/index'
 import { Route as DashboardDeliveryDeploymentsIndexRouteImport } from './routes/dashboard/delivery/deployments/index'
@@ -121,6 +122,11 @@ import { Route as DashboardSettingsQuotasUsageIndexRouteImport } from './routes/
 import { Route as DashboardSettingsTemplatesKeyIndexRouteImport } from './routes/dashboard/settings/templates/$key/index'
 import { Route as DashboardSettingsWebhooksIdIndexRouteImport } from './routes/dashboard/settings/webhooks/$id/index'
 import { Route as DashboardSettingsWebhooksNewIndexRouteImport } from './routes/dashboard/settings/webhooks/new/index'
+import { Route as DashboardClustersIdDeliveryBundlesIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/bundles/index'
+import { Route as DashboardClustersIdDeliveryDeploymentsIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/deployments/index'
+import { Route as DashboardClustersIdDeliveryRolloutsIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/rollouts/index'
+import { Route as DashboardClustersIdDeliverySourcesIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/sources/index'
+import { Route as DashboardClustersIdDeliveryTargetsIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/targets/index'
 import { Route as DashboardClustersIdNodesNodeNameIndexRouteImport } from './routes/dashboard/clusters/$id/nodes/$nodeName/index'
 import { Route as DashboardClustersIdServiceMeshMtlsIndexRouteImport } from './routes/dashboard/clusters/$id/service-mesh/mtls/index'
 import { Route as DashboardClustersRegisterIdConnectIndexRouteImport } from './routes/dashboard/clusters/register/$id/connect/index'
@@ -307,6 +313,12 @@ const DashboardClustersIdIndexRoute =
   DashboardClustersIdIndexRouteImport.update({
     id: '/',
     path: '/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdDeliveryRouteRoute =
+  DashboardClustersIdDeliveryRouteRouteImport.update({
+    id: '/delivery',
+    path: '/delivery',
     getParentRoute: () => DashboardClustersIdRouteRoute,
   } as any)
 const DashboardClustersRegisterIndexRoute =
@@ -563,9 +575,9 @@ const DashboardClustersIdCustomResourcesSplatRoute =
   } as any)
 const DashboardClustersIdDeliveryIndexRoute =
   DashboardClustersIdDeliveryIndexRouteImport.update({
-    id: '/delivery/',
-    path: '/delivery/',
-    getParentRoute: () => DashboardClustersIdRouteRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => DashboardClustersIdDeliveryRouteRoute,
   } as any)
 const DashboardClustersIdGatekeeperIndexRoute =
   DashboardClustersIdGatekeeperIndexRouteImport.update({
@@ -783,6 +795,36 @@ const DashboardSettingsWebhooksNewIndexRoute =
     path: '/settings/webhooks/new/',
     getParentRoute: () => DashboardRouteRoute,
   } as any)
+const DashboardClustersIdDeliveryBundlesIndexRoute =
+  DashboardClustersIdDeliveryBundlesIndexRouteImport.update({
+    id: '/bundles/',
+    path: '/bundles/',
+    getParentRoute: () => DashboardClustersIdDeliveryRouteRoute,
+  } as any)
+const DashboardClustersIdDeliveryDeploymentsIndexRoute =
+  DashboardClustersIdDeliveryDeploymentsIndexRouteImport.update({
+    id: '/deployments/',
+    path: '/deployments/',
+    getParentRoute: () => DashboardClustersIdDeliveryRouteRoute,
+  } as any)
+const DashboardClustersIdDeliveryRolloutsIndexRoute =
+  DashboardClustersIdDeliveryRolloutsIndexRouteImport.update({
+    id: '/rollouts/',
+    path: '/rollouts/',
+    getParentRoute: () => DashboardClustersIdDeliveryRouteRoute,
+  } as any)
+const DashboardClustersIdDeliverySourcesIndexRoute =
+  DashboardClustersIdDeliverySourcesIndexRouteImport.update({
+    id: '/sources/',
+    path: '/sources/',
+    getParentRoute: () => DashboardClustersIdDeliveryRouteRoute,
+  } as any)
+const DashboardClustersIdDeliveryTargetsIndexRoute =
+  DashboardClustersIdDeliveryTargetsIndexRouteImport.update({
+    id: '/targets/',
+    path: '/targets/',
+    getParentRoute: () => DashboardClustersIdDeliveryRouteRoute,
+  } as any)
 const DashboardClustersIdNodesNodeNameIndexRoute =
   DashboardClustersIdNodesNodeNameIndexRouteImport.update({
     id: '/nodes/$nodeName/',
@@ -864,6 +906,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/security/': typeof DashboardSecurityIndexRoute
   '/dashboard/settings/': typeof DashboardSettingsIndexRoute
   '/dashboard/tools/': typeof DashboardToolsIndexRoute
+  '/dashboard/clusters/$id/delivery': typeof DashboardClustersIdDeliveryRouteRouteWithChildren
   '/auth/login/forgot-password/': typeof AuthLoginForgotPasswordIndexRoute
   '/auth/login/reset-password/': typeof AuthLoginResetPasswordIndexRoute
   '/dashboard/account/security/': typeof DashboardAccountSecurityIndexRoute
@@ -951,6 +994,11 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings/templates/$key/': typeof DashboardSettingsTemplatesKeyIndexRoute
   '/dashboard/settings/webhooks/$id/': typeof DashboardSettingsWebhooksIdIndexRoute
   '/dashboard/settings/webhooks/new/': typeof DashboardSettingsWebhooksNewIndexRoute
+  '/dashboard/clusters/$id/delivery/bundles/': typeof DashboardClustersIdDeliveryBundlesIndexRoute
+  '/dashboard/clusters/$id/delivery/deployments/': typeof DashboardClustersIdDeliveryDeploymentsIndexRoute
+  '/dashboard/clusters/$id/delivery/rollouts/': typeof DashboardClustersIdDeliveryRolloutsIndexRoute
+  '/dashboard/clusters/$id/delivery/sources/': typeof DashboardClustersIdDeliverySourcesIndexRoute
+  '/dashboard/clusters/$id/delivery/targets/': typeof DashboardClustersIdDeliveryTargetsIndexRoute
   '/dashboard/clusters/$id/nodes/$nodeName/': typeof DashboardClustersIdNodesNodeNameIndexRoute
   '/dashboard/clusters/$id/service-mesh/mtls/': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
   '/dashboard/clusters/register/$id/connect/': typeof DashboardClustersRegisterIdConnectIndexRoute
@@ -1071,6 +1119,11 @@ export interface FileRoutesByTo {
   '/dashboard/settings/templates/$key': typeof DashboardSettingsTemplatesKeyIndexRoute
   '/dashboard/settings/webhooks/$id': typeof DashboardSettingsWebhooksIdIndexRoute
   '/dashboard/settings/webhooks/new': typeof DashboardSettingsWebhooksNewIndexRoute
+  '/dashboard/clusters/$id/delivery/bundles': typeof DashboardClustersIdDeliveryBundlesIndexRoute
+  '/dashboard/clusters/$id/delivery/deployments': typeof DashboardClustersIdDeliveryDeploymentsIndexRoute
+  '/dashboard/clusters/$id/delivery/rollouts': typeof DashboardClustersIdDeliveryRolloutsIndexRoute
+  '/dashboard/clusters/$id/delivery/sources': typeof DashboardClustersIdDeliverySourcesIndexRoute
+  '/dashboard/clusters/$id/delivery/targets': typeof DashboardClustersIdDeliveryTargetsIndexRoute
   '/dashboard/clusters/$id/nodes/$nodeName': typeof DashboardClustersIdNodesNodeNameIndexRoute
   '/dashboard/clusters/$id/service-mesh/mtls': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
   '/dashboard/clusters/register/$id/connect': typeof DashboardClustersRegisterIdConnectIndexRoute
@@ -1108,6 +1161,7 @@ export interface FileRoutesById {
   '/dashboard/security/': typeof DashboardSecurityIndexRoute
   '/dashboard/settings/': typeof DashboardSettingsIndexRoute
   '/dashboard/tools/': typeof DashboardToolsIndexRoute
+  '/dashboard/clusters/$id/delivery': typeof DashboardClustersIdDeliveryRouteRouteWithChildren
   '/auth/login/forgot-password/': typeof AuthLoginForgotPasswordIndexRoute
   '/auth/login/reset-password/': typeof AuthLoginResetPasswordIndexRoute
   '/dashboard/account/security/': typeof DashboardAccountSecurityIndexRoute
@@ -1195,6 +1249,11 @@ export interface FileRoutesById {
   '/dashboard/settings/templates/$key/': typeof DashboardSettingsTemplatesKeyIndexRoute
   '/dashboard/settings/webhooks/$id/': typeof DashboardSettingsWebhooksIdIndexRoute
   '/dashboard/settings/webhooks/new/': typeof DashboardSettingsWebhooksNewIndexRoute
+  '/dashboard/clusters/$id/delivery/bundles/': typeof DashboardClustersIdDeliveryBundlesIndexRoute
+  '/dashboard/clusters/$id/delivery/deployments/': typeof DashboardClustersIdDeliveryDeploymentsIndexRoute
+  '/dashboard/clusters/$id/delivery/rollouts/': typeof DashboardClustersIdDeliveryRolloutsIndexRoute
+  '/dashboard/clusters/$id/delivery/sources/': typeof DashboardClustersIdDeliverySourcesIndexRoute
+  '/dashboard/clusters/$id/delivery/targets/': typeof DashboardClustersIdDeliveryTargetsIndexRoute
   '/dashboard/clusters/$id/nodes/$nodeName/': typeof DashboardClustersIdNodesNodeNameIndexRoute
   '/dashboard/clusters/$id/service-mesh/mtls/': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
   '/dashboard/clusters/register/$id/connect/': typeof DashboardClustersRegisterIdConnectIndexRoute
@@ -1233,6 +1292,7 @@ export interface FileRouteTypes {
     | '/dashboard/security/'
     | '/dashboard/settings/'
     | '/dashboard/tools/'
+    | '/dashboard/clusters/$id/delivery'
     | '/auth/login/forgot-password/'
     | '/auth/login/reset-password/'
     | '/dashboard/account/security/'
@@ -1320,6 +1380,11 @@ export interface FileRouteTypes {
     | '/dashboard/settings/templates/$key/'
     | '/dashboard/settings/webhooks/$id/'
     | '/dashboard/settings/webhooks/new/'
+    | '/dashboard/clusters/$id/delivery/bundles/'
+    | '/dashboard/clusters/$id/delivery/deployments/'
+    | '/dashboard/clusters/$id/delivery/rollouts/'
+    | '/dashboard/clusters/$id/delivery/sources/'
+    | '/dashboard/clusters/$id/delivery/targets/'
     | '/dashboard/clusters/$id/nodes/$nodeName/'
     | '/dashboard/clusters/$id/service-mesh/mtls/'
     | '/dashboard/clusters/register/$id/connect/'
@@ -1440,6 +1505,11 @@ export interface FileRouteTypes {
     | '/dashboard/settings/templates/$key'
     | '/dashboard/settings/webhooks/$id'
     | '/dashboard/settings/webhooks/new'
+    | '/dashboard/clusters/$id/delivery/bundles'
+    | '/dashboard/clusters/$id/delivery/deployments'
+    | '/dashboard/clusters/$id/delivery/rollouts'
+    | '/dashboard/clusters/$id/delivery/sources'
+    | '/dashboard/clusters/$id/delivery/targets'
     | '/dashboard/clusters/$id/nodes/$nodeName'
     | '/dashboard/clusters/$id/service-mesh/mtls'
     | '/dashboard/clusters/register/$id/connect'
@@ -1476,6 +1546,7 @@ export interface FileRouteTypes {
     | '/dashboard/security/'
     | '/dashboard/settings/'
     | '/dashboard/tools/'
+    | '/dashboard/clusters/$id/delivery'
     | '/auth/login/forgot-password/'
     | '/auth/login/reset-password/'
     | '/dashboard/account/security/'
@@ -1563,6 +1634,11 @@ export interface FileRouteTypes {
     | '/dashboard/settings/templates/$key/'
     | '/dashboard/settings/webhooks/$id/'
     | '/dashboard/settings/webhooks/new/'
+    | '/dashboard/clusters/$id/delivery/bundles/'
+    | '/dashboard/clusters/$id/delivery/deployments/'
+    | '/dashboard/clusters/$id/delivery/rollouts/'
+    | '/dashboard/clusters/$id/delivery/sources/'
+    | '/dashboard/clusters/$id/delivery/targets/'
     | '/dashboard/clusters/$id/nodes/$nodeName/'
     | '/dashboard/clusters/$id/service-mesh/mtls/'
     | '/dashboard/clusters/register/$id/connect/'
@@ -1814,6 +1890,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/dashboard/clusters/$id/'
       preLoaderRoute: typeof DashboardClustersIdIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/delivery': {
+      id: '/dashboard/clusters/$id/delivery'
+      path: '/delivery'
+      fullPath: '/dashboard/clusters/$id/delivery'
+      preLoaderRoute: typeof DashboardClustersIdDeliveryRouteRouteImport
       parentRoute: typeof DashboardClustersIdRouteRoute
     }
     '/dashboard/clusters/register/': {
@@ -2112,10 +2195,10 @@ declare module '@tanstack/react-router' {
     }
     '/dashboard/clusters/$id/delivery/': {
       id: '/dashboard/clusters/$id/delivery/'
-      path: '/delivery'
+      path: '/'
       fullPath: '/dashboard/clusters/$id/delivery/'
       preLoaderRoute: typeof DashboardClustersIdDeliveryIndexRouteImport
-      parentRoute: typeof DashboardClustersIdRouteRoute
+      parentRoute: typeof DashboardClustersIdDeliveryRouteRoute
     }
     '/dashboard/clusters/$id/gatekeeper/': {
       id: '/dashboard/clusters/$id/gatekeeper/'
@@ -2369,6 +2452,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSettingsWebhooksNewIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
+    '/dashboard/clusters/$id/delivery/bundles/': {
+      id: '/dashboard/clusters/$id/delivery/bundles/'
+      path: '/bundles'
+      fullPath: '/dashboard/clusters/$id/delivery/bundles/'
+      preLoaderRoute: typeof DashboardClustersIdDeliveryBundlesIndexRouteImport
+      parentRoute: typeof DashboardClustersIdDeliveryRouteRoute
+    }
+    '/dashboard/clusters/$id/delivery/deployments/': {
+      id: '/dashboard/clusters/$id/delivery/deployments/'
+      path: '/deployments'
+      fullPath: '/dashboard/clusters/$id/delivery/deployments/'
+      preLoaderRoute: typeof DashboardClustersIdDeliveryDeploymentsIndexRouteImport
+      parentRoute: typeof DashboardClustersIdDeliveryRouteRoute
+    }
+    '/dashboard/clusters/$id/delivery/rollouts/': {
+      id: '/dashboard/clusters/$id/delivery/rollouts/'
+      path: '/rollouts'
+      fullPath: '/dashboard/clusters/$id/delivery/rollouts/'
+      preLoaderRoute: typeof DashboardClustersIdDeliveryRolloutsIndexRouteImport
+      parentRoute: typeof DashboardClustersIdDeliveryRouteRoute
+    }
+    '/dashboard/clusters/$id/delivery/sources/': {
+      id: '/dashboard/clusters/$id/delivery/sources/'
+      path: '/sources'
+      fullPath: '/dashboard/clusters/$id/delivery/sources/'
+      preLoaderRoute: typeof DashboardClustersIdDeliverySourcesIndexRouteImport
+      parentRoute: typeof DashboardClustersIdDeliveryRouteRoute
+    }
+    '/dashboard/clusters/$id/delivery/targets/': {
+      id: '/dashboard/clusters/$id/delivery/targets/'
+      path: '/targets'
+      fullPath: '/dashboard/clusters/$id/delivery/targets/'
+      preLoaderRoute: typeof DashboardClustersIdDeliveryTargetsIndexRouteImport
+      parentRoute: typeof DashboardClustersIdDeliveryRouteRoute
+    }
     '/dashboard/clusters/$id/nodes/$nodeName/': {
       id: '/dashboard/clusters/$id/nodes/$nodeName/'
       path: '/nodes/$nodeName'
@@ -2435,7 +2553,38 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface DashboardClustersIdDeliveryRouteRouteChildren {
+  DashboardClustersIdDeliveryIndexRoute: typeof DashboardClustersIdDeliveryIndexRoute
+  DashboardClustersIdDeliveryBundlesIndexRoute: typeof DashboardClustersIdDeliveryBundlesIndexRoute
+  DashboardClustersIdDeliveryDeploymentsIndexRoute: typeof DashboardClustersIdDeliveryDeploymentsIndexRoute
+  DashboardClustersIdDeliveryRolloutsIndexRoute: typeof DashboardClustersIdDeliveryRolloutsIndexRoute
+  DashboardClustersIdDeliverySourcesIndexRoute: typeof DashboardClustersIdDeliverySourcesIndexRoute
+  DashboardClustersIdDeliveryTargetsIndexRoute: typeof DashboardClustersIdDeliveryTargetsIndexRoute
+}
+
+const DashboardClustersIdDeliveryRouteRouteChildren: DashboardClustersIdDeliveryRouteRouteChildren =
+  {
+    DashboardClustersIdDeliveryIndexRoute:
+      DashboardClustersIdDeliveryIndexRoute,
+    DashboardClustersIdDeliveryBundlesIndexRoute:
+      DashboardClustersIdDeliveryBundlesIndexRoute,
+    DashboardClustersIdDeliveryDeploymentsIndexRoute:
+      DashboardClustersIdDeliveryDeploymentsIndexRoute,
+    DashboardClustersIdDeliveryRolloutsIndexRoute:
+      DashboardClustersIdDeliveryRolloutsIndexRoute,
+    DashboardClustersIdDeliverySourcesIndexRoute:
+      DashboardClustersIdDeliverySourcesIndexRoute,
+    DashboardClustersIdDeliveryTargetsIndexRoute:
+      DashboardClustersIdDeliveryTargetsIndexRoute,
+  }
+
+const DashboardClustersIdDeliveryRouteRouteWithChildren =
+  DashboardClustersIdDeliveryRouteRoute._addFileChildren(
+    DashboardClustersIdDeliveryRouteRouteChildren,
+  )
+
 interface DashboardClustersIdRouteRouteChildren {
+  DashboardClustersIdDeliveryRouteRoute: typeof DashboardClustersIdDeliveryRouteRouteWithChildren
   DashboardClustersIdIndexRoute: typeof DashboardClustersIdIndexRoute
   DashboardClustersIdResourceSplatRoute: typeof DashboardClustersIdResourceSplatRoute
   DashboardClustersIdCustomResourcesSplatRoute: typeof DashboardClustersIdCustomResourcesSplatRoute
@@ -2444,7 +2593,6 @@ interface DashboardClustersIdRouteRouteChildren {
   DashboardClustersIdAppsIndexRoute: typeof DashboardClustersIdAppsIndexRoute
   DashboardClustersIdControlPlaneSnapshotsIndexRoute: typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
   DashboardClustersIdCustomResourcesIndexRoute: typeof DashboardClustersIdCustomResourcesIndexRoute
-  DashboardClustersIdDeliveryIndexRoute: typeof DashboardClustersIdDeliveryIndexRoute
   DashboardClustersIdGatekeeperIndexRoute: typeof DashboardClustersIdGatekeeperIndexRoute
   DashboardClustersIdImageScansIndexRoute: typeof DashboardClustersIdImageScansIndexRoute
   DashboardClustersIdMonitoringStackIndexRoute: typeof DashboardClustersIdMonitoringStackIndexRoute
@@ -2465,6 +2613,8 @@ interface DashboardClustersIdRouteRouteChildren {
 
 const DashboardClustersIdRouteRouteChildren: DashboardClustersIdRouteRouteChildren =
   {
+    DashboardClustersIdDeliveryRouteRoute:
+      DashboardClustersIdDeliveryRouteRouteWithChildren,
     DashboardClustersIdIndexRoute: DashboardClustersIdIndexRoute,
     DashboardClustersIdResourceSplatRoute:
       DashboardClustersIdResourceSplatRoute,
@@ -2479,8 +2629,6 @@ const DashboardClustersIdRouteRouteChildren: DashboardClustersIdRouteRouteChildr
       DashboardClustersIdControlPlaneSnapshotsIndexRoute,
     DashboardClustersIdCustomResourcesIndexRoute:
       DashboardClustersIdCustomResourcesIndexRoute,
-    DashboardClustersIdDeliveryIndexRoute:
-      DashboardClustersIdDeliveryIndexRoute,
     DashboardClustersIdGatekeeperIndexRoute:
       DashboardClustersIdGatekeeperIndexRoute,
     DashboardClustersIdImageScansIndexRoute:

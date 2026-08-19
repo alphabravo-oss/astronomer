@@ -7,14 +7,14 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
   DeliveryProjectGate,
-  DeliveryShell,
   ErrorMessage,
+  RedirectDeliveryList,
   inputClass,
   primaryButton,
   secondaryButton,
   textareaClass,
   useDeliveryPageIndex,
-  useDeliveryProjectScope,
+  useDeliveryWorkspace,
 } from "@/components/delivery/shared";
 import {
   createComponentBundle,
@@ -30,9 +30,8 @@ import { formatRelativeTime } from "@/lib/utils";
 import { useRouter } from "@/lib/navigation";
 import { toastSuccess } from "@/lib/toast";
 
-function BundlesPage() {
-  const { projectId, projects, projectQuery, setProjectId } =
-    useDeliveryProjectScope();
+export function BundlesPage() {
+  const { projectId, projects, projectQuery } = useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const scope = { type: "project" as const, id: projectId };
   const allowed = can(user, "delivery_bundles", "list", scope);
@@ -85,11 +84,7 @@ function BundlesPage() {
     },
   ];
   return (
-    <DeliveryShell
-      projectId={projectId}
-      projects={projects}
-      setProjectId={setProjectId}
-    >
+    <>
       <DeliveryProjectGate
         projectId={projectId}
         loading={projectQuery.isLoading}
@@ -101,7 +96,6 @@ function BundlesPage() {
       >
         <PageShell>
           <PageHeader
-            eyebrow="Continuous Delivery"
             title="Component bundles"
             description="Stable bundle identities with append-only, immutable and centrally verified versions."
             actions={
@@ -144,7 +138,7 @@ function BundlesPage() {
           onClose={() => setCreating(false)}
         />
       )}
-    </DeliveryShell>
+    </>
   );
 }
 
@@ -217,5 +211,7 @@ function CreateBundleDialog({
 }
 
 export const Route = createFileRoute("/dashboard/delivery/bundles/")({
-  component: BundlesPage,
+  component: function DeliveryBundlesRedirect() {
+    return <RedirectDeliveryList tab="bundles" />;
+  },
 });

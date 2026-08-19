@@ -93,6 +93,7 @@ const project = {
   name: "platform",
   displayName: "Platform",
   description: "Platform delivery project",
+  clusterId: "cluster-1",
   namespaces: [],
   members: [],
   createdAt: new Date().toISOString(),
@@ -567,14 +568,9 @@ test("delivery overview renders the Flux-native system for authenticated users",
   await seedAuth(context, page, adminUser);
   await page.goto("/dashboard/delivery");
 
-  await expect(
-    page.getByRole("heading", { name: /delivery overview/i }),
-  ).toBeVisible();
-  await expect(page.getByText("1.0.0")).toBeVisible();
-  await expect(page.getByRole("link", { name: /sources/i })).toHaveAttribute(
-    "href",
-    /project=project-1/,
-  );
+  await expect(page.getByRole("heading", { name: /^Fleet$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /flux ready/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Sources$/ })).toHaveCount(0);
 });
 
 test("catalog install modal remains usable on responsive viewports", async ({

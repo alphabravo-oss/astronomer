@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Server,
   BarChart3,
-  GitBranch,
   Shield,
   ShieldCheck,
   Settings,
@@ -53,7 +52,6 @@ import {
   Waypoints,
   Rocket,
   Sparkles,
-  Crosshair,
 } from 'lucide-react';
 import { cn, formatK8sVersion } from '@/lib/utils';
 import { APP_VERSION } from '@/lib/env';
@@ -144,12 +142,7 @@ const globalNavGroups: NavGroup[] = [
   {
     label: 'Continuous Delivery',
     items: [
-      { label: 'Overview', href: '/dashboard/delivery', icon: Rocket, permission: { resource: 'delivery_targets', verb: 'list' }, exact: true },
-      { label: 'Sources', href: '/dashboard/delivery/sources', icon: GitBranch, permission: { resource: 'delivery_sources', verb: 'list' } },
-      { label: 'Bundles', href: '/dashboard/delivery/bundles', icon: Boxes, permission: { resource: 'delivery_bundles', verb: 'list' } },
-      { label: 'Targets', href: '/dashboard/delivery/targets', icon: Crosshair, permission: { resource: 'delivery_targets', verb: 'list' } },
-      { label: 'Rollouts', href: '/dashboard/delivery/rollouts', icon: Route, permission: { resource: 'delivery_rollouts', verb: 'list' } },
-      { label: 'Deployments', href: '/dashboard/delivery/deployments', icon: Layers, permission: { resource: 'delivery_deployments', verb: 'list' } },
+      { label: 'Fleet', href: '/dashboard/delivery', icon: Rocket, permission: { resource: 'delivery_targets', verb: 'list' }, exact: true },
     ],
   },
   {
