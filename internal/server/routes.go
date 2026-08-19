@@ -778,6 +778,11 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/backup-drill/", deps.AdminDrill.GetLatest)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/backup-drill/history/", deps.AdminDrill.ListHistory)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/management-backup/", deps.AdminDrill.GetStatus)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/management-backup/destinations/", deps.AdminDrill.CreateDestination)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Put("/admin/management-backup/destinations/{id}/", deps.AdminDrill.UpdateDestination)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/admin/management-backup/destinations/{id}/", deps.AdminDrill.DeleteDestination)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/management-backup/destinations/{id}/test/", deps.AdminDrill.TestDestination)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/management-backup/destinations/{id}/run/", deps.AdminDrill.RunDestination)
 		}
 
 		// Management-plane log tail (FEATURES-051226 T03) — the

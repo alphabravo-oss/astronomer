@@ -2644,6 +2644,7 @@ func routeHandlerOwner(pattern string) string {
 		{"/api/v1/admin/task-outbox", "handler.AdminTaskOutboxHandler"},
 		{"/api/v1/admin/backup-drill", "handler.AdminDrillHandler"},
 		{"/api/v1/admin/management-backup", "handler.AdminDrillHandler"},
+		{"/api/v1/admin/management-backup/destinations", "handler.AdminDrillHandler"},
 		{"/api/v1/admin/management-logs", "handler.ManagementLogsHandler"},
 		{"/api/v1/admin/key-status", "internal/server keyStatusHandler"},
 		{"/api/v1/admin/users/{id}/disable-totp", "handler.TOTPHandler"},

@@ -20,10 +20,12 @@ import (
 	"sort"
 	"time"
 
+	"github.com/google/uuid"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
@@ -48,14 +50,16 @@ func (h *AdminDrillHandler) SetKubernetes(k8s kubernetes.Interface, namespace, r
 // ManagementBackupStatusResponse is the wire shape for
 // GET /admin/management-backup/.
 type ManagementBackupStatusResponse struct {
-	Enabled             bool                         `json:"enabled"`
-	Reason              string                       `json:"reason,omitempty"`
-	CronJob             *ManagementCronJobStatus     `json:"cronjob,omitempty"`
-	Destination         *ManagementBackupDestination `json:"destination,omitempty"`
-	Retention           *ManagementBackupRetention   `json:"retention,omitempty"`
-	EncryptionKeyBackup ManagementKeyBackupStatus    `json:"encryption_key_backup"`
-	LastJob             *ManagementBackupJob         `json:"last_job,omitempty"`
-	Drill               *ManagementCronJobStatus     `json:"drill,omitempty"`
+	Enabled             bool                              `json:"enabled"`
+	Reason              string                            `json:"reason,omitempty"`
+	Destinations        []ManagementBackupDestinationView `json:"destinations"`
+	EncryptionKeyBackup ManagementKeyBackupStatus         `json:"encryption_key_backup"`
+	Drill               *ManagementCronJobStatus          `json:"drill,omitempty"`
+	// Legacy single-destination fields kept so older clients still render.
+	CronJob     *ManagementCronJobStatus   `json:"cronjob,omitempty"`
+	Destination *ManagementBackupEndpoint  `json:"destination,omitempty"`
+	Retention   *ManagementBackupRetention `json:"retention,omitempty"`
+	LastJob     *ManagementBackupJob       `json:"last_job,omitempty"`
 }
 
 // ManagementCronJobStatus is the operator-visible slice of a CronJob.
@@ -67,12 +71,34 @@ type ManagementCronJobStatus struct {
 	LastSuccessfulTime *time.Time `json:"last_successful_time,omitempty"`
 }
 
-// ManagementBackupDestination is the S3 target. No credentials.
-type ManagementBackupDestination struct {
+// ManagementBackupEndpoint is a bucket/prefix/region tuple with no credentials.
+type ManagementBackupEndpoint struct {
 	Bucket   string `json:"bucket"`
 	Prefix   string `json:"prefix"`
 	Region   string `json:"region"`
 	Endpoint string `json:"endpoint,omitempty"`
+}
+
+// ManagementBackupDestinationView is one named dump target on the settings page.
+type ManagementBackupDestinationView struct {
+	ID             string                   `json:"id"`
+	Name           string                   `json:"name"`
+	Source         string                   `json:"source"`
+	Bucket         string                   `json:"bucket"`
+	Prefix         string                   `json:"prefix"`
+	Region         string                   `json:"region"`
+	Endpoint       string                   `json:"endpoint,omitempty"`
+	Schedule       string                   `json:"schedule"`
+	Enabled        bool                     `json:"enabled"`
+	KeepDaily      int32                    `json:"keep_daily"`
+	KeepWeekly     int32                    `json:"keep_weekly"`
+	KeepMonthly    int32                    `json:"keep_monthly"`
+	HasCredentials bool                     `json:"has_credentials"`
+	AccessKey      string                   `json:"access_key,omitempty"`
+	SecretKey      string                   `json:"secret_key,omitempty"`
+	CronJob        *ManagementCronJobStatus `json:"cronjob,omitempty"`
+	LastJob        *ManagementBackupJob     `json:"last_job,omitempty"`
+	ReadOnly       bool                     `json:"read_only"`
 }
 
 // ManagementBackupRetention is the per-tier keep count from CronJob env.
@@ -117,46 +143,75 @@ func (h *AdminDrillHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	backupCJ, err := h.findCronJob(ctx, managementBackupComponent)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, err.Error())
-		return
-	}
-	if backupCJ == nil {
-		out.Reason = "Management-plane backup CronJob is not installed. Set managementBackup.s3.bucket and credentialsSecretRef in Helm values."
-		RespondJSON(w, http.StatusOK, out)
-		return
+	out.Destinations = []ManagementBackupDestinationView{}
+
+	if h.queries != nil {
+		rows, err := h.queries.ListManagementBackupDestinations(ctx)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+			return
+		}
+		for _, row := range rows {
+			view := destinationView(row)
+			if h.k8s != nil && h.namespace != "" {
+				if cj, err := h.destinationCronJob(ctx, row.ID); err == nil && cj != nil {
+					view.CronJob = cronJobStatus(cj)
+				}
+				if job, err := h.latestJobForDestination(ctx, row.ID); err == nil && job != nil {
+					view.LastJob = jobSummary(job)
+				}
+			}
+			out.Destinations = append(out.Destinations, view)
+			if view.Enabled {
+				out.Enabled = true
+			}
+		}
 	}
 
-	out.Enabled = true
-	out.CronJob = cronJobStatus(backupCJ)
-	env := cronJobEnv(backupCJ)
-	out.Destination = &ManagementBackupDestination{
-		Bucket:   env["MANAGEMENT_BACKUP_BUCKET"],
-		Prefix:   env["MANAGEMENT_BACKUP_PREFIX"],
-		Region:   env["MANAGEMENT_BACKUP_REGION"],
-		Endpoint: env["MANAGEMENT_BACKUP_ENDPOINT"],
-	}
-	out.Retention = &ManagementBackupRetention{
-		Daily:   env["MANAGEMENT_BACKUP_KEEP_DAILY"],
-		Weekly:  env["MANAGEMENT_BACKUP_KEEP_WEEKLY"],
-		Monthly: env["MANAGEMENT_BACKUP_KEEP_MONTHLY"],
-	}
-	out.EncryptionKeyBackup = ManagementKeyBackupStatus{
-		WrappingConfigured: env["KEYBACKUP_ENABLED"] != "",
-	}
-	if job, err := h.latestJob(ctx, managementBackupComponent); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, err.Error())
-		return
-	} else if job != nil {
-		out.LastJob = jobSummary(job)
+	if h.k8s != nil && h.namespace != "" {
+		helmCJ, err := h.findHelmBackupCronJob(ctx)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, err.Error())
+			return
+		}
+		if helmCJ != nil {
+			env := cronJobEnv(helmCJ)
+			view := ManagementBackupDestinationView{
+				ID:       "helm",
+				Name:     helmCJ.Name,
+				Source:   "helm",
+				Bucket:   env["MANAGEMENT_BACKUP_BUCKET"],
+				Prefix:   env["MANAGEMENT_BACKUP_PREFIX"],
+				Region:   env["MANAGEMENT_BACKUP_REGION"],
+				Endpoint: env["MANAGEMENT_BACKUP_ENDPOINT"],
+				Schedule: helmCJ.Spec.Schedule,
+				Enabled:  helmCJ.Spec.Suspend == nil || !*helmCJ.Spec.Suspend,
+				CronJob:  cronJobStatus(helmCJ),
+				ReadOnly: true,
+			}
+			if job, err := h.latestJob(ctx, managementBackupComponent); err == nil && job != nil {
+				view.LastJob = jobSummary(job)
+			}
+			out.Destinations = append(out.Destinations, view)
+			out.Enabled = true
+			out.EncryptionKeyBackup.WrappingConfigured = env["KEYBACKUP_ENABLED"] != ""
+			out.CronJob = view.CronJob
+			out.Destination = &ManagementBackupEndpoint{
+				Bucket: view.Bucket, Prefix: view.Prefix, Region: view.Region, Endpoint: view.Endpoint,
+			}
+			out.LastJob = view.LastJob
+		}
+
+		if drillCJ, err := h.findCronJob(ctx, restoreDrillComponent); err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, err.Error())
+			return
+		} else if drillCJ != nil {
+			out.Drill = cronJobStatus(drillCJ)
+		}
 	}
 
-	if drillCJ, err := h.findCronJob(ctx, restoreDrillComponent); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, err.Error())
-		return
-	} else if drillCJ != nil {
-		out.Drill = cronJobStatus(drillCJ)
+	if len(out.Destinations) == 0 {
+		out.Reason = "Add an S3 destination to start nightly dumps of Astronomer's database."
 	}
 
 	RespondJSON(w, http.StatusOK, out)
@@ -231,6 +286,88 @@ func cronJobEnv(cj *batchv1.CronJob) map[string]string {
 		}
 	}
 	return out
+}
+
+const destinationIDLabel = "astronomer.io/destination-id"
+
+func destinationView(row sqlc.ManagementBackupDestination) ManagementBackupDestinationView {
+	view := ManagementBackupDestinationView{
+		ID:             row.ID.String(),
+		Name:           row.Name,
+		Source:         "ui",
+		Bucket:         row.Bucket,
+		Prefix:         row.Prefix,
+		Region:         row.Region,
+		Endpoint:       row.EndpointUrl,
+		Schedule:       row.Schedule,
+		Enabled:        row.Enabled,
+		KeepDaily:      row.KeepDaily,
+		KeepWeekly:     row.KeepWeekly,
+		KeepMonthly:    row.KeepMonthly,
+		HasCredentials: row.EncryptedCredentials != "",
+	}
+	if view.HasCredentials {
+		view.AccessKey = PasswordSentinelEncrypted
+		view.SecretKey = PasswordSentinelEncrypted
+	}
+	return view
+}
+
+func (h *AdminDrillHandler) destinationCronJob(ctx context.Context, id uuid.UUID) (*batchv1.CronJob, error) {
+	name := h.destinationResourceName(id)
+	cj, err := h.k8s.BatchV1().CronJobs(h.namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, nil
+	}
+	return cj, nil
+}
+
+func (h *AdminDrillHandler) latestJobForDestination(ctx context.Context, id uuid.UUID) (*batchv1.Job, error) {
+	list, err := h.k8s.BatchV1().Jobs(h.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: destinationIDLabel + "=" + id.String(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(list.Items) == 0 {
+		return nil, nil
+	}
+	items := append([]batchv1.Job(nil), list.Items...)
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].CreationTimestamp.After(items[j].CreationTimestamp.Time)
+	})
+	return &items[0], nil
+}
+
+func (h *AdminDrillHandler) findHelmBackupCronJob(ctx context.Context) (*batchv1.CronJob, error) {
+	list, err := h.k8s.BatchV1().CronJobs(h.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: h.componentSelector(managementBackupComponent),
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i := range list.Items {
+		if list.Items[i].Labels[destinationIDLabel] == "" {
+			return &list.Items[i], nil
+		}
+	}
+	return nil, nil
+}
+
+func (h *AdminDrillHandler) destinationResourceName(id uuid.UUID) string {
+	prefix := h.resourcePrefix()
+	hex := id.String()
+	if len(hex) >= 8 {
+		hex = hex[:8]
+	}
+	return prefix + "-mb-" + hex
+}
+
+func (h *AdminDrillHandler) resourcePrefix() string {
+	if h != nil && h.releaseName != "" {
+		return h.releaseName
+	}
+	return "astronomer"
 }
 
 func jobSummary(job *batchv1.Job) *ManagementBackupJob {

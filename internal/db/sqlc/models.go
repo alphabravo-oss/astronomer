@@ -2031,6 +2031,24 @@ type MaintenanceWindow struct {
 	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
+type ManagementBackupDestination struct {
+	ID                   uuid.UUID   `json:"id"`
+	Name                 string      `json:"name"`
+	Bucket               string      `json:"bucket"`
+	Prefix               string      `json:"prefix"`
+	Region               string      `json:"region"`
+	EndpointUrl          string      `json:"endpoint_url"`
+	EncryptedCredentials string      `json:"encrypted_credentials"`
+	Schedule             string      `json:"schedule"`
+	Enabled              bool        `json:"enabled"`
+	KeepDaily            int32       `json:"keep_daily"`
+	KeepWeekly           int32       `json:"keep_weekly"`
+	KeepMonthly          int32       `json:"keep_monthly"`
+	CreatedByID          pgtype.UUID `json:"created_by_id"`
+	CreatedAt            time.Time   `json:"created_at"`
+	UpdatedAt            time.Time   `json:"updated_at"`
+}
+
 type MirroredGatewayClass struct {
 	ID             uuid.UUID       `json:"id"`
 	ClusterID      uuid.UUID       `json:"cluster_id"`

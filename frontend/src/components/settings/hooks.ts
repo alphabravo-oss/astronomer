@@ -387,6 +387,62 @@ export function useManagementBackupStatus() {
   });
 }
 
+export function useCreateManagementBackupDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.createManagementBackupDestination,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
+      toastSuccess('Backup destination saved');
+    },
+    onError: (err: Error) => toastApiError('Failed to save destination', err),
+  });
+}
+
+export function useUpdateManagementBackupDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: api.ManagementBackupDestinationWrite }) =>
+      api.updateManagementBackupDestination(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
+      toastSuccess('Backup destination updated');
+    },
+    onError: (err: Error) => toastApiError('Failed to update destination', err),
+  });
+}
+
+export function useDeleteManagementBackupDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.deleteManagementBackupDestination,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
+      toastSuccess('Backup destination removed');
+    },
+    onError: (err: Error) => toastApiError('Failed to remove destination', err),
+  });
+}
+
+export function useTestManagementBackupDestination() {
+  return useMutation({
+    mutationFn: api.testManagementBackupDestination,
+    onError: (err: Error) => toastApiError('Connection test failed', err),
+  });
+}
+
+export function useRunManagementBackupDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.runManagementBackupDestination,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
+      toastSuccess('Backup job started');
+    },
+    onError: (err: Error) => toastApiError('Failed to start backup', err),
+  });
+}
+
 // ============================================================
 // GitOps cluster registration (migration 060)
 // ============================================================

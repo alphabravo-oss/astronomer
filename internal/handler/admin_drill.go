@@ -19,14 +19,17 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // AdminDrillQuerier is the slice of sqlc.Queries the handler needs.
@@ -38,22 +41,49 @@ type AdminDrillQuerier interface {
 	GetLatestSuccessfulBackupDrillResult(ctx context.Context) (sqlc.BackupDrillResult, error)
 	ListBackupDrillResults(ctx context.Context, arg sqlc.ListBackupDrillResultsParams) ([]sqlc.BackupDrillResult, error)
 	CountBackupDrillResults(ctx context.Context) (int64, error)
+	ListManagementBackupDestinations(ctx context.Context) ([]sqlc.ManagementBackupDestination, error)
+	GetManagementBackupDestination(ctx context.Context, id uuid.UUID) (sqlc.ManagementBackupDestination, error)
+	CreateManagementBackupDestination(ctx context.Context, arg sqlc.CreateManagementBackupDestinationParams) (sqlc.ManagementBackupDestination, error)
+	UpdateManagementBackupDestination(ctx context.Context, arg sqlc.UpdateManagementBackupDestinationParams) (sqlc.ManagementBackupDestination, error)
+	DeleteManagementBackupDestination(ctx context.Context, id uuid.UUID) error
 }
 
 // AdminDrillHandler wraps GET /api/v1/admin/backup-drill/* and
 // GET /api/v1/admin/management-backup/.
 type AdminDrillHandler struct {
-	queries     AdminDrillQuerier
-	k8s         kubernetes.Interface
-	namespace   string
-	releaseName string
+	queries        AdminDrillQuerier
+	k8s            kubernetes.Interface
+	namespace      string
+	releaseName    string
+	encryptor      *auth.Encryptor
+	httpClient     *http.Client
+	backupImage    string
+	serviceAccount string
 }
 
 // NewAdminDrillHandler returns a usable handler. queries may be nil for
 // degenerate installs that disable the management DB; the handler then
 // renders 503.
 func NewAdminDrillHandler(queries AdminDrillQuerier) *AdminDrillHandler {
-	return &AdminDrillHandler{queries: queries}
+	return &AdminDrillHandler{
+		queries:    queries,
+		httpClient: httpclient.DefaultExternal(),
+	}
+}
+
+func (h *AdminDrillHandler) SetEncryptor(e *auth.Encryptor) {
+	if h == nil {
+		return
+	}
+	h.encryptor = e
+}
+
+func (h *AdminDrillHandler) SetBackupRuntime(image, serviceAccount string) {
+	if h == nil {
+		return
+	}
+	h.backupImage = strings.TrimSpace(image)
+	h.serviceAccount = strings.TrimSpace(serviceAccount)
 }
 
 // BackupDrillResult is the wire shape for a single drill row. Distinct

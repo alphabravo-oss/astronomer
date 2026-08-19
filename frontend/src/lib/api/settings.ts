@@ -468,11 +468,49 @@ export interface ManagementCronJobStatus {
   lastSuccessfulTime?: string;
 }
 
-export interface ManagementBackupDestination {
+export const MANAGEMENT_BACKUP_SECRET_SENTINEL = '<encrypted>';
+
+export interface ManagementBackupEndpoint {
   bucket: string;
   prefix: string;
   region: string;
   endpoint?: string;
+}
+
+export interface ManagementBackupDestination {
+  id: string;
+  name: string;
+  source: 'ui' | 'helm' | string;
+  bucket: string;
+  prefix: string;
+  region: string;
+  endpoint?: string;
+  schedule: string;
+  enabled: boolean;
+  keepDaily: number;
+  keepWeekly: number;
+  keepMonthly: number;
+  hasCredentials: boolean;
+  accessKey?: string;
+  secretKey?: string;
+  cronjob?: ManagementCronJobStatus;
+  lastJob?: ManagementBackupJob;
+  readOnly?: boolean;
+}
+
+export interface ManagementBackupDestinationWrite {
+  name: string;
+  bucket: string;
+  prefix?: string;
+  region?: string;
+  endpoint_url?: string;
+  access_key?: string;
+  secret_key?: string;
+  schedule?: string;
+  enabled?: boolean;
+  keep_daily?: number;
+  keep_weekly?: number;
+  keep_monthly?: number;
 }
 
 export interface ManagementBackupRetention {
@@ -494,12 +532,13 @@ export interface ManagementBackupJob {
 export interface ManagementBackupStatus {
   enabled: boolean;
   reason?: string;
-  cronjob?: ManagementCronJobStatus;
-  destination?: ManagementBackupDestination;
-  retention?: ManagementBackupRetention;
+  destinations: ManagementBackupDestination[];
   encryptionKeyBackup: { wrappingConfigured: boolean };
-  lastJob?: ManagementBackupJob;
   drill?: ManagementCronJobStatus;
+  cronjob?: ManagementCronJobStatus;
+  destination?: ManagementBackupEndpoint;
+  retention?: ManagementBackupRetention;
+  lastJob?: ManagementBackupJob;
 }
 
 // ============================================================
@@ -796,6 +835,54 @@ export async function listBackupDrillHistory(params?: {
 
 export async function getManagementBackupStatus(): Promise<ManagementBackupStatus> {
   const res = await api.get<APIResponse<ManagementBackupStatus>>('/admin/management-backup');
+  const payload = unwrapData(res.data);
+  return {
+    ...payload,
+    destinations: payload.destinations ?? [],
+    encryptionKeyBackup: payload.encryptionKeyBackup ?? { wrappingConfigured: false },
+  };
+}
+
+export async function createManagementBackupDestination(
+  body: ManagementBackupDestinationWrite,
+): Promise<ManagementBackupDestination> {
+  const res = await api.post<APIResponse<ManagementBackupDestination>>(
+    '/admin/management-backup/destinations',
+    body,
+  );
+  return unwrapData(res.data);
+}
+
+export async function updateManagementBackupDestination(
+  id: string,
+  body: ManagementBackupDestinationWrite,
+): Promise<ManagementBackupDestination> {
+  const res = await api.put<APIResponse<ManagementBackupDestination>>(
+    `/admin/management-backup/destinations/${encodeURIComponent(id)}`,
+    body,
+  );
+  return unwrapData(res.data);
+}
+
+export async function deleteManagementBackupDestination(id: string): Promise<void> {
+  await api.delete(`/admin/management-backup/destinations/${encodeURIComponent(id)}`);
+}
+
+export async function testManagementBackupDestination(
+  id: string,
+): Promise<{ success: boolean; message: string }> {
+  const res = await api.post<APIResponse<{ success: boolean; message: string }>>(
+    `/admin/management-backup/destinations/${encodeURIComponent(id)}/test`,
+  );
+  return unwrapData(res.data);
+}
+
+export async function runManagementBackupDestination(
+  id: string,
+): Promise<{ name: string }> {
+  const res = await api.post<APIResponse<{ name: string }>>(
+    `/admin/management-backup/destinations/${encodeURIComponent(id)}/run`,
+  );
   return unwrapData(res.data);
 }
 

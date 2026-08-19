@@ -165,3 +165,9 @@ data:
   {{- end }}
   {{- end }}
   {{- end }}
+  # Image + SA the server uses when reconciling per-destination management
+  # backup CronJobs from Settings → Astronomer backup. Destinations live in
+  # the DB; Helm S3 values are no longer required to turn dumps on.
+  MANAGEMENT_BACKUP_IMAGE: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementBackup.image.repository "tag" .Values.managementBackup.image.tag "digest" .Values.managementBackup.image.digest "registry" .Values.managementBackup.image.registry "fallback" .Values.image.registry) | quote }}
+  MANAGEMENT_BACKUP_SERVICE_ACCOUNT: {{ include "astronomer.serviceAccountName" . | quote }}
+

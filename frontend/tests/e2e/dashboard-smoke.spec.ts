@@ -490,7 +490,8 @@ async function mockApi(page: Page, user = adminUser) {
       return route.fulfill({
         json: apiResponse({
           enabled: false,
-          reason: "not wired in e2e",
+          reason: "Add an S3 destination to start nightly dumps of Astronomer's database.",
+          destinations: [],
           encryption_key_backup: { wrapping_configured: false },
         }),
       });

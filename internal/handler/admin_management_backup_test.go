@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -231,9 +234,79 @@ func TestManagementBackupStatus_OmitsSecretEnv(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", w.Code, body)
 	}
-	for _, leak := range []string{"DATABASE_URL", "passphrase", "credentials"} {
+	for _, leak := range []string{"DATABASE_URL", "passphrase", "aws_secret_access_key"} {
 		if strings.Contains(body, leak) {
 			t.Fatalf("response leaked %q: %s", leak, body)
 		}
+	}
+}
+
+func TestManagementBackupCreateDestination_CreatesCronJob(t *testing.T) {
+	callerID := uuid.New()
+	q := &fakeDrillQuerier{user: sqlc.User{ID: callerID, IsSuperuser: true}}
+	h := NewAdminDrillHandler(q)
+	h.SetKubernetes(fake.NewSimpleClientset(), "astronomer", "astronomer")
+	h.SetBackupRuntime("pgdump-s3:test", "astronomer")
+
+	body := `{"name":"primary","bucket":"astronomer-backups","region":"us-east-1","access_key":"AKIA","secret_key":"secret","schedule":"0 3 * * *"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/management-backup/destinations/", bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(makeRequest("/api/v1/admin/management-backup/destinations/", callerID).Context())
+
+	w := httptest.NewRecorder()
+	h.CreateDestination(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", w.Code, w.Body.String())
+	}
+	if len(q.destinations) != 1 {
+		t.Fatalf("destinations = %d, want 1", len(q.destinations))
+	}
+	name := h.destinationResourceName(q.destinations[0].ID)
+	if _, err := h.k8s.BatchV1().CronJobs("astronomer").Get(req.Context(), name, metav1.GetOptions{}); err != nil {
+		t.Fatalf("cronjob missing: %v", err)
+	}
+	if _, err := h.k8s.CoreV1().Secrets("astronomer").Get(req.Context(), name+"-aws", metav1.GetOptions{}); err != nil {
+		t.Fatalf("secret missing: %v", err)
+	}
+	if strings.Contains(w.Body.String(), "secret") || strings.Contains(w.Body.String(), "AKIA") {
+		t.Fatalf("response leaked credentials: %s", w.Body.String())
+	}
+
+	statusW := httptest.NewRecorder()
+	h.GetStatus(statusW, makeRequest("/api/v1/admin/management-backup/", callerID))
+	if statusW.Code != http.StatusOK {
+		t.Fatalf("status page = %d; body=%s", statusW.Code, statusW.Body.String())
+	}
+	if !strings.Contains(statusW.Body.String(), `"enabled":true`) {
+		t.Fatalf("expected enabled after create: %s", statusW.Body.String())
+	}
+}
+
+func TestManagementBackupDeleteDestination(t *testing.T) {
+	callerID := uuid.New()
+	id := uuid.New()
+	q := &fakeDrillQuerier{
+		user: sqlc.User{ID: callerID, IsSuperuser: true},
+		destinations: []sqlc.ManagementBackupDestination{{
+			ID: id, Name: "primary", Bucket: "b", Prefix: "astronomer-pg",
+			Region: "us-east-1", Schedule: "0 3 * * *", Enabled: true,
+		}},
+	}
+	h := NewAdminDrillHandler(q)
+	h.SetKubernetes(fake.NewSimpleClientset(), "astronomer", "astronomer")
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/management-backup/destinations/"+id.String()+"/", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", id.String())
+	ctx := makeRequest("/api/v1/admin/management-backup/destinations/"+id.String()+"/", callerID).Context()
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	h.DeleteDestination(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body=%s", w.Code, w.Body.String())
+	}
+	if len(q.destinations) != 0 {
+		t.Fatalf("destinations left = %d", len(q.destinations))
 	}
 }

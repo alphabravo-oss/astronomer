@@ -23,6 +23,7 @@ const contractPaths: Array<{ method: string; path: string }> = [
   { method: 'get', path: '/api/v1/tools/' },
   { method: 'get', path: '/api/v1/admin/backup-drill/' },
   { method: 'get', path: '/api/v1/admin/management-backup/' },
+  { method: 'post', path: '/api/v1/admin/management-backup/destinations/' },
 ];
 
 describe('frontend API contract', () => {

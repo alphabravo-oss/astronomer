@@ -18,6 +18,7 @@ var classifiedSecretColumns = map[string]string{
 	"001_initial.up.sql:credential_id":                 "foreign key reference",
 	"001_initial.up.sql:credential_state":              "non-secret credential lifecycle enum",
 	"001_initial.up.sql:encrypted_credentials":         "encrypted object-store credentials",
+	"002_management_backup_destinations.up.sql:encrypted_credentials": "encrypted management-plane backup object-store credentials",
 	"001_initial.up.sql:object_storage_secret_name":    "Kubernetes Secret name reference",
 	"001_initial.up.sql:password":                      "hashed bcrypt user password",
 	"001_initial.up.sql:password_encrypted":            "encrypted SMTP password",

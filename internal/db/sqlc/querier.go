@@ -391,6 +391,7 @@ type Querier interface {
 	CreateLoggingOutput(ctx context.Context, arg CreateLoggingOutputParams) (LoggingOutput, error)
 	CreateLoggingPipeline(ctx context.Context, arg CreateLoggingPipelineParams) (LoggingPipeline, error)
 	CreateMaintenanceWindow(ctx context.Context, arg CreateMaintenanceWindowParams) (MaintenanceWindow, error)
+	CreateManagementBackupDestination(ctx context.Context, arg CreateManagementBackupDestinationParams) (ManagementBackupDestination, error)
 	CreateMonitoringOperation(ctx context.Context, arg CreateMonitoringOperationParams) (MonitoringOperation, error)
 	CreateMonitoringOperationEvent(ctx context.Context, arg CreateMonitoringOperationEventParams) (MonitoringOperationEvent, error)
 	// Native per-CRD RBAC rules (migration 126). Reference as q.<Name>.
@@ -556,6 +557,7 @@ type Querier interface {
 	DeleteLoggingOutput(ctx context.Context, id uuid.UUID) error
 	DeleteLoggingPipeline(ctx context.Context, id uuid.UUID) error
 	DeleteMaintenanceWindow(ctx context.Context, id uuid.UUID) error
+	DeleteManagementBackupDestination(ctx context.Context, id uuid.UUID) error
 	DeleteMirroredGatewayClass(ctx context.Context, arg DeleteMirroredGatewayClassParams) error
 	DeleteMirroredIngressClass(ctx context.Context, arg DeleteMirroredIngressClassParams) error
 	DeleteMirroredLimitRange(ctx context.Context, arg DeleteMirroredLimitRangeParams) error
@@ -872,6 +874,7 @@ type Querier interface {
 	GetLoggingPipelineByID(ctx context.Context, id uuid.UUID) (LoggingPipeline, error)
 	GetMaintenanceWindow(ctx context.Context, id uuid.UUID) (MaintenanceWindow, error)
 	GetMaintenanceWindowByName(ctx context.Context, name string) (MaintenanceWindow, error)
+	GetManagementBackupDestination(ctx context.Context, id uuid.UUID) (ManagementBackupDestination, error)
 	GetMonitoringOperation(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
 	GetNativeRBACRuleByID(ctx context.Context, id uuid.UUID) (NativeRbacRule, error)
 	GetNetworkPolicyApplicationByID(ctx context.Context, id uuid.UUID) (NetworkPolicyApplication, error)
@@ -1451,6 +1454,9 @@ type Querier interface {
 	// deferred-ops worker scans ListPendingDeferredOperations every 60s and
 	// re-fires the rows whose deferred_until has elapsed.
 	ListMaintenanceWindows(ctx context.Context) ([]MaintenanceWindow, error)
+	// Management-plane (Astronomer-itself) backup destinations.
+	// Read/written by /api/v1/admin/management-backup/destinations/.
+	ListManagementBackupDestinations(ctx context.Context) ([]ManagementBackupDestination, error)
 	// ---------------------------------------------------------------------
 	// mirrored_gateway_classes
 	// ---------------------------------------------------------------------
@@ -2078,6 +2084,7 @@ type Querier interface {
 	UpdateLoggingOutput(ctx context.Context, arg UpdateLoggingOutputParams) (LoggingOutput, error)
 	UpdateLoggingPipeline(ctx context.Context, arg UpdateLoggingPipelineParams) (LoggingPipeline, error)
 	UpdateMaintenanceWindow(ctx context.Context, arg UpdateMaintenanceWindowParams) (MaintenanceWindow, error)
+	UpdateManagementBackupDestination(ctx context.Context, arg UpdateManagementBackupDestinationParams) (ManagementBackupDestination, error)
 	// Builtin rows are not edited via this path — the handler refuses with a
 	// 403 before calling Update. The query still works on any row so an
 	// operator-script with direct DB access can repair a broken builtin.

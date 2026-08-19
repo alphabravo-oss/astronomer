@@ -18,6 +18,7 @@ unclassified column fails CI.
 | `webhook_subscriptions.secret_encrypted` | Fernet ciphertext | Never returned. |
 | `sso_sessions.upstream_id_token_encrypted` | Fernet ciphertext | Used only for upstream session lifecycle. |
 | `backup_storage_configs.encrypted_credentials` | Fernet ciphertext | Complete object-store credential envelope. |
+| `management_backup_destinations.encrypted_credentials` | Fernet ciphertext | Complete management-plane dump object-store credential envelope. |
 | `cluster_registry_configs.registry_password_encrypted` | Fernet ciphertext | Complete cluster registry password. |
 | `project_registry_credentials.registry_credential_encrypted` | Fernet ciphertext | Complete project registry credential. |
 | `delivery_sources.credential_encrypted` | Fernet ciphertext | Complete write-only delivery-source credential map. |

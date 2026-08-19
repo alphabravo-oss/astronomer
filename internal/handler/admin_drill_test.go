@@ -33,7 +33,8 @@ type fakeDrillQuerier struct {
 	totalErr   error
 	// CreateAuditLogV1 is invoked by recordAudit; satisfy the interface
 	// so the audit best-effort path is a no-op in tests.
-	auditCalls int
+	auditCalls   int
+	destinations []sqlc.ManagementBackupDestination
 }
 
 func (f *fakeDrillQuerier) GetUserByID(_ context.Context, _ uuid.UUID) (sqlc.User, error) {
@@ -50,6 +51,54 @@ func (f *fakeDrillQuerier) ListBackupDrillResults(_ context.Context, _ sqlc.List
 }
 func (f *fakeDrillQuerier) CountBackupDrillResults(_ context.Context) (int64, error) {
 	return f.total, f.totalErr
+}
+
+func (f *fakeDrillQuerier) ListManagementBackupDestinations(context.Context) ([]sqlc.ManagementBackupDestination, error) {
+	if f.destinations == nil {
+		return []sqlc.ManagementBackupDestination{}, nil
+	}
+	return f.destinations, nil
+}
+func (f *fakeDrillQuerier) GetManagementBackupDestination(_ context.Context, id uuid.UUID) (sqlc.ManagementBackupDestination, error) {
+	for _, d := range f.destinations {
+		if d.ID == id {
+			return d, nil
+		}
+	}
+	return sqlc.ManagementBackupDestination{}, pgx.ErrNoRows
+}
+func (f *fakeDrillQuerier) CreateManagementBackupDestination(_ context.Context, arg sqlc.CreateManagementBackupDestinationParams) (sqlc.ManagementBackupDestination, error) {
+	row := sqlc.ManagementBackupDestination{
+		ID: uuid.New(), Name: arg.Name, Bucket: arg.Bucket, Prefix: arg.Prefix,
+		Region: arg.Region, EndpointUrl: arg.EndpointUrl, EncryptedCredentials: arg.EncryptedCredentials,
+		Schedule: arg.Schedule, Enabled: arg.Enabled, KeepDaily: arg.KeepDaily, KeepWeekly: arg.KeepWeekly,
+		KeepMonthly: arg.KeepMonthly, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	f.destinations = append(f.destinations, row)
+	return row, nil
+}
+func (f *fakeDrillQuerier) UpdateManagementBackupDestination(_ context.Context, arg sqlc.UpdateManagementBackupDestinationParams) (sqlc.ManagementBackupDestination, error) {
+	for i, d := range f.destinations {
+		if d.ID == arg.ID {
+			d.Name, d.Bucket, d.Prefix, d.Region = arg.Name, arg.Bucket, arg.Prefix, arg.Region
+			d.EndpointUrl, d.EncryptedCredentials = arg.EndpointUrl, arg.EncryptedCredentials
+			d.Schedule, d.Enabled = arg.Schedule, arg.Enabled
+			d.KeepDaily, d.KeepWeekly, d.KeepMonthly = arg.KeepDaily, arg.KeepWeekly, arg.KeepMonthly
+			f.destinations[i] = d
+			return d, nil
+		}
+	}
+	return sqlc.ManagementBackupDestination{}, pgx.ErrNoRows
+}
+func (f *fakeDrillQuerier) DeleteManagementBackupDestination(_ context.Context, id uuid.UUID) error {
+	out := f.destinations[:0]
+	for _, d := range f.destinations {
+		if d.ID != id {
+			out = append(out, d)
+		}
+	}
+	f.destinations = out
+	return nil
 }
 
 // CreateAuditLogV1 makes the fake satisfy auditWriterV1 so recordAudit

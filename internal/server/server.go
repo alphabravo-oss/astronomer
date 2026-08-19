@@ -1576,6 +1576,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// backup_drill_results. Superuser-gated inside the handler.
 		AdminDrill: func() *handler.AdminDrillHandler {
 			h := handler.NewAdminDrillHandler(queries)
+			h.SetEncryptor(encryptor)
+			h.SetBackupRuntime(os.Getenv("MANAGEMENT_BACKUP_IMAGE"), os.Getenv("MANAGEMENT_BACKUP_SERVICE_ACCOUNT"))
 			if localK8s != nil && localNamespace != "" {
 				h.SetKubernetes(localK8s, localNamespace, os.Getenv("RELEASE_NAME"))
 			}
