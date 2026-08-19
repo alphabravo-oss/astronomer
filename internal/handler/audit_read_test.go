@@ -248,6 +248,9 @@ func TestAuditHandlerListSupportsComposableSearchFilters(t *testing.T) {
 	if fake.filterArg.Limit != 500 || fake.filterArg.Offset != 10 {
 		t.Fatalf("pagination = limit %d offset %d, want 500/10", fake.filterArg.Limit, fake.filterArg.Offset)
 	}
+	if fake.filterArg.Q != "" {
+		t.Fatalf("q should be empty when not supplied: %#v", fake.filterArg)
+	}
 	if fake.filterArg.Actor != "admin@example.com" ||
 		fake.filterArg.Target != "prod" ||
 		fake.filterArg.Action != "cluster.delete" ||
@@ -276,6 +279,23 @@ func TestAuditHandlerListSupportsComposableSearchFilters(t *testing.T) {
 	row := body.Data[0]
 	if row.Status != "failure" || row.StatusCode != 403 || row.HTTPMethod != http.MethodDelete || row.DurationMs != 12 {
 		t.Fatalf("unexpected response row: %#v", row)
+	}
+}
+
+func TestAuditHandlerListAcceptsQSearch(t *testing.T) {
+	fake := &filteredAuditQueries{
+		fakeAuditQueries: fakeAuditQueries{
+			v1Log: sqlc.AuditLog{ID: uuid.New(), Action: "auth.login", CreatedAt: time.Unix(1, 0).UTC()},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/audit/?q=login", nil)
+	rr := httptest.NewRecorder()
+	NewAuditHandler(fake).List(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rr.Code, rr.Body.String())
+	}
+	if !fake.filterCalled || fake.filterArg.Q != "login" {
+		t.Fatalf("filter Q = %q, called=%v", fake.filterArg.Q, fake.filterCalled)
 	}
 }
 

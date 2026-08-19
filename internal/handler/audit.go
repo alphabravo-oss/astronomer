@@ -415,6 +415,7 @@ func auditQueryLimit(r *http.Request) int32 {
 func auditFilterFromRequest(r *http.Request, limit, offset int32) (sqlc.AuditLogFilterParams, error) {
 	q := r.URL.Query()
 	filter := sqlc.AuditLogFilterParams{
+		Q:             strings.TrimSpace(q.Get("q")),
 		Actor:         strings.TrimSpace(q.Get("actor")),
 		ResourceType:  strings.TrimSpace(q.Get("resource_type")),
 		ResourceID:    strings.TrimSpace(q.Get("resource_id")),

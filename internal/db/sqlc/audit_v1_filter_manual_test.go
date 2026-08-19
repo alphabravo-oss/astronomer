@@ -45,6 +45,22 @@ func TestBuildAuditLogV1FilterWhereComposesFilters(t *testing.T) {
 	}
 }
 
+func TestBuildAuditLogV1FilterWhereQSearchesActionAndActor(t *testing.T) {
+	where, args := buildAuditLogV1FilterWhere(AuditLogFilterParams{Q: "login"})
+	for _, want := range []string{
+		"lower(a.action) LIKE $1",
+		"lower(a.path) LIKE $1",
+		"lower(u.email) LIKE $1",
+	} {
+		if !strings.Contains(where, want) {
+			t.Fatalf("Q filter WHERE missing %q:\n%s", want, where)
+		}
+	}
+	if len(args) != 1 || args[0] != "%login%" {
+		t.Fatalf("args = %#v, want [%%login%%]", args)
+	}
+}
+
 func TestBuildAuditLogV1FilterWhereEmpty(t *testing.T) {
 	where, args := buildAuditLogV1FilterWhere(AuditLogFilterParams{})
 	if where != "" {

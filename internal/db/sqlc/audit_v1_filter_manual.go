@@ -32,6 +32,7 @@ type AuditLogFilterParams struct {
 	HasFrom       bool        `json:"has_from"`
 	To            time.Time   `json:"to"`
 	HasTo         bool        `json:"has_to"`
+	Q             string      `json:"q"`
 	Limit         int32       `json:"limit"`
 	Offset        int32       `json:"offset"`
 }
@@ -89,6 +90,28 @@ func buildAuditLogV1FilterWhere(arg AuditLogFilterParams) (string, []any) {
 	if actor := strings.TrimSpace(arg.Actor); actor != "" {
 		pattern := "%" + strings.ToLower(actor) + "%"
 		add(`(
+			lower(a.user_id::text) LIKE $%d OR
+			lower(a.actor_auth_method) LIKE $%d OR
+			EXISTS (
+				SELECT 1
+				FROM users u
+				WHERE u.id = a.user_id
+				  AND (
+					lower(u.email) LIKE $%d OR
+					lower(u.username) LIKE $%d OR
+					lower(concat_ws(' ', u.first_name, u.last_name)) LIKE $%d
+				  )
+			)
+		)`, pattern)
+	}
+	if q := strings.TrimSpace(arg.Q); q != "" {
+		pattern := "%" + strings.ToLower(q) + "%"
+		add(`(
+			lower(a.action) LIKE $%d OR
+			lower(a.resource_type) LIKE $%d OR
+			lower(a.resource_id) LIKE $%d OR
+			lower(a.resource_name) LIKE $%d OR
+			lower(a.path) LIKE $%d OR
 			lower(a.user_id::text) LIKE $%d OR
 			lower(a.actor_auth_method) LIKE $%d OR
 			EXISTS (

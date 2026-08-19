@@ -1051,6 +1051,7 @@ export type AuditLogQueryParams = {
   pageSize?: number;
   limit?: number;
   offset?: number;
+  q?: string;
   actor?: string;
   action?: string;
   user?: string;
@@ -1081,6 +1082,7 @@ function auditLogRequestParams(params?: AuditLogQueryParams): Record<string, str
   if (limit != null) out.limit = limit;
   if (offset != null) out.offset = offset;
   const entries: Array<[string, string | number | undefined]> = [
+    ['q', params.q],
     ['actor', params.actor || params.user],
     ['user_id', params.user_id],
     ['action', params.action],
