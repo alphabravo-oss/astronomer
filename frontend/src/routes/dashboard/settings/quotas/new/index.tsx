@@ -169,7 +169,7 @@ function NewQuotaPlanForm() {
 function NewQuotaPlanPage() {
   return (
     <SettingsAuthGate>
-      <PageShell className="max-w-3xl mx-auto">
+      <PageShell>
         <Link
           href="/dashboard/settings/quotas"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"

@@ -77,7 +77,7 @@ function RegisterClusterWizardPage() {
   const isViewer = privilegeProfile === 'viewer';
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
+    <div>
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">

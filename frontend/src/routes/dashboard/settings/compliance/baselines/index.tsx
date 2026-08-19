@@ -252,7 +252,7 @@ function ComplianceBaselinesPage() {
 
   return (
     <SettingsAuthGate>
-      <div className="max-w-5xl mx-auto p-6 space-y-6">
+      <div className="space-y-6">
         <div className="flex items-center gap-2">
           <Link href="/dashboard/settings/compliance" className="text-sm text-muted-foreground inline-flex items-center gap-1">
             <ArrowLeft className="w-4 h-4" /> Compliance

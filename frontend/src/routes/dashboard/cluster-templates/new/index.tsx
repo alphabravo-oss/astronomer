@@ -30,7 +30,7 @@ function NewClusterTemplatePage() {
   const [serverError, setServerError] = useState<string | null>(null);
 
   return (
-    <PageShell className="max-w-4xl mx-auto">
+    <PageShell>
       <Link
         href="/dashboard/cluster-templates"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"

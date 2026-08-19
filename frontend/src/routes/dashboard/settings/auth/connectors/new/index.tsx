@@ -72,7 +72,7 @@ function NewConnectorPage() {
   };
 
   return (
-    <PageShell className="max-w-3xl mx-auto">
+    <PageShell>
       <Link
         href="/dashboard/settings/auth"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"

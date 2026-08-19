@@ -575,7 +575,7 @@ function AstronomerBackupPage() {
 
   return (
     <SettingsAuthGate>
-      <PageShell className="max-w-4xl mx-auto">
+      <PageShell>
         <Link
           href="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"

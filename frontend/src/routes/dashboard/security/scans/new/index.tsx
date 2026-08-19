@@ -83,7 +83,7 @@ function NewScanWizardPage() {
   }
 
   return (
-    <PageShell className="max-w-3xl">
+    <PageShell>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Link href="/dashboard/security" className="hover:text-foreground transition-colors">

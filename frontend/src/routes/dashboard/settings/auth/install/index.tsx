@@ -82,7 +82,7 @@ function InstallDexPage() {
   const installing = settingsMutation.isPending;
 
   return (
-    <PageShell className="max-w-3xl mx-auto">
+    <PageShell>
       <BackLink />
 
       <PageHeader

@@ -157,7 +157,7 @@ function NewWebhookWizard() {
         : 'Preview & create';
 
   return (
-    <PageShell className="max-w-3xl mx-auto">
+    <PageShell>
       <Link
         href="/dashboard/settings/webhooks"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"

@@ -153,7 +153,7 @@ function PolicyPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6">
       {!canEdit && (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
           <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />

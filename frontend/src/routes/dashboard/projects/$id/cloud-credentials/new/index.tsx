@@ -52,7 +52,7 @@ function NewCloudCredentialPage() {
   const backToList = `/dashboard/projects/${projectId}/cloud-credentials`;
 
   return (
-    <PageShell className="max-w-3xl mx-auto">
+    <PageShell>
       <Link
         href={backToList}
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"

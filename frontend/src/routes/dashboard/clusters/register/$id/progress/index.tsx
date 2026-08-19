@@ -17,7 +17,7 @@ function ProgressStepPage() {
   const [isReady, setIsReady] = useState(false);
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
+    <div>
       <div className="mb-6 flex items-center gap-3">
         <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
           <Server className="h-5 w-5 text-muted-foreground" />

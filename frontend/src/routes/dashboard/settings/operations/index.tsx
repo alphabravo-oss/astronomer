@@ -107,7 +107,7 @@ function OperationsBody() {
   });
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="space-y-6">
       <Link
         href="/dashboard/settings"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
