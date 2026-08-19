@@ -13,12 +13,14 @@ import {
   Detail,
   DetailGrid,
   ErrorMessage,
+  RedirectDeliveryDetail,
   deliveryPageRowCount,
   primaryButton,
   secondaryButton,
   textareaClass,
   useDeliveryPageIndex,
-  useDeliveryProjectScope,
+  useDeliveryWorkspace,
+  withProjectQuery,
 } from "@/components/delivery/shared";
 import {
   actOnClusterDeployment,
@@ -36,10 +38,10 @@ import { liveFallback } from "@/lib/live/status-store";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { toastSuccess } from "@/lib/toast";
 
-function DeploymentDetailPage() {
+export function DeploymentDetailPage() {
   const { deploymentId } = useParams<{ deploymentId: string }>();
-  const { projectId, projects, projectQuery, setProjectId } =
-    useDeliveryProjectScope();
+  const { projectId, projects, projectQuery, setProjectId, listHref } =
+    useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const scope = { type: "project" as const, id: projectId };
   const allowed = can(user, "delivery_deployments", "read", scope);
@@ -122,7 +124,7 @@ function DeploymentDetailPage() {
       >
         <PageShell>
           <Link
-            href={`/dashboard/delivery/deployments?project=${encodeURIComponent(projectId)}`}
+            href={withProjectQuery(listHref("deployments"), projectId)}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Deployments
@@ -446,6 +448,15 @@ const eventColumns: Column<ClusterDeploymentEvent>[] = [
   },
 ];
 
+function DeliveryDeploymentDetailRedirect() {
+  const { deploymentId } = useParams<{ deploymentId: string }>();
+  return (
+    <RedirectDeliveryDetail tab="deployments" id={deploymentId}>
+      <DeploymentDetailPage />
+    </RedirectDeliveryDetail>
+  );
+}
+
 export const Route = createFileRoute(
   "/dashboard/delivery/deployments/$deploymentId/",
-)({ component: DeploymentDetailPage });
+)({ component: DeliveryDeploymentDetailRedirect });

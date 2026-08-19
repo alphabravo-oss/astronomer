@@ -37,7 +37,7 @@ const phases: DeploymentPhase[] = [
 ];
 
 export function DeploymentsPage() {
-  const { projectId, projects, projectQuery, clusterId: workspaceClusterId, listHref } =
+  const { projectId, projects, projectQuery, clusterId: workspaceClusterId, listHref, entityHref } =
     useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const allowed = can(user, "delivery_deployments", "list", {
@@ -205,11 +205,7 @@ export function DeploymentsPage() {
               )}
             </div>
           }
-          onRowClick={(row) =>
-            router.push(
-              `/dashboard/delivery/deployments/${row.id}?project=${encodeURIComponent(projectId)}`,
-            )
-          }
+          onRowClick={(row) => router.push(entityHref("deployments", row.id))}
           serverSide={{
             rowCount: query.data?.count ?? 0,
             pagination: { pageIndex, pageSize },

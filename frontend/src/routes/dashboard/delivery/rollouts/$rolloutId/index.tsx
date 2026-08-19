@@ -17,11 +17,13 @@ import {
   Detail,
   DetailGrid,
   ErrorMessage,
+  RedirectDeliveryDetail,
   primaryButton,
   secondaryButton,
   textareaClass,
   useDeliveryPageIndex,
-  useDeliveryProjectScope,
+  useDeliveryWorkspace,
+  withProjectQuery,
 } from "@/components/delivery/shared";
 import {
   actOnDeliveryRollout,
@@ -44,10 +46,10 @@ import { toastSuccess } from "@/lib/toast";
 
 type RolloutAction = "pause" | "resume" | "abort" | "retry" | "rollback";
 
-function RolloutDetailPage() {
+export function RolloutDetailPage() {
   const { rolloutId } = useParams<{ rolloutId: string }>();
-  const { projectId, projects, projectQuery, setProjectId } =
-    useDeliveryProjectScope();
+  const { projectId, projects, projectQuery, setProjectId, listHref } =
+    useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const scope = { type: "project" as const, id: projectId };
   const allowed = can(user, "delivery_rollouts", "read", scope);
@@ -178,7 +180,7 @@ function RolloutDetailPage() {
       >
         <PageShell>
           <Link
-            href={`/dashboard/delivery/rollouts?project=${encodeURIComponent(projectId)}`}
+            href={withProjectQuery(listHref("rollouts"), projectId)}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Rollouts
@@ -522,6 +524,15 @@ function actionIcon(action: RolloutAction) {
   if (action === "abort") return <Ban className="h-4 w-4" />;
   return <RotateCcw className="h-4 w-4" />;
 }
+function DeliveryRolloutDetailRedirect() {
+  const { rolloutId } = useParams<{ rolloutId: string }>();
+  return (
+    <RedirectDeliveryDetail tab="rollouts" id={rolloutId}>
+      <RolloutDetailPage />
+    </RedirectDeliveryDetail>
+  );
+}
+
 export const Route = createFileRoute(
   "/dashboard/delivery/rollouts/$rolloutId/",
-)({ component: RolloutDetailPage });
+)({ component: DeliveryRolloutDetailRedirect });

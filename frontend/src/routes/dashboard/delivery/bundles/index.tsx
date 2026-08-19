@@ -31,7 +31,8 @@ import { useRouter } from "@/lib/navigation";
 import { toastSuccess } from "@/lib/toast";
 
 export function BundlesPage() {
-  const { projectId, projects, projectQuery } = useDeliveryWorkspace();
+  const { projectId, projects, projectQuery, entityHref } =
+    useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const scope = { type: "project" as const, id: projectId };
   const allowed = can(user, "delivery_bundles", "list", scope);
@@ -119,11 +120,7 @@ export function BundlesPage() {
             onRetry={() => void query.refetch()}
             searchable={false}
             emptyMessage="No component bundles in this project"
-            onRowClick={(row) =>
-              router.push(
-                `/dashboard/delivery/bundles/${row.id}?project=${encodeURIComponent(projectId)}`,
-              )
-            }
+            onRowClick={(row) => router.push(entityHref("bundles", row.id))}
             serverSide={{
               rowCount: query.data?.count ?? 0,
               pagination: { pageIndex, pageSize },
@@ -151,6 +148,7 @@ function CreateBundleDialog({
 }) {
   const client = useQueryClient();
   const router = useRouter();
+  const { entityHref } = useDeliveryWorkspace();
   const mutation = useMutation({
     mutationFn: (body: { name: string; description?: string }) =>
       createComponentBundle(projectId, body, crypto.randomUUID()),
@@ -161,7 +159,7 @@ function CreateBundleDialog({
       toastSuccess("Component bundle created");
       onClose();
       router.push(
-        `/dashboard/delivery/bundles/${bundle.id}?project=${encodeURIComponent(projectId)}`,
+        entityHref("bundles", bundle.id),
       );
     },
   });

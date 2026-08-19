@@ -40,7 +40,8 @@ import { liveFallback } from "@/lib/live/status-store";
 import { toastSuccess } from "@/lib/toast";
 
 export function TargetsPage() {
-  const { projectId, projects, projectQuery } = useDeliveryWorkspace();
+  const { projectId, projects, projectQuery, entityHref } =
+    useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const scope = { type: "project" as const, id: projectId };
   const allowed = can(user, "delivery_targets", "list", scope);
@@ -159,11 +160,7 @@ export function TargetsPage() {
             onRetry={() => void query.refetch()}
             searchable={false}
             emptyMessage="No delivery targets in this project"
-            onRowClick={(row) =>
-              router.push(
-                `/dashboard/delivery/targets/${row.id}?project=${encodeURIComponent(projectId)}`,
-              )
-            }
+            onRowClick={(row) => router.push(entityHref("targets", row.id))}
             serverSide={{
               rowCount: query.data?.count ?? 0,
               pagination: { pageIndex, pageSize },
@@ -191,6 +188,7 @@ function CreateTargetDialog({
 }) {
   const client = useQueryClient();
   const router = useRouter();
+  const { entityHref } = useDeliveryWorkspace();
   const [bundleId, setBundleId] = useState("");
   const [allClusters, setAllClusters] = useState(false);
   const [drift, setDrift] = useState<DriftPolicy>("repair");
@@ -217,7 +215,7 @@ function CreateTargetDialog({
       toastSuccess("Delivery target created");
       onClose();
       router.push(
-        `/dashboard/delivery/targets/${data.id}?project=${encodeURIComponent(projectId)}`,
+        entityHref("targets", data.id),
       );
     },
   });

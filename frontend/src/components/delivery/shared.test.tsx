@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clusterDeliveryPath,
+  deliveryEntityPath,
   deliveryPageRowCount,
   deliveryProjectLabel,
   projectBoundToCluster,
@@ -94,6 +95,17 @@ describe("cluster delivery paths", () => {
     );
     expect(clusterDeliveryPath("cluster-1", "sources")).toBe(
       "/dashboard/clusters/cluster-1/delivery/sources",
+    );
+  });
+
+  it("keeps entity URLs inside the cluster workspace", () => {
+    expect(
+      deliveryEntityPath("deployments", "dep-1", {
+        clusterId: "cluster-1",
+        projectId: "project-1",
+      }),
+    ).toBe(
+      "/dashboard/clusters/cluster-1/delivery/deployments/dep-1?project=project-1",
     );
   });
 

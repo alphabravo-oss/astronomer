@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@/lib/link";
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation";
 import { useClusters, useProjects } from "@/lib/hooks";
@@ -22,6 +22,24 @@ export type DeliveryListTab =
 export function clusterDeliveryPath(clusterId: string, tab: string = ""): string {
   const suffix = tab ? `/${tab}` : "";
   return `/dashboard/clusters/${clusterId}/delivery${suffix}`;
+}
+
+export function withProjectQuery(path: string, projectId?: string): string {
+  if (!projectId) return path;
+  const join = path.includes("?") ? "&" : "?";
+  return `${path}${join}project=${encodeURIComponent(projectId)}`;
+}
+
+export function deliveryEntityPath(
+  tab: DeliveryListTab,
+  entityId: string,
+  opts: { clusterId?: string; projectId?: string } = {},
+): string {
+  const encoded = encodeURIComponent(entityId);
+  const path = opts.clusterId
+    ? `${clusterDeliveryPath(opts.clusterId, tab)}/${encoded}`
+    : `/dashboard/delivery/${tab}/${encoded}`;
+  return withProjectQuery(path, opts.projectId);
 }
 
 export function projectClusterId(project: {
@@ -94,7 +112,25 @@ export function useDeliveryWorkspace() {
       : tab
         ? `/dashboard/delivery/${tab}`
         : "/dashboard/delivery";
-  return { clusterId, listHref, ...scope };
+  const entityHref = (tab: DeliveryListTab, entityId: string) =>
+    deliveryEntityPath(tab, entityId, {
+      clusterId,
+      projectId: scope.projectId,
+    });
+  return { clusterId, listHref, entityHref, ...scope };
+}
+
+function resolveDeliveryCluster(
+  projectId: string,
+  projects: Array<{ id: string; clusterId?: string; clusterIds?: string[] }>,
+) {
+  const project =
+    projects.find((item) => item.id === projectId) ??
+    (projects.length === 1 ? projects[0] : undefined);
+  return {
+    project,
+    clusterId: project ? projectClusterId(project) : undefined,
+  };
 }
 
 export function RedirectDeliveryList({ tab }: { tab: DeliveryListTab }) {
@@ -104,10 +140,7 @@ export function RedirectDeliveryList({ tab }: { tab: DeliveryListTab }) {
   const router = useRouter();
   useEffect(() => {
     if (projectQuery.isLoading) return;
-    const project =
-      projects.find((item) => item.id === projectId) ??
-      (projects.length === 1 ? projects[0] : undefined);
-    const clusterId = project ? projectClusterId(project) : undefined;
+    const { project, clusterId } = resolveDeliveryCluster(projectId, projects);
     const next = new URLSearchParams(searchKey);
     if (project?.id) next.set("project", project.id);
     if (clusterId) {
@@ -119,6 +152,37 @@ export function RedirectDeliveryList({ tab }: { tab: DeliveryListTab }) {
     router.replace("/dashboard/delivery");
   }, [projectId, projectQuery.isLoading, projects, router, searchKey, tab]);
   return <LoadingState title="Opening cluster delivery" />;
+}
+
+export function RedirectDeliveryDetail({
+  tab,
+  id,
+  children,
+}: {
+  tab: DeliveryListTab;
+  id: string;
+  children: ReactNode;
+}) {
+  const { projectId, projects, projectQuery } = useDeliveryProjectScope();
+  const search = useSearchParams();
+  const searchKey = search.toString();
+  const router = useRouter();
+  const [redirecting, setRedirecting] = useState(false);
+  useEffect(() => {
+    if (projectQuery.isLoading || !id) return;
+    const { project, clusterId } = resolveDeliveryCluster(projectId, projects);
+    if (!clusterId) return;
+    const next = new URLSearchParams(searchKey);
+    if (project?.id) next.set("project", project.id);
+    setRedirecting(true);
+    router.replace(
+      `${clusterDeliveryPath(clusterId, tab)}/${encodeURIComponent(id)}${next.size ? `?${next.toString()}` : ""}`,
+    );
+  }, [id, projectId, projectQuery.isLoading, projects, router, searchKey, tab]);
+  if (projectQuery.isLoading || redirecting) {
+    return <LoadingState title="Opening cluster delivery" />;
+  }
+  return children;
 }
 
 export function useDeliveryPageIndex(parameter = "page") {

@@ -30,7 +30,9 @@ import {
   primaryButton,
   secondaryButton,
   textareaClass,
-  useDeliveryProjectScope,
+  RedirectDeliveryDetail,
+  useDeliveryWorkspace,
+  withProjectQuery,
 } from "@/components/delivery/shared";
 import {
   deleteDeliveryTarget,
@@ -59,10 +61,10 @@ import { can, isSuperuser } from "@/lib/permissions";
 import { useParams, useRouter } from "@/lib/navigation";
 import { toastSuccess } from "@/lib/toast";
 
-function TargetDetailPage() {
+export function TargetDetailPage() {
   const { targetId } = useParams<{ targetId: string }>();
-  const { projectId, projects, projectQuery, setProjectId } =
-    useDeliveryProjectScope();
+  const { projectId, projects, projectQuery, setProjectId, listHref, entityHref } =
+    useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const scope = { type: "project" as const, id: projectId };
   const allowed = can(user, "delivery_targets", "read", scope);
@@ -140,9 +142,7 @@ function TargetDetailPage() {
         queryKey: queryKeys.delivery.targetsAll(projectId),
       });
       toastSuccess("Target deletion started");
-      router.push(
-        `/dashboard/delivery/targets?project=${encodeURIComponent(projectId)}`,
-      );
+      router.push(withProjectQuery(listHref("targets"), projectId));
     },
   });
   const orphanMutation = useMutation({
@@ -160,9 +160,7 @@ function TargetDetailPage() {
         queryKey: queryKeys.delivery.targetsAll(projectId),
       });
       toastSuccess("Target marked orphaned");
-      router.push(
-        `/dashboard/delivery/targets?project=${encodeURIComponent(projectId)}`,
-      );
+      router.push(withProjectQuery(listHref("targets"), projectId));
     },
   });
   const target = query.data?.data;
@@ -183,7 +181,7 @@ function TargetDetailPage() {
       >
         <PageShell>
           <Link
-            href={`/dashboard/delivery/targets?project=${encodeURIComponent(projectId)}`}
+            href={withProjectQuery(listHref("targets"), projectId)}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Targets
@@ -781,6 +779,7 @@ function LaunchDialog({
 }) {
   const client = useQueryClient();
   const router = useRouter();
+  const { entityHref } = useDeliveryWorkspace();
   const [strategyType, setStrategyType] =
     useState<RolloutStrategyType>("rolling");
   const [maxUnavailableType, setMaxUnavailableType] =
@@ -808,7 +807,7 @@ function LaunchDialog({
       toastSuccess("Rollout launched");
       onClose();
       router.push(
-        `/dashboard/delivery/rollouts/${rollout.id}?project=${encodeURIComponent(projectId)}`,
+        entityHref("rollouts", rollout.id),
       );
     },
   });
@@ -1104,6 +1103,15 @@ function Field({
     </label>
   );
 }
+function DeliveryTargetDetailRedirect() {
+  const { targetId } = useParams<{ targetId: string }>();
+  return (
+    <RedirectDeliveryDetail tab="targets" id={targetId}>
+      <TargetDetailPage />
+    </RedirectDeliveryDetail>
+  );
+}
+
 export const Route = createFileRoute("/dashboard/delivery/targets/$targetId/")({
-  component: TargetDetailPage,
+  component: DeliveryTargetDetailRedirect,
 });

@@ -27,6 +27,7 @@ import {
   DetailGrid,
   ErrorMessage,
   clusterDeliveryPath,
+  deliveryEntityPath,
   projectClusterId,
   useDeliveryProjectScope,
 } from "@/components/delivery/shared";
@@ -817,7 +818,10 @@ function ProjectDeliveryOverview({
               {failures.map((deployment) => (
                 <Link
                   key={deployment.id}
-                  href={`/dashboard/delivery/deployments/${deployment.id}?project=${encodeURIComponent(projectId)}`}
+                  href={deliveryEntityPath("deployments", deployment.id, {
+                    clusterId: deployment.clusterId || clusterId,
+                    projectId,
+                  })}
                   className="flex items-center justify-between rounded-md border border-status-warning/30 bg-status-warning/10 p-3"
                 >
                   <span className="flex items-center gap-2">
@@ -835,7 +839,10 @@ function ProjectDeliveryOverview({
                 .map((rollout) => (
                   <Link
                     key={rollout.id}
-                    href={`/dashboard/delivery/rollouts/${rollout.id}?project=${encodeURIComponent(projectId)}`}
+                    href={deliveryEntityPath("rollouts", rollout.id, {
+                      clusterId,
+                      projectId,
+                    })}
                     className="flex items-center justify-between rounded-md border border-status-error/30 bg-status-error/10 p-3"
                   >
                     <span className="flex items-center gap-2">

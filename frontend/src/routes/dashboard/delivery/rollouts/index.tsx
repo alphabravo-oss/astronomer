@@ -41,7 +41,8 @@ const states: RolloutState[] = [
 ];
 
 export function RolloutsPage() {
-  const { projectId, projects, projectQuery, listHref } = useDeliveryWorkspace();
+  const { projectId, projects, projectQuery, listHref, entityHref } =
+    useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const allowed = can(user, "delivery_rollouts", "list", {
     type: "project",
@@ -188,11 +189,7 @@ export function RolloutsPage() {
                 ))}
               </select>
             }
-            onRowClick={(row) =>
-              router.push(
-                `/dashboard/delivery/rollouts/${row.id}?project=${encodeURIComponent(projectId)}`,
-              )
-            }
+            onRowClick={(row) => router.push(entityHref("rollouts", row.id))}
             serverSide={{
               rowCount: query.data?.count ?? 0,
               pagination: { pageIndex, pageSize },
