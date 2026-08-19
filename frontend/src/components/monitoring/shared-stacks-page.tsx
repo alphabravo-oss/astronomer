@@ -84,7 +84,7 @@ export function SharedMonitoringStacksPage() {
             Settings
           </Link>
         }
-        title="Shared monitoring stacks"
+        title="Shared observability stacks"
         description="Optional deployment-wide tier: Thanos (long-term metric retention) and Alertmanager (alert routing). Per-cluster monitoring already runs in-cluster on short-lived rolling storage with no object storage — add Thanos here only to keep metrics beyond each cluster's local retention window. Every action is queued and reconciled server-side."
         actions={
           <Link
@@ -92,7 +92,7 @@ export function SharedMonitoringStacksPage() {
             className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <BarChart3 className="h-3.5 w-3.5" />
-            Metrics
+            Fleet metrics
           </Link>
         }
       />
@@ -106,7 +106,7 @@ export function SharedMonitoringStacksPage() {
             <p>
               Object storage is required only for Thanos below — it reads historical blocks from a
               bucket. To simply collect metrics on a cluster you don&apos;t need a bucket: install the
-              per-cluster Prometheus stack from that cluster&apos;s Monitoring tab, which defaults to
+              per-cluster Prometheus stack from that cluster&apos;s Monitoring Stack page, which defaults to
               in-cluster rolling storage (15-day retention).
             </p>
           </div>

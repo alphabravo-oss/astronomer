@@ -81,6 +81,7 @@ import { Route as DashboardClusterTemplatesIdEditIndexRouteImport } from './rout
 import { Route as DashboardClustersIdResourceIndexRouteImport } from './routes/dashboard/clusters/$id/$resource/index'
 import { Route as DashboardClustersIdResourceSplatRouteImport } from './routes/dashboard/clusters/$id/$resource/$'
 import { Route as DashboardClustersIdAdoptionIndexRouteImport } from './routes/dashboard/clusters/$id/adoption/index'
+import { Route as DashboardClustersIdAlertingIndexRouteImport } from './routes/dashboard/clusters/$id/alerting/index'
 import { Route as DashboardClustersIdAppsIndexRouteImport } from './routes/dashboard/clusters/$id/apps/index'
 import { Route as DashboardClustersIdControlPlaneSnapshotsIndexRouteImport } from './routes/dashboard/clusters/$id/control-plane-snapshots/index'
 import { Route as DashboardClustersIdCustomResourcesIndexRouteImport } from './routes/dashboard/clusters/$id/custom-resources/index'
@@ -88,6 +89,8 @@ import { Route as DashboardClustersIdCustomResourcesSplatRouteImport } from './r
 import { Route as DashboardClustersIdDeliveryIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/index'
 import { Route as DashboardClustersIdGatekeeperIndexRouteImport } from './routes/dashboard/clusters/$id/gatekeeper/index'
 import { Route as DashboardClustersIdImageScansIndexRouteImport } from './routes/dashboard/clusters/$id/image-scans/index'
+import { Route as DashboardClustersIdLoggingIndexRouteImport } from './routes/dashboard/clusters/$id/logging/index'
+import { Route as DashboardClustersIdMetricsIndexRouteImport } from './routes/dashboard/clusters/$id/metrics/index'
 import { Route as DashboardClustersIdMonitoringStackIndexRouteImport } from './routes/dashboard/clusters/$id/monitoring-stack/index'
 import { Route as DashboardClustersIdNetworkAccessIndexRouteImport } from './routes/dashboard/clusters/$id/network-access/index'
 import { Route as DashboardClustersIdNetworkPoliciesIndexRouteImport } from './routes/dashboard/clusters/$id/network-policies/index'
@@ -553,6 +556,12 @@ const DashboardClustersIdAdoptionIndexRoute =
     path: '/adoption/',
     getParentRoute: () => DashboardClustersIdRouteRoute,
   } as any)
+const DashboardClustersIdAlertingIndexRoute =
+  DashboardClustersIdAlertingIndexRouteImport.update({
+    id: '/alerting/',
+    path: '/alerting/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
 const DashboardClustersIdAppsIndexRoute =
   DashboardClustersIdAppsIndexRouteImport.update({
     id: '/apps/',
@@ -593,6 +602,18 @@ const DashboardClustersIdImageScansIndexRoute =
   DashboardClustersIdImageScansIndexRouteImport.update({
     id: '/image-scans/',
     path: '/image-scans/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdLoggingIndexRoute =
+  DashboardClustersIdLoggingIndexRouteImport.update({
+    id: '/logging/',
+    path: '/logging/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdMetricsIndexRoute =
+  DashboardClustersIdMetricsIndexRouteImport.update({
+    id: '/metrics/',
+    path: '/metrics/',
     getParentRoute: () => DashboardClustersIdRouteRoute,
   } as any)
 const DashboardClustersIdMonitoringStackIndexRoute =
@@ -982,12 +1003,15 @@ export interface FileRoutesByFullPath {
   '/dashboard/cluster-templates/$id/edit/': typeof DashboardClusterTemplatesIdEditIndexRoute
   '/dashboard/clusters/$id/$resource/': typeof DashboardClustersIdResourceIndexRoute
   '/dashboard/clusters/$id/adoption/': typeof DashboardClustersIdAdoptionIndexRoute
+  '/dashboard/clusters/$id/alerting/': typeof DashboardClustersIdAlertingIndexRoute
   '/dashboard/clusters/$id/apps/': typeof DashboardClustersIdAppsIndexRoute
   '/dashboard/clusters/$id/control-plane-snapshots/': typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
   '/dashboard/clusters/$id/custom-resources/': typeof DashboardClustersIdCustomResourcesIndexRoute
   '/dashboard/clusters/$id/delivery/': typeof DashboardClustersIdDeliveryIndexRoute
   '/dashboard/clusters/$id/gatekeeper/': typeof DashboardClustersIdGatekeeperIndexRoute
   '/dashboard/clusters/$id/image-scans/': typeof DashboardClustersIdImageScansIndexRoute
+  '/dashboard/clusters/$id/logging/': typeof DashboardClustersIdLoggingIndexRoute
+  '/dashboard/clusters/$id/metrics/': typeof DashboardClustersIdMetricsIndexRoute
   '/dashboard/clusters/$id/monitoring-stack/': typeof DashboardClustersIdMonitoringStackIndexRoute
   '/dashboard/clusters/$id/network-access/': typeof DashboardClustersIdNetworkAccessIndexRoute
   '/dashboard/clusters/$id/network-policies/': typeof DashboardClustersIdNetworkPoliciesIndexRoute
@@ -1111,12 +1135,15 @@ export interface FileRoutesByTo {
   '/dashboard/cluster-templates/$id/edit': typeof DashboardClusterTemplatesIdEditIndexRoute
   '/dashboard/clusters/$id/$resource': typeof DashboardClustersIdResourceIndexRoute
   '/dashboard/clusters/$id/adoption': typeof DashboardClustersIdAdoptionIndexRoute
+  '/dashboard/clusters/$id/alerting': typeof DashboardClustersIdAlertingIndexRoute
   '/dashboard/clusters/$id/apps': typeof DashboardClustersIdAppsIndexRoute
   '/dashboard/clusters/$id/control-plane-snapshots': typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
   '/dashboard/clusters/$id/custom-resources': typeof DashboardClustersIdCustomResourcesIndexRoute
   '/dashboard/clusters/$id/delivery': typeof DashboardClustersIdDeliveryIndexRoute
   '/dashboard/clusters/$id/gatekeeper': typeof DashboardClustersIdGatekeeperIndexRoute
   '/dashboard/clusters/$id/image-scans': typeof DashboardClustersIdImageScansIndexRoute
+  '/dashboard/clusters/$id/logging': typeof DashboardClustersIdLoggingIndexRoute
+  '/dashboard/clusters/$id/metrics': typeof DashboardClustersIdMetricsIndexRoute
   '/dashboard/clusters/$id/monitoring-stack': typeof DashboardClustersIdMonitoringStackIndexRoute
   '/dashboard/clusters/$id/network-access': typeof DashboardClustersIdNetworkAccessIndexRoute
   '/dashboard/clusters/$id/network-policies': typeof DashboardClustersIdNetworkPoliciesIndexRoute
@@ -1245,12 +1272,15 @@ export interface FileRoutesById {
   '/dashboard/cluster-templates/$id/edit/': typeof DashboardClusterTemplatesIdEditIndexRoute
   '/dashboard/clusters/$id/$resource/': typeof DashboardClustersIdResourceIndexRoute
   '/dashboard/clusters/$id/adoption/': typeof DashboardClustersIdAdoptionIndexRoute
+  '/dashboard/clusters/$id/alerting/': typeof DashboardClustersIdAlertingIndexRoute
   '/dashboard/clusters/$id/apps/': typeof DashboardClustersIdAppsIndexRoute
   '/dashboard/clusters/$id/control-plane-snapshots/': typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
   '/dashboard/clusters/$id/custom-resources/': typeof DashboardClustersIdCustomResourcesIndexRoute
   '/dashboard/clusters/$id/delivery/': typeof DashboardClustersIdDeliveryIndexRoute
   '/dashboard/clusters/$id/gatekeeper/': typeof DashboardClustersIdGatekeeperIndexRoute
   '/dashboard/clusters/$id/image-scans/': typeof DashboardClustersIdImageScansIndexRoute
+  '/dashboard/clusters/$id/logging/': typeof DashboardClustersIdLoggingIndexRoute
+  '/dashboard/clusters/$id/metrics/': typeof DashboardClustersIdMetricsIndexRoute
   '/dashboard/clusters/$id/monitoring-stack/': typeof DashboardClustersIdMonitoringStackIndexRoute
   '/dashboard/clusters/$id/network-access/': typeof DashboardClustersIdNetworkAccessIndexRoute
   '/dashboard/clusters/$id/network-policies/': typeof DashboardClustersIdNetworkPoliciesIndexRoute
@@ -1380,12 +1410,15 @@ export interface FileRouteTypes {
     | '/dashboard/cluster-templates/$id/edit/'
     | '/dashboard/clusters/$id/$resource/'
     | '/dashboard/clusters/$id/adoption/'
+    | '/dashboard/clusters/$id/alerting/'
     | '/dashboard/clusters/$id/apps/'
     | '/dashboard/clusters/$id/control-plane-snapshots/'
     | '/dashboard/clusters/$id/custom-resources/'
     | '/dashboard/clusters/$id/delivery/'
     | '/dashboard/clusters/$id/gatekeeper/'
     | '/dashboard/clusters/$id/image-scans/'
+    | '/dashboard/clusters/$id/logging/'
+    | '/dashboard/clusters/$id/metrics/'
     | '/dashboard/clusters/$id/monitoring-stack/'
     | '/dashboard/clusters/$id/network-access/'
     | '/dashboard/clusters/$id/network-policies/'
@@ -1509,12 +1542,15 @@ export interface FileRouteTypes {
     | '/dashboard/cluster-templates/$id/edit'
     | '/dashboard/clusters/$id/$resource'
     | '/dashboard/clusters/$id/adoption'
+    | '/dashboard/clusters/$id/alerting'
     | '/dashboard/clusters/$id/apps'
     | '/dashboard/clusters/$id/control-plane-snapshots'
     | '/dashboard/clusters/$id/custom-resources'
     | '/dashboard/clusters/$id/delivery'
     | '/dashboard/clusters/$id/gatekeeper'
     | '/dashboard/clusters/$id/image-scans'
+    | '/dashboard/clusters/$id/logging'
+    | '/dashboard/clusters/$id/metrics'
     | '/dashboard/clusters/$id/monitoring-stack'
     | '/dashboard/clusters/$id/network-access'
     | '/dashboard/clusters/$id/network-policies'
@@ -1642,12 +1678,15 @@ export interface FileRouteTypes {
     | '/dashboard/cluster-templates/$id/edit/'
     | '/dashboard/clusters/$id/$resource/'
     | '/dashboard/clusters/$id/adoption/'
+    | '/dashboard/clusters/$id/alerting/'
     | '/dashboard/clusters/$id/apps/'
     | '/dashboard/clusters/$id/control-plane-snapshots/'
     | '/dashboard/clusters/$id/custom-resources/'
     | '/dashboard/clusters/$id/delivery/'
     | '/dashboard/clusters/$id/gatekeeper/'
     | '/dashboard/clusters/$id/image-scans/'
+    | '/dashboard/clusters/$id/logging/'
+    | '/dashboard/clusters/$id/metrics/'
     | '/dashboard/clusters/$id/monitoring-stack/'
     | '/dashboard/clusters/$id/network-access/'
     | '/dashboard/clusters/$id/network-policies/'
@@ -2217,6 +2256,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardClustersIdAdoptionIndexRouteImport
       parentRoute: typeof DashboardClustersIdRouteRoute
     }
+    '/dashboard/clusters/$id/alerting/': {
+      id: '/dashboard/clusters/$id/alerting/'
+      path: '/alerting'
+      fullPath: '/dashboard/clusters/$id/alerting/'
+      preLoaderRoute: typeof DashboardClustersIdAlertingIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
     '/dashboard/clusters/$id/apps/': {
       id: '/dashboard/clusters/$id/apps/'
       path: '/apps'
@@ -2264,6 +2310,20 @@ declare module '@tanstack/react-router' {
       path: '/image-scans'
       fullPath: '/dashboard/clusters/$id/image-scans/'
       preLoaderRoute: typeof DashboardClustersIdImageScansIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/logging/': {
+      id: '/dashboard/clusters/$id/logging/'
+      path: '/logging'
+      fullPath: '/dashboard/clusters/$id/logging/'
+      preLoaderRoute: typeof DashboardClustersIdLoggingIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/metrics/': {
+      id: '/dashboard/clusters/$id/metrics/'
+      path: '/metrics'
+      fullPath: '/dashboard/clusters/$id/metrics/'
+      preLoaderRoute: typeof DashboardClustersIdMetricsIndexRouteImport
       parentRoute: typeof DashboardClustersIdRouteRoute
     }
     '/dashboard/clusters/$id/monitoring-stack/': {
@@ -2682,11 +2742,14 @@ interface DashboardClustersIdRouteRouteChildren {
   DashboardClustersIdCustomResourcesSplatRoute: typeof DashboardClustersIdCustomResourcesSplatRoute
   DashboardClustersIdResourceIndexRoute: typeof DashboardClustersIdResourceIndexRoute
   DashboardClustersIdAdoptionIndexRoute: typeof DashboardClustersIdAdoptionIndexRoute
+  DashboardClustersIdAlertingIndexRoute: typeof DashboardClustersIdAlertingIndexRoute
   DashboardClustersIdAppsIndexRoute: typeof DashboardClustersIdAppsIndexRoute
   DashboardClustersIdControlPlaneSnapshotsIndexRoute: typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
   DashboardClustersIdCustomResourcesIndexRoute: typeof DashboardClustersIdCustomResourcesIndexRoute
   DashboardClustersIdGatekeeperIndexRoute: typeof DashboardClustersIdGatekeeperIndexRoute
   DashboardClustersIdImageScansIndexRoute: typeof DashboardClustersIdImageScansIndexRoute
+  DashboardClustersIdLoggingIndexRoute: typeof DashboardClustersIdLoggingIndexRoute
+  DashboardClustersIdMetricsIndexRoute: typeof DashboardClustersIdMetricsIndexRoute
   DashboardClustersIdMonitoringStackIndexRoute: typeof DashboardClustersIdMonitoringStackIndexRoute
   DashboardClustersIdNetworkAccessIndexRoute: typeof DashboardClustersIdNetworkAccessIndexRoute
   DashboardClustersIdNetworkPoliciesIndexRoute: typeof DashboardClustersIdNetworkPoliciesIndexRoute
@@ -2716,6 +2779,8 @@ const DashboardClustersIdRouteRouteChildren: DashboardClustersIdRouteRouteChildr
       DashboardClustersIdResourceIndexRoute,
     DashboardClustersIdAdoptionIndexRoute:
       DashboardClustersIdAdoptionIndexRoute,
+    DashboardClustersIdAlertingIndexRoute:
+      DashboardClustersIdAlertingIndexRoute,
     DashboardClustersIdAppsIndexRoute: DashboardClustersIdAppsIndexRoute,
     DashboardClustersIdControlPlaneSnapshotsIndexRoute:
       DashboardClustersIdControlPlaneSnapshotsIndexRoute,
@@ -2725,6 +2790,8 @@ const DashboardClustersIdRouteRouteChildren: DashboardClustersIdRouteRouteChildr
       DashboardClustersIdGatekeeperIndexRoute,
     DashboardClustersIdImageScansIndexRoute:
       DashboardClustersIdImageScansIndexRoute,
+    DashboardClustersIdLoggingIndexRoute: DashboardClustersIdLoggingIndexRoute,
+    DashboardClustersIdMetricsIndexRoute: DashboardClustersIdMetricsIndexRoute,
     DashboardClustersIdMonitoringStackIndexRoute:
       DashboardClustersIdMonitoringStackIndexRoute,
     DashboardClustersIdNetworkAccessIndexRoute:

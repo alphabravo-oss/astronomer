@@ -212,13 +212,19 @@ const featurePathPrefixes: Array<{ prefix: string; flag: FeatureFlagKey }> = [
   { prefix: '/dashboard/catalog', flag: 'feature.catalog' },
   { prefix: '/dashboard/tools', flag: 'feature.catalog' },
   { prefix: '/dashboard/monitoring', flag: 'feature.monitoring' },
+  { prefix: '/dashboard/settings/monitoring', flag: 'feature.monitoring' },
   { prefix: '/dashboard/security', flag: 'feature.security' },
   { prefix: '/dashboard/charlie', flag: 'feature.charlie' },
   { prefix: '/dashboard/extensions', flag: 'feature.extensions' },
 ];
 
+const clusterMonitoringPath = /^\/dashboard\/clusters\/[^/]+\/(metrics|monitoring-stack)(\/|$)/;
+
 function disabledFeatureForPath(pathname: string, flags?: FeatureFlags): FeatureFlagKey | null {
   if (!flags) return null;
+  if (flags['feature.monitoring'] === false && clusterMonitoringPath.test(pathname)) {
+    return 'feature.monitoring';
+  }
   const match = featurePathPrefixes.find(({ prefix }) => pathname === prefix || pathname.startsWith(`${prefix}/`));
   if (!match) return null;
   return flags[match.flag] === false ? match.flag : null;

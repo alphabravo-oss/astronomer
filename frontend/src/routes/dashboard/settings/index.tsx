@@ -162,7 +162,7 @@ const CARDS: SettingsCard[] = [
   },
   {
     href: '/dashboard/settings/monitoring',
-    title: 'Monitoring stacks',
+    title: 'Shared observability stacks',
     description: 'Shared Thanos + Alertmanager: install, upgrade, replace, uninstall.',
     icon: BarChart3,
   },

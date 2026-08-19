@@ -9,11 +9,11 @@ import type { LoggingPipeline } from '@/types';
 import { Trash2 } from 'lucide-react';
 import { toastError, toastSuccess } from '@/lib/toast';
 
-export function PipelinesTab() {
+export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
   const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<LoggingPipeline | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const { data: pipelines, isLoading, isError, refetch } = useLoggingPipelines();
+  const { data: pipelines, isLoading, isError, refetch } = useLoggingPipelines(clusterId);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -53,13 +53,15 @@ export function PipelinesTab() {
         </div>
       ),
     },
-    {
-      key: 'cluster',
-      header: 'Cluster',
-      accessor: (row) => (
-        <span className="text-sm text-muted-foreground">{row.clusterName || 'All'}</span>
-      ),
-    },
+    ...(clusterId
+      ? []
+      : [{
+          key: 'cluster',
+          header: 'Cluster',
+          accessor: (row: LoggingPipeline) => (
+            <span className="text-sm text-muted-foreground">{row.clusterName || 'All'}</span>
+          ),
+        } as Column<LoggingPipeline>]),
     {
       key: 'namespaces',
       header: 'Namespaces',

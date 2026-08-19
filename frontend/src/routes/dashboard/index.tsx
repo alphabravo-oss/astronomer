@@ -137,7 +137,7 @@ function DashboardPage() {
           href="/dashboard/alerting"
           icon={<Bell className="h-4 w-4" />}
           title="Review alerts"
-          description="Acknowledge firing alerts and tune rules"
+          description="Acknowledge firing alerts and manage routing"
         />
         <ActionCard
           href="/dashboard/projects"

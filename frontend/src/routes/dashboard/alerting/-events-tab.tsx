@@ -6,8 +6,10 @@ import { ActionButton } from '@/components/ui/action-button';
 import { cn, formatRelativeTime, statusBgColor } from '@/lib/utils';
 import type { AlertEvent } from '@/types';
 
-export function EventsTab() {
-  const { data: events, isLoading, isError, refetch } = useAlertEvents();
+export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
+  const { data: events, isLoading, isError, refetch } = useAlertEvents(
+    clusterId ? { clusterId } : undefined,
+  );
   const acknowledgeAlert = useAcknowledgeAlert();
   const resolveAlert = useResolveAlert();
 
@@ -36,13 +38,15 @@ export function EventsTab() {
       ),
       sortable: false,
     },
-    {
-      key: 'cluster',
-      header: 'Cluster',
-      accessor: (row) => (
-        <span className="text-sm text-muted-foreground">{row.clusterName || '--'}</span>
-      ),
-    },
+    ...(clusterId
+      ? []
+      : [{
+          key: 'cluster',
+          header: 'Cluster',
+          accessor: (row: AlertEvent) => (
+            <span className="text-sm text-muted-foreground">{row.clusterName || '--'}</span>
+          ),
+        } as Column<AlertEvent>]),
     {
       key: 'firedAt',
       header: 'Fired',

@@ -229,7 +229,9 @@ export const queryKeys = {
   activityAll: ["activity"] as const,
   alerting: {
     all: ["alerting"] as const,
-    rules: ["alerting", "rules"] as const,
+    rulesAll: ["alerting", "rules"] as const,
+    rules: (clusterId?: string) =>
+      ["alerting", "rules", clusterId ?? "all"] as const,
     events: (params?: Record<string, unknown>) =>
       ["alerting", "events", params] as const,
     // Prefix matching every `events(params)` variant — used by the live
@@ -265,7 +267,9 @@ export const queryKeys = {
   logging: {
     all: ["logging"] as const,
     outputs: ["logging", "outputs"] as const,
-    pipelines: ["logging", "pipelines"] as const,
+    pipelinesAll: ["logging", "pipelines"] as const,
+    pipelines: (clusterId?: string) =>
+      ["logging", "pipelines", clusterId ?? "all"] as const,
     operations: (params?: Record<string, unknown>) =>
       ["logging", "operations", params] as const,
     // Two-element prefix matching every `operations(params)` list variant and

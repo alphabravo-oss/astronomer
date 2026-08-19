@@ -8,7 +8,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn, statusBgColor } from '@/lib/utils';
 import type { AlertRule, AlertSeverity } from '@/types';
 
-export function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: () => void }) {
+export function AlertRuleModal({
+  rule,
+  onClose,
+  clusterId,
+}: {
+  rule: AlertRule | null;
+  onClose: () => void;
+  clusterId?: string;
+}) {
   const createRule = useCreateAlertRule();
   const updateRule = useUpdateAlertRule();
   const form = useAppForm({
@@ -34,6 +42,7 @@ export function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onCl
       const isAnomaly = value.type === 'anomaly';
       const data: Partial<AlertRule> & {
         rule_kind?: string;
+        cluster_id?: string;
         anomaly_stddev?: number;
         anomaly_window_seconds?: number;
         anomaly_min_samples?: number;
@@ -52,6 +61,7 @@ export function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onCl
         // via Type/RuleType aliases, but the snake_case path is
         // canonical. rule_kind is derived from `type` so the two stay in sync.
         rule_kind: isAnomaly ? 'anomaly' : 'threshold',
+        cluster_id: clusterId || rule?.clusterId,
         metric: isAnomaly ? value.metric : undefined,
         anomaly_stddev: isAnomaly ? parseFloat(value.anomalyStddev) : undefined,
         anomaly_window_seconds: isAnomaly ? parseInt(value.anomalyWindowSeconds, 10) : undefined,

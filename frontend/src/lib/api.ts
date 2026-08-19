@@ -1134,8 +1134,13 @@ export async function getActivityFeed(params?: { limit?: number }) {
 
 // --- Alerting ---
 
-export async function getAlertRules() {
-  const res = await api.get<APIResponse<import('@/types').AlertRule[]>>('/alerting/rules');
+export async function getAlertRules(params?: { clusterId?: string; limit?: number }) {
+  const res = await api.get<APIResponse<import('@/types').AlertRule[]>>('/alerting/rules', {
+    params: {
+      ...(params?.clusterId ? { clusterId: params.clusterId } : {}),
+      ...(params?.limit ? { limit: params.limit } : {}),
+    },
+  });
   return res.data.data;
 }
 
@@ -1244,13 +1249,22 @@ export async function testLoggingOutput(id: string) {
   return res.data.data;
 }
 
-export async function getLoggingPipelines() {
-  const res = await api.get<APIResponse<import('@/types').LoggingPipeline[]>>('/logging/pipelines');
+export async function getLoggingPipelines(params?: { clusterId?: string; limit?: number }) {
+  const res = await api.get<APIResponse<import('@/types').LoggingPipeline[]>>('/logging/pipelines', {
+    params: {
+      ...(params?.clusterId ? { cluster_id: params.clusterId } : {}),
+      ...(params?.limit ? { limit: params.limit } : {}),
+    },
+  });
   return res.data.data;
 }
 
 export async function createLoggingPipeline(data: Partial<import('@/types').LoggingPipeline>) {
-  const res = await api.post<APIResponse<import('@/types').LoggingPipeline>>('/logging/pipelines', data);
+  const res = await api.post<APIResponse<import('@/types').LoggingPipeline>>(
+    '/logging/pipelines',
+    data,
+    { params: data.clusterId ? { cluster_id: data.clusterId } : undefined },
+  );
   return res.data.data;
 }
 

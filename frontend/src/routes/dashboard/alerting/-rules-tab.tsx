@@ -8,8 +8,14 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { cn, statusBgColor } from '@/lib/utils';
 import type { AlertRule } from '@/types';
 
-export function RulesTab({ onEdit }: { onEdit: (rule: AlertRule) => void }) {
-  const { data: rules, isLoading, isError, refetch } = useAlertRules();
+export function RulesTab({
+  onEdit,
+  clusterId,
+}: {
+  onEdit: (rule: AlertRule) => void;
+  clusterId?: string;
+}) {
+  const { data: rules, isLoading, isError, refetch } = useAlertRules(clusterId);
   const deleteRule = useDeleteAlertRule();
   const [deleteRuleTarget, setDeleteRuleTarget] = useState<AlertRule | null>(null);
 
@@ -44,13 +50,15 @@ export function RulesTab({ onEdit }: { onEdit: (rule: AlertRule) => void }) {
         </span>
       ),
     },
-    {
-      key: 'cluster',
-      header: 'Cluster',
-      accessor: (row) => (
-        <span className="text-sm text-muted-foreground">{row.clusterName || 'All'}</span>
-      ),
-    },
+    ...(clusterId
+      ? []
+      : [{
+          key: 'cluster',
+          header: 'Cluster',
+          accessor: (row: AlertRule) => (
+            <span className="text-sm text-muted-foreground">{row.clusterName || 'All'}</span>
+          ),
+        } as Column<AlertRule>]),
     {
       key: 'status',
       header: 'Status',

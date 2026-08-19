@@ -68,6 +68,9 @@ DELETE FROM alert_rules WHERE id = $1;
 -- name: CountAlertRules :one
 SELECT count(*) FROM alert_rules;
 
+-- name: CountAlertRulesByCluster :one
+SELECT count(*) FROM alert_rules WHERE cluster_id = $1;
+
 -- Alert Rule Channels (M2M)
 
 -- name: AddAlertRuleChannel :exec

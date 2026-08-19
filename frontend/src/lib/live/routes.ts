@@ -327,7 +327,7 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
   "alerting.changed": (d) => {
     switch (d.kind) {
       case "rule":
-        return [qk.alerting.rules];
+        return [qk.alerting.rulesAll];
       case "event":
         return [qk.alerting.eventsAll];
       case "silence":

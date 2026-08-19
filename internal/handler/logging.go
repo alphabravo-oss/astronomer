@@ -269,6 +269,7 @@ type CreateLoggingOutputRequest struct {
 // CreateLoggingPipelineRequest represents the request body for creating a logging pipeline.
 type CreateLoggingPipelineRequest struct {
 	Name       string          `json:"name" validate:"required"`
+	ClusterID  string          `json:"cluster_id"`
 	Namespaces json.RawMessage `json:"namespaces"`
 	Labels     json.RawMessage `json:"labels"`
 	Filters    json.RawMessage `json:"filters"`
@@ -536,6 +537,9 @@ func (h *LoggingHandler) CreatePipeline(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	clusterID, err := clusterIDFromRequest(r)
+	if err != nil && req.ClusterID != "" {
+		clusterID, err = uuid.Parse(req.ClusterID)
+	}
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return

@@ -14,6 +14,12 @@ describe("Charlie safe UI boundary", () => {
       "agent_connection_record",
     );
     expect(contextForRoute("/dashboard/alerting")[0].type).toBe("alert");
+    expect(contextForRoute("/dashboard/clusters/abc/alerting")[0].type).toBe(
+      "alert",
+    );
+    expect(contextForRoute("/dashboard/clusters/abc/metrics")[0].type).toBe(
+      "agent_connection_record",
+    );
     expect(contextForRoute("/dashboard/agents")[0].type).toBe("cluster_agents");
     expect(contextForRoute("/dashboard/backups/run-1")[0]).toMatchObject({
       type: "backup",

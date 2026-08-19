@@ -5,33 +5,29 @@ import { useTabParam } from '@/lib/use-tab-param';
 import { PageHeader, PageShell } from '@/components/ui/page';
 import { TabStrip, TabsContent } from '@/components/ui/tabs';
 import { ActionButton } from '@/components/ui/action-button';
-import { Database, GitBranch, Activity, Plus } from 'lucide-react';
+import { Database, Activity, Plus } from 'lucide-react';
 import { OutputsTab } from './-outputs-tab';
-import { PipelinesTab } from './-pipelines-tab';
 import { OperationsTab } from './-operations-tab';
 import { CreateOutputModal } from './-output-modal';
-import { CreatePipelineModal } from './-pipeline-modal';
 
-type TabKey = 'outputs' | 'pipelines' | 'operations';
+type TabKey = 'outputs' | 'operations';
 
-const TAB_KEYS = ['outputs', 'pipelines', 'operations'] as const;
+const TAB_KEYS = ['outputs', 'operations'] as const;
 
 const tabs: { key: TabKey; label: string; icon: ElementType }[] = [
-  { key: 'outputs', label: 'Outputs', icon: Database },
-  { key: 'pipelines', label: 'Pipelines', icon: GitBranch },
+  { key: 'outputs', label: 'Destinations', icon: Database },
   { key: 'operations', label: 'Operations', icon: Activity },
 ];
 
 function LoggingPage() {
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'outputs');
   const [showOutputModal, setShowOutputModal] = useState(false);
-  const [showPipelineModal, setShowPipelineModal] = useState(false);
 
   return (
     <PageShell>
       <PageHeader
         title="Logging"
-        description="Logging outputs and pipeline configuration"
+        description="Shared log destinations. Pipelines are configured on each cluster."
         actions={
           activeTab === 'outputs' ? (
             <ActionButton
@@ -39,15 +35,7 @@ function LoggingPage() {
               icon={<Plus className="h-4 w-4" />}
               onClick={() => setShowOutputModal(true)}
             >
-              Create Output
-            </ActionButton>
-          ) : activeTab === 'pipelines' ? (
-            <ActionButton
-              intent="primary"
-              icon={<Plus className="h-4 w-4" />}
-              onClick={() => setShowPipelineModal(true)}
-            >
-              Create Pipeline
+              Create Destination
             </ActionButton>
           ) : undefined
         }
@@ -57,12 +45,10 @@ function LoggingPage() {
 
       <TabsContent>
         {activeTab === 'outputs' && <OutputsTab />}
-        {activeTab === 'pipelines' && <PipelinesTab />}
         {activeTab === 'operations' && <OperationsTab />}
       </TabsContent>
 
       {showOutputModal && <CreateOutputModal onClose={() => setShowOutputModal(false)} />}
-      {showPipelineModal && <CreatePipelineModal onClose={() => setShowPipelineModal(false)} />}
     </PageShell>
   );
 }

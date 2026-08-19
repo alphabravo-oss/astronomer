@@ -899,10 +899,10 @@ export function useActivityFeed(limit: number = 20) {
 // Alerting Hooks
 // ============================================================
 
-export function useAlertRules() {
+export function useAlertRules(clusterId?: string) {
   return useQuery({
-    queryKey: queryKeys.alerting.rules,
-    queryFn: () => apiClient.getAlertRules(),
+    queryKey: queryKeys.alerting.rules(clusterId),
+    queryFn: () => apiClient.getAlertRules({ clusterId, limit: 200 }),
     // `alerting.changed` (kind: rule) refreshes this while the stream is open.
     refetchInterval: liveFallback(30000),
   });
@@ -913,7 +913,7 @@ export function useCreateAlertRule() {
   return useMutation({
     mutationFn: (data: Partial<AlertRule>) => apiClient.createAlertRule(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.rules });
+      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.all });
       toastSuccess('Alert rule created');
     },
     onError: (error: Error) => {
@@ -928,7 +928,7 @@ export function useUpdateAlertRule() {
     mutationFn: ({ id, data }: { id: string; data: Partial<AlertRule> }) =>
       apiClient.updateAlertRule(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.rules });
+      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.all });
       toastSuccess('Alert rule updated');
     },
     onError: (error: Error) => {
@@ -942,7 +942,7 @@ export function useDeleteAlertRule() {
   return useMutation({
     mutationFn: (id: string) => apiClient.deleteAlertRule(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.rules });
+      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.all });
       toastSuccess('Alert rule deleted');
     },
     onError: (error: Error) => {
@@ -1112,10 +1112,10 @@ export function useTestLoggingOutput() {
   });
 }
 
-export function useLoggingPipelines() {
+export function useLoggingPipelines(clusterId?: string) {
   return useQuery({
-    queryKey: queryKeys.logging.pipelines,
-    queryFn: () => apiClient.getLoggingPipelines(),
+    queryKey: queryKeys.logging.pipelines(clusterId),
+    queryFn: () => apiClient.getLoggingPipelines({ clusterId, limit: 200 }),
   });
 }
 
@@ -1124,7 +1124,7 @@ export function useCreateLoggingPipeline() {
   return useMutation({
     mutationFn: (data: Partial<LoggingPipeline>) => apiClient.createLoggingPipeline(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.logging.pipelines });
+      queryClient.invalidateQueries({ queryKey: queryKeys.logging.pipelinesAll });
       toastSuccess('Logging pipeline created');
     },
     onError: (error: Error) => {

@@ -9,7 +9,13 @@ import { cn } from '@/lib/utils';
 import { Plus, X } from 'lucide-react';
 import { toastError } from '@/lib/toast';
 
-export function CreatePipelineModal({ onClose }: { onClose: () => void }) {
+export function CreatePipelineModal({
+  onClose,
+  clusterId,
+}: {
+  onClose: () => void;
+  clusterId?: string;
+}) {
   const createPipeline = useCreateLoggingPipeline();
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const clusters = clustersData?.data || [];
@@ -20,7 +26,7 @@ export function CreatePipelineModal({ onClose }: { onClose: () => void }) {
     defaultValues: {
       name: '',
       description: '',
-      clusterId: '',
+      clusterId: clusterId || '',
       namespaces: [] as string[],
       outputIds: [] as string[],
       labelKey: '',
@@ -33,9 +39,11 @@ export function CreatePipelineModal({ onClose }: { onClose: () => void }) {
       onSubmit: ({ value }) =>
         !value.name
           ? 'Name is required'
-          : value.outputIds.length === 0
-            ? 'Select at least one output'
-            : undefined,
+          : !value.clusterId
+            ? 'Select a cluster'
+            : value.outputIds.length === 0
+              ? 'Select at least one output'
+              : undefined,
     },
     // Same UX as before: the failed check surfaces as a toast, not inline.
     onSubmitInvalid: ({ formApi }) => {
@@ -116,7 +124,7 @@ export function CreatePipelineModal({ onClose }: { onClose: () => void }) {
           <ActionButton
             intent="primary"
             onClick={() => void pipelineForm.handleSubmit()}
-            disabled={!form.name || form.outputIds.length === 0}
+            disabled={!form.name || !form.clusterId || form.outputIds.length === 0}
             loading={createPipeline.isPending}
           >
             Create Pipeline
@@ -140,6 +148,7 @@ export function CreatePipelineModal({ onClose }: { onClose: () => void }) {
             )}
           </pipelineForm.Field>
         </div>
+        {!clusterId && (
         <div className="space-y-1.5">
           <label htmlFor="logging-pipeline-cluster" className="text-sm font-medium text-foreground">Cluster</label>
           <pipelineForm.Field name="clusterId">
@@ -153,7 +162,7 @@ export function CreatePipelineModal({ onClose }: { onClose: () => void }) {
                 }}
                 onBlur={field.handleBlur}
               >
-                <option value="">All Clusters</option>
+                <option value="">Select a cluster</option>
                 {clusters.map((cluster) => (
                   <option key={cluster.id} value={cluster.id}>
                     {cluster.displayName}
@@ -163,6 +172,7 @@ export function CreatePipelineModal({ onClose }: { onClose: () => void }) {
             )}
           </pipelineForm.Field>
         </div>
+        )}
       </div>
 
       <div className="space-y-1.5">

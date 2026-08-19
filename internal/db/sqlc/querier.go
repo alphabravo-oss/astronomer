@@ -146,6 +146,7 @@ type Querier interface {
 	CountAlertEventsFiltered(ctx context.Context, arg CountAlertEventsFilteredParams) (int64, error)
 	CountAlertInhibitions(ctx context.Context) (int64, error)
 	CountAlertRules(ctx context.Context) (int64, error)
+	CountAlertRulesByCluster(ctx context.Context, clusterID pgtype.UUID) (int64, error)
 	CountAlertSilences(ctx context.Context) (int64, error)
 	CountAnomalyBaselines(ctx context.Context) (int64, error)
 	CountApiserverAuditEventsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)

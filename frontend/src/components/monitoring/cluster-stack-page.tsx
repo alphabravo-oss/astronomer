@@ -77,13 +77,21 @@ export function ClusterMonitoringStackPage({ clusterId }: { clusterId: string })
         title="Monitoring stack"
         description="kube-prometheus-stack for this cluster. Install, upgrade, replace or uninstall the release; the panel follows the queued operation to completion and surfaces the reconciler's own errors."
         actions={
-          <Link
-            href="/dashboard/settings/monitoring"
-            className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <BarChart3 className="h-3.5 w-3.5" />
-            Shared stacks
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/dashboard/clusters/${clusterId}/metrics`}
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              Metrics
+            </Link>
+            <Link
+              href="/dashboard/settings/monitoring"
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              Shared stacks
+            </Link>
+          </div>
         }
       />
 
