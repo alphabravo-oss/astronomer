@@ -388,9 +388,43 @@ func TestSyncGrafanaThanosDatasourceAppliesConfigMap(t *testing.T) {
 	if !strings.Contains(joined, "/configmaps") {
 		t.Fatalf("expected configmap apply, calls=%v", fake.calls)
 	}
+	if fake.lastBody == nil {
+		t.Fatal("expected ConfigMap body")
+	}
+	var cm map[string]any
+	if err := json.Unmarshal(fake.lastBody, &cm); err != nil {
+		t.Fatalf("decode cm: %v", err)
+	}
+	md, _ := cm["metadata"].(map[string]any)
+	labels, _ := md["labels"].(map[string]any)
+	anns, _ := md["annotations"].(map[string]any)
+	if labels["app.kubernetes.io/managed-by"] != "Helm" {
+		t.Fatalf("managed-by = %v, want Helm", labels["app.kubernetes.io/managed-by"])
+	}
+	if anns["meta.helm.sh/release-name"] != sharedGrafanaDefaultRelease {
+		t.Fatalf("release-name = %v", anns["meta.helm.sh/release-name"])
+	}
+	if anns["meta.helm.sh/release-namespace"] != "monitoring" {
+		t.Fatalf("release-namespace = %v", anns["meta.helm.sh/release-namespace"])
+	}
 	meta := sharedStackMetadata(q.backend, "sharedGrafana")
 	if meta["status"] != "healthy" {
 		t.Fatalf("persisted status = %v, want healthy after Thanos datasource sync", meta["status"])
+	}
+}
+
+func TestDeleteGrafanaThanosDatasourceConfigMapOnUninstall(t *testing.T) {
+	h := NewMonitoringHandlerWithDeps(nil, nil, nil)
+	fake := &grafanaCMK8sFake{}
+	h.requester = fake
+	h.deleteGrafanaThanosDatasourceConfigMap(context.Background(), SharedGrafanaRequest{
+		ManagementClusterID: stackTestClusterID,
+		Namespace:           "monitoring",
+		ReleaseName:         sharedGrafanaDefaultRelease,
+	})
+	want := "DELETE /api/v1/namespaces/monitoring/configmaps/" + grafanaThanosDatasourceConfigMapName(sharedGrafanaDefaultRelease)
+	if len(fake.calls) != 1 || fake.calls[0] != want {
+		t.Fatalf("calls = %v, want [%s]", fake.calls, want)
 	}
 }
 
@@ -407,15 +441,23 @@ func (f *grafanaClusterK8sFake) Do(ctx context.Context, clusterID, method, path 
 }
 
 type grafanaCMK8sFake struct {
-	calls []string
+	calls    []string
+	lastBody []byte
 }
 
-func (f *grafanaCMK8sFake) Do(_ context.Context, _, method, path string, _ []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
+func (f *grafanaCMK8sFake) Do(_ context.Context, _, method, path string, body []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
 	f.calls = append(f.calls, method+" "+path)
-	if method == http.MethodPatch {
-		return &protocol.K8sResponsePayload{StatusCode: http.StatusNotFound}, nil
+	if len(body) > 0 {
+		f.lastBody = append([]byte(nil), body...)
 	}
-	return &protocol.K8sResponsePayload{StatusCode: http.StatusCreated}, nil
+	switch method {
+	case http.MethodPatch:
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusNotFound}, nil
+	case http.MethodDelete:
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusOK}, nil
+	default:
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusCreated}, nil
+	}
 }
 
 var _ K8sRequester = (*grafanaClusterK8sFake)(nil)

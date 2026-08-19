@@ -222,20 +222,30 @@ func sharedGrafanaHelmValues(req SharedGrafanaRequest, backend sqlc.MonitoringBa
 }
 
 func grafanaOwnedConfigMaps(req SharedGrafanaRequest, backend sqlc.MonitoringBackend) []any {
+	ns := defaultString(req.Namespace, "monitoring")
+	release := defaultString(req.ReleaseName, sharedGrafanaDefaultRelease)
 	objects := grafanaDashboardConfigMaps()
 	if url, ok := thanosDatasourceURL(backend); ok {
 		objects = append(objects, grafanaDatasourceConfigMap(
-			defaultString(req.ReleaseName, sharedGrafanaDefaultRelease)+"-thanos-datasource",
+			grafanaThanosDatasourceConfigMapName(release),
+			ns,
+			release,
 			grafanaThanosDatasourceYAML(url),
 		))
 	}
 	if byo := strings.TrimSpace(req.LogDatasourceURL); byo != "" {
 		objects = append(objects, grafanaDatasourceConfigMap(
-			defaultString(req.ReleaseName, sharedGrafanaDefaultRelease)+"-loki-byo-datasource",
+			release+"-loki-byo-datasource",
+			ns,
+			release,
 			grafanaBYOLokiDatasourceYAML(byo),
 		))
 	}
 	return objects
+}
+
+func grafanaThanosDatasourceConfigMapName(release string) string {
+	return defaultString(release, sharedGrafanaDefaultRelease) + "-thanos-datasource"
 }
 
 func grafanaDashboardConfigMaps() []any {
@@ -284,14 +294,20 @@ func grafanaDashboardConfigMapName(slug string) string {
 	return name
 }
 
-func grafanaDatasourceConfigMap(name, yamlBody string) map[string]any {
+func grafanaDatasourceConfigMap(name, namespace, release, yamlBody string) map[string]any {
 	return map[string]any{
 		"apiVersion": "v1",
 		"kind":       "ConfigMap",
 		"metadata": map[string]any{
-			"name": name,
+			"name":      name,
+			"namespace": namespace,
 			"labels": map[string]any{
-				"grafana_datasource": "1",
+				"grafana_datasource":           "1",
+				"app.kubernetes.io/managed-by": "Helm",
+			},
+			"annotations": map[string]any{
+				"meta.helm.sh/release-name":      release,
+				"meta.helm.sh/release-namespace": namespace,
 			},
 		},
 		"data": map[string]any{
@@ -430,7 +446,12 @@ func (h *MonitoringHandler) syncGrafanaThanosDatasource(ctx context.Context) err
 	req := grafanaRequestFromMetadata(meta)
 	ns := defaultString(req.Namespace, "monitoring")
 	release := defaultString(req.ReleaseName, sharedGrafanaDefaultRelease)
-	cm := grafanaDatasourceConfigMap(release+"-thanos-datasource", grafanaThanosDatasourceYAML(url))
+	cm := grafanaDatasourceConfigMap(
+		grafanaThanosDatasourceConfigMapName(release),
+		ns,
+		release,
+		grafanaThanosDatasourceYAML(url),
+	)
 	if err := h.ensureGrafanaConfigMap(ctx, req.ManagementClusterID, ns, cm); err != nil {
 		return err
 	}
@@ -477,4 +498,21 @@ func (h *MonitoringHandler) ensureGrafanaConfigMap(ctx context.Context, clusterI
 		return nil
 	}
 	return ensureSuccess(resp)
+}
+
+func (h *MonitoringHandler) deleteGrafanaThanosDatasourceConfigMap(ctx context.Context, req SharedGrafanaRequest) {
+	if h.requester == nil {
+		return
+	}
+	ns := defaultString(req.Namespace, "monitoring")
+	release := defaultString(req.ReleaseName, sharedGrafanaDefaultRelease)
+	path := fmt.Sprintf("/api/v1/namespaces/%s/configmaps/%s", ns, grafanaThanosDatasourceConfigMapName(release))
+	resp, err := h.requester.Do(ctx, req.ManagementClusterID, http.MethodDelete, path, nil, requestHeaders(""))
+	if err != nil || resp == nil {
+		return
+	}
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusAccepted, http.StatusNotFound:
+		return
+	}
 }

@@ -748,6 +748,11 @@ func (h *MonitoringHandler) executeMonitoringOperation(ctx context.Context, op s
 			if err != nil && !isReleaseMissing(err) {
 				return err
 			}
+			// Out-of-band Thanos datasource CM is Helm-adopt annotated, but
+			// it is not in the release history until a later Grafana upgrade
+			// imports it. Delete it here so a reinstall does not hit
+			// "resource already exists and cannot be imported".
+			h.deleteGrafanaThanosDatasourceConfigMap(ctx, req)
 			return nil
 		}
 	case "cluster_stack":
