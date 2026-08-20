@@ -47,6 +47,7 @@ type stackLifecycleQuerier struct {
 	clusterErr    error
 	extraClusters []sqlc.Cluster
 	lokiTokens    []sqlc.ListLokiIngestTokenHashesRow
+	ingestTokens  map[uuid.UUID]sqlc.LokiIngestToken
 	aclAdmins     []sqlc.ListLokiQueryACLAdminCandidatesRow
 	aclUsers      []sqlc.ListLokiQueryACLUserCandidatesRow
 
@@ -120,10 +121,50 @@ func (q *stackLifecycleQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.Cre
 }
 
 func (q *stackLifecycleQuerier) ListLokiIngestTokenHashes(context.Context) ([]sqlc.ListLokiIngestTokenHashesRow, error) {
-	if q.lokiTokens == nil {
-		return []sqlc.ListLokiIngestTokenHashesRow{}, nil
+	seen := map[uuid.UUID]string{}
+	for _, row := range q.lokiTokens {
+		if row.TokenHash != "" {
+			seen[row.ClusterID] = row.TokenHash
+		}
 	}
-	return q.lokiTokens, nil
+	for id, tok := range q.ingestTokens {
+		if tok.TokenHash != "" {
+			seen[id] = tok.TokenHash
+		}
+	}
+	out := make([]sqlc.ListLokiIngestTokenHashesRow, 0, len(seen))
+	for id, hash := range seen {
+		out = append(out, sqlc.ListLokiIngestTokenHashesRow{ClusterID: id, TokenHash: hash})
+	}
+	return out, nil
+}
+
+func (q *stackLifecycleQuerier) GetLokiIngestTokenByCluster(_ context.Context, clusterID uuid.UUID) (sqlc.LokiIngestToken, error) {
+	if tok, ok := q.ingestTokens[clusterID]; ok {
+		return tok, nil
+	}
+	return sqlc.LokiIngestToken{}, pgx.ErrNoRows
+}
+
+func (q *stackLifecycleQuerier) UpsertLokiIngestToken(_ context.Context, arg sqlc.UpsertLokiIngestTokenParams) (sqlc.LokiIngestToken, error) {
+	if q.ingestTokens == nil {
+		q.ingestTokens = map[uuid.UUID]sqlc.LokiIngestToken{}
+	}
+	tok := sqlc.LokiIngestToken{
+		ID:             uuid.New(),
+		ClusterID:      arg.ClusterID,
+		TokenHash:      arg.TokenHash,
+		TokenEncrypted: arg.TokenEncrypted,
+		CreatedByID:    arg.CreatedByID,
+		CreatedAt:      time.Now(),
+		RotatedAt:      time.Now(),
+	}
+	if existing, ok := q.ingestTokens[arg.ClusterID]; ok {
+		tok.ID = existing.ID
+		tok.CreatedAt = existing.CreatedAt
+	}
+	q.ingestTokens[arg.ClusterID] = tok
+	return tok, nil
 }
 
 func (q *stackLifecycleQuerier) ListLokiQueryACLAdminCandidates(context.Context) ([]sqlc.ListLokiQueryACLAdminCandidatesRow, error) {

@@ -1149,7 +1149,9 @@ managementRestoreDrill:
 # Off by default — opt-in per install. Operators that already run a node-
 # level log collector (Fluent Bit, Vector, OpenTelemetry Collector) can
 # leave this disabled and instead point that collector at the same Pod
-# log files.
+# log files. The product reconciler overlays these values onto the
+# Astronomer Helm release when hosted Loki is healthy and ingestPublic=true;
+# it does not flip this default when Loki is absent.
 #
 # When enabled=true the chart renders:
 #   - ConfigMap with a Fluent Bit config that tails the server + worker

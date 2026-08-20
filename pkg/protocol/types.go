@@ -432,6 +432,9 @@ type HelmRequestPayload struct {
 	Values      map[string]any `json:"values,omitempty"`
 	Revision    int            `json:"revision,omitempty"` // for rollback
 	Timeout     int            `json:"timeout,omitempty"`  // seconds
+	// ReuseValues merges Values onto the last release (helm --reuse-values).
+	// Required for overlay upgrades that must not reset unrelated chart keys.
+	ReuseValues bool `json:"reuse_values,omitempty"`
 }
 
 // HelmResultPayload is the response for any Helm operation.

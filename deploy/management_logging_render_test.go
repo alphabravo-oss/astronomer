@@ -102,6 +102,12 @@ func TestManagementLoggingConfigMap_RendersForLoki(t *testing.T) {
 	if !strings.Contains(out, "${BEARER_TOKEN}") {
 		t.Fatalf("bearer-token substitution missing:\n%s", out)
 	}
+	if !strings.Contains(out, "bearer_token      ${BEARER_TOKEN}") {
+		t.Fatalf("loki OUTPUT must use bearer_token (loki-auth rejects basic auth):\n%s", out)
+	}
+	if strings.Contains(out, "http_user         token") {
+		t.Fatalf("loki OUTPUT used http_user instead of bearer_token:\n%s", out)
+	}
 	// FILTER: kubernetes + record_modifier + grep (excludeDebug=true).
 	if !strings.Contains(out, "Name                kubernetes") {
 		t.Fatalf("kubernetes filter missing:\n%s", out)

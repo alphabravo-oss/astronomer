@@ -36,6 +36,16 @@ func (h *MonitoringHandler) ReconcileLokiIngest(ctx context.Context) error {
 	status := stringFromMap(meta, "status")
 	svcName := release + "-auth"
 
+	// Mint the management-plane token before hashing so loki-auth admits
+	// server/worker logs in the same tick as ingestPublic flipping on.
+	if lokiRunning(meta) && host != "" && h.encryptor != nil {
+		if local, ok := h.localManagementCluster(ctx); ok {
+			if _, err := h.ensureManagementLokiToken(ctx, local.ID); err != nil && h.log != nil {
+				h.log.Warn("management ingest token ensure failed", "error", err)
+			}
+		}
+	}
+
 	hashes := map[string]string{}
 	if lister, ok := h.queries.(lokiTokenHashLister); ok {
 		rows, listErr := lister.ListLokiIngestTokenHashes(ctx)
@@ -54,7 +64,13 @@ func (h *MonitoringHandler) ReconcileLokiIngest(ctx context.Context) error {
 		if err := h.deleteLokiPublicIngest(ctx, clusterID, ns, svcName); err != nil {
 			return err
 		}
-		return h.stampSharedLokiIngestPublic(ctx, false)
+		if err := h.stampSharedLokiIngestPublic(ctx, false); err != nil {
+			return err
+		}
+		if err := h.ReconcileManagementLogging(ctx); err != nil && h.log != nil {
+			h.log.Warn("management logging overlay failed", "error", err)
+		}
+		return nil
 	}
 
 	hashJSON, err := json.Marshal(hashes)
@@ -105,7 +121,13 @@ func (h *MonitoringHandler) ReconcileLokiIngest(ctx context.Context) error {
 			return fmt.Errorf("reconcile loki ingest ingress: %w", err)
 		}
 	}
-	return h.stampSharedLokiIngestPublic(ctx, true)
+	if err := h.stampSharedLokiIngestPublic(ctx, true); err != nil {
+		return err
+	}
+	if err := h.ReconcileManagementLogging(ctx); err != nil && h.log != nil {
+		h.log.Warn("management logging overlay failed", "error", err)
+	}
+	return nil
 }
 
 func (h *MonitoringHandler) ensureLokiNamespaceIssuer(ctx context.Context, clusterID, destNS string) error {
