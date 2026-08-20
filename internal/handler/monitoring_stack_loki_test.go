@@ -15,6 +15,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func lokiAuthed(method, target, body string) *http.Request {
@@ -190,12 +191,15 @@ func TestSharedLokiPreviewIsClusterIPOnly(t *testing.T) {
 	if storage["type"] != "s3" {
 		t.Fatalf("loki.storage.type = %v, want s3", storage["type"])
 	}
-	structured, _ := loki["structuredConfig"].(map[string]any)
-	common, _ := structured["common"].(map[string]any)
-	st, _ := common["storage"].(map[string]any)
-	s3, _ := st["s3"].(map[string]any)
-	if s3["path_prefix"] != "loki" {
-		t.Fatalf("computed prefix = %v, want loki", s3["path_prefix"])
+	if storage["use_thanos_objstore"] != true {
+		t.Fatalf("use_thanos_objstore = %v, want true so chart 6.27 honors object_store.prefix", storage["use_thanos_objstore"])
+	}
+	obj, _ := storage["object_store"].(map[string]any)
+	if obj["prefix"] != "loki" {
+		t.Fatalf("object_store.prefix = %v, want loki", obj["prefix"])
+	}
+	if obj["type"] != "s3" {
+		t.Fatalf("object_store.type = %v, want s3", obj["type"])
 	}
 	schema, _ := loki["schemaConfig"].(map[string]any)
 	configs, _ := schema["configs"].([]any)
@@ -208,6 +212,78 @@ func TestSharedLokiPreviewIsClusterIPOnly(t *testing.T) {
 	}
 	if first["from"] != sharedLokiSchemaFrom {
 		t.Fatalf("schema from = %v", first["from"])
+	}
+}
+
+func TestSharedLokiInstallCachesWALAndSizerVerdict(t *testing.T) {
+	h, q := newStackLifecycleHandler(t)
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
+
+	rec := httptest.NewRecorder()
+	h.InstallSharedLokiStack(rec, lokiAuthed(http.MethodPost, "/api/v1/settings/monitoring/loki/install/", sharedLokiBody))
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body.String())
+	}
+	meta := sharedStackMetadata(q.backend, "sharedLoki")
+	if !boolFromAny(meta["walCapacityKnown"]) {
+		t.Fatalf("walCapacityKnown = %v after passing install; persist clobbered precheck cache", meta["walCapacityKnown"])
+	}
+	if int64FromAny(meta["walCapacityBytes"]) != sizerWALSingleBinaryBytes {
+		t.Fatalf("walCapacityBytes = %v, want %d", meta["walCapacityBytes"], sizerWALSingleBinaryBytes)
+	}
+	verdict := mapFromMapValue(meta["lastSizerVerdict"])
+	if verdict["result"] != "pass" {
+		t.Fatalf("lastSizerVerdict = %v, want result=pass", meta["lastSizerVerdict"])
+	}
+
+	statusRec := httptest.NewRecorder()
+	h.GetSharedLokiStatus(statusRec, lokiAuthed(http.MethodGet, "/api/v1/settings/monitoring/loki/status/", ""))
+	var wrap struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(statusRec.Body.Bytes(), &wrap); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	statusVerdict := mapFromMapValue(wrap.Data["lastSizerVerdict"])
+	if statusVerdict["result"] != "pass" {
+		t.Fatalf("status lastSizerVerdict = %v", wrap.Data["lastSizerVerdict"])
+	}
+
+	sizerRec := httptest.NewRecorder()
+	h.GetMonitoringSizer(sizerRec, lokiAuthed(http.MethodGet, "/api/v1/settings/monitoring/sizer/", ""))
+	var sizerWrap struct {
+		Data MonitoringSizerResponse `json:"data"`
+	}
+	if err := json.Unmarshal(sizerRec.Body.Bytes(), &sizerWrap); err != nil {
+		t.Fatalf("decode sizer: %v", err)
+	}
+	if !sizerWrap.Data.StorageClass.WALCapacityKnown {
+		t.Fatalf("GET /sizer/ walCapacityKnown=false after install cache")
+	}
+}
+
+func TestSharedLokiSimpleScalableRequestsMatchSizer(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
+	body := `{"managementClusterId":"` + stackTestClusterID + `","storageConfigId":"` + stackTestStorageID + `","ingestHostname":"loki-ingest.example.com","mode":"simpleScalable"}`
+	rec := httptest.NewRecorder()
+	h.PreviewSharedLokiStack(rec, lokiAuthed(http.MethodPost, "/api/v1/settings/monitoring/loki/preview/", body))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var wrap struct {
+		Data struct {
+			Values map[string]any `json:"values"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	cpu, mem := sumLokiChartRequests(t, wrap.Data.Values)
+	wantCPU := int64(sizerSimpleScalableCPUMilli)
+	wantMem := int64(sizerSimpleScalableMemBytes)
+	if cpu != wantCPU || mem != wantMem {
+		t.Fatalf("SimpleScalable requests = %dm / %d bytes, want %dm / %d (sizer floor including loki-auth)", cpu, mem, wantCPU, wantMem)
 	}
 }
 
@@ -359,4 +435,57 @@ func (h *helmCapture) Status(context.Context, string, string, string) (*protocol
 
 func (h *helmCapture) History(context.Context, string, string, string) (*protocol.HelmResultPayload, error) {
 	return nil, nil
+}
+
+func sumLokiChartRequests(t *testing.T, values map[string]any) (cpuMilli, memBytes int64) {
+	t.Helper()
+	add := func(replicas int, res map[string]any) {
+		if replicas <= 0 || len(res) == 0 {
+			return
+		}
+		reqs, _ := res["requests"].(map[string]any)
+		if len(reqs) == 0 {
+			return
+		}
+		cpuMilli += int64(replicas) * mustMilliCPU(t, reqs["cpu"])
+		memBytes += int64(replicas) * mustMemBytes(t, reqs["memory"])
+	}
+	for _, name := range []string{"write", "read", "backend"} {
+		comp, _ := values[name].(map[string]any)
+		add(int(int64FromAny(comp["replicas"])), mapFromMapValue(comp["resources"]))
+	}
+	gw, _ := values["gateway"].(map[string]any)
+	if gw["enabled"] != false {
+		add(1, mapFromMapValue(gw["resources"]))
+	}
+	extra, _ := values["extraObjects"].([]any)
+	for _, obj := range extra {
+		m, _ := obj.(map[string]any)
+		if m["kind"] != "Deployment" {
+			continue
+		}
+		spec, _ := m["spec"].(map[string]any)
+		tmpl, _ := spec["template"].(map[string]any)
+		pspec, _ := tmpl["spec"].(map[string]any)
+		containers, _ := pspec["containers"].([]any)
+		for _, c := range containers {
+			cm, _ := c.(map[string]any)
+			add(1, mapFromMapValue(cm["resources"]))
+		}
+	}
+	return cpuMilli, memBytes
+}
+
+func mustMilliCPU(t *testing.T, v any) int64 {
+	t.Helper()
+	s, _ := v.(string)
+	q := resource.MustParse(s)
+	return q.MilliValue()
+}
+
+func mustMemBytes(t *testing.T, v any) int64 {
+	t.Helper()
+	s, _ := v.(string)
+	q := resource.MustParse(s)
+	return q.Value()
 }

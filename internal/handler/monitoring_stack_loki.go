@@ -133,24 +133,25 @@ func (h *MonitoringHandler) lokiS3FromStorageConfig(ctx context.Context, storage
 		endpoint = "s3.amazonaws.com"
 	}
 	region := defaultString(cfg.Region, "us-east-1")
-	pathStyle := !strings.Contains(endpoint, "amazonaws.com")
-	s3 := map[string]any{
-		"endpoint":         endpoint,
-		"region":           region,
-		"accessKeyId":      accessKey,
-		"secretAccessKey":  secretKey,
-		"s3ForcePathStyle": pathStyle,
-		"insecure":         insecure,
-		"bucketnames":      cfg.Bucket,
-	}
 	return map[string]any{
-		"type": "s3",
+		"type":                "s3",
+		"use_thanos_objstore": true,
 		"bucketNames": map[string]any{
 			"chunks": cfg.Bucket,
 			"ruler":  cfg.Bucket,
 			"admin":  cfg.Bucket,
 		},
-		"s3": s3,
+		"object_store": map[string]any{
+			"type":   "s3",
+			"prefix": prefix,
+			"s3": map[string]any{
+				"endpoint":          endpoint,
+				"region":            region,
+				"access_key_id":     accessKey,
+				"secret_access_key": secretKey,
+				"insecure":          insecure,
+			},
+		},
 	}, prefix, nil
 }
 
@@ -385,6 +386,11 @@ func (h *MonitoringHandler) updateSharedLokiMetadata(ctx context.Context, backen
 	if h.queries == nil {
 		return nil
 	}
+	// Precheck caches WAL/lastSizerVerdict on a later row than payload's
+	// snapshot. Re-read so persist cannot clobber those keys.
+	if live, err := h.queries.GetDefaultMonitoringBackend(ctx); err == nil {
+		backend = live
+	}
 	resolvedRollback := h.resolveAutoRollbackPolicy(backend, req.AutoRollbackOnFailure)
 	ns := defaultString(req.Namespace, "monitoring")
 	release := defaultString(req.ReleaseName, sharedLokiDefaultRelease)
@@ -516,9 +522,15 @@ func (h *MonitoringHandler) sharedLokiHelmValues(req SharedLokiRequest, existing
 	if mode == "" {
 		mode = sizerModeSingleBinary
 	}
-	if prefix == "" {
-		prefix = defaultString(stringFromMap(existing, "computedLokiPrefix"), "loki")
+	if existingPrefix := stringFromMap(existing, "computedLokiPrefix"); existingPrefix != "" {
+		if stringFromMap(existing, "storageConfigId") == req.StorageConfigID || req.StorageConfigID == "" {
+			prefix = existingPrefix
+		}
 	}
+	if prefix == "" {
+		prefix = "loki"
+	}
+	setLokiObjectStorePrefix(storage, prefix)
 	schemaFrom := defaultString(stringFromMap(existing, "schemaFrom"), sharedLokiSchemaFrom)
 	deploymentMode := "SingleBinary"
 	singleReplicas := 1
@@ -569,13 +581,6 @@ func (h *MonitoringHandler) sharedLokiHelmValues(req SharedLokiRequest, existing
 				},
 			},
 			"storage": storage,
-			"structuredConfig": map[string]any{
-				"common": map[string]any{
-					"storage": map[string]any{
-						"s3": map[string]any{"path_prefix": prefix},
-					},
-				},
-			},
 			"limits_config": map[string]any{
 				"ingestion_rate_mb":           rateMB,
 				"ingestion_burst_size_mb":     burstMB,
@@ -601,20 +606,10 @@ func (h *MonitoringHandler) sharedLokiHelmValues(req SharedLokiRequest, existing
 				"limits":   map[string]any{"cpu": "2000m", "memory": "4Gi"},
 			},
 		},
-		"backend": map[string]any{"replicas": backendReplicas},
-		"read":    map[string]any{"replicas": readReplicas},
-		"write": map[string]any{
-			"replicas":    writeReplicas,
-			"persistence": persistence,
-		},
-		"gateway": map[string]any{
-			"enabled": true,
-			"service": map[string]any{"type": "ClusterIP"},
-			"ingress": map[string]any{"enabled": false},
-			"nginxConfig": map[string]any{
-				"clientMaxBodySize": bodySize,
-			},
-		},
+		"backend":      lokiComponentValues(backendReplicas, mode == sizerModeSimpleScalable, lokiSimpleScalablePodResources(), nil),
+		"read":         lokiComponentValues(readReplicas, mode == sizerModeSimpleScalable, lokiSimpleScalablePodResources(), nil),
+		"write":        lokiComponentValues(writeReplicas, mode == sizerModeSimpleScalable, lokiSimpleScalablePodResources(), persistence),
+		"gateway":      lokiGatewayValues(mode, bodySize),
 		"minio":        map[string]any{"enabled": false},
 		"lokiCanary":   map[string]any{"enabled": false},
 		"test":         map[string]any{"enabled": false},
@@ -631,6 +626,59 @@ func (h *MonitoringHandler) sharedLokiHelmValues(req SharedLokiRequest, existing
 		},
 		"extraObjects": lokiFamilyExtraObjects(req, image),
 	}
+}
+
+func setLokiObjectStorePrefix(storage map[string]any, prefix string) {
+	if storage == nil {
+		return
+	}
+	obj, _ := storage["object_store"].(map[string]any)
+	if obj == nil {
+		obj = map[string]any{"type": "s3"}
+		storage["object_store"] = obj
+	}
+	obj["prefix"] = prefix
+}
+
+func lokiSimpleScalablePodResources() map[string]any {
+	// write/read/backend ×2 = 3000m / 6Gi; gateway adds 500m / 2Gi → 3500m / 8Gi chart.
+	return map[string]any{
+		"requests": map[string]any{"cpu": "500m", "memory": "1Gi"},
+		"limits":   map[string]any{"cpu": "1000m", "memory": "2Gi"},
+	}
+}
+
+func lokiSimpleScalableGatewayResources() map[string]any {
+	return map[string]any{
+		"requests": map[string]any{"cpu": "500m", "memory": "2Gi"},
+		"limits":   map[string]any{"cpu": "1000m", "memory": "4Gi"},
+	}
+}
+
+func lokiComponentValues(replicas int, withResources bool, resources map[string]any, persistence map[string]any) map[string]any {
+	out := map[string]any{"replicas": replicas}
+	if persistence != nil {
+		out["persistence"] = persistence
+	}
+	if withResources {
+		out["resources"] = resources
+	}
+	return out
+}
+
+func lokiGatewayValues(mode, bodySize string) map[string]any {
+	out := map[string]any{
+		"enabled": true,
+		"service": map[string]any{"type": "ClusterIP"},
+		"ingress": map[string]any{"enabled": false},
+		"nginxConfig": map[string]any{
+			"clientMaxBodySize": bodySize,
+		},
+	}
+	if mode == sizerModeSimpleScalable {
+		out["resources"] = lokiSimpleScalableGatewayResources()
+	}
+	return out
 }
 
 func lokiFamilyExtraObjects(req SharedLokiRequest, image string) []any {
