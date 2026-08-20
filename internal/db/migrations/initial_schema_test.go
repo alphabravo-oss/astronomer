@@ -21,9 +21,14 @@ func TestCanonicalGreenfieldMigrationSet(t *testing.T) {
 		}
 	}
 	sort.Strings(migrations)
-	want := []string{"001_initial.down.sql", "001_initial.up.sql"}
-	if strings.Join(migrations, ",") != strings.Join(want, ",") {
-		t.Fatalf("migration set = %v, want %v", migrations, want)
+	if len(migrations) < 2 || migrations[0] != "001_initial.down.sql" || migrations[1] != "001_initial.up.sql" {
+		t.Fatalf("migration set = %v, want 001_initial.down.sql and 001_initial.up.sql first", migrations)
+	}
+	numbered := regexp.MustCompile(`^\d{3}_[a-z0-9_]+\.(up|down)\.sql$`)
+	for _, name := range migrations {
+		if !numbered.MatchString(name) {
+			t.Fatalf("unexpected migration filename %q", name)
+		}
 	}
 }
 

@@ -18,6 +18,11 @@ exposed by `astronomer-go`.
 - `cluster_id` labels are bounded by registered-cluster count
 - no request IDs, correlation IDs, or resource names may appear in metric labels
 
+## Hosted Loki ingest (`loki-auth`)
+
+- `astronomer_loki_ingest_requests_total{result="ok|unauth|cap|error"}` — no unbounded `cluster` label
+- `astronomer_loki_ingest_bytes_total{result}` — push-path bytes only
+
 ## Server HTTP Metrics
 
 - `astronomer_http_requests_total{astronomer_instance_id,method,route_template,status_class}`

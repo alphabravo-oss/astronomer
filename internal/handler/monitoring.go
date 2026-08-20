@@ -568,7 +568,7 @@ func (h *MonitoringHandler) applySharedLokiStack(ctx context.Context, msgType pr
 	if values == nil {
 		values = map[string]any{}
 	}
-	values["extraObjects"] = lokiFamilyExtraObjects(req, h.proxyImage)
+	values["extraObjects"] = lokiFamilyExtraObjects(req, h.proxyImage, h.lokiHasIngestTokens(ctx), h.lokiIngestClass())
 	return h.helm.Do(ctx, req.ManagementClusterID, msgType, protocol.HelmRequestPayload{
 		ReleaseName: req.ReleaseName,
 		Namespace:   req.Namespace,

@@ -602,6 +602,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	loggingHandler.SetK8sRequester(requester)
 	loggingHandler.SetLogger(logger)
 	loggingHandler.SetEventBus(bus)
+	loggingHandler.SetEncryptor(encryptor)
 	securityHandler := handler.NewSecurityHandler(queries)
 	// Phase B5 — CIS scans wiring (handler creates ClusterScan CRs through the
 	// tunnel and runs an in-process poller until the report lands).
@@ -632,6 +633,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	catalogHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	backupHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	loggingHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	loggingHandler.SetLokiIngestReconciler(monitoringHandler)
 	workloadHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	// Anomaly-baselines read endpoints gate on cluster authz (fail closed:
 	// unwired → 500 for any authenticated caller), so this MUST be set.

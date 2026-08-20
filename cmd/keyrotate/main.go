@@ -182,6 +182,7 @@ var rewriteTargets = []target{
 	{"delivery_sources", "id", "ca_bundle_encrypted"},
 	{"delivery_sources", "id", "credential_encrypted"},
 	{"delivery_system_releases", "id", "registry_credential_encrypted"},
+	{"loki_ingest_tokens", "id", "token_encrypted"},
 }
 
 // jsonbExemptColumns are encrypted columns that keyrotate deliberately does NOT

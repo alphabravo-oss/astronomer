@@ -299,6 +299,8 @@
         "/api/v1/logging/outputs/{id}/disable",
         "/api/v1/logging/outputs/{id}/test",
         "/api/v1/logging/outputs/{id}/query",
+        "/api/v1/logging/outputs/{id}/rotate-token",
+        "/api/v1/clusters/{id}/logging/outputs/{output_id}/rotate-token",
         "/api/v1/logging/pipelines",
         "/api/v1/logging/pipelines/{id}",
         "/api/v1/logging/pipelines/{id}/enable",

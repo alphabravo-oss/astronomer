@@ -34,6 +34,8 @@ unclassified column fails CI.
 | `charlie_action_receipts.result_encrypted` | Fernet ciphertext | Bounded idempotent replay result; excluded from logs and support bundles. |
 | `charlie_delegations.authorization_hash` | SHA-256 lookup hash | Hash of an opaque, short-lived authorization reference. |
 | `charlie_connections.agent_secret_hmac` | Keyed digest | Reconciles deterministic Kubernetes Secret content without retaining the secret. |
+| `loki_ingest_tokens.token_hash` | Token hash | SHA-256 of the hosted Loki ingest bearer. Projected into the management-cluster hash Secret; never plaintext. |
+| `loki_ingest_tokens.token_encrypted` | Fernet ciphertext | Re-renders the member Fluent Bit ConfigMap `bearer_token`. List APIs never return it. |
 
 ## References and non-secret metadata
 

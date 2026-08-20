@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -336,6 +337,80 @@ func TestSharedLokiStatusProjectsRequiredFields(t *testing.T) {
 	}
 	if wrap.Data["authUrl"] != "http://astronomer-loki-auth.monitoring.svc.cluster.local:8080" {
 		t.Fatalf("authUrl = %v", wrap.Data["authUrl"])
+	}
+}
+
+func TestSharedLokiIngressOnlyWhenTokensExist(t *testing.T) {
+	h, q := newStackLifecycleHandler(t)
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
+
+	preview := func() map[string]any {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.PreviewSharedLokiStack(rec, lokiAuthed(http.MethodPost, "/api/v1/settings/monitoring/loki/preview/", sharedLokiBody))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("preview status = %d: %s", rec.Code, rec.Body.String())
+		}
+		var wrap struct {
+			Data struct {
+				Values map[string]any `json:"values"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return wrap.Data.Values
+	}
+
+	assertIngress := func(values map[string]any, want bool) {
+		t.Helper()
+		raw, _ := json.Marshal(values)
+		has := strings.Contains(string(raw), `"kind":"Ingress"`)
+		if has != want {
+			t.Fatalf("ingress present=%v, want %v: %s", has, want, raw)
+		}
+		if want && !strings.Contains(string(raw), "loki-ingest.example.com") {
+			t.Fatalf("ingress missing explicit ingestHostname: %s", raw)
+		}
+		if want && strings.Contains(string(raw), "astronomer.localtest.me") {
+			t.Fatalf("ingress must not derive host from Astronomer ingress: %s", raw)
+		}
+		if strings.Contains(string(raw), "token_encrypted") || strings.Contains(string(raw), "bearer_token") {
+			t.Fatalf("helm values leaked plaintext token: %s", raw)
+		}
+	}
+
+	assertIngress(preview(), false)
+
+	q.lokiTokens = []sqlc.ListLokiIngestTokenHashesRow{{
+		ClusterID: uuid.MustParse(stackTestClusterID),
+		TokenHash: "abc123",
+	}}
+	values := preview()
+	assertIngress(values, true)
+	extra, _ := values["extraObjects"].([]any)
+	var sawAuthBackend, sawPushPath, sawNP bool
+	for _, obj := range extra {
+		m, _ := obj.(map[string]any)
+		kind, _ := m["kind"].(string)
+		raw, _ := json.Marshal(m)
+		switch kind {
+		case "Ingress":
+			if strings.Contains(string(raw), "astronomer-loki-auth") {
+				sawAuthBackend = true
+			}
+			if strings.Contains(string(raw), "/loki/api/v1/push") {
+				sawPushPath = true
+			}
+		case "NetworkPolicy":
+			sawNP = true
+		}
+	}
+	if !sawAuthBackend || !sawPushPath {
+		t.Fatalf("ingress backend/path missing backend=%v path=%v", sawAuthBackend, sawPushPath)
+	}
+	if !sawNP {
+		t.Fatal("expected NetworkPolicy extraObjects")
 	}
 }
 

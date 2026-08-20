@@ -39,6 +39,7 @@ func (h *MonitoringHandler) StartReconciler(ctx context.Context) {
 		h.log = slog.Default()
 	}
 	go h.runReconciler(ctx)
+	go h.runLokiIngestReconciler(ctx)
 }
 
 func (h *MonitoringHandler) ListOperations(w http.ResponseWriter, r *http.Request) {

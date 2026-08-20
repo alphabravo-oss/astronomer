@@ -583,7 +583,7 @@ func (h *MonitoringHandler) sharedLokiLifecycle() sharedStackLifecycle[SharedLok
 				"storageConfigId":         stringFromMap(metadata, "storageConfigId"),
 				"objectStorageSecretName": stringFromMap(metadata, "objectStorageSecretName"),
 				"ingestHostname":          stringFromMap(metadata, "ingestHostname"),
-				"ingestPublic":            false,
+				"ingestPublic":            boolFromAny(metadata["ingestPublic"]),
 				"storageClass":            stringFromMap(metadata, "storageClass"),
 				"walStorageSize":          stringFromMap(metadata, "walStorageSize"),
 				"mode":                    stringFromMap(metadata, "mode"),

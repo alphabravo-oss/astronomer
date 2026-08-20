@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -69,6 +70,9 @@ type LoggingQuerier interface {
 	RequeueLoggingOperation(ctx context.Context, id uuid.UUID) (sqlc.LoggingOperation, error)
 	CreateLoggingOperationEvent(ctx context.Context, arg sqlc.CreateLoggingOperationEventParams) (sqlc.LoggingOperationEvent, error)
 	ListLoggingOperationEvents(ctx context.Context, operationID uuid.UUID) ([]sqlc.LoggingOperationEvent, error)
+	GetLokiIngestTokenByCluster(ctx context.Context, clusterID uuid.UUID) (sqlc.LokiIngestToken, error)
+	UpsertLokiIngestToken(ctx context.Context, arg sqlc.UpsertLokiIngestTokenParams) (sqlc.LokiIngestToken, error)
+	ListLokiIngestTokenHashes(ctx context.Context) ([]sqlc.ListLokiIngestTokenHashesRow, error)
 }
 
 // LoggingHandler handles logging output and pipeline endpoints.
@@ -91,6 +95,12 @@ type LoggingHandler struct {
 	// helmConcurrency caps the parallel dispatch fan-out for
 	// executeOperation; zero falls back to the package default.
 	helmConcurrency int
+	encryptor       *auth.Encryptor
+	lokiIngest      lokiIngestReconciler
+}
+
+type lokiIngestReconciler interface {
+	ReconcileLokiIngest(ctx context.Context) error
 }
 
 // NewLoggingHandler creates a new logging handler.
@@ -110,6 +120,20 @@ func (h *LoggingHandler) SetK8sRequester(r K8sRequester) {
 		return
 	}
 	h.requester = r
+}
+
+func (h *LoggingHandler) SetEncryptor(e *auth.Encryptor) {
+	if h == nil {
+		return
+	}
+	h.encryptor = e
+}
+
+func (h *LoggingHandler) SetLokiIngestReconciler(r lokiIngestReconciler) {
+	if h == nil {
+		return
+	}
+	h.lokiIngest = r
 }
 
 // SetLogger wires a structured logger.

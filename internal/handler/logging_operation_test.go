@@ -42,6 +42,7 @@ type loggingFakeQuerier struct {
 	events     []sqlc.LoggingOperationEvent
 	// orderedOps tracks insertion order so ListPending behaves deterministically.
 	orderedOps []uuid.UUID
+	lokiTokens map[uuid.UUID]sqlc.LokiIngestToken
 }
 
 func newLoggingFakeQuerier() *loggingFakeQuerier {
@@ -49,6 +50,7 @@ func newLoggingFakeQuerier() *loggingFakeQuerier {
 		outputs:    map[uuid.UUID]sqlc.LoggingOutput{},
 		pipelines:  map[uuid.UUID]sqlc.LoggingPipeline{},
 		operations: map[uuid.UUID]sqlc.LoggingOperation{},
+		lokiTokens: map[uuid.UUID]sqlc.LokiIngestToken{},
 	}
 }
 
@@ -273,6 +275,39 @@ func (q *loggingFakeQuerier) ListLoggingOperationEvents(_ context.Context, opera
 		if ev.OperationID == operationID {
 			out = append(out, ev)
 		}
+	}
+	return out, nil
+}
+
+func (q *loggingFakeQuerier) GetLokiIngestTokenByCluster(_ context.Context, clusterID uuid.UUID) (sqlc.LokiIngestToken, error) {
+	if tok, ok := q.lokiTokens[clusterID]; ok {
+		return tok, nil
+	}
+	return sqlc.LokiIngestToken{}, errors.New("not found")
+}
+
+func (q *loggingFakeQuerier) UpsertLokiIngestToken(_ context.Context, arg sqlc.UpsertLokiIngestTokenParams) (sqlc.LokiIngestToken, error) {
+	tok := sqlc.LokiIngestToken{
+		ID:             uuid.New(),
+		ClusterID:      arg.ClusterID,
+		TokenHash:      arg.TokenHash,
+		TokenEncrypted: arg.TokenEncrypted,
+		CreatedByID:    arg.CreatedByID,
+		CreatedAt:      time.Now(),
+		RotatedAt:      time.Now(),
+	}
+	if existing, ok := q.lokiTokens[arg.ClusterID]; ok {
+		tok.ID = existing.ID
+		tok.CreatedAt = existing.CreatedAt
+	}
+	q.lokiTokens[arg.ClusterID] = tok
+	return tok, nil
+}
+
+func (q *loggingFakeQuerier) ListLokiIngestTokenHashes(context.Context) ([]sqlc.ListLokiIngestTokenHashesRow, error) {
+	out := make([]sqlc.ListLokiIngestTokenHashesRow, 0, len(q.lokiTokens))
+	for _, tok := range q.lokiTokens {
+		out = append(out, sqlc.ListLokiIngestTokenHashesRow{ClusterID: tok.ClusterID, TokenHash: tok.TokenHash})
 	}
 	return out, nil
 }

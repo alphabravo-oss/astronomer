@@ -16,14 +16,17 @@ import (
 )
 
 const (
-	sharedLokiChartRepo      = "https://grafana.github.io/helm-charts"
-	sharedLokiChartName      = "loki"
-	sharedLokiDefaultRelease = "astronomer-loki"
-	sharedLokiDefaultChart   = "6.27.0"
-	sharedLokiSchemaFrom     = "2024-01-01"
-	lokiAuthListenPort       = 8080
-	lokiWALProbeName         = "astronomer-loki-wal-probe"
-	lokiWALProbeTimeout      = 15 * time.Second
+	sharedLokiChartRepo       = "https://grafana.github.io/helm-charts"
+	sharedLokiChartName       = "loki"
+	sharedLokiDefaultRelease  = "astronomer-loki"
+	sharedLokiDefaultChart    = "6.27.0"
+	sharedLokiSchemaFrom      = "2024-01-01"
+	lokiAuthListenPort        = 8080
+	lokiWALProbeName          = "astronomer-loki-wal-probe"
+	lokiWALProbeTimeout       = 15 * time.Second
+	lokiTokenHashSecretName   = "astronomer-loki-token-hashes"
+	lokiQueryACLConfigMapName = "astronomer-loki-query-acl"
+	lokiIngestTLSSecretName   = "astronomer-loki-ingest-tls"
 )
 
 func (h *MonitoringHandler) sharedLokiPayload(ctx context.Context, r *http.Request) (SharedLokiRequest, map[string]any, sqlc.MonitoringBackend, error) {
@@ -442,7 +445,7 @@ func (h *MonitoringHandler) updateSharedLokiMetadata(ctx context.Context, backen
 		"storageConfigId":         req.StorageConfigID,
 		"objectStorageSecretName": req.ObjectStorageSecretName,
 		"ingestHostname":          req.IngestHostname,
-		"ingestPublic":            false,
+		"ingestPublic":            h.lokiHasIngestTokens(ctx) && strings.TrimSpace(req.IngestHostname) != "",
 		"storageClass":            req.StorageClass,
 		"walStorageSize":          req.WalStorageSize,
 		"mode":                    mode,
@@ -624,8 +627,31 @@ func (h *MonitoringHandler) sharedLokiHelmValues(req SharedLokiRequest, existing
 			},
 			"lokiCanary": map[string]any{"enabled": false},
 		},
-		"extraObjects": lokiFamilyExtraObjects(req, image),
+		"extraObjects": lokiFamilyExtraObjects(req, image, h.lokiHasIngestTokens(context.Background()), h.lokiIngestClass()),
 	}
+}
+
+func (h *MonitoringHandler) lokiIngestClass() string {
+	if h == nil {
+		return ""
+	}
+	return h.grafanaExpose.IngressClass
+}
+
+type lokiTokenHashLister interface {
+	ListLokiIngestTokenHashes(ctx context.Context) ([]sqlc.ListLokiIngestTokenHashesRow, error)
+}
+
+func (h *MonitoringHandler) lokiHasIngestTokens(ctx context.Context) bool {
+	if h == nil || h.queries == nil {
+		return false
+	}
+	lister, ok := h.queries.(lokiTokenHashLister)
+	if !ok {
+		return false
+	}
+	rows, err := lister.ListLokiIngestTokenHashes(ctx)
+	return err == nil && len(rows) > 0
 }
 
 func setLokiObjectStorePrefix(storage map[string]any, prefix string) {
@@ -681,7 +707,7 @@ func lokiGatewayValues(mode, bodySize string) map[string]any {
 	return out
 }
 
-func lokiFamilyExtraObjects(req SharedLokiRequest, image string) []any {
+func lokiFamilyExtraObjects(req SharedLokiRequest, image string, hasTokens bool, ingressClass string) []any {
 	ns := defaultString(req.Namespace, "monitoring")
 	release := defaultString(req.ReleaseName, sharedLokiDefaultRelease)
 	_, authURL := lokiDerivedURLs(release, ns)
@@ -692,9 +718,11 @@ func lokiFamilyExtraObjects(req SharedLokiRequest, image string) []any {
 		"app.kubernetes.io/component": "loki-auth",
 	}
 	svcName := release + "-auth"
-	return []any{
+	objects := []any{
 		lokiAuthDeployment(ns, svcName, labels, image, gateway),
 		lokiAuthService(ns, svcName, labels),
+		lokiAuthListenNetworkPolicy(ns, svcName, labels),
+		lokiGatewayFromAuthNetworkPolicy(ns, release, labels),
 		grafanaDatasourceConfigMap(
 			release+"-grafana-datasource",
 			ns,
@@ -702,6 +730,10 @@ func lokiFamilyExtraObjects(req SharedLokiRequest, image string) []any {
 			lokiGrafanaDatasourceYAML(authURL),
 		),
 	}
+	if hasTokens && strings.TrimSpace(req.IngestHostname) != "" {
+		objects = append(objects, lokiIngestIngress(ns, svcName, req.IngestHostname, ingressClass))
+	}
+	return objects
 }
 
 func lokiAuthDeployment(namespace, name string, labels map[string]any, image, upstream string) map[string]any {
@@ -739,6 +771,15 @@ func lokiAuthDeployment(namespace, name string, labels map[string]any, image, up
 							"env": []any{
 								map[string]any{"name": "LISTEN_ADDR", "value": fmt.Sprintf(":%d", lokiAuthListenPort)},
 								map[string]any{"name": "LOKI_UPSTREAM", "value": upstream},
+								map[string]any{"name": "HASHES_PATH", "value": "/var/run/loki-auth/hashes/hashes"},
+								map[string]any{"name": "ACL_PATH", "value": "/var/run/loki-auth/acl/acl"},
+							},
+							"volumeMounts": []any{
+								map[string]any{"name": "token-hashes", "mountPath": "/var/run/loki-auth/hashes", "readOnly": true},
+								map[string]any{"name": "query-acl", "mountPath": "/var/run/loki-auth/acl", "readOnly": true},
+							},
+							"readinessProbe": map[string]any{
+								"httpGet": map[string]any{"path": "/ready", "port": lokiAuthListenPort},
 							},
 							"resources": map[string]any{
 								"requests": map[string]any{"cpu": "100m", "memory": "64Mi"},
@@ -749,6 +790,22 @@ func lokiAuthDeployment(namespace, name string, labels map[string]any, image, up
 								"readOnlyRootFilesystem":   true,
 								"runAsNonRoot":             true,
 								"capabilities":             map[string]any{"drop": []any{"ALL"}},
+							},
+						},
+					},
+					"volumes": []any{
+						map[string]any{
+							"name": "token-hashes",
+							"secret": map[string]any{
+								"secretName": lokiTokenHashSecretName,
+								"optional":   true,
+							},
+						},
+						map[string]any{
+							"name": "query-acl",
+							"configMap": map[string]any{
+								"name":     lokiQueryACLConfigMapName,
+								"optional": true,
 							},
 						},
 					},
@@ -789,7 +846,101 @@ datasources:
     editable: false
     jsonData:
       timeout: 60
+      # Grafana dataproxy.send_user_header ships X-Grafana-User to loki-auth.
+      # Dashboards set X-Scope-OrgID from var-cluster; loki-auth allow-lists it.
 `, yamlQuotedString(url))) + "\n"
+}
+
+func lokiAuthListenNetworkPolicy(namespace, name string, labels map[string]any) map[string]any {
+	return map[string]any{
+		"apiVersion": "networking.k8s.io/v1",
+		"kind":       "NetworkPolicy",
+		"metadata": map[string]any{
+			"name":      name + "-ingress",
+			"namespace": namespace,
+		},
+		"spec": map[string]any{
+			"podSelector": map[string]any{"matchLabels": labels},
+			"policyTypes": []any{"Ingress"},
+			"ingress": []any{
+				map[string]any{
+					"ports": []any{
+						map[string]any{"protocol": "TCP", "port": lokiAuthListenPort},
+					},
+				},
+			},
+		},
+	}
+}
+
+func lokiGatewayFromAuthNetworkPolicy(namespace, release string, authLabels map[string]any) map[string]any {
+	return map[string]any{
+		"apiVersion": "networking.k8s.io/v1",
+		"kind":       "NetworkPolicy",
+		"metadata": map[string]any{
+			"name":      release + "-gateway-from-auth",
+			"namespace": namespace,
+		},
+		"spec": map[string]any{
+			"podSelector": map[string]any{
+				"matchLabels": map[string]any{
+					"app.kubernetes.io/name":      "loki",
+					"app.kubernetes.io/instance":  release,
+					"app.kubernetes.io/component": "gateway",
+				},
+			},
+			"policyTypes": []any{"Ingress"},
+			"ingress": []any{
+				map[string]any{
+					"from": []any{
+						map[string]any{"podSelector": map[string]any{"matchLabels": authLabels}},
+					},
+				},
+			},
+		},
+	}
+}
+
+func lokiIngestIngress(namespace, svcName, host, ingressClass string) map[string]any {
+	spec := map[string]any{
+		"tls": []any{
+			map[string]any{
+				"hosts":      []any{host},
+				"secretName": lokiIngestTLSSecretName,
+			},
+		},
+		"rules": []any{
+			map[string]any{
+				"host": host,
+				"http": map[string]any{
+					"paths": []any{
+						map[string]any{
+							"path":     "/loki/api/v1/push",
+							"pathType": "Prefix",
+							"backend": map[string]any{
+								"service": map[string]any{
+									"name": svcName,
+									"port": map[string]any{"number": lokiAuthListenPort},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	if ingressClass != "" {
+		spec["ingressClassName"] = ingressClass
+	}
+	return map[string]any{
+		"apiVersion": "networking.k8s.io/v1",
+		"kind":       "Ingress",
+		"metadata": map[string]any{
+			"name":      svcName,
+			"namespace": namespace,
+		},
+		"spec": spec,
+	}
 }
 
 func (h *MonitoringHandler) stampSharedLokiHealth(ctx context.Context, req SharedLokiRequest) error {

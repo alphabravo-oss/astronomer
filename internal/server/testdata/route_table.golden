@@ -536,6 +536,7 @@ POST /api/v1/clusters/{id}/gatekeeper/constraints
 POST /api/v1/clusters/{id}/gatekeeper/constraints/validate
 POST /api/v1/clusters/{id}/generate-kubeconfig
 POST /api/v1/clusters/{id}/generate_kubeconfig
+POST /api/v1/clusters/{id}/logging/outputs/{output_id}/rotate-token
 POST /api/v1/clusters/{id}/monitoring/stack/install
 POST /api/v1/clusters/{id}/monitoring/stack/preview
 POST /api/v1/clusters/{id}/monitoring/stack/replace
@@ -578,6 +579,7 @@ POST /api/v1/logging/outputs
 POST /api/v1/logging/outputs/{id}/disable
 POST /api/v1/logging/outputs/{id}/enable
 POST /api/v1/logging/outputs/{id}/query
+POST /api/v1/logging/outputs/{id}/rotate-token
 POST /api/v1/logging/outputs/{id}/test
 POST /api/v1/logging/pipelines
 POST /api/v1/logging/pipelines/{id}/disable

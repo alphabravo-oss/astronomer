@@ -46,6 +46,7 @@ type stackLifecycleQuerier struct {
 	clusterCfg    sqlc.ClusterMonitoringConfig
 	clusterErr    error
 	extraClusters []sqlc.Cluster
+	lokiTokens    []sqlc.ListLokiIngestTokenHashesRow
 
 	audits []sqlc.CreateAuditLogV1Params
 }
@@ -114,6 +115,13 @@ func (q *stackLifecycleQuerier) GetLatestMonitoringOperationForTarget(context.Co
 func (q *stackLifecycleQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
 	q.audits = append(q.audits, arg)
 	return nil
+}
+
+func (q *stackLifecycleQuerier) ListLokiIngestTokenHashes(context.Context) ([]sqlc.ListLokiIngestTokenHashesRow, error) {
+	if q.lokiTokens == nil {
+		return []sqlc.ListLokiIngestTokenHashesRow{}, nil
+	}
+	return q.lokiTokens, nil
 }
 
 func (q *stackLifecycleQuerier) ListClusters(context.Context, sqlc.ListClustersParams) ([]sqlc.Cluster, error) {

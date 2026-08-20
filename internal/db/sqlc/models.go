@@ -2014,6 +2014,16 @@ type LoggingPipelineOutput struct {
 	LoggingOutputID   uuid.UUID `json:"logging_output_id"`
 }
 
+type LokiIngestToken struct {
+	ID             uuid.UUID   `json:"id"`
+	ClusterID      uuid.UUID   `json:"cluster_id"`
+	TokenHash      string      `json:"token_hash"`
+	TokenEncrypted string      `json:"token_encrypted"`
+	CreatedAt      time.Time   `json:"created_at"`
+	RotatedAt      time.Time   `json:"rotated_at"`
+	CreatedByID    pgtype.UUID `json:"created_by_id"`
+}
+
 type MaintenanceWindow struct {
 	ID              uuid.UUID       `json:"id"`
 	Name            string          `json:"name"`

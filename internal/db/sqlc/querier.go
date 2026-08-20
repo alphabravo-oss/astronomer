@@ -221,6 +221,7 @@ type Querier interface {
 	CountKubectlSessionCommands(ctx context.Context, sessionID uuid.UUID) (int64, error)
 	CountLoggingOutputs(ctx context.Context) (int64, error)
 	CountLoggingPipelines(ctx context.Context) (int64, error)
+	CountLokiIngestTokens(ctx context.Context) (int64, error)
 	CountMembersInProject(ctx context.Context, projectID uuid.UUID) (int64, error)
 	CountNamespacesInProject(ctx context.Context, id uuid.UUID) (int32, error)
 	CountNetworkPolicyTemplates(ctx context.Context) (int64, error)
@@ -557,6 +558,7 @@ type Querier interface {
 	DeleteInstalledChartsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteLoggingOutput(ctx context.Context, id uuid.UUID) error
 	DeleteLoggingPipeline(ctx context.Context, id uuid.UUID) error
+	DeleteLokiIngestTokenByCluster(ctx context.Context, clusterID uuid.UUID) error
 	DeleteMaintenanceWindow(ctx context.Context, id uuid.UUID) error
 	DeleteManagementBackupDestination(ctx context.Context, id uuid.UUID) error
 	DeleteMirroredGatewayClass(ctx context.Context, arg DeleteMirroredGatewayClassParams) error
@@ -873,6 +875,7 @@ type Querier interface {
 	GetLoggingOutputByID(ctx context.Context, id uuid.UUID) (LoggingOutput, error)
 	// Logging Pipelines
 	GetLoggingPipelineByID(ctx context.Context, id uuid.UUID) (LoggingPipeline, error)
+	GetLokiIngestTokenByCluster(ctx context.Context, clusterID uuid.UUID) (LokiIngestToken, error)
 	GetMaintenanceWindow(ctx context.Context, id uuid.UUID) (MaintenanceWindow, error)
 	GetMaintenanceWindowByName(ctx context.Context, name string) (MaintenanceWindow, error)
 	GetManagementBackupDestination(ctx context.Context, id uuid.UUID) (ManagementBackupDestination, error)
@@ -1448,6 +1451,11 @@ type Querier interface {
 	ListLoggingOperations(ctx context.Context, arg ListLoggingOperationsParams) ([]LoggingOperation, error)
 	ListLoggingOutputs(ctx context.Context, arg ListLoggingOutputsParams) ([]LoggingOutput, error)
 	ListLoggingPipelines(ctx context.Context, arg ListLoggingPipelinesParams) ([]LoggingPipeline, error)
+	ListLokiIngestTokenHashes(ctx context.Context) ([]ListLokiIngestTokenHashesRow, error)
+	// Superusers are fleet Loki admins. v1 ACL is coarse: any cluster-role
+	// binding grants that user's email the bound cluster UUID.
+	ListLokiQueryACLAdmins(ctx context.Context) ([]string, error)
+	ListLokiQueryACLUserClusters(ctx context.Context) ([]ListLokiQueryACLUserClustersRow, error)
 	// Maintenance windows + deferred operations (migration 057).
 	//
 	// The window evaluator reads ListEnabledMaintenanceWindows() into an
@@ -2181,6 +2189,7 @@ type Querier interface {
 	// aggregate counts + scanned_at on every re-ingest so the rollups stay
 	// live without an extra SELECT.
 	UpsertImageVulnerabilityReport(ctx context.Context, arg UpsertImageVulnerabilityReportParams) (ImageVulnerabilityReport, error)
+	UpsertLokiIngestToken(ctx context.Context, arg UpsertLokiIngestTokenParams) (LokiIngestToken, error)
 	UpsertMirroredGatewayClass(ctx context.Context, arg UpsertMirroredGatewayClassParams) (MirroredGatewayClass, error)
 	UpsertMirroredIngressClass(ctx context.Context, arg UpsertMirroredIngressClassParams) (MirroredIngressClass, error)
 	UpsertMirroredLimitRange(ctx context.Context, arg UpsertMirroredLimitRangeParams) (MirroredLimitRange, error)

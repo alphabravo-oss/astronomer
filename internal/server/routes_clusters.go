@@ -89,6 +89,9 @@ func registerClusterRoutes(r chi.Router, deps RouterDependencies) {
 				r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/registration/retry/{step_id}/", deps.ClusterRegistration.PostRetry)
 				r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/registration/cancel/", deps.ClusterRegistration.PostCancel)
 			}
+			if deps.Logging != nil {
+				r.With(writeClusters).Post("/{id}/logging/outputs/{output_id}/rotate-token/", deps.Logging.RotateOutputToken)
+			}
 			if deps.Monitoring != nil {
 				r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/monitoring/config/", deps.Monitoring.GetClusterConfig)
 				r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbUpdate)).Put("/{id}/monitoring/config/", deps.Monitoring.UpdateClusterConfig)
