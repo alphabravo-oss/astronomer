@@ -1012,6 +1012,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Fan cluster.* lifecycle events out to SSE subscribers on Create / Update
 	// / Delete. The bus implements the EventPublisher interface naturally.
 	clusterHandler.SetEventPublisher(busPublisherAdapter{bus: bus})
+	clusterHandler.SetGrafanaFolderReconciler(monitoringHandler)
 	// Wizard handler (migration 078 / sprint 22). The handler owns the
 	// phase-machine service; we hand a reference to the cluster handler
 	// (so Create writes the first two step rows), to the tunnel hub (so

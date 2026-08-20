@@ -36,6 +36,10 @@ type MonitoringHandler struct {
 	authz     authorizationSupport
 	mu        sync.Mutex
 	triggerCh chan struct{}
+	// folderTriggerCh wakes folder-per-cluster Grafana provisioning.
+	// Distinct from triggerCh so a cluster create/delete does not also
+	// drain the Helm operations queue.
+	folderTriggerCh chan struct{}
 	// helmConcurrency caps the number of executeMonitoringOperation
 	// goroutines dispatched per reconciler tick.
 	helmConcurrency int
@@ -134,19 +138,19 @@ type MonitoringQuerier interface {
 }
 
 func NewMonitoringHandler() *MonitoringHandler {
-	return &MonitoringHandler{log: slog.Default(), triggerCh: make(chan struct{}, 1)}
+	return &MonitoringHandler{log: slog.Default(), triggerCh: make(chan struct{}, 1), folderTriggerCh: make(chan struct{}, 1)}
 }
 
 func NewMonitoringHandlerWithRequester(requester K8sRequester) *MonitoringHandler {
-	return &MonitoringHandler{requester: requester, log: slog.Default(), triggerCh: make(chan struct{}, 1)}
+	return &MonitoringHandler{requester: requester, log: slog.Default(), triggerCh: make(chan struct{}, 1), folderTriggerCh: make(chan struct{}, 1)}
 }
 
 func NewMonitoringHandlerWithQueries(queries MonitoringQuerier, requester K8sRequester) *MonitoringHandler {
-	return &MonitoringHandler{queries: queries, requester: requester, log: slog.Default(), triggerCh: make(chan struct{}, 1)}
+	return &MonitoringHandler{queries: queries, requester: requester, log: slog.Default(), triggerCh: make(chan struct{}, 1), folderTriggerCh: make(chan struct{}, 1)}
 }
 
 func NewMonitoringHandlerWithDeps(queries MonitoringQuerier, requester K8sRequester, helm HelmRequester) *MonitoringHandler {
-	return &MonitoringHandler{queries: queries, requester: requester, helm: helm, log: slog.Default(), triggerCh: make(chan struct{}, 1)}
+	return &MonitoringHandler{queries: queries, requester: requester, helm: helm, log: slog.Default(), triggerCh: make(chan struct{}, 1), folderTriggerCh: make(chan struct{}, 1)}
 }
 
 type UpdateMonitoringBackendRequest struct {
@@ -613,6 +617,7 @@ func (h *MonitoringHandler) applySharedGrafanaStack(ctx context.Context, msgType
 			values["extraObjects"] = grafanaFamilyExtraObjects(req, backend, h.proxyImage, h.serverURL, h.grafanaExpose)
 		}
 	}
+	values["extraConfigmapMounts"] = []any{grafanaClusterFolderProvidersMount()}
 	return h.helm.Do(ctx, req.ManagementClusterID, msgType, protocol.HelmRequestPayload{
 		ReleaseName: req.ReleaseName,
 		Namespace:   req.Namespace,

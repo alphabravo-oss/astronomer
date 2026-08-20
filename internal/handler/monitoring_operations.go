@@ -40,6 +40,7 @@ func (h *MonitoringHandler) StartReconciler(ctx context.Context) {
 	}
 	go h.runReconciler(ctx)
 	go h.runLokiIngestReconciler(ctx)
+	go h.runGrafanaFolderReconciler(ctx)
 }
 
 func (h *MonitoringHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
@@ -747,7 +748,11 @@ func (h *MonitoringHandler) executeMonitoringOperation(ctx context.Context, op s
 			if err := h.waitForReleaseReadiness(ctx, op.ID, req.ManagementClusterID, req.Namespace, req.ReleaseName, 1, 90*time.Second); err != nil {
 				return err
 			}
-			return h.verifySharedGrafanaReadiness(ctx, op.ID, req)
+			if err := h.verifySharedGrafanaReadiness(ctx, op.ID, req); err != nil {
+				return err
+			}
+			h.TriggerGrafanaFolderReconcile()
+			return nil
 		case "upgrade":
 			previousRevision := h.currentReleaseRevision(ctx, req.ManagementClusterID, req.ReleaseName, req.Namespace)
 			h.recordMonitoringOperationEvent(ctx, op.ID, "info", "render", "applying shared Grafana upgrade", map[string]any{"clusterId": req.ManagementClusterID, "releaseName": req.ReleaseName, "namespace": req.Namespace})
@@ -761,6 +766,7 @@ func (h *MonitoringHandler) executeMonitoringOperation(ctx context.Context, op s
 			if err := h.verifySharedGrafanaReadiness(ctx, op.ID, req); err != nil {
 				return h.rollbackIfConfigured(ctx, op.ID, err, env.ResolvedAutoRollback, req.ManagementClusterID, req.ReleaseName, req.Namespace, previousRevision)
 			}
+			h.TriggerGrafanaFolderReconcile()
 			return nil
 		case "replace":
 			h.recordMonitoringOperationEvent(ctx, op.ID, "info", "uninstall", "uninstalling existing shared Grafana release", map[string]any{"clusterId": req.ManagementClusterID, "releaseName": req.ReleaseName, "namespace": req.Namespace})
@@ -776,7 +782,11 @@ func (h *MonitoringHandler) executeMonitoringOperation(ctx context.Context, op s
 			if err := h.waitForReleaseReadiness(ctx, op.ID, req.ManagementClusterID, req.Namespace, req.ReleaseName, 1, 90*time.Second); err != nil {
 				return err
 			}
-			return h.verifySharedGrafanaReadiness(ctx, op.ID, req)
+			if err := h.verifySharedGrafanaReadiness(ctx, op.ID, req); err != nil {
+				return err
+			}
+			h.TriggerGrafanaFolderReconcile()
+			return nil
 		case "uninstall":
 			h.recordMonitoringOperationEvent(ctx, op.ID, "info", "uninstall", "uninstalling shared Grafana release", map[string]any{"clusterId": req.ManagementClusterID, "releaseName": req.ReleaseName, "namespace": req.Namespace})
 			_, err := h.helm.Do(ctx, req.ManagementClusterID, protocol.MsgHelmUninstall, protocol.HelmRequestPayload{ReleaseName: req.ReleaseName, Namespace: req.Namespace, Timeout: 900})
@@ -788,6 +798,7 @@ func (h *MonitoringHandler) executeMonitoringOperation(ctx context.Context, op s
 			// imports it. Delete it here so a reinstall does not hit
 			// "resource already exists and cannot be imported".
 			h.deleteGrafanaThanosDatasourceConfigMap(ctx, req)
+			h.TriggerGrafanaFolderReconcile()
 			return nil
 		}
 	case "shared_loki":

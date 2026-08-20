@@ -283,10 +283,10 @@ func TestSharedGrafanaDashboardsLandInFleetAndManagementPlaneFolders(t *testing.
 		data, _ := m["data"].(map[string]any)
 		folder, _ := anns[grafanaDashboardFolderAnnotationKey].(string)
 		if folder != grafanaFolderFleet && folder != grafanaFolderManagementPlane {
-			t.Errorf("folder %q is not Fleet or Management plane (not folder-per-cluster)", folder)
+			t.Errorf("Helm extraObjects folder %q is not Fleet or Management plane", folder)
 		}
 		if strings.Contains(folder, "cluster/") || strings.Contains(strings.ToLower(folder), "uuid") {
-			t.Errorf("must not provision folder-per-cluster: %q", folder)
+			t.Errorf("Helm extraObjects must not own folder-per-cluster (reconciler does): %q", folder)
 		}
 		for filename := range data {
 			slug := strings.TrimSuffix(filename, ".json")
@@ -327,6 +327,17 @@ func TestSharedGrafanaSidecarCreatesFoldersFromAnnotation(t *testing.T) {
 	provider, _ := dash["provider"].(map[string]any)
 	if provider["foldersFromFilesStructure"] != true {
 		t.Fatalf("sidecar.dashboards.provider.foldersFromFilesStructure = %v, want true", provider["foldersFromFilesStructure"])
+	}
+	if dash["defaultFolderName"] != grafanaSidecarSharedFolder {
+		t.Fatalf("sidecar.dashboards.defaultFolderName = %v, want %s so cluster folders are outside the sidecar walk", dash["defaultFolderName"], grafanaSidecarSharedFolder)
+	}
+	mounts, _ := wrap.Data.Values["extraConfigmapMounts"].([]any)
+	if len(mounts) != 1 {
+		t.Fatalf("extraConfigmapMounts = %d, want 1 cluster-folder providers mount", len(mounts))
+	}
+	mount, _ := mounts[0].(map[string]any)
+	if mount["configMap"] != grafanaClusterFolderProvidersCM || mount["optional"] != true {
+		t.Fatalf("cluster folder providers mount = %v", mount)
 	}
 
 	folders := map[string]int{}

@@ -29,9 +29,19 @@ const (
 	grafanaProxyListenPort         = 8080
 	// Grafana sidecar annotation key (chart sidecar.dashboards.folderAnnotation).
 	grafanaDashboardFolderAnnotationKey = "grafana_folder"
-	// v1 folders only. Not folder-per-cluster; not a tenant boundary.
+	// Shared (non-tenant) folders. Cluster folders are reconciler-owned
+	// ConfigMaps (uid = cluster UUID); they are UX, not a security boundary.
 	grafanaFolderFleet           = "Fleet"
 	grafanaFolderManagementPlane = "Management plane"
+	// Sidecar writes Fleet / Management plane under this subdir so the
+	// sidecarProvider walk does not import per-cluster dashboard files.
+	grafanaSidecarSharedFolder        = "shared"
+	grafanaClusterDashboardRoot       = "/tmp/dashboards/clusters"
+	grafanaClusterFolderProvidersCM   = "astronomer-grafana-cluster-folders"
+	grafanaClusterFolderProvidersFile = "cluster-folders.yaml"
+	grafanaClusterFolderLabelKey      = "astronomer.io/grafana-cluster-folder"
+	grafanaClusterFolderLabelVal      = "1"
+	grafanaClusterIDLabelKey          = "astronomer.io/cluster-id"
 )
 
 func (h *MonitoringHandler) sharedGrafanaPayload(ctx context.Context, r *http.Request) (SharedGrafanaRequest, map[string]any, sqlc.MonitoringBackend, error) {
@@ -239,10 +249,11 @@ func (h *MonitoringHandler) sharedGrafanaHelmValues(req SharedGrafanaRequest, ba
 		},
 		"sidecar": map[string]any{
 			"dashboards": map[string]any{
-				"enabled":          true,
-				"label":            "grafana_dashboard",
-				"labelValue":       "1",
-				"folderAnnotation": grafanaDashboardFolderAnnotationKey,
+				"enabled":           true,
+				"label":             "grafana_dashboard",
+				"labelValue":        "1",
+				"folderAnnotation":  grafanaDashboardFolderAnnotationKey,
+				"defaultFolderName": grafanaSidecarSharedFolder,
 				"provider": map[string]any{
 					"foldersFromFilesStructure": true,
 				},
@@ -287,6 +298,20 @@ func (h *MonitoringHandler) sharedGrafanaHelmValues(req SharedGrafanaRequest, ba
 			},
 		},
 		"extraObjects": extra,
+		"extraConfigmapMounts": []any{
+			grafanaClusterFolderProvidersMount(),
+		},
+	}
+}
+
+func grafanaClusterFolderProvidersMount() map[string]any {
+	return map[string]any{
+		"name":      grafanaClusterFolderProvidersCM,
+		"configMap": grafanaClusterFolderProvidersCM,
+		"mountPath": "/etc/grafana/provisioning/dashboards/" + grafanaClusterFolderProvidersFile,
+		"subPath":   grafanaClusterFolderProvidersFile,
+		"optional":  true,
+		"readOnly":  true,
 	}
 }
 
@@ -667,9 +692,10 @@ func grafanaDashboardConfigMapName(slug string) string {
 	return name
 }
 
-// grafanaDashboardFolder maps a shipped dashboard slug onto the v1 Grafana
-// folders. Control-plane product metrics land in Management plane; cluster
-// pickers and fleet rollups land in Fleet.
+// grafanaDashboardFolder maps a shipped dashboard slug onto the shared Grafana
+// folders (Fleet / Management plane). Per-cluster copies of cluster-scoped
+// dashboards are provisioned separately; those folders are not a tenant
+// boundary — PromQL/LogQL rewrite is.
 func grafanaDashboardFolder(slug string) string {
 	switch slug {
 	case "management-plane", "baseline-tool-health", "continuous-delivery":
