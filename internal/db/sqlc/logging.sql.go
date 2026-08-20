@@ -62,9 +62,9 @@ func (q *Queries) CountPipelinesByCluster(ctx context.Context, clusterID uuid.UU
 }
 
 const createLoggingOutput = `-- name: CreateLoggingOutput :one
-INSERT INTO logging_outputs (name, output_type, configuration, cluster_id, enabled, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at
+INSERT INTO logging_outputs (name, output_type, configuration, cluster_id, enabled, created_by_id, is_system)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at, is_system
 `
 
 type CreateLoggingOutputParams struct {
@@ -74,6 +74,7 @@ type CreateLoggingOutputParams struct {
 	ClusterID     pgtype.UUID     `json:"cluster_id"`
 	Enabled       bool            `json:"enabled"`
 	CreatedByID   pgtype.UUID     `json:"created_by_id"`
+	IsSystem      bool            `json:"is_system"`
 }
 
 func (q *Queries) CreateLoggingOutput(ctx context.Context, arg CreateLoggingOutputParams) (LoggingOutput, error) {
@@ -84,6 +85,7 @@ func (q *Queries) CreateLoggingOutput(ctx context.Context, arg CreateLoggingOutp
 		arg.ClusterID,
 		arg.Enabled,
 		arg.CreatedByID,
+		arg.IsSystem,
 	)
 	var i LoggingOutput
 	err := row.Scan(
@@ -96,6 +98,7 @@ func (q *Queries) CreateLoggingOutput(ctx context.Context, arg CreateLoggingOutp
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsSystem,
 	)
 	return i, err
 }
@@ -160,9 +163,45 @@ func (q *Queries) DeleteLoggingPipeline(ctx context.Context, id uuid.UUID) error
 	return err
 }
 
+const disableSystemLoggingOutputs = `-- name: DisableSystemLoggingOutputs :many
+UPDATE logging_outputs SET enabled = false WHERE is_system = true AND enabled = true
+RETURNING id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at, is_system
+`
+
+func (q *Queries) DisableSystemLoggingOutputs(ctx context.Context) ([]LoggingOutput, error) {
+	rows, err := q.db.Query(ctx, disableSystemLoggingOutputs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LoggingOutput{}
+	for rows.Next() {
+		var i LoggingOutput
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OutputType,
+			&i.Configuration,
+			&i.ClusterID,
+			&i.Enabled,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.IsSystem,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLoggingOutputByID = `-- name: GetLoggingOutputByID :one
 
-SELECT id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at FROM logging_outputs WHERE id = $1
+SELECT id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at, is_system FROM logging_outputs WHERE id = $1
 `
 
 // Logging Outputs
@@ -179,6 +218,7 @@ func (q *Queries) GetLoggingOutputByID(ctx context.Context, id uuid.UUID) (Loggi
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsSystem,
 	)
 	return i, err
 }
@@ -207,8 +247,30 @@ func (q *Queries) GetLoggingPipelineByID(ctx context.Context, id uuid.UUID) (Log
 	return i, err
 }
 
+const getSystemLoggingOutputByCluster = `-- name: GetSystemLoggingOutputByCluster :one
+SELECT id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at, is_system FROM logging_outputs WHERE cluster_id = $1 AND is_system = true LIMIT 1
+`
+
+func (q *Queries) GetSystemLoggingOutputByCluster(ctx context.Context, clusterID pgtype.UUID) (LoggingOutput, error) {
+	row := q.db.QueryRow(ctx, getSystemLoggingOutputByCluster, clusterID)
+	var i LoggingOutput
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.OutputType,
+		&i.Configuration,
+		&i.ClusterID,
+		&i.Enabled,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsSystem,
+	)
+	return i, err
+}
+
 const listLoggingOutputs = `-- name: ListLoggingOutputs :many
-SELECT id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at FROM logging_outputs ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at, is_system FROM logging_outputs ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListLoggingOutputsParams struct {
@@ -235,6 +297,7 @@ func (q *Queries) ListLoggingOutputs(ctx context.Context, arg ListLoggingOutputs
 			&i.CreatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IsSystem,
 		); err != nil {
 			return nil, err
 		}
@@ -287,7 +350,7 @@ func (q *Queries) ListLoggingPipelines(ctx context.Context, arg ListLoggingPipel
 }
 
 const listOutputsByCluster = `-- name: ListOutputsByCluster :many
-SELECT id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at FROM logging_outputs WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at, is_system FROM logging_outputs WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListOutputsByClusterParams struct {
@@ -315,6 +378,7 @@ func (q *Queries) ListOutputsByCluster(ctx context.Context, arg ListOutputsByClu
 			&i.CreatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IsSystem,
 		); err != nil {
 			return nil, err
 		}
@@ -367,6 +431,41 @@ func (q *Queries) ListPipelinesByCluster(ctx context.Context, arg ListPipelinesB
 	return items, nil
 }
 
+const listSystemLoggingOutputs = `-- name: ListSystemLoggingOutputs :many
+SELECT id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at, is_system FROM logging_outputs WHERE is_system = true
+`
+
+func (q *Queries) ListSystemLoggingOutputs(ctx context.Context) ([]LoggingOutput, error) {
+	rows, err := q.db.Query(ctx, listSystemLoggingOutputs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LoggingOutput{}
+	for rows.Next() {
+		var i LoggingOutput
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OutputType,
+			&i.Configuration,
+			&i.ClusterID,
+			&i.Enabled,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.IsSystem,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateLoggingOutput = `-- name: UpdateLoggingOutput :one
 UPDATE logging_outputs SET
     name = $2,
@@ -374,7 +473,7 @@ UPDATE logging_outputs SET
     configuration = $4,
     enabled = $5
 WHERE id = $1
-RETURNING id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at
+RETURNING id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at, is_system
 `
 
 type UpdateLoggingOutputParams struct {
@@ -404,6 +503,7 @@ func (q *Queries) UpdateLoggingOutput(ctx context.Context, arg UpdateLoggingOutp
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsSystem,
 	)
 	return i, err
 }

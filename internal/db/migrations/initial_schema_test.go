@@ -80,6 +80,25 @@ func TestCanonicalTeardownIsScoped(t *testing.T) {
 	}
 }
 
+func TestLoggingOutputsSystemUniqueIndex(t *testing.T) {
+	up := readMigration(t, "004_logging_outputs_is_system.up.sql")
+	if !strings.Contains(up, "ADD COLUMN is_system boolean") {
+		t.Fatal("migration must add logging_outputs.is_system")
+	}
+	if !strings.Contains(up, "CHECK (NOT is_system OR cluster_id IS NOT NULL)") {
+		t.Fatal("is_system rows must require cluster_id")
+	}
+	if !strings.Contains(up, "CREATE UNIQUE INDEX logging_outputs_one_system_per_cluster") {
+		t.Fatal("missing unique index name logging_outputs_one_system_per_cluster")
+	}
+	if !strings.Contains(up, "ON public.logging_outputs (cluster_id)") {
+		t.Fatal("unique index must be on cluster_id")
+	}
+	if !strings.Contains(up, "WHERE is_system AND cluster_id IS NOT NULL") {
+		t.Fatal("unique index must be partial WHERE is_system AND cluster_id IS NOT NULL")
+	}
+}
+
 func readMigration(t *testing.T, name string) string {
 	t.Helper()
 	contents, err := os.ReadFile(filepath.Clean(name))

@@ -53,6 +53,20 @@ type MonitoringHandler struct {
 	proxyImage     string
 	grafanaExpose  GrafanaExpose
 	sessionTTL     func(context.Context) time.Duration
+	systemOutputs  systemLoggingOutputDisabler
+}
+
+// systemLoggingOutputDisabler turns off per-cluster Astronomer Loki destinations
+// when the shared Loki family is uninstalled. LoggingHandler implements it.
+type systemLoggingOutputDisabler interface {
+	DisableSystemOutputsOnLokiUninstall(ctx context.Context) error
+}
+
+func (h *MonitoringHandler) SetSystemLoggingOutputDisabler(d systemLoggingOutputDisabler) {
+	if h == nil {
+		return
+	}
+	h.systemOutputs = d
 }
 
 // GrafanaExpose describes how grafana-proxy is published. Gateway (platform

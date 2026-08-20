@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -79,6 +80,16 @@ func (q *loggingFakeQuerier) GetLoggingOutputByID(_ context.Context, id uuid.UUI
 	return sqlc.LoggingOutput{}, errors.New("not found")
 }
 func (q *loggingFakeQuerier) CreateLoggingOutput(_ context.Context, arg sqlc.CreateLoggingOutputParams) (sqlc.LoggingOutput, error) {
+	if arg.IsSystem {
+		if !arg.ClusterID.Valid {
+			return sqlc.LoggingOutput{}, errors.New("system logging output requires cluster_id")
+		}
+		for _, existing := range q.outputs {
+			if existing.IsSystem && existing.ClusterID == arg.ClusterID {
+				return sqlc.LoggingOutput{}, errors.New(`duplicate key value violates unique constraint "logging_outputs_one_system_per_cluster" (SQLSTATE 23505)`)
+			}
+		}
+	}
 	o := sqlc.LoggingOutput{
 		ID:            uuid.New(),
 		Name:          arg.Name,
@@ -89,6 +100,7 @@ func (q *loggingFakeQuerier) CreateLoggingOutput(_ context.Context, arg sqlc.Cre
 		CreatedByID:   arg.CreatedByID,
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
+		IsSystem:      arg.IsSystem,
 	}
 	q.outputs[o.ID] = o
 	return o, nil
@@ -277,6 +289,38 @@ func (q *loggingFakeQuerier) ListLoggingOperationEvents(_ context.Context, opera
 		}
 	}
 	return out, nil
+}
+
+func (q *loggingFakeQuerier) GetSystemLoggingOutputByCluster(_ context.Context, clusterID pgtype.UUID) (sqlc.LoggingOutput, error) {
+	for _, o := range q.outputs {
+		if o.IsSystem && o.ClusterID == clusterID {
+			return o, nil
+		}
+	}
+	return sqlc.LoggingOutput{}, pgx.ErrNoRows
+}
+
+func (q *loggingFakeQuerier) ListSystemLoggingOutputs(context.Context) ([]sqlc.LoggingOutput, error) {
+	items := make([]sqlc.LoggingOutput, 0)
+	for _, o := range q.outputs {
+		if o.IsSystem {
+			items = append(items, o)
+		}
+	}
+	return items, nil
+}
+
+func (q *loggingFakeQuerier) DisableSystemLoggingOutputs(context.Context) ([]sqlc.LoggingOutput, error) {
+	items := make([]sqlc.LoggingOutput, 0)
+	for id, o := range q.outputs {
+		if o.IsSystem && o.Enabled {
+			o.Enabled = false
+			o.UpdatedAt = time.Now()
+			q.outputs[id] = o
+			items = append(items, o)
+		}
+	}
+	return items, nil
 }
 
 func (q *loggingFakeQuerier) GetLokiIngestTokenByCluster(_ context.Context, clusterID uuid.UUID) (sqlc.LokiIngestToken, error) {

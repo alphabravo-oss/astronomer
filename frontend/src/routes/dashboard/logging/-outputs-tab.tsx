@@ -9,6 +9,7 @@ import {
 import { deleteLoggingOutput, updateLoggingOutput } from '@/lib/api';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type { LoggingOutput } from '@/types';
@@ -22,6 +23,10 @@ import {
   Server,
 } from 'lucide-react';
 import { toastError, toastSuccess } from '@/lib/toast';
+
+function outputTypeOf(row: LoggingOutput): string {
+  return row.outputType || row.type || '';
+}
 
 const outputTypeIcons: Record<string, ElementType> = {
   elasticsearch: Database,
@@ -70,13 +75,21 @@ export function OutputsTab() {
       key: 'name',
       header: 'Output',
       accessor: (row) => {
-        const TypeIcon = outputTypeIcons[row.type] || Database;
+        const type = outputTypeOf(row);
+        const TypeIcon = outputTypeIcons[type] || Database;
         return (
           <div className="flex items-center gap-2">
             <TypeIcon className="h-4 w-4 text-muted-foreground" />
             <div>
-              <p className="font-medium text-foreground">{row.name}</p>
-              <p className="text-xs text-muted-foreground capitalize">{row.type}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-foreground">{row.name}</p>
+                {row.isSystem ? (
+                  <Badge variant="info" data-testid="system-output-badge">
+                    System
+                  </Badge>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground capitalize">{type}</p>
             </div>
           </div>
         );
@@ -87,7 +100,7 @@ export function OutputsTab() {
       header: 'Type',
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">
-          {row.type}
+          {outputTypeOf(row)}
         </span>
       ),
     },
@@ -101,7 +114,7 @@ export function OutputsTab() {
     {
       key: 'status',
       header: 'Connection',
-      accessor: (row) => <StatusBadge status={row.status} />,
+      accessor: (row) => <StatusBadge status={row.status || 'disconnected'} />,
     },
     {
       key: 'enabled',
@@ -110,11 +123,15 @@ export function OutputsTab() {
         <button
           onClick={(e) => {
             e.stopPropagation();
+            if (row.isSystem) return;
             handleToggle(row);
           }}
+          disabled={row.isSystem}
+          title={row.isSystem ? 'System destinations are managed with Astronomer Loki' : undefined}
           className={cn(
             'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-            row.enabled ? 'bg-primary' : 'bg-muted'
+            row.enabled ? 'bg-primary' : 'bg-muted',
+            row.isSystem && 'cursor-not-allowed opacity-60',
           )}
         >
           <span
@@ -148,13 +165,15 @@ export function OutputsTab() {
             <Send className="h-3 w-3" />
             Test
           </button>
-          <button
-            onClick={() => setDeleteTarget(row)}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Delete output"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {row.isSystem ? null : (
+            <button
+              onClick={() => setDeleteTarget(row)}
+              className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+              title="Delete output"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       ),
       sortable: false,

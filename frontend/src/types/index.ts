@@ -1162,12 +1162,15 @@ export type LoggingOutputType = 'elasticsearch' | 'loki' | 'splunk' | 'cloudwatc
 export interface LoggingOutput {
   id: string;
   name: string;
-  type: LoggingOutputType;
+  type?: LoggingOutputType;
+  outputType?: LoggingOutputType;
   clusterId?: string;
   clusterName?: string;
   enabled: boolean;
-  config: Record<string, string>;
-  status: 'connected' | 'disconnected' | 'error';
+  isSystem?: boolean;
+  config?: Record<string, string>;
+  configuration?: Record<string, string>;
+  status?: 'connected' | 'disconnected' | 'error';
   createdAt: string;
   updatedAt: string;
 }

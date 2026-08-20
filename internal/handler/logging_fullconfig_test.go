@@ -29,7 +29,7 @@ func TestRenderFullFluentbitConfig(t *testing.T) {
 	q.outputs[off] = sqlc.LoggingOutput{ID: off, Name: "disabled-out", OutputType: "loki", Configuration: esCfg, ClusterID: cpg, Enabled: false}
 
 	h := NewLoggingHandler(q)
-	cfg := h.renderFullFluentbitConfig(context.Background(), cluster)
+	cfg := h.renderFullFluentbitConfig(context.Background(), cluster, false)
 
 	for _, want := range []string{"[SERVICE]", "Name tail", "Name kubernetes", "Name es", "Name splunk"} {
 		if !strings.Contains(cfg, want) {
@@ -49,7 +49,7 @@ func TestRenderFullFluentbitConfig(t *testing.T) {
 func TestRenderFullFluentbitConfigNoOutputs(t *testing.T) {
 	q := newLoggingFakeQuerier()
 	h := NewLoggingHandler(q)
-	cfg := h.renderFullFluentbitConfig(context.Background(), uuid.New())
+	cfg := h.renderFullFluentbitConfig(context.Background(), uuid.New(), false)
 	if !strings.Contains(cfg, "Name stdout") {
 		t.Errorf("expected stdout fallback when no outputs:\n%s", cfg)
 	}

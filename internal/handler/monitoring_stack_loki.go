@@ -480,6 +480,13 @@ func (h *MonitoringHandler) updateSharedLokiMetadata(ctx context.Context, backen
 	if _, err = h.queries.UpsertDefaultMonitoringBackend(ctx, params); err != nil {
 		return err
 	}
+	if status == "uninstalled" {
+		if h.systemOutputs != nil {
+			if err := h.systemOutputs.DisableSystemOutputsOnLokiUninstall(ctx); err != nil && h.log != nil {
+				h.log.Warn("loki uninstall: failed to disable system logging outputs", "error", err)
+			}
+		}
+	}
 	if status == "uninstalled" || status == "not_configured" {
 		_ = h.ReconcileLokiIngest(ctx)
 	}

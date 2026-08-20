@@ -634,6 +634,7 @@ type Querier interface {
 	// ON DELETE CASCADE on webhook_deliveries.subscription_id cleans up the
 	// delivery history; the handler doesn't have to do that explicitly.
 	DeleteWebhookSubscription(ctx context.Context, id uuid.UUID) error
+	DisableSystemLoggingOutputs(ctx context.Context) ([]LoggingOutput, error)
 	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
 	DisconnectCharlieConnection(ctx context.Context, id uuid.UUID) (CharlieConnection, error)
 	// The generation predicate is evaluated in the same statement that enables
@@ -954,6 +955,7 @@ type Querier interface {
 	GetSSOSession(ctx context.Context, jti string) (SsoSession, error)
 	// Security Scan Results
 	GetSecurityScanResultByID(ctx context.Context, id uuid.UUID) (SecurityScanResult, error)
+	GetSystemLoggingOutputByCluster(ctx context.Context, clusterID pgtype.UUID) (LoggingOutput, error)
 	GetTokenByHash(ctx context.Context, tokenHash string) (ApiToken, error)
 	GetToolBySlug(ctx context.Context, slug string) (ClusterTool, error)
 	GetToolOperation(ctx context.Context, id uuid.UUID) (ToolOperation, error)
@@ -1646,6 +1648,7 @@ type Querier interface {
 	ListScansByCluster(ctx context.Context, arg ListScansByClusterParams) ([]SecurityScanResult, error)
 	ListScansByClusterAndType(ctx context.Context, arg ListScansByClusterAndTypeParams) ([]SecurityScanResult, error)
 	ListSecurityScanResults(ctx context.Context, arg ListSecurityScanResultsParams) ([]SecurityScanResult, error)
+	ListSystemLoggingOutputs(ctx context.Context) ([]LoggingOutput, error)
 	ListTokensByUser(ctx context.Context, arg ListTokensByUserParams) ([]ApiToken, error)
 	ListToolOperationEvents(ctx context.Context, operationID uuid.UUID) ([]ToolOperationEvent, error)
 	ListToolOperations(ctx context.Context, arg ListToolOperationsParams) ([]ToolOperation, error)

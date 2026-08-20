@@ -37,6 +37,8 @@ unclassified column fails CI.
 | `loki_ingest_tokens.token_hash` | Token hash | SHA-256 of the hosted Loki ingest bearer. Projected into the management-cluster hash Secret; never plaintext. |
 | `loki_ingest_tokens.token_encrypted` | Fernet ciphertext | Re-renders the member Fluent Bit ConfigMap `bearer_token`. List APIs never return it. |
 
+`logging_outputs.configuration` is not a secret column. System (`is_system`) Loki rows store only `host`, `port`, `tls`, `tenant_id`, and `labels`. The member Fluent Bit ConfigMap `bearer_token` is an accepted secret-policy exception (same class as Splunk HEC in ConfigMaps): plaintext is loaded at apply time from `loki_ingest_tokens.token_encrypted` and is never stored in JSONB or returned by list/get.
+
 ## References and non-secret metadata
 
 | Column family | Classification |
