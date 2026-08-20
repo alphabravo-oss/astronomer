@@ -1452,10 +1452,13 @@ type Querier interface {
 	ListLoggingOutputs(ctx context.Context, arg ListLoggingOutputsParams) ([]LoggingOutput, error)
 	ListLoggingPipelines(ctx context.Context, arg ListLoggingPipelinesParams) ([]LoggingPipeline, error)
 	ListLokiIngestTokenHashes(ctx context.Context) ([]ListLokiIngestTokenHashesRow, error)
-	// Superusers are fleet Loki admins. v1 ACL is coarse: any cluster-role
-	// binding grants that user's email the bound cluster UUID.
-	ListLokiQueryACLAdmins(ctx context.Context) ([]string, error)
-	ListLokiQueryACLUserClusters(ctx context.Context) ([]ListLokiQueryACLUserClustersRow, error)
+	// Superusers and users with a global role that grants monitoring:read or
+	// monitoring:update (or *). Filter verbs/resources in Go so tests can
+	// exercise the same rule helper the reconciler uses.
+	ListLokiQueryACLAdminCandidates(ctx context.Context) ([]ListLokiQueryACLAdminCandidatesRow, error)
+	// Cluster bindings plus the bound role rules. Go keeps only logging:read
+	// or monitoring:read (or *) so a workload-editor row cannot widen org.
+	ListLokiQueryACLUserCandidates(ctx context.Context) ([]ListLokiQueryACLUserCandidatesRow, error)
 	// Maintenance windows + deferred operations (migration 057).
 	//
 	// The window evaluator reads ListEnabledMaintenanceWindows() into an

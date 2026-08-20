@@ -792,6 +792,9 @@ func (f *sizerK8sFake) Do(_ context.Context, _, method, path string, _ []byte, _
 	if strings.Contains(path, "persistentvolumeclaims") {
 		return sizerWALProbeResponse(method), nil
 	}
+	if method == http.MethodDelete && (strings.Contains(path, "/ingresses/") || strings.Contains(path, "/certificates/") || strings.Contains(path, "/httproutes/") || strings.Contains(path, "/referencegrants/")) {
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusNotFound}, nil
+	}
 	if method != http.MethodGet {
 		f.t.Errorf("sizer issued mutating call %s %s", method, path)
 		return &protocol.K8sResponsePayload{StatusCode: http.StatusMethodNotAllowed}, nil

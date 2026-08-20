@@ -344,6 +344,7 @@ func bearerToken(header string) string {
 // An empty allow-list is deny (401).
 func SelectOrg(clientOrg string, allow []string) (org string, status int) {
 	clientOrg = strings.TrimSpace(clientOrg)
+	allow = uniqueFold(allow)
 	if len(allow) == 0 {
 		return "", http.StatusUnauthorized
 	}
@@ -365,6 +366,24 @@ func SelectOrg(clientOrg string, allow []string) (org string, status int) {
 		return clientOrg, 0
 	}
 	return "", http.StatusUnauthorized
+}
+
+func uniqueFold(in []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(in))
+	for _, raw := range in {
+		v := strings.TrimSpace(raw)
+		if v == "" {
+			continue
+		}
+		key := strings.ToLower(v)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, v)
+	}
+	return out
 }
 
 func stripHopByHop(hdr http.Header) {

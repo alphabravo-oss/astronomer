@@ -445,7 +445,7 @@ func (h *MonitoringHandler) updateSharedLokiMetadata(ctx context.Context, backen
 		"storageConfigId":         req.StorageConfigID,
 		"objectStorageSecretName": req.ObjectStorageSecretName,
 		"ingestHostname":          req.IngestHostname,
-		"ingestPublic":            h.lokiHasIngestTokens(ctx) && strings.TrimSpace(req.IngestHostname) != "",
+		"ingestPublic":            lokiIngestShouldBePublic(status, h.lokiHasIngestTokens(ctx), req.IngestHostname),
 		"storageClass":            req.StorageClass,
 		"walStorageSize":          req.WalStorageSize,
 		"mode":                    mode,
@@ -476,8 +476,13 @@ func (h *MonitoringHandler) updateSharedLokiMetadata(ctx context.Context, backen
 	if err := imonitoring.SealInto(&params, authCfg, h.monitoringSealer()); err != nil {
 		return err
 	}
-	_, err = h.queries.UpsertDefaultMonitoringBackend(ctx, params)
-	return err
+	if _, err = h.queries.UpsertDefaultMonitoringBackend(ctx, params); err != nil {
+		return err
+	}
+	if status == "uninstalled" || status == "not_configured" {
+		_ = h.ReconcileLokiIngest(ctx)
+	}
+	return nil
 }
 
 func lokiDerivedURLs(release, ns string) (queryURL, authURL string) {
@@ -627,7 +632,7 @@ func (h *MonitoringHandler) sharedLokiHelmValues(req SharedLokiRequest, existing
 			},
 			"lokiCanary": map[string]any{"enabled": false},
 		},
-		"extraObjects": lokiFamilyExtraObjects(req, image, h.lokiHasIngestTokens(context.Background()), h.lokiIngestClass()),
+		"extraObjects": lokiFamilyExtraObjects(req, image),
 	}
 }
 
@@ -707,7 +712,7 @@ func lokiGatewayValues(mode, bodySize string) map[string]any {
 	return out
 }
 
-func lokiFamilyExtraObjects(req SharedLokiRequest, image string, hasTokens bool, ingressClass string) []any {
+func lokiFamilyExtraObjects(req SharedLokiRequest, image string) []any {
 	ns := defaultString(req.Namespace, "monitoring")
 	release := defaultString(req.ReleaseName, sharedLokiDefaultRelease)
 	_, authURL := lokiDerivedURLs(release, ns)
@@ -718,7 +723,10 @@ func lokiFamilyExtraObjects(req SharedLokiRequest, image string, hasTokens bool,
 		"app.kubernetes.io/component": "loki-auth",
 	}
 	svcName := release + "-auth"
-	objects := []any{
+	// Public ingest (Ingress/HTTPRoute/Certificate) is reconcile-owned so
+	// Helm upgrades cannot fight a rotate-created object, and uninstall
+	// can delete it even though Helm never adopted it.
+	return []any{
 		lokiAuthDeployment(ns, svcName, labels, image, gateway),
 		lokiAuthService(ns, svcName, labels),
 		lokiAuthListenNetworkPolicy(ns, svcName, labels),
@@ -730,10 +738,6 @@ func lokiFamilyExtraObjects(req SharedLokiRequest, image string, hasTokens bool,
 			lokiGrafanaDatasourceYAML(authURL),
 		),
 	}
-	if hasTokens && strings.TrimSpace(req.IngestHostname) != "" {
-		objects = append(objects, lokiIngestIngress(ns, svcName, req.IngestHostname, ingressClass))
-	}
-	return objects
 }
 
 func lokiAuthDeployment(namespace, name string, labels map[string]any, image, upstream string) map[string]any {
@@ -901,7 +905,59 @@ func lokiGatewayFromAuthNetworkPolicy(namespace, release string, authLabels map[
 	}
 }
 
-func lokiIngestIngress(namespace, svcName, host, ingressClass string) map[string]any {
+func lokiIngestShouldBePublic(status string, hasTokens bool, hostname string) bool {
+	if !hasTokens || strings.TrimSpace(hostname) == "" {
+		return false
+	}
+	switch status {
+	case "", "not_configured", "uninstalled":
+		return false
+	default:
+		return true
+	}
+}
+
+func lokiTLSIssuer(expose GrafanaExpose) (name, kind string) {
+	name = strings.TrimSpace(expose.TLSIssuerName)
+	if name == "" {
+		name = "astronomer-tls"
+	}
+	kind = strings.TrimSpace(expose.TLSIssuerKind)
+	if kind == "" {
+		kind = "Issuer"
+	}
+	return name, kind
+}
+
+func lokiIngestCertificate(namespace, host string, expose GrafanaExpose) map[string]any {
+	issuer, kind := lokiTLSIssuer(expose)
+	return map[string]any{
+		"apiVersion": "cert-manager.io/v1",
+		"kind":       "Certificate",
+		"metadata": map[string]any{
+			"name":      lokiIngestTLSSecretName,
+			"namespace": namespace,
+		},
+		"spec": map[string]any{
+			"secretName": lokiIngestTLSSecretName,
+			"dnsNames":   []any{host},
+			"issuerRef": map[string]any{
+				"name":  issuer,
+				"kind":  kind,
+				"group": "cert-manager.io",
+			},
+		},
+	}
+}
+
+func lokiIngestIngress(namespace, svcName, host, ingressClass string, expose GrafanaExpose) map[string]any {
+	issuer, kind := lokiTLSIssuer(expose)
+	annotations := map[string]any{}
+	if strings.EqualFold(kind, "ClusterIssuer") {
+		annotations["cert-manager.io/cluster-issuer"] = issuer
+	} else {
+		annotations["cert-manager.io/issuer"] = issuer
+	}
 	spec := map[string]any{
 		"tls": []any{
 			map[string]any{
@@ -936,10 +992,44 @@ func lokiIngestIngress(namespace, svcName, host, ingressClass string) map[string
 		"apiVersion": "networking.k8s.io/v1",
 		"kind":       "Ingress",
 		"metadata": map[string]any{
-			"name":      svcName,
-			"namespace": namespace,
+			"name":        svcName,
+			"namespace":   namespace,
+			"annotations": annotations,
 		},
 		"spec": spec,
+	}
+}
+
+func lokiIngestHTTPRoute(platformNS, gatewayName, lokiNS, svcName, host string) map[string]any {
+	return map[string]any{
+		"apiVersion": "gateway.networking.k8s.io/v1",
+		"kind":       "HTTPRoute",
+		"metadata": map[string]any{
+			"name":      svcName,
+			"namespace": platformNS,
+		},
+		"spec": map[string]any{
+			"parentRefs": []any{
+				map[string]any{"name": gatewayName},
+			},
+			"hostnames": []any{host},
+			"rules": []any{
+				map[string]any{
+					"matches": []any{
+						map[string]any{
+							"path": map[string]any{"type": "PathPrefix", "value": "/loki/api/v1/push"},
+						},
+					},
+					"backendRefs": []any{
+						map[string]any{
+							"name":      svcName,
+							"namespace": lokiNS,
+							"port":      lokiAuthListenPort,
+						},
+					},
+				},
+			},
+		},
 	}
 }
 

@@ -39,6 +39,7 @@ func TestSelectOrgMatrix(t *testing.T) {
 		{name: "missing and empty list", clientOrg: "", allow: nil, wantCode: http.StatusUnauthorized},
 		{name: "client org outside list", clientOrg: c2, allow: []string{c1}, wantCode: http.StatusUnauthorized},
 		{name: "empty acl deny", clientOrg: c1, allow: []string{}, wantCode: http.StatusUnauthorized},
+		{name: "duplicate sole tenant defaults", clientOrg: "", allow: []string{c1, c1, " " + c1}, wantOrg: c1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

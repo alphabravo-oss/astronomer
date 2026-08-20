@@ -563,6 +563,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		IngressClass:      os.Getenv("ASTRONOMER_INGRESS_CLASS"),
 		GatewayName:       os.Getenv("ASTRONOMER_GATEWAY_NAME"),
 		PlatformNamespace: os.Getenv("POD_NAMESPACE"),
+		TLSIssuerName:     os.Getenv("ASTRONOMER_TLS_ISSUER"),
+		TLSIssuerKind:     os.Getenv("ASTRONOMER_TLS_ISSUER_KIND"),
 	})
 	grafanaSessionTTL := newSessionTimeoutResolver(queries, logger)
 	monitoringHandler.SetSessionTTL(func(ctx context.Context) time.Duration {

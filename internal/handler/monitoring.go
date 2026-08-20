@@ -62,6 +62,8 @@ type GrafanaExpose struct {
 	IngressClass      string
 	GatewayName       string
 	PlatformNamespace string
+	TLSIssuerName     string
+	TLSIssuerKind     string
 }
 
 // SetEncryptor wires the Fernet encryptor used for the monitoring-backend
@@ -568,7 +570,7 @@ func (h *MonitoringHandler) applySharedLokiStack(ctx context.Context, msgType pr
 	if values == nil {
 		values = map[string]any{}
 	}
-	values["extraObjects"] = lokiFamilyExtraObjects(req, h.proxyImage, h.lokiHasIngestTokens(ctx), h.lokiIngestClass())
+	values["extraObjects"] = lokiFamilyExtraObjects(req, h.proxyImage)
 	return h.helm.Do(ctx, req.ManagementClusterID, msgType, protocol.HelmRequestPayload{
 		ReleaseName: req.ReleaseName,
 		Namespace:   req.Namespace,

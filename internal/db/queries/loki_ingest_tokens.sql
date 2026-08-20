@@ -19,16 +19,23 @@ RETURNING *;
 -- name: DeleteLokiIngestTokenByCluster :exec
 DELETE FROM loki_ingest_tokens WHERE cluster_id = $1;
 
--- Superusers are fleet Loki admins. v1 ACL is coarse: any cluster-role
--- binding grants that user's email the bound cluster UUID.
--- name: ListLokiQueryACLAdmins :many
-SELECT email FROM users
-WHERE is_active = true AND is_service = false AND is_superuser = true
-ORDER BY email;
+-- Superusers and users with a global role that grants monitoring:read or
+-- monitoring:update (or *). Filter verbs/resources in Go so tests can
+-- exercise the same rule helper the reconciler uses.
+-- name: ListLokiQueryACLAdminCandidates :many
+SELECT u.email, u.is_superuser, COALESCE(gr.rules, '[]'::jsonb) AS rules
+FROM users u
+LEFT JOIN global_role_bindings grb ON grb.user_id = u.id
+LEFT JOIN global_roles gr ON gr.id = grb.role_id
+WHERE u.is_active = true AND u.is_service = false
+ORDER BY u.email;
 
--- name: ListLokiQueryACLUserClusters :many
-SELECT u.email, crb.cluster_id
+-- Cluster bindings plus the bound role rules. Go keeps only logging:read
+-- or monitoring:read (or *) so a workload-editor row cannot widen org.
+-- name: ListLokiQueryACLUserCandidates :many
+SELECT u.email, crb.cluster_id, cr.rules
 FROM cluster_role_bindings crb
 INNER JOIN users u ON u.id = crb.user_id
+INNER JOIN cluster_roles cr ON cr.id = crb.role_id
 WHERE u.is_active = true AND u.is_service = false
 ORDER BY u.email, crb.cluster_id;

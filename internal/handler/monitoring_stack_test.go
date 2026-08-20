@@ -47,6 +47,8 @@ type stackLifecycleQuerier struct {
 	clusterErr    error
 	extraClusters []sqlc.Cluster
 	lokiTokens    []sqlc.ListLokiIngestTokenHashesRow
+	aclAdmins     []sqlc.ListLokiQueryACLAdminCandidatesRow
+	aclUsers      []sqlc.ListLokiQueryACLUserCandidatesRow
 
 	audits []sqlc.CreateAuditLogV1Params
 }
@@ -122,6 +124,20 @@ func (q *stackLifecycleQuerier) ListLokiIngestTokenHashes(context.Context) ([]sq
 		return []sqlc.ListLokiIngestTokenHashesRow{}, nil
 	}
 	return q.lokiTokens, nil
+}
+
+func (q *stackLifecycleQuerier) ListLokiQueryACLAdminCandidates(context.Context) ([]sqlc.ListLokiQueryACLAdminCandidatesRow, error) {
+	if q.aclAdmins == nil {
+		return []sqlc.ListLokiQueryACLAdminCandidatesRow{}, nil
+	}
+	return q.aclAdmins, nil
+}
+
+func (q *stackLifecycleQuerier) ListLokiQueryACLUserCandidates(context.Context) ([]sqlc.ListLokiQueryACLUserCandidatesRow, error) {
+	if q.aclUsers == nil {
+		return []sqlc.ListLokiQueryACLUserCandidatesRow{}, nil
+	}
+	return q.aclUsers, nil
 }
 
 func (q *stackLifecycleQuerier) ListClusters(context.Context, sqlc.ListClustersParams) ([]sqlc.Cluster, error) {

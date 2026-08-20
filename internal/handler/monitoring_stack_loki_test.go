@@ -362,52 +362,32 @@ func TestSharedLokiIngressOnlyWhenTokensExist(t *testing.T) {
 		return wrap.Data.Values
 	}
 
-	assertIngress := func(values map[string]any, want bool) {
+	assertNoPublicIngest := func(values map[string]any) {
 		t.Helper()
 		raw, _ := json.Marshal(values)
-		has := strings.Contains(string(raw), `"kind":"Ingress"`)
-		if has != want {
-			t.Fatalf("ingress present=%v, want %v: %s", has, want, raw)
-		}
-		if want && !strings.Contains(string(raw), "loki-ingest.example.com") {
-			t.Fatalf("ingress missing explicit ingestHostname: %s", raw)
-		}
-		if want && strings.Contains(string(raw), "astronomer.localtest.me") {
-			t.Fatalf("ingress must not derive host from Astronomer ingress: %s", raw)
+		if strings.Contains(string(raw), `"kind":"Ingress"`) || strings.Contains(string(raw), `"kind":"HTTPRoute"`) || strings.Contains(string(raw), `"kind":"Certificate"`) {
+			t.Fatalf("Helm extraObjects must not own public ingest: %s", raw)
 		}
 		if strings.Contains(string(raw), "token_encrypted") || strings.Contains(string(raw), "bearer_token") {
 			t.Fatalf("helm values leaked plaintext token: %s", raw)
 		}
 	}
 
-	assertIngress(preview(), false)
+	assertNoPublicIngest(preview())
 
 	q.lokiTokens = []sqlc.ListLokiIngestTokenHashesRow{{
 		ClusterID: uuid.MustParse(stackTestClusterID),
 		TokenHash: "abc123",
 	}}
 	values := preview()
-	assertIngress(values, true)
+	assertNoPublicIngest(values)
 	extra, _ := values["extraObjects"].([]any)
-	var sawAuthBackend, sawPushPath, sawNP bool
+	var sawNP bool
 	for _, obj := range extra {
 		m, _ := obj.(map[string]any)
-		kind, _ := m["kind"].(string)
-		raw, _ := json.Marshal(m)
-		switch kind {
-		case "Ingress":
-			if strings.Contains(string(raw), "astronomer-loki-auth") {
-				sawAuthBackend = true
-			}
-			if strings.Contains(string(raw), "/loki/api/v1/push") {
-				sawPushPath = true
-			}
-		case "NetworkPolicy":
+		if m["kind"] == "NetworkPolicy" {
 			sawNP = true
 		}
-	}
-	if !sawAuthBackend || !sawPushPath {
-		t.Fatalf("ingress backend/path missing backend=%v path=%v", sawAuthBackend, sawPushPath)
 	}
 	if !sawNP {
 		t.Fatal("expected NetworkPolicy extraObjects")

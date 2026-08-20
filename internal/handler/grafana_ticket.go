@@ -55,6 +55,8 @@ func (h *MonitoringHandler) SetGrafanaExpose(expose GrafanaExpose) {
 		IngressClass:      strings.TrimSpace(expose.IngressClass),
 		GatewayName:       strings.TrimSpace(expose.GatewayName),
 		PlatformNamespace: strings.TrimSpace(expose.PlatformNamespace),
+		TLSIssuerName:     strings.TrimSpace(expose.TLSIssuerName),
+		TLSIssuerKind:     strings.TrimSpace(expose.TLSIssuerKind),
 	}
 }
 

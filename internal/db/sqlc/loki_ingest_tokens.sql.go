@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -80,27 +81,37 @@ func (q *Queries) ListLokiIngestTokenHashes(ctx context.Context) ([]ListLokiInge
 	return items, nil
 }
 
-const listLokiQueryACLAdmins = `-- name: ListLokiQueryACLAdmins :many
-SELECT email FROM users
-WHERE is_active = true AND is_service = false AND is_superuser = true
-ORDER BY email
+const listLokiQueryACLAdminCandidates = `-- name: ListLokiQueryACLAdminCandidates :many
+SELECT u.email, u.is_superuser, COALESCE(gr.rules, '[]'::jsonb) AS rules
+FROM users u
+LEFT JOIN global_role_bindings grb ON grb.user_id = u.id
+LEFT JOIN global_roles gr ON gr.id = grb.role_id
+WHERE u.is_active = true AND u.is_service = false
+ORDER BY u.email
 `
 
-// Superusers are fleet Loki admins. v1 ACL is coarse: any cluster-role
-// binding grants that user's email the bound cluster UUID.
-func (q *Queries) ListLokiQueryACLAdmins(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, listLokiQueryACLAdmins)
+type ListLokiQueryACLAdminCandidatesRow struct {
+	Email       string          `json:"email"`
+	IsSuperuser bool            `json:"is_superuser"`
+	Rules       json.RawMessage `json:"rules"`
+}
+
+// Superusers and users with a global role that grants monitoring:read or
+// monitoring:update (or *). Filter verbs/resources in Go so tests can
+// exercise the same rule helper the reconciler uses.
+func (q *Queries) ListLokiQueryACLAdminCandidates(ctx context.Context) ([]ListLokiQueryACLAdminCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listLokiQueryACLAdminCandidates)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []string{}
+	items := []ListLokiQueryACLAdminCandidatesRow{}
 	for rows.Next() {
-		var email string
-		if err := rows.Scan(&email); err != nil {
+		var i ListLokiQueryACLAdminCandidatesRow
+		if err := rows.Scan(&i.Email, &i.IsSuperuser, &i.Rules); err != nil {
 			return nil, err
 		}
-		items = append(items, email)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -108,29 +119,33 @@ func (q *Queries) ListLokiQueryACLAdmins(ctx context.Context) ([]string, error) 
 	return items, nil
 }
 
-const listLokiQueryACLUserClusters = `-- name: ListLokiQueryACLUserClusters :many
-SELECT u.email, crb.cluster_id
+const listLokiQueryACLUserCandidates = `-- name: ListLokiQueryACLUserCandidates :many
+SELECT u.email, crb.cluster_id, cr.rules
 FROM cluster_role_bindings crb
 INNER JOIN users u ON u.id = crb.user_id
+INNER JOIN cluster_roles cr ON cr.id = crb.role_id
 WHERE u.is_active = true AND u.is_service = false
 ORDER BY u.email, crb.cluster_id
 `
 
-type ListLokiQueryACLUserClustersRow struct {
-	Email     string    `json:"email"`
-	ClusterID uuid.UUID `json:"cluster_id"`
+type ListLokiQueryACLUserCandidatesRow struct {
+	Email     string          `json:"email"`
+	ClusterID uuid.UUID       `json:"cluster_id"`
+	Rules     json.RawMessage `json:"rules"`
 }
 
-func (q *Queries) ListLokiQueryACLUserClusters(ctx context.Context) ([]ListLokiQueryACLUserClustersRow, error) {
-	rows, err := q.db.Query(ctx, listLokiQueryACLUserClusters)
+// Cluster bindings plus the bound role rules. Go keeps only logging:read
+// or monitoring:read (or *) so a workload-editor row cannot widen org.
+func (q *Queries) ListLokiQueryACLUserCandidates(ctx context.Context) ([]ListLokiQueryACLUserCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listLokiQueryACLUserCandidates)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListLokiQueryACLUserClustersRow{}
+	items := []ListLokiQueryACLUserCandidatesRow{}
 	for rows.Next() {
-		var i ListLokiQueryACLUserClustersRow
-		if err := rows.Scan(&i.Email, &i.ClusterID); err != nil {
+		var i ListLokiQueryACLUserCandidatesRow
+		if err := rows.Scan(&i.Email, &i.ClusterID, &i.Rules); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
