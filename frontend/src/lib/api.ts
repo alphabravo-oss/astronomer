@@ -1250,6 +1250,39 @@ export async function testLoggingOutput(id: string) {
   return res.data.data;
 }
 
+export interface LoggingAttachStatus {
+  clusterId: string;
+  ingestPublic: boolean;
+  status?: string;
+  host?: string;
+  attached: boolean;
+}
+
+export interface LoggingAttachResult {
+  id: string;
+  name: string;
+  outputType?: string;
+  isSystem?: boolean;
+  enabled?: boolean;
+  token?: string;
+}
+
+export async function getLoggingAttachStatus(clusterId: string) {
+  const res = await api.get<APIResponse<LoggingAttachStatus>>(
+    `/clusters/${clusterId}/logging/outputs/attach-astronomer/`,
+  );
+  return res.data.data;
+}
+
+export async function attachAstronomerLogs(clusterId: string, rotate = false) {
+  const res = await api.post<APIResponse<LoggingAttachResult>>(
+    `/clusters/${clusterId}/logging/outputs/attach-astronomer/`,
+    {},
+    rotate ? { params: { rotate: true } } : undefined,
+  );
+  return res.data.data;
+}
+
 export async function getLoggingPipelines(params?: { clusterId?: string; limit?: number }) {
   const res = await api.get<APIResponse<import('@/types').LoggingPipeline[]>>('/logging/pipelines', {
     params: {

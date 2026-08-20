@@ -100,10 +100,26 @@ type LoggingHandler struct {
 	helmConcurrency int
 	encryptor       *auth.Encryptor
 	lokiIngest      lokiIngestReconciler
+	lokiAttach      lokiAttachGate
 }
 
 type lokiIngestReconciler interface {
 	ReconcileLokiIngest(ctx context.Context) error
+}
+
+// lokiAttachGate is the hosted-Loki precheck used by one-click attach.
+// MonitoringHandler implements it. Nil is fail-closed (Loki not ready).
+type lokiAttachGate interface {
+	LokiAttachState(ctx context.Context) lokiAttachState
+	CheckLokiAttachCapacity(ctx context.Context, clusterID uuid.UUID) (code, msg string, ok bool)
+}
+
+type lokiAttachState struct {
+	Status       string
+	IngestPublic bool
+	Host         string
+	Port         string
+	Mode         string
 }
 
 // NewLoggingHandler creates a new logging handler.
@@ -137,6 +153,13 @@ func (h *LoggingHandler) SetLokiIngestReconciler(r lokiIngestReconciler) {
 		return
 	}
 	h.lokiIngest = r
+}
+
+func (h *LoggingHandler) SetLokiAttachGate(g lokiAttachGate) {
+	if h == nil {
+		return
+	}
+	h.lokiAttach = g
 }
 
 // SetLogger wires a structured logger.

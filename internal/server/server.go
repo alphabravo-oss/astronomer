@@ -636,6 +636,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	backupHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	loggingHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	loggingHandler.SetLokiIngestReconciler(monitoringHandler)
+	loggingHandler.SetLokiAttachGate(monitoringHandler)
 	monitoringHandler.SetSystemLoggingOutputDisabler(loggingHandler)
 	workloadHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	// Anomaly-baselines read endpoints gate on cluster authz (fail closed:

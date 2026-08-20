@@ -20,7 +20,7 @@ accompanies, and a short description. Codes are grouped by status family; a
 handful of codes legitimately appear under more than one status depending on
 context, so the grouping reflects the dominant usage, not an exhaustive contract.
 
-**Total codes: 218**
+**Total codes: 221**
 
 ## Codes by category
 
@@ -225,6 +225,9 @@ Dominant HTTP status: 409 · Provenance: codemod
 | `SessionNotOwned` | `session_not_owned` | 409 | indicates a session not owned condition. |
 | `SnapshotNotReady` | `snapshot_not_ready` | 409 | indicates a snapshot not ready condition. |
 | `TransitionError` | `transition_error` | 409 | indicates a transition error condition. Aliases: `invalid_transition` |
+| `DegradedCapacity` | `degraded_capacity` | 409 | indicates hosted Loki is frozen for new attaches because a sizer re-eval set status degraded_capacity (HTTP 409). |
+| `IngestCapExceeded` | `ingest_cap_exceeded` | 409 | indicates attaching another cluster would fail the running Loki mode's pass row or observed ingest is ≥ 80% of the global budget (HTTP 409). |
+| `LokiNotReady` | `loki_not_ready` | 409 | indicates Astronomer Loki is not healthy with a public ingest hostname, so one-click attach cannot proceed (HTTP 409). |
 
 ### Server / IO / dependency failures
 

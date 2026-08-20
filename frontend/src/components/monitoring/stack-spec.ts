@@ -213,7 +213,7 @@ export const CLUSTER_STACK_FAMILY: StackFamilySpec = {
       label: 'Object storage',
       kind: 'storageConfig',
       replaceTrigger: true,
-      help: 'Backup storage config used for the Thanos sidecar’s objstore secret.',
+      help: 'Backup storage config used for the Thanos sidecar’s objstore secret. When shared Thanos is healthy this is pre-filled (Use shared Thanos bucket).',
     },
     { name: 'enableGrafana', label: 'Grafana', kind: 'tristate', unsetLabel: CHART_DEFAULT },
     {

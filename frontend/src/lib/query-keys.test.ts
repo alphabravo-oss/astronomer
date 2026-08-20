@@ -47,5 +47,10 @@ describe("observability query keys", () => {
       "cluster-1",
     ]);
     expect(queryKeys.logging.pipelinesAll).toEqual(["logging", "pipelines"]);
+    expect(queryKeys.logging.attachStatus("cluster-1")).toEqual([
+      "logging",
+      "attach",
+      "cluster-1",
+    ]);
   });
 });

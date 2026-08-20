@@ -255,6 +255,7 @@ GET /api/v1/clusters/{id}/gatekeeper/constraints
 GET /api/v1/clusters/{id}/health
 GET /api/v1/clusters/{id}/kubeconfig
 GET /api/v1/clusters/{id}/kubeconfig-preview
+GET /api/v1/clusters/{id}/logging/outputs/attach-astronomer
 GET /api/v1/clusters/{id}/manifest
 GET /api/v1/clusters/{id}/metrics
 GET /api/v1/clusters/{id}/metrics/summary
@@ -536,6 +537,7 @@ POST /api/v1/clusters/{id}/gatekeeper/constraints
 POST /api/v1/clusters/{id}/gatekeeper/constraints/validate
 POST /api/v1/clusters/{id}/generate-kubeconfig
 POST /api/v1/clusters/{id}/generate_kubeconfig
+POST /api/v1/clusters/{id}/logging/outputs/attach-astronomer
 POST /api/v1/clusters/{id}/logging/outputs/{output_id}/rotate-token
 POST /api/v1/clusters/{id}/monitoring/stack/install
 POST /api/v1/clusters/{id}/monitoring/stack/preview

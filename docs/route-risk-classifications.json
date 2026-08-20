@@ -301,6 +301,7 @@
         "/api/v1/logging/outputs/{id}/query",
         "/api/v1/logging/outputs/{id}/rotate-token",
         "/api/v1/clusters/{id}/logging/outputs/{output_id}/rotate-token",
+        "/api/v1/clusters/{id}/logging/outputs/attach-astronomer",
         "/api/v1/logging/pipelines",
         "/api/v1/logging/pipelines/{id}",
         "/api/v1/logging/pipelines/{id}/enable",
@@ -308,7 +309,7 @@
         "/api/v1/logging/operations/{id}/retry"
       ],
       "classification": "covered-rbac-cluster-scoped",
-      "reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+      "reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed. Attach-astronomer is logging:create on that cluster."
     },
     {
       "id": "tools-catalog-cluster-scoped",

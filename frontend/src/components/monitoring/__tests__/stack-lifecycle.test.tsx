@@ -56,12 +56,14 @@ vi.mock('@/lib/api/monitoring-stack', async (importOriginal) => {
     getMonitoringOperation: vi.fn(),
     retryMonitoringOperation: vi.fn(),
     getMonitoringSizer: vi.fn(),
+    getSharedThanosStatus: vi.fn(),
   };
 });
 
 import {
   getMonitoringOperation,
   getMonitoringSizer,
+  getSharedThanosStatus,
   getStackStatus,
   listMonitoringOperations,
   previewStack,
@@ -333,6 +335,7 @@ beforeEach(() => {
   storageHook.mockReturnValue({
     data: { data: [{ id: 'storage-1', name: 'metrics', bucket: 'astronomer-metrics' }] },
   } as never);
+  vi.mocked(getSharedThanosStatus).mockResolvedValue({ status: 'not_configured' });
   vi.mocked(getMonitoringSizer).mockResolvedValue({
     verdicts: {
       grafana: { result: 'pass', reasons: [] },
@@ -552,6 +555,23 @@ describe('per-cluster monitoring stack page', () => {
     expect(await screen.findByText('Monitoring access required')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Install' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('stack-panel-cluster')).not.toBeInTheDocument();
+  });
+
+  it('prefills storageConfigId from a healthy shared Thanos stack', async () => {
+    grant(['read', 'create', 'update', 'delete']);
+    statusPerTarget({ cluster: { status: 'not_configured' } });
+    vi.mocked(getSharedThanosStatus).mockResolvedValue({
+      status: 'healthy',
+      storageConfigId: 'storage-1',
+    });
+    render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, { wrapper: Wrapper });
+
+    expect(await screen.findByTestId('shared-thanos-bucket-prefill')).toHaveTextContent(
+      'Use shared Thanos bucket',
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /^Set up / }));
+    const objectStorage = await screen.findByLabelText('Object storage');
+    await waitFor(() => expect(objectStorage).toHaveValue('storage-1'));
   });
 
 });

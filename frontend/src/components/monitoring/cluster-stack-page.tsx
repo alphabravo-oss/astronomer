@@ -24,6 +24,8 @@ import {
   type StackOption,
 } from '@/components/monitoring/stack-lifecycle-panel';
 import { CLUSTER_STACK_FAMILY } from '@/components/monitoring/stack-spec';
+import { useSharedThanosStatus } from '@/components/monitoring/hooks';
+import type { SharedThanosStatus } from '@/lib/api/monitoring-stack';
 
 export function ClusterMonitoringStackPage({ clusterId }: { clusterId: string }) {
   /**
@@ -59,6 +61,10 @@ export function ClusterMonitoringStackPage({ clusterId }: { clusterId: string })
     id: location.id,
     label: `${location.name} — ${location.bucket}`,
   }));
+  const thanosQuery = useSharedThanosStatus(permissions.read.allowed);
+  const thanos = thanosQuery.data as SharedThanosStatus | undefined;
+  const sharedThanosStorageId =
+    thanos?.status === 'healthy' ? (thanos.storageConfigId || '').trim() : '';
 
   const target = { kind: 'cluster' as const, clusterId };
 
@@ -99,12 +105,19 @@ export function ClusterMonitoringStackPage({ clusterId }: { clusterId: string })
         <PermissionState title="Monitoring access required" permission="monitoring:read" />
       ) : (
         <div className="space-y-4">
+          {sharedThanosStorageId ? (
+            <p className="text-sm text-muted-foreground" data-testid="shared-thanos-bucket-prefill">
+              Use shared Thanos bucket. Object storage is pre-filled from the healthy
+              shared Thanos stack. This does not enable Thanos Receive or remote_write.
+            </p>
+          ) : null}
 
           <StackLifecyclePanel
             target={target}
             spec={CLUSTER_STACK_FAMILY}
             permissions={permissions}
             storageOptions={storageOptions}
+            seedOverrides={sharedThanosStorageId ? { storageConfigId: sharedThanosStorageId } : undefined}
           />
         </div>
       )}

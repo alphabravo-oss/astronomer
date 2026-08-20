@@ -90,6 +90,8 @@ func registerClusterRoutes(r chi.Router, deps RouterDependencies) {
 				r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/registration/cancel/", deps.ClusterRegistration.PostCancel)
 			}
 			if deps.Logging != nil {
+				r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceLogging, rbac.VerbRead)).Get("/{id}/logging/outputs/attach-astronomer/", deps.Logging.GetAstronomerAttachStatus)
+				r.With(writeClusters).Post("/{id}/logging/outputs/attach-astronomer/", deps.Logging.AttachAstronomerLogs)
 				r.With(writeClusters).Post("/{id}/logging/outputs/{output_id}/rotate-token/", deps.Logging.RotateOutputToken)
 			}
 			if deps.Monitoring != nil {

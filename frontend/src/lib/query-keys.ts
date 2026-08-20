@@ -276,6 +276,7 @@ export const queryKeys = {
     // the `operation(id)` detail rows at once — used by retry to invalidate all.
     operationsAll: ["logging", "operations"] as const,
     operation: (id: string) => ["logging", "operations", "detail", id] as const,
+    attachStatus: (clusterId: string) => ["logging", "attach", clusterId] as const,
   },
   // Monitoring-stack LIFECYCLE (install/upgrade/replace/uninstall) across the
   // three families. Distinct from the `clusters.metrics*` keys, which cache the

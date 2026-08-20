@@ -1096,6 +1096,29 @@ export function useCreateLoggingOutput() {
   });
 }
 
+export function useLoggingAttachStatus(clusterId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.logging.attachStatus(clusterId ?? ''),
+    queryFn: () => apiClient.getLoggingAttachStatus(clusterId as string),
+    enabled: Boolean(clusterId),
+  });
+}
+
+export function useAttachAstronomerLogs(clusterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (rotate?: boolean) => apiClient.attachAstronomerLogs(clusterId, Boolean(rotate)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.logging.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.logging.attachStatus(clusterId) });
+      toastSuccess('Astronomer logs attached');
+    },
+    onError: (error: Error) => {
+      toastApiError('Failed to attach Astronomer logs', error);
+    },
+  });
+}
+
 export function useTestLoggingOutput() {
   return useMutation({
     mutationFn: (id: string) => apiClient.testLoggingOutput(id),
