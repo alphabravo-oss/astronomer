@@ -27,6 +27,7 @@ const (
 	lokiTokenHashSecretName   = "astronomer-loki-token-hashes"
 	lokiQueryACLConfigMapName = "astronomer-loki-query-acl"
 	lokiIngestTLSSecretName   = "astronomer-loki-ingest-tls"
+	lokiIngestGatewayListener = "https-loki-ingest"
 )
 
 func (h *MonitoringHandler) sharedLokiPayload(ctx context.Context, r *http.Request) (SharedLokiRequest, map[string]any, sqlc.MonitoringBackend, error) {
@@ -1010,7 +1011,7 @@ func lokiIngestHTTPRoute(platformNS, gatewayName, lokiNS, svcName, host string) 
 		},
 		"spec": map[string]any{
 			"parentRefs": []any{
-				map[string]any{"name": gatewayName},
+				map[string]any{"name": gatewayName, "sectionName": lokiIngestGatewayListener},
 			},
 			"hostnames": []any{host},
 			"rules": []any{

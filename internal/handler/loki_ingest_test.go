@@ -114,21 +114,37 @@ func TestReconcileLokiIngestGatewayEmitsHTTPRouteAndCertificate(t *testing.T) {
 	if err := h.ReconcileLokiIngest(context.Background()); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
-	var sawRoute, sawCert, sawIngress bool
+	var sawRoute, sawCert, sawIngress, sawGatewayListener bool
 	for _, call := range fake.calls {
 		body := string(call.body)
 		if strings.Contains(body, `"kind":"HTTPRoute"`) && strings.Contains(body, "/loki/api/v1/push") {
 			sawRoute = true
+			if !strings.Contains(body, lokiIngestGatewayListener) {
+				t.Fatalf("HTTPRoute must attach to ingest listener: %s", body)
+			}
 		}
 		if strings.Contains(body, `"kind":"Certificate"`) && strings.Contains(body, "loki-ingest.example.com") {
 			sawCert = true
+			if !strings.Contains(call.path, "/namespaces/astronomer/certificates/") && !strings.Contains(body, `"namespace":"astronomer"`) {
+				t.Fatalf("Certificate must live next to the Gateway/Issuer: %s %s", call.path, body)
+			}
 		}
 		if strings.Contains(body, `"kind":"Ingress"`) {
 			sawIngress = true
 		}
+		if (call.method == "PUT" || call.method == "PATCH") && strings.Contains(call.path, "/gateways/astronomer") {
+			if strings.Contains(body, lokiIngestGatewayListener) &&
+				strings.Contains(body, lokiIngestTLSSecretName) &&
+				strings.Contains(body, "loki-ingest.example.com") {
+				sawGatewayListener = true
+			}
+		}
 	}
 	if !sawRoute || !sawCert {
 		t.Fatalf("gateway expose missing HTTPRoute/Certificate, calls=%v", fake.calls)
+	}
+	if !sawGatewayListener {
+		t.Fatalf("Gateway listener must terminate ingestHostname with astronomer-loki-ingest-tls, calls=%v", fake.calls)
 	}
 	if sawIngress {
 		t.Fatal("gateway expose must not also apply Ingress")
@@ -187,16 +203,23 @@ func TestBuildLokiQueryACLGrantsAndDedupes(t *testing.T) {
 		[]sqlc.ListLokiQueryACLAdminCandidatesRow{
 			{Email: "admin@example.com", IsSuperuser: false, Rules: adminRules},
 			{Email: "root@example.com", IsSuperuser: true, Rules: json.RawMessage(`[]`)},
+			{Email: "fleet-viewer@example.com", IsSuperuser: false, Rules: viewerRules},
 		},
 		[]sqlc.ListLokiQueryACLUserCandidatesRow{
 			{Email: "viewer@example.com", ClusterID: c1, Rules: viewerRules},
 			{Email: "viewer@example.com", ClusterID: c1, Rules: viewerRules},
 			{Email: "editor@example.com", ClusterID: c1, Rules: workloadRules},
 			{Email: "admin@example.com", ClusterID: c1, Rules: viewerRules},
+			{Email: "fleet-viewer@example.com", ClusterID: c1, Rules: viewerRules},
 		},
 	)
 	if len(acl.Admins) != 2 {
 		t.Fatalf("admins = %v, want monitoring-admin + superuser", acl.Admins)
+	}
+	for _, email := range acl.Admins {
+		if email == "fleet-viewer@example.com" {
+			t.Fatal("global monitoring:read must not be a fleet Loki admin")
+		}
 	}
 	if _, ok := acl.Users["admin@example.com"]; ok {
 		t.Fatal("admins must not also appear in users")
@@ -210,6 +233,9 @@ func TestBuildLokiQueryACLGrantsAndDedupes(t *testing.T) {
 	}
 	if _, ok := acl.Users["editor@example.com"]; ok {
 		t.Fatal("workload-editor must not receive a Loki org")
+	}
+	if got := acl.Users["fleet-viewer@example.com"]; len(got) != 1 || got[0] != c1.String() {
+		t.Fatalf("global monitoring:read must only get matching cluster orgs, got %v", got)
 	}
 }
 

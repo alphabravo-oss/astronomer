@@ -78,16 +78,16 @@ func (h *MonitoringHandler) ReconcileLokiIngest(ctx context.Context) error {
 		return fmt.Errorf("reconcile loki query acl: %w", err)
 	}
 
-	certNS := ns
-	if h.lokiUseGateway() {
-		certNS = h.grafanaExpose.PlatformNamespace
-	}
-	cert := lokiIngestCertificate(certNS, host, h.grafanaExpose)
-	if err := applyAPIResource(ctx, h.requester, clusterID, "cert-manager.io/v1", certNS, "certificates", lokiIngestTLSSecretName, cert); err != nil {
+	tlsNS := h.lokiTLSNamespace(ns)
+	cert := lokiIngestCertificate(tlsNS, host, h.grafanaExpose)
+	if err := applyAPIResource(ctx, h.requester, clusterID, "cert-manager.io/v1", tlsNS, "certificates", lokiIngestTLSSecretName, cert); err != nil {
 		return fmt.Errorf("reconcile loki ingest certificate: %w", err)
 	}
 
 	if h.lokiUseGateway() {
+		if err := h.ensureGatewayIngestListener(ctx, clusterID, host, false); err != nil {
+			return err
+		}
 		route := lokiIngestHTTPRoute(h.grafanaExpose.PlatformNamespace, h.grafanaExpose.GatewayName, ns, svcName, host)
 		if err := applyAPIResource(ctx, h.requester, clusterID, "gateway.networking.k8s.io/v1", h.grafanaExpose.PlatformNamespace, "httproutes", svcName, route); err != nil {
 			return fmt.Errorf("reconcile loki ingest httproute: %w", err)
@@ -97,12 +97,61 @@ func (h *MonitoringHandler) ReconcileLokiIngest(ctx context.Context) error {
 			return fmt.Errorf("reconcile loki ingest referencegrant: %w", err)
 		}
 	} else {
-		ing := lokiIngestIngress(ns, svcName, host, h.lokiIngestClass(), h.grafanaExpose)
-		if err := applyAPIResource(ctx, h.requester, clusterID, "networking.k8s.io/v1", ns, "ingresses", svcName, ing); err != nil {
+		if err := h.ensureLokiNamespaceIssuer(ctx, clusterID, tlsNS); err != nil {
+			return err
+		}
+		ing := lokiIngestIngress(tlsNS, svcName, host, h.lokiIngestClass(), h.grafanaExpose)
+		if err := applyAPIResource(ctx, h.requester, clusterID, "networking.k8s.io/v1", tlsNS, "ingresses", svcName, ing); err != nil {
 			return fmt.Errorf("reconcile loki ingest ingress: %w", err)
 		}
 	}
 	return h.stampSharedLokiIngestPublic(ctx, true)
+}
+
+func (h *MonitoringHandler) ensureLokiNamespaceIssuer(ctx context.Context, clusterID, destNS string) error {
+	if h == nil || destNS == "" {
+		return nil
+	}
+	name, kind := lokiTLSIssuer(h.grafanaExpose)
+	if !strings.EqualFold(kind, "Issuer") {
+		return nil
+	}
+	srcNS := strings.TrimSpace(h.grafanaExpose.PlatformNamespace)
+	if srcNS == "" || srcNS == destNS {
+		return nil
+	}
+	path := fmt.Sprintf("/apis/cert-manager.io/v1/namespaces/%s/issuers/%s", srcNS, name)
+	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if err != nil {
+		return fmt.Errorf("get platform tls issuer: %w", err)
+	}
+	if resp == nil || resp.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	if err := ensureSuccess(resp); err != nil {
+		return err
+	}
+	var issuer map[string]any
+	if err := parseJSONResponse(resp, &issuer); err != nil {
+		return fmt.Errorf("decode platform tls issuer: %w", err)
+	}
+	spec, _ := issuer["spec"].(map[string]any)
+	cloned := map[string]any{
+		"apiVersion": "cert-manager.io/v1",
+		"kind":       "Issuer",
+		"metadata":   map[string]any{"name": name, "namespace": destNS},
+		"spec":       spec,
+	}
+	return applyAPIResource(ctx, h.requester, clusterID, "cert-manager.io/v1", destNS, "issuers", name, cloned)
+}
+
+func (h *MonitoringHandler) lokiTLSNamespace(lokiNS string) string {
+	if h != nil && h.lokiUseGateway() {
+		if plat := strings.TrimSpace(h.grafanaExpose.PlatformNamespace); plat != "" {
+			return plat
+		}
+	}
+	return lokiNS
 }
 
 func (h *MonitoringHandler) lokiUseGateway() bool {
@@ -114,13 +163,17 @@ func (h *MonitoringHandler) lokiUseGateway() bool {
 }
 
 func (h *MonitoringHandler) deleteLokiPublicIngest(ctx context.Context, clusterID, ns, svcName string) error {
-	if err := deleteAPIResource(ctx, h.requester, clusterID, "networking.k8s.io/v1", ns, "ingresses", svcName); err != nil {
+	tlsNS := h.lokiTLSNamespace(ns)
+	if err := deleteAPIResource(ctx, h.requester, clusterID, "networking.k8s.io/v1", tlsNS, "ingresses", svcName); err != nil {
 		return err
 	}
-	if err := deleteAPIResource(ctx, h.requester, clusterID, "cert-manager.io/v1", ns, "certificates", lokiIngestTLSSecretName); err != nil {
+	if err := deleteAPIResource(ctx, h.requester, clusterID, "cert-manager.io/v1", tlsNS, "certificates", lokiIngestTLSSecretName); err != nil {
 		return err
 	}
 	if plat := strings.TrimSpace(h.grafanaExpose.PlatformNamespace); plat != "" {
+		if err := h.ensureGatewayIngestListener(ctx, clusterID, "", true); err != nil && h.log != nil {
+			h.log.Warn("remove loki ingest gateway listener", "error", err)
+		}
 		if err := deleteAPIResource(ctx, h.requester, clusterID, "gateway.networking.k8s.io/v1", plat, "httproutes", svcName); err != nil {
 			return err
 		}
@@ -129,6 +182,73 @@ func (h *MonitoringHandler) deleteLokiPublicIngest(ctx context.Context, clusterI
 		}
 	}
 	return deleteAPIResource(ctx, h.requester, clusterID, "gateway.networking.k8s.io/v1beta1", ns, "referencegrants", svcName+"-from-gateway")
+}
+
+func (h *MonitoringHandler) ensureGatewayIngestListener(ctx context.Context, clusterID, host string, remove bool) error {
+	if h == nil || !h.lokiUseGateway() {
+		return nil
+	}
+	ns := h.grafanaExpose.PlatformNamespace
+	name := h.grafanaExpose.GatewayName
+	path := fmt.Sprintf("/apis/gateway.networking.k8s.io/v1/namespaces/%s/gateways/%s", ns, name)
+	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if err != nil {
+		return fmt.Errorf("get platform gateway: %w", err)
+	}
+	if resp == nil || resp.StatusCode == http.StatusNotFound {
+		if remove {
+			return nil
+		}
+		return fmt.Errorf("platform gateway %s/%s not found", ns, name)
+	}
+	if err := ensureSuccess(resp); err != nil {
+		return err
+	}
+	var gw map[string]any
+	if err := parseJSONResponse(resp, &gw); err != nil {
+		return fmt.Errorf("decode platform gateway: %w", err)
+	}
+	spec, _ := gw["spec"].(map[string]any)
+	if spec == nil {
+		spec = map[string]any{}
+		gw["spec"] = spec
+	}
+	listeners, _ := spec["listeners"].([]any)
+	next := make([]any, 0, len(listeners)+1)
+	for _, raw := range listeners {
+		m, _ := raw.(map[string]any)
+		if m != nil && fmt.Sprint(m["name"]) == lokiIngestGatewayListener {
+			continue
+		}
+		next = append(next, raw)
+	}
+	if !remove && host != "" {
+		next = append(next, map[string]any{
+			"name":     lokiIngestGatewayListener,
+			"hostname": host,
+			"port":     443,
+			"protocol": "HTTPS",
+			"tls": map[string]any{
+				"mode": "Terminate",
+				"certificateRefs": []any{
+					map[string]any{"kind": "Secret", "name": lokiIngestTLSSecretName},
+				},
+			},
+			"allowedRoutes": map[string]any{
+				"namespaces": map[string]any{"from": "Same"},
+			},
+		})
+	}
+	spec["listeners"] = next
+	body, err := json.Marshal(gw)
+	if err != nil {
+		return err
+	}
+	put, err := h.requester.Do(ctx, clusterID, http.MethodPut, path, body, requestHeaders("application/json"))
+	if err != nil {
+		return fmt.Errorf("update platform gateway listeners: %w", err)
+	}
+	return ensureSuccess(put)
 }
 
 func (h *MonitoringHandler) buildLokiQueryACL(ctx context.Context) lokiauth.QueryACL {

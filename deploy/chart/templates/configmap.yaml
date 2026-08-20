@@ -38,6 +38,10 @@ data:
   {{- if .Values.ingress.enabled }}
   ASTRONOMER_INGRESS_CLASS: {{ .Values.ingress.className | quote }}
   {{- end }}
+  {{- if include "astronomer.tls.usesCertManager" . }}
+  ASTRONOMER_TLS_ISSUER: {{ include "astronomer.tls.issuerName" . | quote }}
+  ASTRONOMER_TLS_ISSUER_KIND: "Issuer"
+  {{- end }}
   # Agent image the server renders into install.yaml for adopted clusters.
   # Derives from image.agent (registry-aware: GHCR online, mirror in air-gap) so
   # adopted clusters pull from the same place as the management plane. An

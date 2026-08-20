@@ -16,7 +16,7 @@ func buildLokiQueryACLFromCandidates(admins []sqlc.ListLokiQueryACLAdminCandidat
 		if email == "" {
 			continue
 		}
-		if row.IsSuperuser || rbacRulesGrant(row.Rules, []string{"monitoring", "*"}, []string{"read", "update", "*"}) {
+		if row.IsSuperuser || rbacRulesGrant(row.Rules, []string{"monitoring", "*"}, []string{"update", "*"}) {
 			if _, ok := adminSet[email]; ok {
 				continue
 			}
