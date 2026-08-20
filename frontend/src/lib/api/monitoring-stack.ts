@@ -168,8 +168,10 @@ export function isRetryableOperationStatus(status: string | undefined): boolean 
  * optional on the wire: the handler defaults releaseName=prometheus,
  * namespace=monitoring, retention=15d, storageSize=50Gi, storageClass=default,
  * scrapeInterval=30s, clusterLabel=cluster_id, clusterLabelValue=<cluster id>,
- * chartVersion=61.3.2, and treats the three tri-state booleans as true when
- * absent.
+ * chartVersion=61.3.2, and treats enableAlertmanager / thanosSidecarEnabled as
+ * true when absent. Omitted enableGrafana is true unless fleet Grafana is
+ * healthy and this cluster stack is not_configured, in which case it is false
+ * (changelog'd; explicit true/false is unchanged).
  */
 export interface ClusterStackRequest {
   releaseName?: string;

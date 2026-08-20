@@ -150,7 +150,7 @@ export const CLUSTER_STACK_FAMILY: StackFamilySpec = {
   key: 'cluster',
   title: 'Cluster monitoring stack',
   description:
-    'kube-prometheus-stack on this cluster — Prometheus, optionally Grafana and Alertmanager, with a Thanos sidecar shipping blocks to shared object storage.',
+    'kube-prometheus-stack on this cluster — Prometheus, optionally Grafana and Alertmanager, with a Thanos sidecar shipping blocks to shared object storage. Cluster Grafana is this Prometheus (15d) and survives an Astronomer outage; fleet Grafana is the lobby.',
   destroys:
     'the Helm release, its Prometheus StatefulSet and the PersistentVolumeClaims holding this cluster’s local metrics',
   fields: [
@@ -215,7 +215,13 @@ export const CLUSTER_STACK_FAMILY: StackFamilySpec = {
       replaceTrigger: true,
       help: 'Backup storage config used for the Thanos sidecar’s objstore secret. When shared Thanos is healthy this is pre-filled (Use shared Thanos bucket).',
     },
-    { name: 'enableGrafana', label: 'Grafana', kind: 'tristate', unsetLabel: CHART_DEFAULT },
+    {
+      name: 'enableGrafana',
+      label: 'Grafana',
+      kind: 'tristate',
+      unsetLabel: 'Use backend default',
+      help: 'Cluster Grafana talks to this Prometheus (15d) and survives an Astronomer outage. Omitted: enabled, except new (not_configured) stacks default off when fleet Grafana is healthy.',
+    },
     {
       name: 'enableAlertmanager',
       label: 'Alertmanager',
@@ -583,6 +589,16 @@ export function fleetGrafanaOpenURL(
   return `https://${host}/`;
 }
 
+/** Fleet Grafana with this cluster pre-selected. Null unless the Open button exists. */
+export function fleetGrafanaClusterURL(
+  status: Pick<SharedGrafanaStatus, 'status' | 'authMode' | 'grafanaHost' | 'ingressHost'> | null | undefined,
+  clusterId: string,
+): string | null {
+  const base = fleetGrafanaOpenURL(status);
+  if (!base || !clusterId) return null;
+  return `${base}?var-cluster=${encodeURIComponent(clusterId)}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Status interpretation
 // ─────────────────────────────────────────────────────────────────────
@@ -704,8 +720,9 @@ export function missingRequiredFields(
  * Empty is OMITTED, for every kind. That is the request's only way to say
  * "unset", and the backend's fields are built for it: strings fall back to the
  * handler's own default rather than writing a blank namespace, and the `*bool`
- * pointers fall back to policy (`autoRollbackOnFailure`) or to the chart's
- * enabled-by-default (`enableGrafana`, `enableAlertmanager`).
+ * pointers fall back to policy (`autoRollbackOnFailure`) or to the backend
+ * default (`enableGrafana` is chart-enabled except new stacks when fleet
+ * Grafana is healthy; `enableAlertmanager` stays chart-enabled).
  *
  * `boolean` fields are still always sent, because those ARE round-tripped
  * through status (thanosSidecarEnabled) and so the form genuinely knows what

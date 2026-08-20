@@ -15,6 +15,7 @@ import {
   SHARED_THANOS_FAMILY,
   SERVER_BLIND_FIELDS,
   buildStackBody,
+  fleetGrafanaClusterURL,
   fleetGrafanaOpenURL,
   missingRequiredFields,
   replaceTriggeringChanges,
@@ -111,6 +112,22 @@ describe('seedStackValues', () => {
         authMode: 'proxy',
         grafanaHost: 'grafana.example.com',
       }),
+    ).toBeNull();
+    expect(
+      fleetGrafanaClusterURL(
+        {
+          status: 'healthy',
+          authMode: 'proxy',
+          grafanaHost: 'grafana.example.com',
+        },
+        'cluster-1',
+      ),
+    ).toBe('https://grafana.example.com/?var-cluster=cluster-1');
+    expect(
+      fleetGrafanaClusterURL(
+        { status: 'healthy', authMode: 'clusterip', grafanaHost: 'grafana.example.com' },
+        'cluster-1',
+      ),
     ).toBeNull();
   });
 

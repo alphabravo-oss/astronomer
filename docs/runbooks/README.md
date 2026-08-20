@@ -41,6 +41,10 @@ Anything with a `runbook_url` on a PrometheusRule in
 | `AstronomerSIEMEventsDropped` | [siem-events-dropped.md](siem-events-dropped.md) |
 | `AstronomerManagementLoggingForwarderDown` | [management-logging-down.md](management-logging-down.md) |
 | `AstronomerClusterLoggingFlatlined` | [logging-flatlined.md](logging-flatlined.md) |
+| `AstronomerGrafanaDown` | [grafana-down.md](grafana-down.md) |
+| `AstronomerLokiGatewayDown` | [loki-gateway-down.md](loki-gateway-down.md) |
+| `AstronomerLokiIngestDenied` | [loki-ingest-denied.md](loki-ingest-denied.md) |
+| `AstronomerLokiOverCapacity` | [loki-over-capacity.md](loki-over-capacity.md) |
 
 ## Operational scenarios (no automated alert)
 

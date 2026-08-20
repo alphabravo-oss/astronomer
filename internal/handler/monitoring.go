@@ -191,10 +191,12 @@ type MonitoringStackRequest struct {
 	ChartVersion            string `json:"chartVersion"`
 	StorageConfigID         string `json:"storageConfigId"`
 	ObjectStorageSecretName string `json:"objectStorageSecretName"`
-	EnableGrafana           *bool  `json:"enableGrafana"`
-	EnableAlertmanager      *bool  `json:"enableAlertmanager"`
-	ThanosSidecarEnabled    *bool  `json:"thanosSidecarEnabled"`
-	AutoRollbackOnFailure   *bool  `json:"autoRollbackOnFailure"`
+	// EnableGrafana omitted: true, except false when sharedGrafana is
+	// healthy and the cluster stack is not_configured (changelog'd).
+	EnableGrafana         *bool `json:"enableGrafana"`
+	EnableAlertmanager    *bool `json:"enableAlertmanager"`
+	ThanosSidecarEnabled  *bool `json:"thanosSidecarEnabled"`
+	AutoRollbackOnFailure *bool `json:"autoRollbackOnFailure"`
 }
 
 type SharedThanosStackRequest struct {

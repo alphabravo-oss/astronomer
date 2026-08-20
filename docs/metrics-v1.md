@@ -23,6 +23,14 @@ exposed by `astronomer-go`.
 - `astronomer_loki_ingest_requests_total{result="ok|unauth|cap|error"}` — no unbounded `cluster` label
 - `astronomer_loki_ingest_bytes_total{result}` — push-path bytes only
 
+Chart-shipped Prometheus rules (`deploy/chart/templates/prometheus-rules.yaml`
+group `astronomer.observability.alerts`):
+
+- `AstronomerLokiIngestDenied` — `rate(...{result=~"unauth|cap"}[5m]) > 0`
+- `AstronomerLokiOverCapacity` — `rate(...{result="cap"}[5m]) > 0` (10m); correlate with Loki `degraded_capacity`
+- `AstronomerGrafanaDown` — kube-state-metrics on Deployment `astronomer-grafana`; process check is `GET /api/health`
+- `AstronomerLokiGatewayDown` — kube-state-metrics on Deployment `astronomer-loki-gateway`
+
 ## Server HTTP Metrics
 
 - `astronomer_http_requests_total{astronomer_instance_id,method,route_template,status_class}`

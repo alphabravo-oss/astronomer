@@ -57,12 +57,14 @@ vi.mock('@/lib/api/monitoring-stack', async (importOriginal) => {
     retryMonitoringOperation: vi.fn(),
     getMonitoringSizer: vi.fn(),
     getSharedThanosStatus: vi.fn(),
+    getSharedGrafanaStatus: vi.fn(),
   };
 });
 
 import {
   getMonitoringOperation,
   getMonitoringSizer,
+  getSharedGrafanaStatus,
   getSharedThanosStatus,
   getStackStatus,
   listMonitoringOperations,
@@ -336,6 +338,7 @@ beforeEach(() => {
     data: { data: [{ id: 'storage-1', name: 'metrics', bucket: 'astronomer-metrics' }] },
   } as never);
   vi.mocked(getSharedThanosStatus).mockResolvedValue({ status: 'not_configured' });
+  vi.mocked(getSharedGrafanaStatus).mockResolvedValue({ status: 'not_configured' });
   vi.mocked(getMonitoringSizer).mockResolvedValue({
     verdicts: {
       grafana: { result: 'pass', reasons: [] },
@@ -572,6 +575,36 @@ describe('per-cluster monitoring stack page', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^Set up / }));
     const objectStorage = await screen.findByLabelText('Object storage');
     await waitFor(() => expect(objectStorage).toHaveValue('storage-1'));
+  });
+
+  it('explains two Grafanas and omits Open when fleet Grafana is not proxy', async () => {
+    grant(['read', 'create', 'update', 'delete']);
+    statusPerTarget({ cluster: { status: 'not_configured' } });
+    render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, { wrapper: Wrapper });
+
+    const copy = await screen.findByTestId('two-grafana-copy');
+    expect(copy).toHaveTextContent(/this cluster.+Prometheus \(15d/);
+    expect(copy).toHaveTextContent('survives an Astronomer outage');
+    expect(copy).toHaveTextContent('lobby');
+    expect(copy).toHaveTextContent('dies with Astronomer');
+    expect(screen.queryByRole('link', { name: /Open fleet Grafana/ })).not.toBeInTheDocument();
+  });
+
+  it('links to fleet Grafana with var-cluster when the Open button exists', async () => {
+    grant(['read', 'create', 'update', 'delete']);
+    statusPerTarget({ cluster: { status: 'not_configured' } });
+    vi.mocked(getSharedGrafanaStatus).mockResolvedValue({
+      status: 'healthy',
+      authMode: 'proxy',
+      grafanaHost: 'grafana.example.com',
+    });
+    render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, { wrapper: Wrapper });
+
+    const open = await screen.findByRole('link', { name: /Open fleet Grafana/ });
+    expect(open).toHaveAttribute(
+      'href',
+      `https://grafana.example.com/?var-cluster=${CLUSTER_ID}`,
+    );
   });
 
 });
