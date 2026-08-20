@@ -27,6 +27,11 @@ const (
 	sharedGrafanaAuthModeProxy     = "proxy"
 	grafanaProxySecretName         = "astronomer-grafana-proxy-key"
 	grafanaProxyListenPort         = 8080
+	// Grafana sidecar annotation key (chart sidecar.dashboards.folderAnnotation).
+	grafanaDashboardFolderAnnotationKey = "grafana_folder"
+	// v1 folders only. Not folder-per-cluster; not a tenant boundary.
+	grafanaFolderFleet           = "Fleet"
+	grafanaFolderManagementPlane = "Management plane"
 )
 
 func (h *MonitoringHandler) sharedGrafanaPayload(ctx context.Context, r *http.Request) (SharedGrafanaRequest, map[string]any, sqlc.MonitoringBackend, error) {
@@ -234,9 +239,13 @@ func (h *MonitoringHandler) sharedGrafanaHelmValues(req SharedGrafanaRequest, ba
 		},
 		"sidecar": map[string]any{
 			"dashboards": map[string]any{
-				"enabled":    true,
-				"label":      "grafana_dashboard",
-				"labelValue": "1",
+				"enabled":          true,
+				"label":            "grafana_dashboard",
+				"labelValue":       "1",
+				"folderAnnotation": grafanaDashboardFolderAnnotationKey,
+				"provider": map[string]any{
+					"foldersFromFilesStructure": true,
+				},
 			},
 			"datasources": map[string]any{
 				"enabled":    true,
@@ -637,6 +646,9 @@ func grafanaDashboardConfigMaps() []any {
 				"labels": map[string]any{
 					"grafana_dashboard": "1",
 				},
+				"annotations": map[string]any{
+					grafanaDashboardFolderAnnotationKey: grafanaDashboardFolder(slug),
+				},
 			},
 			"data": map[string]any{
 				name: helmTplEscape(string(raw)),
@@ -653,6 +665,18 @@ func grafanaDashboardConfigMapName(slug string) string {
 		name = strings.TrimRight(name, "-")
 	}
 	return name
+}
+
+// grafanaDashboardFolder maps a shipped dashboard slug onto the v1 Grafana
+// folders. Control-plane product metrics land in Management plane; cluster
+// pickers and fleet rollups land in Fleet.
+func grafanaDashboardFolder(slug string) string {
+	switch slug {
+	case "management-plane", "baseline-tool-health", "continuous-delivery":
+		return grafanaFolderManagementPlane
+	default:
+		return grafanaFolderFleet
+	}
 }
 
 func grafanaDatasourceConfigMap(name, namespace, release, yamlBody string) map[string]any {

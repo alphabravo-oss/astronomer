@@ -264,6 +264,99 @@ func TestSharedGrafanaDashboardsAreEmbedded(t *testing.T) {
 	}
 }
 
+func TestSharedGrafanaDashboardsLandInFleetAndManagementPlaneFolders(t *testing.T) {
+	want := map[string]string{
+		"cluster-overview":        grafanaFolderFleet,
+		"node-usage":              grafanaFolderFleet,
+		"workload-health":         grafanaFolderFleet,
+		"image-scan-summary":      grafanaFolderFleet,
+		"security-posture-rollup": grafanaFolderFleet,
+		"management-plane":        grafanaFolderManagementPlane,
+		"baseline-tool-health":    grafanaFolderManagementPlane,
+		"continuous-delivery":     grafanaFolderManagementPlane,
+	}
+	got := map[string]string{}
+	for _, obj := range grafanaDashboardConfigMaps() {
+		m, _ := obj.(map[string]any)
+		meta, _ := m["metadata"].(map[string]any)
+		anns, _ := meta["annotations"].(map[string]any)
+		data, _ := m["data"].(map[string]any)
+		folder, _ := anns[grafanaDashboardFolderAnnotationKey].(string)
+		if folder != grafanaFolderFleet && folder != grafanaFolderManagementPlane {
+			t.Errorf("folder %q is not Fleet or Management plane (not folder-per-cluster)", folder)
+		}
+		if strings.Contains(folder, "cluster/") || strings.Contains(strings.ToLower(folder), "uuid") {
+			t.Errorf("must not provision folder-per-cluster: %q", folder)
+		}
+		for filename := range data {
+			slug := strings.TrimSuffix(filename, ".json")
+			got[slug] = folder
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("shipped dashboards = %v, want %v", got, want)
+	}
+	for slug, folder := range want {
+		if got[slug] != folder {
+			t.Errorf("%s folder = %q, want %q", slug, got[slug], folder)
+		}
+	}
+}
+
+func TestSharedGrafanaSidecarCreatesFoldersFromAnnotation(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
+	rec := httptest.NewRecorder()
+	h.PreviewSharedGrafanaStack(rec, grafanaAuthed(http.MethodPost, "/api/v1/settings/monitoring/grafana/preview/", sharedGrafanaBody))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var wrap struct {
+		Data struct {
+			Values map[string]any `json:"values"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
+		t.Fatalf("decode: %v body=%s", err, rec.Body.String())
+	}
+	sidecar, _ := wrap.Data.Values["sidecar"].(map[string]any)
+	dash, _ := sidecar["dashboards"].(map[string]any)
+	if dash["folderAnnotation"] != grafanaDashboardFolderAnnotationKey {
+		t.Fatalf("sidecar.dashboards.folderAnnotation = %v, want %s", dash["folderAnnotation"], grafanaDashboardFolderAnnotationKey)
+	}
+	provider, _ := dash["provider"].(map[string]any)
+	if provider["foldersFromFilesStructure"] != true {
+		t.Fatalf("sidecar.dashboards.provider.foldersFromFilesStructure = %v, want true", provider["foldersFromFilesStructure"])
+	}
+
+	folders := map[string]int{}
+	extra, _ := wrap.Data.Values["extraObjects"].([]any)
+	for _, obj := range extra {
+		m, _ := obj.(map[string]any)
+		if m["kind"] != "ConfigMap" {
+			continue
+		}
+		meta, _ := m["metadata"].(map[string]any)
+		labels, _ := meta["labels"].(map[string]any)
+		if labels["grafana_dashboard"] != "1" {
+			continue
+		}
+		anns, _ := meta["annotations"].(map[string]any)
+		folder, _ := anns[grafanaDashboardFolderAnnotationKey].(string)
+		if folder == "" {
+			t.Errorf("dashboard ConfigMap %v missing grafana_folder", meta["name"])
+			continue
+		}
+		folders[folder]++
+	}
+	if folders[grafanaFolderFleet] == 0 || folders[grafanaFolderManagementPlane] == 0 {
+		t.Fatalf("preview extraObjects folders = %v, want both %q and %q", folders, grafanaFolderFleet, grafanaFolderManagementPlane)
+	}
+	if len(folders) != 2 {
+		t.Fatalf("preview extraObjects folders = %v, want only Fleet and Management plane", folders)
+	}
+}
+
 func TestSharedGrafanaThanosDatasourceOmittedWhenMissing(t *testing.T) {
 	h, _ := newStackLifecycleHandler(t)
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
