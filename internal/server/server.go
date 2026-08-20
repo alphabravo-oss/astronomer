@@ -599,9 +599,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	backupHandler.SetEventBus(bus)
 	loggingHandler := handler.NewLoggingHandler(queries)
 	// Logging controller — DB-backed operations table + background reconciler
-	// applies rendered ConfigMaps into the managed cluster's astronomer-logging
-	// namespace via the tunnel K8s requester. Comparison.md §7/§10/§11.
+	// applies ConfigMaps and ingest-token Secrets into astronomer-logging, and
+	// patches the baseline fluent-bit Helm extraVolumeMounts. Comparison.md §7/§10/§11.
 	loggingHandler.SetK8sRequester(requester)
+	loggingHandler.SetHelmRequester(helmRequester)
 	loggingHandler.SetLogger(logger)
 	loggingHandler.SetEventBus(bus)
 	loggingHandler.SetEncryptor(encryptor)

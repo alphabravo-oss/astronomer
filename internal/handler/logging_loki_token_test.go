@@ -103,6 +103,9 @@ func TestRotateOutputTokenMintsHashAndFernet(t *testing.T) {
 	if recReconcile.calls != 1 {
 		t.Fatalf("reconcile calls = %d, want 1", recReconcile.calls)
 	}
+	if len(q.operations) != 1 {
+		t.Fatalf("rotate enqueued %d member apply ops, want 1", len(q.operations))
+	}
 }
 
 func TestRotateOutputTokenDeniesZeroGrant(t *testing.T) {

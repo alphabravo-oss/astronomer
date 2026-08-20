@@ -42,8 +42,11 @@ type loggingFakeQuerier struct {
 	operations map[uuid.UUID]sqlc.LoggingOperation
 	events     []sqlc.LoggingOperationEvent
 	// orderedOps tracks insertion order so ListPending behaves deterministically.
-	orderedOps []uuid.UUID
-	lokiTokens map[uuid.UUID]sqlc.LokiIngestToken
+	orderedOps    []uuid.UUID
+	lokiTokens    map[uuid.UUID]sqlc.LokiIngestToken
+	installed     map[string]sqlc.InstalledChart
+	tools         map[string]sqlc.ClusterTool
+	valuesUpdates []sqlc.UpdateInstalledChartValuesParams
 }
 
 func newLoggingFakeQuerier() *loggingFakeQuerier {
@@ -52,7 +55,52 @@ func newLoggingFakeQuerier() *loggingFakeQuerier {
 		pipelines:  map[uuid.UUID]sqlc.LoggingPipeline{},
 		operations: map[uuid.UUID]sqlc.LoggingOperation{},
 		lokiTokens: map[uuid.UUID]sqlc.LokiIngestToken{},
+		installed:  map[string]sqlc.InstalledChart{},
+		tools:      map[string]sqlc.ClusterTool{},
 	}
+}
+
+var _ fluentBitReleaseStore = (*loggingFakeQuerier)(nil)
+
+func loggingInstalledKey(clusterID uuid.UUID, slug string) string {
+	return clusterID.String() + "|" + slug
+}
+
+func (q *loggingFakeQuerier) GetInstalledChartByClusterAndTool(_ context.Context, arg sqlc.GetInstalledChartByClusterAndToolParams) (sqlc.InstalledChart, error) {
+	if q == nil || q.installed == nil {
+		return sqlc.InstalledChart{}, pgx.ErrNoRows
+	}
+	item, ok := q.installed[loggingInstalledKey(arg.ClusterID, arg.ToolSlug)]
+	if !ok {
+		return sqlc.InstalledChart{}, pgx.ErrNoRows
+	}
+	return item, nil
+}
+
+func (q *loggingFakeQuerier) GetToolBySlug(_ context.Context, slug string) (sqlc.ClusterTool, error) {
+	if q == nil || q.tools == nil {
+		return sqlc.ClusterTool{}, pgx.ErrNoRows
+	}
+	tool, ok := q.tools[slug]
+	if !ok {
+		return sqlc.ClusterTool{}, pgx.ErrNoRows
+	}
+	return tool, nil
+}
+
+func (q *loggingFakeQuerier) UpdateInstalledChartValues(_ context.Context, arg sqlc.UpdateInstalledChartValuesParams) (sqlc.InstalledChart, error) {
+	q.valuesUpdates = append(q.valuesUpdates, arg)
+	for key, item := range q.installed {
+		if item.ID != arg.ID {
+			continue
+		}
+		item.ValuesOverride = arg.ValuesOverride
+		item.Status = arg.Status
+		item.Revision = arg.Revision
+		q.installed[key] = item
+		return item, nil
+	}
+	return sqlc.InstalledChart{}, pgx.ErrNoRows
 }
 
 // --- LoggingQuerier outputs ---

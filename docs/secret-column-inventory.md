@@ -35,9 +35,9 @@ unclassified column fails CI.
 | `charlie_delegations.authorization_hash` | SHA-256 lookup hash | Hash of an opaque, short-lived authorization reference. |
 | `charlie_connections.agent_secret_hmac` | Keyed digest | Reconciles deterministic Kubernetes Secret content without retaining the secret. |
 | `loki_ingest_tokens.token_hash` | Token hash | SHA-256 of the hosted Loki ingest bearer. Projected into the management-cluster hash Secret; never plaintext. |
-| `loki_ingest_tokens.token_encrypted` | Fernet ciphertext | Re-renders the member Fluent Bit ConfigMap `bearer_token`. List APIs never return it. |
+| `loki_ingest_tokens.token_encrypted` | Fernet ciphertext | Re-renders the member Kubernetes Secret `astronomer-loki-ingest-token`. Fluent Bit OUTPUT uses `bearer_token_file`. List APIs never return it. |
 
-`logging_outputs.configuration` is not a secret column. System (`is_system`) Loki rows store only `host`, `port`, `tls`, `tenant_id`, and `labels`. The member Fluent Bit ConfigMap `bearer_token` is an accepted secret-policy exception (same class as Splunk HEC in ConfigMaps): plaintext is loaded at apply time from `loki_ingest_tokens.token_encrypted` and is never stored in JSONB or returned by list/get.
+`logging_outputs.configuration` is not a secret column. System (`is_system`) Loki rows store only `host`, `port`, `tls`, `tenant_id`, and `labels`. The member copy lives in Secret `astronomer-loki-ingest-token` (mounted via fluent-bit Helm `extraVolumes` / `extraVolumeMounts`); the ConfigMap references `bearer_token_file` only. Plaintext is loaded at apply time from `loki_ingest_tokens.token_encrypted` and is never stored in JSONB or returned by list/get.
 
 ## References and non-secret metadata
 

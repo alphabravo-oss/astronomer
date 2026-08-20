@@ -83,13 +83,14 @@ type LoggingQuerier interface {
 // As of the logging-controller refactor (comparison.md §7/§10/§11) the
 // handler no longer applies to the cluster inline: it writes intent rows to
 // the `logging_operations` table and a background reconciler picks them up.
-// The reconciler renders a tiny ConfigMap for each output/pipeline and
-// applies it via the tunnel K8sRequester into the LoggingNamespace on the
-// target managed cluster, where Fluent Bit (assumed already installed)
-// watches.
+// The reconciler renders ConfigMaps for each output/pipeline, applies a
+// member Secret for hosted Loki ingest tokens, and patches the baseline
+// fluent-bit Helm extraVolumes/extraVolumeMounts so OUTPUT uses
+// bearer_token_file. Fluent Bit itself is assumed already installed.
 type LoggingHandler struct {
 	queries   LoggingQuerier
 	requester K8sRequester
+	helm      HelmRequester
 	log       *slog.Logger
 	authz     authorizationSupport
 	bus       *events.Bus
@@ -139,6 +140,15 @@ func (h *LoggingHandler) SetK8sRequester(r K8sRequester) {
 		return
 	}
 	h.requester = r
+}
+
+// SetHelmRequester wires the tunnel Helm client used to patch the baseline
+// fluent-bit release (extraVolumes / extraVolumeMounts for ingest tokens).
+func (h *LoggingHandler) SetHelmRequester(r HelmRequester) {
+	if h == nil {
+		return
+	}
+	h.helm = r
 }
 
 func (h *LoggingHandler) SetEncryptor(e *auth.Encryptor) {
@@ -959,6 +969,9 @@ const fluentBitDefaultParsers = `[PARSER]
 // block renderers the controller applies to the cluster. Previously this view
 // returned a hardcoded stub that ignored the actual pipelines/outputs.
 func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterID uuid.UUID, includeSecrets bool) string {
+	// includeSecrets is retained for callers; system ingest tokens are never
+	// rendered into this ConfigMap (bearer_token_file + member Secret).
+	_ = includeSecrets
 	var b strings.Builder
 	b.WriteString("# rendered by astronomer-go logging controller\n")
 	b.WriteString("[SERVICE]\n")
@@ -1010,11 +1023,6 @@ func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterI
 				ClusterID: clusterID.String(), TargetID: o.ID.String(), TargetType: "output",
 				Name: o.Name, OutputType: o.OutputType, Enabled: o.Enabled, Configuration: o.Configuration,
 				IsSystem: o.IsSystem,
-			}
-			if includeSecrets {
-				if err := h.attachLokiBearer(ctx, &env); err != nil && h.log != nil {
-					h.log.Warn("logging: failed to load system loki bearer", "cluster_id", clusterID.String(), "error", err)
-				}
 			}
 			b.WriteString(renderOutputBlock(env))
 		}
@@ -1364,8 +1372,9 @@ func (h *LoggingHandler) claimPendingLoggingOperations(ctx context.Context) []cl
 }
 
 // executeOperation renders the ConfigMap and applies (or deletes) it via the
-// tunnel K8sRequester. Fluent Bit on the managed cluster is assumed to be
-// running and watching the LoggingNamespace; this code does NOT install it.
+// tunnel K8sRequester. System Loki ingest tokens are written to a member
+// Secret and mounted into the baseline fluent-bit release; the ConfigMap
+// references bearer_token_file. This code does NOT install Fluent Bit.
 func (h *LoggingHandler) executeOperation(ctx context.Context, op sqlc.LoggingOperation) error {
 	var env loggingOperationEnvelope
 	if err := json.Unmarshal(op.Payload, &env); err != nil {
@@ -1397,6 +1406,9 @@ func (h *LoggingHandler) executeOperation(ctx context.Context, op sqlc.LoggingOp
 		if err := ensureNamespace(ctx, h.requester, env.ClusterID, LoggingNamespace); err != nil {
 			return fmt.Errorf("ensure namespace: %w", err)
 		}
+		if err := h.syncMemberLokiIngestSecret(ctx, env); err != nil {
+			return err
+		}
 		if err := applyConfigMap(ctx, h.requester, env.ClusterID, LoggingNamespace, configMapName, data); err != nil {
 			return err
 		}
@@ -1410,6 +1422,15 @@ func (h *LoggingHandler) executeOperation(ctx context.Context, op sqlc.LoggingOp
 			"namespace":     LoggingNamespace,
 			"configMapName": configMapName,
 		})
+		if err := h.syncMemberLokiIngestSecret(ctx, loggingOperationEnvelope{
+			ClusterID:  env.ClusterID,
+			TargetType: env.TargetType,
+			OutputType: env.OutputType,
+			IsSystem:   env.IsSystem,
+			Enabled:    false,
+		}); err != nil {
+			return err
+		}
 		if err := deleteConfigMap(ctx, h.requester, env.ClusterID, LoggingNamespace, configMapName); err != nil {
 			return err
 		}
@@ -1526,7 +1547,9 @@ func renderOutputBlock(env loggingOperationEnvelope) string {
 		if tlsVerify != "" {
 			writeKV(&b, "tls.verify", tlsVerify)
 		}
-		if env.BearerToken != "" {
+		if env.IsSystem {
+			writeKV(&b, "bearer_token_file", fluentBitIngestTokenFile)
+		} else if env.BearerToken != "" {
 			writeKV(&b, "bearer_token", env.BearerToken)
 		}
 		labels := configString(cfg, "labels", "")
@@ -1862,7 +1885,15 @@ func loggingConfigMapName(targetType, targetID string) string {
 }
 
 func deleteConfigMap(ctx context.Context, requester K8sRequester, clusterID, namespace, name string) error {
-	path := fmt.Sprintf("/api/v1/namespaces/%s/configmaps/%s", namespace, name)
+	return deleteCoreV1Resource(ctx, requester, clusterID, namespace, "configmaps", name)
+}
+
+func deleteSecret(ctx context.Context, requester K8sRequester, clusterID, namespace, name string) error {
+	return deleteCoreV1Resource(ctx, requester, clusterID, namespace, "secrets", name)
+}
+
+func deleteCoreV1Resource(ctx context.Context, requester K8sRequester, clusterID, namespace, plural, name string) error {
+	path := fmt.Sprintf("/api/v1/namespaces/%s/%s/%s", namespace, plural, name)
 	resp, err := requester.Do(ctx, clusterID, http.MethodDelete, path, nil, requestHeaders(""))
 	if err != nil {
 		return err

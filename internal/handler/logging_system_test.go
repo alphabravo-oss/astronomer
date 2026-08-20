@@ -18,6 +18,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func TestSystemLoggingOutputUniquePerCluster(t *testing.T) {
@@ -339,12 +340,15 @@ func TestRenderOutputBlockSystemLokiBearerAndTLS(t *testing.T) {
 		"Port 443",
 		"tls on",
 		"tls.verify on",
-		"bearer_token plaintext-bearer",
+		"bearer_token_file " + fluentBitIngestTokenFile,
 		"tenant_id " + clusterID,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "bearer_token plaintext-bearer") {
+		t.Fatal("system renderer wrote plaintext bearer_token")
 	}
 	if strings.Contains(out, "operator-supplied") {
 		t.Fatal("system renderer used operator tenant_id")
@@ -413,8 +417,14 @@ func TestApplySystemLokiInjectsBearerFromFernet(t *testing.T) {
 	h.SetEncryptor(enc)
 	requester := &loggingFakeRequester{}
 	h.SetK8sRequester(requester)
+	helm := &loggingHelmStub{}
+	h.SetHelmRequester(helm)
 
 	clusterID := uuid.New()
+	seedFluentBitRelease(q, clusterID, `existingConfigMap: astronomer-fluent-bit-config
+hotReload:
+  enabled: true
+`)
 	sealed, err := enc.Encrypt("rotate-me-token")
 	if err != nil {
 		t.Fatal(err)
@@ -431,18 +441,43 @@ func TestApplySystemLokiInjectsBearerFromFernet(t *testing.T) {
 	}
 	h.processPendingOperations(context.Background())
 
-	foundBearer := false
+	foundSecret := false
 	for _, c := range requester.calls {
 		if !strings.Contains(string(c.body), "rotate-me-token") {
 			continue
 		}
-		foundBearer = true
-		if strings.Contains(string(c.body), "Secret") {
-			t.Fatal("apply wrote a Kubernetes Secret")
+		if !strings.Contains(string(c.body), `"kind":"Secret"`) && !strings.Contains(string(c.body), `"kind": "Secret"`) {
+			t.Fatalf("plaintext token written outside Secret: %s", c.body)
+		}
+		foundSecret = true
+		if !strings.Contains(c.path, "/secrets") {
+			t.Fatalf("secret apply path = %s", c.path)
 		}
 	}
-	if !foundBearer {
-		t.Fatal("member ConfigMap missing apply-time bearer_token")
+	if !foundSecret {
+		t.Fatal("member cluster missing ingest token Secret")
+	}
+	for _, c := range requester.calls {
+		if strings.Contains(c.path, "configmaps") && strings.Contains(string(c.body), "rotate-me-token") {
+			t.Fatal("member ConfigMap contained plaintext bearer")
+		}
+		if strings.Contains(c.path, "configmaps") && strings.Contains(string(c.body), "bearer_token ") && !strings.Contains(string(c.body), "bearer_token_file") {
+			t.Fatal("member ConfigMap still used bearer_token")
+		}
+	}
+	if len(helm.payloads) != 1 {
+		t.Fatalf("helm upgrades = %d, want 1", len(helm.payloads))
+	}
+	if helm.msgTypes[0] != protocol.MsgHelmUpgrade {
+		t.Fatalf("helm msg = %s, want upgrade", helm.msgTypes[0])
+	}
+	vals := helm.payloads[0].Values
+	rawVals, _ := json.Marshal(vals)
+	if strings.Contains(string(rawVals), "rotate-me-token") {
+		t.Fatalf("helm values leaked token: %s", rawVals)
+	}
+	if !fluentBitValuesHaveIngestMount(vals) {
+		t.Fatalf("helm values missing extraVolumes/extraVolumeMounts: %s", rawVals)
 	}
 	if bytes.Contains(q.outputs[out.ID].Configuration, []byte("rotate-me-token")) {
 		t.Fatal("bearer stored in configuration JSONB")
@@ -452,4 +487,83 @@ func TestApplySystemLokiInjectsBearerFromFernet(t *testing.T) {
 			t.Fatal("bearer stored in logging_operations payload")
 		}
 	}
+
+	if _, err := h.enqueueOutputApply(context.Background(), out, pgtype.UUID{}); err != nil {
+		t.Fatal(err)
+	}
+	h.processPendingOperations(context.Background())
+	if len(helm.payloads) != 1 {
+		t.Fatalf("second apply re-upgraded fluent-bit: %d", len(helm.payloads))
+	}
+}
+
+func TestEnsureFluentBitIngestMountValuesIdempotent(t *testing.T) {
+	values := map[string]any{
+		"existingConfigMap": FluentBitConfigMapName,
+		"hotReload":         map[string]any{"enabled": true},
+		"daemonSetVolumes":  []any{map[string]any{"name": "varlog"}},
+	}
+	if !ensureFluentBitIngestMountValues(values) {
+		t.Fatal("first merge should change values")
+	}
+	if !fluentBitValuesHaveIngestMount(values) {
+		t.Fatalf("missing ingest mounts: %v", values)
+	}
+	if _, ok := values["daemonSetVolumes"]; !ok {
+		t.Fatal("distribution daemonSetVolumes were dropped")
+	}
+	if ensureFluentBitIngestMountValues(values) {
+		t.Fatal("second merge should be a no-op")
+	}
+}
+
+func seedFluentBitRelease(q *loggingFakeQuerier, clusterID uuid.UUID, values string) {
+	q.installed[loggingInstalledKey(clusterID, fluentBitToolSlug)] = sqlc.InstalledChart{
+		ID:             uuid.New(),
+		ClusterID:      clusterID,
+		ReleaseName:    fluentBitToolSlug,
+		Namespace:      LoggingNamespace,
+		ValuesOverride: values,
+		Status:         "installed",
+		Revision:       1,
+		ToolSlug:       pgtype.Text{String: fluentBitToolSlug, Valid: true},
+	}
+	q.tools[fluentBitToolSlug] = sqlc.ClusterTool{
+		Slug:              fluentBitToolSlug,
+		Charts:            json.RawMessage(`[{"order":0,"repo_url":"https://fluent.github.io/helm-charts","namespace":"astronomer-logging","chart_name":"fluent-bit"}]`),
+		DefaultNamespace:  LoggingNamespace,
+		VersionConstraint: "",
+	}
+}
+
+type loggingHelmStub struct {
+	payloads []protocol.HelmRequestPayload
+	msgTypes []protocol.MessageType
+}
+
+func (h *loggingHelmStub) Do(_ context.Context, _ string, msgType protocol.MessageType, payload protocol.HelmRequestPayload) (*protocol.HelmResultPayload, error) {
+	h.payloads = append(h.payloads, payload)
+	h.msgTypes = append(h.msgTypes, msgType)
+	return &protocol.HelmResultPayload{Success: true, Status: "deployed", Revision: 2, ReleaseName: payload.ReleaseName, Namespace: payload.Namespace}, nil
+}
+
+func (h *loggingHelmStub) Status(context.Context, string, string, string) (*protocol.HelmResultPayload, error) {
+	return &protocol.HelmResultPayload{Success: true, Status: "deployed"}, nil
+}
+
+func (h *loggingHelmStub) History(context.Context, string, string, string) (*protocol.HelmResultPayload, error) {
+	return &protocol.HelmResultPayload{Success: true}, nil
+}
+
+func fluentBitValuesHaveIngestMount(values map[string]any) bool {
+	if values == nil {
+		return false
+	}
+	raw, _ := json.Marshal(values)
+	body := string(raw)
+	return strings.Contains(body, fluentBitIngestVolumeName) &&
+		strings.Contains(body, fluentBitIngestSecretName) &&
+		strings.Contains(body, `"extraVolumes"`) &&
+		strings.Contains(body, `"extraVolumeMounts"`) &&
+		strings.Contains(body, fluentBitIngestMountPath)
 }

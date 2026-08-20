@@ -80,6 +80,9 @@ func (h *LoggingHandler) RotateOutputToken(w http.ResponseWriter, r *http.Reques
 			h.log.Warn("loki ingest reconcile after rotate failed", "error", recErr, "cluster_id", clusterID.String())
 		}
 	}
+	if _, opErr := h.enqueueOutputApply(withOperationIdempotency(r, "logging"), output, currentUserUUID(r)); opErr != nil && h.log != nil {
+		h.log.Warn("logging: failed to enqueue ingest token apply", "id", output.ID.String(), "error", opErr)
+	}
 	recordAudit(r, h.queries, "logging.loki_token.rotate", "loki_ingest_token", row.ID.String(), output.Name, map[string]any{
 		"cluster_id": clusterID.String(),
 		"output_id":  output.ID.String(),
