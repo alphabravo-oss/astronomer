@@ -31,11 +31,12 @@ type Config struct {
 }
 
 type redeemResult struct {
-	Email   string `json:"email"`
-	Role    string `json:"role"`
-	TTL     int    `json:"ttl"`
-	Explore bool   `json:"explore"`
-	Admin   bool   `json:"admin"`
+	Email      string   `json:"email"`
+	Role       string   `json:"role"`
+	TTL        int      `json:"ttl"`
+	Explore    bool     `json:"explore"`
+	Admin      bool     `json:"admin"`
+	ClusterIDs []string `json:"clusterIds,omitempty"`
 }
 
 func ConfigFromEnv() (Config, error) {
@@ -136,6 +137,14 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(status), status)
 		return
 	}
+	if len(auth.ClusterIDs) > 0 {
+		rewritten, err := rewriteTenantQuery(r, auth.ClusterIDs)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+		r = rewritten
+	}
 	r = r.WithContext(context.WithValue(r.Context(), grafanaAuthContextKey{}, auth))
 	p.reverse.ServeHTTP(w, r)
 }
@@ -175,11 +184,12 @@ func (p *proxy) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	exp := p.cfg.Now().Add(ttl)
 	signed, err := signGrafanaAuth(p.cfg.HMACKey, grafanaAuth{
-		Email:   result.Email,
-		Role:    result.Role,
-		Explore: result.Explore || result.Role == "Editor" || result.Role == "Admin",
-		Admin:   result.Admin || result.Role == "Admin",
-		Exp:     exp.Unix(),
+		Email:      result.Email,
+		Role:       result.Role,
+		Explore:    result.Explore || result.Role == "Editor" || result.Role == "Admin",
+		Admin:      result.Admin || result.Role == "Admin",
+		ClusterIDs: result.ClusterIDs,
+		Exp:        exp.Unix(),
 	})
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

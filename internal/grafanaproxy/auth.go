@@ -15,11 +15,12 @@ const grafanaAuthCookie = "grafana_auth"
 var errGrafanaAuthInvalid = errors.New("grafana_auth is invalid")
 
 type grafanaAuth struct {
-	Email   string `json:"email"`
-	Role    string `json:"role"`
-	Explore bool   `json:"explore"`
-	Admin   bool   `json:"admin"`
-	Exp     int64  `json:"exp"`
+	Email      string   `json:"email"`
+	Role       string   `json:"role"`
+	Explore    bool     `json:"explore"`
+	Admin      bool     `json:"admin"`
+	ClusterIDs []string `json:"clusterIds,omitempty"`
+	Exp        int64    `json:"exp"`
 }
 
 func signGrafanaAuth(key []byte, auth grafanaAuth) (string, error) {

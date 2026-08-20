@@ -96,12 +96,12 @@ func (h *MonitoringHandler) MintGrafanaTicket(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	email, role, explore, admin := h.grafanaIdentity(r, user)
+	email, role, explore, admin, clusterIDs := h.grafanaIdentity(r, user)
 	if email == "" {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "authenticated user has no email")
 		return
 	}
-	token, _, err := h.grafanaTickets.Issue(userID, email, role, explore, admin, h.grafanaCookieTTL(r.Context()))
+	token, _, err := h.grafanaTickets.Issue(userID, email, role, explore, admin, h.grafanaCookieTTL(r.Context()), clusterIDs)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TicketError, "Failed to issue Grafana ticket")
 		return
@@ -135,15 +135,16 @@ func (h *MonitoringHandler) RedeemGrafanaTicket(w http.ResponseWriter, r *http.R
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
-		"email":   ticket.Email,
-		"role":    ticket.Role,
-		"ttl":     ticket.CookieTTL,
-		"explore": ticket.Explore,
-		"admin":   ticket.Admin,
+		"email":      ticket.Email,
+		"role":       ticket.Role,
+		"ttl":        ticket.CookieTTL,
+		"explore":    ticket.Explore,
+		"admin":      ticket.Admin,
+		"clusterIds": ticket.ClusterIDs,
 	})
 }
 
-func (h *MonitoringHandler) grafanaIdentity(r *http.Request, session *middleware.AuthenticatedUser) (email, role string, explore, admin bool) {
+func (h *MonitoringHandler) grafanaIdentity(r *http.Request, session *middleware.AuthenticatedUser) (email, role string, explore, admin bool, clusterIDs []string) {
 	email = strings.TrimSpace(session.Email)
 	isSuperuser := false
 	if h.users != nil {
@@ -155,16 +156,31 @@ func (h *MonitoringHandler) grafanaIdentity(r *http.Request, session *middleware
 		}
 	}
 	if isSuperuser {
-		return email, "Admin", true, true
+		return email, "Admin", true, true, nil
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		return email, "Viewer", false, false
+		return email, "Viewer", false, false, nil
 	}
 	if !restricted || h.authz.allowsGlobal(bindings, rbac.ResourceMonitoring, rbac.VerbUpdate) {
-		return email, "Editor", true, false
+		return email, "Editor", true, false, nil
 	}
-	return email, "Viewer", false, false
+	all, ids, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceMonitoring, rbac.VerbRead, rbac.NarrowedClustersWiden)
+	if err != nil || all {
+		return email, "Viewer", false, false, nil
+	}
+	clusterIDs = uuidStrings(ids)
+	// Cluster-scoped Explore is reopened only when rewrite has cluster IDs to inject.
+	explore = len(clusterIDs) > 0
+	return email, "Viewer", explore, false, clusterIDs
+}
+
+func uuidStrings(ids []uuid.UUID) []string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = id.String()
+	}
+	return out
 }
 
 func (h *MonitoringHandler) resolvedGrafanaHost(r *http.Request) string {

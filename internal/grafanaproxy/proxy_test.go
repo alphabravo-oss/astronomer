@@ -250,6 +250,32 @@ func TestCallbackRedeemsAndSetsHostOnlyCookie(t *testing.T) {
 	}
 }
 
+func TestCallbackPersistsClusterIDs(t *testing.T) {
+	ids := []string{testClusterA}
+	p, key := testProxy(t, nil, func(string) (redeemResult, error) {
+		return redeemResult{Email: "scoped@example.com", Role: "Viewer", TTL: 60, Explore: true, ClusterIDs: ids}, nil
+	})
+	req := httptest.NewRequest(http.MethodGet, "/auth/callback?ticket=x", nil)
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(rec, req)
+	var cookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == grafanaAuthCookie {
+			cookie = c
+		}
+	}
+	if cookie == nil {
+		t.Fatal("missing cookie")
+	}
+	auth, err := verifyGrafanaAuth(key, cookie.Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !auth.Explore || len(auth.ClusterIDs) != 1 || auth.ClusterIDs[0] != testClusterA {
+		t.Fatalf("auth = %+v", auth)
+	}
+}
+
 func TestConfigFromEnvRejectsMissing(t *testing.T) {
 	t.Setenv("GRAFANA_UPSTREAM", "")
 	t.Setenv("ASTRONOMER_URL", "")

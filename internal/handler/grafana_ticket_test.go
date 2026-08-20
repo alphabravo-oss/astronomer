@@ -145,6 +145,84 @@ func TestGrafanaTicketMintRequiresMonitoringRead(t *testing.T) {
 	}
 }
 
+func TestGrafanaTicketClusterScopedRedeemIncludesClusterIDsAndExplore(t *testing.T) {
+	clusterID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	h := grafanaTicketHandler(t, []rbac.RoleBinding{{
+		ClusterID: clusterID.String(),
+		RoleRules: []rbac.Rule{{
+			Resource: string(rbac.ResourceMonitoring),
+			Verbs:    []string{string(rbac.VerbRead)},
+		}},
+	}})
+	mint := httptest.NewRecorder()
+	h.MintGrafanaTicket(mint, grafanaTicketAuthed("scoped@example.com"))
+	if mint.Code != http.StatusFound {
+		t.Fatalf("mint status = %d: %s", mint.Code, mint.Body.String())
+	}
+	loc, err := mint.Result().Location()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticket := loc.Query().Get("ticket")
+	rec := httptest.NewRecorder()
+	h.RedeemGrafanaTicket(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"ticket":"`+ticket+`"}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("redeem status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var wrap struct {
+		Data struct {
+			Email      string   `json:"email"`
+			Role       string   `json:"role"`
+			Explore    bool     `json:"explore"`
+			Admin      bool     `json:"admin"`
+			ClusterIDs []string `json:"clusterIds"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
+		t.Fatal(err)
+	}
+	if wrap.Data.Email != "scoped@example.com" || wrap.Data.Role != "Viewer" || wrap.Data.Admin {
+		t.Fatalf("identity = %+v", wrap.Data)
+	}
+	if !wrap.Data.Explore {
+		t.Fatal("cluster-scoped viewer must have Explore reopened after rewrite")
+	}
+	if len(wrap.Data.ClusterIDs) != 1 || wrap.Data.ClusterIDs[0] != clusterID.String() {
+		t.Fatalf("clusterIds = %v", wrap.Data.ClusterIDs)
+	}
+}
+
+func TestGrafanaTicketGlobalReadDoesNotGetClusterRewriteList(t *testing.T) {
+	h := grafanaTicketHandler(t, []rbac.RoleBinding{{
+		RoleRules: []rbac.Rule{{
+			Resource: string(rbac.ResourceMonitoring),
+			Verbs:    []string{string(rbac.VerbRead)},
+		}},
+	}})
+	mint := httptest.NewRecorder()
+	h.MintGrafanaTicket(mint, grafanaTicketAuthed("reader@example.com"))
+	loc, err := mint.Result().Location()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticket := loc.Query().Get("ticket")
+	rec := httptest.NewRecorder()
+	h.RedeemGrafanaTicket(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"ticket":"`+ticket+`"}`)))
+	var wrap struct {
+		Data struct {
+			Role       string   `json:"role"`
+			Explore    bool     `json:"explore"`
+			ClusterIDs []string `json:"clusterIds"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
+		t.Fatal(err)
+	}
+	if wrap.Data.Role != "Viewer" || wrap.Data.Explore || len(wrap.Data.ClusterIDs) != 0 {
+		t.Fatalf("global monitoring:read must stay Explore-locked without rewrite list: %+v", wrap.Data)
+	}
+}
+
 func TestAllowListedGrafanaReturn(t *testing.T) {
 	if _, err := allowListedGrafanaReturn("https://grafana.example.com/", "grafana.example.com", "https"); err != nil {
 		t.Fatal(err)

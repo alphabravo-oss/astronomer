@@ -34,13 +34,14 @@ var (
 // GrafanaTicket is the at-rest payload. The plaintext token is never stored;
 // only SHA-256(token) is a map key (prefixed grafana-ticket: on Redis).
 type GrafanaTicket struct {
-	UserID    uuid.UUID `json:"userID"`
-	Email     string    `json:"email"`
-	Role      string    `json:"role"`
-	Explore   bool      `json:"explore"`
-	Admin     bool      `json:"admin"`
-	CookieTTL int       `json:"ttl"`
-	ExpiresAt time.Time `json:"exp"`
+	UserID     uuid.UUID `json:"userID"`
+	Email      string    `json:"email"`
+	Role       string    `json:"role"`
+	Explore    bool      `json:"explore"`
+	Admin      bool      `json:"admin"`
+	ClusterIDs []string  `json:"clusterIds,omitempty"`
+	CookieTTL  int       `json:"ttl"`
+	ExpiresAt  time.Time `json:"exp"`
 }
 
 // GrafanaTicketStore is a one-use Put/Take store on the Astronomer server.
@@ -85,7 +86,7 @@ func NewRedisGrafanaTicketBackendFromURL(redisURL string) (StreamTicketBackend, 
 	return NewRedisGrafanaTicketBackend(client), nil
 }
 
-func (s *GrafanaTicketStore) Issue(userID uuid.UUID, email, role string, explore, admin bool, cookieTTL time.Duration) (string, GrafanaTicket, error) {
+func (s *GrafanaTicketStore) Issue(userID uuid.UUID, email, role string, explore, admin bool, cookieTTL time.Duration, clusterIDs []string) (string, GrafanaTicket, error) {
 	if s == nil {
 		return "", GrafanaTicket{}, ErrGrafanaTicketInvalid
 	}
@@ -103,13 +104,14 @@ func (s *GrafanaTicketStore) Issue(userID uuid.UUID, email, role string, explore
 	}
 	token := base64.RawURLEncoding.EncodeToString(raw)
 	ticket := GrafanaTicket{
-		UserID:    userID,
-		Email:     email,
-		Role:      role,
-		Explore:   explore,
-		Admin:     admin,
-		CookieTTL: int(cookieTTL / time.Second),
-		ExpiresAt: s.now().Add(s.ttl),
+		UserID:     userID,
+		Email:      email,
+		Role:       role,
+		Explore:    explore,
+		Admin:      admin,
+		ClusterIDs: append([]string(nil), clusterIDs...),
+		CookieTTL:  int(cookieTTL / time.Second),
+		ExpiresAt:  s.now().Add(s.ttl),
 	}
 	encoded, err := json.Marshal(ticket)
 	if err != nil {

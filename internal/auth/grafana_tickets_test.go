@@ -11,7 +11,7 @@ import (
 func TestGrafanaTicketStore_OneUseTake(t *testing.T) {
 	store := NewGrafanaTicketStore(time.Minute)
 	userID := uuid.New()
-	token, ticket, err := store.Issue(userID, "viewer@example.com", "Viewer", false, false, time.Hour)
+	token, ticket, err := store.Issue(userID, "viewer@example.com", "Viewer", false, false, time.Hour, nil)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestGrafanaTicketStore_Expired(t *testing.T) {
 	now := time.Now()
 	store := NewGrafanaTicketStore(time.Minute)
 	store.now = func() time.Time { return now }
-	token, _, err := store.Issue(uuid.New(), "a@example.com", "Viewer", false, false, time.Hour)
+	token, _, err := store.Issue(uuid.New(), "a@example.com", "Viewer", false, false, time.Hour, nil)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestGrafanaTicketStore_SharedBackendCrossInstance(t *testing.T) {
 	backend := newMemTicketBackend()
 	minter := NewGrafanaTicketStoreWithBackend(time.Minute, backend)
 	redeemer := NewGrafanaTicketStoreWithBackend(time.Minute, backend)
-	token, _, err := minter.Issue(uuid.New(), "a@example.com", "Editor", true, false, time.Hour)
+	token, _, err := minter.Issue(uuid.New(), "a@example.com", "Editor", true, false, time.Hour, nil)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -69,6 +69,22 @@ func TestGrafanaTicketStore_DoesNotUseStreamKinds(t *testing.T) {
 	}
 	if strings.Contains(GrafanaTicketRedisPrefix(), "streamticket") {
 		t.Fatal("grafana ticket prefix must not reuse streamticket:")
+	}
+}
+
+func TestGrafanaTicketStore_ClusterIDsRoundTrip(t *testing.T) {
+	store := NewGrafanaTicketStore(time.Minute)
+	ids := []string{"11111111-1111-1111-1111-111111111111"}
+	token, _, err := store.Issue(uuid.New(), "scoped@example.com", "Viewer", true, false, time.Hour, ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Take(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Explore || len(got.ClusterIDs) != 1 || got.ClusterIDs[0] != ids[0] {
+		t.Fatalf("got %+v", got)
 	}
 }
 
