@@ -216,6 +216,11 @@ func TestReleaseQualifiesExactArtifactsBeforePromotion(t *testing.T) {
 		"resolve-release-images.py",
 		"--set-file release.manifest=release-unit/release-manifest.json",
 		"./scripts/check-build-capacity.sh --path .",
+		"Pack OSS air-gap kit",
+		"airgap-kit.py pack",
+		"astronomer-images.txt",
+		"astronomer-airgap-${TAG}.tar.gz",
+		"astronomer-save-images.sh",
 	} {
 		if !strings.Contains(workflow, required) {
 			t.Errorf("release workflow is missing release-unit contract %q", required)
@@ -264,6 +269,10 @@ func TestInterruptedReleaseResumeRevalidatesBeforePromotion(t *testing.T) {
 		`delivery-artifacts-${TAG}`,
 		`gh release create "$TAG"`,
 		`--repo "$REPOSITORY"`,
+		`Pack OSS air-gap kit`,
+		`airgap-kit.py pack`,
+		`astronomer-images.txt`,
+		`astronomer-airgap-${TAG}.tar.gz`,
 	} {
 		if !strings.Contains(resume, required) {
 			t.Errorf("interrupted release resume workflow is missing guard %q", required)

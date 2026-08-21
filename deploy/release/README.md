@@ -58,7 +58,14 @@ loader. It performs no registry write, tag, deployment, or release creation.
 
 ## Air-gap projection
 
-`scripts/mirror-release.py` consumes the verified published manifest. `plan`
+The promote job packs `astronomer-airgap-vX.Y.Z.tar.gz`: signed manifest, Helm
+chart, Flux and built-in bundle archives, `astronomer-images.txt` (complete
+digest-pinned container list), and save/load helpers. The kit does **not**
+contain image blobs. Operators run `astronomer-save-images.sh` on a connected
+host (default `linux/amd64`) and `astronomer-load-images.sh` against the
+private registry.
+
+`scripts/mirror-release.py` remains the registry-to-registry path. `plan`
 emits a deterministic mapping and exact Helm JSON; `apply` copies all platforms
 and recursive OCI referrers, verifies every destination digest, and signs the
 mapping only after success. The management plane accepts that mapping only when
