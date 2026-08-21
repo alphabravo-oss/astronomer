@@ -106,7 +106,6 @@ type Config struct {
 	DeliverySourceMaxArtifactBytes              int64  `mapstructure:"delivery_source_max_artifact_bytes"`
 	DeliverySourceMaxHelmChartBytes             int64  `mapstructure:"delivery_source_max_helm_chart_bytes"`
 	DeliverySourceTrustDirectory                string `mapstructure:"delivery_source_trust_directory"`
-	DeliveryCosignPath                          string `mapstructure:"delivery_cosign_path"`
 
 	LogLevel string `mapstructure:"log_level"`
 
@@ -283,7 +282,6 @@ func Load() (*Config, error) {
 		"delivery_source_max_artifact_bytes",
 		"delivery_source_max_helm_chart_bytes",
 		"delivery_source_trust_directory",
-		"delivery_cosign_path",
 		"database_url",
 		"redis_url",
 		"event_relay_queue_capacity",
@@ -354,7 +352,6 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "delivery_source_max_artifact_bytes", Value: int64(512 << 20)},
 		envconfig.Default{Key: "delivery_source_max_helm_chart_bytes", Value: int64(100 << 20)},
 		envconfig.Default{Key: "delivery_source_trust_directory", Value: "/etc/astronomer/delivery-trust"},
-		envconfig.Default{Key: "delivery_cosign_path", Value: "/usr/local/bin/cosign"},
 		envconfig.Default{Key: "log_level", Value: "info"},
 		envconfig.Default{Key: "audit_log_retention_months", Value: 13},
 		envconfig.Default{Key: "cluster_tombstone_retention_days", Value: 90},

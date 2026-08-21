@@ -115,11 +115,12 @@ func (s *Service) Resolve(ctx context.Context, request Request) (result Result, 
 	defer clearBytes(result.verificationPayload)
 	defer clearBytes(result.verificationSignature)
 	defer clearBytes(result.verificationCertificate)
+	defer clearBytes(result.verificationBundle)
 	defer clearSignatureEvidence(result.verificationEvidence)
 	verification, err := s.verify(resolutionCtx, VerificationInput{
 		Source: request.Source, Revision: result.Revision, Artifact: result.verificationPayload,
 		Signature: result.verificationSignature, Certificate: result.verificationCertificate,
-		Evidence: result.verificationEvidence,
+		Bundle: result.verificationBundle, Evidence: result.verificationEvidence,
 	})
 	if err != nil {
 		return Result{}, err

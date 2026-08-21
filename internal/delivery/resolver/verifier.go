@@ -3,56 +3,62 @@ package resolver
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	protobundle "github.com/sigstore/protobuf-specs/gen/pb-go/bundle/v1"
+	protocommon "github.com/sigstore/protobuf-specs/gen/pb-go/common/v1"
+	protorekor "github.com/sigstore/protobuf-specs/gen/pb-go/rekor/v1"
+	sigstorebundle "github.com/sigstore/sigstore-go/pkg/bundle"
+	"github.com/sigstore/sigstore-go/pkg/root"
+	"github.com/sigstore/sigstore-go/pkg/verify"
+	"github.com/sigstore/sigstore/pkg/cryptoutils"
+	"github.com/sigstore/sigstore/pkg/signature"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
 
 const (
-	defaultCosignPath = "/usr/local/bin/cosign"
-	defaultTrustDir   = "/etc/astronomer/delivery-trust"
-	maxVerifierOutput = 1 << 20
-	maxTrustKeyBytes  = 1 << 20
+	defaultTrustDir        = "/etc/astronomer/delivery-trust"
+	trustedRootRef         = "trusted_root"
+	maxTrustKeyBytes       = 1 << 20
+	cosignV2BundleMediaTyp = "application/vnd.dev.sigstore.bundle+json;version=0.1"
 )
 
 // ExecVerifier is the production cryptographic verifier. OCI and Helm
-// signatures are checked with the pinned cosign binary; Git commit signatures
-// are checked in-process against an operator-mounted armored public keyring.
-// It never places credentials, keys, source URLs, or command output in errors.
+// signatures are checked in-process with sigstore-go against operator-mounted
+// trust material. Git commit signatures are checked in-process against an
+// armored public keyring. It never places credentials, keys, source URLs, or
+// library output in errors, and it never contacts TUF, Rekor, or Fulcio.
 type ExecVerifier struct {
-	cosignPath string
-	trustDir   string
+	trustDir string
 }
 
-func NewExecVerifier(cosignPath, trustDirectory string) (*ExecVerifier, error) {
-	if strings.TrimSpace(cosignPath) == "" {
-		cosignPath = defaultCosignPath
-	}
+func NewExecVerifier(trustDirectory string) (*ExecVerifier, error) {
 	if strings.TrimSpace(trustDirectory) == "" {
 		trustDirectory = defaultTrustDir
 	}
-	if !filepath.IsAbs(cosignPath) || !filepath.IsAbs(trustDirectory) {
+	if !filepath.IsAbs(trustDirectory) {
 		return nil, errors.New("delivery verifier paths must be absolute")
 	}
-	info, err := os.Stat(cosignPath)
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
-		return nil, errors.New("pinned cosign verifier binary is unavailable")
-	}
-	return &ExecVerifier{cosignPath: cosignPath, trustDir: filepath.Clean(trustDirectory)}, nil
+	return &ExecVerifier{trustDir: filepath.Clean(trustDirectory)}, nil
 }
 
 func (v *ExecVerifier) Verify(ctx context.Context, input VerificationInput) (Verification, error) {
 	if v == nil {
 		return Verification{}, errors.New("source verifier is unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return Verification{}, errors.New("signature verification failed")
 	}
 	switch input.Source.Type {
 	case model.SourceGit:
@@ -109,7 +115,7 @@ func (v *ExecVerifier) verifyGit(input VerificationInput) (Verification, error) 
 }
 
 func (v *ExecVerifier) verifyOCI(ctx context.Context, input VerificationInput) (Verification, error) {
-	identity, keyPath, err := v.cosignPolicyArgs(input.Source.Trust)
+	identity, err := v.cosignPolicyIdentity(input.Source.Trust)
 	if err != nil {
 		return Verification{}, err
 	}
@@ -122,7 +128,7 @@ func (v *ExecVerifier) verifyOCI(ctx context.Context, input VerificationInput) (
 		candidate.Signature = evidence.Signature
 		candidate.Certificate = evidence.Certificate
 		candidate.Bundle = evidence.Bundle
-		if err := v.verifyBlobWithPolicy(ctx, candidate, keyPath); err == nil {
+		if err := v.verifyBlobWithPolicy(ctx, candidate); err == nil {
 			return Verification{Status: "verified", Identity: identity, Provider: "cosign"}, nil
 		}
 	}
@@ -133,77 +139,100 @@ func (v *ExecVerifier) verifyBlob(ctx context.Context, input VerificationInput) 
 	if len(input.Artifact) == 0 || len(input.Signature) == 0 {
 		return Verification{}, errors.New("detached artifact signature is unavailable")
 	}
-	identity, keyPath, err := v.cosignPolicyArgs(input.Source.Trust)
+	identity, err := v.cosignPolicyIdentity(input.Source.Trust)
 	if err != nil {
 		return Verification{}, err
 	}
-	if err := v.verifyBlobWithPolicy(ctx, input, keyPath); err != nil {
+	if err := v.verifyBlobWithPolicy(ctx, input); err != nil {
 		return Verification{}, err
 	}
 	return Verification{Status: "verified", Identity: identity, Provider: "cosign"}, nil
 }
 
-func (v *ExecVerifier) verifyBlobWithPolicy(ctx context.Context, input VerificationInput, keyPath string) error {
-	temporary, err := os.MkdirTemp("", "astronomer-cosign-verify-*")
-	if err != nil {
-		return errors.New("signature verification workspace is unavailable")
+func (v *ExecVerifier) verifyBlobWithPolicy(ctx context.Context, input VerificationInput) error {
+	if err := ctx.Err(); err != nil {
+		return errors.New("signature verification failed")
 	}
-	defer func() { _ = os.RemoveAll(temporary) }()
-	if err := os.Chmod(temporary, 0o700); err != nil {
-		return errors.New("signature verification workspace is unavailable")
+	switch input.Source.Trust.Provider {
+	case model.SignatureCosignKey:
+		return v.verifyCosignKey(input)
+	case model.SignatureCosignKeyless:
+		return v.verifyCosignKeyless(input)
+	default:
+		return errors.New("cosign signature provider is required")
 	}
-	blobPath := filepath.Join(temporary, "artifact")
-	signaturePath := filepath.Join(temporary, "artifact.sig")
-	if err := writePrivateFile(blobPath, input.Artifact); err != nil {
-		return err
-	}
-	if err := writePrivateFile(signaturePath, input.Signature); err != nil {
-		return err
-	}
-	// --offline is load-bearing: every remote byte (including the Rekor bundle)
-	// was already fetched by the policy-bound resolver. The subprocess receives
-	// no URL or registry credential and therefore has no attacker-influenced
-	// network destination to follow.
-	args := []string{"verify-blob", "--offline", "--signature", signaturePath}
-	if keyPath != "" {
-		args = append(args, "--key", keyPath)
-	} else {
-		if len(input.Certificate) == 0 || len(input.Bundle) == 0 {
-			return errors.New("offline keyless signing evidence is unavailable")
-		}
-		certificatePath := filepath.Join(temporary, "artifact.pem")
-		if err := writePrivateFile(certificatePath, input.Certificate); err != nil {
-			return err
-		}
-		bundlePath := filepath.Join(temporary, "rekor.bundle")
-		if err := writePrivateFile(bundlePath, input.Bundle); err != nil {
-			return err
-		}
-		args = append(args, "--certificate", certificatePath,
-			"--bundle", bundlePath,
-			"--certificate-identity", input.Source.Trust.Identity,
-			"--certificate-oidc-issuer", input.Source.Trust.Issuer)
-	}
-	args = append(args, blobPath)
-	return v.runCosign(ctx, args, temporary)
 }
 
-func (v *ExecVerifier) cosignPolicyArgs(policy model.TrustPolicy) (identity, keyPath string, err error) {
+func (v *ExecVerifier) verifyCosignKey(input VerificationInput) error {
+	if len(input.Artifact) == 0 || len(input.Signature) == 0 {
+		return errors.New("detached artifact signature is unavailable")
+	}
+	pemBytes, _, err := v.readTrustKey(input.Source.Trust.KeyRef, ".pub")
+	if err != nil {
+		return err
+	}
+	defer clearBytes(pemBytes)
+	publicKey, err := cryptoutils.UnmarshalPEMToPublicKey(pemBytes)
+	if err != nil || publicKey == nil {
+		return errors.New("referenced signature verification key is unavailable")
+	}
+	verifier, err := signature.LoadDefaultVerifier(publicKey)
+	if err != nil {
+		return errors.New("referenced signature verification key is unavailable")
+	}
+	for _, candidate := range signatureCandidates(input.Signature) {
+		if err := verifier.VerifySignature(bytes.NewReader(candidate), bytes.NewReader(input.Artifact)); err == nil {
+			return nil
+		}
+	}
+	return errors.New("signature verification failed")
+}
+
+func (v *ExecVerifier) verifyCosignKeyless(input VerificationInput) error {
+	if len(input.Bundle) == 0 {
+		return errors.New("offline keyless signing evidence is unavailable")
+	}
+	rootJSON, _, err := v.readTrustKey(trustedRootRef, ".json")
+	if err != nil {
+		return errors.New("offline keyless trusted root is unavailable")
+	}
+	defer clearBytes(rootJSON)
+	trustedRoot, err := root.NewTrustedRootFromJSON(rootJSON)
+	if err != nil {
+		return errors.New("offline keyless trusted root is unavailable")
+	}
+	entity, err := signedEntityFromEvidence(input)
+	if err != nil {
+		return errors.New("offline keyless signing evidence is unavailable")
+	}
+	verifier, err := verify.NewVerifier(trustedRoot, verify.WithTransparencyLog(1), verify.WithObserverTimestamps(1))
+	if err != nil {
+		return errors.New("signature verification failed")
+	}
+	identity, err := verify.NewShortCertificateIdentity(input.Source.Trust.Issuer, "", input.Source.Trust.Identity, "")
+	if err != nil {
+		return errors.New("keyless signature identity policy is incomplete")
+	}
+	if _, err := verifier.Verify(entity, verify.NewPolicy(verify.WithArtifact(bytes.NewReader(input.Artifact)), verify.WithCertificateIdentity(identity))); err != nil {
+		return errors.New("signature verification failed")
+	}
+	return nil
+}
+
+func (v *ExecVerifier) cosignPolicyIdentity(policy model.TrustPolicy) (string, error) {
 	switch policy.Provider {
 	case model.SignatureCosignKey:
-		key, path, readErr := v.readTrustKey(policy.KeyRef, ".pub")
-		if readErr != nil {
-			return "", "", readErr
+		if _, _, err := v.readTrustKey(policy.KeyRef, ".pub"); err != nil {
+			return "", err
 		}
-		clearBytes(key)
-		return "key:" + policy.KeyRef, path, nil
+		return "key:" + policy.KeyRef, nil
 	case model.SignatureCosignKeyless:
 		if strings.TrimSpace(policy.Identity) == "" || strings.TrimSpace(policy.Issuer) == "" {
-			return "", "", errors.New("keyless signature identity policy is incomplete")
+			return "", errors.New("keyless signature identity policy is incomplete")
 		}
-		return policy.Identity, "", nil
+		return policy.Identity, nil
 	default:
-		return "", "", errors.New("cosign signature provider is required")
+		return "", errors.New("cosign signature provider is required")
 	}
 }
 
@@ -227,71 +256,148 @@ func (v *ExecVerifier) readTrustKey(reference, suffix string) ([]byte, string, e
 	return data, path, nil
 }
 
-func (v *ExecVerifier) runCosign(ctx context.Context, args []string, existingTemporary string) error {
-	temporary := existingTemporary
-	if temporary == "" {
-		var err error
-		temporary, err = os.MkdirTemp("", "astronomer-cosign-runtime-*")
-		if err != nil {
-			return errors.New("signature verification workspace is unavailable")
-		}
-		defer func() { _ = os.RemoveAll(temporary) }()
+func signedEntityFromEvidence(input VerificationInput) (*sigstorebundle.Bundle, error) {
+	entity := &sigstorebundle.Bundle{}
+	if err := entity.UnmarshalJSON(input.Bundle); err == nil {
+		return entity, nil
 	}
-	if err := os.Chmod(temporary, 0o700); err != nil {
-		return errors.New("signature verification workspace is unavailable")
+	if len(input.Certificate) == 0 || len(input.Signature) == 0 {
+		return nil, errors.New("offline keyless signing evidence is unavailable")
 	}
-	environment := []string{
-		"HOME=" + temporary, "DOCKER_CONFIG=" + temporary, "COSIGN_EXPERIMENTAL=1",
-		"PATH=/usr/local/bin:/usr/bin:/bin",
-	}
-	command := exec.CommandContext(ctx, v.cosignPath, args...)
-	command.Env = environment
-	command.Dir = temporary
-	output := &boundedOutput{remaining: maxVerifierOutput}
-	command.Stdout = output
-	command.Stderr = output
-	err := command.Run()
-	output.Clear()
-	if err != nil || output.exceeded {
-		return errors.New("cosign signature verification failed")
-	}
-	return nil
+	return bundleFromCosignV2(input.Artifact, input.Signature, input.Certificate, input.Bundle)
 }
 
-func writePrivateFile(path string, data []byte) error {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+func bundleFromCosignV2(artifact, signatureValue, certificatePEM, rekorBundle []byte) (*sigstorebundle.Bundle, error) {
+	cert, err := parseSigningCertificate(certificatePEM)
 	if err != nil {
-		return errors.New("signature verification workspace is unavailable")
+		return nil, err
 	}
-	_, writeErr := io.Copy(file, bytes.NewReader(data))
-	closeErr := file.Close()
-	if writeErr != nil || closeErr != nil {
-		return errors.New("signature verification workspace is unavailable")
+	sig := primarySignature(signatureValue)
+	if len(sig) == 0 || len(artifact) == 0 {
+		return nil, errors.New("offline keyless signing evidence is unavailable")
 	}
-	return nil
+	entry, err := transparencyLogEntryFromCosignBundle(rekorBundle)
+	if err != nil {
+		return nil, err
+	}
+	digest := sha256.Sum256(artifact)
+	pb := &protobundle.Bundle{
+		MediaType: cosignV2BundleMediaTyp,
+		VerificationMaterial: &protobundle.VerificationMaterial{
+			Content: &protobundle.VerificationMaterial_X509CertificateChain{
+				X509CertificateChain: &protocommon.X509CertificateChain{
+					Certificates: []*protocommon.X509Certificate{{RawBytes: cert.Raw}},
+				},
+			},
+			TlogEntries: []*protorekor.TransparencyLogEntry{entry},
+		},
+		Content: &protobundle.Bundle_MessageSignature{
+			MessageSignature: &protocommon.MessageSignature{
+				MessageDigest: &protocommon.HashOutput{
+					Algorithm: protocommon.HashAlgorithm_SHA2_256,
+					Digest:    digest[:],
+				},
+				Signature: sig,
+			},
+		},
+	}
+	return sigstorebundle.NewBundle(pb)
 }
 
-type boundedOutput struct {
-	buffer    bytes.Buffer
-	remaining int
-	exceeded  bool
+type cosignRekorBundle struct {
+	SignedEntryTimestamp []byte `json:"SignedEntryTimestamp"`
+	Payload              struct {
+		Body           json.RawMessage `json:"body"`
+		IntegratedTime int64           `json:"integratedTime"`
+		LogIndex       int64           `json:"logIndex"`
+		LogID          string          `json:"logID"`
+	} `json:"Payload"`
 }
 
-func (b *boundedOutput) Write(value []byte) (int, error) {
-	original := len(value)
-	if len(value) > b.remaining {
-		value = value[:max(0, b.remaining)]
-		b.exceeded = true
+func transparencyLogEntryFromCosignBundle(raw []byte) (*protorekor.TransparencyLogEntry, error) {
+	var bundle cosignRekorBundle
+	if err := json.Unmarshal(raw, &bundle); err != nil {
+		return nil, err
 	}
-	b.remaining -= len(value)
-	_, _ = b.buffer.Write(value)
-	return original, nil
+	if len(bundle.SignedEntryTimestamp) == 0 || bundle.Payload.LogID == "" || len(bundle.Payload.Body) == 0 {
+		return nil, errors.New("offline keyless signing evidence is unavailable")
+	}
+	body, err := decodeRekorBody(bundle.Payload.Body)
+	if err != nil || len(body) == 0 {
+		return nil, errors.New("offline keyless signing evidence is unavailable")
+	}
+	logID, err := hex.DecodeString(bundle.Payload.LogID)
+	if err != nil || len(logID) == 0 {
+		return nil, errors.New("offline keyless signing evidence is unavailable")
+	}
+	kind, version := hashedRekordKind(body)
+	return &protorekor.TransparencyLogEntry{
+		LogIndex: bundle.Payload.LogIndex,
+		LogId:    &protocommon.LogId{KeyId: logID},
+		KindVersion: &protorekor.KindVersion{
+			Kind:    kind,
+			Version: version,
+		},
+		IntegratedTime: bundle.Payload.IntegratedTime,
+		InclusionPromise: &protorekor.InclusionPromise{
+			SignedEntryTimestamp: bundle.SignedEntryTimestamp,
+		},
+		CanonicalizedBody: body,
+	}, nil
 }
 
-func (b *boundedOutput) Clear() {
-	data := b.buffer.Bytes()
-	clearBytes(data)
-	b.buffer.Reset()
+func decodeRekorBody(raw json.RawMessage) ([]byte, error) {
+	var encoded string
+	if err := json.Unmarshal(raw, &encoded); err == nil {
+		decoded, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			return nil, err
+		}
+		return decoded, nil
+	}
+	return bytes.TrimSpace(raw), nil
+}
+
+func hashedRekordKind(body []byte) (string, string) {
+	var header struct {
+		Kind       string `json:"kind"`
+		APIVersion string `json:"apiVersion"`
+	}
+	if json.Unmarshal(body, &header) != nil || header.Kind == "" {
+		return "hashedrekord", "0.0.1"
+	}
+	if header.APIVersion == "" {
+		return header.Kind, "0.0.1"
+	}
+	return header.Kind, header.APIVersion
+}
+
+func parseSigningCertificate(value []byte) (*x509.Certificate, error) {
+	certs, err := cryptoutils.LoadCertificatesFromPEM(bytes.NewReader(value))
+	if err == nil && len(certs) > 0 && certs[0] != nil {
+		return certs[0], nil
+	}
+	return x509.ParseCertificate(value)
+}
+
+func signatureCandidates(value []byte) [][]byte {
+	trimmed := bytes.TrimSpace(value)
+	if len(trimmed) == 0 {
+		return nil
+	}
+	candidates := [][]byte{trimmed}
+	if decoded, err := base64.StdEncoding.DecodeString(string(trimmed)); err == nil && len(decoded) > 0 && !bytes.Equal(decoded, trimmed) {
+		candidates = [][]byte{decoded, trimmed}
+	}
+	return candidates
+}
+
+func primarySignature(value []byte) []byte {
+	candidates := signatureCandidates(value)
+	if len(candidates) == 0 {
+		return nil
+	}
+	return candidates[0]
 }
 
 var _ Verifier = (*ExecVerifier)(nil)

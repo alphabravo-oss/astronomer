@@ -537,9 +537,11 @@ delivery:
     ca:
       existingSecret: ""
       key: ca.crt
-    # Optional Secret whose keys are <trust-policy key_ref>.pub for cosign
-    # and <key_ref>.asc for armored OpenPGP. It is mounted read-only only in
-    # resolver workers and is never exposed through the API.
+    # Optional Secret whose keys are <trust-policy key_ref>.pub for Cosign
+    # key verification, <key_ref>.asc for armored OpenPGP, and
+    # trusted_root.json for offline keyless (Fulcio + Rekor) verification.
+    # It is mounted read-only only in resolver workers and is never exposed
+    # through the API.
     trustKeys:
       existingSecret: ""
 

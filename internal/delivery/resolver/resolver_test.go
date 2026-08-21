@@ -129,6 +129,50 @@ func TestHelmHTTPResolverPinsDownloadedDigest(t *testing.T) {
 	}
 }
 
+func TestHelmHTTPResolverFetchesOfflineKeylessEvidence(t *testing.T) {
+	chart := []byte("signed-chart-archive")
+	sum := sha256.Sum256(chart)
+	digest := hex.EncodeToString(sum[:])
+	index := "apiVersion: v1\nentries:\n  widget:\n    - apiVersion: v2\n      name: widget\n      version: 1.2.3\n      digest: " + digest + "\n      urls: [widget-1.2.3.tgz]\ngenerated: 2026-08-17T00:00:00Z\n"
+	signature := []byte("detached-signature")
+	certificate := []byte("-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----")
+	bundle := []byte(`{"SignedEntryTimestamp":"QQ=="}`)
+	fetched := map[string]int{}
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		fetched[request.URL.Path]++
+		body := chart
+		switch {
+		case strings.HasSuffix(request.URL.Path, "/index.yaml"):
+			body = []byte(index)
+		case strings.HasSuffix(request.URL.Path, ".sig"):
+			body = signature
+		case strings.HasSuffix(request.URL.Path, ".pem"):
+			body = certificate
+		case strings.HasSuffix(request.URL.Path, ".bundle"):
+			body = bundle
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body)),
+			ContentLength: int64(len(body)), Request: request,
+		}, nil
+	})}
+	source := unsignedSource(model.SourceHelmHTTP, "https://example.com/stable")
+	source.Trust = model.TrustPolicy{Provider: model.SignatureCosignKeyless, Identity: "release@example.test", Issuer: "https://issuer.example.test"}
+	result, err := (helmHTTPResolver{}).Resolve(context.Background(), Request{
+		Source: source, RequestedRevision: "1.2.3", Chart: "widget", Limits: Limits{}.withDefaults(),
+	}, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(result.verificationPayload) != string(chart) || string(result.verificationSignature) != string(signature) ||
+		string(result.verificationCertificate) != string(certificate) || string(result.verificationBundle) != string(bundle) {
+		t.Fatalf("keyless helm evidence was incomplete: sig=%q cert=%q bundle=%q", result.verificationSignature, result.verificationCertificate, result.verificationBundle)
+	}
+	if fetched["/stable/widget-1.2.3.tgz.sig"] != 1 || fetched["/stable/widget-1.2.3.tgz.pem"] != 1 || fetched["/stable/widget-1.2.3.tgz.bundle"] != 1 {
+		t.Fatalf("keyless helm did not fetch local signature evidence: %#v", fetched)
+	}
+}
+
 func TestFetchBoundedRejectsStreamingOverflow(t *testing.T) {
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("123456")), ContentLength: -1, Request: request}, nil

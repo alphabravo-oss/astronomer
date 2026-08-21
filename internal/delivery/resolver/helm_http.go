@@ -99,6 +99,20 @@ func (helmHTTPResolver) Resolve(ctx context.Context, request Request, client *ht
 				clearBytes(result.verificationSignature)
 				return Result{}, &Error{Code: CodeVerification, Message: "Helm chart signing certificate is unavailable"}
 			}
+			bundleURL := chartURL + ".bundle"
+			if err := validateFetchURL(ctx, request.NetworkPolicy, bundleURL); err != nil {
+				clearBytes(chartBytes)
+				clearBytes(result.verificationSignature)
+				clearBytes(result.verificationCertificate)
+				return Result{}, err
+			}
+			result.verificationBundle, err = fetchBounded(ctx, client, bundleURL, request, 1<<20)
+			if err != nil {
+				clearBytes(chartBytes)
+				clearBytes(result.verificationSignature)
+				clearBytes(result.verificationCertificate)
+				return Result{}, &Error{Code: CodeVerification, Message: "Helm chart signing bundle is unavailable"}
+			}
 		}
 	}
 	return result, nil

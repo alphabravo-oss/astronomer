@@ -130,13 +130,13 @@ type Result struct {
 	verificationPayload     []byte
 	verificationSignature   []byte
 	verificationCertificate []byte
+	verificationBundle      []byte
 	verificationEvidence    []SignatureEvidence
 }
 
 // SignatureEvidence is the complete, bounded verification material acquired by
-// the resolver under its guarded HTTP client. OCI verification deliberately
-// consumes these local bytes instead of allowing the cosign subprocess to make
-// a second, independently-networked registry request.
+// the resolver under its guarded HTTP client. OCI verification consumes these
+// local bytes in-process; the verifier never makes a second registry request.
 type SignatureEvidence struct {
 	Payload     []byte
 	Signature   []byte
@@ -144,10 +144,9 @@ type SignatureEvidence struct {
 	Bundle      []byte
 }
 
-// VerificationInput carries immutable identity, bounded bytes acquired under
-// the resolver's network policy, and an ephemeral credential reference for a
-// second authenticated registry read. Verifiers must apply the same policy to
-// every subprocess fetch and must not retain or log any of this material.
+// VerificationInput carries immutable identity and bounded bytes acquired under
+// the resolver's network policy. Verifiers must not contact the network and
+// must not retain or log any of this material.
 type VerificationInput struct {
 	Source      model.Source
 	Revision    model.ImmutableRevision

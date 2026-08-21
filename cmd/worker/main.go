@@ -193,7 +193,7 @@ func main() {
 		MonitoringCipher:              tasks.MonitoringCipherFor(platformEncryptor),
 	})
 	deliveryQueries := sqlc.New(database.Pool())
-	deliveryVerifier, deliveryVerifierErr := deliveryresolver.NewExecVerifier(cfg.DeliveryCosignPath, cfg.DeliverySourceTrustDirectory)
+	deliveryVerifier, deliveryVerifierErr := deliveryresolver.NewExecVerifier(cfg.DeliverySourceTrustDirectory)
 	if deliveryVerifierErr != nil {
 		log.Error("failed to configure delivery source signature verifier", "error", deliveryVerifierErr)
 		os.Exit(1)
