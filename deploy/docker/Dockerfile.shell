@@ -38,41 +38,43 @@ COPY cmd/dexconfigcheck ./cmd/dexconfigcheck
 COPY internal/dexconfig ./internal/dexconfig
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dexconfigcheck ./cmd/dexconfigcheck
 
+# Fetch kubectl in a throwaway stage so the runtime image does not ship curl.
+# kubectl version is pinned in lockstep with the bundled control-plane minor.
+# Bump in the same commit that bumps the k8s.io/* dependencies in go.mod so
+# the shell's kubectl version never lags the cluster's server version far
+# enough to be in the "skew unsupported" zone. The official binary is scanned
+# separately from first-party code: it ships Kubernetes' own Go stdlib and
+# cannot be patched here.
+FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce AS kubectl
+ARG KUBECTL_VERSION=v1.35.2
+ARG TARGETARCH=amd64
+RUN apk add --no-cache ca-certificates curl \
+    && curl -fsSL -o /kubectl \
+        "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
+    && chmod +x /kubectl \
+    && /kubectl version --client=true --output=yaml | grep -q "${KUBECTL_VERSION}"
+
 FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce AS base
 
 ARG VERSION=1.0.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
+ARG KUBECTL_VERSION=v1.35.2
 
 LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astronomer" \
       org.opencontainers.image.revision="${GIT_COMMIT}" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
-# kubectl version is pinned in lockstep with the bundled control-plane
-# minor. Bump in the same commit that bumps the k8s.io/* dependencies
-# in go.mod so the shell's kubectl version never lags the cluster's
-# server version far enough to be in the "skew unsupported" zone.
-# The official binary is scanned separately from first-party code: it
-# ships Kubernetes' own Go stdlib and cannot be patched here.
-ARG KUBECTL_VERSION=v1.35.2
-ARG TARGETARCH=amd64
-
-RUN apk add --no-cache \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache \
         bash \
         ca-certificates \
         coreutils \
-        curl \
         jq \
-        tini \
-    && curl -fsSL -o /usr/local/bin/kubectl \
-        "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
-    && chmod +x /usr/local/bin/kubectl \
-    # Sanity-check the binary is the version we asked for so a typo'd
-    # KUBECTL_VERSION fails the build instead of silently shipping
-    # whatever HTTP returned (e.g. a 404 HTML page).
-    && /usr/local/bin/kubectl version --client=true --output=yaml | grep -q "${KUBECTL_VERSION}"
+        tini
 
+COPY --from=kubectl /kubectl /usr/local/bin/kubectl
 COPY --from=dex-validator /out/dexconfigcheck /usr/local/bin/dexconfigcheck
 
 # Preflight has no runtime downloads. jq and GNU base64 are declared above;

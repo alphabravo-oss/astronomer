@@ -16,6 +16,7 @@ ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
 RUN CGO_ENABLED=0 go build \
+    -trimpath \
     -ldflags "-s -w \
       -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=${VERSION} \
       -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=${GIT_COMMIT} \
@@ -34,7 +35,7 @@ LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astrono
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /bin/astronomer-agent /usr/local/bin/astronomer-agent
 

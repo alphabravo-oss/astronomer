@@ -17,3 +17,6 @@ jest.setup.ts
 dist
 test-results
 playwright-report
+tests
+gallery
+playwright.config.ts
