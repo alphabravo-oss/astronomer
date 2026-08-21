@@ -40,6 +40,9 @@ RUN rm -rf /etc/nginx/conf.d /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# Match Helm frontend.podSecurityContext.runAsUser (listen is 3000).
+USER 1001
+
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

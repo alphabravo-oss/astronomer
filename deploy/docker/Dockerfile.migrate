@@ -19,9 +19,13 @@ LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astrono
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
+
 COPY --from=builder /out/migrate /usr/local/bin/migrate
-COPY internal/db/migrations /migrations
+COPY internal/db/migrations/*.sql /migrations/
 RUN chmod 0755 /usr/local/bin/migrate && chmod 0644 /migrations/*.sql
+
+USER nobody
 
 ENTRYPOINT ["migrate"]
 CMD ["-help"]

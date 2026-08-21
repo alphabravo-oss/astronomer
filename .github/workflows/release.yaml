@@ -101,7 +101,7 @@ jobs:
           - { name: worker,   context: .,        dockerfile: deploy/docker/Dockerfile.worker,  imageName: astronomer-go-worker }
           - { name: agent,    context: .,        dockerfile: deploy/docker/Dockerfile.agent,   imageName: astronomer-go-agent }
           - { name: migrate,  context: .,        dockerfile: deploy/docker/Dockerfile.migrate, imageName: astronomer-go-migrate }
-          - { name: shell,    context: .,        dockerfile: deploy/docker/Dockerfile.shell,   imageName: astronomer-shell }
+          - { name: shell,    context: .,        dockerfile: deploy/docker/Dockerfile.shell,   imageName: astronomer-shell, skip_files: /usr/local/bin/kubectl }
           - { name: frontend, context: frontend, dockerfile: frontend/Dockerfile,              imageName: astronomer-frontend }
     steps:
       - name: Checkout
@@ -204,6 +204,17 @@ jobs:
           if missing:
               raise SystemExit(f"multi-platform manifest missing: {sorted(missing)}; actual={sorted(actual)}")
           PY
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.24.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}@${{ steps.image.outputs.digest }}
+          format: table
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          skip-files: ${{ matrix.component.skip_files }}
+          exit-code: "1"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3

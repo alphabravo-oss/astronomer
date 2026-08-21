@@ -121,6 +121,33 @@ func TestReleasePublishesSixTrueMultiPlatformImages(t *testing.T) {
 		t.Fatalf("release build push = %#v, want true", build.With["push"])
 	}
 
+	scan := releaseNamedStep(t, job.Steps, "Scan image")
+	if !strings.HasPrefix(scan.Uses, "aquasecurity/trivy-action@") {
+		t.Fatalf("release scan uses %q, want aquasecurity/trivy-action", scan.Uses)
+	}
+	if stringValue(scan.With["severity"]) != "HIGH,CRITICAL" {
+		t.Fatalf("release scan severity = %q, want HIGH,CRITICAL", stringValue(scan.With["severity"]))
+	}
+	if ignoreUnfixed, ok := scan.With["ignore-unfixed"].(bool); !ok || !ignoreUnfixed {
+		t.Fatalf("release scan ignore-unfixed = %#v, want true", scan.With["ignore-unfixed"])
+	}
+	if stringValue(scan.With["exit-code"]) != "1" {
+		t.Fatalf("release scan exit-code = %q, want 1", stringValue(scan.With["exit-code"]))
+	}
+	signIndex := -1
+	scanIndex := -1
+	for i, step := range job.Steps {
+		if step.Name == "Scan image" {
+			scanIndex = i
+		}
+		if step.Name == "Sign image by digest" {
+			signIndex = i
+		}
+	}
+	if scanIndex < 0 || signIndex < 0 || scanIndex > signIndex {
+		t.Fatalf("release must scan before signing; scan=%d sign=%d", scanIndex, signIndex)
+	}
+
 	verify := releaseNamedStep(t, job.Steps, "Verify multi-platform manifest")
 	for _, required := range []string{"docker buildx imagetools inspect", "linux/amd64", "linux/arm64", "steps.build.outputs.digest"} {
 		text := verify.Run
