@@ -1,6 +1,6 @@
 # Astronomer management-plane chart
 
-This chart installs the Astronomer 1.0.0 API, worker, web application, database
+This chart installs the Astronomer 1.1.0 API, worker, web application, database
 migration job, and optional supporting services. It is the only supported
 management-plane installation path for the v1 release line.
 
@@ -12,7 +12,7 @@ never installs delivery controllers in the management cluster.
 
 | Contract | Supported value |
 |---|---|
-| Chart and application | 1.0.0 |
+| Chart and application | 1.1.0 |
 | Kubernetes | 1.33 through 1.35 |
 | Agent protocol | 2 |
 | Flux | 2.9.3 |

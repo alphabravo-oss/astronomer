@@ -45,8 +45,8 @@ var expectedFirstPartyReleaseImages = map[string]struct {
 }
 
 const (
-	releaseVersion      = "1.0.0"
-	chartReleaseVersion = "1.0.0"
+	releaseVersion      = "1.1.0"
+	chartReleaseVersion = "1.1.0"
 )
 
 func TestReleaseIdentityIsConsistent(t *testing.T) {

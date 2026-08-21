@@ -1,6 +1,6 @@
 # Chart dependencies
 
-The Astronomer 1.0.0 management-plane chart has no Helm dependencies. A
+The Astronomer 1.1.0 management-plane chart has no Helm dependencies. A
 packaged chart can therefore be linted, rendered, and installed without Helm
 contacting a chart repository.
 
