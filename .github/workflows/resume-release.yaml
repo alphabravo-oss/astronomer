@@ -388,6 +388,11 @@ jobs:
       contents: write
       packages: read
     steps:
+      - name: Checkout tagged configuration
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
       - name: Download original release artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -412,6 +417,26 @@ jobs:
             test -s "${component}.digest"
             grep -Eq "^ghcr.io/alphabravo-oss/[^@]+@sha256:[0-9a-f]{64}$" "${component}.digest"
           done
+          test -s flux-distribution.tar.gz
+          test -s builtin-bundles.tar.gz
+
+      - name: Pack OSS air-gap kit
+        env:
+          TAG: ${{ needs.preflight.outputs.image-tag }}
+          CHART_VERSION: ${{ needs.preflight.outputs.chart-version }}
+        run: |
+          set -euo pipefail
+          python3 scripts/airgap-kit.py list-images --manifest release-manifest.json > astronomer-images.txt
+          awk '/@sha256:[a-f0-9]{64}$/ { n++ } END { exit (n >= 6) ? 0 : 1 }' astronomer-images.txt
+          python3 scripts/airgap-kit.py pack \
+            --manifest release-manifest.json \
+            --chart "astronomer-${CHART_VERSION}.tgz" \
+            --values values-production.yaml \
+            --signature release-manifest.sigstore.json \
+            --flux-archive flux-distribution.tar.gz \
+            --bundles-archive builtin-bundles.tar.gz \
+            --output "astronomer-airgap-${TAG}.tar.gz"
+          tar -tzf "astronomer-airgap-${TAG}.tar.gz" | grep -F "astronomer-airgap-${TAG}/astronomer-save-images.sh"
 
       - name: Publish immutable GitHub Release
         env:
@@ -426,6 +451,7 @@ jobs:
               -name 'sbom-*.spdx.json' -o -name 'provenance-*.slsa.json' -o \
               -name 'release-manifest.json' -o -name 'release-manifest.sigstore.json' -o \
               -name 'values-production.yaml' -o \
+              -name 'astronomer-images.txt' -o \
               -name 'RELEASE_IMAGES' -o -name 'RELEASE_SUBJECTS' \
             \) -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
           gh release create "$TAG" \
@@ -435,5 +461,5 @@ jobs:
             --title "Astronomer ${TAG}" \
             astronomer-*.tgz *.tar.gz sbom-*.spdx.json provenance-*.slsa.json \
             release-manifest.json release-manifest.sigstore.json \
-            values-production.yaml \
+            values-production.yaml astronomer-images.txt \
             RELEASE_IMAGES RELEASE_SUBJECTS SHA256SUMS

@@ -33,6 +33,52 @@ Required tools are Helm 3.16+, Skopeo, ORAS 1.2.2+, Cosign 2.4.1+, `jq`, and
 `sha256sum`. The exact versions used by release CI are visible in
 `.github/workflows/release.yaml`.
 
+## Air-gap kit (USB / sneakernet)
+
+Each GitHub Release includes `astronomer-airgap-vX.Y.Z.tar.gz` and
+`astronomer-images.txt`. The kit is the signed release unit plus save/load
+scripts. It does **not** include container image blobs (GitHub's 2 GiB asset
+limit). Default save is `linux/amd64` only.
+
+```bash
+export ASTRONOMER_RELEASE=v1.0.0
+gh release download "$ASTRONOMER_RELEASE" --repo alphabravo-oss/astronomer \
+  --pattern "astronomer-airgap-${ASTRONOMER_RELEASE}.tar.gz" \
+  --pattern SHA256SUMS
+sha256sum --check --ignore-missing SHA256SUMS
+tar -xzf "astronomer-airgap-${ASTRONOMER_RELEASE}.tar.gz"
+cd "astronomer-airgap-${ASTRONOMER_RELEASE}"
+sha256sum --check SHA256SUMS
+```
+
+On a host that can pull public registries:
+
+```bash
+./astronomer-save-images.sh \
+  --manifest release-manifest.json \
+  --output astronomer-images.tar.gz
+```
+
+Move the kit directory **and** `astronomer-images.tar.gz` into the dark site.
+Authenticate Skopeo to the private registry using its normal credential file
+(not these scripts), then:
+
+```bash
+./astronomer-load-images.sh \
+  --manifest release-manifest.json \
+  --images astronomer-images.tar.gz \
+  --destination-registry registry.internal.example.com \
+  --values-output airgap-values.json
+```
+
+Continue at [step 5](#5-prepare-the-cluster) with the kit chart,
+`airgap-values.json`, and `--set-file release.manifest=release-manifest.json`.
+`--all-platforms` saves the multi-arch index; `--first-party` saves only the
+six Astronomer images (smaller smoke USB).
+
+Registry-to-registry copy without a USB stick is the rest of this document
+(`mirror-release.py`).
+
 ## 1. Download and verify the release unit
 
 Set an exact release; there is no `latest` release channel.
