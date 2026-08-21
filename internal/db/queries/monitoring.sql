@@ -67,7 +67,7 @@ WHERE auth_config_encrypted = ''
         FROM jsonb_object_keys(auth_config) AS config_key
         WHERE config_key <> ALL (ARRAY[
             'operationPolicies', 'sharedThanos', 'sharedAlertmanager',
-            'sharedAlertingAssets', 'status'
+            'sharedGrafana', 'sharedLoki', 'sharedAlertingAssets', 'status'
         ])
       )
 ORDER BY id

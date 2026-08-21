@@ -24,8 +24,10 @@ import {
   primaryButton,
   secondaryButton,
   textareaClass,
+  RedirectDeliveryDetail,
   useDeliveryPageIndex,
-  useDeliveryProjectScope,
+  useDeliveryWorkspace,
+  withProjectQuery,
 } from "@/components/delivery/shared";
 import {
   createComponentBundleVersion,
@@ -45,10 +47,10 @@ import { useParams } from "@/lib/navigation";
 import { formatRelativeTime } from "@/lib/utils";
 import { toastSuccess } from "@/lib/toast";
 
-function BundleDetailPage() {
+export function BundleDetailPage() {
   const { bundleId } = useParams<{ bundleId: string }>();
-  const { projectId, projects, projectQuery, setProjectId } =
-    useDeliveryProjectScope();
+  const { projectId, projects, projectQuery, setProjectId, listHref } =
+    useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const allowed = can(user, "delivery_bundles", "read", {
     type: "project",
@@ -152,7 +154,7 @@ function BundleDetailPage() {
       >
         <PageShell>
           <Link
-            href={`/dashboard/delivery/bundles?project=${encodeURIComponent(projectId)}`}
+            href={withProjectQuery(listHref("bundles"), projectId)}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Bundles
@@ -569,6 +571,15 @@ function Field({
     </label>
   );
 }
+function DeliveryBundleDetailRedirect() {
+  const { bundleId } = useParams<{ bundleId: string }>();
+  return (
+    <RedirectDeliveryDetail tab="bundles" id={bundleId}>
+      <BundleDetailPage />
+    </RedirectDeliveryDetail>
+  );
+}
+
 export const Route = createFileRoute("/dashboard/delivery/bundles/$bundleId/")({
-  component: BundleDetailPage,
+  component: DeliveryBundleDetailRedirect,
 });

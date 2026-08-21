@@ -131,6 +131,17 @@ func (q *Queries) CountAlertRules(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countAlertRulesByCluster = `-- name: CountAlertRulesByCluster :one
+SELECT count(*) FROM alert_rules WHERE cluster_id = $1
+`
+
+func (q *Queries) CountAlertRulesByCluster(ctx context.Context, clusterID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countAlertRulesByCluster, clusterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countAlertSilences = `-- name: CountAlertSilences :one
 SELECT count(*) FROM alert_silences
 `

@@ -21,6 +21,9 @@ import {
   Route,
   Waypoints,
   Layers,
+  Bell,
+  ScrollText,
+  Gauge,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useUIStore } from '@/lib/store';
@@ -33,13 +36,8 @@ const pages = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Clusters', href: '/dashboard/clusters', icon: Server },
   { name: 'Projects', href: '/dashboard/projects', icon: Folder },
-  { name: 'Monitoring', href: '/dashboard/monitoring', icon: BarChart3 },
+  { name: 'Fleet metrics', href: '/dashboard/monitoring', icon: BarChart3 },
   { name: 'Continuous Delivery', href: '/dashboard/delivery', icon: Rocket },
-  { name: 'Delivery Sources', href: '/dashboard/delivery/sources', icon: Rocket },
-  { name: 'Delivery Bundles', href: '/dashboard/delivery/bundles', icon: Boxes },
-  { name: 'Delivery Targets', href: '/dashboard/delivery/targets', icon: Route },
-  { name: 'Delivery Rollouts', href: '/dashboard/delivery/rollouts', icon: Rocket },
-  { name: 'Catalog', href: '/dashboard/catalog', icon: Box },
   { name: 'RBAC', href: '/dashboard/rbac', icon: Shield },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
@@ -48,13 +46,18 @@ const pages = [
 // sidebar. Surfaced in the palette when the user is inside a cluster context so
 // keyboard users can jump straight to them.
 const clusterPages: Array<{ name: string; suffix: string; icon: LucideIcon; description: string }> = [
+  { name: 'Apps', suffix: '/apps', icon: Box, description: 'Helm charts, installed apps, and repositories' },
   { name: 'Registries', suffix: '/registries', icon: Boxes, description: 'Private image-pull credentials' },
   { name: 'Snapshots', suffix: '/snapshots', icon: Camera, description: 'Velero workload snapshots' },
   { name: 'Network & Access', suffix: '/network-access', icon: Route, description: 'Apiserver allow-list' },
   { name: 'Service Mesh', suffix: '/service-mesh', icon: Waypoints, description: 'mTLS + mesh status' },
   { name: 'Mirrored Resources', suffix: '/resources', icon: Layers, description: 'Read-only CRD mirror' },
   { name: 'Gatekeeper', suffix: '/gatekeeper', icon: Shield, description: 'OPA constraint authoring' },
-  { name: 'Delivery', suffix: '/delivery', icon: Rocket, description: 'Controller compatibility and deployments' },
+  { name: 'Delivery', suffix: '/delivery', icon: Rocket, description: 'Flux and delivery for this cluster' },
+  { name: 'Metrics', suffix: '/metrics', icon: Gauge, description: 'CPU, memory, and node utilization' },
+  { name: 'Monitoring Stack', suffix: '/monitoring-stack', icon: BarChart3, description: 'kube-prometheus-stack for this cluster' },
+  { name: 'Alerting', suffix: '/alerting', icon: Bell, description: 'Alert rules and firing alerts' },
+  { name: 'Logging', suffix: '/logging', icon: ScrollText, description: 'Log pipelines for this cluster' },
 ];
 
 // Extract the cluster id from a /dashboard/clusters/<id>/... path, skipping the
@@ -82,8 +85,8 @@ const runbookLinks = [
   },
   {
     name: 'Backup recovery',
-    href: '/dashboard/backups',
-    description: 'Snapshots, restores, restore drills',
+    href: '/dashboard/settings/backup',
+    description: 'Astronomer dump, restore drill, encryption-key wrapping',
   },
   {
     name: 'Operations queues',

@@ -8,8 +8,10 @@ import * as apiClient from '@/lib/api';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ModalShell } from '@/components/ui/modal-shell';
 import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
 import { ResourceActions } from '@/components/workloads/resource-actions';
 import { k8sResourcePath } from '@/lib/k8s-paths';
@@ -848,117 +850,120 @@ function NodeDetailPage() {
 
       {/* Add Taint Dialog */}
       {showAddTaint && (
-        <OverlayShell onClose={() => setShowAddTaint(false)}>
-          <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4 animate-fade-in p-6">
-            <h3 className="text-base font-semibold text-foreground mb-4">Add Taint</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Key</label>
-                <input type="text" value={newTaint.key} onChange={(e) => setNewTaint({ ...newTaint, key: e.target.value })}
-                  placeholder="node.kubernetes.io/unreachable" autoFocus
-                  className="w-full h-8 px-3 rounded border border-border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
-              </div>
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Value</label>
-                <input type="text" value={newTaint.value ?? ''} onChange={(e) => setNewTaint({ ...newTaint, value: e.target.value })}
-                  placeholder="(optional)"
-                  className="w-full h-8 px-3 rounded border border-border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
-              </div>
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Effect</label>
-                <select value={newTaint.effect}
-                  onChange={(e) => setNewTaint({ ...newTaint, effect: e.target.value as apiClient.NodeTaintRequest['effect'] })}
-                  className="w-full h-8 px-3 rounded border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring">
-                  <option value="NoSchedule">NoSchedule</option>
-                  <option value="PreferNoSchedule">PreferNoSchedule</option>
-                  <option value="NoExecute">NoExecute</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => setShowAddTaint(false)}
-                className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleAddTaint} disabled={!newTaint.key || nodeActionPending || !nodeUpdateDecision.allowed}
-                title={nodeUpdateBlockedReason}
-                className="h-8 px-4 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90
-                  disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+        <ModalShell
+          title="Add Taint"
+          onClose={() => setShowAddTaint(false)}
+          size="sm"
+          footerClassName="flex items-center justify-end gap-2"
+          footer={
+            <>
+              <ActionButton size="sm" intent="ghost" onClick={() => setShowAddTaint(false)}>Cancel</ActionButton>
+              <ActionButton
+                size="sm"
+                intent="primary"
+                onClick={handleAddTaint}
+                disabled={!newTaint.key || nodeActionPending || !nodeUpdateDecision.allowed}
+                disabledReason={nodeUpdateBlockedReason}
+                loading={nodeActionPending}
+              >
                 Add Taint
-              </button>
+              </ActionButton>
+            </>
+          }
+        >
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Key</label>
+              <Input type="text" value={newTaint.key} onChange={(e) => setNewTaint({ ...newTaint, key: e.target.value })}
+                placeholder="node.kubernetes.io/unreachable" autoFocus className="h-8 font-mono" />
             </div>
-          </div>
-        </OverlayShell>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Value</label>
+              <Input type="text" value={newTaint.value ?? ''} onChange={(e) => setNewTaint({ ...newTaint, value: e.target.value })}
+                placeholder="(optional)" className="h-8 font-mono" />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Effect</label>
+              <Select value={newTaint.effect}
+                onChange={(e) => setNewTaint({ ...newTaint, effect: e.target.value as apiClient.NodeTaintRequest['effect'] })}
+                className="h-8">
+                <option value="NoSchedule">NoSchedule</option>
+                <option value="PreferNoSchedule">PreferNoSchedule</option>
+                <option value="NoExecute">NoExecute</option>
+              </Select>
+            </div>
+        </ModalShell>
       )}
 
       {/* Add Label Dialog */}
       {showAddLabel && (
-        <OverlayShell onClose={() => setShowAddLabel(false)}>
-          <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4 animate-fade-in p-6">
-            <h3 className="text-base font-semibold text-foreground mb-4">Add Label</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Key</label>
-                <input type="text" value={newLabel.key} onChange={(e) => setNewLabel({ ...newLabel, key: e.target.value })}
-                  placeholder="app.kubernetes.io/name" autoFocus
-                  className="w-full h-8 px-3 rounded border border-border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
-              </div>
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Value</label>
-                <input type="text" value={newLabel.value} onChange={(e) => setNewLabel({ ...newLabel, value: e.target.value })}
-                  placeholder="my-app"
-                  className="w-full h-8 px-3 rounded border border-border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => setShowAddLabel(false)}
-                className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleAddLabel} disabled={!newLabel.key || nodeActionPending || !nodeUpdateDecision.allowed}
-                title={nodeUpdateBlockedReason}
-                className="h-8 px-4 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90
-                  disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+        <ModalShell
+          title="Add Label"
+          onClose={() => setShowAddLabel(false)}
+          size="sm"
+          footerClassName="flex items-center justify-end gap-2"
+          footer={
+            <>
+              <ActionButton size="sm" intent="ghost" onClick={() => setShowAddLabel(false)}>Cancel</ActionButton>
+              <ActionButton
+                size="sm"
+                intent="primary"
+                onClick={handleAddLabel}
+                disabled={!newLabel.key || nodeActionPending || !nodeUpdateDecision.allowed}
+                disabledReason={nodeUpdateBlockedReason}
+                loading={nodeActionPending}
+              >
                 Add Label
-              </button>
+              </ActionButton>
+            </>
+          }
+        >
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Key</label>
+              <Input type="text" value={newLabel.key} onChange={(e) => setNewLabel({ ...newLabel, key: e.target.value })}
+                placeholder="app.kubernetes.io/name" autoFocus className="h-8 font-mono" />
             </div>
-          </div>
-        </OverlayShell>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Value</label>
+              <Input type="text" value={newLabel.value} onChange={(e) => setNewLabel({ ...newLabel, value: e.target.value })}
+                placeholder="my-app" className="h-8 font-mono" />
+            </div>
+        </ModalShell>
       )}
 
       {/* Add Annotation Dialog */}
       {showAddAnnotation && (
-        <OverlayShell onClose={() => setShowAddAnnotation(false)}>
-          <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4 animate-fade-in p-6">
-            <h3 className="text-base font-semibold text-foreground mb-4">Add Annotation</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Key</label>
-                <input type="text" value={newAnnotation.key} onChange={(e) => setNewAnnotation({ ...newAnnotation, key: e.target.value })}
-                  placeholder="example.com/owner" autoFocus
-                  className="w-full h-8 px-3 rounded border border-border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
-              </div>
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Value</label>
-                <input type="text" value={newAnnotation.value} onChange={(e) => setNewAnnotation({ ...newAnnotation, value: e.target.value })}
-                  placeholder="platform"
-                  className="w-full h-8 px-3 rounded border border-border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => setShowAddAnnotation(false)}
-                className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleAddAnnotation} disabled={!newAnnotation.key || nodeActionPending || !nodeUpdateDecision.allowed}
-                title={nodeUpdateBlockedReason}
-                className="h-8 px-4 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90
-                  disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+        <ModalShell
+          title="Add Annotation"
+          onClose={() => setShowAddAnnotation(false)}
+          size="sm"
+          footerClassName="flex items-center justify-end gap-2"
+          footer={
+            <>
+              <ActionButton size="sm" intent="ghost" onClick={() => setShowAddAnnotation(false)}>Cancel</ActionButton>
+              <ActionButton
+                size="sm"
+                intent="primary"
+                onClick={handleAddAnnotation}
+                disabled={!newAnnotation.key || nodeActionPending || !nodeUpdateDecision.allowed}
+                disabledReason={nodeUpdateBlockedReason}
+                loading={nodeActionPending}
+              >
                 Add Annotation
-              </button>
+              </ActionButton>
+            </>
+          }
+        >
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Key</label>
+              <Input type="text" value={newAnnotation.key} onChange={(e) => setNewAnnotation({ ...newAnnotation, key: e.target.value })}
+                placeholder="example.com/owner" autoFocus className="h-8 font-mono" />
             </div>
-          </div>
-        </OverlayShell>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Value</label>
+              <Input type="text" value={newAnnotation.value} onChange={(e) => setNewAnnotation({ ...newAnnotation, value: e.target.value })}
+                placeholder="platform" className="h-8 font-mono" />
+            </div>
+        </ModalShell>
       )}
     </div>
   );

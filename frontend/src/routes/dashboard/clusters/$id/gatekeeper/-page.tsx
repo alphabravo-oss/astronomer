@@ -15,7 +15,6 @@ import { useParams } from '@/lib/navigation';
 import { Link } from '@/lib/link';
 import {
   ArrowLeft,
-  ShieldCheck,
   Trash2,
   Loader2,
   CheckCircle2,
@@ -25,6 +24,7 @@ import {
   Server,
 } from 'lucide-react';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useCluster } from '@/lib/hooks';
 import { useClustersUpdate } from '@/lib/permission-hooks';
@@ -181,7 +181,7 @@ export function ClusterGatekeeperPage() {
   const busy = validate.isPending || apply.isPending;
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <Link
         href={`/dashboard/clusters/${clusterId}`}
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -190,18 +190,10 @@ export function ClusterGatekeeperPage() {
         Back to cluster
       </Link>
 
-      <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-          <ShieldCheck className="h-5 w-5 text-muted-foreground" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Gatekeeper Constraints</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Bundle + custom OPA/Gatekeeper policy for {cluster.displayName}. Author a ConstraintTemplate
-            or Constraint, validate it, then apply it through the agent.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Gatekeeper Constraints"
+        description={`Bundle + custom OPA/Gatekeeper policy for ${cluster.displayName}. Author a ConstraintTemplate or Constraint, validate it, then apply it through the agent.`}
+      />
 
       {/* Authoring panel */}
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -309,6 +301,6 @@ export function ClusterGatekeeperPage() {
         variant="destructive"
         loading={del.isPending}
       />
-    </div>
+    </PageShell>
   );
 }

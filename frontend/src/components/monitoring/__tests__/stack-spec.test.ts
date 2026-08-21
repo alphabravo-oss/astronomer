@@ -10,9 +10,13 @@
 import {
   CLUSTER_STACK_FAMILY,
   SHARED_ALERTMANAGER_FAMILY,
+  SHARED_GRAFANA_FAMILY,
+  SHARED_LOKI_FAMILY,
   SHARED_THANOS_FAMILY,
   SERVER_BLIND_FIELDS,
   buildStackBody,
+  fleetGrafanaClusterURL,
+  fleetGrafanaOpenURL,
   missingRequiredFields,
   replaceTriggeringChanges,
   seedStackValues,
@@ -85,6 +89,70 @@ describe('seedStackValues', () => {
       chartVersion: '1.24.0',
     } as MonitoringStackStatusBase);
     expect(values.chartVersion).toBe('1.24.0');
+  });
+
+  it('exposes fleet Grafana URL only when authMode is proxy', () => {
+    expect(
+      fleetGrafanaOpenURL({
+        status: 'healthy',
+        authMode: 'clusterip',
+        grafanaHost: 'grafana.example.com',
+      }),
+    ).toBeNull();
+    expect(
+      fleetGrafanaOpenURL({
+        status: 'healthy',
+        authMode: 'proxy',
+        grafanaHost: 'grafana.example.com',
+      }),
+    ).toBe('https://grafana.example.com/');
+    expect(
+      fleetGrafanaOpenURL({
+        status: 'not_configured',
+        authMode: 'proxy',
+        grafanaHost: 'grafana.example.com',
+      }),
+    ).toBeNull();
+    expect(
+      fleetGrafanaClusterURL(
+        {
+          status: 'healthy',
+          authMode: 'proxy',
+          grafanaHost: 'grafana.example.com',
+        },
+        'cluster-1',
+      ),
+    ).toBe('https://grafana.example.com/?var-cluster=cluster-1');
+    expect(
+      fleetGrafanaClusterURL(
+        { status: 'healthy', authMode: 'clusterip', grafanaHost: 'grafana.example.com' },
+        'cluster-1',
+      ),
+    ).toBeNull();
+  });
+
+  it('seeds Loki chartVersion, skipDiskCheck and ingestHostname from status', () => {
+    const values = seedStackValues(SHARED_LOKI_FAMILY, {
+      status: 'healthy',
+      chartVersion: '6.27.0',
+      skipDiskCheck: true,
+      ingestHostname: 'loki-ingest.example.com',
+      ingestPublic: false,
+    } as MonitoringStackStatusBase);
+    expect(values.chartVersion).toBe('6.27.0');
+    expect(values.skipDiskCheck).toBe('true');
+    expect(values.ingestHostname).toBe('loki-ingest.example.com');
+  });
+
+  it('seeds Grafana chartVersion and autoRollbackOnFailure from status (not SERVER_BLIND)', () => {
+    const values = seedStackValues(SHARED_GRAFANA_FAMILY, {
+      status: 'healthy',
+      chartVersion: '8.12.1',
+      autoRollbackOnFailure: true,
+      authMode: 'clusterip',
+    } as MonitoringStackStatusBase);
+    expect(values.chartVersion).toBe('8.12.1');
+    expect(values.autoRollbackOnFailure).toBe('true');
   });
 
   it('ignores a stale recorded spec once the stack has been uninstalled', () => {

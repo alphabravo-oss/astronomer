@@ -17,6 +17,7 @@ import { useParams } from '@/lib/navigation';
 import { Link } from '@/lib/link';
 import { ArrowLeft, Eye, FileText, Loader2, RotateCcw, Save } from 'lucide-react';
 import { toastApiError, toastSuccess } from '@/lib/toast';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { useAppForm } from '@/lib/form';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -175,29 +176,31 @@ function NotificationTemplateEditor() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Link
-          href="/dashboard/settings/templates"
-          className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-        >
-          <ArrowLeft className="h-4 w-4" /> Notification templates
-        </Link>
-      </div>
+    <PageShell>
+      <Link
+        href="/dashboard/settings/templates"
+        className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+      >
+        <ArrowLeft className="h-4 w-4" /> Notification templates
+      </Link>
 
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">{detail.key}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{detail.description}</p>
-        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="px-2 py-0.5 rounded bg-muted">{detail.channel}</span>
-          <span className="px-2 py-0.5 rounded bg-muted">{detail.bodyFormat}</span>
-          {detail.hasOverride && (
-            <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600">
-              override active
+      <PageHeader
+        title={detail.key}
+        description={
+          <>
+            {detail.description}
+            <span className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="px-2 py-0.5 rounded bg-muted">{detail.channel}</span>
+              <span className="px-2 py-0.5 rounded bg-muted">{detail.bodyFormat}</span>
+              {detail.hasOverride && (
+                <span className="px-2 py-0.5 rounded bg-status-success/15 text-status-success">
+                  override active
+                </span>
+              )}
             </span>
-          )}
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -343,10 +346,10 @@ function NotificationTemplateEditor() {
             Preview
           </button>
           {previewMissing && previewMissing.length > 0 && (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+            <div className="rounded-md border border-status-warning/40 bg-status-warning/10 p-3 text-xs">
               Missing required variables:{' '}
               {previewMissing.map((m) => (
-                <code key={m} className="px-1 mx-0.5 rounded bg-amber-500/20">
+                <code key={m} className="px-1 mx-0.5 rounded bg-status-warning/20">
                   {m}
                 </code>
               ))}
@@ -379,7 +382,7 @@ function NotificationTemplateEditor() {
           )}
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

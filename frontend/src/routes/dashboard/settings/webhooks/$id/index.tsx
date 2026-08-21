@@ -20,10 +20,15 @@ import {
 import { toastError, toastSuccess } from '@/lib/toast';
 import { useAppForm } from '@/lib/form';
 import { cn, formatRelativeTime } from '@/lib/utils';
+import { ActionButton } from '@/components/ui/action-button';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { CodeBlock } from '@/components/ui/code-block';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Input } from '@/components/ui/input';
+import { PageHeader, PageShell } from '@/components/ui/page';
+import { Select } from '@/components/ui/select';
+import { TabStrip, TabsContent } from '@/components/ui/tabs';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {
   useDeleteWebhook,
@@ -38,8 +43,6 @@ import type {
   WebhookSubscription,
   WebhookTestResult,
 } from '@/lib/api/settings';
-
-type Tab = 'config' | 'deliveries' | 'test';
 
 const TAB_KEYS = ['config', 'deliveries', 'test'] as const;
 
@@ -107,12 +110,11 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
         <label className="text-sm font-medium text-foreground">Name</label>
         <form.Field name="name">
           {(field) => (
-            <input
+            <Input
               type="text"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           )}
         </form.Field>
@@ -121,12 +123,12 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
         <label className="text-sm font-medium text-foreground">URL</label>
         <form.Field name="url">
           {(field) => (
-            <input
+            <Input
               type="url"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+              className="font-mono"
             />
           )}
         </form.Field>
@@ -135,12 +137,11 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
         <label className="text-sm font-medium text-foreground">Signing secret</label>
         <form.Field name="secret">
           {(field) => (
-            <input
+            <Input
               type="password"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           )}
         </form.Field>
@@ -183,17 +184,16 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
         <label className="text-sm font-medium text-foreground">Minimum severity</label>
         <form.Field name="minSeverity">
           {(field) => (
-            <select
+            <Select
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value as 'info' | 'warning' | 'critical' | '')}
               onBlur={field.handleBlur}
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">No threshold</option>
               <option value="info">Info or higher</option>
               <option value="warning">Warning or higher</option>
               <option value="critical">Critical only</option>
-            </select>
+            </Select>
           )}
         </form.Field>
       </div>
@@ -224,15 +224,15 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
         </form.Field>
       </div>
       <div className="flex justify-end gap-2 pt-2 border-t border-border">
-        <button
+        <ActionButton
           type="button"
+          intent="primary"
           onClick={() => void form.handleSubmit()}
-          disabled={update.isPending}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          loading={update.isPending}
+          icon={<Save className="h-3.5 w-3.5" />}
         >
-          {update.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
           Save changes
-        </button>
+        </ActionButton>
       </div>
     </div>
   );
@@ -382,15 +382,14 @@ function TestTab({ webhookId }: { webhookId: string }) {
             below.
           </p>
         </div>
-        <button
-          type="button"
+        <ActionButton
+          intent="primary"
           onClick={handleTest}
-          disabled={test.isPending}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          loading={test.isPending}
+          icon={<Play className="h-3.5 w-3.5" />}
         >
-          {test.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
           Run test
-        </button>
+        </ActionButton>
       </div>
 
       {lastResult && (
@@ -442,7 +441,7 @@ function WebhookDetail() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <PageShell>
       <Link
         href="/dashboard/settings/webhooks"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -451,49 +450,36 @@ function WebhookDetail() {
         Back to webhooks
       </Link>
 
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Webhooks · {data.template}
-          </p>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">{data.name}</h1>
-          <p className="text-sm text-muted-foreground mt-1 font-mono break-all">{data.url}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setConfirmDelete(true)}
-          className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-border text-sm font-medium text-status-error hover:bg-status-error/10 transition-colors"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Delete
-        </button>
-      </div>
+      <PageHeader
+        eyebrow={`Webhooks · ${data.template}`}
+        title={data.name}
+        description={<span className="font-mono break-all">{data.url}</span>}
+        actions={
+          <ActionButton
+            intent="destructive"
+            icon={<Trash2 className="h-3.5 w-3.5" />}
+            onClick={() => setConfirmDelete(true)}
+          >
+            Delete
+          </ActionButton>
+        }
+      />
 
-      <div className="border-b border-border">
-        <nav className="flex gap-6">
-          {(['config', 'deliveries', 'test'] as Tab[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={cn(
-                'pb-3 text-sm font-medium border-b-2 transition-colors capitalize',
-                tab === t
-                  ? 'border-foreground text-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {t === 'deliveries' ? 'Recent deliveries' : t}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <TabStrip
+        tabs={[
+          { key: 'config', label: 'Config' },
+          { key: 'deliveries', label: 'Recent deliveries' },
+          { key: 'test', label: 'Test' },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
 
-      <div className="animate-fade-in">
+      <TabsContent>
         {tab === 'config' && <ConfigTab webhook={data} />}
         {tab === 'deliveries' && <DeliveriesTab webhookId={id} />}
         {tab === 'test' && <TestTab webhookId={id} />}
-      </div>
+      </TabsContent>
 
       <ConfirmDialog
         open={confirmDelete}
@@ -507,7 +493,7 @@ function WebhookDetail() {
         confirmText="Delete"
         variant="destructive"
       />
-    </div>
+    </PageShell>
   );
 }
 

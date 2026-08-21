@@ -21,11 +21,11 @@ import (
 
 // sharedStackLifecycle drives the six /settings/monitoring lifecycle endpoints
 // — Preview, Install, Upgrade, Replace, Uninstall, Status — for ONE shared
-// monitoring stack family. Two families are instantiated below: shared Thanos
-// and shared Alertmanager.
+// monitoring stack family. Shared families instantiated below: Thanos,
+// Alertmanager, Grafana, and Loki.
 //
-// It exists for the authorization preamble, not for the line count. The two
-// families were written by copying one another, and the copy dropped
+// It exists for the authorization preamble, not for the line count. The first
+// two families were written by copying one another, and the copy dropped
 //
 //	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbRead)
 //
@@ -36,9 +36,11 @@ import (
 //
 // Here the preamble is written exactly once per verb, inside this type, and it
 // is the first statement of the only six bodies that exist. A family is a data
-// literal — it supplies charts, payload decoding, persistence and enqueue, and
-// has no way to express "and skip the check", because there is no body of its
-// own to omit it from. A SEVENTH FAMILY therefore gets all six gates free.
+// literal — it supplies charts, payload decoding, persistence, enqueue, and an
+// optional precheck hook, and has no way to express "and skip the check",
+// because there is no body of its own to omit it from. A NEW FAMILY therefore
+// gets all six gates free. TestSharedStackHandlersOnlyDelegateToTheLifecycleDriver
+// counts 6 handlers per family (currently 24).
 //
 // A seventh ENDPOINT is the direction the original bug came from, and a comment
 // promising that the next author will copy the preamble is worth nothing, so it
@@ -50,16 +52,18 @@ import (
 // monitoring_stack_shared_gate_test.go and neither consults a list of endpoint
 // names, so adding one cannot outrun them.
 //
-// Deliberately NOT generalised to a third family: the per-cluster stack
-// (monitoring_stack_cluster.go) is gated by requirePermission middleware at
-// routes_clusters.go rather than in the handler, persists a typed row rather
-// than a JSON metadata bag, and has a materially different Uninstall. Folding
-// it in would need an optional Resource field — an "authorization is somebody
-// else's job" escape hatch on the very type whose job is to make that
-// impossible. See the file comment there for the fence that covers it instead.
+// Deliberately NOT generalised to the per-cluster stack
+// (monitoring_stack_cluster.go): that family is gated by requirePermission
+// middleware at routes_clusters.go rather than in the handler, persists a
+// typed row rather than a JSON metadata bag, and has a materially different
+// Uninstall. Folding it in would need an optional Resource field — an
+// "authorization is somebody else's job" escape hatch on the very type whose
+// job is to make that impossible. See the file comment there for the fence
+// that covers it instead.
 //
-// Everything the two families genuinely differ on is a field. There are no
-// per-family conditionals in any of the six methods.
+// Everything the shared families genuinely differ on is a field. There are no
+// per-family conditionals in any of the six methods (precheck is a hook;
+// Thanos/Alertmanager leave it nil).
 type sharedStackLifecycle[Req any] struct {
 	h *MonitoringHandler
 
@@ -103,6 +107,14 @@ type sharedStackLifecycle[Req any] struct {
 	// statusFields projects the persisted metadata into the family's status
 	// response. The driver adds the observed release, drift and pod count.
 	statusFields func(map[string]any, sqlc.MonitoringBackend) map[string]any
+	// precheck runs after authorize + payload, before persist.
+	// ok=true → continue. ok=false → write status/code/msg and return.
+	// Thanos/Alertmanager leave this nil (treated as ok). Preview does not
+	// call it. Grafana install/replace 412 on leftover-floor fail; upgrade
+	// skips the floor. Loki install/replace/mode-widen 412 on sizer fail;
+	// in-place upgrade and sizer_ratchet skip the mode gate. Preview does
+	// not call it.
+	precheck func(ctx context.Context, req Req, op string) (status int, code, msg string, ok bool)
 }
 
 func (l sharedStackLifecycle[Req]) preview(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +150,9 @@ func (l sharedStackLifecycle[Req]) install(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
+	if !l.runPrecheck(w, r, req, "install") {
+		return
+	}
 	if err := l.persist(r.Context(), backend, req, "installing"); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, l.persistFailure())
 		return
@@ -159,6 +174,9 @@ func (l sharedStackLifecycle[Req]) upgrade(w http.ResponseWriter, r *http.Reques
 	req, values, secretSpec, backend, err := l.payload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		return
+	}
+	if !l.runPrecheck(w, r, req, "upgrade") {
 		return
 	}
 	if replaceRequired, reasons := l.replaceRequired(sharedStackMetadata(backend, l.metadataKey), req); replaceRequired {
@@ -191,6 +209,9 @@ func (l sharedStackLifecycle[Req]) replace(w http.ResponseWriter, r *http.Reques
 	req, values, secretSpec, backend, err := l.payload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		return
+	}
+	if !l.runPrecheck(w, r, req, "replace") {
 		return
 	}
 	metadata := sharedStackMetadata(backend, l.metadataKey)
@@ -309,6 +330,24 @@ func (l sharedStackLifecycle[Req]) status(w http.ResponseWriter, r *http.Request
 
 func (l sharedStackLifecycle[Req]) persistFailure() string {
 	return "Failed to persist shared " + l.noun + " metadata"
+}
+
+func (l sharedStackLifecycle[Req]) runPrecheck(w http.ResponseWriter, r *http.Request, req Req, op string) bool {
+	if l.precheck == nil {
+		return true
+	}
+	status, code, msg, ok := l.precheck(r.Context(), req, op)
+	if ok {
+		return true
+	}
+	if status == 0 {
+		status = http.StatusPreconditionFailed
+	}
+	if code == "" {
+		code = apierror.SizerFailed
+	}
+	RespondRequestError(w, r, status, code, msg)
+	return false
 }
 
 // recordLifecycleAudit emits the family's audit row. Action name and detail
@@ -433,7 +472,136 @@ func (h *MonitoringHandler) sharedAlertmanagerLifecycle() sharedStackLifecycle[S
 	}
 }
 
-// The twelve exported entry points. Each is a route target and nothing else —
+func (h *MonitoringHandler) sharedGrafanaLifecycle() sharedStackLifecycle[SharedGrafanaRequest] {
+	return sharedStackLifecycle[SharedGrafanaRequest]{
+		h:              h,
+		auditPrefix:    "monitoring.shared_grafana",
+		noun:           "Grafana",
+		metadataKey:    "sharedGrafana",
+		opTargetType:   "shared_grafana",
+		chartRepo:      sharedGrafanaChartRepo,
+		chartName:      sharedGrafanaChartName,
+		defaultRelease: sharedGrafanaDefaultRelease,
+		payload: func(ctx context.Context, r *http.Request) (SharedGrafanaRequest, map[string]any, *objectStoreSecretSpec, sqlc.MonitoringBackend, error) {
+			req, values, backend, err := h.sharedGrafanaPayload(ctx, r)
+			return req, values, nil, backend, err
+		},
+		replaceRequired: sharedGrafanaReplaceRequired,
+		persist:         h.updateSharedGrafanaMetadata,
+		enqueue: func(ctx context.Context, userID pgtype.UUID, opType string, req SharedGrafanaRequest, values map[string]any, _ *objectStoreSecretSpec) (sqlc.MonitoringOperation, error) {
+			return h.enqueueSharedGrafanaOperation(ctx, userID, opType, req, values)
+		},
+		target: func(req SharedGrafanaRequest) (string, string, string) {
+			return req.ManagementClusterID, req.Namespace, req.ReleaseName
+		},
+		retarget: func(req SharedGrafanaRequest, clusterID, namespace, releaseName string) SharedGrafanaRequest {
+			return SharedGrafanaRequest{
+				ManagementClusterID:   clusterID,
+				Namespace:             namespace,
+				ReleaseName:           releaseName,
+				ChartVersion:          req.ChartVersion,
+				Replicas:              req.Replicas,
+				StorageClass:          req.StorageClass,
+				StorageSize:           req.StorageSize,
+				IngressHost:           req.IngressHost,
+				LogDatasourceURL:      req.LogDatasourceURL,
+				AutoRollbackOnFailure: req.AutoRollbackOnFailure,
+			}
+		},
+		statusFields: func(metadata map[string]any, backend sqlc.MonitoringBackend) map[string]any {
+			return map[string]any{
+				"status":                sharedGrafanaProjectedStatus(metadata, backend),
+				"managementClusterId":   stringFromMap(metadata, "managementClusterId"),
+				"namespace":             stringFromMap(metadata, "namespace"),
+				"releaseName":           stringFromMap(metadata, "releaseName"),
+				"chartVersion":          stringFromMap(metadata, "chartVersion"),
+				"replicas":              metadata["replicas"],
+				"storageClass":          stringFromMap(metadata, "storageClass"),
+				"storageSize":           stringFromMap(metadata, "storageSize"),
+				"ingressHost":           stringFromMap(metadata, "ingressHost"),
+				"logDatasourceUrl":      stringFromMap(metadata, "logDatasourceUrl"),
+				"grafanaHost":           stringFromMap(metadata, "grafanaHost"),
+				"authMode":              defaultString(stringFromMap(metadata, "authMode"), sharedGrafanaAuthModeClusterIP),
+				"autoRollbackOnFailure": boolFromAny(metadata["autoRollbackOnFailure"]),
+				"desiredSpecHash":       stringFromMap(metadata, "lastAppliedSpecHash"),
+				"managedAssetHashes":    mapFromMapValue(metadata["managedAssetHashes"]),
+			}
+		},
+		precheck: h.sharedGrafanaPrecheck,
+	}
+}
+
+func (h *MonitoringHandler) sharedLokiLifecycle() sharedStackLifecycle[SharedLokiRequest] {
+	return sharedStackLifecycle[SharedLokiRequest]{
+		h:              h,
+		auditPrefix:    "monitoring.shared_loki",
+		noun:           "Loki",
+		metadataKey:    "sharedLoki",
+		opTargetType:   "shared_loki",
+		chartRepo:      sharedLokiChartRepo,
+		chartName:      sharedLokiChartName,
+		defaultRelease: sharedLokiDefaultRelease,
+		payload: func(ctx context.Context, r *http.Request) (SharedLokiRequest, map[string]any, *objectStoreSecretSpec, sqlc.MonitoringBackend, error) {
+			req, values, backend, err := h.sharedLokiPayload(ctx, r)
+			return req, values, nil, backend, err
+		},
+		replaceRequired: sharedLokiReplaceRequired,
+		persist:         h.updateSharedLokiMetadata,
+		enqueue: func(ctx context.Context, userID pgtype.UUID, opType string, req SharedLokiRequest, values map[string]any, _ *objectStoreSecretSpec) (sqlc.MonitoringOperation, error) {
+			return h.enqueueSharedLokiOperation(ctx, userID, opType, req, values)
+		},
+		target: func(req SharedLokiRequest) (string, string, string) {
+			return req.ManagementClusterID, req.Namespace, req.ReleaseName
+		},
+		retarget: func(req SharedLokiRequest, clusterID, namespace, releaseName string) SharedLokiRequest {
+			return SharedLokiRequest{
+				ManagementClusterID:     clusterID,
+				Namespace:               namespace,
+				ReleaseName:             releaseName,
+				ChartVersion:            req.ChartVersion,
+				StorageConfigID:         req.StorageConfigID,
+				ObjectStorageSecretName: req.ObjectStorageSecretName,
+				IngestHostname:          req.IngestHostname,
+				StorageClass:            req.StorageClass,
+				WalStorageSize:          req.WalStorageSize,
+				Mode:                    req.Mode,
+				Retention:               req.Retention,
+				SkipDiskCheck:           req.SkipDiskCheck,
+				AutoRollbackOnFailure:   req.AutoRollbackOnFailure,
+			}
+		},
+		statusFields: func(metadata map[string]any, _ sqlc.MonitoringBackend) map[string]any {
+			release := defaultString(stringFromMap(metadata, "releaseName"), sharedLokiDefaultRelease)
+			ns := defaultString(stringFromMap(metadata, "namespace"), "monitoring")
+			queryURL, authURL := lokiDerivedURLs(release, ns)
+			return map[string]any{
+				"status":                  defaultString(stringFromMap(metadata, "status"), "not_configured"),
+				"managementClusterId":     stringFromMap(metadata, "managementClusterId"),
+				"namespace":               ns,
+				"releaseName":             release,
+				"chartVersion":            stringFromMap(metadata, "chartVersion"),
+				"storageConfigId":         stringFromMap(metadata, "storageConfigId"),
+				"objectStorageSecretName": stringFromMap(metadata, "objectStorageSecretName"),
+				"ingestHostname":          stringFromMap(metadata, "ingestHostname"),
+				"ingestPublic":            boolFromAny(metadata["ingestPublic"]),
+				"storageClass":            stringFromMap(metadata, "storageClass"),
+				"walStorageSize":          stringFromMap(metadata, "walStorageSize"),
+				"mode":                    stringFromMap(metadata, "mode"),
+				"retention":               stringFromMap(metadata, "retention"),
+				"skipDiskCheck":           boolFromAny(metadata["skipDiskCheck"]),
+				"autoRollbackOnFailure":   boolFromAny(metadata["autoRollbackOnFailure"]),
+				"computedLokiPrefix":      stringFromMap(metadata, "computedLokiPrefix"),
+				"lastSizerVerdict":        metadata["lastSizerVerdict"],
+				"queryUrl":                defaultString(stringFromMap(metadata, "queryUrl"), queryURL),
+				"authUrl":                 defaultString(stringFromMap(metadata, "authUrl"), authURL),
+				"desiredSpecHash":         stringFromMap(metadata, "lastAppliedSpecHash"),
+			}
+		},
+		precheck: h.sharedLokiPrecheck,
+	}
+}
+
+// The twenty-four exported entry points. Each is a route target and nothing else —
 // there is no body here to leave a check out of.
 
 func (h *MonitoringHandler) PreviewSharedThanosStack(w http.ResponseWriter, r *http.Request) {
@@ -482,6 +650,54 @@ func (h *MonitoringHandler) UninstallSharedAlertmanager(w http.ResponseWriter, r
 
 func (h *MonitoringHandler) GetSharedAlertmanagerStatus(w http.ResponseWriter, r *http.Request) {
 	h.sharedAlertmanagerLifecycle().status(w, r)
+}
+
+func (h *MonitoringHandler) PreviewSharedGrafanaStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedGrafanaLifecycle().preview(w, r)
+}
+
+func (h *MonitoringHandler) InstallSharedGrafanaStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedGrafanaLifecycle().install(w, r)
+}
+
+func (h *MonitoringHandler) UpgradeSharedGrafanaStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedGrafanaLifecycle().upgrade(w, r)
+}
+
+func (h *MonitoringHandler) ReplaceSharedGrafanaStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedGrafanaLifecycle().replace(w, r)
+}
+
+func (h *MonitoringHandler) UninstallSharedGrafanaStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedGrafanaLifecycle().uninstall(w, r)
+}
+
+func (h *MonitoringHandler) GetSharedGrafanaStatus(w http.ResponseWriter, r *http.Request) {
+	h.sharedGrafanaLifecycle().status(w, r)
+}
+
+func (h *MonitoringHandler) PreviewSharedLokiStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedLokiLifecycle().preview(w, r)
+}
+
+func (h *MonitoringHandler) InstallSharedLokiStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedLokiLifecycle().install(w, r)
+}
+
+func (h *MonitoringHandler) UpgradeSharedLokiStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedLokiLifecycle().upgrade(w, r)
+}
+
+func (h *MonitoringHandler) ReplaceSharedLokiStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedLokiLifecycle().replace(w, r)
+}
+
+func (h *MonitoringHandler) UninstallSharedLokiStack(w http.ResponseWriter, r *http.Request) {
+	h.sharedLokiLifecycle().uninstall(w, r)
+}
+
+func (h *MonitoringHandler) GetSharedLokiStatus(w http.ResponseWriter, r *http.Request) {
+	h.sharedLokiLifecycle().status(w, r)
 }
 
 func (h *MonitoringHandler) sharedThanosPayload(ctx context.Context, r *http.Request) (SharedThanosStackRequest, map[string]any, objectStoreSecretSpec, sqlc.MonitoringBackend, error) {

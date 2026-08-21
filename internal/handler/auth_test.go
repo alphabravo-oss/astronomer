@@ -400,6 +400,9 @@ func TestBrowserSessionCookieAttributes(t *testing.T) {
 			if session.MaxAge != 0 {
 				t.Fatalf("session MaxAge = %d, want session cookie MaxAge 0", session.MaxAge)
 			}
+			if session.Domain != "" {
+				t.Fatalf("astronomer_session Domain = %q, want empty (host-only; do not widen to grafana.*)", session.Domain)
+			}
 
 			refresh := cookieByName(t, resp, middleware.RefreshCookieName)
 			assertCookieSecurity(t, refresh, cookieSecurityWant{

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@/lib/link";
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation";
 import { useClusters, useProjects } from "@/lib/hooks";
@@ -9,24 +9,67 @@ import {
   LoadingState,
   PermissionState,
 } from "@/components/ui/empty-state";
-import { FolderKanban, PackageOpen } from "lucide-react";
+import { ArrowLeft, FolderKanban, PackageOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const deliveryTabs = [
-  ["Overview", "/dashboard/delivery"],
-  ["Sources", "/dashboard/delivery/sources"],
-  ["Bundles", "/dashboard/delivery/bundles"],
-  ["Targets", "/dashboard/delivery/targets"],
-  ["Rollouts", "/dashboard/delivery/rollouts"],
-  ["Deployments", "/dashboard/delivery/deployments"],
-] as const;
+export type DeliveryListTab =
+  | "sources"
+  | "bundles"
+  | "targets"
+  | "rollouts"
+  | "deployments";
 
-export function useDeliveryProjectScope() {
+export function clusterDeliveryPath(clusterId: string, tab: string = ""): string {
+  const suffix = tab ? `/${tab}` : "";
+  return `/dashboard/clusters/${clusterId}/delivery${suffix}`;
+}
+
+export function withProjectQuery(path: string, projectId?: string): string {
+  if (!projectId) return path;
+  const join = path.includes("?") ? "&" : "?";
+  return `${path}${join}project=${encodeURIComponent(projectId)}`;
+}
+
+export function deliveryEntityPath(
+  tab: DeliveryListTab,
+  entityId: string,
+  opts: { clusterId?: string; projectId?: string } = {},
+): string {
+  const encoded = encodeURIComponent(entityId);
+  const path = opts.clusterId
+    ? `${clusterDeliveryPath(opts.clusterId, tab)}/${encoded}`
+    : `/dashboard/delivery/${tab}/${encoded}`;
+  return withProjectQuery(path, opts.projectId);
+}
+
+export function projectClusterId(project: {
+  clusterId?: string;
+  clusterIds?: string[];
+}): string | undefined {
+  return project.clusterId || project.clusterIds?.[0];
+}
+
+export function projectBoundToCluster(
+  project: { clusterId?: string; clusterIds?: string[] },
+  clusterId: string,
+): boolean {
+  return (
+    project.clusterId === clusterId ||
+    Boolean(project.clusterIds?.includes(clusterId))
+  );
+}
+
+export function useDeliveryProjectScope(opts?: { clusterId?: string }) {
   const projects = useProjects({ pageSize: 200 });
   const pathname = usePathname();
   const search = useSearchParams();
   const router = useRouter();
-  const rows = useMemo(() => projects.data?.data ?? [], [projects.data?.data]);
+  const clusterId = opts?.clusterId;
+  const rows = useMemo(() => {
+    const all = projects.data?.data ?? [];
+    if (!clusterId) return all;
+    return all.filter((project) => projectBoundToCluster(project, clusterId));
+  }, [clusterId, projects.data?.data]);
   const requested = search.get("project") ?? "";
   const projectId = rows.some((project) => project.id === requested)
     ? requested
@@ -54,6 +97,92 @@ export function useDeliveryProjectScope() {
   };
 
   return { projectId, projects: rows, projectQuery: projects, setProjectId };
+}
+
+export function useDeliveryWorkspace() {
+  const pathname = usePathname();
+  const clusterMatch = pathname.match(
+    /^\/dashboard\/clusters\/([^/]+)\/delivery/,
+  );
+  const clusterId = clusterMatch?.[1];
+  const scope = useDeliveryProjectScope({ clusterId });
+  const listHref = (tab: DeliveryListTab | "") =>
+    clusterId
+      ? clusterDeliveryPath(clusterId, tab)
+      : tab
+        ? `/dashboard/delivery/${tab}`
+        : "/dashboard/delivery";
+  const entityHref = (tab: DeliveryListTab, entityId: string) =>
+    deliveryEntityPath(tab, entityId, {
+      clusterId,
+      projectId: scope.projectId,
+    });
+  return { clusterId, listHref, entityHref, ...scope };
+}
+
+function resolveDeliveryCluster(
+  projectId: string,
+  projects: Array<{ id: string; clusterId?: string; clusterIds?: string[] }>,
+) {
+  const project =
+    projects.find((item) => item.id === projectId) ??
+    (projects.length === 1 ? projects[0] : undefined);
+  return {
+    project,
+    clusterId: project ? projectClusterId(project) : undefined,
+  };
+}
+
+export function RedirectDeliveryList({ tab }: { tab: DeliveryListTab }) {
+  const { projectId, projects, projectQuery } = useDeliveryProjectScope();
+  const search = useSearchParams();
+  const searchKey = search.toString();
+  const router = useRouter();
+  useEffect(() => {
+    if (projectQuery.isLoading) return;
+    const { project, clusterId } = resolveDeliveryCluster(projectId, projects);
+    const next = new URLSearchParams(searchKey);
+    if (project?.id) next.set("project", project.id);
+    if (clusterId) {
+      router.replace(
+        `${clusterDeliveryPath(clusterId, tab)}${next.size ? `?${next.toString()}` : ""}`,
+      );
+      return;
+    }
+    router.replace("/dashboard/delivery");
+  }, [projectId, projectQuery.isLoading, projects, router, searchKey, tab]);
+  return <LoadingState title="Opening cluster delivery" />;
+}
+
+export function RedirectDeliveryDetail({
+  tab,
+  id,
+  children,
+}: {
+  tab: DeliveryListTab;
+  id: string;
+  children: ReactNode;
+}) {
+  const { projectId, projects, projectQuery } = useDeliveryProjectScope();
+  const search = useSearchParams();
+  const searchKey = search.toString();
+  const router = useRouter();
+  const [redirecting, setRedirecting] = useState(false);
+  useEffect(() => {
+    if (projectQuery.isLoading || !id) return;
+    const { project, clusterId } = resolveDeliveryCluster(projectId, projects);
+    if (!clusterId) return;
+    const next = new URLSearchParams(searchKey);
+    if (project?.id) next.set("project", project.id);
+    setRedirecting(true);
+    router.replace(
+      `${clusterDeliveryPath(clusterId, tab)}/${encodeURIComponent(id)}${next.size ? `?${next.toString()}` : ""}`,
+    );
+  }, [id, projectId, projectQuery.isLoading, projects, router, searchKey, tab]);
+  if (projectQuery.isLoading || redirecting) {
+    return <LoadingState title="Opening cluster delivery" />;
+  }
+  return children;
 }
 
 export function useDeliveryPageIndex(parameter = "page") {
@@ -119,46 +248,36 @@ export function DeliveryShell({
     displayName: string;
     name: string;
     clusterId?: string;
+    clusterIds?: string[];
   }>;
   setProjectId: (id: string) => void;
   showProjectSelect?: boolean;
   children: ReactNode;
 }) {
-  const pathname = usePathname();
+  const { clusterId } = useDeliveryWorkspace();
   const clusters = useClusters({ pageSize: 200 });
   const clusterNames = useMemo(() => {
     const names = new Map<string, string>();
     for (const cluster of clusters.data?.data ?? []) {
-      if (cluster.id && cluster.name) names.set(cluster.id, cluster.name);
+      if (cluster.id && (cluster.displayName || cluster.name)) {
+        names.set(cluster.id, cluster.displayName || cluster.name);
+      }
     }
     return names;
   }, [clusters.data?.data]);
+  // Cluster delivery layout already owns the tab strip. Detail pages that
+  // still sit on /dashboard/delivery/... only need a way back to the fleet.
+  if (clusterId) return children;
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 border-b border-border pb-4 lg:flex-row lg:items-end lg:justify-between">
-        <nav aria-label="Continuous Delivery" className="flex flex-wrap gap-1">
-          {deliveryTabs.map(([label, href]) => {
-            const active =
-              pathname === href ||
-              (href !== "/dashboard/delivery" &&
-                pathname.startsWith(`${href}/`));
-            return (
-              <Link
-                key={href}
-                href={`${href}${projectId ? `?project=${encodeURIComponent(projectId)}` : ""}`}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                )}
-              >
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
+      <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <Link
+          href="/dashboard/delivery"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to delivery fleet
+        </Link>
         {showProjectSelect ? (
           <label className="flex min-w-64 items-center gap-2 text-sm">
             <FolderKanban

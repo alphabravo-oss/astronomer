@@ -18,6 +18,7 @@ import (
 
 type effectivePermissionResponse struct {
 	Subject     effectivePermissionSubject `json:"subject"`
+	Superuser   bool                       `json:"superuser"`
 	Context     effectivePermissionContext `json:"context"`
 	Bindings    []effectiveBinding         `json:"bindings"`
 	Permissions []effectivePermissionGrant `json:"permissions"`
@@ -45,6 +46,7 @@ type effectiveBinding struct {
 	ClusterID string      `json:"cluster_id,omitempty"`
 	ProjectID string      `json:"project_id,omitempty"`
 	Namespace string      `json:"namespace,omitempty"`
+	Superuser bool        `json:"superuser,omitempty"`
 	Rules     []rbac.Rule `json:"rules"`
 }
 
@@ -187,11 +189,29 @@ func (h *RBACHandler) respondEffectivePermissions(w http.ResponseWriter, r *http
 		return
 	}
 	response := effectivePermissionResponse{
-		Subject:  effectivePermissionSubject{UserID: userID, Self: self},
-		Context:  selectedContext,
-		Bindings: make([]effectiveBinding, 0, len(bindings)),
+		Subject:     effectivePermissionSubject{UserID: userID, Self: self},
+		Context:     selectedContext,
+		Bindings:    make([]effectiveBinding, 0, len(bindings)),
+		Permissions: make([]effectivePermissionGrant, 0),
 	}
 	for _, binding := range bindings {
+		if binding.IsSuperuser {
+			response.Superuser = true
+			source := effectivePermissionSource{Scope: "global", RoleName: "Superuser"}
+			rules := []rbac.Rule{{Resource: "*", Verbs: []string{"*"}}}
+			response.Bindings = append(response.Bindings, effectiveBinding{
+				Scope:     "global",
+				RoleName:  "Superuser",
+				Superuser: true,
+				Rules:     rules,
+			})
+			response.Permissions = mergeGrants(response.Permissions, grantsFromRules(rules, source))
+			continue
+		}
+		rules := binding.RoleRules
+		if rules == nil {
+			rules = []rbac.Rule{}
+		}
 		response.Bindings = append(response.Bindings, effectiveBinding{
 			Scope:     binding.Scope,
 			BindingID: binding.BindingID,
@@ -201,7 +221,7 @@ func (h *RBACHandler) respondEffectivePermissions(w http.ResponseWriter, r *http
 			ClusterID: binding.ClusterID,
 			ProjectID: binding.ProjectID,
 			Namespace: binding.Namespace,
-			Rules:     binding.RoleRules,
+			Rules:     rules,
 		})
 		source := effectivePermissionSource{
 			Scope:     binding.Scope,
@@ -212,7 +232,7 @@ func (h *RBACHandler) respondEffectivePermissions(w http.ResponseWriter, r *http
 			ProjectID: binding.ProjectID,
 			Namespace: binding.Namespace,
 		}
-		response.Permissions = mergeGrants(response.Permissions, grantsFromRules(binding.RoleRules, source))
+		response.Permissions = mergeGrants(response.Permissions, grantsFromRules(rules, source))
 	}
 	for i := range response.Permissions {
 		response.Permissions[i].AppliesToContext = grantAppliesToContext(response.Permissions[i], selectedContext)
@@ -329,9 +349,13 @@ func (h *RBACHandler) rulesForRoleID(ctx context.Context, scope string, id uuid.
 func grantsFromRules(rules []rbac.Rule, source effectivePermissionSource) []effectivePermissionGrant {
 	grants := make([]effectivePermissionGrant, 0)
 	for _, rule := range rules {
+		resource := grantResourceName(rule)
+		if resource == "" {
+			continue
+		}
 		for _, verb := range rule.Verbs {
 			grants = append(grants, effectivePermissionGrant{
-				Resource:         rule.Resource,
+				Resource:         resource,
 				Verb:             verb,
 				AppliesToContext: true,
 				Sources:          []effectivePermissionSource{source},
@@ -340,6 +364,20 @@ func grantsFromRules(rules []rbac.Rule, source effectivePermissionSource) []effe
 	}
 	sortEffectivePermissions(grants)
 	return grants
+}
+
+func grantResourceName(rule rbac.Rule) string {
+	name := rule.Resource
+	if name == "" && len(rule.Resources) > 0 {
+		name = rule.Resources[0]
+	}
+	if groups := rule.CRDAPIGroups(); len(groups) > 0 && groups[0] != "" {
+		if name == "" {
+			return groups[0]
+		}
+		return name + "." + groups[0]
+	}
+	return name
 }
 
 // grantsFromEffective renders a template's flattened, provenance-annotated

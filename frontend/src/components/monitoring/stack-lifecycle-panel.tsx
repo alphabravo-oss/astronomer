@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   Download,
   FileCode2,
+  ExternalLink,
   Pencil,
   Plus,
   RefreshCw,
@@ -42,12 +43,13 @@ import { PermissionState } from '@/components/ui/empty-state';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import type { PermissionDecision } from '@/lib/permissions';
-import type { MonitoringStackTarget } from '@/lib/api/monitoring-stack';
+import type { MonitoringStackTarget, SharedGrafanaStatus } from '@/lib/api/monitoring-stack';
 import { useMonitoringStackController } from '@/components/monitoring/hooks';
 import { StackOperationPanel } from '@/components/monitoring/stack-operation-panel';
 import { StackPreviewDialog } from '@/components/monitoring/stack-preview-dialog';
 import {
   buildStackBody,
+  fleetGrafanaOpenURL,
   missingRequiredFields,
   replaceTriggeringChanges,
   seedStackValues,
@@ -184,6 +186,8 @@ export function StackLifecyclePanel({
   }
 
   const releaseLabel = status?.releaseName || spec.defaults.releaseName || spec.title;
+  const grafanaOpenURL =
+    spec.key === 'grafana' ? fleetGrafanaOpenURL(status as SharedGrafanaStatus | undefined) : null;
 
   return (
     <section
@@ -203,17 +207,30 @@ export function StackLifecyclePanel({
           </div>
           <p className="mt-1 max-w-2xl text-xs text-muted-foreground">{spec.description}</p>
         </div>
-        <ActionButton
-          size="sm"
-          intent="ghost"
-          icon={<RefreshCw className="h-3.5 w-3.5" />}
-          onClick={() => {
-            void statusQuery.refetch();
-            tracker.refresh();
-          }}
-        >
-          Refresh
-        </ActionButton>
+        <div className="flex shrink-0 items-center gap-2">
+          {grafanaOpenURL ? (
+            <a
+              href={grafanaOpenURL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-accent"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Open fleet Grafana
+            </a>
+          ) : null}
+          <ActionButton
+            size="sm"
+            intent="ghost"
+            icon={<RefreshCw className="h-3.5 w-3.5" />}
+            onClick={() => {
+              void statusQuery.refetch();
+              tracker.refresh();
+            }}
+          >
+            Refresh
+          </ActionButton>
+        </div>
       </header>
 
       <div className="space-y-4 p-4">

@@ -77,6 +77,9 @@ func TestRecordDefaultsAndRedaction(t *testing.T) {
 	if writer.last.CorrelationID != "req-123" {
 		t.Fatalf("correlation_id = %q, want req-123", writer.last.CorrelationID)
 	}
+	if writer.last.ActionClass != ClassAuth {
+		t.Fatalf("action_class = %q, want %s", writer.last.ActionClass, ClassAuth)
+	}
 
 	var detail map[string]any
 	if err := json.Unmarshal(writer.last.Detail, &detail); err != nil {

@@ -14,6 +14,7 @@ import {
   XCircle,
 } from 'lucide-react';
 
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   disableExtension,
   enableExtension,
@@ -28,10 +29,10 @@ import {
 import { queryKeys } from '@/lib/hooks';
 
 function statusClass(status: string, enabled?: boolean) {
-  if (enabled) return 'bg-emerald-500/10 text-emerald-500';
+  if (enabled) return 'bg-status-success/10 text-status-success';
   if (status === 'compatible') return 'bg-muted text-muted-foreground';
-  if (status === 'incompatible') return 'bg-red-500/10 text-red-500';
-  return 'bg-amber-500/10 text-amber-500';
+  if (status === 'incompatible') return 'bg-status-error/10 text-status-error';
+  return 'bg-status-warning/10 text-status-warning';
 }
 
 function FindingList({ findings }: { findings: ExtensionFinding[] }) {
@@ -44,9 +45,9 @@ function FindingList({ findings }: { findings: ExtensionFinding[] }) {
         <div key={`${finding.field || 'finding'}:${index}`} className="rounded border border-border p-3">
           <div className="flex items-center gap-2 text-xs font-medium text-foreground">
             {finding.severity === 'error' ? (
-              <XCircle className="h-3.5 w-3.5 text-red-500" />
+              <XCircle className="h-3.5 w-3.5 text-status-error" />
             ) : (
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+              <AlertTriangle className="h-3.5 w-3.5 text-status-warning" />
             )}
             {finding.severity === 'error' ? 'Error' : 'Warning'}
             {finding.field && <span className="text-muted-foreground">{finding.field}</span>}
@@ -202,18 +203,16 @@ function ExtensionsPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Extensions</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Registry, manifest validation, permissions, and compatibility state.
-          </p>
-        </div>
-        <div className="rounded-md bg-accent/30 p-2.5">
-          <Puzzle className="h-5 w-5 text-foreground" />
-        </div>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Extensions"
+        description="Registry, manifest validation, permissions, and compatibility state."
+        actions={
+          <div className="rounded-md bg-accent/30 p-2.5">
+            <Puzzle className="h-5 w-5 text-foreground" />
+          </div>
+        }
+      />
 
       {isLoading ? (
         <div className="flex items-center justify-center h-40">
@@ -292,8 +291,8 @@ function ExtensionsPage() {
             <>
               <div className={`rounded-lg border p-4 ${
                 validation.valid && validation.compatibilityStatus === 'compatible'
-                  ? 'border-emerald-500/30 bg-emerald-500/10'
-                  : 'border-amber-500/30 bg-amber-500/10'
+                  ? 'border-status-success/30 bg-status-success/10'
+                  : 'border-status-warning/30 bg-status-warning/10'
               }`}>
                 <div className="text-sm font-medium text-foreground">
                   {validation.valid ? 'Manifest accepted' : 'Manifest blocked'}
@@ -307,7 +306,7 @@ function ExtensionsPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

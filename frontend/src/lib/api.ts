@@ -56,7 +56,8 @@ function csrfHeaders(): Record<string, string> {
  *
  * Exported for the round-trip test in src/lib/__tests__/api-camelize.test.ts.
  */
-const MONITORING_PREVIEW_PATH = /\/monitoring\/(?:stack|thanos|alertmanager)\/preview\/?(?:\?|$)/;
+const MONITORING_PREVIEW_PATH =
+  /\/monitoring\/(?:stack|thanos|alertmanager|grafana|loki)\/preview\/?(?:\?|$)/;
 
 export function isMonitoringPreviewPath(url: string | undefined): boolean {
   return !!url && MONITORING_PREVIEW_PATH.test(url);
@@ -283,7 +284,16 @@ export async function getClusters(params?: {
   page?: number;
   pageSize?: number;
 }) {
-  const res = await api.get<PaginatedResponse<import('@/types').Cluster>>('/clusters', { params });
+  const res = await api.get<PaginatedResponse<import('@/types').Cluster>>('/clusters', {
+    params: {
+      status: params?.status,
+      provider: params?.provider,
+      environment: params?.environment,
+      search: params?.search,
+      limit: params?.pageSize,
+      offset: params?.page && params?.pageSize ? Math.max(0, params.page - 1) * params.pageSize : undefined,
+    },
+  });
   return res.data;
 }
 
@@ -791,21 +801,25 @@ export async function getWorkloadMetrics(
 
 // --- RBAC ---
 
+const RBAC_LIST_LIMIT = 200;
+
 export async function getGlobalRoles() {
-  const res = await api.get<APIResponse<import('@/types').GlobalRole[]>>('/rbac/global-roles');
+  const res = await api.get<APIResponse<import('@/types').GlobalRole[]>>('/rbac/global-roles', {
+    params: { limit: RBAC_LIST_LIMIT },
+  });
   return res.data.data;
 }
 
 export async function getClusterRoles(clusterId?: string) {
   const res = await api.get<APIResponse<import('@/types').ClusterRole[]>>('/rbac/cluster-roles', {
-    params: clusterId ? { clusterId } : undefined,
+    params: { limit: RBAC_LIST_LIMIT, ...(clusterId ? { clusterId } : {}) },
   });
   return res.data.data;
 }
 
 export async function getProjectRoles(projectId?: string) {
   const res = await api.get<APIResponse<import('@/types').ProjectRole[]>>('/rbac/project-roles', {
-    params: projectId ? { projectId } : undefined,
+    params: { limit: RBAC_LIST_LIMIT, ...(projectId ? { projectId } : {}) },
   });
   return res.data.data;
 }
@@ -814,7 +828,7 @@ export async function createGlobalRole(data: {
   name: string;
   displayName: string;
   description?: string;
-  rules: import('@/types').PolicyRule[];
+  rules: Array<import('@/types').PolicyRule | Record<string, unknown>>;
 }) {
   const res = await api.post<APIResponse<import('@/types').GlobalRole>>('/rbac/global-roles', data);
   return res.data.data;
@@ -824,7 +838,7 @@ export async function createClusterRole(data: {
   name: string;
   displayName: string;
   description?: string;
-  rules: import('@/types').PolicyRule[];
+  rules: Array<import('@/types').PolicyRule | Record<string, unknown>>;
 }) {
   const res = await api.post<APIResponse<import('@/types').ClusterRole>>('/rbac/cluster-roles', data);
   return res.data.data;
@@ -834,7 +848,7 @@ export async function createProjectRole(data: {
   name: string;
   displayName: string;
   description?: string;
-  rules: import('@/types').PolicyRule[];
+  rules: Array<import('@/types').PolicyRule | Record<string, unknown>>;
 }) {
   const res = await api.post<APIResponse<import('@/types').ProjectRole>>('/rbac/project-roles', data);
   return res.data.data;
@@ -862,7 +876,23 @@ export async function createRoleBinding(data: {
 export async function listClusterRoleBindings(params?: { cluster_id?: string }) {
   const res = await api.get<APIResponse<import('@/types').ClusterRoleBinding[]>>(
     '/rbac/cluster-role-bindings/',
-    { params }
+    { params: { limit: RBAC_LIST_LIMIT, ...params } }
+  );
+  return res.data.data;
+}
+
+export async function listGlobalRoleBindings() {
+  const res = await api.get<APIResponse<import('@/types').AccessBinding[]>>(
+    '/rbac/global-role-bindings/',
+    { params: { limit: RBAC_LIST_LIMIT } },
+  );
+  return res.data.data;
+}
+
+export async function listProjectRoleBindings(params?: { project_id?: string }) {
+  const res = await api.get<APIResponse<import('@/types').AccessBinding[]>>(
+    '/rbac/project-role-bindings/',
+    { params: { limit: RBAC_LIST_LIMIT, ...params } },
   );
   return res.data.data;
 }
@@ -873,15 +903,43 @@ export async function createClusterRoleBinding(data: {
   cluster_id: string;
   namespace?: string;
 }) {
-  const res = await api.post<APIResponse<import('@/types').ClusterRoleBinding>>(
+  const res = await api.post<APIResponse<import('@/types').AccessBinding>>(
     '/rbac/cluster-role-bindings/',
     data
   );
   return res.data.data;
 }
 
+export async function createGlobalRoleBinding(data: { user_id: string; role_id: string }) {
+  const res = await api.post<APIResponse<import('@/types').AccessBinding>>(
+    '/rbac/global-role-bindings/',
+    data,
+  );
+  return res.data.data;
+}
+
+export async function createProjectRoleBinding(data: {
+  user_id: string;
+  role_id: string;
+  project_id: string;
+}) {
+  const res = await api.post<APIResponse<import('@/types').AccessBinding>>(
+    '/rbac/project-role-bindings/',
+    data,
+  );
+  return res.data.data;
+}
+
 export async function deleteClusterRoleBinding(id: string) {
   await api.delete(`/rbac/cluster-role-bindings/${id}/`);
+}
+
+export async function deleteGlobalRoleBinding(id: string) {
+  await api.delete(`/rbac/global-role-bindings/${id}/`);
+}
+
+export async function deleteProjectRoleBinding(id: string) {
+  await api.delete(`/rbac/project-role-bindings/${id}/`);
 }
 
 export interface EffectivePermissionParams {
@@ -922,7 +980,15 @@ export async function previewPermissions(data: import('@/types').PermissionPrevi
 }
 
 export async function getUsers(params?: { search?: string; page?: number; pageSize?: number }) {
-  const res = await api.get<PaginatedResponse<import('@/types').User>>('/users', { params });
+  const pageSize = params?.pageSize;
+  const page = params?.page;
+  const res = await api.get<PaginatedResponse<import('@/types').User>>('/users', {
+    params: {
+      search: params?.search,
+      limit: pageSize,
+      offset: page && pageSize ? Math.max(0, page - 1) * pageSize : undefined,
+    },
+  });
   return res.data;
 }
 
@@ -986,6 +1052,7 @@ export type AuditLogQueryParams = {
   pageSize?: number;
   limit?: number;
   offset?: number;
+  q?: string;
   actor?: string;
   action?: string;
   user?: string;
@@ -1005,6 +1072,8 @@ export type AuditLogQueryParams = {
   to?: string;
   // action_class: "mutation" | "read" | "auth" | "system" — migration 063.
   action_class?: string;
+  // audience: people (operators/users) | system (workers/agents) | all
+  audience?: 'people' | 'system' | 'all' | string;
 };
 
 function auditLogRequestParams(params?: AuditLogQueryParams): Record<string, string | number> | undefined {
@@ -1016,10 +1085,12 @@ function auditLogRequestParams(params?: AuditLogQueryParams): Record<string, str
   if (limit != null) out.limit = limit;
   if (offset != null) out.offset = offset;
   const entries: Array<[string, string | number | undefined]> = [
+    ['q', params.q],
     ['actor', params.actor || params.user],
     ['user_id', params.user_id],
     ['action', params.action],
     ['action_class', params.action_class],
+    ['audience', params.audience],
     ['target', params.target],
     ['resource_type', params.resource_type],
     ['resource_id', params.resource_id],
@@ -1064,8 +1135,13 @@ export async function getActivityFeed(params?: { limit?: number }) {
 
 // --- Alerting ---
 
-export async function getAlertRules() {
-  const res = await api.get<APIResponse<import('@/types').AlertRule[]>>('/alerting/rules');
+export async function getAlertRules(params?: { clusterId?: string; limit?: number }) {
+  const res = await api.get<APIResponse<import('@/types').AlertRule[]>>('/alerting/rules', {
+    params: {
+      ...(params?.clusterId ? { clusterId: params.clusterId } : {}),
+      ...(params?.limit ? { limit: params.limit } : {}),
+    },
+  });
   return res.data.data;
 }
 
@@ -1174,13 +1250,55 @@ export async function testLoggingOutput(id: string) {
   return res.data.data;
 }
 
-export async function getLoggingPipelines() {
-  const res = await api.get<APIResponse<import('@/types').LoggingPipeline[]>>('/logging/pipelines');
+export interface LoggingAttachStatus {
+  clusterId: string;
+  ingestPublic: boolean;
+  status?: string;
+  host?: string;
+  attached: boolean;
+}
+
+export interface LoggingAttachResult {
+  id: string;
+  name: string;
+  outputType?: string;
+  isSystem?: boolean;
+  enabled?: boolean;
+  token?: string;
+}
+
+export async function getLoggingAttachStatus(clusterId: string) {
+  const res = await api.get<APIResponse<LoggingAttachStatus>>(
+    `/clusters/${clusterId}/logging/outputs/attach-astronomer/`,
+  );
+  return res.data.data;
+}
+
+export async function attachAstronomerLogs(clusterId: string, rotate = false) {
+  const res = await api.post<APIResponse<LoggingAttachResult>>(
+    `/clusters/${clusterId}/logging/outputs/attach-astronomer/`,
+    {},
+    rotate ? { params: { rotate: true } } : undefined,
+  );
+  return res.data.data;
+}
+
+export async function getLoggingPipelines(params?: { clusterId?: string; limit?: number }) {
+  const res = await api.get<APIResponse<import('@/types').LoggingPipeline[]>>('/logging/pipelines', {
+    params: {
+      ...(params?.clusterId ? { cluster_id: params.clusterId } : {}),
+      ...(params?.limit ? { limit: params.limit } : {}),
+    },
+  });
   return res.data.data;
 }
 
 export async function createLoggingPipeline(data: Partial<import('@/types').LoggingPipeline>) {
-  const res = await api.post<APIResponse<import('@/types').LoggingPipeline>>('/logging/pipelines', data);
+  const res = await api.post<APIResponse<import('@/types').LoggingPipeline>>(
+    '/logging/pipelines',
+    data,
+    { params: data.clusterId ? { cluster_id: data.clusterId } : undefined },
+  );
   return res.data.data;
 }
 
@@ -1393,7 +1511,13 @@ export async function getReferenceGrants(clusterId: string) {
 // --- Projects ---
 
 export async function getProjects(params?: { search?: string; page?: number; pageSize?: number }) {
-  const res = await api.get<PaginatedResponse<import('@/types').Project>>('/projects', { params });
+  const res = await api.get<PaginatedResponse<import('@/types').Project>>('/projects', {
+    params: {
+      search: params?.search,
+      limit: params?.pageSize,
+      offset: params?.page && params?.pageSize ? Math.max(0, params.page - 1) * params.pageSize : undefined,
+    },
+  });
   return res.data;
 }
 

@@ -13,10 +13,10 @@ import type { CISFindingSeverity, CISFindingStatus } from '@/types';
 
 /** Tailwind class fragments for severity badges. */
 export const severityBadge: Record<string, string> = {
-  critical: 'bg-red-500/10 text-red-500 border border-red-500/20',
-  high: 'bg-orange-500/10 text-orange-500 border border-orange-500/20',
-  medium: 'bg-amber-500/10 text-amber-500 border border-amber-500/20',
-  low: 'bg-blue-500/10 text-blue-500 border border-blue-500/20',
+  critical: 'bg-status-error/10 text-status-error border border-status-error/20',
+  high: 'bg-status-high/10 text-status-high border border-status-high/20',
+  medium: 'bg-status-warning/10 text-status-warning border border-status-warning/20',
+  low: 'bg-status-info/10 text-status-info border border-status-info/20',
   info: 'bg-muted text-muted-foreground border border-border',
 };
 

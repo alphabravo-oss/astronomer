@@ -242,7 +242,7 @@ func TestHasAuthConfigSecretMatchesTheSweepPredicate(t *testing.T) {
 	cases := map[string]bool{
 		`{}`: false,
 		`{"operationPolicies":{"maxRetryAttempts":1}}`:                                             false,
-		`{"sharedThanos":{},"sharedAlertmanager":{},"sharedAlertingAssets":{},"status":"healthy"}`: false,
+		`{"sharedThanos":{},"sharedAlertmanager":{},"sharedGrafana":{},"sharedLoki":{},"sharedAlertingAssets":{},"status":"healthy"}`: false,
 		`{"token":"t"}`:                          true,
 		`{"operationPolicies":{},"username":""}`: true,
 		`{"x-scope-token":"t"}`:                  true,

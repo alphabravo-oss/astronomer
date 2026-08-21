@@ -19,6 +19,7 @@ import { ArrowLeft, Plus, Trash2, Save, Copy, Loader2, ShieldCheck } from 'lucid
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import { useAppForm, useStore } from '@/lib/form';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   listNetworkPolicyTemplates,
   createNetworkPolicyTemplate,
@@ -32,7 +33,7 @@ function KindBadge({ kind }: { kind: 'builtin' | 'custom' }) {
   const palette =
     kind === 'builtin'
       ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
-      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30';
+      : 'bg-status-success/10 text-status-success border-status-success/30';
   return (
     <span className={`text-xs px-2 py-0.5 rounded border font-medium uppercase ${palette}`}>{kind}</span>
   );
@@ -63,7 +64,7 @@ function TemplateRow({
         <span
           className={`text-xs px-2 py-0.5 rounded border font-medium ${
             tmpl.enabled
-              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+              ? 'bg-status-success/10 text-status-success border-status-success/30'
               : 'bg-muted text-muted-foreground border-border'
           }`}
         >
@@ -91,7 +92,7 @@ function TemplateRow({
               </button>
               <button
                 type="button"
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-status-error/30 text-status-error hover:bg-status-error/10"
                 onClick={onDelete}
               >
                 <Trash2 className="h-3 w-3" />
@@ -172,39 +173,36 @@ function NetworkPoliciesPanel() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <Link href="/dashboard/settings" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to settings
-        </Link>
-        <button
-          type="button"
-          onClick={() =>
-            openDraft({
-              slug: '',
-              name: '',
-              description: '',
-              spec_template:
-                'apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: {{.PolicyName}}\n  namespace: {{.Namespace}}\nspec:\n  podSelector: {}\n  policyTypes: [Ingress]\n',
-              enabled: true,
-            })
-          }
-          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border border-border bg-card hover:bg-muted"
-        >
-          <Plus className="h-4 w-4" /> New custom template
-        </button>
-      </div>
-
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5" /> Network policy templates
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-          Pre-built Kubernetes NetworkPolicy bundles. Built-in rows are read-only — clone to
-          create an editable custom row. Apply templates to namespaces from the cluster detail
-          page&apos;s Network policies tab.
-        </p>
-      </div>
+    <PageShell className="space-y-4">
+      <Link href="/dashboard/settings" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4 mr-1" /> Back to settings
+      </Link>
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5" /> Network policy templates
+          </span>
+        }
+        description="Pre-built Kubernetes NetworkPolicy bundles. Built-in rows are read-only — clone to create an editable custom row. Apply templates to namespaces from the cluster detail page's Network policies tab."
+        actions={
+          <button
+            type="button"
+            onClick={() =>
+              openDraft({
+                slug: '',
+                name: '',
+                description: '',
+                spec_template:
+                  'apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: {{.PolicyName}}\n  namespace: {{.Namespace}}\nspec:\n  podSelector: {}\n  policyTypes: [Ingress]\n',
+                enabled: true,
+              })
+            }
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border border-border bg-card hover:bg-muted"
+          >
+            <Plus className="h-4 w-4" /> New custom template
+          </button>
+        }
+      />
 
       {loading ? (
         <div className="flex items-center text-sm text-muted-foreground">
@@ -255,7 +253,7 @@ function NetworkPoliciesPanel() {
           }}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
 

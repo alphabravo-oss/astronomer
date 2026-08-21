@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -41,7 +42,11 @@ type loggingFakeQuerier struct {
 	operations map[uuid.UUID]sqlc.LoggingOperation
 	events     []sqlc.LoggingOperationEvent
 	// orderedOps tracks insertion order so ListPending behaves deterministically.
-	orderedOps []uuid.UUID
+	orderedOps    []uuid.UUID
+	lokiTokens    map[uuid.UUID]sqlc.LokiIngestToken
+	installed     map[string]sqlc.InstalledChart
+	tools         map[string]sqlc.ClusterTool
+	valuesUpdates []sqlc.UpdateInstalledChartValuesParams
 }
 
 func newLoggingFakeQuerier() *loggingFakeQuerier {
@@ -49,7 +54,53 @@ func newLoggingFakeQuerier() *loggingFakeQuerier {
 		outputs:    map[uuid.UUID]sqlc.LoggingOutput{},
 		pipelines:  map[uuid.UUID]sqlc.LoggingPipeline{},
 		operations: map[uuid.UUID]sqlc.LoggingOperation{},
+		lokiTokens: map[uuid.UUID]sqlc.LokiIngestToken{},
+		installed:  map[string]sqlc.InstalledChart{},
+		tools:      map[string]sqlc.ClusterTool{},
 	}
+}
+
+var _ fluentBitReleaseStore = (*loggingFakeQuerier)(nil)
+
+func loggingInstalledKey(clusterID uuid.UUID, slug string) string {
+	return clusterID.String() + "|" + slug
+}
+
+func (q *loggingFakeQuerier) GetInstalledChartByClusterAndTool(_ context.Context, arg sqlc.GetInstalledChartByClusterAndToolParams) (sqlc.InstalledChart, error) {
+	if q == nil || q.installed == nil {
+		return sqlc.InstalledChart{}, pgx.ErrNoRows
+	}
+	item, ok := q.installed[loggingInstalledKey(arg.ClusterID, arg.ToolSlug)]
+	if !ok {
+		return sqlc.InstalledChart{}, pgx.ErrNoRows
+	}
+	return item, nil
+}
+
+func (q *loggingFakeQuerier) GetToolBySlug(_ context.Context, slug string) (sqlc.ClusterTool, error) {
+	if q == nil || q.tools == nil {
+		return sqlc.ClusterTool{}, pgx.ErrNoRows
+	}
+	tool, ok := q.tools[slug]
+	if !ok {
+		return sqlc.ClusterTool{}, pgx.ErrNoRows
+	}
+	return tool, nil
+}
+
+func (q *loggingFakeQuerier) UpdateInstalledChartValues(_ context.Context, arg sqlc.UpdateInstalledChartValuesParams) (sqlc.InstalledChart, error) {
+	q.valuesUpdates = append(q.valuesUpdates, arg)
+	for key, item := range q.installed {
+		if item.ID != arg.ID {
+			continue
+		}
+		item.ValuesOverride = arg.ValuesOverride
+		item.Status = arg.Status
+		item.Revision = arg.Revision
+		q.installed[key] = item
+		return item, nil
+	}
+	return sqlc.InstalledChart{}, pgx.ErrNoRows
 }
 
 // --- LoggingQuerier outputs ---
@@ -77,6 +128,16 @@ func (q *loggingFakeQuerier) GetLoggingOutputByID(_ context.Context, id uuid.UUI
 	return sqlc.LoggingOutput{}, errors.New("not found")
 }
 func (q *loggingFakeQuerier) CreateLoggingOutput(_ context.Context, arg sqlc.CreateLoggingOutputParams) (sqlc.LoggingOutput, error) {
+	if arg.IsSystem {
+		if !arg.ClusterID.Valid {
+			return sqlc.LoggingOutput{}, errors.New("system logging output requires cluster_id")
+		}
+		for _, existing := range q.outputs {
+			if existing.IsSystem && existing.ClusterID == arg.ClusterID {
+				return sqlc.LoggingOutput{}, errors.New(`duplicate key value violates unique constraint "logging_outputs_one_system_per_cluster" (SQLSTATE 23505)`)
+			}
+		}
+	}
 	o := sqlc.LoggingOutput{
 		ID:            uuid.New(),
 		Name:          arg.Name,
@@ -87,6 +148,7 @@ func (q *loggingFakeQuerier) CreateLoggingOutput(_ context.Context, arg sqlc.Cre
 		CreatedByID:   arg.CreatedByID,
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
+		IsSystem:      arg.IsSystem,
 	}
 	q.outputs[o.ID] = o
 	return o, nil
@@ -273,6 +335,71 @@ func (q *loggingFakeQuerier) ListLoggingOperationEvents(_ context.Context, opera
 		if ev.OperationID == operationID {
 			out = append(out, ev)
 		}
+	}
+	return out, nil
+}
+
+func (q *loggingFakeQuerier) GetSystemLoggingOutputByCluster(_ context.Context, clusterID pgtype.UUID) (sqlc.LoggingOutput, error) {
+	for _, o := range q.outputs {
+		if o.IsSystem && o.ClusterID == clusterID {
+			return o, nil
+		}
+	}
+	return sqlc.LoggingOutput{}, pgx.ErrNoRows
+}
+
+func (q *loggingFakeQuerier) ListSystemLoggingOutputs(context.Context) ([]sqlc.LoggingOutput, error) {
+	items := make([]sqlc.LoggingOutput, 0)
+	for _, o := range q.outputs {
+		if o.IsSystem {
+			items = append(items, o)
+		}
+	}
+	return items, nil
+}
+
+func (q *loggingFakeQuerier) DisableSystemLoggingOutputs(context.Context) ([]sqlc.LoggingOutput, error) {
+	items := make([]sqlc.LoggingOutput, 0)
+	for id, o := range q.outputs {
+		if o.IsSystem && o.Enabled {
+			o.Enabled = false
+			o.UpdatedAt = time.Now()
+			q.outputs[id] = o
+			items = append(items, o)
+		}
+	}
+	return items, nil
+}
+
+func (q *loggingFakeQuerier) GetLokiIngestTokenByCluster(_ context.Context, clusterID uuid.UUID) (sqlc.LokiIngestToken, error) {
+	if tok, ok := q.lokiTokens[clusterID]; ok {
+		return tok, nil
+	}
+	return sqlc.LokiIngestToken{}, errors.New("not found")
+}
+
+func (q *loggingFakeQuerier) UpsertLokiIngestToken(_ context.Context, arg sqlc.UpsertLokiIngestTokenParams) (sqlc.LokiIngestToken, error) {
+	tok := sqlc.LokiIngestToken{
+		ID:             uuid.New(),
+		ClusterID:      arg.ClusterID,
+		TokenHash:      arg.TokenHash,
+		TokenEncrypted: arg.TokenEncrypted,
+		CreatedByID:    arg.CreatedByID,
+		CreatedAt:      time.Now(),
+		RotatedAt:      time.Now(),
+	}
+	if existing, ok := q.lokiTokens[arg.ClusterID]; ok {
+		tok.ID = existing.ID
+		tok.CreatedAt = existing.CreatedAt
+	}
+	q.lokiTokens[arg.ClusterID] = tok
+	return tok, nil
+}
+
+func (q *loggingFakeQuerier) ListLokiIngestTokenHashes(context.Context) ([]sqlc.ListLokiIngestTokenHashesRow, error) {
+	out := make([]sqlc.ListLokiIngestTokenHashesRow, 0, len(q.lokiTokens))
+	for _, tok := range q.lokiTokens {
+		out = append(out, sqlc.ListLokiIngestTokenHashesRow{ClusterID: tok.ClusterID, TokenHash: tok.TokenHash})
 	}
 	return out, nil
 }

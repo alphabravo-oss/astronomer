@@ -4,6 +4,7 @@ import { Link } from '@/lib/link';
 import type { ElementType, ReactNode } from 'react';
 import { AlertCircle, Loader2, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ActionButton } from '@/components/ui/action-button';
 
 type StateTone = 'neutral' | 'danger' | 'warning' | 'info';
 
@@ -84,15 +85,15 @@ export function StatePanel({
             {actionLabel}
           </Link>
         ) : (
-          <button
+          <ActionButton
             type="button"
             onClick={onAction}
             disabled={disabled}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            intent="primary"
+            icon={ActionIcon ? <ActionIcon className="h-4 w-4" /> : undefined}
           >
-            {ActionIcon && <ActionIcon className="h-4 w-4" />}
             {actionLabel}
-          </button>
+          </ActionButton>
         )
       )}
     </div>

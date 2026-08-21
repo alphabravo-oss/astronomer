@@ -228,6 +228,7 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			r.Post("/outputs/{id}/enable/", deps.Logging.EnableOutput)
 			r.Post("/outputs/{id}/disable/", deps.Logging.DisableOutput)
 			r.Post("/outputs/{id}/query/", deps.Logging.QueryOutput)
+			r.Post("/outputs/{id}/rotate-token/", deps.Logging.RotateOutputToken)
 			r.Get("/pipelines/", deps.Logging.ListPipelines)
 			r.Post("/pipelines/", deps.Logging.CreatePipeline)
 			r.Put("/pipelines/{id}/", deps.Logging.UpdatePipeline)

@@ -41,12 +41,17 @@ const config: Config = {
           foreground: 'hsl(var(--card-foreground))',
         },
         status: {
-          success: '#10b981',
-          warning: '#f59e0b',
-          error: '#ef4444',
-          info: '#3b82f6',
-          pending: '#6366f1',
-          neutral: '#6b7280',
+          success: 'hsl(var(--status-success))',
+          warning: 'hsl(var(--status-warning))',
+          error: 'hsl(var(--status-error))',
+          info: 'hsl(var(--status-info))',
+          pending: 'hsl(var(--status-pending))',
+          neutral: 'hsl(var(--status-neutral))',
+          high: 'hsl(var(--status-high))',
+        },
+        terminal: {
+          DEFAULT: 'hsl(var(--terminal-bg))',
+          foreground: 'hsl(var(--terminal-fg))',
         },
         sidebar: {
           DEFAULT: 'hsl(var(--sidebar))',
@@ -73,27 +78,22 @@ const config: Config = {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
         },
-        'slide-in-right': {
-          '0%': { transform: 'translateX(100%)' },
-          '100%': { transform: 'translateX(0)' },
-        },
         'pulse-dot': {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.5' },
         },
-        'slide-up': {
-          '0%': { transform: 'translateY(100%)' },
-          '100%': { transform: 'translateY(0)' },
-        },
       },
       animation: {
         'fade-in': 'fade-in 0.3s ease-out',
-        'slide-in-right': 'slide-in-right 0.3s ease-out',
         'pulse-dot': 'pulse-dot 2s ease-in-out infinite',
-        'slide-up': 'slide-up 0.3s ease-out',
       },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+      zIndex: {
+        sticky: 'var(--z-sticky)',
+        header: 'var(--z-header)',
+        chrome: 'var(--z-chrome)',
+        overlay: 'var(--z-overlay)',
+        popover: 'var(--z-popover)',
+        toast: 'var(--z-toast)',
       },
     },
   },

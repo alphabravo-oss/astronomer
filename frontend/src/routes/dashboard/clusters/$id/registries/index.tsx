@@ -14,6 +14,8 @@ import { useParams } from '@/lib/navigation';
 import { useAppForm, useStore } from '@/lib/form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
+import { ActionButton } from '@/components/ui/action-button';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   CheckCircle2,
   Container,
@@ -43,7 +45,7 @@ import {
 } from '@/lib/api/cluster-detail';
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ModalShell } from '@/components/ui/modal-shell';
 import { liveFallback } from '@/lib/live/status-store';
 
 const PASSWORD_SENTINEL = '<set>';
@@ -123,26 +125,22 @@ function ClusterRegistriesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Registries</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Private image-pull credentials reconciled into namespaces on {cluster.displayName}.
-          </p>
-        </div>
-        <button
+    <PageShell>
+      <PageHeader
+        title="Registries"
+        description={`Private image-pull credentials reconciled into namespaces on ${cluster.displayName}.`}
+        actions={
+        <ActionButton
+          intent="primary"
+          icon={<Plus className="h-3.5 w-3.5" />}
           onClick={() => canWrite && setNewOpen(true)}
           disabled={!canWrite}
           title={canWrite ? undefined : reason}
-          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium
-            bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
-            disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Plus className="h-3.5 w-3.5" />
           New Registry
-        </button>
-      </div>
+        </ActionButton>
+        }
+      />
 
       {isLoading ? (
         <div className="rounded-lg border border-border bg-card p-12 flex items-center justify-center">
@@ -285,7 +283,7 @@ function ClusterRegistriesPage() {
         variant="destructive"
         loading={deleteMutation.isPending}
       />
-    </div>
+    </PageShell>
   );
 }
 
@@ -614,28 +612,20 @@ function Modal({
   children: React.ReactNode;
 }) {
   return (
-    <OverlayShell onClose={onClose}>
-      <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl border border-border bg-popover shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            {icon && (
-              <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground flex-shrink-0">
-                {icon}
-              </div>
-            )}
-            <h3 className="text-lg font-semibold text-foreground truncate">{title}</h3>
+    <ModalShell
+      title={title}
+      onClose={onClose}
+      size="md"
+      titleIcon={
+        icon ? (
+          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground flex-shrink-0">
+            {icon}
           </div>
-          <button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-            aria-label="Close"
-          >
-            <XCircle className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="p-6 space-y-4 overflow-y-auto">{children}</div>
-      </div>
-    </OverlayShell>
+        ) : undefined
+      }
+    >
+      {children}
+    </ModalShell>
   );
 }
 
@@ -653,24 +643,12 @@ function ModalFooter({
   return (
     <div className="flex items-center justify-end gap-2 pt-3 -mx-6 px-6 border-t border-border">
       <div className="pt-3 flex items-center gap-2">
-        <button
-          onClick={onCancel}
-          disabled={loading}
-          className="inline-flex items-center h-9 px-3 rounded text-sm
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-        >
+        <ActionButton onClick={onCancel} disabled={loading} intent="ghost">
           Cancel
-        </button>
-        <button
-          onClick={onSubmit}
-          disabled={loading}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded text-sm font-medium
-            bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
-            disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        </ActionButton>
+        <ActionButton onClick={onSubmit} disabled={loading} intent="primary" loading={loading}>
           {submitLabel}
-        </button>
+        </ActionButton>
       </div>
     </div>
   );

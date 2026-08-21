@@ -2226,15 +2226,16 @@ func mapUser(user sqlc.User) map[string]any {
 		lastLogin = user.LastLogin.Time.UTC().Format(timeLayout)
 	}
 	return map[string]any{
-		"id":          user.ID.String(),
-		"username":    user.Username,
-		"email":       user.Email,
-		"displayName": displayName,
-		"provider":    "local",
-		"globalRoles": []string{},
-		"enabled":     user.IsActive,
-		"lastLogin":   lastLogin,
-		"createdAt":   user.CreatedAt.UTC().Format(timeLayout),
+		"id":           user.ID.String(),
+		"username":     user.Username,
+		"email":        user.Email,
+		"displayName":  displayName,
+		"provider":     "local",
+		"globalRoles":  []string{},
+		"is_superuser": user.IsSuperuser,
+		"enabled":      user.IsActive,
+		"lastLogin":    lastLogin,
+		"createdAt":    user.CreatedAt.UTC().Format(timeLayout),
 	}
 }
 

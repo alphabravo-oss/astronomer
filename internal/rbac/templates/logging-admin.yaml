@@ -1,0 +1,15 @@
+name: logging-admin
+display_name: Logging Admin
+description: |
+  Manages logging destinations and pipelines on one adopted cluster,
+  including Astronomer Loki attach and BYO sinks. Does not grant
+  monitoring-stack lifecycle or fleet-wide logging admin; bind once
+  per cluster, or use platform-admin for fleet-wide access.
+scope: cluster
+category: observability
+risk_level: high
+rules:
+  - resource: logging
+    verbs: [create, read, update, delete, list]
+  - resource: clusters
+    verbs: [read, list]

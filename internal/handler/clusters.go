@@ -152,6 +152,11 @@ type ClusterHandler struct {
 	// events. Optional and nil-safe: when not wired the CRUD path simply
 	// doesn't notify SSE subscribers.
 	publisher EventPublisher
+	// grafanaFolders nudges fleet Grafana folder-per-cluster provisioning
+	// after create/update/delete. Optional; the 30s Grafana folder
+	// reconciler is the catch-up path. Folders are UX, not a security
+	// boundary (PromQL/LogQL rewrite is).
+	grafanaFolders grafanaFolderReconciler
 	// decommissionQueue is the asynq client used to enqueue
 	// cluster_decommission tasks from the DELETE handler. Optional —
 	// when nil, the row is still inserted but the worker doesn't pick it up
@@ -396,6 +401,19 @@ func (h *ClusterHandler) SetDeliverySystemBootstrap(repository, digest, issuer, 
 	h.systemArtifactDigest = strings.TrimSpace(digest)
 	h.systemOIDCIssuer = strings.TrimSpace(issuer)
 	h.systemOIDCIdentity = strings.TrimSpace(identity)
+}
+
+func (h *ClusterHandler) SetGrafanaFolderReconciler(r grafanaFolderReconciler) {
+	if h == nil {
+		return
+	}
+	h.grafanaFolders = r
+}
+
+func (h *ClusterHandler) triggerGrafanaFolders() {
+	if h != nil && h.grafanaFolders != nil {
+		h.grafanaFolders.TriggerGrafanaFolderReconcile()
+	}
 }
 
 // SetEventPublisher wires the SSE bus so cluster CRUD operations fan out
@@ -798,6 +816,8 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"distribution": req.Distribution,
 	})
 
+	h.triggerGrafanaFolders()
+
 	w.Header().Set("Location", "/api/v1/clusters/"+cluster.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, clusterToResponse(cluster))
 }
@@ -910,6 +930,7 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 		"region":       req.Region,
 	})
 
+	h.triggerGrafanaFolders()
 	RespondJSON(w, http.StatusOK, clusterToResponse(cluster))
 }
 
@@ -1200,6 +1221,7 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		"decommission_id": row.ID.String(),
 	})
 
+	h.triggerGrafanaFolders()
 	statusURL := fmt.Sprintf("/api/v1/clusters/%s/decommission/", id.String())
 	RespondJSON(w, http.StatusAccepted, renderDecommission(row, statusURL))
 }

@@ -221,6 +221,9 @@ func (h *RBACHandler) CreateGlobalRole(w http.ResponseWriter, r *http.Request) {
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
+	if rejectGlobalCRDGrants(w, r, defaultJSON(req.Rules)) {
+		return
+	}
 	role, err := h.queries.CreateGlobalRole(r.Context(), sqlc.CreateGlobalRoleParams{
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
@@ -256,6 +259,9 @@ func (h *RBACHandler) UpdateGlobalRole(w http.ResponseWriter, r *http.Request) {
 	var req roleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		return
+	}
+	if rejectGlobalCRDGrants(w, r, defaultJSON(req.Rules)) {
 		return
 	}
 	if !h.guardGlobalRoleRules(w, r, id, defaultJSON(req.Rules)) {
@@ -1095,6 +1101,27 @@ func (h *RBACHandler) enforceNoEscalation(w http.ResponseWriter, r *http.Request
 		return false
 	}
 	for _, rule := range targetRules {
+		if rule.IsCRDGrant() {
+			for _, group := range rule.CRDAPIGroups() {
+				if escalationGroups[strings.ToLower(strings.TrimSpace(group))] {
+					RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+						"CRD grants cannot target privilege-escalation API groups")
+					return false
+				}
+				for _, resource := range rule.ResourceNames() {
+					charged := nativeRuleChargedResources(group, resource)
+					for _, verb := range rbac.NormalizeNativeVerbs(rule.Verbs) {
+						for _, mapped := range charged {
+							if !h.engine.CheckPermission(callerBindings, mapped, rbac.Verb(verb), clusterID, projectID, namespace) {
+								RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Cannot grant a role that includes permissions you do not hold")
+								return false
+							}
+						}
+					}
+				}
+			}
+			continue
+		}
 		for _, verb := range rule.Verbs {
 			if !h.engine.CheckPermission(callerBindings, rbac.Resource(rule.Resource), rbac.Verb(verb), clusterID, projectID, namespace) {
 				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Cannot grant a role that includes permissions you do not hold")
@@ -1103,6 +1130,21 @@ func (h *RBACHandler) enforceNoEscalation(w http.ResponseWriter, r *http.Request
 		}
 	}
 	return true
+}
+
+func rejectGlobalCRDGrants(w http.ResponseWriter, r *http.Request, raw json.RawMessage) bool {
+	rules, err := decodeRoleRules(raw)
+	if err != nil {
+		return false
+	}
+	for _, rule := range rules {
+		if rule.IsCRDGrant() {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody,
+				"CRD grants belong on cluster or project roles, not global roles")
+			return true
+		}
+	}
+	return false
 }
 
 // decodeRoleRules parses a role's rules JSONB into the RBAC rule slice. Empty

@@ -12,6 +12,7 @@
 //
 //   - internal/handler/monitoring_stack_shared.go   updateSharedThanosMetadata
 //   - internal/handler/monitoring_stack_shared.go   updateSharedAlertmanagerMetadata
+//   - internal/handler/monitoring_stack_grafana.go  updateSharedGrafanaMetadata
 //   - internal/handler/alerting.go     persistSharedAlertingAssetHashes
 //   - internal/worker/tasks/monitoring_reconcile.go  reconcileMonitoringBackend
 //
@@ -73,6 +74,8 @@ var ErrAuthConfigUnavailable = credential.ErrUnavailable
 //	operationPolicies    retry / auto-rollback policy for monitoring operations
 //	sharedThanos         shared Thanos stack deployment metadata + status
 //	sharedAlertmanager   shared Alertmanager deployment metadata + status
+//	sharedGrafana        shared Grafana stack deployment metadata + status
+//	sharedLoki           shared Loki stack deployment metadata + status
 //	sharedAlertingAssets rendered rule/routing/silence ConfigMap hashes
 //	status               backend health, read by the monitoring summary
 //
@@ -85,6 +88,8 @@ var NonSecretAuthConfigKeys = []string{
 	"operationPolicies",
 	"sharedThanos",
 	"sharedAlertmanager",
+	"sharedGrafana",
+	"sharedLoki",
 	"sharedAlertingAssets",
 	"status",
 }

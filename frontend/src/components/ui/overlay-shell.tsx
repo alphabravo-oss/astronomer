@@ -49,8 +49,17 @@ export function OverlayShell({
     const root = rootRef.current;
     if (!root) return;
 
-    const focusTarget = getFocusable(root)[0] ?? root;
-    focusTarget.focus({ preventScroll: true });
+    const alreadyFocused =
+      document.activeElement instanceof HTMLElement &&
+      root.contains(document.activeElement) &&
+      document.activeElement !== root;
+    if (!alreadyFocused) {
+      const autoFocused = Array.from(root.querySelectorAll<HTMLElement>('input, textarea, select, button')).find(
+        (el) => el.autofocus,
+      );
+      const focusTarget = autoFocused ?? getFocusable(root)[0] ?? root;
+      focusTarget.focus({ preventScroll: true });
+    }
 
     return () => {
       if (previousActive && document.contains(previousActive)) {
@@ -100,7 +109,7 @@ export function OverlayShell({
     <div
       ref={rootRef}
       tabIndex={-1}
-      className={cn('fixed inset-0 z-50 flex', placementClass[placement], rootClassName)}
+      className={cn('fixed inset-0 z-overlay flex', placementClass[placement], rootClassName)}
     >
       <button
         type="button"

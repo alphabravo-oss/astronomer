@@ -506,6 +506,15 @@ func TestSettings_FeaturesReturnsOnlyFeatureBooleans(t *testing.T) {
 	if flags["feature.charlie"] {
 		t.Fatalf("feature.charlie default = true, want fail-closed false")
 	}
+	if flags["feature.extensions"] {
+		t.Fatalf("feature.extensions default = true, want fail-closed false")
+	}
+	if !flags["feature.fleet_grafana"] {
+		t.Fatalf("feature.fleet_grafana default = false, want true")
+	}
+	if flags["feature.hosted_loki"] {
+		t.Fatalf("feature.hosted_loki default = true, want fail-closed false")
+	}
 	if _, ok := flags["telemetry.endpoint"]; ok {
 		t.Fatalf("features leaked telemetry row: %+v", flags)
 	}

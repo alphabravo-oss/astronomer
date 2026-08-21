@@ -68,6 +68,8 @@ DELETE /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}
 DELETE /api/v1/security/policies/{id}
 DELETE /api/v1/security/templates/{id}
 DELETE /api/v1/settings/monitoring/alertmanager/uninstall
+DELETE /api/v1/settings/monitoring/grafana/uninstall
+DELETE /api/v1/settings/monitoring/loki/uninstall
 DELETE /api/v1/settings/monitoring/thanos/uninstall
 DELETE /api/v1/settings/sso/{id}
 DELETE /api/v1/settings/tokens/{id}
@@ -253,6 +255,7 @@ GET /api/v1/clusters/{id}/gatekeeper/constraints
 GET /api/v1/clusters/{id}/health
 GET /api/v1/clusters/{id}/kubeconfig
 GET /api/v1/clusters/{id}/kubeconfig-preview
+GET /api/v1/clusters/{id}/logging/outputs/attach-astronomer
 GET /api/v1/clusters/{id}/manifest
 GET /api/v1/clusters/{id}/metrics
 GET /api/v1/clusters/{id}/metrics/summary
@@ -303,6 +306,7 @@ GET /api/v1/monitoring/metrics/cluster-overview/{cluster_id}
 GET /api/v1/monitoring/metrics/node/{cluster_id}/{node}
 GET /api/v1/monitoring/metrics/workload/{cluster_id}/{namespace}/{workload}
 GET /api/v1/native-rbac-rules
+GET /api/v1/observability/grafana-ticket
 GET /api/v1/projects
 GET /api/v1/projects/{id}
 GET /api/v1/projects/{id}/clusters
@@ -355,8 +359,11 @@ GET /api/v1/settings/features
 GET /api/v1/settings/general
 GET /api/v1/settings/monitoring/alertmanager/status
 GET /api/v1/settings/monitoring/backend
+GET /api/v1/settings/monitoring/grafana/status
+GET /api/v1/settings/monitoring/loki/status
 GET /api/v1/settings/monitoring/operations
 GET /api/v1/settings/monitoring/operations/{id}
+GET /api/v1/settings/monitoring/sizer
 GET /api/v1/settings/monitoring/thanos/status
 GET /api/v1/settings/registration
 GET /api/v1/settings/sso
@@ -530,6 +537,8 @@ POST /api/v1/clusters/{id}/gatekeeper/constraints
 POST /api/v1/clusters/{id}/gatekeeper/constraints/validate
 POST /api/v1/clusters/{id}/generate-kubeconfig
 POST /api/v1/clusters/{id}/generate_kubeconfig
+POST /api/v1/clusters/{id}/logging/outputs/attach-astronomer
+POST /api/v1/clusters/{id}/logging/outputs/{output_id}/rotate-token
 POST /api/v1/clusters/{id}/monitoring/stack/install
 POST /api/v1/clusters/{id}/monitoring/stack/preview
 POST /api/v1/clusters/{id}/monitoring/stack/replace
@@ -572,6 +581,7 @@ POST /api/v1/logging/outputs
 POST /api/v1/logging/outputs/{id}/disable
 POST /api/v1/logging/outputs/{id}/enable
 POST /api/v1/logging/outputs/{id}/query
+POST /api/v1/logging/outputs/{id}/rotate-token
 POST /api/v1/logging/outputs/{id}/test
 POST /api/v1/logging/pipelines
 POST /api/v1/logging/pipelines/{id}/disable
@@ -588,6 +598,7 @@ POST /api/v1/nodes/{cluster_id}/{node_name}/labels/remove
 POST /api/v1/nodes/{cluster_id}/{node_name}/taints
 POST /api/v1/nodes/{cluster_id}/{node_name}/taints/remove
 POST /api/v1/nodes/{cluster_id}/{node_name}/uncordon
+POST /api/v1/observability/grafana-ticket/redeem
 POST /api/v1/projects
 POST /api/v1/projects/{id}/add-namespace
 POST /api/v1/projects/{id}/ownership/takeover
@@ -613,6 +624,12 @@ POST /api/v1/security/templates
 POST /api/v1/settings/monitoring/alertmanager/install
 POST /api/v1/settings/monitoring/alertmanager/preview
 POST /api/v1/settings/monitoring/alertmanager/replace
+POST /api/v1/settings/monitoring/grafana/install
+POST /api/v1/settings/monitoring/grafana/preview
+POST /api/v1/settings/monitoring/grafana/replace
+POST /api/v1/settings/monitoring/loki/install
+POST /api/v1/settings/monitoring/loki/preview
+POST /api/v1/settings/monitoring/loki/replace
 POST /api/v1/settings/monitoring/operations/{id}/retry
 POST /api/v1/settings/monitoring/thanos/install
 POST /api/v1/settings/monitoring/thanos/preview
@@ -683,6 +700,8 @@ PUT /api/v1/security/templates/{id}
 PUT /api/v1/settings/general
 PUT /api/v1/settings/monitoring/alertmanager/upgrade
 PUT /api/v1/settings/monitoring/backend
+PUT /api/v1/settings/monitoring/grafana/upgrade
+PUT /api/v1/settings/monitoring/loki/upgrade
 PUT /api/v1/settings/monitoring/thanos/upgrade
 PUT /api/v1/tools/{slug}/upgrade
 PUT /api/v1/users/{id}

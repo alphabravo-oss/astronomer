@@ -69,6 +69,7 @@ export const settingsKeys = {
   backupDrill: ['settings', 'backup-drill'] as const,
   backupDrillHistory: (params?: Record<string, unknown>) =>
     ['settings', 'backup-drill', 'history', params] as const,
+  managementBackup: ['settings', 'management-backup'] as const,
   gitopsSources: ['settings', 'gitops-sources'] as const,
   gitopsSource: (id: string) => ['settings', 'gitops-sources', id] as const,
   gitopsClusters: (id: string) =>
@@ -93,6 +94,7 @@ export function useSavePlatformSettings() {
       api.savePlatformSettingsBatch(updates),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.platform });
+      qc.invalidateQueries({ queryKey: queryKeys.featureFlags });
       toastSuccess('Platform settings saved');
     },
     onError: (err: Error) => {
@@ -376,6 +378,69 @@ export function useBackupDrillHistory(params?: { page?: number; page_size?: numb
   return useQuery({
     queryKey: settingsKeys.backupDrillHistory(params),
     queryFn: () => api.listBackupDrillHistory(params),
+  });
+}
+
+export function useManagementBackupStatus() {
+  return useQuery({
+    queryKey: settingsKeys.managementBackup,
+    queryFn: () => api.getManagementBackupStatus(),
+  });
+}
+
+export function useCreateManagementBackupDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.createManagementBackupDestination,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
+      toastSuccess('Backup destination saved');
+    },
+    onError: (err: Error) => toastApiError('Failed to save destination', err),
+  });
+}
+
+export function useUpdateManagementBackupDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: api.ManagementBackupDestinationWrite }) =>
+      api.updateManagementBackupDestination(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
+      toastSuccess('Backup destination updated');
+    },
+    onError: (err: Error) => toastApiError('Failed to update destination', err),
+  });
+}
+
+export function useDeleteManagementBackupDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.deleteManagementBackupDestination,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
+      toastSuccess('Backup destination removed');
+    },
+    onError: (err: Error) => toastApiError('Failed to remove destination', err),
+  });
+}
+
+export function useTestManagementBackupDestination() {
+  return useMutation({
+    mutationFn: api.testManagementBackupDestination,
+    onError: (err: Error) => toastApiError('Connection test failed', err),
+  });
+}
+
+export function useRunManagementBackupDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.runManagementBackupDestination,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
+      toastSuccess('Backup job started');
+    },
+    onError: (err: Error) => toastApiError('Failed to start backup', err),
   });
 }
 

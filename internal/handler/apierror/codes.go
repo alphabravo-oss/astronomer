@@ -472,6 +472,11 @@ const (
 	// ShellUnavailable indicates a shell unavailable condition.
 	ShellUnavailable Code = "shell_unavailable"
 
+	// SizerFailed indicates a management-cluster sizer precheck refused
+	// the install or replace (HTTP 412). Grafana uses leftover floor;
+	// Loki uses the fail-closed mode gate.
+	SizerFailed Code = "sizer_failed"
+
 	// StoreUnavailable indicates a store unavailable condition.
 	StoreUnavailable Code = "store_unavailable"
 
@@ -515,6 +520,19 @@ const (
 	// TransitionError indicates a transition error condition.
 	// Collapses legacy literal(s): "invalid_transition".
 	TransitionError Code = "transition_error"
+
+	// DegradedCapacity indicates hosted Loki is frozen for new attaches
+	// because a sizer re-eval set status degraded_capacity (HTTP 409).
+	DegradedCapacity Code = "degraded_capacity"
+
+	// IngestCapExceeded indicates attaching another cluster would fail the
+	// running Loki mode's pass row or observed ingest is ≥ 80% of the
+	// global budget (HTTP 409).
+	IngestCapExceeded Code = "ingest_cap_exceeded"
+
+	// LokiNotReady indicates Astronomer Loki is not healthy with a public
+	// ingest hostname, so one-click attach cannot proceed (HTTP 409).
+	LokiNotReady Code = "loki_not_ready"
 )
 
 // --- Server / IO / dependency failures (typically HTTP 500) ---

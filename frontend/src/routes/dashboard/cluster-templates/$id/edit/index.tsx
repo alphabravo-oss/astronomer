@@ -16,6 +16,7 @@ import {
   canWriteClusterTemplates,
 } from '@/components/projects/hooks';
 import { TemplateForm } from '@/components/projects/cluster-templates/template-form';
+import { PageHeader, PageShell } from '@/components/ui/page';
 
 function ClusterTemplateEditPage() {
   const params = useParams();
@@ -36,7 +37,7 @@ function ClusterTemplateEditPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <PageShell>
       <Link
         href={`/dashboard/cluster-templates/${id}`}
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -45,14 +46,10 @@ function ClusterTemplateEditPage() {
         Back to bundle
       </Link>
 
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Onboarding Bundles · Edit
-        </p>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">
-          {template.displayName}
-        </h1>
-      </div>
+      <PageHeader
+        eyebrow="Onboarding Bundles · Edit"
+        title={template.displayName}
+      />
 
       {!canWrite && (
         <PermissionState
@@ -89,7 +86,7 @@ function ClusterTemplateEditPage() {
           }
         }}
       />
-    </div>
+    </PageShell>
   );
 }
 

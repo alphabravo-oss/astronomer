@@ -274,7 +274,7 @@ describe("EVENT_ROUTES", () => {
 
   it("routes alerting.changed per payload kind (P4.9)", () => {
     const route = EVENT_ROUTES["alerting.changed"];
-    expect(route({ ...fixture(), kind: "rule" })).toEqual([qk.alerting.rules]);
+    expect(route({ ...fixture(), kind: "rule" })).toEqual([qk.alerting.rulesAll]);
     expect(route({ ...fixture(), kind: "event" })).toEqual([
       qk.alerting.eventsAll,
     ]);

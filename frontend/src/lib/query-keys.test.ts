@@ -30,3 +30,27 @@ describe("delivery query keys", () => {
     expect(queryKeys.delivery.all).toEqual(["delivery"]);
   });
 });
+
+describe("observability query keys", () => {
+  it("scopes alert rules and logging pipelines per cluster", () => {
+    expect(queryKeys.alerting.rules()).toEqual(["alerting", "rules", "all"]);
+    expect(queryKeys.alerting.rules("cluster-1")).toEqual([
+      "alerting",
+      "rules",
+      "cluster-1",
+    ]);
+    expect(queryKeys.alerting.rulesAll).toEqual(["alerting", "rules"]);
+    expect(queryKeys.logging.pipelines()).toEqual(["logging", "pipelines", "all"]);
+    expect(queryKeys.logging.pipelines("cluster-1")).toEqual([
+      "logging",
+      "pipelines",
+      "cluster-1",
+    ]);
+    expect(queryKeys.logging.pipelinesAll).toEqual(["logging", "pipelines"]);
+    expect(queryKeys.logging.attachStatus("cluster-1")).toEqual([
+      "logging",
+      "attach",
+      "cluster-1",
+    ]);
+  });
+});

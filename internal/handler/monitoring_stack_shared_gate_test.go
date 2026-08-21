@@ -200,8 +200,8 @@ func TestSharedStackHandlersOnlyDelegateToTheLifecycleDriver(t *testing.T) {
 		})
 	}
 
-	if delegations != 12 {
-		t.Fatalf("found %d exported shared-stack handlers, want 12 (two families x six endpoints); "+
+	if delegations != 24 {
+		t.Fatalf("found %d exported shared-stack handlers, want 24 (four families x six endpoints); "+
 			"if an endpoint was legitimately added or removed, update this count deliberately", delegations)
 	}
 }

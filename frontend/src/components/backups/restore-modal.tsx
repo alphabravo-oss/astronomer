@@ -14,7 +14,8 @@
 
 import { useState } from 'react';
 import { useRouter } from '@/lib/navigation';
-import { AlertTriangle, Loader2, Plus, X } from 'lucide-react';
+import { AlertTriangle, Plus, X } from 'lucide-react';
+import { ActionButton } from '@/components/ui/action-button';
 import { ModalShell } from '@/components/ui/modal-shell';
 import { useB2CreateRestore } from './hooks';
 import type { BackupRun } from '@/types';
@@ -88,27 +89,21 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
       onClose={onClose}
       panelClassName="max-w-lg max-h-[85vh] bg-popover flex flex-col overflow-hidden"
       bodyClassName="flex-1 overflow-y-auto"
-      footerClassName="bg-muted/30"
       titleIcon={<AlertTriangle className="h-5 w-5 text-status-warning" />}
+      footerClassName="flex items-center justify-end gap-2 bg-muted/30"
       footer={(
-        <div className="flex items-center justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
+        <>
+          <ActionButton onClick={onClose}>Cancel</ActionButton>
+          <ActionButton
+            intent="primary"
             onClick={handleSubmit}
             disabled={!confirmOK || !namespacesOK || create.isPending}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-status-warning text-white
-              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+            loading={create.isPending}
+            className="bg-status-warning text-white hover:bg-status-warning/90"
           >
-            {create.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Start Restore
-          </button>
-        </div>
+          </ActionButton>
+        </>
       )}
     >
           <div className="rounded-lg border border-status-warning/20 bg-status-warning/5 p-4 space-y-1">

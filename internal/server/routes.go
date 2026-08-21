@@ -643,6 +643,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 					// handler.
 					monitoringAuthed := r.With(requireAuth(deps.JWT, deps.AuthQueries))
 					monitoringAuthed.Get("/monitoring/backend/", deps.Monitoring.GetBackendConfig)
+					monitoringAuthed.Get("/monitoring/sizer/", deps.Monitoring.GetMonitoringSizer)
 					// PUT backend/ persists operator-supplied backend auth
 					// material and POST retry/ re-enqueues helm work, so both
 					// belong on the write-scope backstop alongside every other
@@ -666,6 +667,19 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 					monitoringMutate.Put("/monitoring/alertmanager/upgrade/", deps.Monitoring.UpgradeSharedAlertmanager)
 					monitoringMutate.Post("/monitoring/alertmanager/replace/", deps.Monitoring.ReplaceSharedAlertmanager)
 					monitoringMutate.Delete("/monitoring/alertmanager/uninstall/", deps.Monitoring.UninstallSharedAlertmanager)
+					monitoringAuthed.Get("/monitoring/grafana/status/", deps.Monitoring.GetSharedGrafanaStatus)
+					monitoringAuthed.Post("/monitoring/grafana/preview/", deps.Monitoring.PreviewSharedGrafanaStack)
+					monitoringMutate.Post("/monitoring/grafana/install/", deps.Monitoring.InstallSharedGrafanaStack)
+					monitoringMutate.Put("/monitoring/grafana/upgrade/", deps.Monitoring.UpgradeSharedGrafanaStack)
+					monitoringMutate.Post("/monitoring/grafana/replace/", deps.Monitoring.ReplaceSharedGrafanaStack)
+					monitoringMutate.Delete("/monitoring/grafana/uninstall/", deps.Monitoring.UninstallSharedGrafanaStack)
+					lokiGate := appmiddleware.FeatureGateDefault("feature.hosted_loki", deps.SettingsCache, false)
+					monitoringAuthed.With(lokiGate).Get("/monitoring/loki/status/", deps.Monitoring.GetSharedLokiStatus)
+					monitoringAuthed.With(lokiGate).Post("/monitoring/loki/preview/", deps.Monitoring.PreviewSharedLokiStack)
+					monitoringMutate.With(lokiGate).Post("/monitoring/loki/install/", deps.Monitoring.InstallSharedLokiStack)
+					monitoringMutate.With(lokiGate).Put("/monitoring/loki/upgrade/", deps.Monitoring.UpgradeSharedLokiStack)
+					monitoringMutate.With(lokiGate).Post("/monitoring/loki/replace/", deps.Monitoring.ReplaceSharedLokiStack)
+					monitoringMutate.With(lokiGate).Delete("/monitoring/loki/uninstall/", deps.Monitoring.UninstallSharedLokiStack)
 				}
 			})
 			// The user directory (usernames, emails, last-login, active state) is
@@ -693,6 +707,15 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		}
 		if deps.StreamTickets != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/streams/tickets/", deps.StreamTickets.Create)
+		}
+		if deps.Monitoring != nil {
+			// Ticket bounce for fleet Grafana. Mint needs the session cookie
+			// (Astronomer origin). Redeem is called by grafana-proxy with the
+			// ticket as the only credential — no session, no Redis, no secret key.
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/observability/grafana-ticket", deps.Monitoring.MintGrafanaTicket)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/observability/grafana-ticket/", deps.Monitoring.MintGrafanaTicket)
+			r.Post("/observability/grafana-ticket/redeem", deps.Monitoring.RedeemGrafanaTicket)
+			r.Post("/observability/grafana-ticket/redeem/", deps.Monitoring.RedeemGrafanaTicket)
 		}
 
 		if deps.SupportBundle != nil {
@@ -777,6 +800,12 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		if deps.AdminDrill != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/backup-drill/", deps.AdminDrill.GetLatest)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/backup-drill/history/", deps.AdminDrill.ListHistory)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/management-backup/", deps.AdminDrill.GetStatus)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/management-backup/destinations/", deps.AdminDrill.CreateDestination)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Put("/admin/management-backup/destinations/{id}/", deps.AdminDrill.UpdateDestination)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/admin/management-backup/destinations/{id}/", deps.AdminDrill.DeleteDestination)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/management-backup/destinations/{id}/test/", deps.AdminDrill.TestDestination)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/management-backup/destinations/{id}/run/", deps.AdminDrill.RunDestination)
 		}
 
 		// Management-plane log tail (FEATURES-051226 T03) — the

@@ -4,10 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Eye, Pause, RefreshCw } from "lucide-react";
 import { Link } from "@/lib/link";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import {
-  OperationTimeline,
-  type OperationTimelineStepStatus,
-} from "@/components/ui/operation-timeline";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
@@ -17,10 +13,14 @@ import {
   Detail,
   DetailGrid,
   ErrorMessage,
+  RedirectDeliveryDetail,
+  deliveryPageRowCount,
   primaryButton,
   secondaryButton,
   textareaClass,
-  useDeliveryProjectScope,
+  useDeliveryPageIndex,
+  useDeliveryWorkspace,
+  withProjectQuery,
 } from "@/components/delivery/shared";
 import {
   actOnClusterDeployment,
@@ -38,18 +38,18 @@ import { liveFallback } from "@/lib/live/status-store";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { toastSuccess } from "@/lib/toast";
 
-function DeploymentDetailPage() {
+export function DeploymentDetailPage() {
   const { deploymentId } = useParams<{ deploymentId: string }>();
-  const { projectId, projects, projectQuery, setProjectId } =
-    useDeliveryProjectScope();
+  const { projectId, projects, projectQuery, setProjectId, listHref } =
+    useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const scope = { type: "project" as const, id: projectId };
   const allowed = can(user, "delivery_deployments", "read", scope);
   const canUpdate = can(user, "delivery_deployments", "update", scope);
   const [action, setAction] = useState<"reconcile" | "suspend" | null>(null);
   const [diagnostics, setDiagnostics] = useState(false);
-  const [eventPage, setEventPage] = useState(0);
-  const pageSize = 50;
+  const [eventPage, setEventPage] = useDeliveryPageIndex();
+  const pageSize = 20;
   const detail = useQuery({
     queryKey: queryKeys.delivery.deployment(projectId, deploymentId),
     queryFn: () => getClusterDeployment(projectId, deploymentId),
@@ -124,7 +124,7 @@ function DeploymentDetailPage() {
       >
         <PageShell>
           <Link
-            href={`/dashboard/delivery/deployments?project=${encodeURIComponent(projectId)}`}
+            href={withProjectQuery(listHref("deployments"), projectId)}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Deployments
@@ -228,33 +228,24 @@ function DeploymentDetailPage() {
               </PageSection>
             </>
           )}
-          <PageSection title="Event history">
-            <OperationTimeline
-              header="Deployment events"
-              headerMeta={`${events.data?.count ?? 0} events`}
-              steps={(events.data?.data ?? []).map(eventStep)}
-              footer={
-                events.data && events.data.count > pageSize ? (
-                  <div className="flex justify-end gap-2 border-t border-border p-3">
-                    <button
-                      type="button"
-                      className={secondaryButton}
-                      disabled={eventPage === 0}
-                      onClick={() => setEventPage((value) => value - 1)}
-                    >
-                      Previous
-                    </button>
-                    <button
-                      type="button"
-                      className={secondaryButton}
-                      disabled={!events.data.next}
-                      onClick={() => setEventPage((value) => value + 1)}
-                    >
-                      Next
-                    </button>
-                  </div>
-                ) : undefined
-              }
+          <PageSection
+            title="Event history"
+            description="Observed phase changes for this deployment. Historical transitions are complete; they are not in-flight."
+          >
+            <DataTable
+              data={events.data?.data ?? []}
+              columns={eventColumns}
+              keyExtractor={(row) => row.id}
+              searchable={false}
+              loading={events.isLoading}
+              isError={events.isError}
+              onRetry={() => void events.refetch()}
+              emptyMessage="No deployment events recorded"
+              serverSide={{
+                rowCount: deliveryPageRowCount(events.data, eventPage, pageSize),
+                pagination: { pageIndex: eventPage, pageSize },
+                onPaginationChange: (next) => setEventPage(next.pageIndex),
+              }}
             />
           </PageSection>
         </PageShell>
@@ -406,22 +397,66 @@ function DiagnosticsDialog({
   );
 }
 
-function eventStep(event: ClusterDeploymentEvent) {
-  const failed =
-    event.toPhase === "failed" || event.eventType.includes("failed");
-  const status: OperationTimelineStepStatus = failed
-    ? "failed"
-    : event.toPhase === "ready" || event.toPhase === "removed"
-      ? "success"
-      : "running";
-  return {
-    id: event.id,
-    label: event.eventType.replaceAll("_", " "),
-    status,
-    detail: `${event.fromPhase || "—"} → ${event.toPhase || "—"} · generation ${event.generation} · ${new Date(event.observedAt).toLocaleString()}`,
-    error: failed ? event.message || event.reasonCode : undefined,
-  };
+const eventColumns: Column<ClusterDeploymentEvent>[] = [
+  {
+    key: "observed",
+    header: "Observed",
+    accessor: (row) => (
+      <span className="whitespace-nowrap text-xs text-muted-foreground">
+        {new Date(row.observedAt).toLocaleString()}
+      </span>
+    ),
+    sortAccessor: (row) => row.observedAt,
+  },
+  {
+    key: "event",
+    header: "Event",
+    accessor: (row) => row.eventType.replaceAll("_", " "),
+  },
+  {
+    key: "phase",
+    header: "Phase",
+    accessor: (row) => (
+      <span className="font-mono text-xs">
+        {row.fromPhase || "—"} → {row.toPhase || "—"}
+      </span>
+    ),
+  },
+  {
+    key: "result",
+    header: "Result",
+    accessor: (row) => (
+      <DeliveryPhaseBadge value={row.toPhase || row.eventType} />
+    ),
+  },
+  {
+    key: "generation",
+    header: "Gen",
+    accessor: (row) => (
+      <span className="tabular-nums text-xs">{row.generation}</span>
+    ),
+    sortAccessor: (row) => row.generation,
+  },
+  {
+    key: "message",
+    header: "Message",
+    accessor: (row) => (
+      <span className="max-w-xl whitespace-normal text-xs">
+        {row.message || row.reasonCode || "—"}
+      </span>
+    ),
+  },
+];
+
+function DeliveryDeploymentDetailRedirect() {
+  const { deploymentId } = useParams<{ deploymentId: string }>();
+  return (
+    <RedirectDeliveryDetail tab="deployments" id={deploymentId}>
+      <DeploymentDetailPage />
+    </RedirectDeliveryDetail>
+  );
 }
+
 export const Route = createFileRoute(
   "/dashboard/delivery/deployments/$deploymentId/",
-)({ component: DeploymentDetailPage });
+)({ component: DeliveryDeploymentDetailRedirect });

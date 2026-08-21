@@ -72,4 +72,14 @@ describe('ModalShell', () => {
     fireEvent.keyDown(document, { key: 'Tab' });
     expect(close).toHaveFocus();
   });
+
+  it('honors autofocus on a field inside the dialog', () => {
+    render(
+      <ModalShell title="Type to confirm" onClose={vi.fn()}>
+        <input aria-label="Confirmation" autoFocus />
+      </ModalShell>,
+    );
+
+    expect(screen.getByLabelText('Confirmation')).toHaveFocus();
+  });
 });

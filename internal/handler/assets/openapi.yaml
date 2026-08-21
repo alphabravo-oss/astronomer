@@ -1245,11 +1245,17 @@ components:
           type: boolean
         feature.monitoring:
           type: boolean
+        feature.fleet_grafana:
+          type: boolean
+        feature.hosted_loki:
+          type: boolean
         feature.security:
           type: boolean
         feature.backups:
           type: boolean
         feature.charlie:
+          type: boolean
+        feature.extensions:
           type: boolean
     ExtensionManifest:
       type: object
@@ -6501,6 +6507,110 @@ paths:
       responses:
         '200':
           description: Backup drill status
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /api/v1/admin/management-backup/:
+    get:
+      tags:
+        - Settings
+      summary: Astronomer management-plane backup status
+      description: >-
+        Superuser-only status of Astronomer's own pg_dump: destinations
+        (S3 buckets), CronJob schedule, last Job, restore drill. Credentials
+        and wrapping passphrases are never returned.
+      responses:
+        '200':
+          description: Management-plane backup status
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /api/v1/admin/management-backup/destinations/:
+    post:
+      tags:
+        - Settings
+      summary: Add a management-plane backup S3 destination
+      responses:
+        '201':
+          description: Destination created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /api/v1/admin/management-backup/destinations/{id}/:
+    put:
+      tags:
+        - Settings
+      summary: Update a management-plane backup S3 destination
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Destination updated
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    delete:
+      tags:
+        - Settings
+      summary: Remove a management-plane backup S3 destination
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Destination deleted
+  /api/v1/admin/management-backup/destinations/{id}/test/:
+    post:
+      tags:
+        - Settings
+      summary: Probe a management-plane backup S3 destination
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Probe result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /api/v1/admin/management-backup/destinations/{id}/run/:
+    post:
+      tags:
+        - Settings
+      summary: Run a management-plane backup now
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Job created
           content:
             application/json:
               schema:

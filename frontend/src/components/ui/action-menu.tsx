@@ -103,7 +103,7 @@ export function ActionMenu({ items }: ActionMenuProps) {
               ? 'translateY(-100%)'
               : undefined,
           }}
-          className="rounded-md border border-border bg-popover p-1 shadow-lg z-[9999]"
+          className="rounded-md border border-border bg-popover p-1 shadow-lg z-popover"
           onClick={(e) => e.stopPropagation()}
         >
           {items.map((item, i) => (

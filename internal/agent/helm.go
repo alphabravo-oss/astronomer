@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"helm.sh/helm/v3/pkg/action"
+	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/registry"
@@ -158,6 +159,41 @@ func (h *HelmHandler) locateChart(req *protocol.HelmRequestPayload) (string, err
 	return cp, nil
 }
 
+// helmUpgradeUsesStoredChart is true when the caller omitted chart coordinates
+// and the upgrade should load the chart from the last release (overlay
+// --reuse-values of an already-installed chart such as astronomer).
+func helmUpgradeUsesStoredChart(req *protocol.HelmRequestPayload) bool {
+	if req == nil {
+		return false
+	}
+	return strings.TrimSpace(req.ChartName) == "" && strings.TrimSpace(req.ChartURL) == "" && strings.TrimSpace(req.RepoURL) == ""
+}
+
+func (h *HelmHandler) loadUpgradeChart(cfg *action.Configuration, req *protocol.HelmRequestPayload) (*helmchart.Chart, error) {
+	if helmUpgradeUsesStoredChart(req) {
+		if cfg == nil || cfg.Releases == nil {
+			return nil, fmt.Errorf("helm storage is not configured")
+		}
+		last, err := cfg.Releases.Last(req.ReleaseName)
+		if err != nil {
+			return nil, fmt.Errorf("load last release chart: %w", err)
+		}
+		if last == nil || last.Chart == nil {
+			return nil, fmt.Errorf("helm release %q has no chart to reuse", req.ReleaseName)
+		}
+		return last.Chart, nil
+	}
+	chartPath, err := h.locateChart(req)
+	if err != nil {
+		return nil, err
+	}
+	chrt, err := loader.Load(chartPath)
+	if err != nil {
+		return nil, fmt.Errorf("load chart: %w", err)
+	}
+	return chrt, nil
+}
+
 // HandleInstall processes HELM_INSTALL messages.
 func (h *HelmHandler) HandleInstall(ctx context.Context, msg *protocol.Message) (*protocol.Message, error) {
 	req, err := decodeHelmRequest(msg)
@@ -222,6 +258,7 @@ func (h *HelmHandler) HandleUpgrade(ctx context.Context, msg *protocol.Message) 
 
 	upgrade := action.NewUpgrade(cfg)
 	upgrade.Namespace = req.Namespace
+	upgrade.ReuseValues = req.ReuseValues
 	if req.Version != "" {
 		upgrade.Version = req.Version
 	}
@@ -230,18 +267,12 @@ func (h *HelmHandler) HandleUpgrade(ctx context.Context, msg *protocol.Message) 
 	upgrade.Wait = true
 	upgrade.Timeout = helmReadyTimeout(req.Timeout)
 
-	chartPath, err := h.locateChart(req)
+	chrt, err := h.loadUpgradeChart(cfg, req)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
 
-	chart, err := loader.Load(chartPath)
-	if err != nil {
-		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0,
-			fmt.Errorf("load chart: %w", err)), nil
-	}
-
-	rel, err := upgrade.RunWithContext(ctx, req.ReleaseName, chart, req.Values)
+	rel, err := upgrade.RunWithContext(ctx, req.ReleaseName, chrt, req.Values)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}

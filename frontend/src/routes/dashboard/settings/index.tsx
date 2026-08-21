@@ -13,6 +13,7 @@ import { Link } from '@/lib/link';
 import { ExtensionSlot } from '@/components/extensions/ExtensionSlot';
 import { useIsSuperuser } from '@/components/settings/hooks';
 import { PermissionState } from '@/components/ui/empty-state';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   Palette,
   Mail,
@@ -45,6 +46,7 @@ interface SettingsCard {
   description: string;
   icon: React.ElementType;
   charlie?: boolean;
+  featureFlag?: 'feature.extensions';
 }
 
 const CARDS: SettingsCard[] = [
@@ -110,9 +112,9 @@ const CARDS: SettingsCard[] = [
     icon: FileArchive,
   },
   {
-    href: '/dashboard/settings/backup-drill',
-    title: 'Backup drill',
-    description: 'Latest restore drill result + history.',
+    href: '/dashboard/settings/backup',
+    title: 'Astronomer backup',
+    description: 'Nightly management-plane dump, destination, encryption-key wrapping, restore drill.',
     icon: ShieldCheck,
   },
   {
@@ -132,6 +134,7 @@ const CARDS: SettingsCard[] = [
     title: 'Extensions',
     description: 'Manifest validation, permissions review, and enablement controls.',
     icon: Puzzle,
+    featureFlag: 'feature.extensions',
   },
   {
     href: '/dashboard/settings/vault',
@@ -159,7 +162,7 @@ const CARDS: SettingsCard[] = [
   },
   {
     href: '/dashboard/settings/monitoring',
-    title: 'Monitoring stacks',
+    title: 'Shared observability stacks',
     description: 'Shared Thanos + Alertmanager: install, upgrade, replace, uninstall.',
     icon: BarChart3,
   },
@@ -184,45 +187,44 @@ function SettingsHubPage() {
   // grid to a user who will turn out to lack all administration access.
   if (!ready || (!isSuperuser && featureFlags === undefined)) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground mt-1">Platform configuration and administration.</p>
-        </div>
-      </div>
+      <PageShell>
+        <PageHeader
+          title="Settings"
+          description="Platform configuration and administration."
+        />
+      </PageShell>
     );
   }
 
   if (!isSuperuser && !canManageCharlie) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Platform configuration and administration.
-          </p>
-        </div>
+      <PageShell>
+        <PageHeader
+          title="Settings"
+          description="Platform configuration and administration."
+        />
         <PermissionState
           title="Administration permission required"
           description="Platform settings require superuser access, or charlie:manage for the Charlie administration surface."
         />
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Platform configuration and administration. All surfaces below are admin-only.
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Settings"
+        description="Platform configuration and administration. All surfaces below are admin-only."
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {CARDS.filter((card) => isSuperuser
-          ? (!card.charlie || canManageCharlie)
-          : card.charlie && canManageCharlie).map((card) => {
+        {CARDS.filter((card) => {
+          if (card.featureFlag && featureFlags?.[card.featureFlag] !== true) return false;
+          return isSuperuser
+            ? (!card.charlie || canManageCharlie)
+            : card.charlie && canManageCharlie;
+        }).map((card) => {
           const Icon = card.icon;
           return (
             <Link
@@ -248,7 +250,7 @@ function SettingsHubPage() {
         point="settingsPage"
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
       />
-    </div>
+    </PageShell>
   );
 }
 

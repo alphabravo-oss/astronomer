@@ -62,6 +62,13 @@ const HTTP_METHODS = new Set(['get', 'put', 'post', 'delete', 'patch', 'head', '
 // "METHOD <normalized-path>" (params collapsed to {}, no trailing slash).
 const KNOWN_NIL_GATED = new Set([
   'GET /api/v1/admin/backup-drill',
+  'GET /api/v1/admin/backup-drill/history',
+  'GET /api/v1/admin/management-backup',
+  'POST /api/v1/admin/management-backup/destinations',
+  'PUT /api/v1/admin/management-backup/destinations/{}',
+  'DELETE /api/v1/admin/management-backup/destinations/{}',
+  'POST /api/v1/admin/management-backup/destinations/{}/test',
+  'POST /api/v1/admin/management-backup/destinations/{}/run',
   'GET /api/v1/alerting/channels',
   'POST /api/v1/alerting/channels',
   'GET /api/v1/alerting/events',

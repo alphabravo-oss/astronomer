@@ -1,38 +1,34 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Radio } from "lucide-react";
-import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
   Detail,
   DetailGrid,
-  inputClass,
+  ErrorMessage,
   useDeliveryProjectScope,
 } from "@/components/delivery/shared";
-import {
-  getClusterDeliveryInventory,
-  type ClusterDeployment,
-} from "@/lib/api/delivery";
+import { getClusterDeliveryInventory } from "@/lib/api/delivery";
 import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks";
 import { can } from "@/lib/permissions";
-import { useParams, useRouter } from "@/lib/navigation";
+import { useParams } from "@/lib/navigation";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
-import { formatRelativeTime } from "@/lib/utils";
+import { LoadingState } from "@/components/ui/empty-state";
 
 function ClusterDeliveryPage() {
   const { id: clusterId } = useParams<{ id: string }>();
-  const { projectId, projects, projectQuery, setProjectId } =
-    useDeliveryProjectScope();
+  const { projectId, projects, projectQuery } = useDeliveryProjectScope({
+    clusterId,
+  });
   const { data: user } = useCurrentUser();
   const allowed = can(user, "delivery_inventory", "read", {
     type: "project",
     id: projectId,
   });
-  const router = useRouter();
   const query = useQuery({
     queryKey: queryKeys.delivery.clusterInventory(projectId, clusterId),
     queryFn: () => getClusterDeliveryInventory(projectId, clusterId),
@@ -46,62 +42,11 @@ function ClusterDeliveryPage() {
       : queryKeys.delivery.all,
   );
   const inventory = query.data?.controllerInventory;
-  const columns: Column<ClusterDeployment>[] = [
-    {
-      key: "target",
-      header: "Target",
-      accessor: (row) => <code className="text-xs">{row.targetId}</code>,
-    },
-    {
-      key: "phase",
-      header: "Phase",
-      accessor: (row) => <DeliveryPhaseBadge value={row.phase} />,
-    },
-    {
-      key: "revision",
-      header: "Observed revision",
-      accessor: (row) => (
-        <span className="font-mono text-xs">
-          {row.observedRevision || "Not observed"}
-        </span>
-      ),
-    },
-    {
-      key: "generation",
-      header: "Generation",
-      accessor: (row) => `${row.observedGeneration}/${row.desiredGeneration}`,
-    },
-    {
-      key: "observed",
-      header: "Last observed",
-      accessor: (row) =>
-        row.lastObservedAt ? formatRelativeTime(row.lastObservedAt) : "Never",
-    },
-  ];
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Cluster"
-        title="Continuous Delivery"
-        description="Pinned controller compatibility and every Astronomer-managed deployment on this cluster."
-        actions={
-          <label className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Project</span>
-            <select
-              aria-label="Delivery project"
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className={inputClass}
-            >
-              <option value="">Select project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-        }
+        title="Flux"
+        description="Pinned controller compatibility for this cluster."
       />
       <DeliveryProjectGate
         projectId={projectId}
@@ -112,6 +57,8 @@ function ClusterDeliveryPage() {
         allowed={allowed}
         onRetry={() => void projectQuery.refetch()}
       >
+        {query.isError && <ErrorMessage error={query.error} />}
+        {query.isLoading && <LoadingState title="Loading Flux inventory" />}
         {inventory && (
           <>
             <DetailGrid>
@@ -164,26 +111,6 @@ function ClusterDeliveryPage() {
             </PageSection>
           </>
         )}
-        <PageSection
-          title="Cluster deployments"
-          description={`${query.data?.deploymentCount ?? 0} delivery targets currently have state for this cluster.`}
-        >
-          <DataTable
-            data={query.data?.deployments ?? []}
-            columns={columns}
-            keyExtractor={(row) => row.id}
-            loading={query.isLoading}
-            isError={query.isError}
-            onRetry={() => void query.refetch()}
-            searchable={false}
-            emptyMessage="No delivery deployments on this cluster"
-            onRowClick={(row) =>
-              router.push(
-                `/dashboard/delivery/deployments/${row.id}?project=${encodeURIComponent(projectId)}`,
-              )
-            }
-          />
-        </PageSection>
       </DeliveryProjectGate>
     </PageShell>
   );

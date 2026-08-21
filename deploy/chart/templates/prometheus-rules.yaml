@@ -733,4 +733,78 @@ spec:
             summary: "A delivery source credential was revoked or expired"
             description: "Rotate the source credential, increment its epoch, verify the immutable source again, and retry only the failed resolution."
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-control-plane.md#credential-rotation-and-revocation
+
+    - name: astronomer.observability.alerts
+      rules:
+        # ── Fleet Grafana down ─────────────────────────────────────────
+        # Default shared-Grafana release is astronomer-grafana (fullnameOverride).
+        # Absent series = not installed, so this stays quiet until the
+        # Deployment exists. /api/health is the process check in the runbook.
+        - alert: AstronomerGrafanaDown
+          expr: |
+            kube_deployment_status_replicas_available{deployment="astronomer-grafana"} < 1
+            and kube_deployment_spec_replicas{deployment="astronomer-grafana"} > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: observability
+          annotations:
+            summary: "Fleet Grafana has no available replicas"
+            description: |
+              Deployment astronomer-grafana is supposed to be running but
+              has zero available replicas. Cluster Grafana on member
+              clusters is unaffected (local Prometheus, 15d). Check
+              GET /api/health on the Grafana ClusterIP and grafana-proxy.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/grafana-down.md
+
+        # ── Hosted Loki gateway down ───────────────────────────────────
+        - alert: AstronomerLokiGatewayDown
+          expr: |
+            kube_deployment_status_replicas_available{deployment="astronomer-loki-gateway"} < 1
+            and kube_deployment_spec_replicas{deployment="astronomer-loki-gateway"} > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: observability
+          annotations:
+            summary: "Astronomer Loki gateway has no available replicas"
+            description: |
+              The Loki chart gateway (ClusterIP) is down. Hosted ingest
+              and Grafana Loki panels fail. BYO destinations continue.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/loki-gateway-down.md
+
+        # ── loki-auth rejecting pushes ─────────────────────────────────
+        - alert: AstronomerLokiIngestDenied
+          expr: |
+            sum(rate(astronomer_loki_ingest_requests_total{result=~"unauth|cap"}[5m])) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: observability
+          annotations:
+            summary: "loki-auth is denying hosted Loki ingest"
+            description: |
+              astronomer_loki_ingest_requests_total{result=~"unauth|cap"}
+              is increasing. Bad/rotated bearer, org mismatch, or
+              fail-closed ingest cap. Fluent Bit retries then drops.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/loki-ingest-denied.md
+
+        # ── Sizer / ingest cap freeze ──────────────────────────────────
+        # Push-path backstop (loki-auth result=cap). Correlate with Loki
+        # family status degraded_capacity; new attaches 409.
+        - alert: AstronomerLokiOverCapacity
+          expr: |
+            sum(rate(astronomer_loki_ingest_requests_total{result="cap"}[5m])) > 0
+          for: 10m
+          labels:
+            severity: warning
+            component: observability
+          annotations:
+            summary: "Hosted Loki is shedding ingest (over capacity)"
+            description: |
+              Per-tenant or global ingest cap is rejecting pushes.
+              Existing pipelines keep their current cap; new Astronomer
+              Loki attaches freeze. Do not raise ingestion_rate_mb by
+              hand — BYO Loki is the scale-out.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/loki-over-capacity.md
 {{- end }}

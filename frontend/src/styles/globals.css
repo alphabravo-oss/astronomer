@@ -31,6 +31,21 @@
     --sidebar-border: 240 5.9% 90%;
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
+    --status-success: 160 84% 39%;
+    --status-warning: 38 92% 50%;
+    --status-error: 0 84% 60%;
+    --status-info: 217 91% 60%;
+    --status-pending: 239 84% 67%;
+    --status-neutral: 220 9% 46%;
+    --status-high: 25 95% 53%;
+    --terminal-bg: 240 10% 4%;
+    --terminal-fg: 240 5% 84%;
+    --z-sticky: 10;
+    --z-header: 30;
+    --z-chrome: 40;
+    --z-overlay: 50;
+    --z-popover: 60;
+    --z-toast: 70;
   }
 
   .dark {
@@ -48,7 +63,7 @@
     --muted-foreground: 240 5% 64.9%;
     --accent: 240 3.7% 15.9%;
     --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 72% 58%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
@@ -58,6 +73,15 @@
     --sidebar-border: 240 3.7% 12%;
     --sidebar-accent: 240 3.7% 10%;
     --sidebar-accent-foreground: 0 0% 98%;
+    --status-success: 160 72% 45%;
+    --status-warning: 38 92% 56%;
+    --status-error: 0 78% 64%;
+    --status-info: 217 91% 68%;
+    --status-pending: 239 84% 72%;
+    --status-neutral: 220 9% 64%;
+    --status-high: 25 95% 58%;
+    --terminal-bg: 240 10% 4%;
+    --terminal-fg: 240 5% 84%;
   }
 }
 
@@ -103,19 +127,19 @@
 
   /* Terminal-style log viewer */
   .log-viewer {
-    @apply bg-[#0a0a0f] font-mono text-[13px] leading-5 text-zinc-300;
+    @apply bg-terminal font-mono text-[13px] leading-5 text-terminal-foreground;
   }
 
   .log-viewer .log-timestamp {
-    @apply text-zinc-600 select-none;
+    @apply text-muted-foreground/60 select-none;
   }
 
   .log-viewer .log-error {
-    @apply text-red-400;
+    @apply text-status-error;
   }
 
   .log-viewer .log-warn {
-    @apply text-yellow-400;
+    @apply text-status-warning;
   }
 
   /* Metric gauge bar */
@@ -130,12 +154,12 @@
   /* Sidebar nav item */
   .nav-item {
     @apply flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium
-      text-muted-foreground hover:text-foreground hover:bg-accent
+      text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent
       transition-all duration-150;
   }
 
   .nav-item.active {
-    @apply text-foreground bg-accent;
+    @apply text-sidebar-accent-foreground bg-sidebar-accent;
   }
 }
 

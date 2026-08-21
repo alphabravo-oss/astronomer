@@ -66,7 +66,31 @@ func TestClusterExplorerRoleTemplatesCoverCommonResourceFamilies(t *testing.T) {
 		{Resource: string(ResourceStorage), Verbs: []string{string(VerbCreate), string(VerbRead), string(VerbUpdate), string(VerbDelete), string(VerbList)}},
 		{Resource: string(ResourceConfigMaps), Verbs: []string{string(VerbCreate), string(VerbRead), string(VerbUpdate), string(VerbDelete), string(VerbList)}},
 		{Resource: string(ResourceNetworkPolicies), Verbs: []string{string(VerbCreate), string(VerbRead), string(VerbUpdate), string(VerbDelete), string(VerbList)}},
+		{Resource: string(ResourceLogging), Verbs: []string{string(VerbRead), string(VerbList), string(VerbCreate)}},
 	})
+	requireTemplateRules(t, catalog, "logging-admin", []Rule{
+		{Resource: string(ResourceLogging), Verbs: []string{string(VerbCreate), string(VerbRead), string(VerbUpdate), string(VerbDelete), string(VerbList)}},
+		{Resource: string(ResourceClusters), Verbs: []string{string(VerbRead), string(VerbList)}},
+	})
+	operator, ok := catalog.Get("cluster-operator")
+	if !ok {
+		t.Fatal("cluster-operator missing")
+	}
+	for _, rule := range operator.Rules {
+		if rule.Resource != string(ResourceLogging) {
+			continue
+		}
+		if containsString(rule.Verbs, string(VerbUpdate)) || containsString(rule.Verbs, string(VerbDelete)) {
+			t.Fatalf("cluster-operator logging verbs = %v, must not include update/delete", rule.Verbs)
+		}
+	}
+	admin, ok := catalog.Get("logging-admin")
+	if !ok {
+		t.Fatal("logging-admin missing")
+	}
+	if admin.Scope != ScopeCluster {
+		t.Fatalf("logging-admin scope = %q, want cluster", admin.Scope)
+	}
 }
 
 func requireTemplateRules(t *testing.T, catalog *Catalog, name string, required []Rule) {

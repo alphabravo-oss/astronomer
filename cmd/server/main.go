@@ -17,6 +17,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/systemrelease"
+	"github.com/alphabravocompany/astronomer-go/internal/grafanaproxy"
+	"github.com/alphabravocompany/astronomer-go/internal/lokiauth"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
@@ -29,6 +31,22 @@ func handleCLI(args []string, stdout, stderr io.Writer) (handled bool, exitCode 
 
 	if len(args) == 1 && (args[0] == "--version" || args[0] == "version") {
 		_, _ = fmt.Fprintf(stdout, "astronomer-server %s (commit %s, built %s)\n", version.Version, version.GitCommit, version.BuildDate)
+		return true, 0
+	}
+
+	if args[0] == "grafana-proxy" {
+		if err := grafanaproxy.Run(); err != nil {
+			_, _ = fmt.Fprintf(stderr, "grafana-proxy: %v\n", err)
+			return true, 1
+		}
+		return true, 0
+	}
+
+	if args[0] == "loki-auth" {
+		if err := lokiauth.Run(); err != nil {
+			_, _ = fmt.Fprintf(stderr, "loki-auth: %v\n", err)
+			return true, 1
+		}
 		return true, 0
 	}
 

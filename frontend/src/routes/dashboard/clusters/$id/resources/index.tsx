@@ -152,7 +152,7 @@ function IngressClassesTable({ rows }: { rows: MirroredIngressClass[] }) {
             <TableCell className="py-2 font-mono text-xs">{r.controller || '—'}</TableCell>
             <TableCell className="py-2">
               {r.isDefault ? (
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                <span className="rounded-full bg-status-success/10 px-2 py-0.5 text-xs text-status-success">
                   default
                 </span>
               ) : (
@@ -170,14 +170,14 @@ function IngressClassesTable({ rows }: { rows: MirroredIngressClass[] }) {
 function AcceptedBadge({ status }: { status: string }) {
   if (status === 'True') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-status-success/10 px-2 py-0.5 text-xs text-status-success">
         <CircleCheck className="h-3 w-3" /> Accepted
       </span>
     );
   }
   if (status === 'False') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-status-error/10 px-2 py-0.5 text-xs text-status-error">
         <CircleX className="h-3 w-3" /> Rejected
       </span>
     );
@@ -280,7 +280,7 @@ function QuotaProgressRow({
     Number.isFinite(hardN) && Number.isFinite(usedN) && hardN > 0
       ? Math.min(100, Math.round((usedN / hardN) * 100))
       : null;
-  const barColor = pct == null ? 'bg-zinc-400' : pct > 90 ? 'bg-red-500' : pct > 75 ? 'bg-amber-500' : 'bg-emerald-500';
+  const barColor = pct == null ? 'bg-zinc-400' : pct > 90 ? 'bg-status-error' : pct > 75 ? 'bg-status-warning' : 'bg-status-success';
   return (
     <div className="mb-2">
       <div className="flex items-center justify-between text-xs">

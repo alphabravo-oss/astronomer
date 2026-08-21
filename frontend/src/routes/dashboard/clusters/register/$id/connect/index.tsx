@@ -10,7 +10,7 @@ import { useParams } from '@/lib/navigation';
 import { useTabParam } from '@/lib/use-tab-param';
 import { queryKeys } from '@/lib/query-keys';
 import { toastError } from '@/lib/toast';
-import { Loader2, Copy, Check, Download, Server } from 'lucide-react';
+import { Copy, Check, Download, Server } from 'lucide-react';
 import {
   confirmRegistration,
   getClusterManifestWithToken,
@@ -19,6 +19,7 @@ import {
   type RegistrationTLSMode,
 } from '@/lib/api';
 import { useLiveEvents } from '@/lib/live/hooks';
+import { ActionButton } from '@/components/ui/action-button';
 import {
   inlineManifestCommand,
   registrationCurlCommands,
@@ -173,7 +174,7 @@ function ConnectStepPage() {
     status?.phase === 'connected' || status?.phase === 'provisioning' || status?.phase === 'ready';
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div>
       <div className="mb-6 flex items-center gap-3">
         <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
           <Server className="h-5 w-5 text-muted-foreground" />
@@ -322,21 +323,18 @@ function ConnectStepPage() {
         )}
 
         <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard/clusters/register')}
-            className="h-10 px-4 rounded-lg border border-border text-sm font-medium hover:bg-accent"
-          >
+          <ActionButton type="button" onClick={() => router.push('/dashboard/clusters/register')}>
             ← Back
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            intent="primary"
             onClick={advance}
             disabled={confirming}
-            className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
+            loading={confirming}
+            loadingLabel="I've run it →"
           >
-            {confirming && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             I've run it →
-          </button>
+          </ActionButton>
         </div>
       </div>
     </div>

@@ -7,14 +7,14 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
   DeliveryProjectGate,
-  DeliveryShell,
   ErrorMessage,
+  RedirectDeliveryList,
   inputClass,
   primaryButton,
   secondaryButton,
   textareaClass,
   useDeliveryPageIndex,
-  useDeliveryProjectScope,
+  useDeliveryWorkspace,
 } from "@/components/delivery/shared";
 import {
   createComponentBundle,
@@ -30,9 +30,9 @@ import { formatRelativeTime } from "@/lib/utils";
 import { useRouter } from "@/lib/navigation";
 import { toastSuccess } from "@/lib/toast";
 
-function BundlesPage() {
-  const { projectId, projects, projectQuery, setProjectId } =
-    useDeliveryProjectScope();
+export function BundlesPage() {
+  const { projectId, projects, projectQuery, entityHref } =
+    useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const scope = { type: "project" as const, id: projectId };
   const allowed = can(user, "delivery_bundles", "list", scope);
@@ -85,11 +85,7 @@ function BundlesPage() {
     },
   ];
   return (
-    <DeliveryShell
-      projectId={projectId}
-      projects={projects}
-      setProjectId={setProjectId}
-    >
+    <>
       <DeliveryProjectGate
         projectId={projectId}
         loading={projectQuery.isLoading}
@@ -101,7 +97,6 @@ function BundlesPage() {
       >
         <PageShell>
           <PageHeader
-            eyebrow="Continuous Delivery"
             title="Component bundles"
             description="Stable bundle identities with append-only, immutable and centrally verified versions."
             actions={
@@ -125,11 +120,7 @@ function BundlesPage() {
             onRetry={() => void query.refetch()}
             searchable={false}
             emptyMessage="No component bundles in this project"
-            onRowClick={(row) =>
-              router.push(
-                `/dashboard/delivery/bundles/${row.id}?project=${encodeURIComponent(projectId)}`,
-              )
-            }
+            onRowClick={(row) => router.push(entityHref("bundles", row.id))}
             serverSide={{
               rowCount: query.data?.count ?? 0,
               pagination: { pageIndex, pageSize },
@@ -144,7 +135,7 @@ function BundlesPage() {
           onClose={() => setCreating(false)}
         />
       )}
-    </DeliveryShell>
+    </>
   );
 }
 
@@ -157,6 +148,7 @@ function CreateBundleDialog({
 }) {
   const client = useQueryClient();
   const router = useRouter();
+  const { entityHref } = useDeliveryWorkspace();
   const mutation = useMutation({
     mutationFn: (body: { name: string; description?: string }) =>
       createComponentBundle(projectId, body, crypto.randomUUID()),
@@ -167,7 +159,7 @@ function CreateBundleDialog({
       toastSuccess("Component bundle created");
       onClose();
       router.push(
-        `/dashboard/delivery/bundles/${bundle.id}?project=${encodeURIComponent(projectId)}`,
+        entityHref("bundles", bundle.id),
       );
     },
   });
@@ -217,5 +209,7 @@ function CreateBundleDialog({
 }
 
 export const Route = createFileRoute("/dashboard/delivery/bundles/")({
-  component: BundlesPage,
+  component: function DeliveryBundlesRedirect() {
+    return <RedirectDeliveryList tab="bundles" />;
+  },
 });

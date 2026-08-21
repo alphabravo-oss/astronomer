@@ -110,6 +110,9 @@ server through this resource/action contract.
 | Manage SSO and Dex connectors | `sso:create/read/update/delete/list` |
 | Manage global settings | `settings:read/update/manage` |
 | Search/export audit logs | `audit_logs:read` and `audit_logs:list` |
+| View logging destinations and pipelines | `logging:read` and `logging:list` on the cluster |
+| Create a BYO logging destination or attach Astronomer logs | `logging:create` on the cluster |
+| Edit or delete a BYO logging destination | `logging:update` or `logging:delete` on the cluster. System (`is_system`) rows cannot be edited or deleted via API. |
 | Agent POST of kube-apiserver audit batches | `audit_ingest:create` (held only by the per-cluster agent ingest token) |
 | Generate or download support bundles | `support_bundles:create/read/list` |
 | Register, inspect, rotate, or delete delivery sources | `delivery_sources:create/read/list/update/delete` in the target project |
@@ -146,6 +149,21 @@ server through this resource/action contract.
 | `storage:create/read/update/delete/list/watch` | Matching PVC/PV/StorageClass verbs. |
 | `network_policies:*` | NetworkPolicy template management in Astronomer; per-cluster apply is executed through controlled project/cluster reconciliation. |
 | `delivery_*` | Desired delivery state is materialized centrally and reconciled by each cluster's Flux controllers under the cluster-agent boundary. |
+
+## Built-in observability templates
+
+Role templates are copied into the binding at bind time. Existing bindings do
+**not** pick up new verbs automatically; re-apply the template (there is no
+template-sync job).
+
+| Template | Scope | Grants | Notes |
+| --- | --- | --- | --- |
+| `logging-admin` | cluster | `logging: [create, read, update, delete, list]`, `clusters: [read, list]` | New. Bind once per cluster, or use `platform-admin` for fleet-wide logging admin. |
+| `logging-viewer` | global | `logging: [read, list]` (plus read/list on clusters, projects, and pod logs) | Unchanged. |
+| `cluster-operator` | cluster | `logging: [read, list, create]` only | Privilege expansion: `create` can point a new destination at customer Splunk. **Not** `update`/`delete` (that would retarget or destroy a BYO Splunk output). Existing `cluster-operator` bindings do not auto-gain these verbs. |
+| `monitoring-admin` | global | monitoring + alerts lifecycle | Unchanged; covers Grafana/Loki Helm. |
+
+Wildcard `cluster-owner` / `platform-admin` already include `logging`.
 
 ## Review Rules
 

@@ -13,7 +13,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * key gets rejected.
  */
 import { useState } from 'react';
-import { Link } from '@/lib/link';
 import { useParams, useRouter } from '@/lib/navigation';
 import {
   Plus,
@@ -32,6 +31,7 @@ import {
 } from '@/components/projects/hooks';
 import { useCurrentUser } from '@/lib/hooks';
 import { ProviderBadge } from '@/components/projects/cloud-credentials/provider-badge';
+import { ActionButton } from '@/components/ui/action-button';
 import type { CloudCredential, CloudCredentialTestResult } from '@/lib/api/project-detail';
 import { cn, formatRelativeTime } from '@/lib/utils';
 
@@ -76,13 +76,13 @@ function CloudCredentialsListPage() {
           Cloud-provider credentials materialized into the listed clusters as Secrets.
         </p>
         {canEdit && (
-          <Link
-            href={`/dashboard/projects/${projectId}/cloud-credentials/new`}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+          <ActionButton
+            intent="primary"
+            icon={<Plus className="h-4 w-4" />}
+            onClick={() => router.push(`/dashboard/projects/${projectId}/cloud-credentials/new`)}
           >
-            <Plus className="h-4 w-4" />
             New credential
-          </Link>
+          </ActionButton>
         )}
       </div>
 

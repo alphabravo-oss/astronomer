@@ -348,3 +348,22 @@ func (a *authorizationSupport) allowsGlobal(bindings []rbac.RoleBinding, resourc
 	}
 	return a.engine.CheckPermission(bindings, resource, verb, uuid.UUID{}, uuid.UUID{})
 }
+
+// authorizeAnyScope admits a caller who holds resource+verb at any scope
+// (global, cluster, or project). Used for ticket mint where cluster-scoped
+// monitoring:read is enough to open fleet Grafana as a Viewer.
+func (a *authorizationSupport) authorizeAnyScope(w http.ResponseWriter, r *http.Request, resource rbac.Resource, verb rbac.Verb) bool {
+	bindings, restricted, err := a.bindingsForContext(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		return false
+	}
+	if !restricted {
+		return true
+	}
+	if a.engine != nil && a.engine.HasAnyScopedAccess(bindings, resource, verb) {
+		return true
+	}
+	RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to perform this action")
+	return false
+}

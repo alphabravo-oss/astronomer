@@ -82,6 +82,73 @@ func NativeAllow(rules []NativeRule, clusterID, namespace, apiGroup, resource, v
 	return false
 }
 
+// NativeRulesFromBindings extracts CRD grants stored on bound cluster/project
+// roles and scopes each one to the binding's cluster/namespace. Global
+// bindings contribute grants with empty cluster/namespace (any scope).
+func NativeRulesFromBindings(bindings []RoleBinding) []NativeRule {
+	var out []NativeRule
+	for _, b := range bindings {
+		if b.IsSuperuser {
+			continue
+		}
+		for _, rule := range b.RoleRules {
+			if !rule.IsCRDGrant() {
+				continue
+			}
+			verbs := NormalizeNativeVerbs(rule.Verbs)
+			if len(verbs) == 0 {
+				continue
+			}
+			for _, group := range rule.CRDAPIGroups() {
+				for _, resource := range rule.ResourceNames() {
+					if resource == "" {
+						continue
+					}
+					out = append(out, NativeRule{
+						ClusterID: b.ClusterID,
+						Namespace: b.Namespace,
+						APIGroup:  group,
+						Resource:  resource,
+						Verbs:     verbs,
+					})
+				}
+			}
+		}
+	}
+	return out
+}
+
+// NormalizeNativeVerbs maps Kubernetes PolicyRule verbs onto the coarse
+// vocabulary NativeAllow understands (get→read, patch→update) and drops
+// exec/logs so they cannot sneak in through a role-folded grant.
+func NormalizeNativeVerbs(verbs []string) []string {
+	if len(verbs) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(verbs))
+	seen := make(map[string]struct{}, len(verbs))
+	for _, raw := range verbs {
+		v := strings.ToLower(strings.TrimSpace(raw))
+		switch v {
+		case "get":
+			v = string(VerbRead)
+		case "patch":
+			v = string(VerbUpdate)
+		case string(VerbExec), string(VerbLogs), "proxy":
+			continue
+		}
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
 func verbMatches(verbs []string, verb string) bool {
 	for _, v := range verbs {
 		if v == "*" || v == verb {

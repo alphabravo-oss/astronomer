@@ -8,6 +8,7 @@ import { useClusters } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { ActionButton } from '@/components/ui/action-button';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type { CISScanListItem } from '@/types';
 import {
@@ -255,14 +256,13 @@ export function CISScansTab() {
           {scansPage?.total ?? scans.length} historical scan
           {scans.length === 1 ? '' : 's'} across all clusters
         </p>
-        <Link
-          href="/dashboard/security/scans/new"
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-            text-sm font-medium hover:opacity-90 transition-opacity"
+        <ActionButton
+          intent="primary"
+          icon={<Plus className="h-4 w-4" />}
+          onClick={() => router.push('/dashboard/security/scans/new')}
         >
-          <Plus className="h-4 w-4" />
           New Scan
-        </Link>
+        </ActionButton>
       </div>
 
       <DataTable

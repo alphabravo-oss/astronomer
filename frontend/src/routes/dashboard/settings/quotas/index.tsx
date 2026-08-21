@@ -14,6 +14,8 @@ import {
   Plus,
 } from 'lucide-react';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { ActionButton } from '@/components/ui/action-button';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {
@@ -24,8 +26,8 @@ import type { QuotaPlan, QuotaUsageRow } from '@/lib/api/settings';
 
 function enforcementBadge(e: QuotaPlan['enforcement']) {
   const palette: Record<QuotaPlan['enforcement'], string> = {
-    hard: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
-    soft: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+    hard: 'bg-status-error/10 text-status-error border-status-error/30',
+    soft: 'bg-status-warning/10 text-status-warning border-status-warning/30',
     disabled: 'bg-muted text-muted-foreground border-border',
   };
   return (
@@ -49,10 +51,10 @@ function UtilizationBar({ pct }: { pct: number }) {
   const clamped = Math.max(0, Math.min(100, pct));
   const color =
     clamped >= 95
-      ? 'bg-rose-500'
+      ? 'bg-status-error'
       : clamped >= 80
-        ? 'bg-amber-500'
-        : 'bg-emerald-500';
+        ? 'bg-status-warning'
+        : 'bg-status-success';
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-[120px]">
@@ -141,9 +143,10 @@ function QuotaPlansTable() {
 }
 
 function QuotasPage() {
+  const router = useRouter();
   return (
     <SettingsAuthGate>
-      <div className="space-y-6">
+      <PageShell>
         <Link
           href="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -151,35 +154,23 @@ function QuotasPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
         </Link>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Settings · Quotas</p>
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">Quota plans</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Per-tenant caps on projects, clusters, namespaces, storage, tokens, and more.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/dashboard/settings/quotas/usage"
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Deployment-wide usage
-            </Link>
-            <Link
-              href="/dashboard/settings/quotas/new"
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              <Plus className="h-4 w-4" />
-              New plan
-            </Link>
-          </div>
-        </div>
-
+        <PageHeader
+          eyebrow="Settings · Quotas"
+          title="Quota plans"
+          description="Per-tenant caps on projects, clusters, namespaces, storage, tokens, and more."
+          actions={
+            <>
+              <ActionButton icon={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => router.push('/dashboard/settings/quotas/usage')}>
+                Deployment-wide usage
+              </ActionButton>
+              <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => router.push('/dashboard/settings/quotas/new')}>
+                New plan
+              </ActionButton>
+            </>
+          }
+        />
         <QuotaPlansTable />
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

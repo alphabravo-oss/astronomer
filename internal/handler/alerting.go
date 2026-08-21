@@ -46,6 +46,7 @@ type AlertingQuerier interface {
 	CountNotificationChannels(ctx context.Context) (int64, error)
 	// Rules
 	ListAlertRules(ctx context.Context, arg sqlc.ListAlertRulesParams) ([]sqlc.AlertRule, error)
+	ListAlertRulesByCluster(ctx context.Context, arg sqlc.ListAlertRulesByClusterParams) ([]sqlc.AlertRule, error)
 	GetAlertRuleByID(ctx context.Context, id uuid.UUID) (sqlc.AlertRule, error)
 	ListAlertRulesByIDs(ctx context.Context, ids []uuid.UUID) ([]sqlc.AlertRule, error)
 	CreateAlertRule(ctx context.Context, arg sqlc.CreateAlertRuleParams) (sqlc.AlertRule, error)
@@ -56,6 +57,7 @@ type AlertingQuerier interface {
 	ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid.UUID) ([]sqlc.NotificationChannel, error)
 	ListAlertRuleChannelsByRules(ctx context.Context, ruleIds []uuid.UUID) ([]sqlc.AlertRuleChannel, error)
 	CountAlertRules(ctx context.Context) (int64, error)
+	CountAlertRulesByCluster(ctx context.Context, clusterID pgtype.UUID) (int64, error)
 	// Events
 	ListAlertEvents(ctx context.Context, arg sqlc.ListAlertEventsParams) ([]sqlc.AlertEvent, error)
 	ListAlertEventsByRule(ctx context.Context, arg sqlc.ListAlertEventsByRuleParams) ([]sqlc.AlertEvent, error)
@@ -489,17 +491,44 @@ func (h *AlertingHandler) ListRules(w http.ResponseWriter, r *http.Request) {
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
-	rules, err := h.queries.ListAlertRules(r.Context(), sqlc.ListAlertRulesParams{
-		Limit:  limit,
-		Offset: offset,
-	})
+	var clusterID pgtype.UUID
+	if v := r.URL.Query().Get("clusterId"); v != "" {
+		parsed, parseErr := uuid.Parse(v)
+		if parseErr != nil {
+			RespondList(w, []map[string]any{}, NewPagination(0, int(limit), int(offset), 0))
+			return
+		}
+		clusterID = pgtype.UUID{Bytes: parsed, Valid: true}
+	}
+
+	var (
+		rules []sqlc.AlertRule
+		err   error
+		total int64
+	)
+	if clusterID.Valid {
+		rules, err = h.queries.ListAlertRulesByCluster(r.Context(), sqlc.ListAlertRulesByClusterParams{
+			ClusterID: clusterID,
+			Limit:     limit,
+			Offset:    offset,
+		})
+	} else {
+		rules, err = h.queries.ListAlertRules(r.Context(), sqlc.ListAlertRulesParams{
+			Limit:  limit,
+			Offset: offset,
+		})
+	}
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list alert rules")
 		return
 	}
+	if clusterID.Valid {
+		total, _ = h.queries.CountAlertRulesByCluster(r.Context(), clusterID)
+	} else {
+		total, _ = h.queries.CountAlertRules(r.Context())
+	}
 
 	items := h.alertRuleResponses(r.Context(), rules)
-	total, _ := h.queries.CountAlertRules(r.Context())
 	RespondList(w, items, NewPagination(int(total), int(limit), int(offset), len(items)))
 }
 

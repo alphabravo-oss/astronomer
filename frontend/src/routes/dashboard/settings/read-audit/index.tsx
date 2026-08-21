@@ -14,7 +14,10 @@ import { useEffect, useState } from 'react';
 import { Link } from '@/lib/link';
 import { ArrowLeft, FileSearch, Loader2, Plus, Trash2 } from 'lucide-react';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { ModalShell } from '@/components/ui/modal-shell';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   listReadAuditPolicies,
   createReadAuditPolicy,
@@ -87,37 +90,22 @@ function ReadAuditPoliciesList() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Link
-          href="/dashboard/settings"
-          className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-        >
-          <ArrowLeft className="h-4 w-4" /> Settings
-        </Link>
-      </div>
-      <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-          <FileSearch className="h-5 w-5 text-foreground" />
-        </div>
-        <div className="flex-1">
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-            Read-side audit policies
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Configure which GET endpoints emit an audit row. HIPAA / PCI compliance
-            requires &quot;who saw what credential and when&quot; — the seeded policies
-            cover cloud credentials, registry secrets, SSO, webhooks, SIEM auth,
-            the audit log itself, support bundles, and admin settings.
-          </p>
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted"
-        >
-          <Plus className="h-4 w-4" /> New policy
-        </button>
-      </div>
+    <PageShell>
+      <Link
+        href="/dashboard/settings"
+        className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+      >
+        <ArrowLeft className="h-4 w-4" /> Settings
+      </Link>
+      <PageHeader
+        title="Read-side audit policies"
+        description='Configure which GET endpoints emit an audit row. HIPAA / PCI compliance requires "who saw what credential and when" — the seeded policies cover cloud credentials, registry secrets, SSO, webhooks, SIEM auth, the audit log itself, support bundles, and admin settings.'
+        actions={
+          <ActionButton icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>
+            New policy
+          </ActionButton>
+        }
+      />
 
       {error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -157,8 +145,8 @@ function ReadAuditPoliciesList() {
                       onClick={() => toggleEnabled(p)}
                       className={`text-xs px-2 py-0.5 rounded-md ${
                         p.enabled
-                          ? 'bg-emerald-500/15 text-emerald-600'
-                          : 'bg-amber-500/15 text-amber-600'
+                          ? 'bg-status-success/15 text-status-success'
+                          : 'bg-status-warning/15 text-status-warning'
                       }`}
                     >
                       {p.enabled ? 'enabled' : 'disabled'}
@@ -197,7 +185,7 @@ function ReadAuditPoliciesList() {
           }}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
 
@@ -238,40 +226,54 @@ function CreatePolicyModal({
   }
 
   return (
-    <OverlayShell onClose={onClose}>
-      <div className="relative w-full max-w-md rounded-xl border border-border bg-popover shadow-2xl p-6 space-y-4">
-        <h3 className="text-lg font-semibold text-foreground">New read-audit policy</h3>
+    <ModalShell
+      title="New read-audit policy"
+      onClose={onClose}
+      size="sm"
+      footerClassName="flex items-center justify-end gap-2"
+      footer={
+        <>
+          <ActionButton onClick={onClose} disabled={busy}>Cancel</ActionButton>
+          <ActionButton
+            intent="primary"
+            onClick={submit}
+            disabled={busy || !name || !pathPattern}
+            loading={busy}
+            loadingLabel="Creating…"
+          >
+            Create
+          </ActionButton>
+        </>
+      }
+    >
         {error && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
             {error}
           </div>
         )}
         <Field label="Name">
-          <input
+          <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
           />
         </Field>
         <Field label="Description">
-          <input
+          <Input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
           />
         </Field>
         <Field label="Path pattern (e.g. /admin/sso or /projects/*/cloud-credentials)">
-          <input
+          <Input
             value={pathPattern}
             onChange={(e) => setPathPattern(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm font-mono"
+            className="font-mono"
           />
         </Field>
         <Field label="Verbs (comma-separated or *)">
-          <input
+          <Input
             value={verbs}
             onChange={(e) => setVerbs(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
           />
         </Field>
         <Field label={`Sample rate: ${Math.round(sampleRate * 100)}%`}>
@@ -293,24 +295,7 @@ function CreatePolicyModal({
           />
           Enabled
         </label>
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            onClick={onClose}
-            disabled={busy}
-            className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={submit}
-            disabled={busy || !name || !pathPattern}
-            className="rounded-md bg-foreground text-background px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-          >
-            {busy ? 'Creating…' : 'Create'}
-          </button>
-        </div>
-      </div>
-    </OverlayShell>
+    </ModalShell>
   );
 }
 

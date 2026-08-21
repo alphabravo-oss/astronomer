@@ -36,6 +36,9 @@ vi.mock('@/lib/link', () => ({
 vi.mock('@/lib/hooks', () => ({
   useClusters: vi.fn(),
   useCluster: vi.fn(),
+  useFeatureFlags: vi.fn(() => ({
+    data: { 'feature.fleet_grafana': true, 'feature.hosted_loki': true },
+  })),
 }));
 
 vi.mock('@/components/backups/hooks', () => ({
@@ -52,11 +55,17 @@ vi.mock('@/lib/api/monitoring-stack', async (importOriginal) => {
     listMonitoringOperations: vi.fn(),
     getMonitoringOperation: vi.fn(),
     retryMonitoringOperation: vi.fn(),
+    getMonitoringSizer: vi.fn(),
+    getSharedThanosStatus: vi.fn(),
+    getSharedGrafanaStatus: vi.fn(),
   };
 });
 
 import {
   getMonitoringOperation,
+  getMonitoringSizer,
+  getSharedGrafanaStatus,
+  getSharedThanosStatus,
   getStackStatus,
   listMonitoringOperations,
   previewStack,
@@ -65,7 +74,7 @@ import {
   type MonitoringStackStatusBase,
   type MonitoringStackTarget,
 } from '@/lib/api/monitoring-stack';
-import { useCluster, useClusters } from '@/lib/hooks';
+import { useCluster, useClusters, useFeatureFlags } from '@/lib/hooks';
 import { useB2StorageLocations } from '@/components/backups/hooks';
 import { useAuthStore } from '@/lib/store';
 import { SharedMonitoringStacksPage } from '@/components/monitoring/shared-stacks-page';
@@ -166,7 +175,7 @@ function Wrapper({ children }: { children: ReactNode }) {
 // ─────────────────────────────────────────────────────────────────────
 
 interface FamilyCase {
-  key: 'cluster' | 'thanos' | 'alertmanager';
+  key: 'cluster' | 'thanos' | 'alertmanager' | 'grafana' | 'loki';
   name: string;
   targetType: string;
   releaseName: string;
@@ -248,6 +257,53 @@ const FAMILIES: FamilyCase[] = [
     renderPage: () => render(<SharedMonitoringStacksPage />, { wrapper: Wrapper }),
     fullGrant: ['read', 'update'],
   },
+  {
+    key: 'grafana',
+    name: 'shared Grafana',
+    targetType: 'shared_grafana',
+    releaseName: 'astronomer-grafana',
+    namespace: 'monitoring',
+    installedStatus: {
+      status: 'healthy',
+      namespace: 'monitoring',
+      releaseName: 'astronomer-grafana',
+      chartVersion: '8.12.1',
+      managementClusterId: CLUSTER_ID,
+      authMode: 'clusterip',
+      autoRollbackOnFailure: false,
+    } as MonitoringStackStatusBase,
+    renderPage: () => render(<SharedMonitoringStacksPage />, { wrapper: Wrapper }),
+    fullGrant: ['read', 'update'],
+  },
+  {
+    key: 'loki',
+    name: 'shared Loki',
+    targetType: 'shared_loki',
+    releaseName: 'astronomer-loki',
+    namespace: 'monitoring',
+    installedStatus: {
+      status: 'healthy',
+      namespace: 'monitoring',
+      releaseName: 'astronomer-loki',
+      chartVersion: '6.27.0',
+      managementClusterId: CLUSTER_ID,
+      storageConfigId: 'storage-1',
+      ingestHostname: 'loki-ingest.example.com',
+      ingestPublic: false,
+      skipDiskCheck: false,
+      autoRollbackOnFailure: false,
+    } as MonitoringStackStatusBase,
+    renderPage: () => render(<SharedMonitoringStacksPage />, { wrapper: Wrapper }),
+    prepareInstall: (panel) => {
+      fireEvent.change(within(panel).getByLabelText('Object storage'), {
+        target: { value: 'storage-1' },
+      });
+      fireEvent.change(within(panel).getByLabelText('Ingest hostname'), {
+        target: { value: 'loki-ingest.example.com' },
+      });
+    },
+    fullGrant: ['read', 'update'],
+  },
 ];
 
 /** Answer status per family so the shared page's two panels differ. */
@@ -280,6 +336,19 @@ beforeEach(() => {
   clusterHook.mockReturnValue({ data: { id: CLUSTER_ID, displayName: 'Management' } } as never);
   storageHook.mockReturnValue({
     data: { data: [{ id: 'storage-1', name: 'metrics', bucket: 'astronomer-metrics' }] },
+  } as never);
+  vi.mocked(getSharedThanosStatus).mockResolvedValue({ status: 'not_configured' });
+  vi.mocked(getSharedGrafanaStatus).mockResolvedValue({ status: 'not_configured' });
+  vi.mocked(getMonitoringSizer).mockResolvedValue({
+    verdicts: {
+      grafana: { result: 'pass', reasons: [] },
+      loki: { result: 'fail', reasons: ['single_node_small'] },
+      thanosReceive: { result: 'fail', reasons: ['receive_not_offered'] },
+    },
+    objectStorage: { computedLokiPrefix: 'loki' },
+  });
+  vi.mocked(useFeatureFlags).mockReturnValue({
+    data: { 'feature.fleet_grafana': true, 'feature.hosted_loki': true },
   } as never);
 });
 
@@ -455,6 +524,20 @@ describe.each(FAMILIES)('$name lifecycle screen', (family) => {
   });
 });
 
+describe('hosted Loki feature flag', () => {
+  it('hides the Loki panel unless feature.hosted_loki is exactly true', async () => {
+    grant(['read', 'update']);
+    vi.mocked(useFeatureFlags).mockReturnValue({
+      data: { 'feature.fleet_grafana': true },
+    } as never);
+    statusPerTarget({ thanos: { status: 'not_configured' } });
+    render(<SharedMonitoringStacksPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByTestId('stack-panel-thanos'));
+    expect(screen.queryByTestId('stack-panel-loki')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('loki-sizer-banner')).not.toBeInTheDocument();
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // Cross-family checks that only make sense once, on the shared page
 // ─────────────────────────────────────────────────────────────────────
@@ -477,9 +560,93 @@ describe('per-cluster monitoring stack page', () => {
     expect(screen.queryByTestId('stack-panel-cluster')).not.toBeInTheDocument();
   });
 
+  it('prefills storageConfigId from a healthy shared Thanos stack', async () => {
+    grant(['read', 'create', 'update', 'delete']);
+    statusPerTarget({ cluster: { status: 'not_configured' } });
+    vi.mocked(getSharedThanosStatus).mockResolvedValue({
+      status: 'healthy',
+      storageConfigId: 'storage-1',
+    });
+    render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, { wrapper: Wrapper });
+
+    expect(await screen.findByTestId('shared-thanos-bucket-prefill')).toHaveTextContent(
+      'Use shared Thanos bucket',
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /^Set up / }));
+    const objectStorage = await screen.findByLabelText('Object storage');
+    await waitFor(() => expect(objectStorage).toHaveValue('storage-1'));
+  });
+
+  it('explains two Grafanas and omits Open when fleet Grafana is not proxy', async () => {
+    grant(['read', 'create', 'update', 'delete']);
+    statusPerTarget({ cluster: { status: 'not_configured' } });
+    render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, { wrapper: Wrapper });
+
+    const copy = await screen.findByTestId('two-grafana-copy');
+    expect(copy).toHaveTextContent(/this cluster.+Prometheus \(15d/);
+    expect(copy).toHaveTextContent('survives an Astronomer outage');
+    expect(copy).toHaveTextContent('lobby');
+    expect(copy).toHaveTextContent('dies with Astronomer');
+    expect(screen.queryByRole('link', { name: /Open fleet Grafana/ })).not.toBeInTheDocument();
+  });
+
+  it('links to fleet Grafana with var-cluster when the Open button exists', async () => {
+    grant(['read', 'create', 'update', 'delete']);
+    statusPerTarget({ cluster: { status: 'not_configured' } });
+    vi.mocked(getSharedGrafanaStatus).mockResolvedValue({
+      status: 'healthy',
+      authMode: 'proxy',
+      grafanaHost: 'grafana.example.com',
+    });
+    render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, { wrapper: Wrapper });
+
+    const open = await screen.findByRole('link', { name: /Open fleet Grafana/ });
+    expect(open).toHaveAttribute(
+      'href',
+      `https://grafana.example.com/?var-cluster=${CLUSTER_ID}`,
+    );
+  });
+
 });
 
 describe('shared monitoring stacks page', () => {
+  it('shows Open fleet Grafana only when authMode is proxy', async () => {
+    grant(['read', 'update']);
+    statusPerTarget({
+      grafana: {
+        status: 'healthy',
+        namespace: 'monitoring',
+        releaseName: 'astronomer-grafana',
+        chartVersion: '8.12.1',
+        managementClusterId: CLUSTER_ID,
+        authMode: 'clusterip',
+        grafanaHost: 'grafana.example.com',
+      } as MonitoringStackStatusBase,
+    });
+    const { unmount } = render(<SharedMonitoringStacksPage />, { wrapper: Wrapper });
+    const clusteripPanel = await panelFor(FAMILIES.find((f) => f.key === 'grafana')!);
+    await waitFor(() => expect(within(clusteripPanel).getByText('Healthy')).toBeInTheDocument());
+    expect(within(clusteripPanel).queryByRole('link', { name: 'Open fleet Grafana' })).not.toBeInTheDocument();
+    unmount();
+
+    statusPerTarget({
+      grafana: {
+        status: 'healthy',
+        namespace: 'monitoring',
+        releaseName: 'astronomer-grafana',
+        chartVersion: '8.12.1',
+        managementClusterId: CLUSTER_ID,
+        authMode: 'proxy',
+        grafanaHost: 'grafana.example.com',
+      } as MonitoringStackStatusBase,
+    });
+    render(<SharedMonitoringStacksPage />, { wrapper: Wrapper });
+    const proxyPanel = await panelFor(FAMILIES.find((f) => f.key === 'grafana')!);
+    await waitFor(() => expect(within(proxyPanel).getByText('Healthy')).toBeInTheDocument());
+    const open = within(proxyPanel).getByRole('link', { name: 'Open fleet Grafana' });
+    expect(open).toHaveAttribute('href', 'https://grafana.example.com/');
+  });
+
   it('renders Thanos and Alertmanager as independent panels', async () => {
     grant(['read', 'update']);
     statusPerTarget({
@@ -489,8 +656,10 @@ describe('shared monitoring stacks page', () => {
     render(<SharedMonitoringStacksPage />, { wrapper: Wrapper });
 
     const thanos = await screen.findByTestId('stack-panel-thanos');
+    const grafana = await screen.findByTestId('stack-panel-grafana');
     const alertmanager = await screen.findByTestId('stack-panel-alertmanager');
     await waitFor(() => expect(within(thanos).getByText('Healthy')).toBeInTheDocument());
+    expect(within(grafana).getByText('Not installed')).toBeInTheDocument();
     expect(within(alertmanager).getByText('Not installed')).toBeInTheDocument();
     // Progressive disclosure: an absent stack offers a "Set up …" entry point,
     // an installed one offers "Edit configuration" — the actual Install/Upgrade

@@ -9,14 +9,14 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
-  DeliveryShell,
   ErrorMessage,
+  RedirectDeliveryList,
   inputClass,
   primaryButton,
   secondaryButton,
   textareaClass,
   useDeliveryPageIndex,
-  useDeliveryProjectScope,
+  useDeliveryWorkspace,
 } from "@/components/delivery/shared";
 import {
   createDeliverySource,
@@ -42,9 +42,9 @@ import { useRouter, useSearchParams } from "@/lib/navigation";
 
 const sourceStatuses = ["pending", "ready", "degraded", "revoked"] as const;
 
-function SourcesPage() {
-  const { projectId, projects, projectQuery, setProjectId } =
-    useDeliveryProjectScope();
+export function SourcesPage() {
+  const { projectId, projects, projectQuery, listHref } =
+    useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const scope = { type: "project" as const, id: projectId };
   const canList = can(user, "delivery_sources", "list", scope);
@@ -76,7 +76,7 @@ function SourcesPage() {
     else next.delete("status");
     next.delete("page");
     router.replace(
-      `/dashboard/delivery/sources${next.size ? `?${next.toString()}` : ""}`,
+      `${listHref("sources")}${next.size ? `?${next.toString()}` : ""}`,
     );
   };
   const query = useQuery({
@@ -191,11 +191,7 @@ function SourcesPage() {
   ];
 
   return (
-    <DeliveryShell
-      projectId={projectId}
-      projects={projects}
-      setProjectId={setProjectId}
-    >
+    <>
       <DeliveryProjectGate
         projectId={projectId}
         loading={projectQuery.isLoading}
@@ -207,7 +203,6 @@ function SourcesPage() {
       >
         <PageShell>
           <PageHeader
-            eyebrow="Continuous Delivery"
             title="Sources"
             description="Reusable authenticated and verified Git, OCI, and Helm locations. Credentials are write-only."
             actions={
@@ -279,7 +274,7 @@ function SourcesPage() {
         source={deleteSource}
         onClose={() => setDeleteSource(null)}
       />
-    </DeliveryShell>
+    </>
   );
 }
 
@@ -778,5 +773,7 @@ function authModesFor(
 }
 
 export const Route = createFileRoute("/dashboard/delivery/sources/")({
-  component: SourcesPage,
+  component: function DeliverySourcesRedirect() {
+    return <RedirectDeliveryList tab="sources" />;
+  },
 });

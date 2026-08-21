@@ -11,7 +11,7 @@
  * see the comment on `scope`.
  */
 import { Link } from '@/lib/link';
-import { ArrowLeft, BarChart3 } from 'lucide-react';
+import { ArrowLeft, BarChart3, ExternalLink } from 'lucide-react';
 
 import { PageHeader, PageShell } from '@/components/ui/page';
 import { PermissionState } from '@/components/ui/empty-state';
@@ -23,7 +23,9 @@ import {
   type StackLifecyclePermissions,
   type StackOption,
 } from '@/components/monitoring/stack-lifecycle-panel';
-import { CLUSTER_STACK_FAMILY } from '@/components/monitoring/stack-spec';
+import { CLUSTER_STACK_FAMILY, fleetGrafanaClusterURL } from '@/components/monitoring/stack-spec';
+import { useSharedGrafanaStatus, useSharedThanosStatus } from '@/components/monitoring/hooks';
+import type { SharedGrafanaStatus, SharedThanosStatus } from '@/lib/api/monitoring-stack';
 
 export function ClusterMonitoringStackPage({ clusterId }: { clusterId: string }) {
   /**
@@ -59,6 +61,15 @@ export function ClusterMonitoringStackPage({ clusterId }: { clusterId: string })
     id: location.id,
     label: `${location.name} — ${location.bucket}`,
   }));
+  const thanosQuery = useSharedThanosStatus(permissions.read.allowed);
+  const thanos = thanosQuery.data as SharedThanosStatus | undefined;
+  const sharedThanosStorageId =
+    thanos?.status === 'healthy' ? (thanos.storageConfigId || '').trim() : '';
+  const grafanaQuery = useSharedGrafanaStatus(permissions.read.allowed);
+  const grafanaOpenURL = fleetGrafanaClusterURL(
+    grafanaQuery.data as SharedGrafanaStatus | undefined,
+    clusterId,
+  );
 
   const target = { kind: 'cluster' as const, clusterId };
 
@@ -77,13 +88,21 @@ export function ClusterMonitoringStackPage({ clusterId }: { clusterId: string })
         title="Monitoring stack"
         description="kube-prometheus-stack for this cluster. Install, upgrade, replace or uninstall the release; the panel follows the queued operation to completion and surfaces the reconciler's own errors."
         actions={
-          <Link
-            href="/dashboard/settings/monitoring"
-            className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <BarChart3 className="h-3.5 w-3.5" />
-            Shared stacks
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/dashboard/clusters/${clusterId}/metrics`}
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              Metrics
+            </Link>
+            <Link
+              href="/dashboard/settings/monitoring"
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              Shared stacks
+            </Link>
+          </div>
         }
       />
 
@@ -91,12 +110,40 @@ export function ClusterMonitoringStackPage({ clusterId }: { clusterId: string })
         <PermissionState title="Monitoring access required" permission="monitoring:read" />
       ) : (
         <div className="space-y-4">
+          <p className="text-sm text-muted-foreground" data-testid="two-grafana-copy">
+            Cluster Grafana talks to this cluster’s Prometheus (15d local retention) and
+            survives an Astronomer outage. Fleet Grafana is the lobby for comparing
+            clusters, long-term metrics, and logs — it dies with Astronomer. We do not
+            uninstall cluster Grafana automatically.
+            {grafanaOpenURL ? (
+              <>
+                {' '}
+                <a
+                  href={grafanaOpenURL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-medium text-foreground hover:underline"
+                >
+                  Open fleet Grafana
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </>
+            ) : null}
+          </p>
+
+          {sharedThanosStorageId ? (
+            <p className="text-sm text-muted-foreground" data-testid="shared-thanos-bucket-prefill">
+              Use shared Thanos bucket. Object storage is pre-filled from the healthy
+              shared Thanos stack. This does not enable Thanos Receive or remote_write.
+            </p>
+          ) : null}
 
           <StackLifecyclePanel
             target={target}
             spec={CLUSTER_STACK_FAMILY}
             permissions={permissions}
             storageOptions={storageOptions}
+            seedOverrides={sharedThanosStorageId ? { storageConfigId: sharedThanosStorageId } : undefined}
           />
         </div>
       )}

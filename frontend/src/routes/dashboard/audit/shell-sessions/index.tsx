@@ -10,9 +10,10 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@/lib/link';
-import { ArrowLeft, TerminalSquare, X, Loader2 } from 'lucide-react';
+import { ArrowLeft, TerminalSquare, Loader2 } from 'lucide-react';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ModalShell } from '@/components/ui/modal-shell';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   listShellSessions,
@@ -77,7 +78,7 @@ function ShellSessionsPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <div>
         <Link
           href="/dashboard/audit"
@@ -86,13 +87,16 @@ function ShellSessionsPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Audit Log
         </Link>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-2 flex items-center gap-2">
-          <TerminalSquare className="h-6 w-6" />
-          Shell Sessions
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Active kubectl shell sessions across every cluster. Click a session to see its command trail.
-        </p>
+        <PageHeader
+          className="mt-2"
+          title={
+            <span className="inline-flex items-center gap-2">
+              <TerminalSquare className="h-6 w-6" />
+              Shell Sessions
+            </span>
+          }
+          description="Active kubectl shell sessions across every cluster. Click a session to see its command trail."
+        />
       </div>
 
       <DataTable
@@ -110,7 +114,7 @@ function ShellSessionsPage() {
       {selected && (
         <SessionCommandsDrawer session={selected} onClose={() => setSelected(null)} />
       )}
-    </div>
+    </PageShell>
   );
 }
 
@@ -127,21 +131,12 @@ function SessionCommandsDrawer({
   });
 
   return (
-    <OverlayShell onClose={onClose}>
-      <div className="relative w-full max-w-2xl max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <div>
-            <h3 className="text-lg font-semibold text-foreground">Command trail</h3>
-            <p className="text-xs text-muted-foreground font-mono mt-0.5">
-              {session.podNamespace}/{session.podName} · started {formatDate(session.startedAt)}
-            </p>
-          </div>
-          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6">
+    <ModalShell
+      title="Command trail"
+      subtitle={`${session.podNamespace}/${session.podName} · started ${formatDate(session.startedAt)}`}
+      onClose={onClose}
+      size="lg"
+    >
           {isLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -163,9 +158,7 @@ function SessionCommandsDrawer({
               ))}
             </ol>
           )}
-        </div>
-      </div>
-    </OverlayShell>
+    </ModalShell>
   );
 }
 

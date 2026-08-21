@@ -1,5 +1,5 @@
 /**
- * The three monitoring-stack families, described as data.
+ * The monitoring-stack families, described as data.
  *
  * The lifecycle SCREENS are one component (stack-lifecycle-panel.tsx) driven by
  * the specs below, for the same reason the backend collapsed its two shared
@@ -19,6 +19,7 @@
 import type {
   MonitoringStackRequestBody,
   MonitoringStackStatusBase,
+  SharedGrafanaStatus,
 } from '@/lib/api/monitoring-stack';
 
 /**
@@ -58,7 +59,7 @@ export interface StackField {
 
 export interface StackFamilySpec {
   /** Matches MonitoringStackTarget['kind']. */
-  key: 'cluster' | 'thanos' | 'alertmanager';
+  key: 'cluster' | 'thanos' | 'alertmanager' | 'grafana' | 'loki';
   title: string;
   description: string;
   /**
@@ -149,7 +150,7 @@ export const CLUSTER_STACK_FAMILY: StackFamilySpec = {
   key: 'cluster',
   title: 'Cluster monitoring stack',
   description:
-    'kube-prometheus-stack on this cluster — Prometheus, optionally Grafana and Alertmanager, with a Thanos sidecar shipping blocks to shared object storage.',
+    'kube-prometheus-stack on this cluster — Prometheus, optionally Grafana and Alertmanager, with a Thanos sidecar shipping blocks to shared object storage. Cluster Grafana is this Prometheus (15d) and survives an Astronomer outage; fleet Grafana is the lobby.',
   destroys:
     'the Helm release, its Prometheus StatefulSet and the PersistentVolumeClaims holding this cluster’s local metrics',
   fields: [
@@ -212,9 +213,15 @@ export const CLUSTER_STACK_FAMILY: StackFamilySpec = {
       label: 'Object storage',
       kind: 'storageConfig',
       replaceTrigger: true,
-      help: 'Backup storage config used for the Thanos sidecar’s objstore secret.',
+      help: 'Backup storage config used for the Thanos sidecar’s objstore secret. When shared Thanos is healthy this is pre-filled (Use shared Thanos bucket).',
     },
-    { name: 'enableGrafana', label: 'Grafana', kind: 'tristate', unsetLabel: CHART_DEFAULT },
+    {
+      name: 'enableGrafana',
+      label: 'Grafana',
+      kind: 'tristate',
+      unsetLabel: 'Use backend default',
+      help: 'Cluster Grafana talks to this Prometheus (15d) and survives an Astronomer outage. Omitted: enabled, except new (not_configured) stacks default off when fleet Grafana is healthy.',
+    },
     {
       name: 'enableAlertmanager',
       label: 'Alertmanager',
@@ -384,6 +391,215 @@ export const SHARED_ALERTMANAGER_FAMILY: StackFamilySpec = {
 };
 
 // ─────────────────────────────────────────────────────────────────────
+// Shared Grafana (ticket bounce + grafana-proxy on grafana.<host>)
+// ─────────────────────────────────────────────────────────────────────
+
+export const SHARED_GRAFANA_FAMILY: StackFamilySpec = {
+  key: 'grafana',
+  title: 'Shared Grafana',
+  description:
+    'Fleet Grafana on grafana.<platform-host> via grafana-proxy (ticket bounce, Explore-lock). Datasources are shared Thanos (when installed) and an optional BYO Loki URL. Open is shown only when authMode is proxy.',
+  destroys:
+    'the Grafana Helm release on the management cluster, grafana-proxy, and its provisioned dashboard/datasource ConfigMaps. Per-cluster Grafana is not touched',
+  fields: [
+    {
+      name: 'managementClusterId',
+      label: 'Management cluster',
+      kind: 'cluster',
+      required: true,
+      help: 'Cluster the shared Grafana release runs on.',
+    },
+    {
+      name: 'namespace',
+      label: 'Namespace',
+      kind: 'text',
+      placeholder: 'monitoring',
+      replaceTrigger: true,
+    },
+    {
+      name: 'releaseName',
+      label: 'Release name',
+      kind: 'text',
+      placeholder: 'astronomer-grafana',
+      replaceTrigger: true,
+    },
+    { name: 'chartVersion', label: 'Chart version', kind: 'text', placeholder: '8.12.1' },
+    { name: 'replicas', label: 'Replicas', kind: 'number', placeholder: '1' },
+    {
+      name: 'storageClass',
+      label: 'Storage class',
+      kind: 'text',
+      placeholder: 'default',
+      replaceTrigger: true,
+      help: 'Used only when a PVC is requested below.',
+    },
+    {
+      name: 'storageSize',
+      label: 'Storage size',
+      kind: 'text',
+      placeholder: '1Gi',
+      replaceTrigger: true,
+      help: 'Optional 1Gi PVC for stars and prefs. Leave empty to stay stateless. Dashboards and datasources stay sidecar ConfigMaps.',
+    },
+    {
+      name: 'ingressHost',
+      label: 'Grafana host',
+      kind: 'text',
+      placeholder: 'grafana.example.com',
+      help: 'Defaults to grafana.<Astronomer ServerURL host>. Never taken from the Astronomer chart ingress.host.',
+    },
+    {
+      name: 'logDatasourceUrl',
+      label: 'BYO Loki URL',
+      kind: 'text',
+      placeholder: 'http://loki.example:3100',
+      help: 'Optional Grafana-owned Loki datasource. Astronomer Loki is a later family.',
+    },
+    {
+      name: 'autoRollbackOnFailure',
+      label: 'Roll back on failure',
+      kind: 'tristate',
+      unsetLabel: PLATFORM_DEFAULT,
+    },
+  ],
+  defaults: {
+    managementClusterId: '',
+    namespace: 'monitoring',
+    releaseName: 'astronomer-grafana',
+    chartVersion: '8.12.1',
+    replicas: '1',
+    storageClass: '',
+    storageSize: '',
+    ingressHost: '',
+    logDatasourceUrl: '',
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// Shared Loki (sizer-gated ClusterIP warehouse; no Ingress until tokens)
+// ─────────────────────────────────────────────────────────────────────
+
+export const SHARED_LOKI_FAMILY: StackFamilySpec = {
+  key: 'loki',
+  title: 'Shared Loki',
+  description:
+    'Optional Astronomer log warehouse on the management cluster. Install is refused unless the sizer passes. Gateway and loki-auth stay ClusterIP until ingest tokens exist. Object storage uses the same backup-storage config as Thanos, with prefix join(prefix, "loki").',
+  destroys:
+    'the Loki Helm release and its WAL disks. Index and chunks in object storage (computed Loki prefix) are NOT deleted',
+  fields: [
+    {
+      name: 'managementClusterId',
+      label: 'Management cluster',
+      kind: 'cluster',
+      required: true,
+      help: 'Cluster the shared Loki release runs on.',
+    },
+    {
+      name: 'storageConfigId',
+      label: 'Object storage',
+      kind: 'storageConfig',
+      required: true,
+      replaceTrigger: true,
+      help: 'Same backup-storage config as Thanos. Loki writes under join(prefix, "loki"), never Thanos objstore.yml.',
+    },
+    {
+      name: 'ingestHostname',
+      label: 'Ingest hostname',
+      kind: 'text',
+      required: true,
+      placeholder: 'loki-ingest.example.com',
+      help: 'Required and explicit. Never derived from the Astronomer ingress host. Ingress is not created until tokens exist.',
+    },
+    {
+      name: 'namespace',
+      label: 'Namespace',
+      kind: 'text',
+      placeholder: 'monitoring',
+      replaceTrigger: true,
+    },
+    {
+      name: 'releaseName',
+      label: 'Release name',
+      kind: 'text',
+      placeholder: 'astronomer-loki',
+      replaceTrigger: true,
+    },
+    { name: 'chartVersion', label: 'Chart version', kind: 'text', placeholder: '6.27.0' },
+    {
+      name: 'storageClass',
+      label: 'Storage class',
+      kind: 'text',
+      placeholder: 'default',
+      replaceTrigger: true,
+      help: 'RWO class for WAL disks.',
+    },
+    {
+      name: 'walStorageSize',
+      label: 'WAL size',
+      kind: 'text',
+      placeholder: '10Gi',
+      replaceTrigger: true,
+    },
+    {
+      name: 'mode',
+      label: 'Mode',
+      kind: 'text',
+      placeholder: 'singleBinary',
+      replaceTrigger: true,
+      help: 'Empty = sizer pick. May only narrow (singleBinary when SimpleScalable was selected). Mode change replaces the release (WAL lost, bucket kept).',
+    },
+    { name: 'retention', label: 'Retention', kind: 'text', placeholder: '14d' },
+    {
+      name: 'skipDiskCheck',
+      label: 'Skip WAL disk check',
+      kind: 'tristate',
+      unsetLabel: 'Probe WAL on install/replace',
+    },
+    {
+      name: 'autoRollbackOnFailure',
+      label: 'Roll back on failure',
+      kind: 'tristate',
+      unsetLabel: PLATFORM_DEFAULT,
+    },
+  ],
+  defaults: {
+    managementClusterId: '',
+    storageConfigId: '',
+    ingestHostname: '',
+    namespace: 'monitoring',
+    releaseName: 'astronomer-loki',
+    chartVersion: '6.27.0',
+    storageClass: 'default',
+    walStorageSize: '10Gi',
+    mode: '',
+    retention: '14d',
+  },
+};
+
+/** Public Grafana URL only when the proxy + ticket bounce are installed. */
+export function fleetGrafanaOpenURL(
+  status?: Pick<SharedGrafanaStatus, 'status' | 'authMode' | 'grafanaHost' | 'ingressHost'> | null,
+): string | null {
+  if (!status || status.authMode !== 'proxy') return null;
+  if (!stackIsInstalled(status)) return null;
+  const raw = (status.grafanaHost || status.ingressHost || '').trim();
+  if (!raw) return null;
+  const host = raw.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  if (!host) return null;
+  return `https://${host}/`;
+}
+
+/** Fleet Grafana with this cluster pre-selected. Null unless the Open button exists. */
+export function fleetGrafanaClusterURL(
+  status: Pick<SharedGrafanaStatus, 'status' | 'authMode' | 'grafanaHost' | 'ingressHost'> | null | undefined,
+  clusterId: string,
+): string | null {
+  const base = fleetGrafanaOpenURL(status);
+  if (!base || !clusterId) return null;
+  return `${base}?var-cluster=${encodeURIComponent(clusterId)}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Status interpretation
 // ─────────────────────────────────────────────────────────────────────
 
@@ -504,8 +720,9 @@ export function missingRequiredFields(
  * Empty is OMITTED, for every kind. That is the request's only way to say
  * "unset", and the backend's fields are built for it: strings fall back to the
  * handler's own default rather than writing a blank namespace, and the `*bool`
- * pointers fall back to policy (`autoRollbackOnFailure`) or to the chart's
- * enabled-by-default (`enableGrafana`, `enableAlertmanager`).
+ * pointers fall back to policy (`autoRollbackOnFailure`) or to the backend
+ * default (`enableGrafana` is chart-enabled except new stacks when fleet
+ * Grafana is healthy; `enableAlertmanager` stays chart-enabled).
  *
  * `boolean` fields are still always sent, because those ARE round-tripped
  * through status (thanosSidecarEnabled) and so the form genuinely knows what

@@ -26,9 +26,9 @@ import {
 function StatusPill({ status }: { status: NetworkPolicyApplication['status'] }) {
   const palette: Record<string, string> = {
     pending: 'bg-muted text-muted-foreground border-border',
-    applied: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-    failed: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
-    drifting: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+    applied: 'bg-status-success/10 text-status-success border-status-success/30',
+    failed: 'bg-status-error/10 text-status-error border-status-error/30',
+    drifting: 'bg-status-warning/10 text-status-warning border-status-warning/30',
   };
   return (
     <span className={`text-xs px-2 py-0.5 rounded border font-medium capitalize ${palette[status]}`}>
@@ -216,7 +216,7 @@ function ClusterNetworkPoliciesPage() {
                   <TableCell className="px-3 py-2">
                     <StatusPill status={a.status} />
                     {a.last_error && (
-                      <div className="text-xs text-rose-600 dark:text-rose-400 mt-0.5">{a.last_error}</div>
+                      <div className="text-xs text-status-error mt-0.5">{a.last_error}</div>
                     )}
                   </TableCell>
                   <TableCell className="px-3 py-2 text-xs text-muted-foreground">{a.last_applied_at ?? '—'}</TableCell>
@@ -232,7 +232,7 @@ function ClusterNetworkPoliciesPage() {
                       <button
                         type="button"
                         onClick={() => handleRevoke(a)}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-status-error/30 text-status-error hover:bg-status-error/10"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>

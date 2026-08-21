@@ -10,8 +10,8 @@ SELECT * FROM logging_outputs ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 SELECT * FROM logging_outputs WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
 
 -- name: CreateLoggingOutput :one
-INSERT INTO logging_outputs (name, output_type, configuration, cluster_id, enabled, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO logging_outputs (name, output_type, configuration, cluster_id, enabled, created_by_id, is_system)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: UpdateLoggingOutput :one
@@ -33,6 +33,16 @@ SELECT count(*) FROM logging_outputs;
 -- Total outputs scoped to a single cluster, matching ListOutputsByCluster so
 -- the cluster-scoped list endpoint reports a correct pagination total.
 SELECT count(*) FROM logging_outputs WHERE cluster_id = $1;
+
+-- name: GetSystemLoggingOutputByCluster :one
+SELECT * FROM logging_outputs WHERE cluster_id = $1 AND is_system = true LIMIT 1;
+
+-- name: ListSystemLoggingOutputs :many
+SELECT * FROM logging_outputs WHERE is_system = true;
+
+-- name: DisableSystemLoggingOutputs :many
+UPDATE logging_outputs SET enabled = false WHERE is_system = true AND enabled = true
+RETURNING *;
 
 -- Logging Pipelines
 

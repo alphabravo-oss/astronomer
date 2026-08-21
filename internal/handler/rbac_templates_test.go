@@ -84,6 +84,7 @@ func TestListTemplates_ReturnsExpandedCatalogInStableOrder(t *testing.T) {
 		"cluster-operator",
 		"cluster-owner",
 		"cluster-viewer",
+		"logging-admin",
 		"node-operator",
 		"service-mesh-operator",
 		"storage-manager",

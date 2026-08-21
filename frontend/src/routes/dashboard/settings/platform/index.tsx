@@ -17,7 +17,11 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
 import { ModalShell } from '@/components/ui/modal-shell';
+import { PageHeader, PageShell } from '@/components/ui/page';
+import { Textarea } from '@/components/ui/textarea';
 import { KeyStatusPanel } from '@/components/settings/key-status-panel';
 import { toastInfo } from '@/lib/toast';
 import { useAppForm } from '@/lib/form';
@@ -48,6 +52,7 @@ const DEFAULTS: PlatformSettingsGrouped = {
     monitoring: true,
     security: true,
     backups: true,
+    extensions: false,
   },
   tokens: {
     defaultTtlSeconds: 86400,
@@ -76,11 +81,12 @@ const FLAT_KEYS: Record<string, (g: PlatformSettingsGrouped) => unknown> = {
   'banners.login_banner_text': (g) => g.banners.loginBannerText,
   'banners.global_banner_text': (g) => g.banners.globalBannerText,
   'banners.global_banner_color': (g) => g.banners.globalBannerColor,
-  'features.catalog': (g) => g.features.catalog,
-  'features.projects': (g) => g.features.projects,
-  'features.monitoring': (g) => g.features.monitoring,
-  'features.security': (g) => g.features.security,
-  'features.backups': (g) => g.features.backups,
+  'feature.catalog': (g) => g.features.catalog,
+  'feature.projects': (g) => g.features.projects,
+  'feature.monitoring': (g) => g.features.monitoring,
+  'feature.security': (g) => g.features.security,
+  'feature.backups': (g) => g.features.backups,
+  'feature.extensions': (g) => g.features.extensions,
   'tokens.default_ttl_seconds': (g) => g.tokens.defaultTtlSeconds,
   'tokens.max_ttl_seconds': (g) => g.tokens.maxTtlSeconds,
   'session.timeout_minutes': (g) => g.session.timeoutMinutes,
@@ -110,11 +116,12 @@ function hydrate(flat: Array<{ key: string; value: unknown }>): PlatformSettings
       globalBannerColor: get('banners.global_banner_color', DEFAULTS.banners.globalBannerColor),
     },
     features: {
-      catalog: get('features.catalog', DEFAULTS.features.catalog),
-      projects: get('features.projects', DEFAULTS.features.projects),
-      monitoring: get('features.monitoring', DEFAULTS.features.monitoring),
-      security: get('features.security', DEFAULTS.features.security),
-      backups: get('features.backups', DEFAULTS.features.backups),
+      catalog: get('feature.catalog', DEFAULTS.features.catalog),
+      projects: get('feature.projects', DEFAULTS.features.projects),
+      monitoring: get('feature.monitoring', DEFAULTS.features.monitoring),
+      security: get('feature.security', DEFAULTS.features.security),
+      backups: get('feature.backups', DEFAULTS.features.backups),
+      extensions: get('feature.extensions', DEFAULTS.features.extensions),
     },
     tokens: {
       defaultTtlSeconds: get('tokens.default_ttl_seconds', DEFAULTS.tokens.defaultTtlSeconds),
@@ -173,10 +180,10 @@ function BannerPreview({ text, color }: { text: string; color: PlatformSettingsG
     return <p className="text-xs text-muted-foreground italic">No banner — leave blank to hide.</p>;
   }
   const palette: Record<typeof color, string> = {
-    info: 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400',
-    success: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400',
-    warning: 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400',
-    error: 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400',
+    info: 'bg-status-info/10 border-status-info/30 text-status-info',
+    success: 'bg-status-success/10 border-status-success/30 text-status-success',
+    warning: 'bg-status-warning/10 border-status-warning/30 text-status-warning',
+    error: 'bg-status-error/10 border-status-error/30 text-status-error',
   };
   return (
     <div className={cn('rounded-lg border px-3 py-2 text-xs whitespace-pre-wrap', palette[color])}>
@@ -239,13 +246,13 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
           <form.Field name="branding.primaryColor">
             {(field) => (
               <div className="flex items-center gap-3">
-                <input
+                <Input
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   placeholder="#3b82f6"
-                  className="flex-1 h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="flex-1 font-mono"
                 />
                 <div
                   className="w-10 h-10 rounded-lg border border-border"
@@ -315,6 +322,14 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
         <form.AppField name="features.monitoring">{(field) => <field.SwitchField label="Monitoring" />}</form.AppField>
         <form.AppField name="features.security">{(field) => <field.SwitchField label="Security" />}</form.AppField>
         <form.AppField name="features.backups">{(field) => <field.SwitchField label="Backups" />}</form.AppField>
+        <form.AppField name="features.extensions">
+          {(field) => (
+            <field.SwitchField
+              label="Extensions"
+              helper="UI extension registry. Leave off until the marketplace is ready."
+            />
+          )}
+        </form.AppField>
       </Section>
 
       <Section title="Token TTL" description="Defaults applied to newly minted API tokens.">
@@ -417,13 +432,12 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
                   <label className="text-sm font-medium text-foreground">CA bundle (PEM)</label>
                   <form.Field name="registration.caBundle">
                     {(caField) => (
-                      <textarea
+                      <Textarea
                         value={caField.state.value}
                         onChange={(e) => caField.handleChange(e.target.value)}
                         onBlur={caField.handleBlur}
                         rows={10}
                         placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
-                        className="w-full px-3 py-2 rounded-lg border border-border bg-background text-xs font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     )}
                   </form.Field>
@@ -448,15 +462,16 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
                   ? `${Object.keys(dirty).length} unsaved change${Object.keys(dirty).length === 1 ? '' : 's'}`
                   : 'No changes'}
               </p>
-              <button
+              <ActionButton
                 type="button"
+                intent="primary"
                 onClick={() => void form.handleSubmit()}
                 disabled={!hasChanges || save.isPending}
-                className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                loading={save.isPending}
+                icon={<Save className="h-3.5 w-3.5" />}
               >
-                {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                 Save changes
-              </button>
+              </ActionButton>
             </div>
           );
         }}
@@ -492,14 +507,12 @@ function PlatformSummary({ onEdit }: { onEdit: () => void }) {
           <h2 className="text-base font-semibold text-foreground">Current configuration</h2>
           <p className="text-xs text-muted-foreground mt-0.5">Branding, banners, feature flags, TTLs, telemetry.</p>
         </div>
-        <button
-          type="button"
+        <ActionButton
+          icon={<Pencil className="h-3.5 w-3.5" />}
           onClick={onEdit}
-          className="inline-flex flex-shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
         >
-          <Pencil className="h-3.5 w-3.5" />
           Edit settings
-        </button>
+        </ActionButton>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 divide-y divide-border/60 sm:divide-y-0">
         <div className="flex items-center justify-between gap-4 py-1.5">
@@ -538,7 +551,7 @@ function PlatformSettingsPage() {
   const [editing, setEditing] = useState(false);
   return (
     <SettingsAuthGate>
-      <div className="max-w-3xl mx-auto space-y-6">
+      <PageShell>
         <Link
           href="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -546,16 +559,14 @@ function PlatformSettingsPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
         </Link>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Settings · Platform</p>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">Platform settings</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Branding, banners, feature flags, token TTL, telemetry. Changes apply across the dashboard.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="Settings · Platform"
+          title="Platform settings"
+          description="Branding, banners, feature flags, token TTL, telemetry. Changes apply across the dashboard."
+        />
         <PlatformSummary onEdit={() => setEditing(true)} />
         <KeyStatusPanel />
-      </div>
+      </PageShell>
       {editing && (
         <ModalShell
           title="Platform settings"

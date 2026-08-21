@@ -548,6 +548,28 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	helmRequester.SetInternalPSK(tunnel.DerivePSK(cfg.EncryptionKey))
 	monitoringHandler := handler.NewMonitoringHandlerWithDeps(queries, requester, helmRequester)
 	monitoringHandler.SetLogger(logger)
+	grafanaTickets := auth.NewGrafanaTicketStore(auth.GrafanaTicketTTL)
+	if gbackend, terr := auth.NewRedisGrafanaTicketBackendFromURL(cfg.RedisURL); terr != nil {
+		logger.Warn("grafana tickets: redis backend unavailable, using per-pod in-memory store", "error", terr)
+	} else {
+		grafanaTickets = auth.NewGrafanaTicketStoreWithBackend(auth.GrafanaTicketTTL, gbackend)
+	}
+	monitoringHandler.SetGrafanaTickets(grafanaTickets)
+	monitoringHandler.SetUserLookup(queries)
+	monitoringHandler.SetServerURL(cfg.ServerURL)
+	monitoringHandler.SetGrafanaProxyImage(os.Getenv("ASTRONOMER_SERVER_IMAGE"))
+	monitoringHandler.SetGrafanaExpose(handler.GrafanaExpose{
+		GatewayClass:      os.Getenv("ASTRONOMER_GATEWAY_CLASS"),
+		IngressClass:      os.Getenv("ASTRONOMER_INGRESS_CLASS"),
+		GatewayName:       os.Getenv("ASTRONOMER_GATEWAY_NAME"),
+		PlatformNamespace: os.Getenv("POD_NAMESPACE"),
+		TLSIssuerName:     os.Getenv("ASTRONOMER_TLS_ISSUER"),
+		TLSIssuerKind:     os.Getenv("ASTRONOMER_TLS_ISSUER_KIND"),
+	})
+	grafanaSessionTTL := newSessionTimeoutResolver(queries, logger)
+	monitoringHandler.SetSessionTTL(func(ctx context.Context) time.Duration {
+		return time.Duration(grafanaSessionTTL(ctx)) * time.Minute
+	})
 	// Migration 146: the Thanos/Prometheus/Alertmanager credential is
 	// Fernet-sealed at rest. This handler both reads it (to build a monitoring
 	// client) and read-modify-writes the column it lives in.
@@ -577,11 +599,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	backupHandler.SetEventBus(bus)
 	loggingHandler := handler.NewLoggingHandler(queries)
 	// Logging controller — DB-backed operations table + background reconciler
-	// applies rendered ConfigMaps into the managed cluster's astronomer-logging
-	// namespace via the tunnel K8s requester. Comparison.md §7/§10/§11.
+	// applies ConfigMaps and ingest-token Secrets into astronomer-logging, and
+	// patches the baseline fluent-bit Helm extraVolumeMounts. Comparison.md §7/§10/§11.
 	loggingHandler.SetK8sRequester(requester)
+	loggingHandler.SetHelmRequester(helmRequester)
 	loggingHandler.SetLogger(logger)
 	loggingHandler.SetEventBus(bus)
+	loggingHandler.SetEncryptor(encryptor)
 	securityHandler := handler.NewSecurityHandler(queries)
 	// Phase B5 — CIS scans wiring (handler creates ClusterScan CRs through the
 	// tunnel and runs an in-process poller until the report lands).
@@ -612,6 +636,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	catalogHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	backupHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	loggingHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	loggingHandler.SetLokiIngestReconciler(monitoringHandler)
+	loggingHandler.SetLokiAttachGate(monitoringHandler)
+	monitoringHandler.SetSystemLoggingOutputDisabler(loggingHandler)
 	workloadHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	// Anomaly-baselines read endpoints gate on cluster authz (fail closed:
 	// unwired → 500 for any authenticated caller), so this MUST be set.
@@ -786,13 +813,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		tasks.SetControlPlaneSnapshotStatusReader(controlPlaneSnapshotHandler.ReadSnapshotJobStatus)
 	}
 
-	// Native per-CRD RBAC — an additive allow layer on the k8s-proxy authz
-	// hook, OFF unless native_rbac_enabled. Left nil, deps.NativeAuthz is nil
-	// (proxy authz unchanged) and the CRUD routes never register.
-	var nativeRBACAuthz *nativeRBACAuthorizer
+	// Native / CRD grants — additive allow on the k8s-proxy authz hook after a
+	// coarse deny. Always wired so CRD grants folded into cluster/project roles
+	// take effect. The standalone /native-rbac-rules CRUD stays behind the
+	// native_rbac_enabled flag.
+	nativeRBACAuthz := newNativeRBACAuthorizer(queries)
+	nativeRBACAuthz.setBindings(rbacQuerier)
 	var nativeRBACHandler *handler.NativeRBACHandler
 	if cfg.NativeRBACEnabled {
-		nativeRBACAuthz = newNativeRBACAuthorizer(queries)
 		nativeRBACHandler = handler.NewNativeRBACHandler(queries)
 		nativeRBACHandler.SetInvalidator(nativeRBACAuthz.Invalidate)
 		// Privilege-escalation guard on native-rule authoring: the caller must
@@ -985,6 +1013,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Fan cluster.* lifecycle events out to SSE subscribers on Create / Update
 	// / Delete. The bus implements the EventPublisher interface naturally.
 	clusterHandler.SetEventPublisher(busPublisherAdapter{bus: bus})
+	clusterHandler.SetGrafanaFolderReconciler(monitoringHandler)
 	// Wizard handler (migration 078 / sprint 22). The handler owns the
 	// phase-machine service; we hand a reference to the cluster handler
 	// (so Create writes the first two step rows), to the tunnel hub (so
@@ -1573,7 +1602,15 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// Admin backup-restore drill viewer — reads rows that the
 		// management-plane-restore-drill CronJob writes to
 		// backup_drill_results. Superuser-gated inside the handler.
-		AdminDrill: handler.NewAdminDrillHandler(queries),
+		AdminDrill: func() *handler.AdminDrillHandler {
+			h := handler.NewAdminDrillHandler(queries)
+			h.SetEncryptor(encryptor)
+			h.SetBackupRuntime(os.Getenv("MANAGEMENT_BACKUP_IMAGE"), os.Getenv("MANAGEMENT_BACKUP_SERVICE_ACCOUNT"))
+			if localK8s != nil && localNamespace != "" {
+				h.SetKubernetes(localK8s, localNamespace, os.Getenv("RELEASE_NAME"))
+			}
+			return h
+		}(),
 		// Management-plane log tail (T03 FEATURES-051226). Only wired
 		// when the in-cluster k8s client is available — laptop dev /
 		// test fakes get a nil-safe omission instead of a panicking

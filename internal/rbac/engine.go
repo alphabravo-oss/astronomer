@@ -394,6 +394,11 @@ func (e *Engine) bindingApplies(b RoleBinding, clusterID, projectID uuid.UUID, n
 
 // matchRule checks if a single rule grants the requested permission.
 func (e *Engine) matchRule(rule Rule, resource Resource, verb Verb) bool {
+	// CRD grants are not coarse Astronomer permissions — the native allow
+	// hook evaluates them after a coarse deny.
+	if rule.IsCRDGrant() {
+		return false
+	}
 	// Check resource match
 	if rule.Resource != "*" && rule.Resource != string(resource) {
 		return false

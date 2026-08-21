@@ -575,6 +575,23 @@ export function useMyEffectivePermissions(params?: apiClient.EffectivePermission
   });
 }
 
+export function useEffectivePermissions(
+  userId: string | undefined,
+  params?: apiClient.EffectivePermissionParams,
+) {
+  const me = useCurrentUser();
+  const resolvedId = userId || me.data?.id || 'me';
+  const self = !userId || (!!me.data?.id && userId === me.data.id);
+  return useQuery({
+    queryKey: queryKeys.rbac.effectivePermissions(resolvedId, params),
+    queryFn: () =>
+      self
+        ? apiClient.getMyEffectivePermissions(params)
+        : apiClient.getEffectivePermissionsForUser(userId!, params),
+    enabled: self || !!userId,
+  });
+}
+
 export function useCreateRole() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -583,7 +600,7 @@ export function useCreateRole() {
       name: string;
       displayName: string;
       description?: string;
-      rules: PolicyRule[];
+      rules: Array<PolicyRule | Record<string, unknown>>;
     }) => {
       const { scope, ...roleData } = data;
       switch (scope) {
@@ -633,6 +650,20 @@ export function useClusterRoleBindings(params?: { cluster_id?: string }) {
   });
 }
 
+export function useGlobalRoleBindings() {
+  return useQuery({
+    queryKey: queryKeys.rbac.globalRoleBindings,
+    queryFn: () => apiClient.listGlobalRoleBindings(),
+  });
+}
+
+export function useProjectRoleBindings(params?: { project_id?: string }) {
+  return useQuery({
+    queryKey: queryKeys.rbac.projectRoleBindings(params),
+    queryFn: () => apiClient.listProjectRoleBindings(params),
+  });
+}
+
 export function useCreateClusterRoleBinding() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -652,6 +683,45 @@ export function useCreateClusterRoleBinding() {
   });
 }
 
+export function useCreateAccessBinding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      scope: 'global' | 'cluster' | 'project';
+      user_id: string;
+      role_id: string;
+      cluster_id?: string;
+      project_id?: string;
+      namespace?: string;
+    }) => {
+      switch (data.scope) {
+        case 'global':
+          return apiClient.createGlobalRoleBinding({ user_id: data.user_id, role_id: data.role_id });
+        case 'project':
+          return apiClient.createProjectRoleBinding({
+            user_id: data.user_id,
+            role_id: data.role_id,
+            project_id: data.project_id || '',
+          });
+        default:
+          return apiClient.createClusterRoleBinding({
+            user_id: data.user_id,
+            role_id: data.role_id,
+            cluster_id: data.cluster_id || '',
+            namespace: data.namespace,
+          });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
+      toastSuccess('Binding created');
+    },
+    onError: (error: Error) => {
+      toastApiError('Failed to create binding', error);
+    },
+  });
+}
+
 export function useDeleteClusterRoleBinding() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -662,6 +732,29 @@ export function useDeleteClusterRoleBinding() {
     },
     onError: (error: Error) => {
       toastApiError('Failed to revoke cluster role binding', error);
+    },
+  });
+}
+
+export function useDeleteAccessBinding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (binding: { scope: 'global' | 'cluster' | 'project'; id: string }) => {
+      switch (binding.scope) {
+        case 'global':
+          return apiClient.deleteGlobalRoleBinding(binding.id);
+        case 'project':
+          return apiClient.deleteProjectRoleBinding(binding.id);
+        default:
+          return apiClient.deleteClusterRoleBinding(binding.id);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
+      toastSuccess('Binding revoked');
+    },
+    onError: (error: Error) => {
+      toastApiError('Failed to revoke binding', error);
     },
   });
 }
@@ -806,10 +899,10 @@ export function useActivityFeed(limit: number = 20) {
 // Alerting Hooks
 // ============================================================
 
-export function useAlertRules() {
+export function useAlertRules(clusterId?: string) {
   return useQuery({
-    queryKey: queryKeys.alerting.rules,
-    queryFn: () => apiClient.getAlertRules(),
+    queryKey: queryKeys.alerting.rules(clusterId),
+    queryFn: () => apiClient.getAlertRules({ clusterId, limit: 200 }),
     // `alerting.changed` (kind: rule) refreshes this while the stream is open.
     refetchInterval: liveFallback(30000),
   });
@@ -820,7 +913,7 @@ export function useCreateAlertRule() {
   return useMutation({
     mutationFn: (data: Partial<AlertRule>) => apiClient.createAlertRule(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.rules });
+      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.all });
       toastSuccess('Alert rule created');
     },
     onError: (error: Error) => {
@@ -835,7 +928,7 @@ export function useUpdateAlertRule() {
     mutationFn: ({ id, data }: { id: string; data: Partial<AlertRule> }) =>
       apiClient.updateAlertRule(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.rules });
+      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.all });
       toastSuccess('Alert rule updated');
     },
     onError: (error: Error) => {
@@ -849,7 +942,7 @@ export function useDeleteAlertRule() {
   return useMutation({
     mutationFn: (id: string) => apiClient.deleteAlertRule(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.rules });
+      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.all });
       toastSuccess('Alert rule deleted');
     },
     onError: (error: Error) => {
@@ -1003,6 +1096,29 @@ export function useCreateLoggingOutput() {
   });
 }
 
+export function useLoggingAttachStatus(clusterId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.logging.attachStatus(clusterId ?? ''),
+    queryFn: () => apiClient.getLoggingAttachStatus(clusterId as string),
+    enabled: Boolean(clusterId),
+  });
+}
+
+export function useAttachAstronomerLogs(clusterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (rotate?: boolean) => apiClient.attachAstronomerLogs(clusterId, Boolean(rotate)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.logging.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.logging.attachStatus(clusterId) });
+      toastSuccess('Astronomer logs attached');
+    },
+    onError: (error: Error) => {
+      toastApiError('Failed to attach Astronomer logs', error);
+    },
+  });
+}
+
 export function useTestLoggingOutput() {
   return useMutation({
     mutationFn: (id: string) => apiClient.testLoggingOutput(id),
@@ -1019,10 +1135,10 @@ export function useTestLoggingOutput() {
   });
 }
 
-export function useLoggingPipelines() {
+export function useLoggingPipelines(clusterId?: string) {
   return useQuery({
-    queryKey: queryKeys.logging.pipelines,
-    queryFn: () => apiClient.getLoggingPipelines(),
+    queryKey: queryKeys.logging.pipelines(clusterId),
+    queryFn: () => apiClient.getLoggingPipelines({ clusterId, limit: 200 }),
   });
 }
 
@@ -1031,7 +1147,7 @@ export function useCreateLoggingPipeline() {
   return useMutation({
     mutationFn: (data: Partial<LoggingPipeline>) => apiClient.createLoggingPipeline(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.logging.pipelines });
+      queryClient.invalidateQueries({ queryKey: queryKeys.logging.pipelinesAll });
       toastSuccess('Logging pipeline created');
     },
     onError: (error: Error) => {

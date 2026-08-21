@@ -7,6 +7,7 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { DrawerShell } from '@/components/ui/drawer-shell';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PermissionState } from '@/components/ui/empty-state';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { createAgentUpgradeOperation, createAgentUpgradePlan, downloadAgentDiagnosticsBundle, getAgentDiagnostics, getClusterAgents, getAgentOperations, runAgentSelfTest } from '@/lib/api';
 import { queryKeys, useCurrentUser } from '@/lib/hooks';
 import { can } from '@/lib/permissions';
@@ -189,18 +190,16 @@ function ClusterAgentsPage() {
   if (!canRead) return <PermissionState permission="cluster_agents:read" />;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Cluster Agents</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Connected, degraded, and disconnected Astronomer agents across adopted clusters.
-          </p>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Server {summary?.serverVersion || '-'} · Supported agent {summary?.minimumSupportedAgentVersion || '-'} · Compatible {summary?.minimumCompatibleAgentVersion || '-'} · Generated {summary?.generatedAt ? formatRelativeTime(summary.generatedAt) : '-'}
-        </div>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Cluster Agents"
+        description="Connected, degraded, and disconnected Astronomer agents across adopted clusters."
+        actions={
+          <div className="text-xs text-muted-foreground max-w-md text-right">
+            Server {summary?.serverVersion || '-'} · Supported agent {summary?.minimumSupportedAgentVersion || '-'} · Compatible {summary?.minimumCompatibleAgentVersion || '-'} · Generated {summary?.generatedAt ? formatRelativeTime(summary.generatedAt) : '-'}
+          </div>
+        }
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryTile icon={Server} label="Clusters" value={summary?.totalClusters ?? 0} />
@@ -255,7 +254,7 @@ function ClusterAgentsPage() {
           }}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
 

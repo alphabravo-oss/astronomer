@@ -1,10 +1,11 @@
 'use client';
 
 /**
- * /dashboard/settings/monitoring — lifecycle for the two SHARED monitoring
- * stacks: Thanos (long-term metrics) and Alertmanager (alert routing). Both run
- * on one management cluster and serve every managed cluster, which is why they live
- * under settings rather than on a cluster.
+ * /dashboard/settings/monitoring — lifecycle for the SHARED monitoring
+ * stacks: Thanos (long-term metrics), Alertmanager (alert routing), and
+ * Grafana (ticket-bounce lobby). They run on one management cluster and serve
+ * every managed cluster, which is why they live under settings rather than
+ * on a cluster.
  *
  * Not wrapped in SettingsAuthGate. That gate is superuser-only, and these
  * endpoints are not: the backend authorizes them with
@@ -18,12 +19,15 @@
  * monitoring:update at GLOBAL scope.
  */
 import { Link } from '@/lib/link';
-import { ArrowLeft, BarChart3, Database } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, BarChart3, Database } from 'lucide-react';
 
 import { PageHeader, PageShell } from '@/components/ui/page';
 import { PermissionState } from '@/components/ui/empty-state';
 import { usePermissionDecision } from '@/lib/permission-hooks';
-import { useClusters } from '@/lib/hooks';
+import { useQuery } from '@tanstack/react-query';
+import { useClusters, useFeatureFlags } from '@/lib/hooks';
+import { queryKeys } from '@/lib/query-keys';
+import { getMonitoringSizer } from '@/lib/api/monitoring-stack';
 import { useB2StorageLocations } from '@/components/backups/hooks';
 import {
   StackLifecyclePanel,
@@ -32,11 +36,15 @@ import {
 } from '@/components/monitoring/stack-lifecycle-panel';
 import {
   SHARED_ALERTMANAGER_FAMILY,
+  SHARED_GRAFANA_FAMILY,
+  SHARED_LOKI_FAMILY,
   SHARED_THANOS_FAMILY,
 } from '@/components/monitoring/stack-spec';
 
 const THANOS_TARGET = { kind: 'thanos' } as const;
 const ALERTMANAGER_TARGET = { kind: 'alertmanager' } as const;
+const GRAFANA_TARGET = { kind: 'grafana' } as const;
+const LOKI_TARGET = { kind: 'loki' } as const;
 
 export function SharedMonitoringStacksPage() {
   const read = usePermissionDecision('monitoring', 'read');
@@ -49,6 +57,17 @@ export function SharedMonitoringStacksPage() {
     update,
     uninstall: update,
   };
+
+  const { data: featureFlags } = useFeatureFlags();
+  // Hide only when the flag is exactly false. Missing/loading defaults on.
+  const showGrafana = featureFlags?.['feature.fleet_grafana'] !== false;
+  const showLoki = featureFlags?.['feature.hosted_loki'] === true;
+
+  const sizerQuery = useQuery({
+    queryKey: queryKeys.monitoringStack.sizer,
+    queryFn: getMonitoringSizer,
+    enabled: read.allowed && showLoki,
+  });
 
   const clustersQuery = useClusters({ pageSize: 100 });
   // Backup storage configs double as the object-storage source for Thanos
@@ -84,15 +103,15 @@ export function SharedMonitoringStacksPage() {
             Settings
           </Link>
         }
-        title="Shared monitoring stacks"
-        description="Optional deployment-wide tier: Thanos (long-term metric retention) and Alertmanager (alert routing). Per-cluster monitoring already runs in-cluster on short-lived rolling storage with no object storage — add Thanos here only to keep metrics beyond each cluster's local retention window. Every action is queued and reconciled server-side."
+        title="Shared observability stacks"
+        description="Optional deployment-wide tier: Thanos (long-term metric retention), Grafana (fleet lobby on grafana.<host>), and Alertmanager (alert routing). Per-cluster monitoring already runs in-cluster on short-lived rolling storage with no object storage — add Thanos here only to keep metrics beyond each cluster's local retention window. Every action is queued and reconciled server-side."
         actions={
           <Link
             href="/dashboard/monitoring"
             className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <BarChart3 className="h-3.5 w-3.5" />
-            Metrics
+            Fleet metrics
           </Link>
         }
       />
@@ -106,7 +125,7 @@ export function SharedMonitoringStacksPage() {
             <p>
               Object storage is required only for Thanos below — it reads historical blocks from a
               bucket. To simply collect metrics on a cluster you don&apos;t need a bucket: install the
-              per-cluster Prometheus stack from that cluster&apos;s Monitoring tab, which defaults to
+              per-cluster Prometheus stack from that cluster&apos;s Monitoring Stack page, which defaults to
               in-cluster rolling storage (15-day retention).
             </p>
           </div>
@@ -118,6 +137,33 @@ export function SharedMonitoringStacksPage() {
             storageOptions={storageOptions}
             seedOverrides={seedOverrides}
           />
+          {showGrafana ? (
+            <StackLifecyclePanel
+              target={GRAFANA_TARGET}
+              spec={SHARED_GRAFANA_FAMILY}
+              permissions={permissions}
+              clusterOptions={clusterOptions}
+              seedOverrides={seedOverrides}
+            />
+          ) : null}
+          {showLoki ? (
+            <>
+              <LokiSizerBanner
+                result={sizerQuery.data?.verdicts.loki.result}
+                mode={sizerQuery.data?.verdicts.loki.mode}
+                reasons={sizerQuery.data?.verdicts.loki.reasons}
+                prefix={sizerQuery.data?.objectStorage?.computedLokiPrefix}
+              />
+              <StackLifecyclePanel
+                target={LOKI_TARGET}
+                spec={SHARED_LOKI_FAMILY}
+                permissions={permissions}
+                clusterOptions={clusterOptions}
+                storageOptions={storageOptions}
+                seedOverrides={seedOverrides}
+              />
+            </>
+          ) : null}
           <StackLifecyclePanel
             target={ALERTMANAGER_TARGET}
             spec={SHARED_ALERTMANAGER_FAMILY}
@@ -128,5 +174,38 @@ export function SharedMonitoringStacksPage() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+function LokiSizerBanner({
+  result,
+  mode,
+  reasons,
+  prefix,
+}: {
+  result?: string;
+  mode?: string | null;
+  reasons?: string[];
+  prefix?: string;
+}) {
+  const pass = result === 'pass';
+  return (
+    <div
+      data-testid="loki-sizer-banner"
+      className={
+        pass
+          ? 'flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground'
+          : 'flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive'
+      }
+    >
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+      <p>
+        Loki sizer: <span className="font-medium">{result || 'unknown'}</span>
+        {mode ? ` (${mode})` : ''}.
+        {reasons && reasons.length > 0 ? ` ${reasons.join(', ')}.` : ''}
+        {prefix ? ` Object prefix ${prefix}.` : ''} ClusterIP only — ingest is not public until
+        tokens exist.
+      </p>
+    </div>
   );
 }

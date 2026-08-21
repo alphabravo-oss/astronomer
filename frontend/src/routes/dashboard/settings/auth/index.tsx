@@ -26,8 +26,10 @@ import {
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ActionButton } from "@/components/ui/action-button";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   useDexConnectors,
   useDeleteDexConnector,
@@ -141,7 +143,7 @@ function AuthOverviewPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       {settings?.runtimePhase === "prepare" && (
         <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 text-sm text-status-warning">
           Dex is in prepare: Apply stages and validates the retained Secret
@@ -149,32 +151,22 @@ function AuthOverviewPage() {
           before registration can be verified.
         </div>
       )}
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Settings · Auth
-          </p>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">
-            Identity Broker
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-            Astronomer brokers enterprise IdPs through Dex. Configure upstream
-            connectors (Azure AD, Okta, LDAP, SAML, …) here; once applied,
-            register Dex as the platform's SSO provider with one click.
-          </p>
-        </div>
-        {connectors.length > 0 && (
-          <Link
-            href="/dashboard/settings/auth/register-sso"
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-              text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <ShieldCheck className="h-4 w-4" />
-            Register Dex as SSO
-          </Link>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="Settings · Auth"
+        title="Identity Broker"
+        description="Astronomer brokers enterprise IdPs through Dex. Configure upstream connectors (Azure AD, Okta, LDAP, SAML, …) here; once applied, register Dex as the platform's SSO provider with one click."
+        actions={
+          connectors.length > 0 ? (
+            <ActionButton
+              intent="primary"
+              icon={<ShieldCheck className="h-4 w-4" />}
+              onClick={() => router.push("/dashboard/settings/auth/register-sso")}
+            >
+              Register Dex as SSO
+            </ActionButton>
+          ) : undefined
+        }
+      />
 
       {/* Identity broker card */}
       <DexInstallCard
@@ -196,27 +188,22 @@ function AuthOverviewPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
+            <ActionButton
               onClick={() => applyMutation.mutate()}
               disabled={applyMutation.isPending || connectors.length === 0}
-              className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-border text-sm
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+              loading={applyMutation.isPending}
+              icon={<RefreshCw className="h-3.5 w-3.5" />}
               title="Reconcile the retained runtime Secret and roll Dex when changed"
             >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${applyMutation.isPending ? "animate-spin" : ""}`}
-              />
               Apply to Dex
-            </button>
-            <Link
-              href="/dashboard/settings/auth/connectors/new"
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-                text-sm font-medium hover:opacity-90 transition-opacity"
+            </ActionButton>
+            <ActionButton
+              intent="primary"
+              icon={<Plus className="h-4 w-4" />}
+              onClick={() => router.push("/dashboard/settings/auth/connectors/new")}
             >
-              <Plus className="h-4 w-4" />
               Add Connector
-            </Link>
+            </ActionButton>
           </div>
         </div>
 
@@ -294,7 +281,7 @@ function AuthOverviewPage() {
         variant="destructive"
         loading={deleteMutation.isPending}
       />
-    </div>
+    </PageShell>
   );
 }
 
@@ -309,6 +296,7 @@ function DexInstallCard({
   loading: boolean;
   issuerUrl?: string;
 }) {
+  const router = useRouter();
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="flex items-start justify-between gap-4">
@@ -347,21 +335,20 @@ function DexInstallCard({
         </div>
         <div className="flex-shrink-0">
           {installed ? (
-            <Link
-              href="/dashboard/settings/auth/settings"
-              className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-xs
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            <ActionButton
+              size="sm"
+              onClick={() => router.push("/dashboard/settings/auth/settings")}
             >
               Configure
-            </Link>
+            </ActionButton>
           ) : (
-            <Link
-              href="/dashboard/settings/auth/install"
-              className="inline-flex items-center gap-2 h-8 px-3 rounded-lg bg-primary text-primary-foreground
-                text-xs font-medium hover:opacity-90 transition-opacity"
+            <ActionButton
+              size="sm"
+              intent="primary"
+              onClick={() => router.push("/dashboard/settings/auth/install")}
             >
               Configure bundled Dex
-            </Link>
+            </ActionButton>
           )}
         </div>
       </div>

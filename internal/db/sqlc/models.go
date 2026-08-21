@@ -1994,6 +1994,7 @@ type LoggingOutput struct {
 	CreatedByID   pgtype.UUID     `json:"created_by_id"`
 	CreatedAt     time.Time       `json:"created_at"`
 	UpdatedAt     time.Time       `json:"updated_at"`
+	IsSystem      bool            `json:"is_system"`
 }
 
 type LoggingPipeline struct {
@@ -2014,6 +2015,16 @@ type LoggingPipelineOutput struct {
 	LoggingOutputID   uuid.UUID `json:"logging_output_id"`
 }
 
+type LokiIngestToken struct {
+	ID             uuid.UUID   `json:"id"`
+	ClusterID      uuid.UUID   `json:"cluster_id"`
+	TokenHash      string      `json:"token_hash"`
+	TokenEncrypted string      `json:"token_encrypted"`
+	CreatedAt      time.Time   `json:"created_at"`
+	RotatedAt      time.Time   `json:"rotated_at"`
+	CreatedByID    pgtype.UUID `json:"created_by_id"`
+}
+
 type MaintenanceWindow struct {
 	ID              uuid.UUID       `json:"id"`
 	Name            string          `json:"name"`
@@ -2029,6 +2040,24 @@ type MaintenanceWindow struct {
 	CreatedBy       pgtype.UUID     `json:"created_by"`
 	CreatedAt       time.Time       `json:"created_at"`
 	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+type ManagementBackupDestination struct {
+	ID                   uuid.UUID   `json:"id"`
+	Name                 string      `json:"name"`
+	Bucket               string      `json:"bucket"`
+	Prefix               string      `json:"prefix"`
+	Region               string      `json:"region"`
+	EndpointUrl          string      `json:"endpoint_url"`
+	EncryptedCredentials string      `json:"encrypted_credentials"`
+	Schedule             string      `json:"schedule"`
+	Enabled              bool        `json:"enabled"`
+	KeepDaily            int32       `json:"keep_daily"`
+	KeepWeekly           int32       `json:"keep_weekly"`
+	KeepMonthly          int32       `json:"keep_monthly"`
+	CreatedByID          pgtype.UUID `json:"created_by_id"`
+	CreatedAt            time.Time   `json:"created_at"`
+	UpdatedAt            time.Time   `json:"updated_at"`
 }
 
 type MirroredGatewayClass struct {

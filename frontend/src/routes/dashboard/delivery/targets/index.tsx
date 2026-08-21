@@ -8,14 +8,14 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
-  DeliveryShell,
   ErrorMessage,
+  RedirectDeliveryList,
   inputClass,
   primaryButton,
   secondaryButton,
   textareaClass,
   useDeliveryPageIndex,
-  useDeliveryProjectScope,
+  useDeliveryWorkspace,
 } from "@/components/delivery/shared";
 import {
   createDeliveryTarget,
@@ -39,9 +39,9 @@ import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 import { toastSuccess } from "@/lib/toast";
 
-function TargetsPage() {
-  const { projectId, projects, projectQuery, setProjectId } =
-    useDeliveryProjectScope();
+export function TargetsPage() {
+  const { projectId, projects, projectQuery, entityHref } =
+    useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const scope = { type: "project" as const, id: projectId };
   const allowed = can(user, "delivery_targets", "list", scope);
@@ -125,11 +125,7 @@ function TargetsPage() {
     },
   ];
   return (
-    <DeliveryShell
-      projectId={projectId}
-      projects={projects}
-      setProjectId={setProjectId}
-    >
+    <>
       <DeliveryProjectGate
         projectId={projectId}
         loading={projectQuery.isLoading}
@@ -141,7 +137,6 @@ function TargetsPage() {
       >
         <PageShell>
           <PageHeader
-            eyebrow="Continuous Delivery"
             title="Targets"
             description="Bind an immutable bundle version to centrally evaluated placement and rollout policy."
             actions={
@@ -165,11 +160,7 @@ function TargetsPage() {
             onRetry={() => void query.refetch()}
             searchable={false}
             emptyMessage="No delivery targets in this project"
-            onRowClick={(row) =>
-              router.push(
-                `/dashboard/delivery/targets/${row.id}?project=${encodeURIComponent(projectId)}`,
-              )
-            }
+            onRowClick={(row) => router.push(entityHref("targets", row.id))}
             serverSide={{
               rowCount: query.data?.count ?? 0,
               pagination: { pageIndex, pageSize },
@@ -184,7 +175,7 @@ function TargetsPage() {
           onClose={() => setCreating(false)}
         />
       )}
-    </DeliveryShell>
+    </>
   );
 }
 
@@ -197,6 +188,7 @@ function CreateTargetDialog({
 }) {
   const client = useQueryClient();
   const router = useRouter();
+  const { entityHref } = useDeliveryWorkspace();
   const [bundleId, setBundleId] = useState("");
   const [allClusters, setAllClusters] = useState(false);
   const [drift, setDrift] = useState<DriftPolicy>("repair");
@@ -223,7 +215,7 @@ function CreateTargetDialog({
       toastSuccess("Delivery target created");
       onClose();
       router.push(
-        `/dashboard/delivery/targets/${data.id}?project=${encodeURIComponent(projectId)}`,
+        entityHref("targets", data.id),
       );
     },
   });
@@ -458,5 +450,7 @@ function Field({
   );
 }
 export const Route = createFileRoute("/dashboard/delivery/targets/")({
-  component: TargetsPage,
+  component: function DeliveryTargetsRedirect() {
+    return <RedirectDeliveryList tab="targets" />;
+  },
 });

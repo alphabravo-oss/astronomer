@@ -16,7 +16,11 @@ import {
 } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { ModalShell } from '@/components/ui/modal-shell';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { CISScansTab } from '@/components/security/cis-scans-tab';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type {
@@ -28,8 +32,6 @@ import {
   Shield,
   Plus,
   Trash2,
-  X,
-  Loader2,
   Pencil,
   Play,
   ScanSearch,
@@ -361,41 +363,32 @@ function SecurityPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Security</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            CIS benchmarks, Pod Security Admission policies, and compliance.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {activeTab === 'policies' && (
-            <button
-              onClick={() => setShowAssignModal(true)}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-                text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              <Plus className="h-4 w-4" />
-              Assign Template
-            </button>
-          )}
-          {activeTab === 'templates' && (
-            <button
-              onClick={() => {
-                setEditingTemplate(null);
-                setShowTemplateModal(true);
-              }}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-                text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              <Plus className="h-4 w-4" />
-              Create Template
-            </button>
-          )}
-        </div>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Security"
+        description="CIS benchmarks, Pod Security Admission policies, and compliance."
+        actions={
+          <>
+            {activeTab === 'policies' && (
+              <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setShowAssignModal(true)}>
+                Assign Template
+              </ActionButton>
+            )}
+            {activeTab === 'templates' && (
+              <ActionButton
+                intent="primary"
+                icon={<Plus className="h-4 w-4" />}
+                onClick={() => {
+                  setEditingTemplate(null);
+                  setShowTemplateModal(true);
+                }}
+              >
+                Create Template
+              </ActionButton>
+            )}
+          </>
+        }
+      />
 
       {/* Tabs */}
       <div className="border-b border-border">
@@ -477,7 +470,7 @@ function SecurityPage() {
           }}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
 
@@ -519,23 +512,30 @@ function AssignTemplateModal({
   };
 
   return (
-    <OverlayShell onClose={onClose}>
-      <div className="relative w-full max-w-lg rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <h3 className="text-lg font-semibold text-foreground">Assign Security Template</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-4">
+    <ModalShell
+      title="Assign Security Template"
+      onClose={onClose}
+      size="md"
+      footerClassName="flex items-center justify-end gap-2"
+      footer={
+        <>
+          <ActionButton onClick={onClose}>Cancel</ActionButton>
+          <ActionButton
+            intent="primary"
+            onClick={handleSave}
+            disabled={assignPolicy.isPending || !form.clusterId || !form.templateId}
+            loading={assignPolicy.isPending}
+          >
+            Assign Template
+          </ActionButton>
+        </>
+      }
+    >
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Cluster</label>
-            <select
+            <Select
               value={form.clusterId}
               onChange={(e) => setForm((f) => ({ ...f, clusterId: e.target.value }))}
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                focus:outline-none focus:ring-1 focus:ring-ring"
             >
               <option value="">Select a cluster...</option>
               {clusters.map((c) => (
@@ -543,23 +543,21 @@ function AssignTemplateModal({
                   {c.displayName} ({c.name})
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Template</label>
-            <select
+            <Select
               value={form.templateId}
               onChange={(e) => setForm((f) => ({ ...f, templateId: e.target.value }))}
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                focus:outline-none focus:ring-1 focus:ring-ring"
             >
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name} {t.isDefault ? '(Default)' : ''}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           {selectedTemplate && (
@@ -590,28 +588,7 @@ function AssignTemplateModal({
               )}
             </div>
           )}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/30">
-          <button
-            onClick={onClose}
-            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={assignPolicy.isPending || !form.clusterId || !form.templateId}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {assignPolicy.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Assign Template
-          </button>
-        </div>
-      </div>
-    </OverlayShell>
+    </ModalShell>
   );
 }
 
@@ -682,30 +659,36 @@ function PSATemplateModal({
   const isPending = createTemplate.isPending || updateTemplate.isPending;
 
   return (
-    <OverlayShell onClose={onClose}>
-      <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <h3 className="text-lg font-semibold text-foreground">
-            {template ? 'Edit PSA Template' : 'Create PSA Template'}
-          </h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+    <ModalShell
+      title={template ? 'Edit PSA Template' : 'Create PSA Template'}
+      onClose={onClose}
+      size="md"
+      footerClassName="flex items-center justify-end gap-2"
+      footer={
+        <>
+          <ActionButton onClick={onClose}>Cancel</ActionButton>
+          <ActionButton
+            intent="primary"
+            onClick={() => void form.handleSubmit()}
+            disabled={isPending || !templateName}
+            loading={isPending}
+          >
+            {template ? 'Update Template' : 'Create Template'}
+          </ActionButton>
+        </>
+      }
+    >
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
             <form.Field name="name">
               {(field) => (
-                <input
+                <Input
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   placeholder="restricted-production"
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+
                 />
               )}
             </form.Field>
@@ -715,14 +698,13 @@ function PSATemplateModal({
             <label className="text-sm font-medium text-foreground">Description</label>
             <form.Field name="description">
               {(field) => (
-                <input
+                <Input
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   placeholder="Restricted policy for production clusters"
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+
                 />
               )}
             </form.Field>
@@ -733,19 +715,18 @@ function PSATemplateModal({
               <label className="text-sm font-medium text-foreground">Enforce</label>
               <form.Field name="enforceLevel">
                 {(field) => (
-                  <select
+                  <Select
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value as PodSecurityLevel)}
                     onBlur={field.handleBlur}
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      focus:outline-none focus:ring-1 focus:ring-ring capitalize"
+                    className="capitalize"
                   >
                     {psaLevels.map((level) => (
                       <option key={level} value={level}>
                         {level}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 )}
               </form.Field>
             </div>
@@ -753,19 +734,18 @@ function PSATemplateModal({
               <label className="text-sm font-medium text-foreground">Audit</label>
               <form.Field name="auditLevel">
                 {(field) => (
-                  <select
+                  <Select
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value as PodSecurityLevel)}
                     onBlur={field.handleBlur}
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      focus:outline-none focus:ring-1 focus:ring-ring capitalize"
+                    className="capitalize"
                   >
                     {psaLevels.map((level) => (
                       <option key={level} value={level}>
                         {level}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 )}
               </form.Field>
             </div>
@@ -773,19 +753,18 @@ function PSATemplateModal({
               <label className="text-sm font-medium text-foreground">Warn</label>
               <form.Field name="warnLevel">
                 {(field) => (
-                  <select
+                  <Select
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value as PodSecurityLevel)}
                     onBlur={field.handleBlur}
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      focus:outline-none focus:ring-1 focus:ring-ring capitalize"
+                    className="capitalize"
                   >
                     {psaLevels.map((level) => (
                       <option key={level} value={level}>
                         {level}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 )}
               </form.Field>
             </div>
@@ -796,7 +775,7 @@ function PSATemplateModal({
               <label className="text-xs text-muted-foreground">Enforce Version</label>
               <form.Field name="enforceVersion">
                 {(field) => (
-                  <input
+                  <Input
                     type="text"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
@@ -812,14 +791,13 @@ function PSATemplateModal({
               <label className="text-xs text-muted-foreground">Audit Version</label>
               <form.Field name="auditVersion">
                 {(field) => (
-                  <input
+                  <Input
                     type="text"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
                     placeholder="latest"
-                    className="w-full h-8 px-2.5 rounded border border-border bg-background text-xs
-                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="h-8 text-xs"
                   />
                 )}
               </form.Field>
@@ -828,14 +806,13 @@ function PSATemplateModal({
               <label className="text-xs text-muted-foreground">Warn Version</label>
               <form.Field name="warnVersion">
                 {(field) => (
-                  <input
+                  <Input
                     type="text"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
                     placeholder="latest"
-                    className="w-full h-8 px-2.5 rounded border border-border bg-background text-xs
-                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="h-8 text-xs"
                   />
                 )}
               </form.Field>
@@ -855,8 +832,7 @@ function PSATemplateModal({
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
                     placeholder="kube-system, kube-public, kube-node-lease"
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+
                   />
                 )}
               </form.Field>
@@ -866,14 +842,13 @@ function PSATemplateModal({
               <label className="text-xs text-muted-foreground">Runtime Classes (comma-separated)</label>
               <form.Field name="exemptRuntimeClasses">
                 {(field) => (
-                  <input
+                  <Input
                     type="text"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
                     placeholder="gvisor, kata"
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+
                   />
                 )}
               </form.Field>
@@ -883,41 +858,19 @@ function PSATemplateModal({
               <label className="text-xs text-muted-foreground">Usernames (comma-separated)</label>
               <form.Field name="exemptUsernames">
                 {(field) => (
-                  <input
+                  <Input
                     type="text"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
                     placeholder="system:serviceaccount:kube-system:default"
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+
                   />
                 )}
               </form.Field>
             </div>
           </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border flex-shrink-0 bg-muted/30">
-          <button
-            onClick={onClose}
-            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => void form.handleSubmit()}
-            disabled={isPending || !templateName}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {template ? 'Update Template' : 'Create Template'}
-          </button>
-        </div>
-      </div>
-    </OverlayShell>
+    </ModalShell>
   );
 }
 

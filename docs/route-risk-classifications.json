@@ -62,7 +62,9 @@
       "patterns": [
         "/api/v1/settings/monitoring/backend",
         "/api/v1/settings/monitoring/thanos/preview",
-        "/api/v1/settings/monitoring/alertmanager/preview"
+        "/api/v1/settings/monitoring/alertmanager/preview",
+        "/api/v1/settings/monitoring/grafana/preview",
+        "/api/v1/settings/monitoring/loki/preview"
       ],
       "classification": "covered-rbac-global-monitoring",
       "reason": "The three routes that answered an unauthenticated caller before the 2026-07-28 fix: the backend read returned the decoded authConfig (operator-supplied backend auth material) and the two previews rendered the shared Thanos/Alertmanager helm values. They now sit behind requireAuth at the router and monitoring:read inside the handler, and each is additionally declared in docs/security-sensitive-routes.json so TestHighRiskRoutesDenyUnauthenticatedRequests asserts the 401."
@@ -84,7 +86,15 @@
         "/api/v1/settings/monitoring/alertmanager/install",
         "/api/v1/settings/monitoring/alertmanager/upgrade",
         "/api/v1/settings/monitoring/alertmanager/replace",
-        "/api/v1/settings/monitoring/alertmanager/uninstall"
+        "/api/v1/settings/monitoring/alertmanager/uninstall",
+        "/api/v1/settings/monitoring/grafana/install",
+        "/api/v1/settings/monitoring/grafana/upgrade",
+        "/api/v1/settings/monitoring/grafana/replace",
+        "/api/v1/settings/monitoring/grafana/uninstall",
+        "/api/v1/settings/monitoring/loki/install",
+        "/api/v1/settings/monitoring/loki/upgrade",
+        "/api/v1/settings/monitoring/loki/replace",
+        "/api/v1/settings/monitoring/loki/uninstall"
       ],
       "classification": "covered-rbac-global-monitoring",
       "reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."
@@ -289,6 +299,9 @@
         "/api/v1/logging/outputs/{id}/disable",
         "/api/v1/logging/outputs/{id}/test",
         "/api/v1/logging/outputs/{id}/query",
+        "/api/v1/logging/outputs/{id}/rotate-token",
+        "/api/v1/clusters/{id}/logging/outputs/{output_id}/rotate-token",
+        "/api/v1/clusters/{id}/logging/outputs/attach-astronomer",
         "/api/v1/logging/pipelines",
         "/api/v1/logging/pipelines/{id}",
         "/api/v1/logging/pipelines/{id}/enable",
@@ -296,7 +309,7 @@
         "/api/v1/logging/operations/{id}/retry"
       ],
       "classification": "covered-rbac-cluster-scoped",
-      "reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+      "reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed. Attach-astronomer is logging:create on that cluster."
     },
     {
       "id": "tools-catalog-cluster-scoped",

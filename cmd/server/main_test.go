@@ -45,6 +45,35 @@ func TestHandleCLIAllowsNormalStartupWithoutArguments(t *testing.T) {
 	}
 }
 
+func TestHandleCLIGrafanaProxyRequiresEnv(t *testing.T) {
+	t.Setenv("GRAFANA_UPSTREAM", "")
+	t.Setenv("ASTRONOMER_URL", "")
+	t.Setenv("GRAFANA_HOST", "")
+	t.Setenv("GRAFANA_PROXY_KEY", "")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, exitCode := handleCLI([]string{"grafana-proxy"}, &stdout, &stderr)
+	if !handled || exitCode == 0 {
+		t.Fatalf("handleCLI(grafana-proxy) = handled %v, exit %d; want true, nonzero", handled, exitCode)
+	}
+	if !strings.Contains(stderr.String(), "grafana-proxy") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestHandleCLILokiAuthRequiresEnv(t *testing.T) {
+	t.Setenv("LOKI_UPSTREAM", "")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, exitCode := handleCLI([]string{"loki-auth"}, &stdout, &stderr)
+	if !handled || exitCode == 0 {
+		t.Fatalf("handleCLI(loki-auth) = handled %v, exit %d; want true, nonzero", handled, exitCode)
+	}
+	if !strings.Contains(stderr.String(), "loki-auth") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestHandleCLIRejectsUnknownArgumentsBeforeStartup(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

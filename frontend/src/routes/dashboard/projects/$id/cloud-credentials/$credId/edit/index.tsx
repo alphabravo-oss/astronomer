@@ -19,6 +19,7 @@ import {
 } from '@/components/projects/hooks';
 import { CredentialForm } from '@/components/projects/cloud-credentials/credential-form';
 import { ProviderBadge } from '@/components/projects/cloud-credentials/provider-badge';
+import { PageHeader, PageShell } from '@/components/ui/page';
 
 function EditCloudCredentialPage() {
   const params = useParams();
@@ -79,7 +80,7 @@ function EditCloudCredentialPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <PageShell>
       <Link
         href={backToList}
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -88,17 +89,15 @@ function EditCloudCredentialPage() {
         Back to credentials
       </Link>
 
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Cloud Credentials · Edit
-        </p>
-        <div className="flex items-center gap-2 mt-1">
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+      <PageHeader
+        eyebrow="Cloud Credentials · Edit"
+        title={
+          <span className="flex items-center gap-2">
             {credential.name}
-          </h1>
-          <ProviderBadge provider={credential.provider} />
-        </div>
-      </div>
+            <ProviderBadge provider={credential.provider} />
+          </span>
+        }
+      />
 
       <div className="rounded-xl border border-border bg-card p-6">
         <CredentialForm
@@ -127,7 +126,7 @@ function EditCloudCredentialPage() {
           }}
         />
       </div>
-    </div>
+    </PageShell>
   );
 }
 

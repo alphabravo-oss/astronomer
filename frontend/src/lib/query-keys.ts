@@ -193,8 +193,13 @@ export const queryKeys = {
       ["rbac", "bindings", params] as const,
     clusterRoleBindings: (params?: Record<string, unknown>) =>
       ["rbac", "cluster-role-bindings", params] as const,
+    globalRoleBindings: ["rbac", "global-role-bindings"] as const,
+    projectRoleBindings: (params?: Record<string, unknown>) =>
+      ["rbac", "project-role-bindings", params] as const,
     myPermissions: (params?: apiClient.EffectivePermissionParams) =>
       ["rbac", "my-permissions", params] as const,
+    effectivePermissions: (userId: string, params?: apiClient.EffectivePermissionParams) =>
+      ["rbac", "effective-permissions", userId, params] as const,
   },
   users: {
     all: ["users"] as const,
@@ -224,7 +229,9 @@ export const queryKeys = {
   activityAll: ["activity"] as const,
   alerting: {
     all: ["alerting"] as const,
-    rules: ["alerting", "rules"] as const,
+    rulesAll: ["alerting", "rules"] as const,
+    rules: (clusterId?: string) =>
+      ["alerting", "rules", clusterId ?? "all"] as const,
     events: (params?: Record<string, unknown>) =>
       ["alerting", "events", params] as const,
     // Prefix matching every `events(params)` variant — used by the live
@@ -260,13 +267,16 @@ export const queryKeys = {
   logging: {
     all: ["logging"] as const,
     outputs: ["logging", "outputs"] as const,
-    pipelines: ["logging", "pipelines"] as const,
+    pipelinesAll: ["logging", "pipelines"] as const,
+    pipelines: (clusterId?: string) =>
+      ["logging", "pipelines", clusterId ?? "all"] as const,
     operations: (params?: Record<string, unknown>) =>
       ["logging", "operations", params] as const,
     // Two-element prefix matching every `operations(params)` list variant and
     // the `operation(id)` detail rows at once — used by retry to invalidate all.
     operationsAll: ["logging", "operations"] as const,
     operation: (id: string) => ["logging", "operations", "detail", id] as const,
+    attachStatus: (clusterId: string) => ["logging", "attach", clusterId] as const,
   },
   // Monitoring-stack LIFECYCLE (install/upgrade/replace/uninstall) across the
   // three families. Distinct from the `clusters.metrics*` keys, which cache the
@@ -288,6 +298,7 @@ export const queryKeys = {
     operationsAll: ["monitoring-stack", "operations"] as const,
     operation: (id: string) =>
       ["monitoring-stack", "operations", "detail", id] as const,
+    sizer: ["monitoring-stack", "sizer"] as const,
   },
   clusterGroups: {
     all: ["cluster-groups"] as const,

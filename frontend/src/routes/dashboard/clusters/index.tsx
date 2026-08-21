@@ -5,6 +5,9 @@ import { useClusters, useDeleteCluster, queryKeys } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { ActionButton } from '@/components/ui/action-button';
+import { Select } from '@/components/ui/select';
+import { PageHeader, PageShell } from '@/components/ui/page';
 // RegisterClusterModal removed in sprint 22 — replaced by the
 // /dashboard/clusters/register/* wizard. The "Re-show install command"
 // row action now navigates to the wizard's step 2 for the existing
@@ -232,24 +235,16 @@ function ClustersPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Clusters</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Monitor and manage the existing Kubernetes clusters you&apos;ve registered with Astronomer
-          </p>
-        </div>
-        <button
-          onClick={() => router.push('/dashboard/clusters/register')}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-            text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          <Plus className="h-4 w-4" />
-          Register Cluster
-        </button>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Clusters"
+        description="Monitor and manage the existing Kubernetes clusters you've registered with Astronomer"
+        actions={
+          <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => router.push('/dashboard/clusters/register')}>
+            Register Cluster
+          </ActionButton>
+        }
+      />
 
       {/* Filters */}
       <DataTable
@@ -263,11 +258,10 @@ function ClustersPage() {
         emptyMessage="No clusters found. Register your first cluster to get started."
         toolbar={
           <div className="flex items-center gap-2">
-            <select
+            <Select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-9 px-3 rounded-md border border-border bg-background text-sm
-                text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="w-auto"
             >
               <option value="">All Statuses</option>
               <option value="active">Active</option>
@@ -275,13 +269,12 @@ function ClustersPage() {
               <option value="error">Error</option>
               <option value="disconnected">Disconnected</option>
               <option value="connecting">Connecting</option>
-            </select>
+            </Select>
 
-            <select
+            <Select
               value={providerFilter}
               onChange={(e) => setProviderFilter(e.target.value)}
-              className="h-9 px-3 rounded-md border border-border bg-background text-sm
-                text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="w-auto"
             >
               <option value="">All Providers</option>
               <option value="aws">AWS</option>
@@ -289,20 +282,19 @@ function ClustersPage() {
               <option value="azure">Azure</option>
               <option value="on-prem">On-Premise</option>
               <option value="digitalocean">DigitalOcean</option>
-            </select>
+            </Select>
 
-            <select
+            <Select
               value={envFilter}
               onChange={(e) => setEnvFilter(e.target.value)}
-              className="h-9 px-3 rounded-md border border-border bg-background text-sm
-                text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="w-auto"
             >
               <option value="">All Environments</option>
               <option value="production">Production</option>
               <option value="staging">Staging</option>
               <option value="development">Development</option>
               <option value="testing">Testing</option>
-            </select>
+            </Select>
           </div>
         }
       />
@@ -349,7 +341,7 @@ function ClustersPage() {
           </span>
         </label>
       </ConfirmDialog>
-    </div>
+    </PageShell>
   );
 }
 

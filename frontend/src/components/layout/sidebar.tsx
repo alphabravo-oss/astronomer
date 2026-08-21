@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { usePathname, useRouter } from '@/lib/navigation';
 import { Link } from '@/lib/link';
 import {
   LayoutDashboard,
   Server,
   BarChart3,
-  GitBranch,
   Shield,
   ShieldCheck,
   Settings,
@@ -22,7 +22,6 @@ import {
   ScrollText,
   FolderKanban,
   Package,
-  Archive,
   ArrowLeft,
   Box,
   Database,
@@ -53,7 +52,6 @@ import {
   Waypoints,
   Rocket,
   Sparkles,
-  Crosshair,
 } from 'lucide-react';
 import { cn, formatK8sVersion } from '@/lib/utils';
 import { APP_VERSION } from '@/lib/env';
@@ -62,6 +60,7 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { can, isSuperuser, type PermissionVerb } from '@/lib/permissions';
 import type { FeatureFlags, FeatureFlagKey } from '@/lib/api';
 import {
+  queryKeys,
   useCluster,
   useClusters,
   useClusterNodes,
@@ -81,6 +80,7 @@ import {
   useCharlieActivated,
   useFeatureFlags,
 } from '@/lib/hooks';
+import { getVeleroStatus } from '@/lib/api/cluster-detail';
 
 // APP_VERSION is baked at build time via the vite `define` (VERSION env →
 // __APP_VERSION__), which the release workflow stamps from the git tag; see
@@ -99,6 +99,10 @@ type NavItem = {
   };
   superuserOnly?: boolean;
   featureFlag?: FeatureFlagKey;
+  // Opt-in flags stay hidden until the flags payload explicitly enables them
+  // (missing/loading counts as off). Default-on flags still use === false so
+  // they remain visible while the flags query hydrates.
+  optIn?: boolean;
   requiresCharlieActivated?: boolean;
 };
 
@@ -124,13 +128,13 @@ const globalNavGroups: NavGroup[] = [
   {
     label: 'Observability',
     items: [
-      { label: 'Monitoring', href: '/dashboard/monitoring', icon: BarChart3, permission: { resource: 'monitoring', verb: 'read' }, featureFlag: 'feature.monitoring' },
+      { label: 'Fleet metrics', href: '/dashboard/monitoring', icon: BarChart3, permission: { resource: 'monitoring', verb: 'read' }, featureFlag: 'feature.monitoring' },
       // Shared Thanos / Alertmanager lifecycle. It lives under the settings URL
       // because the API does (/settings/monitoring/...), but it is surfaced
       // here rather than only on the settings hub: the hub is superuser-only,
       // while these endpoints authorize on monitoring:read/update, so a
       // monitoring admin who is not a superuser would otherwise never find it.
-      { label: 'Monitoring Stacks', href: '/dashboard/settings/monitoring', icon: Layers, permission: { resource: 'monitoring', verb: 'read' }, featureFlag: 'feature.monitoring' },
+      { label: 'Shared stacks', href: '/dashboard/settings/monitoring', icon: Layers, permission: { resource: 'monitoring', verb: 'read' }, featureFlag: 'feature.monitoring' },
       { label: 'Alerting', href: '/dashboard/alerting', icon: Bell, permission: { resource: 'alerts', verb: 'read' } },
       { label: 'Logging', href: '/dashboard/logging', icon: ScrollText, permission: { resource: 'logging', verb: 'read' } },
     ],
@@ -138,19 +142,16 @@ const globalNavGroups: NavGroup[] = [
   {
     label: 'Continuous Delivery',
     items: [
-      { label: 'Overview', href: '/dashboard/delivery', icon: Rocket, permission: { resource: 'delivery_targets', verb: 'list' }, exact: true },
-      { label: 'Sources', href: '/dashboard/delivery/sources', icon: GitBranch, permission: { resource: 'delivery_sources', verb: 'list' } },
-      { label: 'Bundles', href: '/dashboard/delivery/bundles', icon: Boxes, permission: { resource: 'delivery_bundles', verb: 'list' } },
-      { label: 'Targets', href: '/dashboard/delivery/targets', icon: Crosshair, permission: { resource: 'delivery_targets', verb: 'list' } },
-      { label: 'Rollouts', href: '/dashboard/delivery/rollouts', icon: Route, permission: { resource: 'delivery_rollouts', verb: 'list' } },
-      { label: 'Deployments', href: '/dashboard/delivery/deployments', icon: Layers, permission: { resource: 'delivery_deployments', verb: 'list' } },
+      { label: 'Fleet', href: '/dashboard/delivery', icon: Rocket, permission: { resource: 'delivery_targets', verb: 'list' }, exact: true },
     ],
   },
   {
     label: 'Integrations',
     items: [
       { label: 'Cluster Tools', href: '/dashboard/tools', icon: Wrench, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
-      { label: 'Extensions', href: '/dashboard/extensions', icon: Puzzle, permission: { resource: 'settings', verb: 'read' } },
+      // Helm marketplace lives on the cluster (Apps), matching Rancher Apps.
+      // Fleet-wide repos stay reachable from Apps → Repositories.
+      { label: 'Extensions', href: '/dashboard/extensions', icon: Puzzle, permission: { resource: 'settings', verb: 'read' }, featureFlag: 'feature.extensions', optIn: true },
     ],
   },
   {
@@ -164,22 +165,19 @@ const globalNavGroups: NavGroup[] = [
     items: [
       { label: 'Projects', href: '/dashboard/projects', icon: FolderKanban, permission: { resource: 'projects', verb: 'list' }, featureFlag: 'feature.projects' },
       { label: 'RBAC', href: '/dashboard/rbac', icon: Shield, permission: { resource: 'rbac', verb: 'read' } },
-      { label: 'Native RBAC', href: '/dashboard/settings/native-rbac', icon: KeyRound, permission: { resource: 'rbac', verb: 'read' } },
       { label: 'Audit Log', href: '/dashboard/audit', icon: FileText, permission: { resource: 'audit_logs', verb: 'read' } },
-      { label: 'Catalog', href: '/dashboard/catalog', icon: Package, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
-      { label: 'Backups', href: '/dashboard/backups', icon: Archive, permission: { resource: 'backups', verb: 'read' }, featureFlag: 'feature.backups' },
-      { label: 'Auth', href: '/dashboard/settings/auth', icon: KeyRound, superuserOnly: true },
-      // Mark Settings as exact so /dashboard/settings/auth doesn't double-highlight
-      // both rows (the active-route matcher otherwise prefix-matches both).
-      // UX-07: Settings hub is superuser-only on the backend; align nav so
-      // non-superusers with settings:read do not see a dead link.
-      { label: 'Settings', href: '/dashboard/settings', icon: Settings, exact: true, superuserOnly: true },
+      // Superuser-only hub. Prefix-match so Dex/SSO under /settings/auth
+      // highlights Settings instead of a sibling Auth row.
+      { label: 'Settings', href: '/dashboard/settings', icon: Settings, superuserOnly: true },
     ],
   },
 ];
 
 // Cluster-context navigation - Rancher-style resource browser
-function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}): NavGroup[] {
+function getClusterNavGroups(
+  clusterId: string,
+  opts: { isLocal?: boolean; veleroInstalled?: boolean } = {},
+): NavGroup[] {
   const base = `/dashboard/clusters/${clusterId}`;
   // Tabs that need a real outbound tunnel to a remote cluster agent.
   // Hidden for the management plane's own cluster (is_local=true) where
@@ -194,12 +192,15 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
         // page itself renders a "not available" state for managed control
         // planes and degrades gracefully when the feature is off server-side.
         { label: 'Control-plane DR', href: `${base}/control-plane-snapshots`, icon: Database, permission: { resource: 'backups', verb: 'read' as const } },
-        // Registries (image-pull secrets), Velero workload Snapshots, and the
-        // apiserver Network & Access allow-list all drive the member cluster
-        // through the outbound tunnel — same agent-required gating as the
-        // items above (hidden for the management plane's local agent).
+        // Registries (image-pull secrets) and the apiserver Network & Access
+        // allow-list drive the member cluster through the outbound tunnel.
         { label: 'Registries', href: `${base}/registries`, icon: Boxes, permission: { resource: 'clusters', verb: 'read' as const } },
-        { label: 'Snapshots', href: `${base}/snapshots`, icon: Camera, permission: { resource: 'backups', verb: 'read' as const } },
+        // Velero workload snapshots: only listed when Velero is actually
+        // installed on this cluster. The snapshots route still renders an
+        // empty-state install CTA if someone hits the URL directly.
+        ...(opts.veleroInstalled
+          ? [{ label: 'Snapshots', href: `${base}/snapshots`, icon: Camera, permission: { resource: 'backups', verb: 'read' as const } }]
+          : []),
         { label: 'Network & Access', href: `${base}/network-access`, icon: Route, permission: { resource: 'security', verb: 'read' as const } },
       ];
   return [
@@ -220,15 +221,24 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
         { label: 'Tools', href: `${base}/tools`, icon: Wrench },
         { label: 'Apps', href: `${base}/apps`, icon: Package },
         { label: 'Delivery', href: `${base}/delivery`, icon: Rocket, permission: { resource: 'delivery_inventory', verb: 'read' as const } },
-        // Lifecycle for this cluster's kube-prometheus-stack (install /
-        // upgrade / replace / uninstall). Gated on monitoring:read, which is
-        // what the status + preview routes require; the mutating controls on
-        // the page gate themselves on create/update/delete.
-        { label: 'Monitoring Stack', href: `${base}/monitoring-stack`, icon: BarChart3, permission: { resource: 'monitoring', verb: 'read' as const } },
         // Promoted from the overview badge pill to a first-class destination.
         // Reads mesh CRs over the k8s proxy, so it works for local + remote.
         { label: 'Service Mesh', href: `${base}/service-mesh`, icon: Waypoints },
         ...agentRequiredItems,
+      ],
+    },
+    {
+      label: 'Observability',
+      defaultOpen: true,
+      items: [
+        { label: 'Metrics', href: `${base}/metrics`, icon: Gauge, permission: { resource: 'monitoring', verb: 'read' as const }, featureFlag: 'feature.monitoring' },
+        // Lifecycle for this cluster's kube-prometheus-stack (install /
+        // upgrade / replace / uninstall). Gated on monitoring:read, which is
+        // what the status + preview routes require; the mutating controls on
+        // the page gate themselves on create/update/delete.
+        { label: 'Monitoring Stack', href: `${base}/monitoring-stack`, icon: BarChart3, permission: { resource: 'monitoring', verb: 'read' as const }, featureFlag: 'feature.monitoring' },
+        { label: 'Alerting', href: `${base}/alerting`, icon: Bell, permission: { resource: 'alerts', verb: 'read' as const } },
+        { label: 'Logging', href: `${base}/logging`, icon: ScrollText, permission: { resource: 'logging', verb: 'read' as const } },
       ],
     },
     {
@@ -634,17 +644,26 @@ export function Sidebar() {
 
   // Fetch cluster name for header
   const { data: cluster } = useCluster(clusterId || '');
+  const { data: veleroStatus } = useQuery({
+    queryKey: queryKeys.clusterPages.veleroStatus(clusterId || ''),
+    queryFn: () => getVeleroStatus(clusterId!),
+    enabled: isClusterContext && !!clusterId && !cluster?.isLocal,
+    staleTime: 30_000,
+  });
 
   const navGroups = useMemo(
     () => filterNavGroups(
       isClusterContext
-        ? getClusterNavGroups(clusterId!, { isLocal: cluster?.isLocal })
+        ? getClusterNavGroups(clusterId!, {
+            isLocal: cluster?.isLocal,
+            veleroInstalled: !!veleroStatus?.installed,
+          })
         : globalNavGroups,
       user,
       featureFlags,
       charlieActivated,
     ),
-    [charlieActivated, cluster?.isLocal, clusterId, featureFlags, isClusterContext, user],
+    [charlieActivated, cluster?.isLocal, clusterId, featureFlags, isClusterContext, user, veleroStatus?.installed],
   );
 
   // Multiple groups may stay open at once (the cluster nav has 7 groups; a
@@ -832,7 +851,13 @@ function filterNavGroups(
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        if (item.featureFlag && featureFlags?.[item.featureFlag] === false) return false;
+        if (item.featureFlag) {
+          if (item.optIn) {
+            if (featureFlags?.[item.featureFlag] !== true) return false;
+          } else if (featureFlags?.[item.featureFlag] === false) {
+            return false;
+          }
+        }
         if (item.requiresCharlieActivated && !charlieActivated) return false;
         if (item.superuserOnly) return isSuperuser(user);
         if (!item.permission) return true;

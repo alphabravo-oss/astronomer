@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from '@/lib/navigation';
 import { Check, Server } from 'lucide-react';
 import { RegistrationTimeline } from '@/components/clusters/registration-timeline';
+import { ActionButton } from '@/components/ui/action-button';
 
 function ProgressStepPage() {
   const router = useRouter();
@@ -16,7 +17,7 @@ function ProgressStepPage() {
   const [isReady, setIsReady] = useState(false);
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
+    <div>
       <div className="mb-6 flex items-center gap-3">
         <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
           <Server className="h-5 w-5 text-muted-foreground" />
@@ -37,12 +38,12 @@ function ProgressStepPage() {
             <Check className="h-4 w-4" />
             Cluster is ready
           </div>
-          <button
+          <ActionButton
+            intent="primary"
             onClick={() => router.push(`/dashboard/clusters/${clusterId}`)}
-            className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
           >
             Take me to the cluster
-          </button>
+          </ActionButton>
         </div>
       )}
     </div>

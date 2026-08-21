@@ -132,8 +132,9 @@ data:
         Tenant_id         {{ . }}
         {{- end }}
         {{- if .Values.managementLogging.auth.bearerSecretRef.name }}
-        http_user         token
-        http_passwd       ${BEARER_TOKEN}
+        # loki-auth requires Authorization: Bearer. http_user/http_passwd is
+        # basic auth and is rejected on the hosted ingest path.
+        bearer_token      ${BEARER_TOKEN}
         {{- end }}
     {{- else if eq $backend "elasticsearch" }}
     [OUTPUT]

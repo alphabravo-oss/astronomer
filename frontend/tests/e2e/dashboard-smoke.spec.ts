@@ -93,6 +93,7 @@ const project = {
   name: "platform",
   displayName: "Platform",
   description: "Platform delivery project",
+  clusterId: "cluster-1",
   namespaces: [],
   members: [],
   createdAt: new Date().toISOString(),
@@ -476,8 +477,24 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === "/admin/backup-drill") {
       return route.fulfill({
-        status: 404,
-        json: { code: "not_found", message: "No drill has run" },
+        json: apiResponse({
+          latest: null,
+          latest_success: null,
+          latest_success_age_seconds: null,
+        }),
+      });
+    }
+    if (path === "/admin/backup-drill/history") {
+      return route.fulfill({ json: paginated([]) });
+    }
+    if (path === "/admin/management-backup") {
+      return route.fulfill({
+        json: apiResponse({
+          enabled: false,
+          reason: "Add an S3 destination to start nightly dumps of Astronomer's database.",
+          destinations: [],
+          encryption_key_backup: { wrapping_configured: false },
+        }),
       });
     }
     return route.fulfill({ json: apiResponse([]) });
@@ -551,14 +568,9 @@ test("delivery overview renders the Flux-native system for authenticated users",
   await seedAuth(context, page, adminUser);
   await page.goto("/dashboard/delivery");
 
-  await expect(
-    page.getByRole("heading", { name: /delivery overview/i }),
-  ).toBeVisible();
-  await expect(page.getByText("1.0.0")).toBeVisible();
-  await expect(page.getByRole("link", { name: /sources/i })).toHaveAttribute(
-    "href",
-    /project=project-1/,
-  );
+  await expect(page.getByRole("heading", { name: /^Fleet$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /flux ready/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Sources$/ })).toHaveCount(0);
 });
 
 test("catalog install modal remains usable on responsive viewports", async ({
@@ -616,7 +628,8 @@ test("Charlie launcher exposes only bounded route context across product surface
     ["/dashboard/clusters/cluster-1/tools", "Cluster agent connection"],
     ["/dashboard/alerting", "Alerts"],
     ["/dashboard/agents", "Cluster agents"],
-    ["/dashboard/backups", "Backups"],
+    ["/dashboard/backups", "Astronomer backup"],
+    ["/dashboard/settings/backup", "Astronomer backup"],
     ["/dashboard/delivery", "Continuous delivery"],
   ] as const;
 

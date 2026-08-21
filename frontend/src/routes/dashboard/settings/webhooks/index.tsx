@@ -18,6 +18,8 @@ import {
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ActionButton } from '@/components/ui/action-button';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {
@@ -164,9 +166,10 @@ function WebhooksList() {
 }
 
 function WebhooksPage() {
+  const router = useRouter();
   return (
     <SettingsAuthGate>
-      <div className="space-y-6">
+      <PageShell>
         <Link
           href="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -174,24 +177,18 @@ function WebhooksPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
         </Link>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Settings · Webhooks</p>
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">Webhooks</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Outbound HTTP subscribers for platform events. Slack / PagerDuty / generic JSON.
-            </p>
-          </div>
-          <Link
-            href="/dashboard/settings/webhooks/new"
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus className="h-4 w-4" />
-            New webhook
-          </Link>
-        </div>
+        <PageHeader
+          eyebrow="Settings · Webhooks"
+          title="Webhooks"
+          description="Outbound HTTP subscribers for platform events. Slack / PagerDuty / generic JSON."
+          actions={
+            <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => router.push('/dashboard/settings/webhooks/new')}>
+              New webhook
+            </ActionButton>
+          }
+        />
         <WebhooksList />
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

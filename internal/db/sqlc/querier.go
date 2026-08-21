@@ -146,6 +146,7 @@ type Querier interface {
 	CountAlertEventsFiltered(ctx context.Context, arg CountAlertEventsFilteredParams) (int64, error)
 	CountAlertInhibitions(ctx context.Context) (int64, error)
 	CountAlertRules(ctx context.Context) (int64, error)
+	CountAlertRulesByCluster(ctx context.Context, clusterID pgtype.UUID) (int64, error)
 	CountAlertSilences(ctx context.Context) (int64, error)
 	CountAnomalyBaselines(ctx context.Context) (int64, error)
 	CountApiserverAuditEventsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
@@ -220,6 +221,7 @@ type Querier interface {
 	CountKubectlSessionCommands(ctx context.Context, sessionID uuid.UUID) (int64, error)
 	CountLoggingOutputs(ctx context.Context) (int64, error)
 	CountLoggingPipelines(ctx context.Context) (int64, error)
+	CountLokiIngestTokens(ctx context.Context) (int64, error)
 	CountMembersInProject(ctx context.Context, projectID uuid.UUID) (int64, error)
 	CountNamespacesInProject(ctx context.Context, id uuid.UUID) (int32, error)
 	CountNetworkPolicyTemplates(ctx context.Context) (int64, error)
@@ -391,6 +393,7 @@ type Querier interface {
 	CreateLoggingOutput(ctx context.Context, arg CreateLoggingOutputParams) (LoggingOutput, error)
 	CreateLoggingPipeline(ctx context.Context, arg CreateLoggingPipelineParams) (LoggingPipeline, error)
 	CreateMaintenanceWindow(ctx context.Context, arg CreateMaintenanceWindowParams) (MaintenanceWindow, error)
+	CreateManagementBackupDestination(ctx context.Context, arg CreateManagementBackupDestinationParams) (ManagementBackupDestination, error)
 	CreateMonitoringOperation(ctx context.Context, arg CreateMonitoringOperationParams) (MonitoringOperation, error)
 	CreateMonitoringOperationEvent(ctx context.Context, arg CreateMonitoringOperationEventParams) (MonitoringOperationEvent, error)
 	// Native per-CRD RBAC rules (migration 126). Reference as q.<Name>.
@@ -555,7 +558,9 @@ type Querier interface {
 	DeleteInstalledChartsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteLoggingOutput(ctx context.Context, id uuid.UUID) error
 	DeleteLoggingPipeline(ctx context.Context, id uuid.UUID) error
+	DeleteLokiIngestTokenByCluster(ctx context.Context, clusterID uuid.UUID) error
 	DeleteMaintenanceWindow(ctx context.Context, id uuid.UUID) error
+	DeleteManagementBackupDestination(ctx context.Context, id uuid.UUID) error
 	DeleteMirroredGatewayClass(ctx context.Context, arg DeleteMirroredGatewayClassParams) error
 	DeleteMirroredIngressClass(ctx context.Context, arg DeleteMirroredIngressClassParams) error
 	DeleteMirroredLimitRange(ctx context.Context, arg DeleteMirroredLimitRangeParams) error
@@ -629,6 +634,7 @@ type Querier interface {
 	// ON DELETE CASCADE on webhook_deliveries.subscription_id cleans up the
 	// delivery history; the handler doesn't have to do that explicitly.
 	DeleteWebhookSubscription(ctx context.Context, id uuid.UUID) error
+	DisableSystemLoggingOutputs(ctx context.Context) ([]LoggingOutput, error)
 	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
 	DisconnectCharlieConnection(ctx context.Context, id uuid.UUID) (CharlieConnection, error)
 	// The generation predicate is evaluated in the same statement that enables
@@ -870,8 +876,10 @@ type Querier interface {
 	GetLoggingOutputByID(ctx context.Context, id uuid.UUID) (LoggingOutput, error)
 	// Logging Pipelines
 	GetLoggingPipelineByID(ctx context.Context, id uuid.UUID) (LoggingPipeline, error)
+	GetLokiIngestTokenByCluster(ctx context.Context, clusterID uuid.UUID) (LokiIngestToken, error)
 	GetMaintenanceWindow(ctx context.Context, id uuid.UUID) (MaintenanceWindow, error)
 	GetMaintenanceWindowByName(ctx context.Context, name string) (MaintenanceWindow, error)
+	GetManagementBackupDestination(ctx context.Context, id uuid.UUID) (ManagementBackupDestination, error)
 	GetMonitoringOperation(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
 	GetNativeRBACRuleByID(ctx context.Context, id uuid.UUID) (NativeRbacRule, error)
 	GetNetworkPolicyApplicationByID(ctx context.Context, id uuid.UUID) (NetworkPolicyApplication, error)
@@ -947,6 +955,7 @@ type Querier interface {
 	GetSSOSession(ctx context.Context, jti string) (SsoSession, error)
 	// Security Scan Results
 	GetSecurityScanResultByID(ctx context.Context, id uuid.UUID) (SecurityScanResult, error)
+	GetSystemLoggingOutputByCluster(ctx context.Context, clusterID pgtype.UUID) (LoggingOutput, error)
 	GetTokenByHash(ctx context.Context, tokenHash string) (ApiToken, error)
 	GetToolBySlug(ctx context.Context, slug string) (ClusterTool, error)
 	GetToolOperation(ctx context.Context, id uuid.UUID) (ToolOperation, error)
@@ -1444,6 +1453,14 @@ type Querier interface {
 	ListLoggingOperations(ctx context.Context, arg ListLoggingOperationsParams) ([]LoggingOperation, error)
 	ListLoggingOutputs(ctx context.Context, arg ListLoggingOutputsParams) ([]LoggingOutput, error)
 	ListLoggingPipelines(ctx context.Context, arg ListLoggingPipelinesParams) ([]LoggingPipeline, error)
+	ListLokiIngestTokenHashes(ctx context.Context) ([]ListLokiIngestTokenHashesRow, error)
+	// Superusers and users with a global role that grants monitoring:read or
+	// monitoring:update (or *). Filter verbs/resources in Go so tests can
+	// exercise the same rule helper the reconciler uses.
+	ListLokiQueryACLAdminCandidates(ctx context.Context) ([]ListLokiQueryACLAdminCandidatesRow, error)
+	// Cluster bindings plus the bound role rules. Go keeps only logging:read
+	// or monitoring:read (or *) so a workload-editor row cannot widen org.
+	ListLokiQueryACLUserCandidates(ctx context.Context) ([]ListLokiQueryACLUserCandidatesRow, error)
 	// Maintenance windows + deferred operations (migration 057).
 	//
 	// The window evaluator reads ListEnabledMaintenanceWindows() into an
@@ -1451,6 +1468,9 @@ type Querier interface {
 	// deferred-ops worker scans ListPendingDeferredOperations every 60s and
 	// re-fires the rows whose deferred_until has elapsed.
 	ListMaintenanceWindows(ctx context.Context) ([]MaintenanceWindow, error)
+	// Management-plane (Astronomer-itself) backup destinations.
+	// Read/written by /api/v1/admin/management-backup/destinations/.
+	ListManagementBackupDestinations(ctx context.Context) ([]ManagementBackupDestination, error)
 	// ---------------------------------------------------------------------
 	// mirrored_gateway_classes
 	// ---------------------------------------------------------------------
@@ -1628,6 +1648,7 @@ type Querier interface {
 	ListScansByCluster(ctx context.Context, arg ListScansByClusterParams) ([]SecurityScanResult, error)
 	ListScansByClusterAndType(ctx context.Context, arg ListScansByClusterAndTypeParams) ([]SecurityScanResult, error)
 	ListSecurityScanResults(ctx context.Context, arg ListSecurityScanResultsParams) ([]SecurityScanResult, error)
+	ListSystemLoggingOutputs(ctx context.Context) ([]LoggingOutput, error)
 	ListTokensByUser(ctx context.Context, arg ListTokensByUserParams) ([]ApiToken, error)
 	ListToolOperationEvents(ctx context.Context, operationID uuid.UUID) ([]ToolOperationEvent, error)
 	ListToolOperations(ctx context.Context, arg ListToolOperationsParams) ([]ToolOperation, error)
@@ -2078,6 +2099,7 @@ type Querier interface {
 	UpdateLoggingOutput(ctx context.Context, arg UpdateLoggingOutputParams) (LoggingOutput, error)
 	UpdateLoggingPipeline(ctx context.Context, arg UpdateLoggingPipelineParams) (LoggingPipeline, error)
 	UpdateMaintenanceWindow(ctx context.Context, arg UpdateMaintenanceWindowParams) (MaintenanceWindow, error)
+	UpdateManagementBackupDestination(ctx context.Context, arg UpdateManagementBackupDestinationParams) (ManagementBackupDestination, error)
 	// Builtin rows are not edited via this path — the handler refuses with a
 	// 403 before calling Update. The query still works on any row so an
 	// operator-script with direct DB access can repair a broken builtin.
@@ -2173,6 +2195,7 @@ type Querier interface {
 	// aggregate counts + scanned_at on every re-ingest so the rollups stay
 	// live without an extra SELECT.
 	UpsertImageVulnerabilityReport(ctx context.Context, arg UpsertImageVulnerabilityReportParams) (ImageVulnerabilityReport, error)
+	UpsertLokiIngestToken(ctx context.Context, arg UpsertLokiIngestTokenParams) (LokiIngestToken, error)
 	UpsertMirroredGatewayClass(ctx context.Context, arg UpsertMirroredGatewayClassParams) (MirroredGatewayClass, error)
 	UpsertMirroredIngressClass(ctx context.Context, arg UpsertMirroredIngressClassParams) (MirroredIngressClass, error)
 	UpsertMirroredLimitRange(ctx context.Context, arg UpsertMirroredLimitRangeParams) (MirroredLimitRange, error)

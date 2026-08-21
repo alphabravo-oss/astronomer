@@ -14,10 +14,11 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from '@/lib/navigation';
 import { Link } from '@/lib/link';
-import { Orbit, Loader2, Eye, EyeOff, Check, AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Orbit, Eye, EyeOff, Check, AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import { completePasswordReset } from '@/lib/api/account-security';
 import { useAppForm, useStore } from '@/lib/form';
+import { ActionButton } from '@/components/ui/action-button';
 
 function ResetPasswordPage() {
   const router = useRouter();
@@ -167,13 +168,16 @@ function ResetPasswordPage() {
                 />
               )}
             </form.Field>
-            <button
+            <ActionButton
               type="submit"
+              intent="primary"
+              className="w-full"
               disabled={!canSubmit || loading}
-              className="w-full inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+              loading={loading}
+              loadingLabel="Update password"
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Update password'}
-            </button>
+              Update password
+            </ActionButton>
             <div className="text-center">
               <Link
                 href="/auth/login"

@@ -34,6 +34,7 @@ import {
 import { formatRelativeTime, cn, downloadBlob } from '@/lib/utils';
 import { useAppForm, useStore } from '@/lib/form';
 import { ModalShell } from '@/components/ui/modal-shell';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   getTotpStatus,
   startTotpEnrollment,
@@ -60,13 +61,11 @@ function AccountSecurityPage() {
   const refresh = () => qc.invalidateQueries({ queryKey: TOTP_STATUS_KEY });
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Security</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Two-factor authentication and recovery codes for your account.
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Security"
+        description="Two-factor authentication and recovery codes for your account."
+      />
 
       {isLoading ? (
         <div className="flex items-center justify-center h-32">
@@ -111,7 +110,7 @@ function AccountSecurityPage() {
           }}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
 

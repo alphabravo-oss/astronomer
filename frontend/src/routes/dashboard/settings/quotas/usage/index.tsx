@@ -19,6 +19,7 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { ErrorState, LoadingState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { useQuotaUsage } from '@/components/settings/hooks';
 import type { QuotaUsageRow } from '@/lib/api/settings';
 
@@ -33,7 +34,7 @@ function worstField(row: QuotaUsageRow): { field: string; pct: number } | null {
 function UtilizationBar({ pct }: { pct: number }) {
   const clamped = Math.max(0, Math.min(100, pct));
   const color =
-    clamped >= 95 ? 'bg-rose-500' : clamped >= 80 ? 'bg-amber-500' : 'bg-emerald-500';
+    clamped >= 95 ? 'bg-status-error' : clamped >= 80 ? 'bg-status-warning' : 'bg-status-success';
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-[160px]">
@@ -166,7 +167,7 @@ function UsageInner() {
 function QuotaUsagePage() {
   return (
     <SettingsAuthGate>
-      <div className="max-w-4xl mx-auto space-y-6">
+      <PageShell>
         <Link
           href="/dashboard/settings/quotas"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -174,15 +175,17 @@ function QuotaUsagePage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to quotas
         </Link>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Settings · Quota usage</p>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1 flex items-center gap-2">
-            <Gauge className="h-5 w-5 text-muted-foreground" />
-            Deployment-wide quota usage
-          </h1>
-        </div>
+        <PageHeader
+          eyebrow="Settings · Quota usage"
+          title={
+            <span className="flex items-center gap-2">
+              <Gauge className="h-5 w-5 text-muted-foreground" />
+              Deployment-wide quota usage
+            </span>
+          }
+        />
         <UsageInner />
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

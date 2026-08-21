@@ -15,8 +15,11 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { Link } from '@/lib/link';
 import { useAppForm, useStore } from '@/lib/form';
-import { ArrowLeft, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ArrowLeft, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { ModalShell } from '@/components/ui/modal-shell';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { useClusters } from '@/lib/hooks';
 import { useDexSettings, useUpdateDexSettings, useApplyDexConfig } from '@/components/auth/hooks';
 import type { DexPublicClient } from '@/types';
@@ -106,7 +109,7 @@ function DexSettingsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <PageShell>
       <Link
         href="/dashboard/settings/auth"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -115,30 +118,21 @@ function DexSettingsPage() {
         Back to Auth
       </Link>
 
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Auth · Dex Settings
-          </p>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">
-            Dex Top-level Settings
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Issuer URL, public clients, token expiry. Changes are written to the
-            rendered retained runtime Secret on Apply.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => applyMutation.mutate()}
-          disabled={applyMutation.isPending}
-          className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-border text-sm
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-        >
-          {applyMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Apply to Dex
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Auth · Dex Settings"
+        title="Dex Top-level Settings"
+        description="Issuer URL, public clients, token expiry. Changes are written to the rendered retained runtime Secret on Apply."
+        actions={
+          <ActionButton
+            type="button"
+            onClick={() => applyMutation.mutate()}
+            disabled={applyMutation.isPending}
+            loading={applyMutation.isPending}
+          >
+            Apply to Dex
+          </ActionButton>
+        }
+      />
 
       {applyMutation.data?.staged && !applyMutation.data.applied && (
         <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 text-sm text-status-warning">
@@ -151,17 +145,28 @@ function DexSettingsPage() {
       <DexSummary values={values} clusters={clusters} onEdit={() => setEditing(true)} />
 
       {editing && (
-        <OverlayShell onClose={() => setEditing(false)}>
-          <div className="relative mx-4 my-8 w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-xl border border-border bg-popover shadow-2xl p-6 space-y-5">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-foreground">Dex Settings</h3>
-              <button
-                onClick={() => setEditing(false)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+        <ModalShell
+          title="Dex Settings"
+          onClose={() => setEditing(false)}
+          size="xl"
+          footerClassName="flex items-center justify-end gap-2"
+          footer={
+            <>
+              <ActionButton type="button" onClick={() => setEditing(false)}>
+                Cancel
+              </ActionButton>
+              <ActionButton
+                type="button"
+                intent="primary"
+                onClick={() => void form.handleSubmit()}
+                disabled={updateMutation.isPending || !values.issuer.trim()}
+                loading={updateMutation.isPending}
               >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+                Save settings
+              </ActionButton>
+            </>
+          }
+        >
 
       {/* Section: Identity */}
       <Section title="Identity" description="Where Dex lives and what it calls itself.">
@@ -265,29 +270,9 @@ function DexSettingsPage() {
         </div>
       </Section>
 
-      <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-        <button
-          type="button"
-          onClick={() => setEditing(false)}
-          className="h-9 px-4 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={() => void form.handleSubmit()}
-          disabled={updateMutation.isPending || !values.issuer.trim()}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-            text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          {updateMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Save settings
-        </button>
-      </div>
-          </div>
-        </OverlayShell>
+        </ModalShell>
       )}
-    </div>
+    </PageShell>
   );
 }
 
@@ -358,8 +343,7 @@ function DexRow({ label, value }: { label: string; value: string }) {
 // Helpers
 // ============================================================
 
-const inputCls =
-  'w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring';
+
 
 function Section({
   title,
@@ -436,26 +420,24 @@ function PublicClientEditor({
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <FieldRow label="Client ID" required>
-          <input
+          <Input
             type="text"
             value={value.id}
             onChange={(e) => onChange({ ...value, id: e.target.value })}
             placeholder="astronomer"
-            className={inputCls}
           />
         </FieldRow>
         <FieldRow label="Display name">
-          <input
+          <Input
             type="text"
             value={value.name ?? ''}
             onChange={(e) => onChange({ ...value, name: e.target.value })}
             placeholder="Astronomer"
-            className={inputCls}
           />
         </FieldRow>
       </div>
       <FieldRow label="Redirect URIs" helper="Comma-separated">
-        <input
+        <Input
           type="text"
           value={redirects}
           onChange={(e) =>
@@ -468,7 +450,6 @@ function PublicClientEditor({
             })
           }
           placeholder="https://app.example.com/auth/callback"
-          className={inputCls}
         />
       </FieldRow>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -476,13 +457,12 @@ function PublicClientEditor({
           label="Client secret"
           helper={value.public ? 'Not used for public clients' : 'Required for confidential clients'}
         >
-          <input
+          <Input
             type="password"
             value={value.secret ?? ''}
             onChange={(e) => onChange({ ...value, secret: e.target.value })}
             placeholder={value.public ? '—' : '••••••••'}
             disabled={!!value.public}
-            className={cn(inputCls, value.public && 'opacity-50 cursor-not-allowed')}
           />
         </FieldRow>
         <FieldRow label="Public client?">

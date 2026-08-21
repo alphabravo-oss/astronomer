@@ -215,7 +215,7 @@ function resourceHref(type: string, id: string): string {
     case "alert":
       return `/dashboard/alerting?alert=${encodeURIComponent(id)}`;
     case "backup":
-      return `/dashboard/backups?backup=${encodeURIComponent(id)}`;
+      return `/dashboard/settings/backup`;
     case "self_management_application":
       return "/dashboard/delivery";
     default:

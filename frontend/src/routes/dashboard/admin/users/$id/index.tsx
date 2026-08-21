@@ -20,6 +20,7 @@ import { Link } from '@/lib/link';
 import { useParams, useRouter } from '@/lib/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   ShieldOff,
   Unlock,
@@ -168,24 +169,17 @@ function AdminUserDetailPage() {
   const activeAction = ACTIONS.find((a) => a.key === pending) || null;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <Link
-            href="/dashboard/rbac"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-3 w-3" /> Back to RBAC
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold text-foreground tracking-tight">
-            {user.displayName || user.username}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {user.email} · {user.provider}
-          </p>
-        </div>
-      </div>
+    <PageShell>
+      <Link
+        href="/dashboard/rbac"
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-3 w-3" /> Back to RBAC
+      </Link>
+      <PageHeader
+        title={user.displayName || user.username}
+        description={`${user.email} · ${user.provider}`}
+      />
 
       {/* State banners */}
       {user.lockedUntil && (
@@ -297,7 +291,7 @@ function AdminUserDetailPage() {
         variant={activeAction?.variant}
         loading={mut.isPending}
       />
-    </div>
+    </PageShell>
   );
 }
 

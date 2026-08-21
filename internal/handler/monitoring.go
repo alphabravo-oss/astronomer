@@ -36,6 +36,10 @@ type MonitoringHandler struct {
 	authz     authorizationSupport
 	mu        sync.Mutex
 	triggerCh chan struct{}
+	// folderTriggerCh wakes folder-per-cluster Grafana provisioning.
+	// Distinct from triggerCh so a cluster create/delete does not also
+	// drain the Helm operations queue.
+	folderTriggerCh chan struct{}
 	// helmConcurrency caps the number of executeMonitoringOperation
 	// goroutines dispatched per reconciler tick.
 	helmConcurrency int
@@ -45,6 +49,39 @@ type MonitoringHandler struct {
 	// written to the plaintext JSONB column exactly as it was before 146,
 	// which is the row shape the resolver's legacy branch already handles.
 	encryptor *auth.Encryptor
+	// grafanaTickets is the dedicated mint/redeem store (prefix grafana-ticket:).
+	// Not StreamTicketStore. Nil disables the bounce endpoints.
+	grafanaTickets *auth.GrafanaTicketStore
+	users          UserByIDQuerier
+	serverURL      string
+	proxyImage     string
+	grafanaExpose  GrafanaExpose
+	sessionTTL     func(context.Context) time.Duration
+	systemOutputs  systemLoggingOutputDisabler
+}
+
+// systemLoggingOutputDisabler turns off per-cluster Astronomer Loki destinations
+// when the shared Loki family is uninstalled. LoggingHandler implements it.
+type systemLoggingOutputDisabler interface {
+	DisableSystemOutputsOnLokiUninstall(ctx context.Context) error
+}
+
+func (h *MonitoringHandler) SetSystemLoggingOutputDisabler(d systemLoggingOutputDisabler) {
+	if h == nil {
+		return
+	}
+	h.systemOutputs = d
+}
+
+// GrafanaExpose describes how grafana-proxy is published. Gateway (platform
+// HTTPRoute) is preferred when GatewayClass is set; otherwise Ingress.
+type GrafanaExpose struct {
+	GatewayClass      string
+	IngressClass      string
+	GatewayName       string
+	PlatformNamespace string
+	TLSIssuerName     string
+	TLSIssuerKind     string
 }
 
 // SetEncryptor wires the Fernet encryptor used for the monitoring-backend
@@ -101,19 +138,19 @@ type MonitoringQuerier interface {
 }
 
 func NewMonitoringHandler() *MonitoringHandler {
-	return &MonitoringHandler{log: slog.Default(), triggerCh: make(chan struct{}, 1)}
+	return &MonitoringHandler{log: slog.Default(), triggerCh: make(chan struct{}, 1), folderTriggerCh: make(chan struct{}, 1)}
 }
 
 func NewMonitoringHandlerWithRequester(requester K8sRequester) *MonitoringHandler {
-	return &MonitoringHandler{requester: requester, log: slog.Default(), triggerCh: make(chan struct{}, 1)}
+	return &MonitoringHandler{requester: requester, log: slog.Default(), triggerCh: make(chan struct{}, 1), folderTriggerCh: make(chan struct{}, 1)}
 }
 
 func NewMonitoringHandlerWithQueries(queries MonitoringQuerier, requester K8sRequester) *MonitoringHandler {
-	return &MonitoringHandler{queries: queries, requester: requester, log: slog.Default(), triggerCh: make(chan struct{}, 1)}
+	return &MonitoringHandler{queries: queries, requester: requester, log: slog.Default(), triggerCh: make(chan struct{}, 1), folderTriggerCh: make(chan struct{}, 1)}
 }
 
 func NewMonitoringHandlerWithDeps(queries MonitoringQuerier, requester K8sRequester, helm HelmRequester) *MonitoringHandler {
-	return &MonitoringHandler{queries: queries, requester: requester, helm: helm, log: slog.Default(), triggerCh: make(chan struct{}, 1)}
+	return &MonitoringHandler{queries: queries, requester: requester, helm: helm, log: slog.Default(), triggerCh: make(chan struct{}, 1), folderTriggerCh: make(chan struct{}, 1)}
 }
 
 type UpdateMonitoringBackendRequest struct {
@@ -158,10 +195,12 @@ type MonitoringStackRequest struct {
 	ChartVersion            string `json:"chartVersion"`
 	StorageConfigID         string `json:"storageConfigId"`
 	ObjectStorageSecretName string `json:"objectStorageSecretName"`
-	EnableGrafana           *bool  `json:"enableGrafana"`
-	EnableAlertmanager      *bool  `json:"enableAlertmanager"`
-	ThanosSidecarEnabled    *bool  `json:"thanosSidecarEnabled"`
-	AutoRollbackOnFailure   *bool  `json:"autoRollbackOnFailure"`
+	// EnableGrafana omitted: true, except false when sharedGrafana is
+	// healthy and the cluster stack is not_configured (changelog'd).
+	EnableGrafana         *bool `json:"enableGrafana"`
+	EnableAlertmanager    *bool `json:"enableAlertmanager"`
+	ThanosSidecarEnabled  *bool `json:"thanosSidecarEnabled"`
+	AutoRollbackOnFailure *bool `json:"autoRollbackOnFailure"`
 }
 
 type SharedThanosStackRequest struct {
@@ -186,6 +225,39 @@ type SharedAlertmanagerRequest struct {
 	StorageClass          string `json:"storageClass"`
 	StorageSize           string `json:"storageSize"`
 	AutoRollbackOnFailure *bool  `json:"autoRollbackOnFailure"`
+}
+
+// SharedGrafanaRequest is the camelCase body for the shared Grafana family.
+// ingressHost overrides grafana.<ServerURL host>; never values.ingress.host.
+type SharedGrafanaRequest struct {
+	ManagementClusterID   string `json:"managementClusterId"`
+	Namespace             string `json:"namespace"`
+	ReleaseName           string `json:"releaseName"`
+	ChartVersion          string `json:"chartVersion"`
+	Replicas              int32  `json:"replicas"`
+	StorageClass          string `json:"storageClass"`
+	StorageSize           string `json:"storageSize"`
+	IngressHost           string `json:"ingressHost"`
+	LogDatasourceURL      string `json:"logDatasourceUrl"`
+	AutoRollbackOnFailure *bool  `json:"autoRollbackOnFailure"`
+}
+
+// SharedLokiRequest is the camelCase body for the shared Loki family.
+// ingestHostname is required and never derived from the Astronomer ingress host.
+type SharedLokiRequest struct {
+	ManagementClusterID     string `json:"managementClusterId"`
+	Namespace               string `json:"namespace"`
+	ReleaseName             string `json:"releaseName"`
+	ChartVersion            string `json:"chartVersion"`
+	StorageConfigID         string `json:"storageConfigId"`
+	ObjectStorageSecretName string `json:"objectStorageSecretName"`
+	IngestHostname          string `json:"ingestHostname"`
+	StorageClass            string `json:"storageClass"`
+	WalStorageSize          string `json:"walStorageSize"`
+	Mode                    string `json:"mode"`
+	Retention               string `json:"retention"`
+	SkipDiskCheck           *bool  `json:"skipDiskCheck"`
+	AutoRollbackOnFailure   *bool  `json:"autoRollbackOnFailure"`
 }
 
 type objectStoreSecretSpec struct {
@@ -511,6 +583,52 @@ func (h *MonitoringHandler) applySharedAlertmanager(ctx context.Context, msgType
 	})
 }
 
+func (h *MonitoringHandler) applySharedLokiStack(ctx context.Context, msgType protocol.MessageType, req SharedLokiRequest, values map[string]any) (*protocol.HelmResultPayload, error) {
+	if h.helm == nil {
+		return nil, fmt.Errorf("helm requester not configured")
+	}
+	if values == nil {
+		values = map[string]any{}
+	}
+	values["extraObjects"] = lokiFamilyExtraObjects(req, h.proxyImage)
+	return h.helm.Do(ctx, req.ManagementClusterID, msgType, protocol.HelmRequestPayload{
+		ReleaseName: req.ReleaseName,
+		Namespace:   req.Namespace,
+		ChartName:   sharedLokiChartName,
+		RepoURL:     sharedLokiChartRepo,
+		Version:     req.ChartVersion,
+		Values:      values,
+		Timeout:     1200,
+	})
+}
+
+func (h *MonitoringHandler) applySharedGrafanaStack(ctx context.Context, msgType protocol.MessageType, req SharedGrafanaRequest, values map[string]any) (*protocol.HelmResultPayload, error) {
+	if h.helm == nil {
+		return nil, fmt.Errorf("helm requester not configured")
+	}
+	// Re-render sidecar ConfigMaps from live backend metadata so a Thanos
+	// family that became healthy after enqueue is included without a second
+	// form submit.
+	if values == nil {
+		values = map[string]any{}
+	}
+	if h.queries != nil {
+		if backend, err := h.queries.GetDefaultMonitoringBackend(ctx); err == nil {
+			values["extraObjects"] = grafanaFamilyExtraObjects(req, backend, h.proxyImage, h.serverURL, h.grafanaExpose)
+		}
+	}
+	values["extraConfigmapMounts"] = []any{grafanaClusterFolderProvidersMount()}
+	return h.helm.Do(ctx, req.ManagementClusterID, msgType, protocol.HelmRequestPayload{
+		ReleaseName: req.ReleaseName,
+		Namespace:   req.Namespace,
+		ChartName:   "grafana",
+		RepoURL:     "https://grafana.github.io/helm-charts",
+		Version:     req.ChartVersion,
+		Values:      values,
+		Timeout:     1200,
+	})
+}
+
 func sanitizeMonitoringValues(values map[string]any) map[string]any {
 	raw, err := json.Marshal(values)
 	if err != nil {
@@ -527,7 +645,7 @@ func sanitizeMonitoringValues(values map[string]any) map[string]any {
 func redactSensitiveMap(data map[string]any) {
 	for key, value := range data {
 		lower := strings.ToLower(key)
-		if strings.Contains(lower, "secret") || strings.Contains(lower, "password") || strings.Contains(lower, "token") || strings.Contains(lower, "access_key") || strings.Contains(lower, "secret_key") || strings.Contains(lower, "objstoreconfig") {
+		if strings.Contains(lower, "secret") || strings.Contains(lower, "password") || strings.Contains(lower, "token") || strings.Contains(lower, "access_key") || strings.Contains(lower, "accesskey") || strings.Contains(lower, "secret_key") || strings.Contains(lower, "objstoreconfig") {
 			data[key] = "***redacted***"
 			continue
 		}

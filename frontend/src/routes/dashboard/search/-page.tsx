@@ -19,6 +19,9 @@ import {
 import { detailHref } from '@/lib/k8s-paths';
 import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { Input } from '@/components/ui/input';
+import { PageHeader, PageShell } from '@/components/ui/page';
+import { Select } from '@/components/ui/select';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { cn } from '@/lib/utils';
 
@@ -224,62 +227,56 @@ export function SearchPage() {
   const isEmpty = !isLoading && results.length === 0 && !error;
 
   return (
-    <div className="space-y-4">
+    <PageShell className="space-y-4">
       {/* Sticky search bar */}
       <div className="sticky top-0 z-10 -mx-6 px-6 py-4 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Global Search</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Search Kubernetes resources across every connected cluster
-          </p>
-        </div>
+        <PageHeader
+          title="Global Search"
+          description="Search Kubernetes resources across every connected cluster"
+        />
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-12 gap-2">
           {/* Type selector */}
-          <select
+          <Select
             value={resourceType}
             onChange={(e) => setResourceType(e.target.value as SearchableResourceType)}
-            className="md:col-span-2 h-9 px-3 rounded-md border border-border bg-background text-sm
-              text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="md:col-span-2"
           >
             {SEARCHABLE_TYPES.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
               </option>
             ))}
-          </select>
+          </Select>
 
           {/* Namespace */}
-          <input
+          <Input
             type="text"
             value={namespace}
             onChange={(e) => setNamespace(e.target.value)}
             placeholder="namespace (optional)"
-            className="md:col-span-2 h-9 px-3 rounded-md border border-border bg-background text-sm
-              text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="md:col-span-2"
           />
 
           {/* Label selector */}
-          <input
+          <Input
             type="text"
             value={labelSelector}
             onChange={(e) => setLabelSelector(e.target.value)}
             placeholder="label selector e.g. app=coredns"
-            className="md:col-span-4 h-9 px-3 rounded-md border border-border bg-background text-sm
-              text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+            className="md:col-span-4 font-mono"
           />
 
           {/* Name filter */}
           <div className="md:col-span-4 relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <input
+            <Input
               type="text"
               value={nameFilter}
               onChange={(e) => setNameFilter(e.target.value)}
               placeholder="filter by name (substring)"
               autoFocus
-              className="w-full h-9 pl-8 pr-8 rounded-md border border-border bg-background text-sm
-                text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="pl-8 pr-8"
             />
             {nameFilter && (
               <button
@@ -379,6 +376,6 @@ export function SearchPage() {
       <p className={cn('text-2xs text-muted-foreground text-center pt-2', !data && 'invisible')}>
         Tip: hit Cmd+K from anywhere to focus the global search input.
       </p>
-    </div>
+    </PageShell>
   );
 }

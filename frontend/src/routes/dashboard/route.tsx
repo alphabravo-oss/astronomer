@@ -168,14 +168,14 @@ function DashboardLayout() {
           {!online && (
             <div
               role="status"
-              className="flex items-center gap-2 bg-amber-500/15 text-amber-900 dark:text-amber-100 border-b border-amber-500/30 px-4 py-2 text-sm"
+              className="flex items-center gap-2 bg-status-warning/15 text-status-warning border-b border-status-warning/30 px-4 py-2 text-sm"
             >
               <WifiOff className="h-4 w-4 shrink-0" />
               You are offline. Live updates and mutations will fail until connectivity returns.
             </div>
           )}
           <main className="flex-1 min-h-0 overflow-y-auto">
-            <div className="p-6 max-w-[1600px] mx-auto animate-fade-in">
+            <div className="animate-fade-in px-[10%] py-6">
               {disabledFeature ? (
                 <FeatureDisabledState />
               ) : charlieNotActivated ? (
@@ -209,16 +209,22 @@ function DashboardLayout() {
 
 const featurePathPrefixes: Array<{ prefix: string; flag: FeatureFlagKey }> = [
   { prefix: '/dashboard/projects', flag: 'feature.projects' },
-  { prefix: '/dashboard/backups', flag: 'feature.backups' },
   { prefix: '/dashboard/catalog', flag: 'feature.catalog' },
   { prefix: '/dashboard/tools', flag: 'feature.catalog' },
   { prefix: '/dashboard/monitoring', flag: 'feature.monitoring' },
+  { prefix: '/dashboard/settings/monitoring', flag: 'feature.monitoring' },
   { prefix: '/dashboard/security', flag: 'feature.security' },
   { prefix: '/dashboard/charlie', flag: 'feature.charlie' },
+  { prefix: '/dashboard/extensions', flag: 'feature.extensions' },
 ];
+
+const clusterMonitoringPath = /^\/dashboard\/clusters\/[^/]+\/(metrics|monitoring-stack)(\/|$)/;
 
 function disabledFeatureForPath(pathname: string, flags?: FeatureFlags): FeatureFlagKey | null {
   if (!flags) return null;
+  if (flags['feature.monitoring'] === false && clusterMonitoringPath.test(pathname)) {
+    return 'feature.monitoring';
+  }
   const match = featurePathPrefixes.find(({ prefix }) => pathname === prefix || pathname.startsWith(`${prefix}/`));
   if (!match) return null;
   return flags[match.flag] === false ? match.flag : null;

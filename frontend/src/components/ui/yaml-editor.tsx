@@ -10,7 +10,7 @@ const MonacoEditor = lazy(() => import('@monaco-editor/react'));
 
 function EditorLoading() {
   return (
-    <div className="flex items-center justify-center h-full bg-[#1e1e1e]">
+    <div className="flex items-center justify-center h-full bg-terminal">
       <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
     </div>
   );
@@ -77,13 +77,13 @@ export function YamlEditor({
   return (
     <div className={cn('flex flex-col', className)}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#252526] border-b border-[#3c3c3c]">
-        <span className="text-xs text-[#cccccc]/60">YAML</span>
+      <div className="flex items-center justify-between px-3 py-1.5 bg-terminal text-terminal-foreground border-b border-border">
+        <span className="text-xs text-terminal-foreground/60">YAML</span>
         <div className="flex items-center gap-1">
-          <button onClick={handleCopy} className="p-1.5 rounded hover:bg-[#3c3c3c] text-[#cccccc]/80 hover:text-[#cccccc] transition-colors" title="Copy">
+          <button onClick={handleCopy} className="p-1.5 rounded hover:bg-white/10 text-terminal-foreground/80 hover:text-terminal-foreground transition-colors" title="Copy">
             <Copy className="h-3.5 w-3.5" />
           </button>
-          <button onClick={handleDownload} className="p-1.5 rounded hover:bg-[#3c3c3c] text-[#cccccc]/80 hover:text-[#cccccc] transition-colors" title="Download">
+          <button onClick={handleDownload} className="p-1.5 rounded hover:bg-white/10 text-terminal-foreground/80 hover:text-terminal-foreground transition-colors" title="Download">
             <Download className="h-3.5 w-3.5" />
           </button>
           {!readOnly && onDryRun && (
@@ -94,7 +94,8 @@ export function YamlEditor({
               loading={dryRunning}
               loadingLabel="Dry run"
               size="sm"
-              className="ml-1 h-7 border-0 bg-[#3c3c3c] px-2.5 py-1 text-[#cccccc] hover:bg-[#4a4a4a]"
+              intent="ghost"
+              className="ml-1 h-7 text-terminal-foreground hover:bg-white/10"
               title="Dry run"
             >
               Dry run
@@ -111,7 +112,7 @@ export function YamlEditor({
               loadingLabel="Save"
               size="sm"
               title="Save"
-              className="ml-1 h-7 bg-blue-600 px-2.5 py-1 text-white hover:bg-blue-700"
+              className="ml-1 h-7"
             >
               Save
             </ActionButton>

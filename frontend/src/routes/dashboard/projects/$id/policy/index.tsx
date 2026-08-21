@@ -19,6 +19,8 @@ import { useEffect, useMemo } from 'react';
 import { useParams } from '@/lib/navigation';
 import { useAppForm, useStore } from '@/lib/form';
 import { Loader2, Save, AlertCircle, ExternalLink } from 'lucide-react';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
 import { useCurrentUser } from '@/lib/hooks';
 import {
   useProjectPolicy,
@@ -151,7 +153,7 @@ function PolicyPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6">
       {!canEdit && (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
           <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
@@ -310,19 +312,15 @@ function PolicyPage() {
 
       {canEdit && (
         <div className="flex justify-end">
-          <button
+          <ActionButton
             type="button"
+            intent="primary"
             onClick={() => void form.handleSubmit()}
-            disabled={updateMutation.isPending}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+            loading={updateMutation.isPending}
+            icon={<Save className="h-3.5 w-3.5" />}
           >
-            {updateMutation.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Save className="h-3.5 w-3.5" />
-            )}
             Save changes
-          </button>
+          </ActionButton>
         </div>
       )}
 
@@ -400,13 +398,12 @@ function QuotaInput({
   return (
     <div className="space-y-1.5">
       <label className="text-sm font-medium text-foreground">{label}</label>
-      <input
+      <Input
         type="text"
         value={value}
         disabled={disabled}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60 disabled:cursor-not-allowed"
       />
       <p className="text-xs text-muted-foreground">{hint || 'Empty = unlimited'}</p>
     </div>

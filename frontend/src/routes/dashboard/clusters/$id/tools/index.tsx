@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useParams } from '@/lib/navigation';
 import { useCluster } from '@/lib/hooks';
 import { ToolsTab } from '@/components/clusters/tools-tab';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { Loader2, Server } from 'lucide-react';
 
 function ClusterToolsPage() {
@@ -27,18 +28,13 @@ function ClusterToolsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Tools</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage operational tools for {cluster.displayName}
-        </p>
-      </div>
-
-      {/* Tools Grid */}
+    <PageShell>
+      <PageHeader
+        title="Tools"
+        description={`Manage operational tools for ${cluster.displayName}`}
+      />
       <ToolsTab clusterId={clusterId} clusterEnvironment={cluster.environment} clusterStatus={cluster.status} />
-    </div>
+    </PageShell>
   );
 }
 

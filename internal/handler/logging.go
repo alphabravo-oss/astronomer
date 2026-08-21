@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -48,6 +49,9 @@ type LoggingQuerier interface {
 	DeleteLoggingOutput(ctx context.Context, id uuid.UUID) error
 	CountLoggingOutputs(ctx context.Context) (int64, error)
 	CountOutputsByCluster(ctx context.Context, clusterID pgtype.UUID) (int64, error)
+	GetSystemLoggingOutputByCluster(ctx context.Context, clusterID pgtype.UUID) (sqlc.LoggingOutput, error)
+	ListSystemLoggingOutputs(ctx context.Context) ([]sqlc.LoggingOutput, error)
+	DisableSystemLoggingOutputs(ctx context.Context) ([]sqlc.LoggingOutput, error)
 	// Pipelines
 	ListLoggingPipelines(ctx context.Context, arg sqlc.ListLoggingPipelinesParams) ([]sqlc.LoggingPipeline, error)
 	ListPipelinesByCluster(ctx context.Context, arg sqlc.ListPipelinesByClusterParams) ([]sqlc.LoggingPipeline, error)
@@ -69,6 +73,9 @@ type LoggingQuerier interface {
 	RequeueLoggingOperation(ctx context.Context, id uuid.UUID) (sqlc.LoggingOperation, error)
 	CreateLoggingOperationEvent(ctx context.Context, arg sqlc.CreateLoggingOperationEventParams) (sqlc.LoggingOperationEvent, error)
 	ListLoggingOperationEvents(ctx context.Context, operationID uuid.UUID) ([]sqlc.LoggingOperationEvent, error)
+	GetLokiIngestTokenByCluster(ctx context.Context, clusterID uuid.UUID) (sqlc.LokiIngestToken, error)
+	UpsertLokiIngestToken(ctx context.Context, arg sqlc.UpsertLokiIngestTokenParams) (sqlc.LokiIngestToken, error)
+	ListLokiIngestTokenHashes(ctx context.Context) ([]sqlc.ListLokiIngestTokenHashesRow, error)
 }
 
 // LoggingHandler handles logging output and pipeline endpoints.
@@ -76,13 +83,14 @@ type LoggingQuerier interface {
 // As of the logging-controller refactor (comparison.md §7/§10/§11) the
 // handler no longer applies to the cluster inline: it writes intent rows to
 // the `logging_operations` table and a background reconciler picks them up.
-// The reconciler renders a tiny ConfigMap for each output/pipeline and
-// applies it via the tunnel K8sRequester into the LoggingNamespace on the
-// target managed cluster, where Fluent Bit (assumed already installed)
-// watches.
+// The reconciler renders ConfigMaps for each output/pipeline, applies a
+// member Secret for hosted Loki ingest tokens, and patches the baseline
+// fluent-bit Helm extraVolumes/extraVolumeMounts so OUTPUT uses
+// bearer_token_file. Fluent Bit itself is assumed already installed.
 type LoggingHandler struct {
 	queries   LoggingQuerier
 	requester K8sRequester
+	helm      HelmRequester
 	log       *slog.Logger
 	authz     authorizationSupport
 	bus       *events.Bus
@@ -91,6 +99,28 @@ type LoggingHandler struct {
 	// helmConcurrency caps the parallel dispatch fan-out for
 	// executeOperation; zero falls back to the package default.
 	helmConcurrency int
+	encryptor       *auth.Encryptor
+	lokiIngest      lokiIngestReconciler
+	lokiAttach      lokiAttachGate
+}
+
+type lokiIngestReconciler interface {
+	ReconcileLokiIngest(ctx context.Context) error
+}
+
+// lokiAttachGate is the hosted-Loki precheck used by one-click attach.
+// MonitoringHandler implements it. Nil is fail-closed (Loki not ready).
+type lokiAttachGate interface {
+	LokiAttachState(ctx context.Context) lokiAttachState
+	CheckLokiAttachCapacity(ctx context.Context, clusterID uuid.UUID) (code, msg string, ok bool)
+}
+
+type lokiAttachState struct {
+	Status       string
+	IngestPublic bool
+	Host         string
+	Port         string
+	Mode         string
 }
 
 // NewLoggingHandler creates a new logging handler.
@@ -110,6 +140,36 @@ func (h *LoggingHandler) SetK8sRequester(r K8sRequester) {
 		return
 	}
 	h.requester = r
+}
+
+// SetHelmRequester wires the tunnel Helm client used to patch the baseline
+// fluent-bit release (extraVolumes / extraVolumeMounts for ingest tokens).
+func (h *LoggingHandler) SetHelmRequester(r HelmRequester) {
+	if h == nil {
+		return
+	}
+	h.helm = r
+}
+
+func (h *LoggingHandler) SetEncryptor(e *auth.Encryptor) {
+	if h == nil {
+		return
+	}
+	h.encryptor = e
+}
+
+func (h *LoggingHandler) SetLokiIngestReconciler(r lokiIngestReconciler) {
+	if h == nil {
+		return
+	}
+	h.lokiIngest = r
+}
+
+func (h *LoggingHandler) SetLokiAttachGate(g lokiAttachGate) {
+	if h == nil {
+		return
+	}
+	h.lokiAttach = g
 }
 
 // SetLogger wires a structured logger.
@@ -269,6 +329,7 @@ type CreateLoggingOutputRequest struct {
 // CreateLoggingPipelineRequest represents the request body for creating a logging pipeline.
 type CreateLoggingPipelineRequest struct {
 	Name       string          `json:"name" validate:"required"`
+	ClusterID  string          `json:"cluster_id"`
 	Namespaces json.RawMessage `json:"namespaces"`
 	Labels     json.RawMessage `json:"labels"`
 	Filters    json.RawMessage `json:"filters"`
@@ -311,7 +372,7 @@ func (h *LoggingHandler) ListOutputs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondPaginated(w, r, outputs, total)
+	RespondPaginated(w, r, loggingOutputDTOs(outputs), total)
 }
 
 // CreateOutput handles POST /api/v1/clusters/{cluster_id}/logging/outputs/.
@@ -339,10 +400,7 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	configuration := req.Configuration
-	if configuration == nil {
-		configuration = json.RawMessage(`{}`)
-	}
+	configuration := stripBearerFromLoggingConfiguration(req.Configuration)
 
 	output, err := h.queries.CreateLoggingOutput(r.Context(), sqlc.CreateLoggingOutputParams{
 		Name:          req.Name,
@@ -351,6 +409,7 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 		ClusterID:     pgtype.UUID{Bytes: clusterID, Valid: true},
 		Enabled:       req.Enabled,
 		CreatedByID:   currentUserUUID(r),
+		IsSystem:      false,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create logging output")
@@ -370,7 +429,7 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Location", "/api/v1/logging/outputs/"+output.ID.String()+"/")
-	RespondJSON(w, http.StatusCreated, output)
+	RespondJSON(w, http.StatusCreated, loggingOutputDTO(output))
 }
 
 // UpdateOutput handles PUT /api/v1/logging/outputs/{id}/.
@@ -394,11 +453,14 @@ func (h *LoggingHandler) UpdateOutput(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, uuid.UUID(existing.ClusterID.Bytes), rbac.ResourceLogging, rbac.VerbUpdate) {
 		return
 	}
+	if rejectSystemOutputMutation(w, r, existing, "edited") {
+		return
+	}
 	output, err := h.queries.UpdateLoggingOutput(r.Context(), sqlc.UpdateLoggingOutputParams{
 		ID:            id,
 		Name:          req.Name,
 		OutputType:    req.OutputType,
-		Configuration: req.Configuration,
+		Configuration: stripBearerFromLoggingConfiguration(req.Configuration),
 		Enabled:       req.Enabled,
 	})
 	if err != nil {
@@ -414,7 +476,7 @@ func (h *LoggingHandler) UpdateOutput(w http.ResponseWriter, r *http.Request) {
 		"enabled":      output.Enabled,
 		"operation_id": operationIDOrEmpty(op),
 	})
-	RespondJSON(w, http.StatusOK, output)
+	RespondJSON(w, http.StatusOK, loggingOutputDTO(output))
 }
 
 // TestOutput handles POST /api/v1/logging/outputs/{id}/test/.
@@ -466,6 +528,9 @@ func (h *LoggingHandler) DeleteOutput(w http.ResponseWriter, r *http.Request) {
 		outputClusterID = uuid.UUID(existing.ClusterID.Bytes)
 	}
 	if !h.authz.authorizeClusterAction(w, r, outputClusterID, rbac.ResourceLogging, rbac.VerbDelete) {
+		return
+	}
+	if lookupErr == nil && rejectSystemOutputMutation(w, r, existing, "deleted") {
 		return
 	}
 	// Enqueue the delete operation BEFORE the row goes away — the
@@ -536,6 +601,9 @@ func (h *LoggingHandler) CreatePipeline(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	clusterID, err := clusterIDFromRequest(r)
+	if err != nil && req.ClusterID != "" {
+		clusterID, err = uuid.Parse(req.ClusterID)
+	}
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
@@ -693,6 +761,13 @@ func (h *LoggingHandler) setOutputEnabled(w http.ResponseWriter, r *http.Request
 	if !h.authz.authorizeClusterAction(w, r, uuid.UUID(current.ClusterID.Bytes), rbac.ResourceLogging, rbac.VerbUpdate) {
 		return
 	}
+	denyAction := "enabled"
+	if !enabled {
+		denyAction = "disabled"
+	}
+	if rejectSystemOutputMutation(w, r, current, denyAction) {
+		return
+	}
 	output, err := h.queries.UpdateLoggingOutput(r.Context(), sqlc.UpdateLoggingOutputParams{
 		ID:            id,
 		Name:          current.Name,
@@ -719,7 +794,7 @@ func (h *LoggingHandler) setOutputEnabled(w http.ResponseWriter, r *http.Request
 		"enabled":      enabled,
 		"operation_id": operationIDOrEmpty(op),
 	})
-	RespondJSON(w, http.StatusOK, output)
+	RespondJSON(w, http.StatusOK, loggingOutputDTO(output))
 }
 
 // loggingQueryRequest is the body for POST .../logging/outputs/{id}/query/.
@@ -749,6 +824,11 @@ func (h *LoggingHandler) QueryOutput(w http.ResponseWriter, r *http.Request) {
 		if !h.authz.authorizeClusterAction(w, r, output.ClusterID.Bytes, rbac.ResourceLogging, rbac.VerbRead) {
 			return
 		}
+	}
+	if output.IsSystem {
+		RespondRequestError(w, r, http.StatusNotImplemented, apierror.NotImplemented,
+			"Querying Astronomer Loki destinations is not supported; use fleet Grafana")
+		return
 	}
 	var req loggingQueryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
@@ -834,7 +914,7 @@ func (h *LoggingHandler) FluentbitConfig(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging pipeline not found")
 		return
 	}
-	config := h.renderFullFluentbitConfig(r.Context(), pipeline.ClusterID)
+	config := h.renderFullFluentbitConfig(r.Context(), pipeline.ClusterID, false)
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"cluster_id": pipeline.ClusterID.String(),
 		"config":     config,
@@ -855,7 +935,7 @@ func (h *LoggingHandler) refreshAggregateFluentBitConfig(ctx context.Context, cl
 	if err != nil {
 		return fmt.Errorf("parse cluster id: %w", err)
 	}
-	config := h.renderFullFluentbitConfig(ctx, cu)
+	config := h.renderFullFluentbitConfig(ctx, cu, true)
 	if err := ensureNamespace(ctx, h.requester, clusterID, LoggingNamespace); err != nil {
 		return fmt.Errorf("ensure namespace: %w", err)
 	}
@@ -888,7 +968,10 @@ const fluentBitDefaultParsers = `[PARSER]
 // a cluster from its enabled pipelines (filters) and outputs, reusing the same
 // block renderers the controller applies to the cluster. Previously this view
 // returned a hardcoded stub that ignored the actual pipelines/outputs.
-func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterID uuid.UUID) string {
+func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterID uuid.UUID, includeSecrets bool) string {
+	// includeSecrets is retained for callers; system ingest tokens are never
+	// rendered into this ConfigMap (bearer_token_file + member Secret).
+	_ = includeSecrets
 	var b strings.Builder
 	b.WriteString("# rendered by astronomer-go logging controller\n")
 	b.WriteString("[SERVICE]\n")
@@ -936,10 +1019,12 @@ func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterI
 			}
 			enabledOutputs++
 			b.WriteString("\n")
-			b.WriteString(renderOutputBlock(loggingOperationEnvelope{
+			env := loggingOperationEnvelope{
 				ClusterID: clusterID.String(), TargetID: o.ID.String(), TargetType: "output",
 				Name: o.Name, OutputType: o.OutputType, Enabled: o.Enabled, Configuration: o.Configuration,
-			}))
+				IsSystem: o.IsSystem,
+			}
+			b.WriteString(renderOutputBlock(env))
 		}
 	}
 	if enabledOutputs == 0 {
@@ -1072,6 +1157,8 @@ type loggingOperationEnvelope struct {
 	Name          string          `json:"name"`
 	OutputType    string          `json:"output_type,omitempty"`
 	Enabled       bool            `json:"enabled"`
+	IsSystem      bool            `json:"is_system,omitempty"`
+	BearerToken   string          `json:"-"`
 	Configuration json.RawMessage `json:"configuration,omitempty"`
 	Namespaces    json.RawMessage `json:"namespaces,omitempty"`
 	Labels        json.RawMessage `json:"labels,omitempty"`
@@ -1089,7 +1176,8 @@ func (h *LoggingHandler) enqueueOutputApply(ctx context.Context, output sqlc.Log
 		Name:          output.Name,
 		OutputType:    output.OutputType,
 		Enabled:       output.Enabled,
-		Configuration: output.Configuration,
+		IsSystem:      output.IsSystem,
+		Configuration: stripBearerFromLoggingConfiguration(output.Configuration),
 	}
 	return h.enqueueOperation(ctx, "output", output.ID.String(), "apply", env, userID)
 }
@@ -1284,8 +1372,9 @@ func (h *LoggingHandler) claimPendingLoggingOperations(ctx context.Context) []cl
 }
 
 // executeOperation renders the ConfigMap and applies (or deletes) it via the
-// tunnel K8sRequester. Fluent Bit on the managed cluster is assumed to be
-// running and watching the LoggingNamespace; this code does NOT install it.
+// tunnel K8sRequester. System Loki ingest tokens are written to a member
+// Secret and mounted into the baseline fluent-bit release; the ConfigMap
+// references bearer_token_file. This code does NOT install Fluent Bit.
 func (h *LoggingHandler) executeOperation(ctx context.Context, op sqlc.LoggingOperation) error {
 	var env loggingOperationEnvelope
 	if err := json.Unmarshal(op.Payload, &env); err != nil {
@@ -1296,6 +1385,9 @@ func (h *LoggingHandler) executeOperation(ctx context.Context, op sqlc.LoggingOp
 	}
 	if h.requester == nil {
 		return errors.New("k8s requester not configured")
+	}
+	if err := h.attachLokiBearer(ctx, &env); err != nil {
+		return err
 	}
 	configMapName := loggingConfigMapName(env.TargetType, env.TargetID)
 	switch op.OperationType {
@@ -1314,6 +1406,9 @@ func (h *LoggingHandler) executeOperation(ctx context.Context, op sqlc.LoggingOp
 		if err := ensureNamespace(ctx, h.requester, env.ClusterID, LoggingNamespace); err != nil {
 			return fmt.Errorf("ensure namespace: %w", err)
 		}
+		if err := h.syncMemberLokiIngestSecret(ctx, env); err != nil {
+			return err
+		}
 		if err := applyConfigMap(ctx, h.requester, env.ClusterID, LoggingNamespace, configMapName, data); err != nil {
 			return err
 		}
@@ -1327,6 +1422,15 @@ func (h *LoggingHandler) executeOperation(ctx context.Context, op sqlc.LoggingOp
 			"namespace":     LoggingNamespace,
 			"configMapName": configMapName,
 		})
+		if err := h.syncMemberLokiIngestSecret(ctx, loggingOperationEnvelope{
+			ClusterID:  env.ClusterID,
+			TargetType: env.TargetType,
+			OutputType: env.OutputType,
+			IsSystem:   env.IsSystem,
+			Enabled:    false,
+		}); err != nil {
+			return err
+		}
 		if err := deleteConfigMap(ctx, h.requester, env.ClusterID, LoggingNamespace, configMapName); err != nil {
 			return err
 		}
@@ -1400,6 +1504,7 @@ func renderOutputBlock(env loggingOperationEnvelope) string {
 	b.WriteString("# output: " + safeComment(env.Name) + " (" + env.OutputType + ")\n")
 	if !env.Enabled {
 		b.WriteString("# note: output is currently disabled\n")
+		return b.String()
 	}
 	switch env.OutputType {
 	case "elasticsearch":
@@ -1423,12 +1528,43 @@ func renderOutputBlock(env loggingOperationEnvelope) string {
 		writeKV(&b, "Name", "loki")
 		writeKV(&b, "Match", configString(cfg, "match", "*"))
 		writeKV(&b, "Host", configString(cfg, "host", ""))
-		writeKV(&b, "Port", configString(cfg, "port", "3100"))
-		if v := configString(cfg, "labels", ""); v != "" {
-			writeKV(&b, "Labels", v)
+		portDefault := "3100"
+		if env.IsSystem {
+			portDefault = "443"
 		}
-		if v := configString(cfg, "tenant_id", ""); v != "" {
-			writeKV(&b, "tenant_id", v)
+		writeKV(&b, "Port", configString(cfg, "port", portDefault))
+		tls := configString(cfg, "tls", "")
+		if env.IsSystem && tls == "" {
+			tls = "on"
+		}
+		if tls != "" {
+			writeKV(&b, "tls", tls)
+		}
+		tlsVerify := configString(cfg, "tls.verify", "")
+		if tlsVerify == "" && strings.EqualFold(tls, "on") {
+			tlsVerify = "on"
+		}
+		if tlsVerify != "" {
+			writeKV(&b, "tls.verify", tlsVerify)
+		}
+		if env.IsSystem {
+			writeKV(&b, "bearer_token_file", fluentBitIngestTokenFile)
+		} else if env.BearerToken != "" {
+			writeKV(&b, "bearer_token", env.BearerToken)
+		}
+		labels := configString(cfg, "labels", "")
+		if env.IsSystem && labels == "" && env.ClusterID != "" {
+			labels = "cluster=" + env.ClusterID + ",job=fluentbit"
+		}
+		if labels != "" {
+			writeKV(&b, "Labels", labels)
+		}
+		tenant := configString(cfg, "tenant_id", "")
+		if env.IsSystem {
+			tenant = env.ClusterID
+		}
+		if tenant != "" {
+			writeKV(&b, "tenant_id", tenant)
 		}
 	case "s3":
 		b.WriteString("[OUTPUT]\n")
@@ -1749,7 +1885,15 @@ func loggingConfigMapName(targetType, targetID string) string {
 }
 
 func deleteConfigMap(ctx context.Context, requester K8sRequester, clusterID, namespace, name string) error {
-	path := fmt.Sprintf("/api/v1/namespaces/%s/configmaps/%s", namespace, name)
+	return deleteCoreV1Resource(ctx, requester, clusterID, namespace, "configmaps", name)
+}
+
+func deleteSecret(ctx context.Context, requester K8sRequester, clusterID, namespace, name string) error {
+	return deleteCoreV1Resource(ctx, requester, clusterID, namespace, "secrets", name)
+}
+
+func deleteCoreV1Resource(ctx context.Context, requester K8sRequester, clusterID, namespace, plural, name string) error {
+	path := fmt.Sprintf("/api/v1/namespaces/%s/%s/%s", namespace, plural, name)
 	resp, err := requester.Do(ctx, clusterID, http.MethodDelete, path, nil, requestHeaders(""))
 	if err != nil {
 		return err
@@ -1915,7 +2059,7 @@ func (h *LoggingHandler) listOutputsFleetWide(w http.ResponseWriter, r *http.Req
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count logging outputs")
 			return
 		}
-		RespondPaginated(w, r, outputs, total)
+		RespondPaginated(w, r, loggingOutputDTOs(outputs), total)
 		return
 	}
 	filtered := outputs[:0]
@@ -1924,7 +2068,7 @@ func (h *LoggingHandler) listOutputsFleetWide(w http.ResponseWriter, r *http.Req
 			filtered = append(filtered, o)
 		}
 	}
-	RespondPaginated(w, r, filtered, int64(len(filtered)))
+	RespondPaginated(w, r, loggingOutputDTOs(filtered), int64(len(filtered)))
 }
 
 // listPipelinesFleetWide is listOutputsFleetWide for pipelines (ClusterID is

@@ -2,9 +2,16 @@ name: cluster-operator
 display_name: Cluster Operator
 description: |
   Operates a single cluster end-to-end: workloads, helm catalog,
-  monitoring, alerts, backups. Can run kubectl-shell sessions and view
-  the audit log for the cluster. Cannot decommission the cluster
-  itself; that's a platform-admin action.
+  monitoring, alerts, backups, and log destinations (create only).
+  Can run kubectl-shell sessions and view the audit log for the
+  cluster. Cannot decommission the cluster itself; that's a
+  platform-admin action.
+
+  logging:[read,list,create] is a privilege expansion — create can
+  point a new destination at customer Splunk. It does not include
+  update/delete. Role templates are copied into the binding at bind
+  time; existing cluster-operator bindings do not pick up new verbs
+  automatically. Re-apply this template to existing bindings.
 scope: cluster
 category: cluster
 rules:
@@ -28,6 +35,8 @@ rules:
     verbs: [create, read, update, delete, list]
   - resource: monitoring
     verbs: [read, list, update]
+  - resource: logging
+    verbs: [read, list, create]
   - resource: alerts
     verbs: [read, list, create, update]
   - resource: catalog

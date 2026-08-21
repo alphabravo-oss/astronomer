@@ -26,7 +26,12 @@ import { useAppForm, useStore } from '@/lib/form';
 import { Plus, Loader2, Trash2, Pencil, AlertCircle, Folder } from 'lucide-react';
 import * as api from '@/lib/api';
 import { queryKeys } from '@/lib/hooks';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { ModalShell } from '@/components/ui/modal-shell';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import {
   CLUSTER_GROUP_COLORS,
   CLUSTER_GROUP_ICONS,
@@ -114,27 +119,24 @@ function ClusterGroupsPage() {
   }, [tree]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Cluster groups</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Organize your clusters into folders — group by environment, region, or business unit.
-            Tree depth is capped at {MAX_DEPTH + 1} levels.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            setEditing(null);
-            setShowForm(true);
-          }}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          <Plus className="h-4 w-4" />
-          New group
-        </button>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Cluster groups"
+        description={`Organize your clusters into folders — group by environment, region, or business unit. Tree depth is capped at ${MAX_DEPTH + 1} levels.`}
+        actions={
+          <ActionButton
+            type="button"
+            intent="primary"
+            icon={<Plus className="h-4 w-4" />}
+            onClick={() => {
+              setEditing(null);
+              setShowForm(true);
+            }}
+          >
+            New group
+          </ActionButton>
+        }
+      />
 
       {isLoading ? (
         <div className="flex items-center justify-center h-32">
@@ -237,7 +239,7 @@ function ClusterGroupsPage() {
           }}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
 
@@ -313,23 +315,38 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
   }, [allGroups, existing]);
 
   return (
-    <OverlayShell onClose={onClose}>
-      <div className="bg-background border border-border rounded-lg shadow-lg w-full max-w-lg p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">
-          {existing ? 'Edit cluster group' : 'New cluster group'}
-        </h2>
-
+    <ModalShell
+      title={existing ? 'Edit cluster group' : 'New cluster group'}
+      onClose={onClose}
+      size="md"
+      footerClassName="flex items-center justify-end gap-2"
+      footer={
+        <>
+          <ActionButton type="button" intent="ghost" onClick={onClose}>
+            Cancel
+          </ActionButton>
+          <ActionButton
+            type="button"
+            intent="primary"
+            onClick={() => void form.handleSubmit()}
+            disabled={!name || !slug}
+          >
+            {existing ? 'Save' : 'Create'}
+          </ActionButton>
+        </>
+      }
+    >
         <div className="space-y-3">
           <label className="block">
             <span className="text-xs font-medium text-muted-foreground">Name</span>
             <form.Field name="name">
               {(field) => (
-                <input
+                <Input
                   type="text"
                   value={field.state.value}
                   onChange={(e) => handleName(e.target.value)}
                   onBlur={field.handleBlur}
-                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm"
+                  className="mt-1"
                   autoFocus
                 />
               )}
@@ -341,7 +358,7 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
             </span>
             <form.Field name="slug">
               {(field) => (
-                <input
+                <Input
                   type="text"
                   value={field.state.value}
                   onChange={(e) => {
@@ -349,7 +366,7 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
                     setSlugTouched(true);
                   }}
                   onBlur={field.handleBlur}
-                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
+                  className="mt-1 font-mono"
                 />
               )}
             </form.Field>
@@ -358,12 +375,12 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
             <span className="text-xs font-medium text-muted-foreground">Description</span>
             <form.Field name="description">
               {(field) => (
-                <textarea
+                <Textarea
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   rows={2}
-                  className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background text-sm"
+                  className="mt-1 min-h-0"
                 />
               )}
             </form.Field>
@@ -372,11 +389,11 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
             <span className="text-xs font-medium text-muted-foreground">Parent</span>
             <form.Field name="parentId">
               {(field) => (
-                <select
+                <Select
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm"
+                  className="mt-1"
                 >
                   <option value="">— Top-level —</option>
                   {parentOptions.map((p) => (
@@ -385,7 +402,7 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
                       {p.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               )}
             </form.Field>
           </label>
@@ -417,43 +434,24 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
               <span className="text-xs font-medium text-muted-foreground">Icon</span>
               <form.Field name="icon">
                 {(field) => (
-                  <select
+                  <Select
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
-                    className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm"
+                    className="mt-1"
                   >
                     {CLUSTER_GROUP_ICONS.map((i) => (
                       <option key={i} value={i}>
                         {i}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 )}
               </form.Field>
             </label>
           </div>
         </div>
-
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-9 px-4 rounded-md text-sm text-muted-foreground hover:text-foreground"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => void form.handleSubmit()}
-            disabled={!name || !slug}
-            className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
-          >
-            {existing ? 'Save' : 'Create'}
-          </button>
-        </div>
-      </div>
-    </OverlayShell>
+    </ModalShell>
   );
 }
 

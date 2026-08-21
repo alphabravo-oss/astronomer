@@ -1,7 +1,7 @@
 /**
  * React-Query surface for the monitoring-stack LIFECYCLE — install, upgrade,
  * replace, uninstall, preview and status across the per-cluster stack, shared
- * Thanos and shared Alertmanager.
+ * Thanos, shared Alertmanager and shared Grafana.
  *
  * Kept next to the monitoring UI rather than in the central lib/hooks.ts, the
  * same way components/projects/hooks.ts and components/auth/hooks.ts own their
@@ -272,6 +272,14 @@ export function useSharedAlertmanagerStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.monitoringStack.status('alertmanager'),
     queryFn: () => api.getSharedAlertmanagerStatus(),
+    enabled,
+  });
+}
+
+export function useSharedGrafanaStatus(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.monitoringStack.status('grafana'),
+    queryFn: () => api.getSharedGrafanaStatus(),
     enabled,
   });
 }

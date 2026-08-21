@@ -16,6 +16,9 @@ import { formatRelativeTime } from '@/lib/utils';
 import { useAppForm } from '@/lib/form';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { ModalShell } from '@/components/ui/modal-shell';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {
@@ -147,22 +150,22 @@ function SmtpForm({ initial, onSaved }: { initial: SmtpConfig; onSaved?: () => v
 
       <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-border">
         <div className="flex-1 flex items-center gap-2">
-          <input
+          <Input
             type="email"
             value={testTo}
             onChange={(e) => setTestTo(e.target.value)}
             placeholder="ops@example.com"
-            className="flex-1 h-9 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="flex-1"
           />
-          <button
+          <ActionButton
             type="button"
             onClick={handleTest}
             disabled={testSend.isPending || !testTo}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+            loading={testSend.isPending}
+            icon={<Send className="h-3.5 w-3.5" />}
           >
-            {testSend.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             Send test email
-          </button>
+          </ActionButton>
         </div>
         <form.Subscribe
           selector={(state) =>
@@ -173,15 +176,16 @@ function SmtpForm({ initial, onSaved }: { initial: SmtpConfig; onSaved?: () => v
           }
         >
           {([dirty, saving]) => (
-            <button
+            <ActionButton
               type="button"
+              intent="primary"
               onClick={() => void form.handleSubmit()}
               disabled={!dirty || saving}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              loading={saving}
+              icon={<Save className="h-3.5 w-3.5" />}
             >
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               Save changes
-            </button>
+            </ActionButton>
           )}
         </form.Subscribe>
       </div>
@@ -363,7 +367,7 @@ function SmtpPageInner() {
 function SmtpSettingsPage() {
   return (
     <SettingsAuthGate>
-      <div className="max-w-4xl mx-auto space-y-6">
+      <PageShell>
         <Link
           href="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -371,18 +375,18 @@ function SmtpSettingsPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
         </Link>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Settings · Email</p>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1 flex items-center gap-2">
-            <Mail className="h-5 w-5 text-muted-foreground" />
-            Email &amp; SMTP
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Outbound mail server, test-send, and audit log of recent emails.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="Settings · Email"
+          title={
+            <span className="inline-flex items-center gap-2">
+              <Mail className="h-5 w-5 text-muted-foreground" />
+              Email & SMTP
+            </span>
+          }
+          description="Outbound mail server, test-send, and audit log of recent emails."
+        />
         <SmtpPageInner />
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

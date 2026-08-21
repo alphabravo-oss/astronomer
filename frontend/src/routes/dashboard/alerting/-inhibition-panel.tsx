@@ -10,10 +10,12 @@
  */
 import { useState } from 'react';
 import { useAppForm, useStore } from '@/lib/form';
-import { Plus, X, Loader2, Trash2, Pencil } from 'lucide-react';
+import { Plus, X, Trash2, Pencil } from 'lucide-react';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { ModalShell } from '@/components/ui/modal-shell';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { formatRelativeTime } from '@/lib/utils';
 import type { AlertInhibition, InhibitionMatcher } from '@/types';
@@ -111,23 +113,24 @@ export function InhibitionPanel() {
       sortable: false,
       accessor: (row) => (
         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <button
+          <ActionButton
+            size="icon"
+            intent="ghost"
+            title="Edit inhibition"
             onClick={() => {
               setEditing(row);
               setShowModal(true);
             }}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Edit inhibition"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={() => setDeleteTarget(row)}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+            icon={<Pencil className="h-3.5 w-3.5" />}
+          />
+          <ActionButton
+            size="icon"
+            intent="ghost"
             title="Delete inhibition"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+            onClick={() => setDeleteTarget(row)}
+            icon={<Trash2 className="h-3.5 w-3.5" />}
+            className="hover:text-status-error hover:bg-status-error/10"
+          />
         </div>
       ),
     },
@@ -136,16 +139,16 @@ export function InhibitionPanel() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end">
-        <button
+        <ActionButton
+          intent="primary"
+          icon={<Plus className="h-4 w-4" />}
           onClick={() => {
             setEditing(null);
             setShowModal(true);
           }}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
         >
-          <Plus className="h-4 w-4" />
           Create Inhibition
-        </button>
+        </ActionButton>
       </div>
 
       <DataTable
@@ -224,19 +227,17 @@ function MatcherEditor({
         <p className="text-2xs text-muted-foreground">{hint}</p>
       </div>
       <div className="flex gap-2">
-        <input
-          type="text"
+        <Input
           value={draft.label}
           onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
           placeholder="Label name"
-          className="flex-1 h-8 px-2.5 rounded border border-border bg-background text-xs font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="h-8 flex-1 font-mono text-xs w-auto"
         />
-        <input
-          type="text"
+        <Input
           value={draft.value}
           onChange={(e) => setDraft((d) => ({ ...d, value: e.target.value }))}
           placeholder="Value"
-          className="flex-1 h-8 px-2.5 rounded border border-border bg-background text-xs font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="h-8 flex-1 font-mono text-xs w-auto"
         />
         <button
           type="button"
@@ -250,14 +251,14 @@ function MatcherEditor({
         >
           .*
         </button>
-        <button
+        <ActionButton
           type="button"
+          size="icon"
           onClick={add}
           disabled={!draft.label || !draft.value}
-          className="h-8 px-2.5 rounded border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
+          icon={<Plus className="h-3.5 w-3.5" />}
+          title="Add matcher"
+        />
       </div>
       {matchers.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -333,102 +334,88 @@ function InhibitionModal({
   const canSave = !!name && sourceMatchers.length > 0 && targetMatchers.length > 0;
 
   return (
-    <OverlayShell onClose={onClose}>
-      <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <h3 className="text-lg font-semibold text-foreground">
-            {isEdit ? 'Edit Inhibition Rule' : 'Create Inhibition Rule'}
-          </h3>
-          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Name</label>
-            <form.Field name="name">
-              {(field) => (
-                <input
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  placeholder="Suppress node alerts when cluster is down"
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              )}
-            </form.Field>
-          </div>
-
-          <MatcherEditor
-            title="Source matchers"
-            hint="A firing alert matching these is the SOURCE that suppresses targets."
-            matchers={sourceMatchers}
-            onChange={(next) => form.setFieldValue('sourceMatchers', next)}
-          />
-
-          <MatcherEditor
-            title="Target matchers"
-            hint="Firing alerts matching these are SUPPRESSED while a source fires."
-            matchers={targetMatchers}
-            onChange={(next) => form.setFieldValue('targetMatchers', next)}
-          />
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">
-              Equal labels <span className="text-2xs text-muted-foreground font-normal">(comma-separated)</span>
-            </label>
-            <form.Field name="equalInput">
-              {(field) => (
-                <input
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  placeholder="cluster, namespace"
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              )}
-            </form.Field>
-            <p className="text-2xs text-muted-foreground">
-              Source and target must share the same value on every label listed here for suppression to apply.
-            </p>
-          </div>
-
-          <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-            <form.Field name="enabled">
-              {(field) => (
-                <input
-                  type="checkbox"
-                  checked={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.checked)}
-                  onBlur={field.handleBlur}
-                  className="h-4 w-4 rounded border-border"
-                />
-              )}
-            </form.Field>
-            Enabled
-          </label>
-        </div>
-
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border flex-shrink-0 bg-muted/30">
-          <button
-            onClick={onClose}
-            className="h-9 px-4 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
+    <ModalShell
+      title={isEdit ? 'Edit Inhibition Rule' : 'Create Inhibition Rule'}
+      onClose={onClose}
+      size="md"
+      bodyClassName="space-y-5"
+      footer={
+        <>
+          <ActionButton onClick={onClose}>Cancel</ActionButton>
+          <ActionButton
+            intent="primary"
             onClick={() => void form.handleSubmit()}
-            disabled={isPending || !canSave}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+            disabled={!canSave}
+            loading={isPending}
           >
-            {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {isEdit ? 'Save Changes' : 'Create Inhibition'}
-          </button>
-        </div>
+          </ActionButton>
+        </>
+      }
+      footerClassName="flex items-center justify-end gap-2"
+    >
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-foreground">Name</label>
+        <form.Field name="name">
+          {(field) => (
+            <Input
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="Suppress node alerts when cluster is down"
+            />
+          )}
+        </form.Field>
       </div>
-    </OverlayShell>
+
+      <MatcherEditor
+        title="Source matchers"
+        hint="A firing alert matching these is the SOURCE that suppresses targets."
+        matchers={sourceMatchers}
+        onChange={(next) => form.setFieldValue('sourceMatchers', next)}
+      />
+
+      <MatcherEditor
+        title="Target matchers"
+        hint="Firing alerts matching these are SUPPRESSED while a source fires."
+        matchers={targetMatchers}
+        onChange={(next) => form.setFieldValue('targetMatchers', next)}
+      />
+
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-foreground">
+          Equal labels <span className="text-2xs text-muted-foreground font-normal">(comma-separated)</span>
+        </label>
+        <form.Field name="equalInput">
+          {(field) => (
+            <Input
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="cluster, namespace"
+              className="font-mono"
+            />
+          )}
+        </form.Field>
+        <p className="text-2xs text-muted-foreground">
+          Source and target must share the same value on every label listed here for suppression to apply.
+        </p>
+      </div>
+
+      <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+        <form.Field name="enabled">
+          {(field) => (
+            <input
+              type="checkbox"
+              checked={field.state.value}
+              onChange={(e) => field.handleChange(e.target.checked)}
+              onBlur={field.handleBlur}
+              className="h-4 w-4 rounded border-border"
+            />
+          )}
+        </form.Field>
+        Enabled
+      </label>
+    </ModalShell>
   );
 }

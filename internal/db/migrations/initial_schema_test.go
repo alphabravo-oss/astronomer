@@ -21,9 +21,14 @@ func TestCanonicalGreenfieldMigrationSet(t *testing.T) {
 		}
 	}
 	sort.Strings(migrations)
-	want := []string{"001_initial.down.sql", "001_initial.up.sql"}
-	if strings.Join(migrations, ",") != strings.Join(want, ",") {
-		t.Fatalf("migration set = %v, want %v", migrations, want)
+	if len(migrations) < 2 || migrations[0] != "001_initial.down.sql" || migrations[1] != "001_initial.up.sql" {
+		t.Fatalf("migration set = %v, want 001_initial.down.sql and 001_initial.up.sql first", migrations)
+	}
+	numbered := regexp.MustCompile(`^\d{3}_[a-z0-9_]+\.(up|down)\.sql$`)
+	for _, name := range migrations {
+		if !numbered.MatchString(name) {
+			t.Fatalf("unexpected migration filename %q", name)
+		}
 	}
 }
 
@@ -72,6 +77,25 @@ func TestCanonicalTeardownIsScoped(t *testing.T) {
 	}
 	if !strings.Contains(down, "DROP TABLE IF EXISTS public.audit_log CASCADE;") {
 		t.Fatal("canonical teardown does not remove the partitioned audit parent")
+	}
+}
+
+func TestLoggingOutputsSystemUniqueIndex(t *testing.T) {
+	up := readMigration(t, "004_logging_outputs_is_system.up.sql")
+	if !strings.Contains(up, "ADD COLUMN is_system boolean") {
+		t.Fatal("migration must add logging_outputs.is_system")
+	}
+	if !strings.Contains(up, "CHECK (NOT is_system OR cluster_id IS NOT NULL)") {
+		t.Fatal("is_system rows must require cluster_id")
+	}
+	if !strings.Contains(up, "CREATE UNIQUE INDEX logging_outputs_one_system_per_cluster") {
+		t.Fatal("missing unique index name logging_outputs_one_system_per_cluster")
+	}
+	if !strings.Contains(up, "ON public.logging_outputs (cluster_id)") {
+		t.Fatal("unique index must be on cluster_id")
+	}
+	if !strings.Contains(up, "WHERE is_system AND cluster_id IS NOT NULL") {
+		t.Fatal("unique index must be partial WHERE is_system AND cluster_id IS NOT NULL")
 	}
 }
 

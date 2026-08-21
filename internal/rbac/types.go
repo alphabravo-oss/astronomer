@@ -160,10 +160,44 @@ var canonicalVerbs = []Verb{
 	VerbWildcard,
 }
 
-// Rule represents a permission rule from a role's rules JSONB
+// Rule represents a permission rule from a role's rules JSONB.
+//
+// Coarse Astronomer grants are {resource, verbs} using the canonical
+// vocabulary (workloads, pods, custom_resources, …). CRD grants — the
+// Rancher-shaped fold of native per-CRD RBAC — set APIGroups and name a
+// Kubernetes resource (e.g. api_groups:["cert-manager.io"] resource:"certificates").
+// The engine ignores CRD grants; the k8s-proxy native allow hook honors them
+// after a coarse deny, scoped to the binding's cluster/namespace.
 type Rule struct {
-	Resource string   `json:"resource"`
-	Verbs    []string `json:"verbs"`
+	Resource  string   `json:"resource"`
+	Resources []string `json:"resources,omitempty"`
+	Verbs     []string `json:"verbs"`
+	APIGroups []string `json:"api_groups,omitempty"`
+	// APIGroupsCamel accepts the frontend's camelCase wire spelling.
+	APIGroupsCamel []string `json:"apiGroups,omitempty"`
+}
+
+// CRDAPIGroups returns the Kubernetes API groups on a CRD grant.
+func (r Rule) CRDAPIGroups() []string {
+	if len(r.APIGroups) > 0 {
+		return r.APIGroups
+	}
+	return r.APIGroupsCamel
+}
+
+// IsCRDGrant reports whether this rule is a Kubernetes CRD/resource grant
+// rather than a coarse Astronomer permission.
+func (r Rule) IsCRDGrant() bool {
+	return len(r.CRDAPIGroups()) > 0
+}
+
+// ResourceNames returns every resource this rule names. Coarse rules use
+// Resource; the frontend's PolicyRule shape uses Resources.
+func (r Rule) ResourceNames() []string {
+	if r.Resource != "" {
+		return []string{r.Resource}
+	}
+	return r.Resources
 }
 
 // CanonicalResources returns the stable RBAC resource vocabulary. The wildcard

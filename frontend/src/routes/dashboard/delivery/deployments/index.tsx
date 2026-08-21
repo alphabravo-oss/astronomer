@@ -6,9 +6,9 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
-  DeliveryShell,
+  RedirectDeliveryList,
   inputClass,
-  useDeliveryProjectScope,
+  useDeliveryWorkspace,
 } from "@/components/delivery/shared";
 import {
   listClusterDeployments,
@@ -36,9 +36,9 @@ const phases: DeploymentPhase[] = [
   "unknown",
 ];
 
-function DeploymentsPage() {
-  const { projectId, projects, projectQuery, setProjectId } =
-    useDeliveryProjectScope();
+export function DeploymentsPage() {
+  const { projectId, projects, projectQuery, clusterId: workspaceClusterId, listHref, entityHref } =
+    useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const allowed = can(user, "delivery_deployments", "list", {
     type: "project",
@@ -50,7 +50,7 @@ function DeploymentsPage() {
   const phase = phases.includes(phaseValue as DeploymentPhase)
     ? (phaseValue as DeploymentPhase)
     : undefined;
-  const clusterId = search.get("cluster") ?? undefined;
+  const clusterId = workspaceClusterId ?? search.get("cluster") ?? undefined;
   const pageIndex = Math.max(0, Number(search.get("page") ?? 0) || 0);
   const pageSize = 50;
   const params = {
@@ -69,7 +69,8 @@ function DeploymentsPage() {
       if (value) next.set(key, String(value));
       else next.delete(key);
     }
-    router.replace(`/dashboard/delivery/deployments?${next.toString()}`);
+    if (workspaceClusterId) next.delete("cluster");
+    router.replace(`${listHref("deployments")}?${next.toString()}`);
   };
   const query = useQuery({
     queryKey: queryKeys.delivery.deployments(projectId, params),
@@ -147,52 +148,51 @@ function DeploymentsPage() {
     },
   ];
   return (
-    <DeliveryShell
+    <DeliveryProjectGate
       projectId={projectId}
-      projects={projects}
-      setProjectId={setProjectId}
+      loading={projectQuery.isLoading}
+      error={projectQuery.isError}
+      projectsCount={projects.length}
+      permission="delivery_deployments:list"
+      allowed={allowed}
+      onRetry={() => void projectQuery.refetch()}
     >
-      <DeliveryProjectGate
-        projectId={projectId}
-        loading={projectQuery.isLoading}
-        error={projectQuery.isError}
-        projectsCount={projects.length}
-        permission="delivery_deployments:list"
-        allowed={allowed}
-        onRetry={() => void projectQuery.refetch()}
-      >
-        <PageShell>
-          <PageHeader
-            eyebrow="Continuous Delivery"
-            title="Cluster deployments"
-            description="Current desired and normalized observed state for every target and cluster pair."
-          />
-          <DataTable
-            data={query.data?.data ?? []}
-            columns={columns}
-            keyExtractor={(row) => row.id}
-            loading={query.isLoading}
-            isError={query.isError}
-            onRetry={() => void query.refetch()}
-            searchable={false}
-            emptyMessage="No cluster deployments match this filter"
-            toolbar={
-              <div className="flex flex-wrap gap-2">
-                <select
-                  aria-label="Deployment phase"
-                  value={phase ?? ""}
-                  onChange={(e) =>
-                    updateSearch({ phase: e.target.value, page: 0 })
-                  }
-                  className={inputClass}
-                >
-                  <option value="">All phases</option>
-                  {phases.map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
+      <PageShell>
+        <PageHeader
+          title="Deployments"
+          description={
+            workspaceClusterId
+              ? "Desired and observed state for delivery targets on this cluster."
+              : "Current desired and normalized observed state for every target and cluster pair."
+          }
+        />
+        <DataTable
+          data={query.data?.data ?? []}
+          columns={columns}
+          keyExtractor={(row) => row.id}
+          loading={query.isLoading}
+          isError={query.isError}
+          onRetry={() => void query.refetch()}
+          searchable={false}
+          emptyMessage="No cluster deployments match this filter"
+          toolbar={
+            <div className="flex flex-wrap gap-2">
+              <select
+                aria-label="Deployment phase"
+                value={phase ?? ""}
+                onChange={(e) =>
+                  updateSearch({ phase: e.target.value, page: 0 })
+                }
+                className={inputClass}
+              >
+                <option value="">All phases</option>
+                {phases.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+              {workspaceClusterId ? null : (
                 <input
                   aria-label="Cluster ID filter"
                   value={clusterId ?? ""}
@@ -202,25 +202,23 @@ function DeploymentsPage() {
                   className={inputClass}
                   placeholder="Cluster ID"
                 />
-              </div>
-            }
-            onRowClick={(row) =>
-              router.push(
-                `/dashboard/delivery/deployments/${row.id}?project=${encodeURIComponent(projectId)}`,
-              )
-            }
-            serverSide={{
-              rowCount: query.data?.count ?? 0,
-              pagination: { pageIndex, pageSize },
-              onPaginationChange: (next) =>
-                updateSearch({ page: next.pageIndex }),
-            }}
-          />
-        </PageShell>
-      </DeliveryProjectGate>
-    </DeliveryShell>
+              )}
+            </div>
+          }
+          onRowClick={(row) => router.push(entityHref("deployments", row.id))}
+          serverSide={{
+            rowCount: query.data?.count ?? 0,
+            pagination: { pageIndex, pageSize },
+            onPaginationChange: (next) =>
+              updateSearch({ page: next.pageIndex }),
+          }}
+        />
+      </PageShell>
+    </DeliveryProjectGate>
   );
 }
 export const Route = createFileRoute("/dashboard/delivery/deployments/")({
-  component: DeploymentsPage,
+  component: function DeliveryDeploymentsRedirect() {
+    return <RedirectDeliveryList tab="deployments" />;
+  },
 });

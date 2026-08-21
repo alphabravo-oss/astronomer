@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { useRouter } from '@/lib/navigation';
 import { useClusters, useTools, useClusterToolsStatus } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
@@ -10,13 +11,13 @@ import { Loader2, Server } from 'lucide-react';
 
 const toolStatusDotColor: Record<ToolStatus, string> = {
   installed: 'bg-status-success',
-  installing: 'bg-amber-500',
-  upgrading: 'bg-amber-500',
-  uninstalling: 'bg-amber-500',
+  installing: 'bg-status-warning',
+  upgrading: 'bg-status-warning',
+  uninstalling: 'bg-status-warning',
   failed: 'bg-status-error',
   not_installed: 'bg-muted-foreground/30',
-  installed_unmanaged: 'bg-blue-500',
-  unknown: 'bg-amber-500/50',
+  installed_unmanaged: 'bg-status-info',
+  unknown: 'bg-status-warning/50',
 };
 
 const toolStatusLabel: Record<ToolStatus, string> = {
@@ -92,14 +93,11 @@ function ManagedToolsPage() {
   const isLoading = clustersLoading || toolsLoading;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Cluster Tools</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage operational tools across your clusters
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Cluster Tools"
+        description="Manage operational tools across your clusters"
+      />
 
       {/* Table */}
       {isLoading ? (
@@ -143,7 +141,7 @@ function ManagedToolsPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

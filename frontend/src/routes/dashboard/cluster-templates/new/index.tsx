@@ -13,6 +13,7 @@ import { Link } from '@/lib/link';
 import { useRouter } from '@/lib/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { PermissionState } from '@/components/ui/empty-state';
+import { PageHeader, PageShell } from '@/components/ui/page';
 import { extractApiErrorMessage } from '@/lib/api/errors';
 import { useCurrentUser } from '@/lib/hooks';
 import {
@@ -29,7 +30,7 @@ function NewClusterTemplatePage() {
   const [serverError, setServerError] = useState<string | null>(null);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <PageShell>
       <Link
         href="/dashboard/cluster-templates"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -38,18 +39,11 @@ function NewClusterTemplatePage() {
         Back to bundles
       </Link>
 
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Onboarding Bundles · New
-        </p>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">
-          Create an onboarding bundle
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Capture the environment, labels, tools, project defaults, and registration policy to apply
-          to a cluster once it&apos;s registered.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Onboarding Bundles · New"
+        title="Create an onboarding bundle"
+        description="Capture the environment, labels, tools, project defaults, and registration policy to apply to a cluster once it's registered."
+      />
 
       {!canWrite && (
         <PermissionState
@@ -79,7 +73,7 @@ function NewClusterTemplatePage() {
           }
         }}
       />
-    </div>
+    </PageShell>
   );
 }
 

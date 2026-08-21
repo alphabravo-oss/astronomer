@@ -51,7 +51,9 @@ export const charlieContextRegistry: CharlieRouteContextAdapter[] = [
     id: "monitoring",
     match: (p) =>
       p[1] === "monitoring" ||
-      (p[1] === "clusters" && !!p[2] && p[3] === "monitoring-stack"),
+      (p[1] === "clusters" &&
+        !!p[2] &&
+        (p[3] === "monitoring-stack" || p[3] === "metrics")),
     contexts: (p) =>
       p[1] === "clusters" && p[2]
         ? [
@@ -64,20 +66,32 @@ export const charlieContextRegistry: CharlieRouteContextAdapter[] = [
           ]
         : [],
   },
-  { id: "logging", match: (p) => p[1] === "logging", contexts: () => [] },
+  {
+    id: "logging",
+    match: (p) =>
+      p[1] === "logging" || (p[1] === "clusters" && !!p[2] && p[3] === "logging"),
+    contexts: () => [],
+  },
   { id: "audit", match: (p) => p[1] === "audit", contexts: () => [] },
   {
     id: "alerts",
-    match: (p) => p[1] === "alerting",
+    match: (p) =>
+      p[1] === "alerting" || (p[1] === "clusters" && !!p[2] && p[3] === "alerting"),
     contexts: () => [
       item("alert", "active", "Alerts", "Current authorized alert scope"),
     ],
   },
   {
     id: "backups",
-    match: (p) => p[1] === "backups",
+    match: (p) =>
+      p[1] === "backups" || (p[1] === "settings" && p[2] === "backup"),
     contexts: (p) => [
-      item("backup", p[2] || "overview", "Backups", "Authorized backup scope"),
+      item(
+        "backup",
+        p[1] === "settings" ? "management" : p[2] || "overview",
+        "Astronomer backup",
+        "Management-plane dump status; workload snapshots stay on the cluster",
+      ),
     ],
   },
   {

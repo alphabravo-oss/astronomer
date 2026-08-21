@@ -438,9 +438,17 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 	if req.ChartVersion == "" {
 		req.ChartVersion = "61.3.2"
 	}
+	// CHANGELOG: omitted enableGrafana used to always default true (chart
+	// default). New (not_configured) cluster stacks now default false when
+	// fleet Grafana is healthy so we do not install a second Grafana next to
+	// the lobby. Explicit true/false is unchanged. Already-configured stacks
+	// keep the historical true default so an upgrade that omits the key does
+	// not strip cluster Grafana (the UI that survives an Astronomer outage).
 	enableGrafana := true
 	if req.EnableGrafana != nil {
 		enableGrafana = *req.EnableGrafana
+	} else if h.omitGrafanaOnNewStack(ctx, clusterID) {
+		enableGrafana = false
 	}
 	enableAlertmanager := true
 	if req.EnableAlertmanager != nil {
@@ -605,6 +613,38 @@ func (h *MonitoringHandler) persistStackConfig(ctx context.Context, clusterID st
 		CreatedByID:             pgtype.UUID{},
 	})
 	return err
+}
+
+// omitGrafanaOnNewStack is the PR 8 changelog'd default: omitted
+// enableGrafana becomes false when sharedGrafana is healthy and this cluster
+// stack has never been configured.
+func (h *MonitoringHandler) omitGrafanaOnNewStack(ctx context.Context, clusterID string) bool {
+	if !h.clusterStackNotConfigured(ctx, clusterID) {
+		return false
+	}
+	return h.sharedGrafanaHealthy(ctx)
+}
+
+func (h *MonitoringHandler) clusterStackNotConfigured(ctx context.Context, clusterID string) bool {
+	cfg, ok, err := h.loadStackConfig(ctx, clusterID)
+	if err != nil {
+		return false
+	}
+	if !ok {
+		return true
+	}
+	return cfg.Status == "not_configured"
+}
+
+func (h *MonitoringHandler) sharedGrafanaHealthy(ctx context.Context) bool {
+	if h.queries == nil {
+		return false
+	}
+	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
+	if err != nil {
+		return false
+	}
+	return stringFromMap(sharedStackMetadata(backend, "sharedGrafana"), "status") == "healthy"
 }
 
 func (h *MonitoringHandler) loadStackConfig(ctx context.Context, clusterID string) (sqlc.ClusterMonitoringConfig, bool, error) {

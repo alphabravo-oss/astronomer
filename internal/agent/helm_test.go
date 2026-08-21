@@ -3,6 +3,8 @@ package agent
 import (
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func TestHelmReadyTimeout(t *testing.T) {
@@ -21,5 +23,18 @@ func TestHelmReadyTimeout(t *testing.T) {
 	}
 	if got := helmReadyTimeout(-5); got != defaultHelmReadyTimeout {
 		t.Fatalf("helmReadyTimeout(-5) = %v, want %v", got, defaultHelmReadyTimeout)
+	}
+}
+
+func TestHelmUpgradeUsesStoredChartWhenCoordinatesOmitted(t *testing.T) {
+	t.Parallel()
+	if !helmUpgradeUsesStoredChart(&protocol.HelmRequestPayload{ReleaseName: "astronomer", ReuseValues: true}) {
+		t.Fatal("overlay upgrade with no chart coordinates should reuse the last release chart")
+	}
+	if helmUpgradeUsesStoredChart(&protocol.HelmRequestPayload{ChartName: "astronomer"}) {
+		t.Fatal("explicit chart name should locate a chart")
+	}
+	if helmUpgradeUsesStoredChart(nil) {
+		t.Fatal("nil request")
 	}
 }
