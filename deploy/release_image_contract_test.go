@@ -182,6 +182,8 @@ func TestReleaseQualifiesExactArtifactsBeforePromotion(t *testing.T) {
 		"needs: [preflight, qualify]",
 		"publish immutable GitHub Release",
 		"Refuse to overwrite an existing exact tag",
+		"existing tag ${image} is unsigned or has the wrong identity; rebuilding",
+		"--certificate-oidc-issuer https://token.actions.githubusercontent.com",
 		"RELEASE_IMAGES",
 		"Load immutable image references",
 		`--set-string image.server.digest="$SERVER_DIGEST"`,

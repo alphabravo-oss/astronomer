@@ -131,10 +131,16 @@ jobs:
         id: metadata
         run: echo "build_date=$(git show -s --format=%cI '${{ github.sha }}')" >> "$GITHUB_OUTPUT"
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with:
+          cosign-release: "v2.5.3"
+
       - name: Refuse to overwrite an existing exact tag
         id: existing
         env:
           IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+          COSIGN_EXPERIMENTAL: "1"
         run: |
           image="${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}:${IMAGE_TAG}"
           if ! docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
@@ -147,6 +153,17 @@ jobs:
             exit 1
             ;;
           esac
+          identity="https://github.com/${{ github.repository }}/.github/workflows/release.yaml@refs/tags/${IMAGE_TAG}"
+          # Reuse only a tag that is already signed for this release identity.
+          # Unsigned leftovers from a failed scan-after-push must be rebuilt.
+          if ! cosign verify \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "${image}@${digest}" >/dev/null 2>&1; then
+            echo "existing tag ${image} is unsigned or has the wrong identity; rebuilding"
+            echo "exists=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
           echo "reusing already-published immutable image ${image}@${digest}"
           echo "exists=true" >>"$GITHUB_OUTPUT"
           echo "digest=${digest}" >>"$GITHUB_OUTPUT"
@@ -215,11 +232,6 @@ jobs:
           ignore-unfixed: true
           skip-files: ${{ matrix.component.skip_files }}
           exit-code: "1"
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
-        with:
-          cosign-release: "v2.5.3"
 
       - name: Sign image by digest
         env:
