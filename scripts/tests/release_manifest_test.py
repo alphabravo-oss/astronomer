@@ -43,7 +43,7 @@ class ReleaseManifestTest(unittest.TestCase):
         self.inventory = self.root / "images.txt"
         self.inventory.write_text(
             "\n".join(
-                f"registry.example.test/astronomer/{repository}:v1.0.0"
+                f"registry.example.test/astronomer/{repository}:v1.1.0"
                 for repository in sorted(GENERATOR.FIRST_PARTY.values())
             )
             + "\nthird.example.test/database/postgres:16\n",
@@ -55,8 +55,8 @@ class ReleaseManifestTest(unittest.TestCase):
             encoding="utf-8",
         )
         self.chart = self.root / "Chart.yaml"
-        self.chart.write_text("version: 1.0.0\nappVersion: \"1.0.0\"\n", encoding="utf-8")
-        self.chart_package = self.root / "astronomer-1.0.0.tgz"
+        self.chart.write_text("version: 1.1.0\nappVersion: \"1.1.0\"\n", encoding="utf-8")
+        self.chart_package = self.root / "astronomer-1.1.0.tgz"
         self.chart_package.write_bytes(b"chart")
         self.flux_archive = self.root / "flux.tar.gz"
         self.flux_archive.write_bytes(b"flux")
@@ -68,7 +68,7 @@ class ReleaseManifestTest(unittest.TestCase):
 
     def args(self) -> argparse.Namespace:
         return argparse.Namespace(
-            version="v1.0.0",
+            version="v1.1.0",
             source_commit="1" * 40,
             source_date_epoch=1_700_000_000,
             chart_reference=f"registry.example.test/charts/astronomer@{digest('b')}",

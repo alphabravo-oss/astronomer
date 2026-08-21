@@ -41,7 +41,7 @@ scripts. It does **not** include container image blobs (GitHub's 2 GiB asset
 limit). Default save is `linux/amd64` only.
 
 ```bash
-export ASTRONOMER_RELEASE=v1.0.0
+export ASTRONOMER_RELEASE=v1.1.0
 gh release download "$ASTRONOMER_RELEASE" --repo alphabravo-oss/astronomer \
   --pattern "astronomer-airgap-${ASTRONOMER_RELEASE}.tar.gz" \
   --pattern SHA256SUMS
@@ -84,7 +84,7 @@ Registry-to-registry copy without a USB stick is the rest of this document
 Set an exact release; there is no `latest` release channel.
 
 ```bash
-export ASTRONOMER_RELEASE=v1.0.0
+export ASTRONOMER_RELEASE=v1.1.0
 mkdir "astronomer-${ASTRONOMER_RELEASE}"
 cd "astronomer-${ASTRONOMER_RELEASE}"
 gh release download "$ASTRONOMER_RELEASE" --repo alphabravo-oss/astronomer
@@ -239,7 +239,7 @@ Render with the local packaged chart and the exact release contracts. The
 example assumes application and bootstrap secrets already exist:
 
 ```bash
-helm template astronomer ./astronomer-1.0.0.tgz \
+helm template astronomer ./astronomer-1.1.0.tgz \
   --namespace astronomer \
   -f values-production.yaml \
   -f airgap-values.json \
@@ -266,7 +266,7 @@ test ! -s rendered-images || ! grep -Ev '@sha256:[a-f0-9]{64}$' rendered-images
 `comm -23` and `grep -Ev` must print nothing. Then install atomically:
 
 ```bash
-helm upgrade --install astronomer ./astronomer-1.0.0.tgz \
+helm upgrade --install astronomer ./astronomer-1.1.0.tgz \
   --namespace astronomer --create-namespace \
   -f values-production.yaml \
   -f airgap-values.json \
