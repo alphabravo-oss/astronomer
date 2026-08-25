@@ -54,7 +54,7 @@ jobs:
 
       - name: Upload commit-bound backend evidence
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: enterprise-backend-evidence-${{ github.sha }}
           path: ${{ runner.temp }}/astronomer-verify-enterprise-backend
@@ -96,7 +96,7 @@ jobs:
           bash -Eeuo pipefail -c "$QUALIFICATION_COMMAND" 2>&1 | tee "stateful-evidence/${{ matrix.name }}.log"
       - name: Retain stateful qualification evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: stateful-${{ matrix.name }}-${{ github.run_id }}
           path: stateful-evidence/
@@ -129,7 +129,7 @@ jobs:
 
       - name: Upload PostgreSQL failover evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: postgres-failover-evidence-${{ github.run_id }}
           path: ${{ runner.temp }}/astronomer-postgres-failover/
@@ -166,7 +166,7 @@ jobs:
 
       - name: Upload commit-bound frontend evidence
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: enterprise-frontend-evidence-${{ github.sha }}
           path: ${{ runner.temp }}/astronomer-verify-enterprise-frontend
@@ -216,7 +216,7 @@ jobs:
 
       - name: Upload screenshot gallery
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: smoke-gallery
           path: frontend/gallery/
@@ -224,7 +224,7 @@ jobs:
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-report
           path: |
@@ -274,7 +274,7 @@ jobs:
 
       - name: Upload live browser evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: live-browser-evidence-${{ github.run_id }}
           path: ${{ runner.temp }}/astronomer-live-browser/
@@ -307,7 +307,7 @@ jobs:
 
       - name: Upload commit-bound Helm evidence
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: enterprise-helm-evidence-${{ github.sha }}
           path: ${{ runner.temp }}/astronomer-verify-enterprise-helm
@@ -371,7 +371,7 @@ jobs:
           python3 -c "import json; json.load(open('sbom-${{ matrix.component.name }}.spdx.json'))"
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom-${{ matrix.component.name }}-${{ github.sha }}
           path: sbom-${{ matrix.component.name }}.spdx.json
