@@ -51,27 +51,13 @@ type MeshDetectQuerier interface {
 	UpsertClusterServiceMesh(ctx context.Context, arg sqlc.UpsertClusterServiceMeshParams) (sqlc.ClusterServiceMesh, error)
 }
 
-// MeshDetectDeps is the wiring stored at startup. Tests overwrite via
-// ConfigureMeshDetect / ResetMeshDetect.
+// MeshDetectDeps is the wiring stored at startup.
 type MeshDetectDeps struct {
 	Queries   MeshDetectQuerier
 	Requester K8sRequester
 	// MirroredQuerier is the optional sprint-069 CRD mirror surface.
 	// nil falls back to direct tunnel probes inside the detector.
 	MirroredQuerier mesh.Querier
-}
-
-var meshDetectDeps MeshDetectDeps
-
-// ConfigureMeshDetect stores runtime deps; called from server startup
-// once the DB + tunnel hub are wired.
-func ConfigureMeshDetect(deps MeshDetectDeps) {
-	meshDetectDeps = deps
-}
-
-// ResetMeshDetect clears the deps. Test-only.
-func ResetMeshDetect() {
-	meshDetectDeps = MeshDetectDeps{}
 }
 
 // astronomerClusterMesh is the per-(cluster,mesh) gauge. We emit one
@@ -106,7 +92,7 @@ func init() {
 // HandleMeshDetect is the asynq mux handler. It runs under the
 // leader-elected periodic wrapper so only one replica drives the
 // 5m fleet sweep.
-func HandleMeshDetect(ctx context.Context, _ *asynq.Task) error {
+func (runtime MeshRuntime) HandleMeshDetect(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, MeshDetectType, func() error {
 		// F6: bound the whole sweep so an interval overrun can't run for many
 		// minutes while the scheduler keeps enqueuing on top of it. Shorter than
@@ -114,15 +100,13 @@ func HandleMeshDetect(ctx context.Context, _ *asynq.Task) error {
 		ctx, cancel := context.WithTimeout(ctx, meshDetectSweepDeadline)
 		defer cancel()
 
-		if meshDetectDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "mesh detect runtime not configured, skipping")
-			return nil
+		if runtime.Deps.Queries == nil {
+			return fmt.Errorf("service mesh detection runtime is not configured")
 		}
-		if meshDetectDeps.Requester == nil {
-			runtimeLogger().InfoContext(ctx, "mesh detect requester not configured, skipping")
-			return nil
+		if runtime.Deps.Requester == nil {
+			return fmt.Errorf("service mesh detection requester is not configured")
 		}
-		clusters, err := listAllClustersPaged(ctx, meshDetectDeps.Queries.ListClusters)
+		clusters, err := listAllClustersPaged(ctx, runtime.Deps.Queries.ListClusters)
 		if err != nil {
 			return fmt.Errorf("list clusters: %w", err)
 		}
@@ -143,8 +127,8 @@ func HandleMeshDetect(ctx context.Context, _ *asynq.Task) error {
 		// and a per-cluster timeout so a slow/disconnected agent is
 		// skipped-with-log instead of stalling the whole 5m tick.
 		fanOutClusters(ctx, active, meshDetectPerClusterTimeout, func(ctx context.Context, c sqlc.Cluster) {
-			if err := DetectAndUpsert(ctx, c.ID); err != nil {
-				runtimeLogger().WarnContext(ctx, "mesh detect failed",
+			if err := runtime.DetectAndUpsert(ctx, c.ID); err != nil {
+				runtimeLogger(ctx).WarnContext(ctx, "mesh detect failed",
 					"cluster_id", c.ID.String(),
 					"error", err)
 			}
@@ -161,19 +145,19 @@ func HandleMeshDetect(ctx context.Context, _ *asynq.Task) error {
 //
 // Audit emission lives in this function so both call sites get the
 // same row shape.
-func DetectAndUpsert(ctx context.Context, clusterID uuid.UUID) error {
-	if meshDetectDeps.Queries == nil || meshDetectDeps.Requester == nil {
+func (runtime MeshRuntime) DetectAndUpsert(ctx context.Context, clusterID uuid.UUID) error {
+	if runtime.Deps.Queries == nil || runtime.Deps.Requester == nil {
 		return fmt.Errorf("mesh detect not configured")
 	}
 	// Read the prior row so we can detect a mesh flip and emit the
 	// "changed" audit/metric sibling. pgx.ErrNoRows is normal on the
 	// first detection for a cluster.
-	prior, priorErr := meshDetectDeps.Queries.GetClusterServiceMesh(ctx, clusterID)
+	prior, priorErr := runtime.Deps.Queries.GetClusterServiceMesh(ctx, clusterID)
 	priorMesh := ""
 	if priorErr == nil {
 		priorMesh = prior.DetectedMesh
 	}
-	det, err := mesh.Detect(ctx, meshDetectDeps.MirroredQuerier, meshDetectDeps.Requester, clusterID)
+	det, err := mesh.Detect(ctx, runtime.Deps.MirroredQuerier, runtime.Deps.Requester, clusterID)
 	if err != nil {
 		meshDetectAttempts.WithLabelValues(observability.MetricValues("failure")...).Inc()
 		// Even on detector error we want to record last_error so the
@@ -182,7 +166,7 @@ func DetectAndUpsert(ctx context.Context, clusterID uuid.UUID) error {
 		det.Mesh = mesh.MeshUnknown
 		det.Errors = append(det.Errors, err.Error())
 	}
-	row, err := meshDetectDeps.Queries.UpsertClusterServiceMesh(ctx, sqlc.UpsertClusterServiceMeshParams{
+	row, err := runtime.Deps.Queries.UpsertClusterServiceMesh(ctx, sqlc.UpsertClusterServiceMeshParams{
 		ClusterID:               clusterID,
 		DetectedMesh:            det.Mesh,
 		DetectedVersion:         det.Version,
@@ -234,4 +218,3 @@ const (
 	meshDetectSweepDeadline     = 4 * time.Minute
 	meshDetectPerClusterTimeout = 20 * time.Second
 )
-

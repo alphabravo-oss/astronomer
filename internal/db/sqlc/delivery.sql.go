@@ -244,8 +244,8 @@ const applyDeliveryRolloutClusterTransitionCAS = `-- name: ApplyDeliveryRolloutC
 UPDATE delivery_rollout_clusters rc
 SET state = $1::text,
     fence = fence + 1,
-    ready_at = CASE WHEN $1::text IN ('ready','ready_previous') THEN COALESCE(ready_at, now()) ELSE ready_at END,
-    completed_at = CASE WHEN $1::text IN ('ready','failed','skipped','timed_out','ready_previous') THEN now() ELSE completed_at END,
+    ready_at = CASE WHEN $1::text IN ('ready','ready_previous') THEN COALESCE(rc.ready_at, now()) ELSE rc.ready_at END,
+    completed_at = CASE WHEN $1::text IN ('ready','failed','skipped','timed_out','ready_previous') THEN now() ELSE rc.completed_at END,
     last_error_code = $2
 FROM delivery_rollouts r
 WHERE rc.id = $3 AND rc.rollout_id = r.id
@@ -2076,31 +2076,6 @@ func (q *Queries) GetCurrentDeliverySystemRollout(ctx context.Context) (Delivery
 	return i, err
 }
 
-const getDeliveryAssignmentReceipt = `-- name: GetDeliveryAssignmentReceipt :one
-SELECT cluster_id, desired_snapshot_generation, desired_content_digest, desired_snapshot_etag, acknowledged_snapshot_generation, acknowledged_snapshot_etag, credential_content_digest, credential_epoch, agent_session_id, agent_sequence, last_protocol_error_code, acknowledged_at, updated_at FROM delivery_assignment_receipts WHERE cluster_id = $1
-`
-
-func (q *Queries) GetDeliveryAssignmentReceipt(ctx context.Context, clusterID uuid.UUID) (DeliveryAssignmentReceipt, error) {
-	row := q.db.QueryRow(ctx, getDeliveryAssignmentReceipt, clusterID)
-	var i DeliveryAssignmentReceipt
-	err := row.Scan(
-		&i.ClusterID,
-		&i.DesiredSnapshotGeneration,
-		&i.DesiredContentDigest,
-		&i.DesiredSnapshotEtag,
-		&i.AcknowledgedSnapshotGeneration,
-		&i.AcknowledgedSnapshotEtag,
-		&i.CredentialContentDigest,
-		&i.CredentialEpoch,
-		&i.AgentSessionID,
-		&i.AgentSequence,
-		&i.LastProtocolErrorCode,
-		&i.AcknowledgedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getDeliveryControllerInventory = `-- name: GetDeliveryControllerInventory :one
 SELECT i.cluster_id, i.agent_version, i.flux_version, i.components, i.api_versions, i.distribution_digest, i.kubernetes_version, i.ready, i.compatibility_status, i.error_code, i.observed_at, i.updated_at
 FROM delivery_controller_inventory i
@@ -2500,49 +2475,6 @@ func (q *Queries) GetDeliverySourceResolutionWork(ctx context.Context, arg GetDe
 	return i, err
 }
 
-const getDeliverySourceSecret = `-- name: GetDeliverySourceSecret :one
-SELECT id, project_id, source_type, url, auth_mode, credential_encrypted,
-       credential_key_version, credential_epoch, ca_bundle_encrypted,
-       proxy_ref, trust_policy, status
-FROM delivery_sources
-WHERE id = $1
-`
-
-type GetDeliverySourceSecretRow struct {
-	ID                   uuid.UUID       `json:"id"`
-	ProjectID            uuid.UUID       `json:"project_id"`
-	SourceType           string          `json:"source_type"`
-	Url                  string          `json:"url"`
-	AuthMode             string          `json:"auth_mode"`
-	CredentialEncrypted  string          `json:"credential_encrypted"`
-	CredentialKeyVersion int32           `json:"credential_key_version"`
-	CredentialEpoch      int64           `json:"credential_epoch"`
-	CaBundleEncrypted    string          `json:"ca_bundle_encrypted"`
-	ProxyRef             string          `json:"proxy_ref"`
-	TrustPolicy          json.RawMessage `json:"trust_policy"`
-	Status               string          `json:"status"`
-}
-
-func (q *Queries) GetDeliverySourceSecret(ctx context.Context, id uuid.UUID) (GetDeliverySourceSecretRow, error) {
-	row := q.db.QueryRow(ctx, getDeliverySourceSecret, id)
-	var i GetDeliverySourceSecretRow
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.SourceType,
-		&i.Url,
-		&i.AuthMode,
-		&i.CredentialEncrypted,
-		&i.CredentialKeyVersion,
-		&i.CredentialEpoch,
-		&i.CaBundleEncrypted,
-		&i.ProxyRef,
-		&i.TrustPolicy,
-		&i.Status,
-	)
-	return i, err
-}
-
 const getDeliveryTarget = `-- name: GetDeliveryTarget :one
 SELECT id, project_id, name, description, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_by, updated_by, created_at, updated_at FROM delivery_targets
 WHERE id = $1 AND project_id = $2
@@ -2555,46 +2487,6 @@ type GetDeliveryTargetParams struct {
 
 func (q *Queries) GetDeliveryTarget(ctx context.Context, arg GetDeliveryTargetParams) (DeliveryTarget, error) {
 	row := q.db.QueryRow(ctx, getDeliveryTarget, arg.ID, arg.ProjectID)
-	var i DeliveryTarget
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Description,
-		&i.BundleVersionID,
-		&i.Placement,
-		&i.RolloutPolicy,
-		&i.ReconciliationPolicy,
-		&i.MaintenanceWindowPolicy,
-		&i.Suspended,
-		&i.Generation,
-		&i.ResourceVersion,
-		&i.DeletionState,
-		&i.CreatedBy,
-		&i.UpdatedBy,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getDeliveryTargetByBundleVersion = `-- name: GetDeliveryTargetByBundleVersion :one
-SELECT t.id, t.project_id, t.name, t.description, t.bundle_version_id, t.placement, t.rollout_policy, t.reconciliation_policy, t.maintenance_window_policy, t.suspended, t.generation, t.resource_version, t.deletion_state, t.created_by, t.updated_by, t.created_at, t.updated_at
-FROM delivery_targets t
-JOIN component_bundle_versions bv ON bv.id = t.bundle_version_id
-JOIN component_bundles b ON b.id = bv.bundle_id
-WHERE t.id = $1 AND t.project_id = $2
-  AND bv.id = $3 AND b.project_id = t.project_id
-`
-
-type GetDeliveryTargetByBundleVersionParams struct {
-	ID              uuid.UUID `json:"id"`
-	ProjectID       uuid.UUID `json:"project_id"`
-	BundleVersionID uuid.UUID `json:"bundle_version_id"`
-}
-
-func (q *Queries) GetDeliveryTargetByBundleVersion(ctx context.Context, arg GetDeliveryTargetByBundleVersionParams) (DeliveryTarget, error) {
-	row := q.db.QueryRow(ctx, getDeliveryTargetByBundleVersion, arg.ID, arg.ProjectID, arg.BundleVersionID)
 	var i DeliveryTarget
 	err := row.Scan(
 		&i.ID,
@@ -3007,7 +2899,7 @@ func (q *Queries) ListComponentBundles(ctx context.Context, arg ListComponentBun
 	return items, nil
 }
 
-const listDeliveryFleetClusters = `-- name: ListDeliveryFleetClusters :many
+const listDeliveryEstateClusters = `-- name: ListDeliveryEstateClusters :many
 SELECT
     c.id,
     c.name,
@@ -3064,7 +2956,7 @@ WHERE c.decommissioned_at IS NULL
 ORDER BY c.is_local ASC, c.display_name ASC, c.name ASC, c.id ASC
 `
 
-type ListDeliveryFleetClustersRow struct {
+type ListDeliveryEstateClustersRow struct {
 	ID                  uuid.UUID          `json:"id"`
 	Name                string             `json:"name"`
 	DisplayName         string             `json:"display_name"`
@@ -3094,19 +2986,19 @@ type ListDeliveryFleetClustersRow struct {
 	LastObservedAt      interface{}        `json:"last_observed_at"`
 }
 
-// Fleet scoreboard: one row per live cluster. Local host-only clusters stay
+// Estate scoreboard: one row per live cluster. Local host-only clusters stay
 // in the table so operators can see them, but the handler excludes is_local
 // from Flux-managed tiles. Removed assignments are omitted; Drifted is the
 // normalized condition the observer persists.
-func (q *Queries) ListDeliveryFleetClusters(ctx context.Context) ([]ListDeliveryFleetClustersRow, error) {
-	rows, err := q.db.Query(ctx, listDeliveryFleetClusters)
+func (q *Queries) ListDeliveryEstateClusters(ctx context.Context) ([]ListDeliveryEstateClustersRow, error) {
+	rows, err := q.db.Query(ctx, listDeliveryEstateClusters)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListDeliveryFleetClustersRow{}
+	items := []ListDeliveryEstateClustersRow{}
 	for rows.Next() {
-		var i ListDeliveryFleetClustersRow
+		var i ListDeliveryEstateClustersRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -3693,53 +3585,6 @@ func (q *Queries) ListDeliveryTargets(ctx context.Context, arg ListDeliveryTarge
 	return items, nil
 }
 
-const markDeliveryTargetDeleting = `-- name: MarkDeliveryTargetDeleting :one
-UPDATE delivery_targets
-SET deletion_state = 'deleting', generation = generation + 1,
-    resource_version = resource_version + 1, updated_by = $1
-WHERE id = $2 AND project_id = $3
-  AND resource_version = $4
-  AND deletion_state = 'active'
-RETURNING id, project_id, name, description, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_by, updated_by, created_at, updated_at
-`
-
-type MarkDeliveryTargetDeletingParams struct {
-	UpdatedBy               pgtype.UUID `json:"updated_by"`
-	ID                      uuid.UUID   `json:"id"`
-	ProjectID               uuid.UUID   `json:"project_id"`
-	ExpectedResourceVersion int64       `json:"expected_resource_version"`
-}
-
-func (q *Queries) MarkDeliveryTargetDeleting(ctx context.Context, arg MarkDeliveryTargetDeletingParams) (DeliveryTarget, error) {
-	row := q.db.QueryRow(ctx, markDeliveryTargetDeleting,
-		arg.UpdatedBy,
-		arg.ID,
-		arg.ProjectID,
-		arg.ExpectedResourceVersion,
-	)
-	var i DeliveryTarget
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Description,
-		&i.BundleVersionID,
-		&i.Placement,
-		&i.RolloutPolicy,
-		&i.ReconciliationPolicy,
-		&i.MaintenanceWindowPolicy,
-		&i.Suspended,
-		&i.Generation,
-		&i.ResourceVersion,
-		&i.DeletionState,
-		&i.CreatedBy,
-		&i.UpdatedBy,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const markDeliveryTargetOrphaned = `-- name: MarkDeliveryTargetOrphaned :one
 WITH orphaned AS (
     UPDATE delivery_targets t
@@ -3998,69 +3843,6 @@ func (q *Queries) ReleaseDeliveryRolloutLease(ctx context.Context, arg ReleaseDe
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const requestDeliveryTargetDeletion = `-- name: RequestDeliveryTargetDeletion :many
-UPDATE cluster_deployments d
-SET action = 'delete', phase = 'pending', desired_generation = desired_generation + 1,
-    last_error_code = '', last_message = ''
-FROM delivery_targets t
-WHERE d.target_id = t.id AND t.id = $1
-  AND t.project_id = $2 AND d.phase <> 'removed'
-RETURNING d.id, d.target_id, d.cluster_id, d.current_rollout_id, d.desired_bundle_version_id, d.previous_bundle_version_id, d.desired_generation, d.observed_generation, d.desired_spec_digest, d.observed_spec_digest, d.desired_revision, d.observed_revision, d.action, d.phase, d.conditions, d.source_kind, d.source_name, d.reconciler_kind, d.reconciler_name, d.inventory, d.agent_session_id, d.agent_sequence, d.last_error_code, d.last_message, d.last_observed_at, d.created_at, d.updated_at
-`
-
-type RequestDeliveryTargetDeletionParams struct {
-	TargetID  uuid.UUID `json:"target_id"`
-	ProjectID uuid.UUID `json:"project_id"`
-}
-
-func (q *Queries) RequestDeliveryTargetDeletion(ctx context.Context, arg RequestDeliveryTargetDeletionParams) ([]ClusterDeployment, error) {
-	rows, err := q.db.Query(ctx, requestDeliveryTargetDeletion, arg.TargetID, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ClusterDeployment{}
-	for rows.Next() {
-		var i ClusterDeployment
-		if err := rows.Scan(
-			&i.ID,
-			&i.TargetID,
-			&i.ClusterID,
-			&i.CurrentRolloutID,
-			&i.DesiredBundleVersionID,
-			&i.PreviousBundleVersionID,
-			&i.DesiredGeneration,
-			&i.ObservedGeneration,
-			&i.DesiredSpecDigest,
-			&i.ObservedSpecDigest,
-			&i.DesiredRevision,
-			&i.ObservedRevision,
-			&i.Action,
-			&i.Phase,
-			&i.Conditions,
-			&i.SourceKind,
-			&i.SourceName,
-			&i.ReconcilerKind,
-			&i.ReconcilerName,
-			&i.Inventory,
-			&i.AgentSessionID,
-			&i.AgentSequence,
-			&i.LastErrorCode,
-			&i.LastMessage,
-			&i.LastObservedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const requestDeliveryTargetDeletionCAS = `-- name: RequestDeliveryTargetDeletionCAS :one
@@ -4469,7 +4251,7 @@ func (q *Queries) TransitionClusterDeploymentCAS(ctx context.Context, arg Transi
 
 const transitionDeliveryRolloutCAS = `-- name: TransitionDeliveryRolloutCAS :one
 UPDATE delivery_rollouts
-SET state = $1, fencing_generation = fencing_generation + 1,
+SET state = $1::text, fencing_generation = fencing_generation + 1,
     lease_owner = '', lease_expires_at = NULL,
     started_at = CASE WHEN $1 = 'progressing' THEN COALESCE(started_at, now()) ELSE started_at END,
     completed_at = CASE WHEN $1 IN ('aborted','rejected','rolled_back') THEN now() ELSE NULL END,

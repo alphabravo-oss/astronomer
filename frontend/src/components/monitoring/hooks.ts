@@ -32,12 +32,19 @@
  * stream is healthy. If a monitoring_operation.changed event is ever added,
  * this is the line to change (and add the route in lib/live/routes.ts).
  */
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { queryKeys } from '@/lib/query-keys';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import * as api from '@/lib/api/monitoring-stack';
+import { queryKeys } from "@/lib/query-keys";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import * as api from "@/lib/api/monitoring-stack";
 import {
   isActiveOperationStatus,
   isRetryableOperationStatus,
@@ -52,7 +59,7 @@ import {
   type MonitoringStackStatusBase,
   type MonitoringStackTarget,
   type ReplaceRequiredError,
-} from '@/lib/api/monitoring-stack';
+} from "@/lib/api/monitoring-stack";
 
 // ============================================================
 // Tracking cadence + ceilings
@@ -148,12 +155,15 @@ export function monitoringOperationPollInterval(
   if (!op) return false;
 
   // Terminal and final: nothing more will happen to this row.
-  if (op.status === 'completed' || op.status === 'superseded') return false;
+  if (op.status === "completed" || op.status === "superseded") return false;
 
   // Terminal, but the retry policy may requeue it within milliseconds.
-  if (op.status === 'failed') {
+  if (op.status === "failed") {
     const settledAt = timestampMs(op.completedAt) ?? timestampMs(op.updatedAt);
-    if (settledAt !== null && nowMs - settledAt < MONITORING_OP_FAILURE_SETTLE_MS) {
+    if (
+      settledAt !== null &&
+      nowMs - settledAt < MONITORING_OP_FAILURE_SETTLE_MS
+    ) {
       return MONITORING_OP_FAILURE_SETTLE_POLL_MS;
     }
     return false;
@@ -163,7 +173,8 @@ export function monitoringOperationPollInterval(
   // ceiling below still applies).
   const elapsed = monitoringOperationElapsedMs(op, nowMs);
   if (elapsed >= MONITORING_OP_TRACK_CEILING_MS) return false;
-  if (elapsed >= MONITORING_OP_STALL_AFTER_MS) return MONITORING_OP_STALLED_POLL_MS;
+  if (elapsed >= MONITORING_OP_STALL_AFTER_MS)
+    return MONITORING_OP_STALLED_POLL_MS;
   return MONITORING_OP_ACTIVE_POLL_MS;
 }
 
@@ -178,7 +189,7 @@ export function failureSettleRemainingMs(
   op: MonitoringOperation | null | undefined,
   nowMs: number,
 ): number {
-  if (!op || op.status !== 'failed') return 0;
+  if (!op || op.status !== "failed") return 0;
   const settledAt = timestampMs(op.completedAt) ?? timestampMs(op.updatedAt);
   if (settledAt === null) return 0;
   return Math.max(0, MONITORING_OP_FAILURE_SETTLE_MS - (nowMs - settledAt));
@@ -228,24 +239,35 @@ export function nextTrackerTickMs(
   // stopped and there is no later boundary to cross.
   if (elapsed >= MONITORING_OP_TRACK_CEILING_MS) return 0;
 
-  const remainingToBoundary = [MONITORING_OP_STALL_AFTER_MS, MONITORING_OP_TRACK_CEILING_MS]
+  const remainingToBoundary = [
+    MONITORING_OP_STALL_AFTER_MS,
+    MONITORING_OP_TRACK_CEILING_MS,
+  ]
     .map((boundary) => boundary - elapsed)
     .filter((remaining) => remaining > 0);
 
   // Tick for the clock, but never sail past a boundary.
-  return Math.max(MIN_TICK_MS, Math.min(MONITORING_OP_ELAPSED_TICK_MS, ...remainingToBoundary));
+  return Math.max(
+    MIN_TICK_MS,
+    Math.min(MONITORING_OP_ELAPSED_TICK_MS, ...remainingToBoundary),
+  );
 }
 
 /** True once a `failed` row is past the auto-requeue grace window. */
-export function isSettledFailure(op: MonitoringOperation, nowMs: number): boolean {
-  if (op.status === 'superseded') return true;
-  if (op.status !== 'failed') return false;
+export function isSettledFailure(
+  op: MonitoringOperation,
+  nowMs: number,
+): boolean {
+  if (op.status === "superseded") return true;
+  if (op.status !== "failed") return false;
   return failureSettleRemainingMs(op, nowMs) === 0;
 }
 
 /** Cache-key discriminant for one target's status query. */
 export function stackFamilyKey(target: MonitoringStackTarget): string {
-  return target.kind === 'cluster' ? `cluster:${target.clusterId}` : target.kind;
+  return target.kind === "cluster"
+    ? `cluster:${target.clusterId}`
+    : target.kind;
 }
 
 // ============================================================
@@ -254,7 +276,7 @@ export function stackFamilyKey(target: MonitoringStackTarget): string {
 
 export function useClusterStackStatus(clusterId: string | undefined) {
   return useQuery({
-    queryKey: queryKeys.monitoringStack.status(`cluster:${clusterId ?? ''}`),
+    queryKey: queryKeys.monitoringStack.status(`cluster:${clusterId ?? ""}`),
     queryFn: () => api.getClusterStackStatus(clusterId as string),
     enabled: !!clusterId,
   });
@@ -262,7 +284,7 @@ export function useClusterStackStatus(clusterId: string | undefined) {
 
 export function useSharedThanosStatus(enabled = true) {
   return useQuery({
-    queryKey: queryKeys.monitoringStack.status('thanos'),
+    queryKey: queryKeys.monitoringStack.status("thanos"),
     queryFn: () => api.getSharedThanosStatus(),
     enabled,
   });
@@ -270,7 +292,7 @@ export function useSharedThanosStatus(enabled = true) {
 
 export function useSharedAlertmanagerStatus(enabled = true) {
   return useQuery({
-    queryKey: queryKeys.monitoringStack.status('alertmanager'),
+    queryKey: queryKeys.monitoringStack.status("alertmanager"),
     queryFn: () => api.getSharedAlertmanagerStatus(),
     enabled,
   });
@@ -278,7 +300,7 @@ export function useSharedAlertmanagerStatus(enabled = true) {
 
 export function useSharedGrafanaStatus(enabled = true) {
   return useQuery({
-    queryKey: queryKeys.monitoringStack.status('grafana'),
+    queryKey: queryKeys.monitoringStack.status("grafana"),
     queryFn: () => api.getSharedGrafanaStatus(),
     enabled,
   });
@@ -287,7 +309,7 @@ export function useSharedGrafanaStatus(enabled = true) {
 /** Target-generic status query, for screens that render all three families. */
 export function useStackStatus(target: MonitoringStackTarget, enabled = true) {
   const family = stackFamilyKey(target);
-  const disabled = target.kind === 'cluster' && !target.clusterId;
+  const disabled = target.kind === "cluster" && !target.clusterId;
   // `family` IS the identity of `target` (stackFamilyKey is total over the
   // union), so the key below is complete. Putting the target object in the key
   // instead would give this hook a different key from useClusterStackStatus /
@@ -304,9 +326,13 @@ export function useStackStatus(target: MonitoringStackTarget, enabled = true) {
 // Operations list
 // ============================================================
 
-export function useMonitoringOperations(params?: api.MonitoringOperationListParams) {
+export function useMonitoringOperations(
+  params?: api.MonitoringOperationListParams,
+) {
   return useQuery({
-    queryKey: queryKeys.monitoringStack.operations(params as Record<string, unknown>),
+    queryKey: queryKeys.monitoringStack.operations(
+      params as Record<string, unknown>,
+    ),
     queryFn: () => api.listMonitoringOperations(params),
   });
 }
@@ -320,7 +346,7 @@ export interface MonitoringOperationTracking {
   operation: MonitoringOperation | null;
   /** Newest operation for this target regardless of state — for "last run" UI. */
   latestOperation: MonitoringOperation | null;
-  status: MonitoringOperation['status'] | 'idle';
+  status: MonitoringOperation["status"] | "idle";
   /** pending | running. */
   isActive: boolean;
   isTerminal: boolean;
@@ -415,10 +441,13 @@ export function useMonitoringOperationTracker(
     [listParams],
   );
   const detailKey = useMemo(
-    () => queryKeys.monitoringStack.operation(trackedId ?? ''),
+    () => queryKeys.monitoringStack.operation(trackedId ?? ""),
     [trackedId],
   );
-  const statusKey = useMemo(() => queryKeys.monitoringStack.status(family), [family]);
+  const statusKey = useMemo(
+    () => queryKeys.monitoringStack.status(family),
+    [family],
+  );
 
   // ── Detail: the tracked row, with its stage events ──
   const detailQuery = useQuery({
@@ -427,7 +456,8 @@ export function useMonitoringOperationTracker(
     enabled: enabled && !!trackedId,
     // React Query owns this timer; unmounting the component removes the
     // observer and the timer with it. Nothing to clean up by hand.
-    refetchInterval: (query) => monitoringOperationPollInterval(query.state.data, Date.now()),
+    refetchInterval: (query) =>
+      monitoringOperationPollInterval(query.state.data, Date.now()),
   });
 
   const trackedOperation = detailQuery.data ?? null;
@@ -454,7 +484,9 @@ export function useMonitoringOperationTracker(
    */
   const operation =
     trackedOperation ??
-    (!trackedId && latestOperation && latestOperation.id !== dismissedId ? latestOperation : null);
+    (!trackedId && latestOperation && latestOperation.id !== dismissedId
+      ? latestOperation
+      : null);
 
   useEffect(() => {
     if (!enabled || !latestOperation) return;
@@ -483,8 +515,15 @@ export function useMonitoringOperationTracker(
   // found on load, and re-invalidating on every mount because the last install
   // finished yesterday would be noise.
   useEffect(() => {
-    if (!trackedOperation || !isTerminalOperationStatus(trackedOperation.status)) return;
-    if (trackedOperation.status !== 'completed' && !isSettledFailure(trackedOperation, Date.now())) {
+    if (
+      !trackedOperation ||
+      !isTerminalOperationStatus(trackedOperation.status)
+    )
+      return;
+    if (
+      trackedOperation.status !== "completed" &&
+      !isSettledFailure(trackedOperation, Date.now())
+    ) {
       return;
     }
     const stamp = `${trackedOperation.id}:${trackedOperation.status}:${trackedOperation.updatedAt}`;
@@ -524,25 +563,27 @@ export function useMonitoringOperationTracker(
       // carries no events, so keep the ones already fetched.
       queryClient.setQueryData<MonitoringOperation>(
         queryKeys.monitoringStack.operation(requeued.id),
-        (prev) => (prev ? { ...prev, ...requeued, events: prev.events } : requeued),
+        (prev) =>
+          prev ? { ...prev, ...requeued, events: prev.events } : requeued,
       );
       settledRef.current = null;
       setTrackedId(requeued.id);
       queryClient.invalidateQueries({ queryKey: listKey });
-      toastSuccess('Monitoring operation requeued');
+      toastSuccess("Monitoring operation requeued");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to retry operation', err);
+      toastApiError("Failed to retry operation", err);
     },
   });
 
   const track = useCallback(
     (op: MonitoringOperation | string) => {
-      const id = typeof op === 'string' ? op : op.id;
-      if (typeof op !== 'string') {
+      const id = typeof op === "string" ? op : op.id;
+      if (typeof op !== "string") {
         queryClient.setQueryData<MonitoringOperation>(
           queryKeys.monitoringStack.operation(id),
-          (prev) => (prev ? { ...prev, ...op, events: op.events ?? prev.events } : op),
+          (prev) =>
+            prev ? { ...prev, ...op, events: op.events ?? prev.events } : op,
         );
       }
       settledRef.current = null;
@@ -584,10 +625,15 @@ export function useMonitoringOperationTracker(
   const now = Date.now();
   const elapsed = monitoringOperationElapsedMs(operation, now);
   const terminal = isTerminalOperationStatus(operation?.status);
-  const failure = operation?.status === 'failed' || operation?.status === 'superseded';
+  const failure =
+    operation?.status === "failed" || operation?.status === "superseded";
   const settled =
-    !!operation && terminal && (operation.status === 'completed' || isSettledFailure(operation, now));
-  const errorMessage = operation?.errorMessage?.trim() ? operation.errorMessage : null;
+    !!operation &&
+    terminal &&
+    (operation.status === "completed" || isSettledFailure(operation, now));
+  const errorMessage = operation?.errorMessage?.trim()
+    ? operation.errorMessage
+    : null;
   // `active` above governs the ADOPT query's cadence and is deliberately keyed
   // off the tracked row; the surface below reports on whatever the screen is
   // showing, which may still be the un-adopted fallback for one render.
@@ -598,18 +644,19 @@ export function useMonitoringOperationTracker(
   // controls disabled. The backend deliberately accepts an enqueue over an
   // active operation and supersedes the old one, which is exactly the escape an
   // operator with a stuck stack needs; `isBusy` going false is what offers it.
-  const stoppedTracking = displayActive && elapsed >= MONITORING_OP_TRACK_CEILING_MS;
+  const stoppedTracking =
+    displayActive && elapsed >= MONITORING_OP_TRACK_CEILING_MS;
 
   return {
     operation,
     latestOperation,
-    status: operation?.status ?? 'idle',
+    status: operation?.status ?? "idle",
     isActive: displayActive,
     isTerminal: terminal,
-    isSuccess: operation?.status === 'completed',
+    isSuccess: operation?.status === "completed",
     isFailure: failure,
     isSettled: settled,
-    isAwaitingAutoRetry: operation?.status === 'failed' && !settled,
+    isAwaitingAutoRetry: operation?.status === "failed" && !settled,
     errorMessage,
     events: operation?.events ?? [],
     attemptCount: operation?.attemptCount ?? 0,
@@ -633,9 +680,10 @@ export function useMonitoringOperationTracker(
 
 export function useStackPreview(target: MonitoringStackTarget) {
   return useMutation({
-    mutationFn: (body: MonitoringStackRequestBody) => api.previewStack(target, body),
+    mutationFn: (body: MonitoringStackRequestBody) =>
+      api.previewStack(target, body),
     onError: (err: Error) => {
-      toastApiError('Failed to render monitoring stack preview', err);
+      toastApiError("Failed to render monitoring stack preview", err);
     },
   });
 }
@@ -651,8 +699,10 @@ export interface MonitoringStackController {
    * never rejects, so callers do not need a try/catch to avoid an unhandled
    * rejection.
    */
-  run: (verb: MonitoringOperationType, body?: MonitoringStackRequestBody) =>
-    Promise<MonitoringOperation | null>;
+  run: (
+    verb: MonitoringOperationType,
+    body?: MonitoringStackRequestBody,
+  ) => Promise<MonitoringOperation | null>;
   /** An enqueue request is in flight (not the operation itself — that is tracker.isActive). */
   isEnqueuing: boolean;
   /** Enqueuing, or an operation is already running: every action should be disabled. */
@@ -684,21 +734,29 @@ export function useMonitoringStackController(
   const status = useStackStatus(target, enabled);
   const tracker = useMonitoringOperationTracker(target, { enabled });
   const preview = useStackPreview(target);
-  const [replaceRequired, setReplaceRequired] = useState<ReplaceRequiredError | null>(null);
+  const [replaceRequired, setReplaceRequired] =
+    useState<ReplaceRequiredError | null>(null);
   const family = stackFamilyKey(target);
 
   const trackRef = useRef(tracker.track);
   trackRef.current = tracker.track;
 
   const lifecycle = useMutation({
-    mutationFn: ({ verb, body }: { verb: MonitoringOperationType; body?: MonitoringStackRequestBody }) =>
-      api.runStackLifecycle(target, verb, body),
+    mutationFn: ({
+      verb,
+      body,
+    }: {
+      verb: MonitoringOperationType;
+      body?: MonitoringStackRequestBody;
+    }) => api.runStackLifecycle(target, verb, body),
     onSuccess: (op, { verb }) => {
       trackRef.current(op);
       // The handler persists the new desired state (status "installing" /
       // "updating" / "uninstalled") before enqueueing, so the status card is
       // already stale by the time we get here.
-      queryClient.invalidateQueries({ queryKey: queryKeys.monitoringStack.status(family) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.monitoringStack.status(family),
+      });
       toastSuccess(`Queued ${verb} for ${stackTargetLabel(target)}`);
     },
     onError: (err: Error, { verb }) => {
@@ -714,7 +772,10 @@ export function useMonitoringStackController(
   const { mutateAsync: enqueueLifecycle, isPending: isEnqueuing } = lifecycle;
 
   const run = useCallback(
-    async (verb: MonitoringOperationType, body?: MonitoringStackRequestBody) => {
+    async (
+      verb: MonitoringOperationType,
+      body?: MonitoringStackRequestBody,
+    ) => {
       setReplaceRequired(null);
       try {
         return await enqueueLifecycle({ verb, body });

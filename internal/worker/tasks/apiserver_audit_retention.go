@@ -39,11 +39,10 @@ func NewApiserverAuditRetentionTask() *asynq.Task {
 // pods from racing on the same DELETE.
 func HandleApiserverAuditRetention(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ApiserverAuditRetentionType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().DebugContext(ctx, "apiserver audit retention runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("apiserver audit retention runtime is not configured")
 		}
-		q, ok := runtimeDeps.Queries.(apiserverAuditPurger)
+		q, ok := runtimeDependencies(ctx).Queries.(apiserverAuditPurger)
 		if !ok {
 			return fmt.Errorf("apiserver audit retention not supported by runtime querier")
 		}
@@ -52,7 +51,7 @@ func HandleApiserverAuditRetention(ctx context.Context, _ *asynq.Task) error {
 		if err != nil {
 			return fmt.Errorf("prune apiserver audit events: %w", err)
 		}
-		runtimeLogger().InfoContext(ctx, "pruned apiserver audit events",
+		runtimeLogger(ctx).InfoContext(ctx, "pruned apiserver audit events",
 			"rows", pruned,
 			"cutoff", cutoff.Format(time.RFC3339),
 			"retention", apiserverAuditRetention.String(),

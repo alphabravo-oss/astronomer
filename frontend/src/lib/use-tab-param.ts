@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useCallback } from 'react';
-import { usePathname, useRouter, useSearchParams } from '@/lib/navigation';
+import { useCallback } from "react";
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation";
 
 /**
  * Deep-linkable tab state backed by a URL query param (default `?tab=`).
@@ -23,7 +23,7 @@ import { usePathname, useRouter, useSearchParams } from '@/lib/navigation';
 export function useTabParam<T extends string>(
   keys: readonly T[],
   fallback: T,
-  paramName = 'tab',
+  paramName = "tab",
 ): [T, (tab: T) => void] {
   const router = useRouter();
   const pathname = usePathname();
@@ -31,7 +31,8 @@ export function useTabParam<T extends string>(
 
   // Resolve the active tab from the URL, falling back when absent/invalid.
   const raw = searchParams.get(paramName);
-  const tab = raw && (keys as readonly string[]).includes(raw) ? (raw as T) : fallback;
+  const tab =
+    raw && (keys as readonly string[]).includes(raw) ? (raw as T) : fallback;
 
   const setTab = useCallback(
     (next: T) => {

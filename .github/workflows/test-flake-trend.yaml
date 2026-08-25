@@ -1,0 +1,74 @@
+name: test-flake-trend
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-flake-trend
+  cancel-in-progress: false
+
+jobs:
+  browser-trend:
+    name: browser flake trend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Validate quarantine ownership and expiry
+        run: node scripts/test-flake-report.mjs --validate
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run five retry-free attempts
+        id: playwright
+        continue-on-error: true
+        working-directory: frontend
+        run: |
+          mkdir -p ../test-artifacts
+          PLAYWRIGHT_JSON_OUTPUT_FILE=../test-artifacts/playwright.json \
+            npx playwright test --project=chromium --repeat-each=5 --retries=0 \
+              --trace=retain-on-failure --reporter=json
+
+      - name: Build trend report and enforce budgets
+        id: trend
+        continue-on-error: true
+        run: |
+          node scripts/test-flake-report.mjs \
+            --report test-artifacts/playwright.json \
+            --output test-artifacts/flake-summary.md
+
+      - name: Retain reports and failure evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-flake-trend-${{ github.run_id }}
+          path: |
+            test-artifacts/
+            frontend/test-results/
+          retention-days: 90
+
+      - name: Enforce test and trend result
+        if: always()
+        run: |
+          test "${{ steps.playwright.outcome }}" = success
+          test "${{ steps.trend.outcome }}" = success

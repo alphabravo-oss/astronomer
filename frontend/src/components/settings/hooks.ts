@@ -7,25 +7,22 @@
  * live next to the settings pages rather than in the global `lib/hooks.ts`
  * so this phase doesn't touch the shared hooks module.
  */
-'use client';
+"use client";
 
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import * as api from '@/lib/api';
-import { queryKeys } from '@/lib/query-keys';
-import { useAuthStore } from '@/lib/store';
-import { isSuperuser as hasSuperuserAccess } from '@/lib/permissions';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import * as api from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
+import { useAuthStore } from "@/lib/store";
+import { isSuperuser as hasSuperuserAccess } from "@/lib/permissions";
 import type {
   GroupMappingWriteRequest,
   QuotaPlanWriteRequest,
   SmtpConfig,
   SmtpTestRequest,
   WebhookWriteRequest,
-} from '@/lib/api/settings';
+} from "@/lib/api/settings";
+import { useOperationMutation } from "@/lib/hooks/operation-mutation";
 
 // ============================================================
 // Admin gating
@@ -53,27 +50,27 @@ export function useIsSuperuser(): { isSuperuser: boolean; ready: boolean } {
 // ============================================================
 
 export const settingsKeys = {
-  all: ['settings'] as const,
-  platform: ['settings', 'platform'] as const,
-  smtp: ['settings', 'smtp'] as const,
+  all: ["settings"] as const,
+  platform: ["settings", "platform"] as const,
+  smtp: ["settings", "smtp"] as const,
   emails: (params?: Record<string, unknown>) =>
-    ['settings', 'emails', params] as const,
-  webhooks: ['settings', 'webhooks'] as const,
-  webhook: (id: string) => ['settings', 'webhooks', id] as const,
+    ["settings", "emails", params] as const,
+  webhooks: ["settings", "webhooks"] as const,
+  webhook: (id: string) => ["settings", "webhooks", id] as const,
   webhookDeliveries: (id: string, params?: Record<string, unknown>) =>
-    ['settings', 'webhooks', id, 'deliveries', params] as const,
-  quotas: ['settings', 'quotas'] as const,
-  quota: (name: string) => ['settings', 'quotas', name] as const,
-  quotaUsage: ['settings', 'quota-usage'] as const,
-  groupMappings: ['settings', 'group-mappings'] as const,
-  backupDrill: ['settings', 'backup-drill'] as const,
+    ["settings", "webhooks", id, "deliveries", params] as const,
+  quotas: ["settings", "quotas"] as const,
+  quota: (name: string) => ["settings", "quotas", name] as const,
+  quotaUsage: ["settings", "quota-usage"] as const,
+  groupMappings: ["settings", "group-mappings"] as const,
+  backupDrill: ["settings", "backup-drill"] as const,
   backupDrillHistory: (params?: Record<string, unknown>) =>
-    ['settings', 'backup-drill', 'history', params] as const,
-  managementBackup: ['settings', 'management-backup'] as const,
-  gitopsSources: ['settings', 'gitops-sources'] as const,
-  gitopsSource: (id: string) => ['settings', 'gitops-sources', id] as const,
+    ["settings", "backup-drill", "history", params] as const,
+  managementBackup: ["settings", "management-backup"] as const,
+  gitopsSources: ["settings", "gitops-sources"] as const,
+  gitopsSource: (id: string) => ["settings", "gitops-sources", id] as const,
   gitopsClusters: (id: string) =>
-    ['settings', 'gitops-sources', id, 'clusters'] as const,
+    ["settings", "gitops-sources", id, "clusters"] as const,
 };
 
 // ============================================================
@@ -95,10 +92,10 @@ export function useSavePlatformSettings() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.platform });
       qc.invalidateQueries({ queryKey: queryKeys.featureFlags });
-      toastSuccess('Platform settings saved');
+      toastSuccess("Platform settings saved");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to save settings', err);
+      toastApiError("Failed to save settings", err);
     },
   });
 }
@@ -120,10 +117,10 @@ export function useUpdateSmtpConfig() {
     mutationFn: (body: Partial<SmtpConfig>) => api.updateSmtpConfig(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.smtp });
-      toastSuccess('SMTP configuration saved');
+      toastSuccess("SMTP configuration saved");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to save SMTP config', err);
+      toastApiError("Failed to save SMTP config", err);
     },
   });
 }
@@ -135,11 +132,11 @@ export function useTestSmtp() {
       if (result.success) {
         toastSuccess(`Test email sent in ${result.durationMs}ms`);
       } else {
-        toastApiError('Test failed', result.message);
+        toastApiError("Test failed", result.message);
       }
     },
     onError: (err: Error) => {
-      toastApiError('SMTP test failed', err);
+      toastApiError("SMTP test failed", err);
     },
   });
 }
@@ -147,7 +144,7 @@ export function useTestSmtp() {
 export function useSentEmails(params?: { page?: number; page_size?: number }) {
   return useQuery({
     queryKey: settingsKeys.emails(params),
-    queryFn: () => api.listSentEmails(params),
+    queryFn: ({ signal }) => api.listSentEmails({ ...params, signal }),
   });
 }
 
@@ -158,14 +155,14 @@ export function useSentEmails(params?: { page?: number; page_size?: number }) {
 export function useWebhooks() {
   return useQuery({
     queryKey: settingsKeys.webhooks,
-    queryFn: () => api.listWebhooks(),
+    queryFn: ({ signal }) => api.listWebhooks({ signal }),
   });
 }
 
 export function useWebhook(id: string | undefined) {
   return useQuery({
-    queryKey: settingsKeys.webhook(id ?? ''),
-    queryFn: () => api.getWebhook(id as string),
+    queryKey: settingsKeys.webhook(id ?? ""),
+    queryFn: ({ signal }) => api.getWebhook(id as string, { signal }),
     enabled: !!id,
   });
 }
@@ -176,10 +173,10 @@ export function useCreateWebhook() {
     mutationFn: (body: WebhookWriteRequest) => api.createWebhook(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.webhooks });
-      toastSuccess('Webhook created');
+      toastSuccess("Webhook created");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to create webhook', err);
+      toastApiError("Failed to create webhook", err);
     },
   });
 }
@@ -187,15 +184,20 @@ export function useCreateWebhook() {
 export function useUpdateWebhook() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: Partial<WebhookWriteRequest> }) =>
-      api.updateWebhook(id, body),
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: Partial<WebhookWriteRequest>;
+    }) => api.updateWebhook(id, body),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: settingsKeys.webhooks });
       qc.invalidateQueries({ queryKey: settingsKeys.webhook(vars.id) });
-      toastSuccess('Webhook updated');
+      toastSuccess("Webhook updated");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to update webhook', err);
+      toastApiError("Failed to update webhook", err);
     },
   });
 }
@@ -206,10 +208,10 @@ export function useDeleteWebhook() {
     mutationFn: (id: string) => api.deleteWebhook(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.webhooks });
-      toastSuccess('Webhook deleted');
+      toastSuccess("Webhook deleted");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to delete webhook', err);
+      toastApiError("Failed to delete webhook", err);
     },
   });
 }
@@ -218,7 +220,7 @@ export function useTestWebhook() {
   return useMutation({
     mutationFn: (id: string) => api.testWebhook(id),
     onError: (err: Error) => {
-      toastApiError('Webhook test failed', err);
+      toastApiError("Webhook test failed", err);
     },
   });
 }
@@ -228,8 +230,9 @@ export function useWebhookDeliveries(
   params?: { page?: number; page_size?: number },
 ) {
   return useQuery({
-    queryKey: settingsKeys.webhookDeliveries(id ?? '', params),
-    queryFn: () => api.listWebhookDeliveries(id as string, params),
+    queryKey: settingsKeys.webhookDeliveries(id ?? "", params),
+    queryFn: ({ signal }) =>
+      api.listWebhookDeliveries(id as string, params, { signal }),
     enabled: !!id,
   });
 }
@@ -243,10 +246,10 @@ export function useRetryWebhookDelivery(webhookId: string) {
       qc.invalidateQueries({
         queryKey: queryKeys.settings.webhookDeliveries(webhookId),
       });
-      toastSuccess('Delivery re-queued');
+      toastSuccess("Delivery re-queued");
     },
     onError: (err: Error) => {
-      toastApiError('Retry failed', err);
+      toastApiError("Retry failed", err);
     },
   });
 }
@@ -264,7 +267,7 @@ export function useQuotaPlans() {
 
 export function useQuotaPlan(name: string | undefined) {
   return useQuery({
-    queryKey: settingsKeys.quota(name ?? ''),
+    queryKey: settingsKeys.quota(name ?? ""),
     queryFn: () => api.getQuotaPlan(name as string),
     enabled: !!name,
   });
@@ -276,10 +279,10 @@ export function useCreateQuotaPlan() {
     mutationFn: (body: QuotaPlanWriteRequest) => api.createQuotaPlan(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.quotas });
-      toastSuccess('Quota plan created');
+      toastSuccess("Quota plan created");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to create plan', err);
+      toastApiError("Failed to create plan", err);
     },
   });
 }
@@ -287,15 +290,20 @@ export function useCreateQuotaPlan() {
 export function useUpdateQuotaPlan() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, body }: { name: string; body: Partial<QuotaPlanWriteRequest> }) =>
-      api.updateQuotaPlan(name, body),
+    mutationFn: ({
+      name,
+      body,
+    }: {
+      name: string;
+      body: QuotaPlanWriteRequest;
+    }) => api.updateQuotaPlan(name, body),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: settingsKeys.quotas });
       qc.invalidateQueries({ queryKey: settingsKeys.quota(vars.name) });
-      toastSuccess('Quota plan saved');
+      toastSuccess("Quota plan saved");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to save plan', err);
+      toastApiError("Failed to save plan", err);
     },
   });
 }
@@ -306,10 +314,10 @@ export function useDeleteQuotaPlan() {
     mutationFn: (name: string) => api.deleteQuotaPlan(name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.quotas });
-      toastSuccess('Quota plan deleted');
+      toastSuccess("Quota plan deleted");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to delete plan', err);
+      toastApiError("Failed to delete plan", err);
     },
   });
 }
@@ -338,13 +346,14 @@ export function useGroupMappings() {
 export function useCreateGroupMapping() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: GroupMappingWriteRequest) => api.createGroupMapping(body),
+    mutationFn: (body: GroupMappingWriteRequest) =>
+      api.createGroupMapping(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.groupMappings });
-      toastSuccess('Group mapping created');
+      toastSuccess("Group mapping created");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to create mapping', err);
+      toastApiError("Failed to create mapping", err);
     },
   });
 }
@@ -355,10 +364,10 @@ export function useDeleteGroupMapping() {
     mutationFn: (id: string) => api.deleteGroupMapping(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.groupMappings });
-      toastSuccess('Group mapping deleted');
+      toastSuccess("Group mapping deleted");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to delete mapping', err);
+      toastApiError("Failed to delete mapping", err);
     },
   });
 }
@@ -370,79 +379,115 @@ export function useDeleteGroupMapping() {
 export function useLatestBackupDrill() {
   return useQuery({
     queryKey: settingsKeys.backupDrill,
-    queryFn: () => api.getLatestBackupDrill(),
+    queryFn: ({ signal }) => api.getLatestBackupDrill({ signal }),
   });
 }
 
-export function useBackupDrillHistory(params?: { page?: number; page_size?: number }) {
+export function useBackupDrillHistory(params?: {
+  page?: number;
+  page_size?: number;
+}) {
   return useQuery({
     queryKey: settingsKeys.backupDrillHistory(params),
-    queryFn: () => api.listBackupDrillHistory(params),
+    queryFn: ({ signal }) => api.listBackupDrillHistory(params, { signal }),
   });
 }
 
 export function useManagementBackupStatus() {
   return useQuery({
     queryKey: settingsKeys.managementBackup,
-    queryFn: () => api.getManagementBackupStatus(),
+    queryFn: ({ signal }) => api.getManagementBackupStatus({ signal }),
+    refetchInterval: (query) =>
+      query.state.data?.destinations.some((destination) => {
+        const status = destination.reconcileStatus?.toLowerCase();
+        return (
+          status === "pending" ||
+          status === "running" ||
+          status === "retrying" ||
+          (destination.desiredGeneration ?? 0) >
+            (destination.appliedGeneration ?? 0)
+        );
+      })
+        ? 2_000
+        : false,
   });
 }
 
 export function useCreateManagementBackupDestination() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: api.createManagementBackupDestination,
+    mutationFn: (body: api.ManagementBackupDestinationWrite) =>
+      api.createManagementBackupDestination(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
-      toastSuccess('Backup destination saved');
+      toastSuccess("Backup destination saved; reconciliation queued");
     },
-    onError: (err: Error) => toastApiError('Failed to save destination', err),
+    onError: (err: Error) => toastApiError("Failed to save destination", err),
   });
 }
 
 export function useUpdateManagementBackupDestination() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: api.ManagementBackupDestinationWrite }) =>
-      api.updateManagementBackupDestination(id, body),
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: api.ManagementBackupDestinationWrite;
+    }) => api.updateManagementBackupDestination(id, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
-      toastSuccess('Backup destination updated');
+      toastSuccess("Backup destination update queued");
     },
-    onError: (err: Error) => toastApiError('Failed to update destination', err),
+    onError: (err: Error) => toastApiError("Failed to update destination", err),
   });
 }
 
 export function useDeleteManagementBackupDestination() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: api.deleteManagementBackupDestination,
+    mutationFn: (id: string) => api.deleteManagementBackupDestination(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
-      toastSuccess('Backup destination removed');
+      toastSuccess("Backup destination removal queued");
     },
-    onError: (err: Error) => toastApiError('Failed to remove destination', err),
+    onError: (err: Error) => toastApiError("Failed to remove destination", err),
   });
 }
 
 export function useTestManagementBackupDestination() {
-  return useMutation({
-    mutationFn: api.testManagementBackupDestination,
-    onError: (err: Error) => toastApiError('Connection test failed', err),
+  return useOperationMutation({
+    keyPrefix: "management-backup-test",
+    submit: (id: string, context) =>
+      api.testManagementBackupDestination(id, context),
+    read: api.getManagementBackupOperation,
+    mutation: {
+      onSuccess: () => toastSuccess("Backup destination connection verified"),
+      onError: (err: Error) => toastApiError("Connection test failed", err),
+    },
   });
 }
 
 export function useRunManagementBackupDestination() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: api.runManagementBackupDestination,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
-      toastSuccess('Backup job started');
+  return useOperationMutation({
+    keyPrefix: "management-backup-run",
+    submit: (id: string, context) =>
+      api.runManagementBackupDestination(id, context),
+    read: api.getManagementBackupOperation,
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: settingsKeys.managementBackup });
+        toastSuccess(managementBackupSubmittedMessage);
+      },
+      onError: (err: Error) => toastApiError("Failed to start backup", err),
     },
-    onError: (err: Error) => toastApiError('Failed to start backup', err),
   });
 }
+
+export const managementBackupSubmittedMessage =
+  "Backup run accepted; track execution in backup history";
 
 // ============================================================
 // GitOps cluster registration (migration 060)
@@ -457,7 +502,7 @@ export function useGitOpsSources() {
 
 export function useGitOpsSource(id: string | undefined) {
   return useQuery({
-    queryKey: settingsKeys.gitopsSource(id ?? ''),
+    queryKey: settingsKeys.gitopsSource(id ?? ""),
     queryFn: () => api.getGitOpsSource(id!),
     enabled: !!id,
   });
@@ -465,7 +510,7 @@ export function useGitOpsSource(id: string | undefined) {
 
 export function useGitOpsSourceClusters(id: string | undefined) {
   return useQuery({
-    queryKey: settingsKeys.gitopsClusters(id ?? ''),
+    queryKey: settingsKeys.gitopsClusters(id ?? ""),
     queryFn: () => api.listGitOpsSourceClusters(id!),
     enabled: !!id,
   });
@@ -478,10 +523,10 @@ export function useCreateGitOpsSource() {
       api.createGitOpsSource(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.gitopsSources });
-      toastSuccess('GitOps source created');
+      toastSuccess("GitOps source created");
     },
     onError: (err: Error) => {
-      toastApiError('Create failed', err);
+      toastApiError("Create failed", err);
     },
   });
 }
@@ -499,10 +544,10 @@ export function useUpdateGitOpsSource() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: settingsKeys.gitopsSources });
       qc.invalidateQueries({ queryKey: settingsKeys.gitopsSource(vars.id) });
-      toastSuccess('GitOps source updated');
+      toastSuccess("GitOps source updated");
     },
     onError: (err: Error) => {
-      toastApiError('Update failed', err);
+      toastApiError("Update failed", err);
     },
   });
 }
@@ -513,10 +558,10 @@ export function useDeleteGitOpsSource() {
     mutationFn: (id: string) => api.deleteGitOpsSource(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.gitopsSources });
-      toastSuccess('GitOps source deleted');
+      toastSuccess("GitOps source deleted");
     },
     onError: (err: Error) => {
-      toastApiError('Delete failed', err);
+      toastApiError("Delete failed", err);
     },
   });
 }
@@ -528,10 +573,10 @@ export function useSyncGitOpsSource() {
     onSuccess: (_data, id) => {
       qc.invalidateQueries({ queryKey: settingsKeys.gitopsSource(id) });
       qc.invalidateQueries({ queryKey: settingsKeys.gitopsClusters(id) });
-      toastSuccess('Sync triggered');
+      toastSuccess("Sync triggered");
     },
     onError: (err: Error) => {
-      toastApiError('Sync failed', err);
+      toastApiError("Sync failed", err);
     },
   });
 }
@@ -540,7 +585,7 @@ export function usePreviewGitOpsSource() {
   return useMutation({
     mutationFn: (id: string) => api.previewGitOpsSource(id),
     onError: (err: Error) => {
-      toastApiError('Preview failed', err);
+      toastApiError("Preview failed", err);
     },
   });
 }

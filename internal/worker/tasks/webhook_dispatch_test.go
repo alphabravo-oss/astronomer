@@ -110,19 +110,12 @@ func newSubscription(id uuid.UUID, maxRetries int) sqlc.WebhookSubscription {
 	}
 }
 
-func setupDispatch(t *testing.T, sender *fakeWebhookSender, q *fakeWebhookQuerier) {
+func setupDispatch(t *testing.T, sender WebhookSender, q WebhookQuerier) DispatchRuntime {
 	t.Helper()
-	ConfigureWebhook(WebhookDeps{
+	return DispatchRuntime{Webhook: WebhookDeps{
 		Queries: q,
 		Sender:  sender,
-	})
-	// Drop runtime deps so HandleWebhookDispatch doesn't try the leader
-	// path against a non-existent DB.
-	resetRuntime()
-	t.Cleanup(func() {
-		ConfigureWebhook(WebhookDeps{})
-		resetRuntime()
-	})
+	}}
 }
 
 func TestDispatcher_BatchProcessesPending_Delivered(t *testing.T) {
@@ -137,9 +130,9 @@ func TestDispatcher_BatchProcessesPending_Delivered(t *testing.T) {
 		},
 	}
 	sender := &fakeWebhookSender{out: webhook.Outcome{Status: http.StatusOK}}
-	setupDispatch(t, sender, q)
+	runtime := setupDispatch(t, sender, q)
 
-	if err := HandleWebhookDispatch(context.Background(), nil); err != nil {
+	if err := runtime.HandleWebhookDispatch(context.Background(), nil); err != nil {
 		t.Fatalf("HandleWebhookDispatch: %v", err)
 	}
 
@@ -167,10 +160,10 @@ func TestDispatcher_BackoffSchedule_RetryableFailure(t *testing.T) {
 	// 5xx is retryable; the dispatcher should reschedule with the
 	// backoff slot.
 	sender := &fakeWebhookSender{out: webhook.Outcome{Status: http.StatusInternalServerError, ResponseBody: "boom"}}
-	setupDispatch(t, sender, q)
+	runtime := setupDispatch(t, sender, q)
 
 	now := time.Now().UTC()
-	if err := HandleWebhookDispatch(context.Background(), nil); err != nil {
+	if err := runtime.HandleWebhookDispatch(context.Background(), nil); err != nil {
 		t.Fatalf("HandleWebhookDispatch: %v", err)
 	}
 
@@ -207,9 +200,9 @@ func TestDispatcher_PermanentFailure_4xx_Dropped(t *testing.T) {
 	}
 	// 404 is a permanent 4xx — must be dropped immediately.
 	sender := &fakeWebhookSender{out: webhook.Outcome{Status: http.StatusNotFound, ResponseBody: "no route"}}
-	setupDispatch(t, sender, q)
+	runtime := setupDispatch(t, sender, q)
 
-	if err := HandleWebhookDispatch(context.Background(), nil); err != nil {
+	if err := runtime.HandleWebhookDispatch(context.Background(), nil); err != nil {
 		t.Fatalf("HandleWebhookDispatch: %v", err)
 	}
 
@@ -232,9 +225,9 @@ func TestDispatcher_RetryBudgetExhausted_Dropped(t *testing.T) {
 		},
 	}
 	sender := &fakeWebhookSender{out: webhook.Outcome{Status: http.StatusServiceUnavailable}}
-	setupDispatch(t, sender, q)
+	runtime := setupDispatch(t, sender, q)
 
-	if err := HandleWebhookDispatch(context.Background(), nil); err != nil {
+	if err := runtime.HandleWebhookDispatch(context.Background(), nil); err != nil {
 		t.Fatalf("HandleWebhookDispatch: %v", err)
 	}
 	if got := len(q.dropped); got != 1 {
@@ -256,9 +249,9 @@ func TestDispatcher_TransportError_Retries(t *testing.T) {
 		},
 	}
 	sender := &fakeWebhookSender{out: webhook.Outcome{Err: errors.New("dial tcp: timeout")}}
-	setupDispatch(t, sender, q)
+	runtime := setupDispatch(t, sender, q)
 
-	if err := HandleWebhookDispatch(context.Background(), nil); err != nil {
+	if err := runtime.HandleWebhookDispatch(context.Background(), nil); err != nil {
 		t.Fatalf("HandleWebhookDispatch: %v", err)
 	}
 	if got := len(q.failed); got != 1 {
@@ -282,9 +275,9 @@ func TestDispatcher_OversizedPayload_BuildError_Dropped(t *testing.T) {
 	// A build-side error (template render, oversized payload) must NOT
 	// retry: the failure is deterministic on the row.
 	sender := &fakeWebhookSender{out: webhook.Outcome{}, err: errors.New("payload too large")}
-	setupDispatch(t, sender, q)
+	runtime := setupDispatch(t, sender, q)
 
-	if err := HandleWebhookDispatch(context.Background(), nil); err != nil {
+	if err := runtime.HandleWebhookDispatch(context.Background(), nil); err != nil {
 		t.Fatalf("HandleWebhookDispatch: %v", err)
 	}
 	if got := len(q.dropped); got != 1 {
@@ -302,15 +295,9 @@ func TestDispatcher_ListPendingArgShape(t *testing.T) {
 			subs: map[uuid.UUID]sqlc.WebhookSubscription{subID: newSubscription(subID, 5)},
 		},
 	}
-	setupDispatch(t, &fakeWebhookSender{out: webhook.Outcome{Status: 200}}, &q.fakeWebhookQuerier)
-	// override the queries to use the recording querier
-	ConfigureWebhook(WebhookDeps{
-		Queries: q,
-		Sender:  &fakeWebhookSender{out: webhook.Outcome{Status: 200}},
-	})
-	defer ConfigureWebhook(WebhookDeps{})
+	runtime := setupDispatch(t, &fakeWebhookSender{out: webhook.Outcome{Status: 200}}, q)
 
-	if err := HandleWebhookDispatch(context.Background(), nil); err != nil {
+	if err := runtime.HandleWebhookDispatch(context.Background(), nil); err != nil {
 		t.Fatalf("HandleWebhookDispatch: %v", err)
 	}
 	if !q.gotArg.NextAttemptAt.Valid {

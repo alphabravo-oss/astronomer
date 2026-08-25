@@ -313,7 +313,10 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 		ClusterID:               tc.config.ClusterID,
 		AgentID:                 tc.config.AgentID,
 		AgentVersion:            version.Version,
+		TunnelProtocolVersion:   protocol.TunnelProtocolVersion,
+		HeartbeatSchemaVersion:  protocol.HeartbeatSchemaVersion,
 		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion,
+		Capabilities:            connectCapabilities(tc.config.PrivilegeProfile),
 		Token:                   tc.config.AgentToken,
 	}
 	payloadBytes, err := json.Marshal(connectPayload)
@@ -355,7 +358,7 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 	}
 	if !ack.Accepted {
 		_ = conn.Close(websocket.StatusNormalClosure, "rejected")
-		return fmt.Errorf("connection rejected: %s", ack.Reason)
+		return fmt.Errorf("connection rejected (%s): %s; %s", ack.ReasonCode, ack.Message, ack.UpgradeRecommendation)
 	}
 	if migrated, err := tc.persistAcceptedAgentToken(ctx, ack.AgentToken); err != nil {
 		_ = conn.Close(websocket.StatusInternalError, "durable credential persistence failed")

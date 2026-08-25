@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * Project · Quota tab — single-card view of the effective project quota.
  *
@@ -7,15 +7,15 @@ import { createFileRoute } from '@tanstack/react-router';
  * members the project can claim. Editing the plan is admin-only and lives
  * on /dashboard/settings/quotas/; we just deep-link there.
  */
-import { useParams } from '@/lib/navigation';
-import { Link } from '@/lib/link';
-import { Loader2, Settings, Server, Layers, Users } from 'lucide-react';
-import { useProjectEffectiveQuota } from '@/components/projects/hooks';
-import { cn } from '@/lib/utils';
+import { useParams } from "@/lib/navigation";
+import { Link } from "@/lib/link";
+import { Loader2, Settings, Server, Layers, Users } from "lucide-react";
+import { useProjectEffectiveQuota } from "@/components/projects/hooks";
+import { cn } from "@/lib/utils";
 
 function ProjectQuotaPage() {
   const params = useParams();
-  const id = String(params?.id ?? '');
+  const id = String(params?.id ?? "");
   const { data: quota, isLoading } = useProjectEffectiveQuota(id);
 
   if (isLoading) {
@@ -43,10 +43,19 @@ function ProjectQuotaPage() {
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Effective plan
             </p>
-            <h2 className="text-lg font-semibold text-foreground mt-1">{quota.planName}</h2>
+            <h2 className="text-lg font-semibold text-foreground mt-1">
+              {quota.planName}
+            </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Enforcement:{' '}
-              <span className={cn('font-mono', quota.enforcement === 'hard' ? 'text-status-error' : 'text-status-warning')}>
+              Enforcement:{" "}
+              <span
+                className={cn(
+                  "font-mono",
+                  quota.enforcement === "hard"
+                    ? "text-status-error"
+                    : "text-status-warning",
+                )}
+              >
                 {quota.enforcement}
               </span>
             </p>
@@ -103,12 +112,12 @@ function UsageTile({
   const ratio = unlimited ? 0 : Math.min(used / limit, 1);
   const pct = Math.round(ratio * 100);
   const barColor = unlimited
-    ? 'bg-muted-foreground/40'
+    ? "bg-muted-foreground/40"
     : ratio > 0.9
-      ? 'bg-status-error'
+      ? "bg-status-error"
       : ratio > 0.75
-        ? 'bg-status-warning'
-        : 'bg-status-success';
+        ? "bg-status-warning"
+        : "bg-status-success";
 
   return (
     <div className="rounded-xl border border-border bg-card p-5 space-y-3">
@@ -123,17 +132,20 @@ function UsageTile({
       </div>
       <div className="h-2 rounded-full bg-muted overflow-hidden">
         <div
-          className={cn('h-full rounded-full transition-all duration-300', barColor)}
-          style={{ width: unlimited ? '100%' : `${pct}%` }}
+          className={cn(
+            "h-full rounded-full transition-all duration-300",
+            barColor,
+          )}
+          style={{ width: unlimited ? "100%" : `${pct}%` }}
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        {unlimited ? 'Unlimited' : `${pct}% used`}
+        {unlimited ? "Unlimited" : `${pct}% used`}
       </p>
     </div>
   );
 }
 
-export const Route = createFileRoute('/dashboard/projects/$id/quota/')({
+export const Route = createFileRoute("/dashboard/projects/$id/quota/")({
   component: ProjectQuotaPage,
 });

@@ -4,9 +4,11 @@
 // route just mounts it so etcd DR gets its own URL + sidebar entry. Route
 // files must not import each other under autoCodeSplitting, hence the shared
 // component module instead of a re-export from ../snapshots.
-import { createFileRoute } from '@tanstack/react-router';
-import { ClusterControlPlaneSnapshotsPage } from '@/components/clusters/snapshots-page';
+import { createFileRoute } from "@tanstack/react-router";
+import { ClusterControlPlaneSnapshotsPage } from "@/components/clusters/snapshots-page";
 
-export const Route = createFileRoute('/dashboard/clusters/$id/control-plane-snapshots/')({
+export const Route = createFileRoute(
+  "/dashboard/clusters/$id/control-plane-snapshots/",
+)({
   component: ClusterControlPlaneSnapshotsPage,
 });

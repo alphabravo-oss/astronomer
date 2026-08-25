@@ -31,6 +31,27 @@ func (q *Queries) GetPlatformConfig(ctx context.Context) (PlatformConfiguration,
 	return i, err
 }
 
+const getPlatformConfigForUpdate = `-- name: GetPlatformConfigForUpdate :one
+SELECT id, server_url, platform_name, telemetry_enabled, bootstrapped_at, instance_id, default_cluster_template_id FROM platform_configuration WHERE id = 1 FOR UPDATE
+`
+
+// Serializes platform-default changes and reapply decisions against the
+// singleton configuration row. Call only from a transaction-bound querier.
+func (q *Queries) GetPlatformConfigForUpdate(ctx context.Context) (PlatformConfiguration, error) {
+	row := q.db.QueryRow(ctx, getPlatformConfigForUpdate)
+	var i PlatformConfiguration
+	err := row.Scan(
+		&i.ID,
+		&i.ServerUrl,
+		&i.PlatformName,
+		&i.TelemetryEnabled,
+		&i.BootstrappedAt,
+		&i.InstanceID,
+		&i.DefaultClusterTemplateID,
+	)
+	return i, err
+}
+
 const setPlatformDefaultClusterTemplate = `-- name: SetPlatformDefaultClusterTemplate :one
 UPDATE platform_configuration
 SET default_cluster_template_id = $1

@@ -119,7 +119,7 @@ func TestDeliverySourceProxyCAAndEgressAreSecretBackedAndBounded(t *testing.T) {
 	}
 }
 
-func TestFreshV1DatabasePreflightIsReadOnlyAndExact(t *testing.T) {
+func TestDatabaseUpgradePreflightIsReadOnlyAndBounded(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t,
 		"gateway.enabled=false",
 		"tls.source=none",
@@ -134,21 +134,22 @@ func TestFreshV1DatabasePreflightIsReadOnlyAndExact(t *testing.T) {
 	}
 	script := command[2]
 	for _, want := range []string{
-		"fresh_install_required:",
+		"database_schema_rejected:",
 		"SELECT count(*), COALESCE(max(version), 0), COALESCE(bool_or(dirty), false)",
-		"expected one clean schema_migrations row at version 1",
+		"outside supported range 1-26",
+		"accepted for migration to 26",
 		"delivery_assignment_receipts",
 		"delivery_controller_inventory",
-		"never deletes, reformats, or upgrades a pre-v1 database",
+		"this preflight never changes the database",
 	} {
 		if !strings.Contains(script, want) {
-			t.Fatalf("fresh-v1 DB preflight missing %q", want)
+			t.Fatalf("database upgrade preflight missing %q", want)
 		}
 	}
 	upper := strings.ToUpper(script)
 	for _, mutation := range []string{"DROP TABLE", "TRUNCATE ", "DELETE FROM", "INSERT INTO", "UPDATE SCHEMA_MIGRATIONS"} {
 		if strings.Contains(upper, mutation) {
-			t.Fatalf("fresh-v1 DB preflight contains mutating SQL %q", mutation)
+			t.Fatalf("database upgrade preflight contains mutating SQL %q", mutation)
 		}
 	}
 }

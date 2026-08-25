@@ -242,6 +242,20 @@ func (f *charlieAdminFake) RetryTriggerEvent(_ context.Context, source, request 
 	f.retrySource, f.retryRequest = source, request
 	return f.retryEvent, nil
 }
+func (f *charlieAdminFake) RetryTriggerEventDurable(_ context.Context, source, request, _ uuid.UUID) (charlie.AdminTriggerEventView, error) {
+	f.retrySource, f.retryRequest = source, request
+	view := f.retryEvent
+	view.ID = request.String()
+	return view, nil
+}
+func (f *charlieAdminFake) GetTriggerEvent(_ context.Context, id uuid.UUID) (charlie.AdminTriggerEventView, error) {
+	for _, event := range f.triggerEvents {
+		if event.ID == id.String() {
+			return event, nil
+		}
+	}
+	return charlie.AdminTriggerEventView{}, charlie.ErrAdminConflict
+}
 
 func (f *charlieAdminFake) Status(context.Context) (charlie.AdminStatusView, error) {
 	f.statusCalls++
@@ -568,12 +582,13 @@ func TestCharlieAdminDeadLetterListAndRetryAreBrowserOnlyAndBounded(t *testing.T
 	}
 
 	retryRequest := authenticatedCharlieRequest(http.MethodPost, "/", `{"request_id":"`+requestID.String()+`"}`, uuid.New(), "jwt")
+	retryRequest.Header.Set("Idempotency-Key", "retry-dead-letter-1")
 	routeContext := chi.NewRouteContext()
 	routeContext.URLParams.Add("event_id", sourceID.String())
 	retryRequest = retryRequest.WithContext(context.WithValue(retryRequest.Context(), chi.RouteCtxKey, routeContext))
 	retry := httptest.NewRecorder()
 	handler.RetryTriggerEvent(retry, retryRequest)
-	if retry.Code != http.StatusAccepted || fake.retrySource != sourceID || fake.retryRequest != requestID || !strings.Contains(retry.Body.String(), retryID.String()) {
+	if retry.Code != http.StatusAccepted || fake.retrySource != sourceID || fake.retryRequest == uuid.Nil || !strings.Contains(retry.Body.String(), fake.retryRequest.String()) {
 		t.Fatalf("dead-letter retry = %d source=%s request=%s body=%s", retry.Code, fake.retrySource, fake.retryRequest, retry.Body.String())
 	}
 

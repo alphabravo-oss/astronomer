@@ -10,13 +10,20 @@ import {
   type CharlieAlertPolicy,
 } from "@/lib/api/charlie-admin";
 import { Link } from "@/lib/link";
-import { Field, NumberField, Section, Unavailable, field, primary } from "./shared";
+import {
+  Field,
+  NumberField,
+  Section,
+  Unavailable,
+  field,
+  primary,
+} from "./shared";
 
 export function AlertsTab() {
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: queryKeys.charlie.adminAlertPolicy,
-    queryFn: getCharlieAlertPolicy,
+    queryFn: ({ signal }) => getCharlieAlertPolicy(signal),
     retry: false,
   });
   const [draft, setDraft] = useState<CharlieAlertPolicy>();
@@ -24,7 +31,7 @@ export function AlertsTab() {
     if (q.data) setDraft(structuredClone(q.data));
   }, [q.data]);
   const save = useMutation({
-    mutationFn: updateCharlieAlertPolicy,
+    mutationFn: (input: CharlieAlertPolicy) => updateCharlieAlertPolicy(input),
     onSuccess: (value) => {
       qc.setQueryData(queryKeys.charlie.adminAlertPolicy, value);
       setDraft(structuredClone(value));
@@ -69,7 +76,9 @@ export function AlertsTab() {
           <input
             type="checkbox"
             checked={draft.enabled}
-            onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
+            onChange={(event) =>
+              setDraft({ ...draft, enabled: event.target.checked })
+            }
           />
           Enable external alerts for Charlie findings
         </label>
@@ -79,20 +88,27 @@ export function AlertsTab() {
         </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="space-y-1">
-            <span className="text-xs text-muted-foreground">Minimum severity</span>
+            <span className="text-xs text-muted-foreground">
+              Minimum severity
+            </span>
             <select
               className={field}
               value={draft.minimumSeverity}
               onChange={(event) =>
                 setDraft({
                   ...draft,
-                  minimumSeverity: event.target.value as CharlieAlertPolicy["minimumSeverity"],
+                  minimumSeverity: event.target
+                    .value as CharlieAlertPolicy["minimumSeverity"],
                 })
               }
             >
-              {(["info", "low", "medium", "high", "critical"] as const).map((severity) => (
-                <option key={severity} value={severity}>{severity}</option>
-              ))}
+              {(["info", "low", "medium", "high", "critical"] as const).map(
+                (severity) => (
+                  <option key={severity} value={severity}>
+                    {severity}
+                  </option>
+                ),
+              )}
             </select>
           </label>
           <NumberField
@@ -107,7 +123,9 @@ export function AlertsTab() {
             value={draft.escalationAfterSeconds}
             min={0}
             max={604800}
-            set={(value) => setDraft({ ...draft, escalationAfterSeconds: value })}
+            set={(value) =>
+              setDraft({ ...draft, escalationAfterSeconds: value })
+            }
           />
           <Field
             label="Quiet-hours timezone"
@@ -119,14 +137,26 @@ export function AlertsTab() {
           <input
             type="checkbox"
             checked={draft.quietHoursEnabled}
-            onChange={(event) => setDraft({ ...draft, quietHoursEnabled: event.target.checked })}
+            onChange={(event) =>
+              setDraft({ ...draft, quietHoursEnabled: event.target.checked })
+            }
           />
           Delay delivery during quiet hours
         </label>
         {draft.quietHoursEnabled && (
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Quiet hours start" type="time" value={draft.quietHoursStart} set={(value) => setDraft({ ...draft, quietHoursStart: value })} />
-            <Field label="Quiet hours end" type="time" value={draft.quietHoursEnd} set={(value) => setDraft({ ...draft, quietHoursEnd: value })} />
+            <Field
+              label="Quiet hours start"
+              type="time"
+              value={draft.quietHoursStart}
+              set={(value) => setDraft({ ...draft, quietHoursStart: value })}
+            />
+            <Field
+              label="Quiet hours end"
+              type="time"
+              value={draft.quietHoursEnd}
+              set={(value) => setDraft({ ...draft, quietHoursEnd: value })}
+            />
           </div>
         )}
       </Section>
@@ -137,16 +167,23 @@ export function AlertsTab() {
         {draft.availableChannels.length ? (
           <div className="grid gap-2 md:grid-cols-2">
             {draft.availableChannels.map((channel) => (
-              <label key={channel.id} className="flex items-center gap-3 rounded-lg border p-3 text-sm">
+              <label
+                key={channel.id}
+                className="flex items-center gap-3 rounded-lg border p-3 text-sm"
+              >
                 <input
                   type="checkbox"
                   aria-label={`Route Charlie alerts to ${channel.name}`}
                   checked={draft.channelIds.includes(channel.id)}
-                  onChange={(event) => toggleChannel(channel.id, event.target.checked)}
+                  onChange={(event) =>
+                    toggleChannel(channel.id, event.target.checked)
+                  }
                 />
                 <span className="flex-1">
                   <span className="block font-medium">{channel.name}</span>
-                  <span className="block text-xs text-muted-foreground">{channel.type} · configured recipient</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {channel.type} · configured recipient
+                  </span>
                 </span>
               </label>
             ))}
@@ -155,14 +192,19 @@ export function AlertsTab() {
           <p className="text-sm text-muted-foreground">
             No supported notification channels are enabled. Configure Slack,
             PagerDuty, Teams, or a webhook under{" "}
-            <Link className="underline underline-offset-2" href="/dashboard/alerting">
+            <Link
+              className="underline underline-offset-2"
+              href="/dashboard/alerting"
+            >
               Alerting
             </Link>{" "}
             first. Findings still appear in Charlie regardless.
           </p>
         )}
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">Policy revision {draft.revision || "not saved"}</p>
+          <p className="text-xs text-muted-foreground">
+            Policy revision {draft.revision || "not saved"}
+          </p>
           <button
             type="button"
             className={primary}

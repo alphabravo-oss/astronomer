@@ -18,6 +18,7 @@ import (
 
 func grafanaAuthed(method, target, body string) *http.Request {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req.Header.Set("Idempotency-Key", "grafana-lifecycle-test")
 	return req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
 		ID: uuid.NewString(), AuthMethod: "jwt",
 	}))
@@ -266,11 +267,11 @@ func TestSharedGrafanaDashboardsAreEmbedded(t *testing.T) {
 
 func TestSharedGrafanaDashboardsLandInFleetAndManagementPlaneFolders(t *testing.T) {
 	want := map[string]string{
-		"cluster-overview":        grafanaFolderFleet,
-		"node-usage":              grafanaFolderFleet,
-		"workload-health":         grafanaFolderFleet,
-		"image-scan-summary":      grafanaFolderFleet,
-		"security-posture-rollup": grafanaFolderFleet,
+		"cluster-overview":        grafanaFolderShared,
+		"node-usage":              grafanaFolderShared,
+		"workload-health":         grafanaFolderShared,
+		"image-scan-summary":      grafanaFolderShared,
+		"security-posture-rollup": grafanaFolderShared,
 		"management-plane":        grafanaFolderManagementPlane,
 		"baseline-tool-health":    grafanaFolderManagementPlane,
 		"continuous-delivery":     grafanaFolderManagementPlane,
@@ -282,8 +283,8 @@ func TestSharedGrafanaDashboardsLandInFleetAndManagementPlaneFolders(t *testing.
 		anns, _ := meta["annotations"].(map[string]any)
 		data, _ := m["data"].(map[string]any)
 		folder, _ := anns[grafanaDashboardFolderAnnotationKey].(string)
-		if folder != grafanaFolderFleet && folder != grafanaFolderManagementPlane {
-			t.Errorf("Helm extraObjects folder %q is not Fleet or Management plane", folder)
+		if folder != grafanaFolderShared && folder != grafanaFolderManagementPlane {
+			t.Errorf("Helm extraObjects folder %q is not Shared or Management plane", folder)
 		}
 		if strings.Contains(folder, "cluster/") || strings.Contains(strings.ToLower(folder), "uuid") {
 			t.Errorf("Helm extraObjects must not own folder-per-cluster (reconciler does): %q", folder)
@@ -360,11 +361,11 @@ func TestSharedGrafanaSidecarCreatesFoldersFromAnnotation(t *testing.T) {
 		}
 		folders[folder]++
 	}
-	if folders[grafanaFolderFleet] == 0 || folders[grafanaFolderManagementPlane] == 0 {
-		t.Fatalf("preview extraObjects folders = %v, want both %q and %q", folders, grafanaFolderFleet, grafanaFolderManagementPlane)
+	if folders[grafanaFolderShared] == 0 || folders[grafanaFolderManagementPlane] == 0 {
+		t.Fatalf("preview extraObjects folders = %v, want both %q and %q", folders, grafanaFolderShared, grafanaFolderManagementPlane)
 	}
 	if len(folders) != 2 {
-		t.Fatalf("preview extraObjects folders = %v, want only Fleet and Management plane", folders)
+		t.Fatalf("preview extraObjects folders = %v, want only Shared and Management plane", folders)
 	}
 }
 

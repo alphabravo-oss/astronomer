@@ -13,6 +13,13 @@ SELECT id, user_id, cluster_id, namespace, api_group, resource, verbs,
 FROM native_rbac_rules
 WHERE id = $1;
 
+-- name: GetNativeRBACRuleForUpdate :one
+SELECT id, user_id, cluster_id, namespace, api_group, resource, verbs,
+       created_at, created_by_id
+FROM native_rbac_rules
+WHERE id = $1
+FOR UPDATE;
+
 -- name: ListNativeRBACRulesByUser :many
 -- Both the CRUD/authoring view AND the authz-hook evaluation load use this:
 -- a user's full rule set, newest first. The hot-path caller caches the result.

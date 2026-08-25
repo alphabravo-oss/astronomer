@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * Read-only encryption/JWT key-status surface (F-05). Operators poll this
@@ -7,12 +7,12 @@
  * server-side; renders inside a settings page that is already admin-gated.
  */
 
-import { useQuery } from '@tanstack/react-query';
-import { KeyRound, RefreshCw, Loader2 } from 'lucide-react';
-import { getKeyStatus } from '@/lib/api';
-import { queryKeys } from '@/lib/query-keys';
-import { formatDate } from '@/lib/utils';
-import { ErrorState } from '@/components/ui/empty-state';
+import { useQuery } from "@tanstack/react-query";
+import { KeyRound, RefreshCw, Loader2 } from "lucide-react";
+import { getKeyStatus } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
+import { formatDate } from "@/lib/utils";
+import { ErrorState } from "@/components/ui/empty-state";
 
 export function KeyStatusPanel() {
   const { data, isLoading, isError, refetch, isFetching } = useKeyStatusQuery();
@@ -26,7 +26,8 @@ export function KeyStatusPanel() {
             Encryption keys
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Live count of loaded Fernet + JWT signing keys. Confirm a rotation landed here.
+            Live count of loaded Fernet + JWT signing keys. Confirm a rotation
+            landed here.
           </p>
         </div>
         <button
@@ -55,12 +56,13 @@ export function KeyStatusPanel() {
           {data.insecureDevKeys && data.insecureDevKeys.length > 0 ? (
             <div className="col-span-2 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3">
               <p className="text-sm font-semibold text-destructive">
-                Insecure development key in use: {data.insecureDevKeys.join(', ')}
+                Insecure development key in use:{" "}
+                {data.insecureDevKeys.join(", ")}
               </p>
               <p className="mt-1 text-xs text-destructive/90">
-                This value is published in the Astronomer repository — tokens signed with it
-                are forgeable and credentials wrapped with it are readable. Rotate now
-                (docs/runbooks/insecure-dev-key-in-use.md).
+                This value is published in the Astronomer repository — tokens
+                signed with it are forgeable and credentials wrapped with it are
+                readable. Rotate now (docs/runbooks/insecure-dev-key-in-use.md).
               </p>
             </div>
           ) : null}
@@ -68,7 +70,7 @@ export function KeyStatusPanel() {
           <KeyTile label="JWT signing keys" value={data.jwtKeys} />
           <p className="col-span-2 text-2xs text-muted-foreground">
             As of {formatDate(data.asOf)}
-            {isFetching ? ' · refreshing…' : ''}
+            {isFetching ? " · refreshing…" : ""}
           </p>
         </div>
       ) : null}
@@ -80,7 +82,9 @@ function KeyTile({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-border bg-background px-4 py-3">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{value}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+        {value}
+      </p>
     </div>
   );
 }
@@ -88,7 +92,7 @@ function KeyTile({ label, value }: { label: string; value: number }) {
 function useKeyStatusQuery() {
   return useQuery({
     queryKey: queryKeys.adminSecurity.keyStatus,
-    queryFn: getKeyStatus,
+    queryFn: ({ signal }) => getKeyStatus(signal),
     staleTime: 15_000,
   });
 }

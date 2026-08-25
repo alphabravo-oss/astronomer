@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,9 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	awsv4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 
 	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
+	"github.com/alphabravocompany/astronomer-go/internal/cloudcreds"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
@@ -33,6 +35,7 @@ type EKSProvider struct {
 	HTTPClient      *http.Client
 	Endpoint        string // e.g. "https://eks.us-east-1.amazonaws.com"
 	Materializer    CloudCredentialMaterializer
+	AWSResolver     cloudcreds.AWSCredentialResolver
 	SigningOverride func(req *http.Request, creds map[string]string) error
 }
 
@@ -44,12 +47,17 @@ func NewEKSProvider(m CloudCredentialMaterializer) *EKSProvider {
 	return &EKSProvider{
 		HTTPClient:   &http.Client{Timeout: 30 * time.Second},
 		Materializer: m,
+		AWSResolver:  cloudcreds.NewAWSResolver(),
 	}
 }
 
 // ID returns the registered provider id; satisfies the Registry.Lookup
 // "interface{ ID() ProviderID }" probe.
 func (p *EKSProvider) ID() ProviderID { return ProviderEKS }
+
+func (p *EKSProvider) Capability() Capability {
+	return Capability{Provider: ProviderEKS, CanMonitor: true, CanEnforce: true, RequiredMetadata: []string{"name", "region", "cloud credential"}}
+}
 
 func (p *EKSProvider) Detect(ctx context.Context, cluster Cluster) string {
 	if matchAnnotationOrProvider(cluster, ProviderEKS) {
@@ -91,8 +99,8 @@ func (p *EKSProvider) endpoint(cluster Cluster) string {
 
 func (p *EKSProvider) signAndSend(ctx context.Context, req *http.Request, cluster Cluster) (*http.Response, error) {
 	var creds map[string]string
-	if p.Materializer != nil && cluster.CredentialID != uuid.Nil {
-		c, err := p.Materializer.ResolveForCluster(ctx, cluster.ID)
+	if p.Materializer != nil {
+		c, err := p.Materializer.ResolveForCluster(ctx, cluster, ProviderEKS)
 		if err != nil {
 			return nil, fmt.Errorf("resolve cloud credential: %w", err)
 		}
@@ -101,6 +109,35 @@ func (p *EKSProvider) signAndSend(ctx context.Context, req *http.Request, cluste
 	if p.SigningOverride != nil {
 		if err := p.SigningOverride(req, creds); err != nil {
 			return nil, err
+		}
+	} else {
+		if p.Materializer == nil {
+			return nil, fmt.Errorf("EKS credential materializer is not configured")
+		}
+		resolver := p.AWSResolver
+		if resolver == nil {
+			resolver = cloudcreds.NewAWSResolver()
+		}
+		credential, err := resolver.ResolveAWS(ctx, creds)
+		if err != nil {
+			return nil, fmt.Errorf("resolve EKS AWS credential: %w", err)
+		}
+		payloadHash := sha256.Sum256(nil)
+		if req.Body != nil {
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				return nil, fmt.Errorf("read EKS request body for signing: %w", err)
+			}
+			_ = req.Body.Close()
+			req.Body = io.NopCloser(strings.NewReader(string(body)))
+			payloadHash = sha256.Sum256(body)
+		}
+		region := strings.TrimSpace(cluster.Region)
+		if region == "" {
+			return nil, fmt.Errorf("EKS region is required for request signing")
+		}
+		if err := awsv4.NewSigner().SignHTTP(ctx, credential, req, fmt.Sprintf("%x", payloadHash), "eks", region, time.Now().UTC()); err != nil {
+			return nil, fmt.Errorf("sign EKS request: %w", err)
 		}
 	}
 	client := p.HTTPClient
@@ -127,8 +164,8 @@ func (p *EKSProvider) GetEffective(ctx context.Context, cluster Cluster) ([]stri
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode/100 != 2 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("EKS DescribeCluster %s: status %d: %s", cluster.Name, resp.StatusCode, string(body))
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxProviderErrorBody))
+		return nil, &HTTPError{Provider: ProviderEKS, Operation: "describe_cluster", StatusCode: resp.StatusCode, Body: string(body), RetryAfter: retryAfter(resp.Header.Get("Retry-After"))}
 	}
 	var out eksDescribeClusterResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -172,8 +209,8 @@ func (p *EKSProvider) Apply(ctx context.Context, cluster Cluster, cidrs []string
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode/100 != 2 {
-		rb, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("EKS UpdateClusterConfig %s: status %d: %s", cluster.Name, resp.StatusCode, string(rb))
+		rb, _ := io.ReadAll(io.LimitReader(resp.Body, maxProviderErrorBody))
+		return &HTTPError{Provider: ProviderEKS, Operation: "update_cluster_config", StatusCode: resp.StatusCode, Body: string(rb), RetryAfter: retryAfter(resp.Header.Get("Retry-After"))}
 	}
 	return nil
 }

@@ -3,9 +3,18 @@
 // Backend: internal/handler/admin_queues.go. Superuser-gated; the page's
 // own auth gate fans the 403s into a friendlier "you need admin" notice.
 
-import api from '../api';
-import { unwrapData } from '@/lib/api/errors';
-import type { APIResponse, PaginatedResponse } from '@/types';
+import {
+  deleteAdminQueuesByQueueDlqById,
+  getAdminQueues,
+  getAdminQueuesByQueueDlq,
+  getAdminQueuesOperationsById,
+  getAdminTaskOutbox,
+  postAdminTaskOutboxByIdRetry,
+  postAdminQueuesByQueueDlqByIdRetry,
+} from "@/lib/api/generated/client";
+import { idempotencyHeaderParams } from "@/lib/api/idempotency";
+import type { PaginatedResponse } from "@/types";
+import type { OpenAPIComponents } from "@/types/openapi.generated";
 
 export interface QueueSummary {
   name: string;
@@ -28,7 +37,8 @@ export interface DLQEntry {
   last_failed_at: string;
 }
 
-export type TaskOutboxStatus = 'pending' | 'delivering' | 'failed' | 'delivered' | 'dead';
+export type TaskOutboxStatus =
+  "pending" | "delivering" | "failed" | "delivered" | "dead";
 
 export interface TaskOutboxEntry {
   id: string;
@@ -50,36 +60,90 @@ export interface TaskOutboxEntry {
   updated_at?: string;
 }
 
-export async function listQueues(): Promise<QueueSummary[]> {
-  const res = await api.get<QueueSummary[] | APIResponse<QueueSummary[]>>('/admin/queues/');
-  const data = unwrapData<QueueSummary[]>(res.data);
+export async function listQueues(signal?: AbortSignal): Promise<QueueSummary[]> {
+  const response = await getAdminQueues({ signal });
+  const data = response.data as QueueSummary[] | undefined;
   return Array.isArray(data) ? data : [];
 }
 
-export async function listDLQ(queue: string): Promise<{ queue: string; dlq: DLQEntry[]; count: number }> {
+export async function listDLQ(
+  queue: string,
+  signal?: AbortSignal,
+): Promise<{ queue: string; dlq: DLQEntry[]; count: number }> {
   const fallback = { queue, dlq: [], count: 0 };
-  const res = await api.get<
-    { queue: string; dlq: DLQEntry[]; count: number } | APIResponse<{ queue: string; dlq: DLQEntry[]; count: number }>
-  >(`/admin/queues/${encodeURIComponent(queue)}/dlq/`);
-  return unwrapData(res.data) ?? fallback;
+  const response = await getAdminQueuesByQueueDlq({ path: { queue }, signal });
+  return (response.data as typeof fallback | undefined) ?? fallback;
 }
 
-export async function retryDLQTask(queue: string, id: string): Promise<void> {
-  await api.post(`/admin/queues/${encodeURIComponent(queue)}/dlq/${encodeURIComponent(id)}/retry/`);
-}
+export type AdminQueueOperation =
+  OpenAPIComponents["schemas"]["AdminQueueOperation"];
 
-export async function discardDLQTask(queue: string, id: string): Promise<void> {
-  await api.delete(`/admin/queues/${encodeURIComponent(queue)}/dlq/${encodeURIComponent(id)}/`);
-}
-
-export async function listTaskOutbox(status: TaskOutboxStatus | '' = 'dead'): Promise<PaginatedResponse<TaskOutboxEntry>> {
-  const res = await api.get<PaginatedResponse<TaskOutboxEntry>>('/admin/task-outbox/', {
-    params: { status, limit: 100 },
+export async function retryDLQTask(
+  queue: string,
+  id: string,
+  options: { idempotencyKey: string; signal?: AbortSignal },
+): Promise<AdminQueueOperation> {
+  const response = await postAdminQueuesByQueueDlqByIdRetry({
+    path: { queue, id },
+    headerParams: { "Idempotency-Key": options.idempotencyKey },
+    signal: options.signal,
   });
-  return res.data;
+  return response.data;
 }
 
-export async function retryTaskOutbox(id: string): Promise<TaskOutboxEntry> {
-  const res = await api.post<APIResponse<TaskOutboxEntry>>(`/admin/task-outbox/${encodeURIComponent(id)}/retry/`);
-  return res.data.data;
+export async function discardDLQTask(
+  queue: string,
+  id: string,
+  options: { idempotencyKey: string; signal?: AbortSignal },
+): Promise<AdminQueueOperation> {
+  const response = await deleteAdminQueuesByQueueDlqById({
+    path: { queue, id },
+    headerParams: { "Idempotency-Key": options.idempotencyKey },
+    signal: options.signal,
+  });
+  return response.data;
+}
+
+export async function getDLQOperation(
+  id: string,
+  signal?: AbortSignal,
+): Promise<AdminQueueOperation> {
+  const response = await getAdminQueuesOperationsById({
+    path: { id },
+    signal,
+  });
+  return response.data;
+}
+
+export async function listTaskOutbox(
+  status: TaskOutboxStatus | "" = "dead",
+  signal?: AbortSignal,
+): Promise<PaginatedResponse<TaskOutboxEntry>> {
+  const response = await getAdminTaskOutbox({
+    query: { status: status || undefined, limit: 100 },
+    signal,
+  });
+  const count = response.count ?? response.data?.length ?? 0;
+  return {
+    data: (response.data ?? []) as TaskOutboxEntry[],
+    total: count,
+    count,
+    next: response.next ?? null,
+    previous: response.previous ?? null,
+    page: 1,
+    pageSize: 100,
+    totalPages: Math.max(1, Math.ceil(count / 100)),
+  };
+}
+
+export async function retryTaskOutbox(
+  id: string,
+  signal?: AbortSignal,
+): Promise<TaskOutboxEntry> {
+  const response = await postAdminTaskOutboxByIdRetry({
+    path: { id },
+    headerParams: idempotencyHeaderParams(),
+    signal,
+  });
+  return response.data as TaskOutboxEntry;
 }

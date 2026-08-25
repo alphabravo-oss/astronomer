@@ -9,12 +9,12 @@
  * so fallback polling actually restarts.
  */
 
-import { Store } from '@tanstack/store';
+import { Store } from "@tanstack/store";
 
-export type LiveStatus = 'idle' | 'connecting' | 'open' | 'closed';
+export type LiveStatus = "idle" | "connecting" | "open" | "closed";
 
 /** Current SSE connection status. Written only by `stream.ts`. */
-export const liveStatus = new Store<LiveStatus>('idle');
+export const liveStatus = new Store<LiveStatus>("idle");
 
 /** Non-reactive read of the current stream status. */
 export function liveEventsStatus(): LiveStatus {
@@ -32,5 +32,5 @@ export function setLiveStatus(next: LiveStatus): void {
  * the base interval. Use as `refetchInterval: liveFallback(baseMs)`.
  */
 export function liveFallback(baseMs: number): () => number | false {
-  return () => (liveStatus.state === 'open' ? false : baseMs);
+  return () => (liveStatus.state === "open" ? false : baseMs);
 }

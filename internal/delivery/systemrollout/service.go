@@ -20,6 +20,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
@@ -72,6 +74,7 @@ type StartRequest struct {
 	Strategy       model.RolloutStrategy
 	IdempotencyKey string
 	ActorID        uuid.UUID
+	Audit          audit.Intent
 }
 
 type Action string
@@ -86,8 +89,34 @@ const (
 )
 
 type Service struct {
-	pool *pgxpool.Pool
-	now  func() time.Time
+	pool         *pgxpool.Pool
+	now          func() time.Time
+	requireAudit bool
+}
+
+func (s *Service) RequireTransactionalAudit() {
+	if s != nil {
+		s.requireAudit = true
+	}
+}
+
+func (s *Service) persistAudit(ctx context.Context, tx pgx.Tx, intent audit.Intent, view View) error {
+	if intent.IsZero() {
+		if s.requireAudit {
+			return audit.ErrOutboxUnavailable
+		}
+		return nil
+	}
+	intent.Event.ResourceID = view.ID.String()
+	if intent.Event.Detail == nil {
+		intent.Event.Detail = map[string]any{}
+	}
+	intent.Event.Detail["release_id"] = view.ReleaseID.String()
+	intent.Event.Detail["strategy_digest"] = view.StrategyDigest
+	intent.Event.Detail["cluster_count"] = view.TotalClusters
+	intent.Event.Detail["state"] = view.State
+	intent.Event.Detail["fencing_generation"] = view.FencingGeneration
+	return audit.RecordIntent(ctx, sqlc.New(tx), intent)
 }
 
 func New(pool *pgxpool.Pool) (*Service, error) {
@@ -127,6 +156,9 @@ func (s *Service) Start(ctx context.Context, request StartRequest) (View, error)
 	if existing, err := getByIdempotency(ctx, tx, key); err == nil {
 		if existing.ReleaseID != request.ReleaseID {
 			return View{}, fmt.Errorf("%w: idempotency key belongs to another release", ErrConflict)
+		}
+		if err := s.persistAudit(ctx, tx, request.Audit, existing); err != nil {
+			return View{}, err
 		}
 		return existing, tx.Commit(ctx)
 	} else if !errors.Is(err, pgx.ErrNoRows) {
@@ -236,6 +268,9 @@ func (s *Service) Start(ctx context.Context, request StartRequest) (View, error)
 	if err := appendEvent(ctx, tx, rolloutID, request.ReleaseID, 1, "rollout_created", "", state, "approval_required", strategyDigest, now); err != nil {
 		return View{}, err
 	}
+	if err := s.persistAudit(ctx, tx, request.Audit, view); err != nil {
+		return View{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return View{}, fmt.Errorf("commit system rollout: %w", err)
 	}
@@ -278,7 +313,7 @@ func (s *Service) Assignments(ctx context.Context, id uuid.UUID) ([]Assignment, 
 // Act performs a user-requested CAS transition. The periodic reconciler owns
 // cohort release and completion, keeping HTTP requests bounded regardless of
 // cluster count.
-func (s *Service) Act(ctx context.Context, id uuid.UUID, expectedFence int64, action Action, actor uuid.UUID, reason string) (View, error) {
+func (s *Service) Act(ctx context.Context, id uuid.UUID, expectedFence int64, action Action, actor uuid.UUID, reason string, intent audit.Intent) (View, error) {
 	if id == uuid.Nil || expectedFence < 1 {
 		return View{}, ErrPrecondition
 	}
@@ -328,9 +363,9 @@ func (s *Service) Act(ctx context.Context, id uuid.UUID, expectedFence int64, ac
 		completed = now
 	}
 	row := tx.QueryRow(ctx, `
-		UPDATE delivery_system_rollouts SET state=$2,fencing_generation=fencing_generation+1,
+		UPDATE delivery_system_rollouts SET state=$2::text,fencing_generation=fencing_generation+1,
 			lease_owner='',lease_expires_at=NULL,last_error_code=$3,
-			started_at=CASE WHEN $2 IN ('queued','progressing','rolling_back') THEN COALESCE(started_at,$4) ELSE started_at END,
+			started_at=CASE WHEN $2::text IN ('queued','progressing','rolling_back') THEN COALESCE(started_at,$4) ELSE started_at END,
 			completed_at=COALESCE($5::timestamptz,completed_at)
 		WHERE id=$1 AND fencing_generation=$6
 		RETURNING id,release_id,previous_release_id,strategy,strategy_digest,state,fencing_generation,
@@ -347,6 +382,9 @@ func (s *Service) Act(ctx context.Context, id uuid.UUID, expectedFence int64, ac
 	actorDigest := decisionDigest(action, actor, reason, updated.FencingGeneration)
 	if err := appendEvent(ctx, tx, id, current.ReleaseID, updated.FencingGeneration,
 		"rollout_"+string(action), current.State, next, reason, actorDigest, now); err != nil {
+		return View{}, err
+	}
+	if err := s.persistAudit(ctx, tx, intent, updated); err != nil {
 		return View{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -413,7 +451,7 @@ func (s *Service) ReconcileOne(ctx context.Context, id uuid.UUID) error {
 		return tx.Commit(ctx)
 	}
 	now := s.now().UTC()
-	counts, err := assignmentCounts(ctx, tx, id)
+	counts, err := assignmentCounts(ctx, tx, id, time.Duration(current.Strategy.MinReady))
 	if err != nil {
 		return err
 	}
@@ -425,14 +463,18 @@ func (s *Service) ReconcileOne(ctx context.Context, id uuid.UUID) error {
 		if counts.rollbackFailed > 0 {
 			return finish(ctx, tx, current, "rollback_failed", "rollback_failed", now)
 		}
-		if counts.rolledBack == current.TotalClusters {
+		// Only assignments released before rollback are rollback targets. Pending
+		// cohorts never left the previous release and are intentionally excluded
+		// by beginRollback; waiting for total_clusters here makes a partial
+		// canary rollback impossible to complete.
+		if rollbackComplete(counts) {
 			return finish(ctx, tx, current, "rolled_back", "", now)
 		}
 		return updateCountersAndCommit(ctx, tx, current)
 	}
 
 	if current.State == "queued" {
-		released, err := releaseNextCohort(ctx, tx, current.ID, now)
+		released, err := releaseNextCohort(ctx, tx, current.ID, now, systemReleaseSlots(current.Strategy, current.TotalClusters, counts))
 		if err != nil {
 			return err
 		}
@@ -485,12 +527,12 @@ func (s *Service) ReconcileOne(ctx context.Context, id uuid.UUID) error {
 		}
 		return finish(ctx, tx, current, "succeeded", "", now)
 	}
-	if current.State == "progressing" && counts.inFlight == 0 && counts.pending > 0 {
+	if current.State == "progressing" && counts.inFlight == 0 && counts.immatureReady == 0 && counts.pending > 0 {
 		if current.Strategy.Type == model.StrategyCanary && current.Strategy.Canary != nil &&
-			current.Strategy.Canary.ApprovalAfterCanary && counts.maxReadyCohort == 0 {
+			current.Strategy.Canary.ApprovalAfterCanary && counts.maxReadyCohort == 0 && counts.pendingCanary == 0 {
 			current.State = "awaiting_approval"
 		} else {
-			released, releaseErr := releaseNextCohort(ctx, tx, current.ID, now)
+			released, releaseErr := releaseNextCohort(ctx, tx, current.ID, now, systemReleaseSlots(current.Strategy, current.TotalClusters, counts))
 			if releaseErr != nil {
 				return releaseErr
 			}
@@ -527,11 +569,12 @@ func (s *Service) Sweep(ctx context.Context, limit int) error {
 }
 
 type counts struct {
-	ready, failed, released, pending, inFlight, rolledBack, rollbackFailed int32
-	maxReadyCohort                                                         int32
+	ready, failed, released, pending, inFlight, immatureReady  int32
+	rolledBack, rollbackFailed, rollbackTargets, pendingCanary int32
+	maxReadyCohort                                             int32
 }
 
-func assignmentCounts(ctx context.Context, tx pgx.Tx, id uuid.UUID) (counts, error) {
+func assignmentCounts(ctx context.Context, tx pgx.Tx, id uuid.UUID, minReady time.Duration) (counts, error) {
 	var c counts
 	err := tx.QueryRow(ctx, `
 		SELECT
@@ -540,24 +583,63 @@ func assignmentCounts(ctx context.Context, tx pgx.Tx, id uuid.UUID) (counts, err
 			count(*) FILTER (WHERE phase<>'pending'),
 			count(*) FILTER (WHERE phase='pending'),
 			count(*) FILTER (WHERE phase IN ('released','applying')),
+			count(*) FILTER (WHERE phase='ready' AND ready_at > now() - ($2 * interval '1 millisecond')),
 			count(*) FILTER (WHERE phase='rolled_back'),
 			count(*) FILTER (WHERE phase='rollback_failed'),
+			count(*) FILTER (WHERE phase IN ('rolling_back','rolled_back','rollback_failed')),
+			count(*) FILTER (WHERE phase='pending' AND cohort=0),
 			COALESCE(max(cohort) FILTER (WHERE phase='ready'),-1)
-		FROM delivery_system_cluster_assignments WHERE rollout_id=$1`, id).
-		Scan(&c.ready, &c.failed, &c.released, &c.pending, &c.inFlight, &c.rolledBack, &c.rollbackFailed, &c.maxReadyCohort)
+		FROM delivery_system_cluster_assignments WHERE rollout_id=$1`, id, minReady.Milliseconds()).
+		Scan(&c.ready, &c.failed, &c.released, &c.pending, &c.inFlight, &c.immatureReady,
+			&c.rolledBack, &c.rollbackFailed, &c.rollbackTargets, &c.pendingCanary, &c.maxReadyCohort)
 	return c, err
 }
 
-func releaseNextCohort(ctx context.Context, tx pgx.Tx, id uuid.UUID, now time.Time) (int32, error) {
-	var cohort int32
-	if err := tx.QueryRow(ctx, `SELECT min(cohort) FROM delivery_system_cluster_assignments WHERE rollout_id=$1 AND phase='pending'`, id).Scan(&cohort); err != nil {
-		return 0, err
+func releaseNextCohort(ctx context.Context, tx pgx.Tx, id uuid.UUID, now time.Time, limit int32) (int32, error) {
+	if limit <= 0 {
+		return 0, nil
 	}
-	tag, err := tx.Exec(ctx, `UPDATE delivery_system_cluster_assignments SET phase='released',released_at=$3,fence=fence+1 WHERE rollout_id=$1 AND cohort=$2 AND phase='pending'`, id, cohort, now)
+	tag, err := tx.Exec(ctx, `
+		WITH next_assignments AS (
+			SELECT cluster_id
+			FROM delivery_system_cluster_assignments
+			WHERE rollout_id=$1
+			  AND cohort=(SELECT min(cohort) FROM delivery_system_cluster_assignments WHERE rollout_id=$1 AND phase='pending')
+			  AND phase='pending'
+			ORDER BY release_order,cluster_id
+			LIMIT $3
+			FOR UPDATE
+		)
+		UPDATE delivery_system_cluster_assignments AS assignment
+		SET phase='released',released_at=$2,fence=assignment.fence+1
+		FROM next_assignments
+		WHERE assignment.cluster_id=next_assignments.cluster_id`, id, now, limit)
 	if err != nil {
 		return 0, err
 	}
 	return int32(tag.RowsAffected()), nil
+}
+
+// systemReleaseSlots is the hard forward-rollout safety budget. A released or
+// applying assignment reserves both a concurrency slot and an unavailable
+// slot until it reports Ready. Failed assignments keep consuming availability,
+// preventing a controller from compounding an outage below the configured
+// failure threshold.
+func systemReleaseSlots(strategy model.RolloutStrategy, total int32, current counts) int32 {
+	concurrency := min(int32(strategy.MaxConcurrent), total) - current.inFlight - current.immatureReady
+	availabilityLimit := total
+	switch strategy.MaxUnavailable.Type {
+	case model.AmountCount:
+		availabilityLimit = min(int32(strategy.MaxUnavailable.Value), total)
+	case model.AmountPercent:
+		availabilityLimit = int32(uint64(total) * uint64(strategy.MaxUnavailable.Value) / 100)
+	}
+	availability := availabilityLimit - current.inFlight - current.immatureReady - current.failed
+	return max(0, min(concurrency, availability))
+}
+
+func rollbackComplete(current counts) bool {
+	return current.rollbackFailed == 0 && current.rollbackTargets > 0 && current.rolledBack == current.rollbackTargets
 }
 
 func beginRollback(ctx context.Context, tx pgx.Tx, current View, reason string, now time.Time) error {
@@ -604,7 +686,7 @@ func finish(ctx context.Context, tx pgx.Tx, current View, state, code string, no
 	current.State = state
 	current.LastErrorCode = code
 	if _, err := tx.Exec(ctx, `
-		UPDATE delivery_system_rollouts SET state=$2,fencing_generation=fencing_generation+1,
+		UPDATE delivery_system_rollouts SET state=$2::text,fencing_generation=fencing_generation+1,
 			ready_clusters=$3,failed_clusters=$4,released_clusters=$5,last_error_code=$6,
 			completed_at=$7,lease_owner='',lease_expires_at=NULL WHERE id=$1`, current.ID, state,
 		current.ReadyClusters, current.FailedClusters, current.ReleasedClusters, code, now); err != nil {
@@ -619,9 +701,9 @@ func finish(ctx context.Context, tx pgx.Tx, current View, state, code string, no
 
 func updateCountersAndCommit(ctx context.Context, tx pgx.Tx, current View) error {
 	if _, err := tx.Exec(ctx, `
-		UPDATE delivery_system_rollouts SET state=$2,fencing_generation=fencing_generation+1,
+		UPDATE delivery_system_rollouts SET state=$2::text,fencing_generation=fencing_generation+1,
 			ready_clusters=$3,failed_clusters=$4,released_clusters=$5,last_error_code=$6,
-			started_at=CASE WHEN $2 IN ('progressing','rolling_back') THEN COALESCE(started_at,now()) ELSE started_at END,
+			started_at=CASE WHEN $2::text IN ('progressing','rolling_back') THEN COALESCE(started_at,now()) ELSE started_at END,
 			lease_owner='',lease_expires_at=NULL WHERE id=$1`, current.ID, current.State,
 		current.ReadyClusters, current.FailedClusters, current.ReleasedClusters, current.LastErrorCode); err != nil {
 		return err

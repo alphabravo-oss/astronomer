@@ -299,16 +299,22 @@ func TestExactReleaseUpgradeHelperPreservesStateAndRollback(t *testing.T) {
 	script := string(raw)
 	for _, required := range []string{
 		"oci://ghcr.io/alphabravo-oss/charts/astronomer",
-		`helm get values "$release" --namespace "$namespace" --all`,
+		`"${helm_cmd[@]}" get values "$release" --namespace "$namespace" --all`,
 		`release-secrets.yaml`,
 		`pg_dump --format=custom`,
+		`pg_restore --exit-on-error`,
+		`astronomer.pgcustom.list`,
+		`BACKUP_SHA256SUMS`,
 		`EXTERNAL_DB_BACKUP_CONFIRMED`,
-		`EXTERNAL_DB_V1_SCHEMA_CONFIRMED`,
+		`EXTERNAL_DB_SCHEMA_VERSION`,
+		`release-compatibility.json`,
+		`minimum_upgrade_schema`,
+		`target_schema`,
 		`MIN_READY_NODES`,
 		`MIN_BACKUP_FREE_KIB`,
 		`sort -V`,
 		`status.disruptionsAllowed`,
-		`1|1|f`,
+		`post_migration_state`,
 		`pg_database_size(current_database())`,
 		`--reset-then-reuse-values`,
 		`image.registry=`,
@@ -324,7 +330,16 @@ func TestExactReleaseUpgradeHelperPreservesStateAndRollback(t *testing.T) {
 		`--atomic --cleanup-on-fail`,
 		`--dry-run=server --hide-secret`,
 		`values-user.yaml`,
-		`helm rollback`,
+		`"${helm_cmd[@]}" rollback`,
+		`KUBE_CONTEXT is required; ambient Kubernetes contexts are forbidden`,
+		`EXPECTED_KUBE_API_SERVER must be an explicit https URL`,
+		`actual_kube_api_server`,
+		`RELEASE_ARTIFACT_DIR`,
+		`release-manifest.sigstore.json`,
+		`cosign verify-blob`,
+		`--set-file "release.manifest=$backup_dir/release-assets/release-manifest.json"`,
+		`api_identity_sha256`,
+		`write_sanitized_evidence`,
 		`app.kubernetes.io/name=astronomer`,
 		`kill -0 "$port_forward_pid"`,
 		`/readyz`,
@@ -340,6 +355,82 @@ func TestExactReleaseUpgradeHelperPreservesStateAndRollback(t *testing.T) {
 		if strings.Contains(script, removed) {
 			t.Fatalf("dependency-free v1 upgrade helper retains removed lifecycle mechanism %q", removed)
 		}
+	}
+	for _, forbidden := range []string{
+		"\nkubectl get ", "\nkubectl exec ", "\nkubectl rollout ", "\nkubectl port-forward ",
+		"\nhelm status ", "\nhelm get ", "\nhelm history ", "\nhelm upgrade \"${release_args", "\nhelm rollback ",
+	} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("upgrade helper retains ambient-context invocation %q", forbidden)
+		}
+	}
+}
+
+func TestReleaseManifestConfigMapIsContentAddressed(t *testing.T) {
+	configMap, err := os.ReadFile("chart/templates/release-manifest-configmap.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	helpers, err := os.ReadFile("chart/templates/_helpers.tpl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := os.ReadFile("chart/templates/server-deployment.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	worker, err := os.ReadFile("chart/templates/worker-deployment.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for path, raw := range map[string][]byte{"configmap": configMap, "server": server, "worker": worker} {
+		if !bytes.Contains(raw, []byte(`include "astronomer.releaseManifestConfigMapName" .`)) {
+			t.Errorf("%s does not consume the content-addressed manifest name", path)
+		}
+	}
+	if !bytes.Contains(configMap, []byte("immutable: true")) || !bytes.Contains(helpers, []byte(`sha256sum .Values.release.manifest`)) {
+		t.Fatal("release manifest ConfigMap must remain immutable and content-addressed")
+	}
+	if bytes.Contains(configMap, []byte(`fullname" . }}-release-manifest`)) {
+		t.Fatal("release manifest ConfigMap retains the fixed upgrade-blocking name")
+	}
+}
+
+func TestUpgradeEvidenceSchemaAndWriterAreClosedAndSecretFree(t *testing.T) {
+	schema, err := os.ReadFile("release/upgrade-evidence.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(schema, []byte(`"additionalProperties": false`)) {
+		t.Fatal("upgrade evidence schema is not closed")
+	}
+	script, err := os.ReadFile("../scripts/upgrade-release.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := string(script)
+	for _, secretField := range []string{"release-secrets.yaml\" >\"$evidence_path", "astronomer.pgcustom\" >\"$evidence_path", "actual_kube_api_server\" --arg"} {
+		if strings.Contains(writer, secretField) {
+			t.Fatalf("sanitized evidence writer may expose private material: %s", secretField)
+		}
+	}
+}
+
+func TestRCLiveRestorePrecedesTargetMigration(t *testing.T) {
+	raw, err := os.ReadFile("../scripts/upgrade-release.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(raw)
+	quiesce := strings.Index(script, `scale --namespace "$namespace" "deployment/$deployment" --replicas=0`)
+	replace := strings.Index(script, `ALTER DATABASE :\"restored\" RENAME TO :\"live\";`)
+	upgrade := strings.LastIndex(script, `upgrade "${release_args[@]}" --atomic`)
+	postMigration := strings.Index(script, `post_migration_state=`)
+	if quiesce < 0 || replace < 0 || upgrade < 0 || postMigration < 0 {
+		t.Fatal("RC live-restore ordering markers are incomplete")
+	}
+	if quiesce >= replace || replace >= upgrade || upgrade >= postMigration {
+		t.Fatalf("RC must quiesce, replace the restored DB, run target migration, then verify schema: %d %d %d %d", quiesce, replace, upgrade, postMigration)
 	}
 }
 

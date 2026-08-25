@@ -18,21 +18,40 @@ type CharlieTriggerDispatcher interface {
 	Dispatch(context.Context, uuid.UUID) error
 }
 
-var (
-	charlieTriggerMu         sync.RWMutex
-	charlieTriggerDispatcher CharlieTriggerDispatcher
-)
-
-func ConfigureCharlieTriggerDispatcher(dispatcher CharlieTriggerDispatcher) {
-	charlieTriggerMu.Lock()
-	defer charlieTriggerMu.Unlock()
-	charlieTriggerDispatcher = dispatcher
+// CharlieTriggerRuntime owns the dynamically activated Product Bridge
+// dispatcher while keeping the queue handler itself explicitly bound.
+type CharlieTriggerRuntime struct {
+	mu         sync.RWMutex
+	dispatcher CharlieTriggerDispatcher
 }
 
-func HandleCharlieTriggerDispatch(ctx context.Context, task *asynq.Task) error {
-	charlieTriggerMu.RLock()
-	dispatcher := charlieTriggerDispatcher
-	charlieTriggerMu.RUnlock()
+func (runtime *CharlieTriggerRuntime) SetDispatcher(dispatcher CharlieTriggerDispatcher) {
+	if runtime == nil {
+		return
+	}
+	runtime.mu.Lock()
+	runtime.dispatcher = dispatcher
+	runtime.mu.Unlock()
+}
+
+func (runtime *CharlieTriggerRuntime) Dispatcher() CharlieTriggerDispatcher {
+	if runtime == nil {
+		return nil
+	}
+	runtime.mu.RLock()
+	defer runtime.mu.RUnlock()
+	return runtime.dispatcher
+}
+
+func (runtime *CharlieTriggerRuntime) HandlerBindings() (map[string]asynq.HandlerFunc, error) {
+	if runtime == nil {
+		return nil, fmt.Errorf("Charlie trigger runtime is nil")
+	}
+	return map[string]asynq.HandlerFunc{CharlieTriggerDispatchType: runtime.HandleCharlieTriggerDispatch}, nil
+}
+
+func (runtime *CharlieTriggerRuntime) HandleCharlieTriggerDispatch(ctx context.Context, task *asynq.Task) error {
+	dispatcher := runtime.Dispatcher()
 	if dispatcher == nil {
 		return fmt.Errorf("Charlie trigger dispatcher is inactive")
 	}

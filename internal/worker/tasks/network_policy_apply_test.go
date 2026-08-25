@@ -156,7 +156,6 @@ func mkApplication(tmplID uuid.UUID, slug, ns string) sqlc.NetworkPolicyApplicat
 }
 
 func TestReconciler_SSAsNewNetworkPolicy(t *testing.T) {
-	defer ResetNetworkPolicyApply()
 	q := newFakeNetPolQuerier()
 	tmpl := mkTemplate("deny_all_ingress")
 	q.addTemplate(tmpl)
@@ -182,7 +181,6 @@ func TestReconciler_SSAsNewNetworkPolicy(t *testing.T) {
 }
 
 func TestReconciler_MarksAppliedOnSuccess(t *testing.T) {
-	defer ResetNetworkPolicyApply()
 	q := newFakeNetPolQuerier()
 	tmpl := mkTemplate("namespace_only")
 	q.addTemplate(tmpl)
@@ -201,7 +199,6 @@ func TestReconciler_MarksAppliedOnSuccess(t *testing.T) {
 }
 
 func TestReconciler_MarksFailedOnK8sError(t *testing.T) {
-	defer ResetNetworkPolicyApply()
 	q := newFakeNetPolQuerier()
 	tmpl := mkTemplate("project_isolated")
 	q.addTemplate(tmpl)
@@ -223,7 +220,6 @@ func TestReconciler_MarksFailedOnK8sError(t *testing.T) {
 }
 
 func TestDriftCheck_DetectsDivergence(t *testing.T) {
-	defer ResetNetworkPolicyApply()
 	q := newFakeNetPolQuerier()
 	tmpl := mkTemplate("deny_all_ingress")
 	q.addTemplate(tmpl)
@@ -250,7 +246,6 @@ func TestDriftCheck_DetectsDivergence(t *testing.T) {
 }
 
 func TestDriftCheck_NoDriftOnLabelMatch(t *testing.T) {
-	defer ResetNetworkPolicyApply()
 	q := newFakeNetPolQuerier()
 	tmpl := mkTemplate("deny_all_ingress")
 	q.addTemplate(tmpl)

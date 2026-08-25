@@ -1,8 +1,11 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useWindowManagerStore, type WindowTab } from '@/lib/window-manager-store';
-import { cn } from '@/lib/utils';
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useWindowManagerStore,
+  type WindowTab,
+} from "@/lib/window-manager-store";
+import { cn } from "@/lib/utils";
 import {
   ChevronUp,
   FileText,
@@ -10,20 +13,20 @@ import {
   Minimize2,
   Terminal as TerminalIcon,
   X,
-} from 'lucide-react';
-import { LogsTab } from './logs-tab';
-import { ExecTab } from './exec-tab';
+} from "lucide-react";
+import { LogsTab } from "./logs-tab";
+import { ExecTab } from "./exec-tab";
 
 // Per-tab connection state, mirrored from each tab body via the
 // `onStatusChange` callback. Kept here in component-local state so the
 // chips can render a live pill without coupling to the global store.
-type ChipStatus = 'streaming' | 'connecting' | 'disconnected' | 'idle';
+type ChipStatus = "streaming" | "connecting" | "disconnected" | "idle";
 
 function normalizeStatus(s: string | undefined): ChipStatus {
-  if (s === 'streaming' || s === 'connected') return 'streaming';
-  if (s === 'connecting') return 'connecting';
-  if (s === 'disconnected' || s === 'error') return 'disconnected';
-  return 'idle';
+  if (s === "streaming" || s === "connected") return "streaming";
+  if (s === "connecting") return "connecting";
+  if (s === "disconnected" || s === "error") return "disconnected";
+  return "idle";
 }
 
 export function WindowManager() {
@@ -38,7 +41,9 @@ export function WindowManager() {
   const toggleMinimize = useWindowManagerStore((s) => s.toggleMinimize);
   const setHeight = useWindowManagerStore((s) => s.setHeight);
 
-  const [tabStatuses, setTabStatuses] = useState<Record<string, ChipStatus>>({});
+  const [tabStatuses, setTabStatuses] = useState<Record<string, ChipStatus>>(
+    {},
+  );
   const [maximized, setMaximized] = useState(false);
   // Track height before maximize so we can restore the user's preferred
   // size when they un-maximize.
@@ -60,10 +65,10 @@ export function WindowManager() {
     (e: React.MouseEvent) => {
       e.preventDefault();
       dragRef.current = { startY: e.clientY, startHeight: height };
-      document.body.style.cursor = 'row-resize';
-      document.body.style.userSelect = 'none';
+      document.body.style.cursor = "row-resize";
+      document.body.style.userSelect = "none";
     },
-    [height]
+    [height],
   );
 
   useEffect(() => {
@@ -75,14 +80,14 @@ export function WindowManager() {
     function onUp() {
       if (!dragRef.current) return;
       dragRef.current = null;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
     }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
     return () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
     };
   }, [setHeight]);
 
@@ -94,7 +99,8 @@ export function WindowManager() {
       setMaximized(false);
     } else {
       preMaxHeightRef.current = height;
-      const target = typeof window !== 'undefined' ? window.innerHeight - 80 : height;
+      const target =
+        typeof window !== "undefined" ? window.innerHeight - 80 : height;
       setHeight(target);
       setMaximized(true);
     }
@@ -103,7 +109,7 @@ export function WindowManager() {
   // Reset maximize tracking if user manually drag-resizes away from the
   // maximized state.
   useEffect(() => {
-    if (maximized && typeof window !== 'undefined') {
+    if (maximized && typeof window !== "undefined") {
       const target = window.innerHeight - 80;
       if (Math.abs(height - target) > 4) {
         setMaximized(false);
@@ -137,15 +143,18 @@ export function WindowManager() {
                 setActive(t.id);
               }}
               className={cn(
-                'inline-flex items-center gap-1.5 h-6 px-2 rounded text-2xs whitespace-nowrap transition-colors',
+                "inline-flex items-center gap-1.5 h-6 px-2 rounded text-2xs whitespace-nowrap transition-colors",
                 t.id === activeTabId
-                  ? 'bg-accent text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
               )}
             >
-              <StatusDot status={tabStatuses[t.id] ?? 'idle'} />
+              <StatusDot status={tabStatuses[t.id] ?? "idle"} />
               <TabIcon kind={t.kind} />
-              <span className="font-mono truncate max-w-[160px]" title={`${t.pod}/${t.container ?? ''}`}>
+              <span
+                className="font-mono truncate max-w-[160px]"
+                title={`${t.pod}/${t.container ?? ""}`}
+              >
                 {shortLabel(t)}
               </span>
             </button>
@@ -171,10 +180,17 @@ export function WindowManager() {
       style={{ height: `${height}px` }}
     >
       {/* Resize handle */}
-      <div
+      <button
+        type="button"
+        aria-label={`Resize console, currently ${height} pixels. Use up and down arrow keys.`}
         onMouseDown={onDragStart}
-        className="h-1 -mt-px cursor-row-resize hover:bg-primary/40 transition-colors shrink-0"
-        style={{ marginBottom: '-1px' }}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+          event.preventDefault();
+          setHeight(height + (event.key === "ArrowUp" ? 24 : -24));
+        }}
+        className="h-1 w-full border-0 p-0 -mt-px cursor-row-resize hover:bg-primary/40 transition-colors shrink-0 focus:bg-primary/40 focus:outline-none"
+        style={{ marginBottom: "-1px" }}
       />
 
       {/* Tab strip */}
@@ -183,36 +199,45 @@ export function WindowManager() {
           {tabs.map((t) => {
             const isActive = t.id === activeTabId;
             return (
-              <button
+              <div
                 key={t.id}
-                onClick={() => setActive(t.id)}
                 className={cn(
-                  'group inline-flex items-center gap-1.5 h-8 px-3 text-2xs whitespace-nowrap',
-                  'border-r border-border transition-colors',
+                  "group inline-flex items-center gap-1.5 h-8 px-3 text-2xs whitespace-nowrap",
+                  "border-r border-border transition-colors",
                   isActive
-                    ? 'bg-background text-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/40'
+                    ? "bg-background text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/40",
                 )}
-                title={`${t.namespace}/${t.pod}${t.container ? '/' + t.container : ''}`}
+                title={`${t.namespace}/${t.pod}${t.container ? "/" + t.container : ""}`}
               >
-                <StatusDot status={tabStatuses[t.id] ?? 'idle'} />
-                <TabIcon kind={t.kind} />
-                <span className="font-mono">
-                  {t.pod}
-                  {t.container ? <span className="text-muted-foreground"> · {t.container}</span> : null}
-                </span>
-                <span
-                  role="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeTab(t.id);
-                  }}
+                <button
+                  type="button"
+                  onClick={() => setActive(t.id)}
+                  aria-pressed={isActive}
+                  className="inline-flex min-w-0 items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <StatusDot status={tabStatuses[t.id] ?? "idle"} />
+                  <TabIcon kind={t.kind} />
+                  <span className="font-mono">
+                    {t.pod}
+                    {t.container ? (
+                      <span className="text-muted-foreground">
+                        {" "}
+                        · {t.container}
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => closeTab(t.id)}
+                  aria-label={`Close ${t.pod}${t.container ? ` ${t.container}` : ""} tab`}
                   className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded
                     text-muted-foreground/70 hover:text-foreground hover:bg-accent/80"
                 >
                   <X className="h-3 w-3" />
-                </span>
-              </button>
+                </button>
+              </div>
             );
           })}
         </div>
@@ -223,9 +248,13 @@ export function WindowManager() {
             onClick={handleMaximizeToggle}
             className="inline-flex items-center justify-center h-6 w-6 rounded
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title={maximized ? 'Restore size' : 'Maximize'}
+            title={maximized ? "Restore size" : "Maximize"}
           >
-            {maximized ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+            {maximized ? (
+              <Minimize2 className="h-3 w-3" />
+            ) : (
+              <Maximize2 className="h-3 w-3" />
+            )}
           </button>
           <button
             onClick={() => toggleMinimize()}
@@ -254,9 +283,9 @@ export function WindowManager() {
             className="absolute inset-0"
             // Hide rather than unmount: each tab owns a live WebSocket /
             // xterm buffer that must survive tab switches.
-            style={{ display: t.id === activeTabId ? 'block' : 'none' }}
+            style={{ display: t.id === activeTabId ? "block" : "none" }}
           >
-            {t.kind === 'logs' ? (
+            {t.kind === "logs" ? (
               <LogsTab
                 clusterId={t.clusterId}
                 namespace={t.namespace}
@@ -282,8 +311,8 @@ export function WindowManager() {
   );
 }
 
-function TabIcon({ kind }: { kind: WindowTab['kind'] }) {
-  return kind === 'logs' ? (
+function TabIcon({ kind }: { kind: WindowTab["kind"] }) {
+  return kind === "logs" ? (
     <FileText className="h-3 w-3" />
   ) : (
     <TerminalIcon className="h-3 w-3" />
@@ -292,17 +321,17 @@ function TabIcon({ kind }: { kind: WindowTab['kind'] }) {
 
 function StatusDot({ status }: { status: ChipStatus }) {
   const cls =
-    status === 'streaming'
-      ? 'bg-status-success animate-pulse'
-      : status === 'connecting'
-        ? 'bg-status-warning'
-        : status === 'disconnected'
-          ? 'bg-status-error'
-          : 'bg-muted-foreground/40';
-  return <span className={cn('h-1.5 w-1.5 rounded-full', cls)} />;
+    status === "streaming"
+      ? "bg-status-success animate-pulse"
+      : status === "connecting"
+        ? "bg-status-warning"
+        : status === "disconnected"
+          ? "bg-status-error"
+          : "bg-muted-foreground/40";
+  return <span className={cn("h-1.5 w-1.5 rounded-full", cls)} />;
 }
 
 function shortLabel(t: WindowTab): string {
-  const podShort = t.pod.length > 18 ? t.pod.slice(0, 15) + '...' : t.pod;
+  const podShort = t.pod.length > 18 ? t.pod.slice(0, 15) + "..." : t.pod;
   return t.container ? `${podShort}·${t.container}` : podShort;
 }

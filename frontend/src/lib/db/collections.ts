@@ -22,12 +22,16 @@
  *     while disconnected cannot leave ghost rows.
  */
 
-import { createCollection, type Collection } from '@tanstack/db';
-import { Store } from '@tanstack/store';
-import { k8sGet } from '@/lib/api';
-import { openPodsWatch, openProxyWatch, type WatchVerb } from '@/lib/api/k8s-watch';
-import { formatRelativeTime } from '@/lib/utils';
-import type { Container, Pod, PodPhase } from '@/types';
+import { createCollection, type Collection } from "@tanstack/db";
+import { Store } from "@tanstack/store";
+import { k8sGet } from "@/lib/api";
+import {
+  openPodsWatch,
+  openProxyWatch,
+  type WatchVerb,
+} from "@/lib/api/k8s-watch";
+import { formatRelativeTime } from "@/lib/utils";
+import type { Container, Pod, PodPhase } from "@/types";
 
 interface K8sObjectMeta {
   name?: string;
@@ -46,13 +50,12 @@ export interface K8sObject {
 export function identityOf(obj: K8sObject | undefined): string {
   const m = obj?.metadata;
   if (m?.uid) return m.uid;
-  return `${m?.namespace ?? ''}/${m?.name ?? ''}`;
+  return `${m?.namespace ?? ""}/${m?.name ?? ""}`;
 }
 
 /** Watch source: the dedicated pods SSE stream, or a generic proxy list path. */
 export type WatchSource =
-  | { kind: 'pods'; namespace?: string }
-  | { kind: 'proxy'; path: string };
+  { kind: "pods"; namespace?: string } | { kind: "proxy"; path: string };
 
 /**
  * Connection status of a collection's watch stream. `error` means the list
@@ -60,7 +63,8 @@ export type WatchSource =
  * ready but empty so consumers render rather than spin; `fallback` means the
  * seed worked but the stream is down. Both retry with backoff.
  */
-export type K8sWatchStatus = 'idle' | 'connecting' | 'live' | 'fallback' | 'error';
+export type K8sWatchStatus =
+  "idle" | "connecting" | "live" | "fallback" | "error";
 
 export interface K8sCollectionHandle<T extends K8sObject> {
   collection: Collection<T, string>;
@@ -74,16 +78,16 @@ const RETRY_MAX_MS = 30_000;
 const handles = new Map<string, K8sCollectionHandle<K8sObject>>();
 
 function sourceKey(clusterId: string, source: WatchSource): string {
-  return source.kind === 'pods'
-    ? `${clusterId}|pods|${source.namespace ?? ''}`
+  return source.kind === "pods"
+    ? `${clusterId}|pods|${source.namespace ?? ""}`
     : `${clusterId}|proxy|${source.path}`;
 }
 
 function seedPath(source: WatchSource): string {
-  if (source.kind === 'proxy') return source.path;
+  if (source.kind === "proxy") return source.path;
   return source.namespace
     ? `api/v1/namespaces/${encodeURIComponent(source.namespace)}/pods`
-    : 'api/v1/pods';
+    : "api/v1/pods";
 }
 
 /**
@@ -101,14 +105,21 @@ export function k8sCollection<T extends K8sObject>(opts: {
   const hit = handles.get(key);
   if (hit) return hit as unknown as K8sCollectionHandle<T>;
 
-  const status = new Store<K8sWatchStatus>('idle');
+  const status = new Store<K8sWatchStatus>("idle");
   const collection = createCollection<T, string>({
     id: `k8s:${key}`,
     getKey: (obj) => identityOf(obj),
     sync: {
       // Watch frames carry whole objects, never patches.
-      rowUpdateMode: 'full',
-      sync: ({ collection: col, begin, write, commit, markReady, truncate }) => {
+      rowUpdateMode: "full",
+      sync: ({
+        collection: col,
+        begin,
+        write,
+        commit,
+        markReady,
+        truncate,
+      }) => {
         let stopped = false;
         let stopStream: (() => void) | null = null;
         let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -120,11 +131,11 @@ export function k8sCollection<T extends K8sObject>(opts: {
           if (stopped || !obj || !obj.metadata) return;
           const id = identityOf(obj);
           begin();
-          if (verb === 'DELETED') {
-            if (col.has(id)) write({ type: 'delete', key: id });
+          if (verb === "DELETED") {
+            if (col.has(id)) write({ type: "delete", key: id });
           } else {
             // Upsert: a fresh watch replays existing objects as ADDED.
-            write({ type: col.has(id) ? 'update' : 'insert', value: obj });
+            write({ type: col.has(id) ? "update" : "insert", value: obj });
           }
           commit();
         };
@@ -139,32 +150,34 @@ export function k8sCollection<T extends K8sObject>(opts: {
           }, delay);
         };
 
-        const onStreamStatus = (s: 'live' | 'fallback') => {
+        const onStreamStatus = (s: "live" | "fallback") => {
           if (stopped) return;
-          if (s === 'live') {
+          if (s === "live") {
             attempt = 0;
-            setStatus('live');
+            setStatus("live");
             return;
           }
           // Stream dropped (or never opened): retry with backoff; the next
           // run() re-seeds so deletes missed while down cannot ghost.
           stopStream?.();
           stopStream = null;
-          setStatus('fallback');
+          setStatus("fallback");
           scheduleRetry();
         };
 
         const run = async () => {
           if (stopped) return;
-          setStatus('connecting');
+          setStatus("connecting");
           let list: { items?: T[] } | undefined;
           try {
-            list = (await k8sGet(clusterId, seedPath(source))) as { items?: T[] };
+            list = (await k8sGet(clusterId, seedPath(source))) as {
+              items?: T[];
+            };
           } catch {
             if (stopped) return;
             // Seed failed — surface the error but mark ready so consumers
             // render (empty) instead of spinning forever, then retry.
-            setStatus('error');
+            setStatus("error");
             markReady();
             scheduleRetry();
             return;
@@ -173,14 +186,24 @@ export function k8sCollection<T extends K8sObject>(opts: {
           begin();
           truncate();
           for (const obj of list?.items ?? []) {
-            if (obj && obj.metadata) write({ type: 'insert', value: obj });
+            if (obj && obj.metadata) write({ type: "insert", value: obj });
           }
           commit();
           markReady();
           stopStream =
-            source.kind === 'pods'
-              ? openPodsWatch(clusterId, source.namespace, (verb, obj) => apply(verb, obj as T), onStreamStatus)
-              : openProxyWatch(clusterId, source.path, (verb, obj) => apply(verb, obj as T), onStreamStatus);
+            source.kind === "pods"
+              ? openPodsWatch(
+                  clusterId,
+                  source.namespace,
+                  (verb, obj) => apply(verb, obj as T),
+                  onStreamStatus,
+                )
+              : openProxyWatch(
+                  clusterId,
+                  source.path,
+                  (verb, obj) => apply(verb, obj as T),
+                  onStreamStatus,
+                );
         };
 
         void run();
@@ -191,7 +214,7 @@ export function k8sCollection<T extends K8sObject>(opts: {
           retryTimer = null;
           stopStream?.();
           stopStream = null;
-          setStatus('idle');
+          setStatus("idle");
         };
       },
     },
@@ -244,7 +267,7 @@ export interface RawPod {
 /** kubectl-style short age ("5m" / "3h" / "2d") — mirrors the server's humanAge. */
 function podAge(createdAt: string): string {
   const ts = Date.parse(createdAt);
-  if (Number.isNaN(ts)) return createdAt ? formatRelativeTime(createdAt) : '';
+  if (Number.isNaN(ts)) return createdAt ? formatRelativeTime(createdAt) : "";
   const mins = Math.max(0, Math.floor((Date.now() - ts) / 60_000));
   if (mins < 60) return `${mins}m`;
   if (mins < 24 * 60) return `${Math.floor(mins / 60)}h`;
@@ -258,9 +281,9 @@ export function podRowFromRaw(clusterId: string, pod: RawPod): Pod {
   let restarts = 0;
   const containers: Container[] = specContainers.map((c) => {
     const cs = pod.status?.containerStatuses?.find((s) => s.name === c.name);
-    let state: Container['status'] = 'waiting';
-    if (cs?.state?.running) state = 'running';
-    else if (cs?.state?.terminated) state = 'terminated';
+    let state: Container["status"] = "waiting";
+    if (cs?.state?.running) state = "running";
+    else if (cs?.state?.terminated) state = "terminated";
     if (cs?.ready) readyCount += 1;
     restarts += cs?.restartCount ?? 0;
     return {
@@ -276,8 +299,8 @@ export function podRowFromRaw(clusterId: string, pod: RawPod): Pod {
       })),
     };
   });
-  const phase = (pod.status?.phase ?? 'Unknown') as PodPhase;
-  const createdAt = pod.metadata.creationTimestamp ?? '';
+  const phase = (pod.status?.phase ?? "Unknown") as PodPhase;
+  const createdAt = pod.metadata.creationTimestamp ?? "";
   return {
     name: pod.metadata.name,
     namespace: pod.metadata.namespace,
@@ -286,15 +309,15 @@ export function podRowFromRaw(clusterId: string, pod: RawPod): Pod {
     status: phase,
     ready: `${readyCount}/${specContainers.length}`,
     restarts,
-    node: pod.spec?.nodeName ?? '',
-    ip: pod.status?.podIP ?? '',
+    node: pod.spec?.nodeName ?? "",
+    ip: pod.status?.podIP ?? "",
     containers,
     conditions: (pod.status?.conditions ?? []).map((c) => ({
       type: c.type,
       status: c.status,
       reason: c.reason,
       message: c.message,
-      lastTransition: c.lastTransitionTime ?? '',
+      lastTransition: c.lastTransitionTime ?? "",
     })),
     createdAt,
     age: podAge(createdAt),

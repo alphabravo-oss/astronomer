@@ -20,22 +20,26 @@ import (
 // drive. Mirrors the platform_settings fake shape so the helpers
 // authedRequest + withURLParam can be reused directly.
 type fakeQuotaQuerier struct {
-	mu       sync.Mutex
-	user     sqlc.User
-	plans    map[string]sqlc.QuotaPlan
-	auditOps []string
+	mu        sync.Mutex
+	user      sqlc.User
+	plans     map[string]sqlc.QuotaPlan
+	auditOps  []string
+	outboxErr error
 
 	// counts is the canned-response surface for the various Count*
 	// methods. Tests poke at this directly.
-	projectPlan         map[uuid.UUID]sqlc.GetEffectiveQuotaForProjectRow
-	userPlan            map[uuid.UUID]sqlc.GetEffectiveQuotaForUserRow
-	clustersInProject   map[uuid.UUID]int64
-	namespacesInProject map[uuid.UUID]int32
-	membersInProject    map[uuid.UUID]int64
-	projectsForUser     map[uuid.UUID]int64
-	tokensForUser       map[uuid.UUID]int64
-	totalClusters       int64
-	totalActiveUsers    int64
+	projectPlan          map[uuid.UUID]sqlc.GetEffectiveQuotaForProjectRow
+	userPlan             map[uuid.UUID]sqlc.GetEffectiveQuotaForUserRow
+	clustersInProject    map[uuid.UUID]int64
+	namespacesInProject  map[uuid.UUID]int32
+	membersInProject     map[uuid.UUID]int64
+	projectsForUser      map[uuid.UUID]int64
+	tokensForUser        map[uuid.UUID]int64
+	totalClusters        int64
+	totalActiveUsers     int64
+	totalClustersErr     error
+	clustersInProjectErr error
+	projectsForUserErr   error
 
 	projectsUsingPlan map[string]int64
 	usersUsingPlan    map[string]int64
@@ -80,6 +84,9 @@ func (f *fakeQuotaQuerier) GetQuotaPlan(_ context.Context, name string) (sqlc.Qu
 		return sqlc.QuotaPlan{}, pgx.ErrNoRows
 	}
 	return p, nil
+}
+func (f *fakeQuotaQuerier) GetQuotaPlanForUpdate(ctx context.Context, name string) (sqlc.QuotaPlan, error) {
+	return f.GetQuotaPlan(ctx, name)
 }
 func (f *fakeQuotaQuerier) UpsertQuotaPlan(_ context.Context, arg sqlc.UpsertQuotaPlanParams) (sqlc.QuotaPlan, error) {
 	f.mu.Lock()
@@ -127,6 +134,9 @@ func (f *fakeQuotaQuerier) GetEffectiveQuotaForProject(_ context.Context, id uui
 	return p, nil
 }
 func (f *fakeQuotaQuerier) CountClustersInProject(_ context.Context, id uuid.UUID) (int64, error) {
+	if f.clustersInProjectErr != nil {
+		return 0, f.clustersInProjectErr
+	}
 	return f.clustersInProject[id], nil
 }
 func (f *fakeQuotaQuerier) CountNamespacesInProject(_ context.Context, id uuid.UUID) (int32, error) {
@@ -136,22 +146,40 @@ func (f *fakeQuotaQuerier) CountMembersInProject(_ context.Context, id uuid.UUID
 	return f.membersInProject[id], nil
 }
 func (f *fakeQuotaQuerier) CountProjectsForUser(_ context.Context, id uuid.UUID) (int64, error) {
+	if f.projectsForUserErr != nil {
+		return 0, f.projectsForUserErr
+	}
 	return f.projectsForUser[id], nil
 }
 func (f *fakeQuotaQuerier) CountActiveTokensForUser(_ context.Context, id uuid.UUID) (int64, error) {
 	return f.tokensForUser[id], nil
 }
 func (f *fakeQuotaQuerier) CountTotalClusters(_ context.Context) (int64, error) {
+	if f.totalClustersErr != nil {
+		return 0, f.totalClustersErr
+	}
 	return f.totalClusters, nil
 }
 func (f *fakeQuotaQuerier) CountTotalActiveUsers(_ context.Context) (int64, error) {
 	return f.totalActiveUsers, nil
 }
-func (f *fakeQuotaQuerier) ListProjectQuotaSnapshots(_ context.Context, _ sqlc.ListProjectQuotaSnapshotsParams) ([]sqlc.ProjectQuotaSnapshotRow, error) {
-	return f.projectSnapshots, nil
+func (f *fakeQuotaQuerier) ListProjectQuotaSnapshots(_ context.Context, arg sqlc.ListProjectQuotaSnapshotsParams) ([]sqlc.ProjectQuotaSnapshotRow, error) {
+	return quotaSnapshotPage(f.projectSnapshots, arg.Limit, arg.Offset), nil
 }
-func (f *fakeQuotaQuerier) ListUserQuotaSnapshots(_ context.Context, _ sqlc.ListUserQuotaSnapshotsParams) ([]sqlc.UserQuotaSnapshotRow, error) {
-	return f.userSnapshots, nil
+func (f *fakeQuotaQuerier) ListUserQuotaSnapshots(_ context.Context, arg sqlc.ListUserQuotaSnapshotsParams) ([]sqlc.UserQuotaSnapshotRow, error) {
+	return quotaSnapshotPage(f.userSnapshots, arg.Limit, arg.Offset), nil
+}
+
+func quotaSnapshotPage[T any](rows []T, limit, offset int32) []T {
+	start := int(offset)
+	if start >= len(rows) {
+		return []T{}
+	}
+	end := start + int(limit)
+	if end > len(rows) {
+		end = len(rows)
+	}
+	return rows[start:end]
 }
 
 // CreateAuditLogV1 satisfies the audit writer that recordAudit looks for.
@@ -160,6 +188,16 @@ func (f *fakeQuotaQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAu
 	defer f.mu.Unlock()
 	f.auditOps = append(f.auditOps, arg.Action)
 	return nil
+}
+
+func (f *fakeQuotaQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.outboxErr != nil {
+		return sqlc.AuditOutbox{}, f.outboxErr
+	}
+	f.auditOps = append(f.auditOps, arg.Action)
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
 }
 
 func TestQuotaPlans_CRUD(t *testing.T) {
@@ -277,6 +315,30 @@ func TestQuotaPlans_RequiresSuperuser(t *testing.T) {
 	}
 }
 
+func TestQuotaPlans_ListHonorsPaginationContract(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeQuotaQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+	for _, name := range []string{"alpha", "beta", "gamma"} {
+		q.plans[name] = sqlc.QuotaPlan{Name: name, Enforcement: "hard"}
+	}
+	h := NewQuotaHandler(q)
+	w := httptest.NewRecorder()
+	h.ListPlans(w, authedRequest(http.MethodGet, "/api/v1/admin/quota-plans/?limit=1&offset=1", callerID, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", w.Code, w.Body.String())
+	}
+	var page struct {
+		Data       []quotaPlanResponse `json:"data"`
+		Pagination Pagination          `json:"pagination"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode page: %v", err)
+	}
+	if len(page.Data) != 1 || page.Pagination.Limit != 1 || page.Pagination.Offset != 1 || page.Pagination.Total == nil || *page.Pagination.Total != 3 {
+		t.Fatalf("unexpected quota plan page: %+v", page)
+	}
+}
+
 func TestProjectQuota_RendersUsage(t *testing.T) {
 	callerID := uuid.New()
 	projectID := uuid.New()
@@ -385,6 +447,30 @@ func TestFleetUsage_TopOffenders(t *testing.T) {
 	}
 }
 
+func TestFleetUsage_ReadsBeyondFirstSnapshotBatch(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeQuotaQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+	q.plans["global"] = sqlc.QuotaPlan{Name: "global", Enforcement: "hard"}
+	q.projectSnapshots = make([]sqlc.ProjectQuotaSnapshotRow, quotaSnapshotBatchSize+1)
+	for i := range q.projectSnapshots {
+		q.projectSnapshots[i] = sqlc.ProjectQuotaSnapshotRow{
+			ProjectID: uuid.New(), ProjectName: "under-limit", QuotaPlan: "free",
+			MaxClustersPerProject: 10, ClustersInProject: 1,
+		}
+	}
+	q.projectSnapshots[quotaSnapshotBatchSize].ProjectName = "page-two-offender"
+	q.projectSnapshots[quotaSnapshotBatchSize].ClustersInProject = 10
+
+	w := httptest.NewRecorder()
+	NewQuotaHandler(q).FleetUsage(w, authedRequest(http.MethodGet, "/api/v1/admin/quota-usage/", callerID, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("page-two-offender")) {
+		t.Fatalf("fleet usage omitted an offender beyond the first %d snapshots", quotaSnapshotBatchSize)
+	}
+}
+
 // Sentinel to make sure pgx.ErrNoRows imports are used and that the
 // 404 path on a missing plan is exercised at compile time.
 var _ = errors.Is(pgx.ErrNoRows, pgx.ErrNoRows)
@@ -422,4 +508,44 @@ func TestQuotaUsage_AggregatesCorrectly(t *testing.T) {
 	if resp.Global.TotalUsers != 5 || resp.Global.MaxTotalUsers != 500 {
 		t.Errorf("users: got %d/%d, want 5/500", resp.Global.TotalUsers, resp.Global.MaxTotalUsers)
 	}
+}
+
+func TestQuotaUsageReadersFailClosedOnCountErrors(t *testing.T) {
+	callerID := uuid.New()
+	projectID := uuid.New()
+	boom := errors.New("database unavailable")
+
+	t.Run("fleet", func(t *testing.T) {
+		q := newFakeQuotaQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+		q.plans["global"] = sqlc.QuotaPlan{Name: "global", Enforcement: "hard"}
+		q.totalClustersErr = boom
+		w := httptest.NewRecorder()
+		NewQuotaHandler(q).FleetUsage(w, authedRequest(http.MethodGet, "/api/v1/admin/quota-usage/", callerID, nil))
+		if w.Code != http.StatusInternalServerError {
+			t.Fatalf("fleet count error returned status=%d body=%s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("project", func(t *testing.T) {
+		q := newFakeQuotaQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+		q.projectPlan[projectID] = sqlc.GetEffectiveQuotaForProjectRow{ProjectID: projectID, PlanName: "free", Enforcement: "hard"}
+		q.clustersInProjectErr = boom
+		w := httptest.NewRecorder()
+		req := withURLParam(authedRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/quota/", callerID, nil), "id", projectID.String())
+		NewQuotaHandler(q).ProjectQuota(w, req)
+		if w.Code != http.StatusInternalServerError {
+			t.Fatalf("project count error returned status=%d body=%s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("current user", func(t *testing.T) {
+		q := newFakeQuotaQuerier(sqlc.User{ID: callerID})
+		q.userPlan[callerID] = sqlc.GetEffectiveQuotaForUserRow{UserID: callerID, PlanName: "free", Enforcement: "hard"}
+		q.projectsForUserErr = boom
+		w := httptest.NewRecorder()
+		NewQuotaHandler(q).MyQuota(w, authedRequest(http.MethodGet, "/api/v1/auth/me/quota/", callerID, nil))
+		if w.Code != http.StatusInternalServerError {
+			t.Fatalf("user count error returned status=%d body=%s", w.Code, w.Body.String())
+		}
+	})
 }

@@ -8,18 +8,18 @@
  * pacer so ALL live invalidations are throttled in one place.
  */
 
-import { useEffect, useMemo, useRef } from 'react';
-import { useQueryClient, type QueryKey } from '@tanstack/react-query';
-import type { LiveEvent, LiveEventType, Unsubscribe } from './envelope';
-import { pacedInvalidate } from './paced-invalidate';
-import { liveEventsStatus, type LiveStatus } from './status-store';
+import { useEffect, useMemo, useRef } from "react";
+import { useQueryClient, type QueryKey } from "@tanstack/react-query";
+import type { LiveEvent, LiveEventType, Unsubscribe } from "./envelope";
+import { pacedInvalidate } from "./paced-invalidate";
+import { liveEventsStatus, type LiveStatus } from "./status-store";
 import {
   acquireLiveStream,
   liveTarget,
   registerLiveQueryClient,
   releaseLiveStream,
   reopenIfClosed,
-} from './stream';
+} from "./stream";
 
 /**
  * Public live-events surface. Pages call `subscribe(type, handler)` to
@@ -28,7 +28,7 @@ import {
  */
 export interface LiveEventsAPI {
   subscribe<T = unknown>(
-    types: LiveEventType | LiveEventType[] | '*',
+    types: LiveEventType | LiveEventType[] | "*",
     handler: (ev: LiveEvent<T>) => void,
   ): Unsubscribe;
   /** Connection liveness for diagnostics / status pills. */
@@ -52,14 +52,14 @@ export function useLiveEvents(): LiveEventsAPI {
     // Re-open whenever the tab returns to focus — handles laptop-sleep
     // scenarios where the underlying TCP connection was reset by the OS.
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === "visible") {
         reopenIfClosed();
       }
     };
-    document.addEventListener('visibilitychange', onVisibility);
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
-      document.removeEventListener('visibilitychange', onVisibility);
+      document.removeEventListener("visibilitychange", onVisibility);
       releaseLiveStream();
     };
   }, [queryClient]);
@@ -67,7 +67,7 @@ export function useLiveEvents(): LiveEventsAPI {
   return useMemo<LiveEventsAPI>(
     () => ({
       subscribe<T = unknown>(
-        types: LiveEventType | LiveEventType[] | '*',
+        types: LiveEventType | LiveEventType[] | "*",
         handler: (ev: LiveEvent<T>) => void,
       ) {
         const target = liveTarget();
@@ -98,7 +98,7 @@ export function useLiveEvents(): LiveEventsAPI {
  * without resubscribing on every render.
  */
 export function useLiveSubscribe<T = unknown>(
-  types: LiveEventType | LiveEventType[] | '*',
+  types: LiveEventType | LiveEventType[] | "*",
   handler: (ev: LiveEvent<T>) => void,
 ): void {
   const handlerRef = useRef(handler);

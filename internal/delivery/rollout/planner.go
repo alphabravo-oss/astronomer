@@ -7,14 +7,25 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 )
 
 type Planner struct {
-	store PlanningStore
-	now   func() time.Time
-	newID IDGenerator
+	store        PlanningStore
+	now          func() time.Time
+	newID        IDGenerator
+	requireAudit bool
+}
+
+// RequireTransactionalAudit makes missing audit intent a fail-closed
+// configuration error. Production enables this; narrow domain tests may omit
+// HTTP-originated audit metadata.
+func (p *Planner) RequireTransactionalAudit() {
+	if p != nil {
+		p.requireAudit = true
+	}
 }
 
 func NewPlanner(store PlanningStore, now func() time.Time, newID IDGenerator) (*Planner, error) {
@@ -37,6 +48,9 @@ func (p *Planner) Create(ctx context.Context, request CreateRequest) (FrozenRoll
 	if err := validateCreateRequest(request); err != nil {
 		return FrozenRollout{}, err
 	}
+	if p.requireAudit && request.Audit.IsZero() {
+		return FrozenRollout{}, audit.ErrOutboxUnavailable
+	}
 	strategyDigest, err := request.Strategy.CanonicalDigest()
 	if err != nil {
 		return FrozenRollout{}, &Error{Code: CodeInvalidInput, Field: "strategy", Cause: err}
@@ -55,6 +69,23 @@ func (p *Planner) Create(ctx context.Context, request CreateRequest) (FrozenRoll
 
 	var result FrozenRollout
 	err = p.store.InTransaction(ctx, func(tx PlanningTransaction) error {
+		recordIntent := func() error {
+			if request.Audit.IsZero() {
+				return nil
+			}
+			intent := request.Audit
+			intent.Event.ResourceID = result.ID.String()
+			if intent.Event.Detail == nil {
+				intent.Event.Detail = map[string]any{}
+			}
+			intent.Event.Detail["target_id"] = result.TargetID.String()
+			intent.Event.Detail["target_generation"] = result.TargetGeneration
+			intent.Event.Detail["placement_digest"] = result.PlacementDigest.String()
+			intent.Event.Detail["plan_digest"] = result.PlanDigest.String()
+			intent.Event.Detail["cluster_count"] = len(result.Clusters)
+			intent.Event.Detail["approval_required"] = result.Approval.Required
+			return tx.RecordAuditIntent(ctx, intent)
+		}
 		existing, found, findErr := tx.FindByIdempotency(ctx, request.TargetID, request.IdempotencyKey)
 		if findErr != nil {
 			return findErr
@@ -67,7 +98,7 @@ func (p *Planner) Create(ctx context.Context, request CreateRequest) (FrozenRoll
 				return &Error{Code: CodeInvariant, Field: "existing_rollout", Cause: err}
 			}
 			result = existing
-			return nil
+			return recordIntent()
 		}
 
 		snapshot, loadErr := tx.LoadSnapshotForUpdate(ctx, request.TargetID)
@@ -90,7 +121,7 @@ func (p *Planner) Create(ctx context.Context, request CreateRequest) (FrozenRoll
 				return &Error{Code: CodeInvariant, Field: "existing_rollout", Cause: err}
 			}
 			result = existing
-			return nil
+			return recordIntent()
 		}
 		if snapshot.TargetID != request.TargetID || snapshot.TargetGeneration == 0 {
 			return fail(CodeInvariant, "snapshot", "target identity is inconsistent")
@@ -172,7 +203,10 @@ func (p *Planner) Create(ctx context.Context, request CreateRequest) (FrozenRoll
 		if err := tx.AppendRolloutCreated(ctx, result); err != nil {
 			return err
 		}
-		return tx.EnqueueRollout(ctx, result.ID)
+		if err := tx.EnqueueRollout(ctx, result.ID); err != nil {
+			return err
+		}
+		return recordIntent()
 	})
 	if err != nil {
 		return FrozenRollout{}, err

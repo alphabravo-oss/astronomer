@@ -1,37 +1,56 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { useRouter } from '@/lib/navigation';
-import { useClusters, useTools, useClusterToolsStatus } from '@/lib/hooks';
-import { cn } from '@/lib/utils';
-import { normalizeToolStatus } from '@/lib/tool-status';
-import type { Cluster, ClusterTool, ClusterToolStatus, ToolStatus } from '@/types';
-import { Loader2, Server } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { useRouter } from "@/lib/navigation";
+import { useClusters } from "@/lib/hooks";
+import { useClusterToolsStatus, useTools } from "@/lib/hooks/tools";
+import { cn } from "@/lib/utils";
+import { normalizeToolStatus } from "@/lib/tool-status";
+import type {
+  Cluster,
+  ClusterTool,
+  ClusterToolStatus,
+  ToolStatus,
+} from "@/types";
+import { Loader2, Server } from "lucide-react";
 
 const toolStatusDotColor: Record<ToolStatus, string> = {
-  installed: 'bg-status-success',
-  installing: 'bg-status-warning',
-  upgrading: 'bg-status-warning',
-  uninstalling: 'bg-status-warning',
-  failed: 'bg-status-error',
-  not_installed: 'bg-muted-foreground/30',
-  installed_unmanaged: 'bg-status-info',
-  unknown: 'bg-status-warning/50',
+  installed: "bg-status-success",
+  installing: "bg-status-warning",
+  upgrading: "bg-status-warning",
+  uninstalling: "bg-status-warning",
+  failed: "bg-status-error",
+  not_installed: "bg-muted-foreground/30",
+  installed_unmanaged: "bg-status-info",
+  unknown: "bg-status-warning/50",
 };
 
 const toolStatusLabel: Record<ToolStatus, string> = {
-  installed: 'Installed',
-  installing: 'Installing',
-  upgrading: 'Upgrading',
-  uninstalling: 'Uninstalling',
-  failed: 'Failed',
-  not_installed: 'Not Installed',
-  installed_unmanaged: 'Unmanaged',
-  unknown: 'Unknown',
+  installed: "Installed",
+  installing: "Installing",
+  upgrading: "Upgrading",
+  uninstalling: "Uninstalling",
+  failed: "Failed",
+  not_installed: "Not Installed",
+  installed_unmanaged: "Unmanaged",
+  unknown: "Unknown",
 };
 
-function ClusterToolRow({ cluster, tools }: { cluster: Cluster; tools: ClusterTool[] }) {
+function ClusterToolRow({
+  cluster,
+  tools,
+}: {
+  cluster: Cluster;
+  tools: ClusterTool[];
+}) {
   const router = useRouter();
   const { data: statuses } = useClusterToolsStatus(cluster.id);
 
@@ -47,13 +66,17 @@ function ClusterToolRow({ cluster, tools }: { cluster: Cluster; tools: ClusterTo
         <div className="flex items-center gap-3">
           <Server className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <div>
-            <p className="font-medium text-foreground text-sm">{cluster.displayName}</p>
+            <p className="font-medium text-foreground text-sm">
+              {cluster.displayName}
+            </p>
             <p className="text-xs text-muted-foreground">{cluster.name}</p>
           </div>
         </div>
       </TableCell>
       <TableCell className="px-4 py-3">
-        <span className="text-xs text-muted-foreground capitalize">{cluster.environment}</span>
+        <span className="text-xs text-muted-foreground capitalize">
+          {cluster.environment}
+        </span>
       </TableCell>
       {tools.map((tool) => {
         const toolStatus = statusMap.get(tool.slug);
@@ -62,16 +85,21 @@ function ClusterToolRow({ cluster, tools }: { cluster: Cluster; tools: ClusterTo
           <TableCell key={tool.slug} className="px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2.5 w-2.5">
-                {(status === 'installing' || status === 'upgrading' || status === 'uninstalling') && (
+                {(status === "installing" ||
+                  status === "upgrading" ||
+                  status === "uninstalling") && (
                   <span
                     className={cn(
-                      'absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping',
-                      toolStatusDotColor[status]
+                      "absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping",
+                      toolStatusDotColor[status],
                     )}
                   />
                 )}
                 <span
-                  className={cn('relative inline-flex rounded-full h-2.5 w-2.5', toolStatusDotColor[status])}
+                  className={cn(
+                    "relative inline-flex rounded-full h-2.5 w-2.5",
+                    toolStatusDotColor[status],
+                  )}
                 />
               </span>
               <span className="text-xs text-muted-foreground hidden xl:inline">
@@ -86,7 +114,9 @@ function ClusterToolRow({ cluster, tools }: { cluster: Cluster; tools: ClusterTo
 }
 
 function ManagedToolsPage() {
-  const { data: clustersData, isLoading: clustersLoading } = useClusters({ pageSize: 100 });
+  const { data: clustersData, isLoading: clustersLoading } = useClusters({
+    pageSize: 100,
+  });
   const { data: tools, isLoading: toolsLoading } = useTools();
 
   const clusters = clustersData?.data || [];
@@ -108,7 +138,9 @@ function ManagedToolsPage() {
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <Server className="h-10 w-10 mb-3" />
           <p className="text-sm">No clusters registered</p>
-          <p className="text-xs mt-1">Register a cluster to start managing tools</p>
+          <p className="text-xs mt-1">
+            Register a cluster to start managing tools
+          </p>
         </div>
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
@@ -134,7 +166,11 @@ function ManagedToolsPage() {
               </TableHeader>
               <TableBody>
                 {clusters.map((cluster) => (
-                  <ClusterToolRow key={cluster.id} cluster={cluster} tools={tools || []} />
+                  <ClusterToolRow
+                    key={cluster.id}
+                    cluster={cluster}
+                    tools={tools || []}
+                  />
                 ))}
               </TableBody>
             </Table>
@@ -145,6 +181,6 @@ function ManagedToolsPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/tools/')({
+export const Route = createFileRoute("/dashboard/tools/")({
   component: ManagedToolsPage,
 });

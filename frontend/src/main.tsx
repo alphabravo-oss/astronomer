@@ -1,18 +1,21 @@
-import '@fontsource-variable/inter';
-import '@fontsource-variable/jetbrains-mono';
-import '@/styles/globals.css';
-import { Component, type ReactNode } from 'react';
-import { createRoot } from 'react-dom/client';
-import { RouterProvider } from '@tanstack/react-router';
-import { router } from './router';
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
+import "@/styles/globals.css";
+import { Component, type ReactNode } from "react";
+import { createRoot } from "react-dom/client";
+import { RouterProvider } from "@tanstack/react-router";
+import { router } from "./router";
 
 // Post-deploy stale-chunk insurance: if a lazy route chunk 404s because a new
 // build replaced the hashed assets, reload to pick up the new index.html.
-window.addEventListener('vite:preloadError', () => window.location.reload());
+window.addEventListener("vite:preloadError", () => window.location.reload());
 
 // Plain last-resort boundary around the router. Route-level errors are handled
 // by router boundaries (P2.4); this only catches failures outside them.
-class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+class AppErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
   state = { hasError: false };
 
   static getDerivedStateFromError() {
@@ -37,8 +40,8 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
   }
 }
 
-createRoot(document.getElementById('root')!).render(
+createRoot(document.getElementById("root")!).render(
   <AppErrorBoundary>
     <RouterProvider router={router} />
-  </AppErrorBoundary>
+  </AppErrorBoundary>,
 );

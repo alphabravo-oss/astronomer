@@ -1,17 +1,17 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/gitops/new — create a new GitOps source.
  * Reused for edit via the [id] page; this is the create-only entrypoint.
  */
-import { Link } from '@/lib/link';
-import { useRouter } from '@/lib/navigation';
-import { ArrowLeft } from 'lucide-react';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
-import { ActionButton } from '@/components/ui/action-button';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { useAppForm, useStore } from '@/lib/form';
-import { useCreateGitOpsSource } from '@/components/settings/hooks';
-import type { GitOpsSourceWriteRequest } from '@/lib/api/settings';
+import { Link } from "@/lib/link";
+import { useRouter } from "@/lib/navigation";
+import { ArrowLeft } from "lucide-react";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { ActionButton } from "@/components/ui/action-button";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { useAppForm, useStore } from "@/lib/form";
+import { useCreateGitOpsSource } from "@/components/settings/hooks";
+import type { GitOpsSourceWriteRequest } from "@/lib/api/gitops";
 
 function GitOpsForm() {
   const router = useRouter();
@@ -19,15 +19,15 @@ function GitOpsForm() {
 
   const form = useAppForm({
     defaultValues: {
-      name: '',
-      repo_url: '',
-      branch: 'main',
-      path_prefix: 'clusters',
-      auth_mode: 'none',
-      auth: '',
-      sync_mode: 'interval',
+      name: "",
+      repo_url: "",
+      branch: "main",
+      path_prefix: "clusters",
+      auth_mode: "none",
+      auth: "",
+      sync_mode: "interval",
       sync_interval_seconds: 60,
-      on_delete: 'log',
+      on_delete: "log",
       enabled: true,
     } as GitOpsSourceWriteRequest,
     onSubmit: async ({ value }) => {
@@ -51,10 +51,16 @@ function GitOpsForm() {
       className="space-y-5 max-w-2xl"
     >
       <div className="space-y-1">
-        <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Name</label>
+        <label
+          className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+          htmlFor="field-bf605de5-54"
+        >
+          Name
+        </label>
         <form.Field name="name">
           {(field) => (
             <input
+              id="field-bf605de5-54"
               required
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -66,10 +72,16 @@ function GitOpsForm() {
         </form.Field>
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Repo URL</label>
+        <label
+          className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+          htmlFor="field-bf605de5-69"
+        >
+          Repo URL
+        </label>
         <form.Field name="repo_url">
           {(field) => (
             <input
+              id="field-bf605de5-69"
               required
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -82,11 +94,17 @@ function GitOpsForm() {
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
-          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Branch</label>
+          <label
+            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            htmlFor="field-bf605de5-85"
+          >
+            Branch
+          </label>
           <form.Field name="branch">
             {(field) => (
               <input
-                value={field.state.value ?? ''}
+                id="field-bf605de5-85"
+                value={field.state.value ?? ""}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
                 className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
@@ -95,11 +113,17 @@ function GitOpsForm() {
           </form.Field>
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Path prefix</label>
+          <label
+            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            htmlFor="field-bf605de5-98"
+          >
+            Path prefix
+          </label>
           <form.Field name="path_prefix">
             {(field) => (
               <input
-                value={field.state.value ?? ''}
+                id="field-bf605de5-98"
+                value={field.state.value ?? ""}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
                 className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
@@ -110,12 +134,22 @@ function GitOpsForm() {
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
-          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Auth mode</label>
+          <label
+            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            htmlFor="field-bf605de5-113"
+          >
+            Auth mode
+          </label>
           <form.Field name="auth_mode">
             {(field) => (
               <select
+                id="field-bf605de5-113"
                 value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value as 'none' | 'https_token' | 'ssh_key')}
+                onChange={(e) =>
+                  field.handleChange(
+                    e.target.value as "none" | "https_token" | "ssh_key",
+                  )
+                }
                 onBlur={field.handleBlur}
                 className="w-full h-9 px-3 rounded border bg-background text-sm"
               >
@@ -127,17 +161,25 @@ function GitOpsForm() {
           </form.Field>
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Auth token / key</label>
+          <label
+            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            htmlFor="field-bf605de5-130"
+          >
+            Auth token / key
+          </label>
           <form.Field name="auth">
             {(field) => (
               <input
+                id="field-bf605de5-130"
                 type="password"
-                value={field.state.value ?? ''}
+                value={field.state.value ?? ""}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
-                disabled={authMode === 'none'}
+                disabled={authMode === "none"}
                 className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
-                placeholder={authMode === 'none' ? '(not required)' : 'paste secret'}
+                placeholder={
+                  authMode === "none" ? "(not required)" : "paste secret"
+                }
               />
             )}
           </form.Field>
@@ -145,12 +187,20 @@ function GitOpsForm() {
       </div>
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-1">
-          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Sync mode</label>
+          <label
+            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            htmlFor="field-bf605de5-148"
+          >
+            Sync mode
+          </label>
           <form.Field name="sync_mode">
             {(field) => (
               <select
+                id="field-bf605de5-148"
                 value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value as 'manual' | 'interval')}
+                onChange={(e) =>
+                  field.handleChange(e.target.value as "manual" | "interval")
+                }
                 onBlur={field.handleBlur}
                 className="w-full h-9 px-3 rounded border bg-background text-sm"
               >
@@ -161,28 +211,44 @@ function GitOpsForm() {
           </form.Field>
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Interval (sec)</label>
+          <label
+            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            htmlFor="field-bf605de5-164"
+          >
+            Interval (sec)
+          </label>
           <form.Field name="sync_interval_seconds">
             {(field) => (
               <input
+                id="field-bf605de5-164"
                 type="number"
                 min={30}
                 value={field.state.value ?? 60}
                 onChange={(e) => field.handleChange(Number(e.target.value))}
                 onBlur={field.handleBlur}
-                disabled={syncMode === 'manual'}
+                disabled={syncMode === "manual"}
                 className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
               />
             )}
           </form.Field>
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On delete</label>
+          <label
+            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            htmlFor="field-bf605de5-180"
+          >
+            On delete
+          </label>
           <form.Field name="on_delete">
             {(field) => (
               <select
+                id="field-bf605de5-180"
                 value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value as 'log' | 'tombstone' | 'decommission')}
+                onChange={(e) =>
+                  field.handleChange(
+                    e.target.value as "log" | "tombstone" | "decommission",
+                  )
+                }
                 onBlur={field.handleBlur}
                 className="w-full h-9 px-3 rounded border bg-background text-sm"
               >
@@ -194,7 +260,7 @@ function GitOpsForm() {
           </form.Field>
         </div>
       </div>
-      {onDelete === 'decommission' && !pathPrefix ? (
+      {onDelete === "decommission" && !pathPrefix ? (
         <p className="text-xs text-status-warning">
           Warning: on_delete=decommission with an empty path_prefix monitors the
           entire repository. A single accidental rm anywhere in the tree will
@@ -202,7 +268,10 @@ function GitOpsForm() {
         </p>
       ) : null}
       <div className="flex justify-end gap-2 pt-2">
-        <ActionButton type="button" onClick={() => router.push('/dashboard/settings/gitops')}>
+        <ActionButton
+          type="button"
+          onClick={() => router.push("/dashboard/settings/gitops")}
+        >
           Cancel
         </ActionButton>
         <ActionButton
@@ -237,6 +306,6 @@ function NewGitOpsSourcePage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/gitops/new/')({
+export const Route = createFileRoute("/dashboard/settings/gitops/new/")({
   component: NewGitOpsSourcePage,
 });

@@ -112,10 +112,10 @@ func applyEdits(s string, edits []spanEdit) string {
 
 func skipPromSpaceAndComments(s string, i int) int {
 	for i < len(s) {
-		switch {
-		case s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r':
+		switch s[i] {
+		case ' ', '\t', '\n', '\r':
 			i++
-		case s[i] == '#':
+		case '#':
 			for i < len(s) && s[i] != '\n' {
 				i++
 			}

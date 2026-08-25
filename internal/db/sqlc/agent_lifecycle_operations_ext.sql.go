@@ -107,8 +107,8 @@ func (q *Queries) CreateAgentLifecycleOperation(ctx context.Context, arg CreateA
 
 const createAgentLifecycleOperationIdempotent = `-- name: CreateAgentLifecycleOperationIdempotent :one
 WITH claimed AS (
-    INSERT INTO operation_idempotency_keys (scope, idempotency_key)
-    VALUES ($1, $2)
+    INSERT INTO operation_idempotency_keys (scope, idempotency_key, operation_table, operation_id)
+    VALUES ($1, $2, 'agent_lifecycle_operations', gen_random_uuid())
     ON CONFLICT (scope, idempotency_key) DO UPDATE
     SET operation_table = CASE WHEN operation_table = '' THEN 'agent_lifecycle_operations' ELSE operation_table END,
         operation_id = COALESCE(operation_id, gen_random_uuid()),
@@ -132,12 +132,6 @@ inserted AS (
     WHERE operation_table = 'agent_lifecycle_operations'
     ON CONFLICT (id) DO NOTHING
     RETURNING ` + agentLifecycleOperationColumns + `
-),
-attached AS (
-    UPDATE operation_idempotency_keys
-    SET response = COALESCE((SELECT to_jsonb(inserted) FROM inserted LIMIT 1), response),
-        updated_at = now()
-    WHERE scope = $1 AND idempotency_key = $2
 )
 SELECT ` + agentLifecycleOperationColumns + ` FROM inserted
 UNION ALL
@@ -159,7 +153,11 @@ func (q *Queries) CreateAgentLifecycleOperationIdempotent(ctx context.Context, a
 		arg.OperationSpec,
 		arg.RequestedBy,
 	)
-	return scanAgentLifecycleOperation(row)
+	op, err := scanAgentLifecycleOperation(row)
+	if err == nil {
+		err = q.attachOperationIdempotencyResponse(ctx, arg.Scope, arg.IdempotencyKey, "agent_lifecycle_operations", op.ID, op)
+	}
+	return op, err
 }
 
 const listAgentLifecycleOperationsByCluster = `-- name: ListAgentLifecycleOperationsByCluster :many

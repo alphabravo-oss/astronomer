@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -846,7 +847,9 @@ func (f *sizerK8sFake) podPage(path string) corev1.PodList {
 	}
 	start := 0
 	if cont != "" {
-		fmt.Sscanf(cont, "%d", &start)
+		if parsed, err := strconv.Atoi(cont); err == nil {
+			start = parsed
+		}
 	}
 	end := start + sizerPodListPage
 	if end > len(f.pods) {

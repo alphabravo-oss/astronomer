@@ -1,0 +1,6 @@
+{
+  "control_plane_firewall": {
+    "enabled": true,
+    "allowed_addresses": ["10.0.0.0/8", "203.0.113.0/24"]
+  }
+}

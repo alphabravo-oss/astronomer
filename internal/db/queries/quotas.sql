@@ -6,6 +6,11 @@ SELECT * FROM quota_plans ORDER BY name ASC;
 -- name: GetQuotaPlan :one
 SELECT * FROM quota_plans WHERE name = $1;
 
+-- name: GetQuotaPlanForUpdate :one
+-- Serialize update/delete decisions for a named plan so the existence and
+-- reference checks cannot race a concurrent administrative mutation.
+SELECT * FROM quota_plans WHERE name = $1 FOR UPDATE;
+
 -- name: UpsertQuotaPlan :one
 INSERT INTO quota_plans (
     name, enforcement, description,
@@ -125,7 +130,7 @@ SELECT
     (SELECT count(DISTINCT user_id) FROM project_role_bindings WHERE project_id = pr.id AND user_id IS NOT NULL)::bigint      AS members_in_project
 FROM projects pr
 JOIN quota_plans p ON p.name = pr.quota_plan
-ORDER BY pr.created_at DESC
+ORDER BY pr.created_at DESC, pr.id DESC
 LIMIT $1 OFFSET $2;
 
 -- name: ListUserQuotaSnapshots :many
@@ -142,5 +147,5 @@ SELECT
 FROM users u
 JOIN quota_plans p ON p.name = u.quota_plan
 WHERE u.is_active = true
-ORDER BY u.created_at DESC
+ORDER BY u.created_at DESC, u.id DESC
 LIMIT $1 OFFSET $2;

@@ -166,6 +166,8 @@ func Apply(ctx context.Context, q ApplyQuerier, in ApplyInput) (Result, error) {
 			Region:       pickLabel(in.Doc.Spec.Labels, "region"),
 			Provider:     pickLabel(in.Doc.Spec.Labels, "provider"),
 			Distribution: pickLabel(in.Doc.Spec.Labels, "distribution"),
+			Labels:       labelsJSON,
+			Annotations:  json.RawMessage(`{}`),
 			CreatedByID:  in.ActorID,
 		})
 		if err != nil {

@@ -1,91 +1,101 @@
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { formatRelativeTime } from '@/lib/utils';
-import type { InstalledChart } from '@/types';
-import { RotateCcw, Trash2 } from 'lucide-react';
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { formatRelativeTime } from "@/lib/utils";
+import type { InstalledChart } from "@/types";
+import { RotateCcw, Trash2 } from "lucide-react";
 
 export function InstalledTab({
   installed,
   loading,
+  clusterNames,
   onRollback,
   onUninstall,
 }: {
   installed: InstalledChart[] | undefined;
   loading: boolean;
+  clusterNames: Readonly<Record<string, string>>;
   onRollback: (id: string, revision: number) => void;
   onUninstall: (id: string) => void;
 }) {
   const installedColumns: Column<InstalledChart>[] = [
     {
-      key: 'release',
-      header: 'Release',
+      key: "release",
+      header: "Release",
       accessor: (row) => (
-        <span className="font-medium text-foreground font-mono text-xs">{row.releaseName}</span>
-      ),
-    },
-    {
-      key: 'chart',
-      header: 'Chart',
-      accessor: (row) => (
-        <span className="text-sm text-muted-foreground">{row.chartName}</span>
-      ),
-    },
-    {
-      key: 'version',
-      header: 'Version',
-      accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">
-          {row.chartVersionLabel}
+        <span className="font-medium text-foreground font-mono text-xs">
+          {row.releaseName}
         </span>
       ),
     },
     {
-      key: 'cluster',
-      header: 'Cluster',
+      key: "chart",
+      header: "Chart version",
       accessor: (row) => (
-        <span className="text-sm text-muted-foreground">{row.clusterName}</span>
+        <span
+          className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+          title={row.chartVersionId || undefined}
+        >
+          {row.chartVersionId ? row.chartVersionId.slice(0, 8) : "managed tool"}
+        </span>
       ),
     },
     {
-      key: 'namespace',
-      header: 'Namespace',
+      key: "cluster",
+      header: "Cluster",
       accessor: (row) => (
-        <span className="font-mono text-xs text-muted-foreground">{row.namespace}</span>
+        <span className="text-sm text-muted-foreground" title={row.clusterId}>
+          {clusterNames[row.clusterId] || row.clusterId.slice(0, 8)}
+        </span>
       ),
     },
     {
-      key: 'status',
-      header: 'Status',
+      key: "namespace",
+      header: "Namespace",
+      accessor: (row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.namespace}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
       accessor: (row) => <StatusBadge status={row.status} />,
     },
     {
-      key: 'revision',
-      header: 'Rev',
+      key: "revision",
+      header: "Rev",
       accessor: (row) => (
-        <span className="tabular-nums text-xs text-muted-foreground">{row.revision}</span>
+        <span className="tabular-nums text-xs text-muted-foreground">
+          {row.revision}
+        </span>
       ),
       sortAccessor: (row) => row.revision,
-      align: 'center',
+      align: "center",
     },
     {
-      key: 'installedBy',
-      header: 'Installed By',
+      key: "source",
+      header: "Source",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground">{row.installedBy}</span>
+        <span className="text-xs text-muted-foreground">
+          {row.toolSlug ? `Tool: ${row.toolSlug}` : "Catalog chart"}
+        </span>
       ),
     },
     {
-      key: 'date',
-      header: 'Date',
+      key: "date",
+      header: "Date",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>
+        <span className="text-xs text-muted-foreground">
+          {formatRelativeTime(row.createdAt)}
+        </span>
       ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       accessor: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
           {/* UX-06: hide Upgrade until an upgrade modal / version picker is wired. */}
           <button
             onClick={() => {

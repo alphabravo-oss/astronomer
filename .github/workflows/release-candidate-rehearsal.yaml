@@ -1,0 +1,54 @@
+name: pre-promotion release candidate rehearsal
+on:
+  workflow_dispatch:
+    inputs:
+      tag: {description: "Exact target v1 tag", required: true, type: string}
+      source_run_id: {description: "Release workflow run containing target artifacts", required: true, type: string}
+      previous_release: {description: "Exact previously published v1 tag", required: true, type: string}
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+jobs:
+  rehearsal:
+    runs-on: ubuntu-22.04
+    environment: release-candidate
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {ref: "refs/tags/${{ inputs.tag }}", persist-credentials: false}
+      - name: Enforce tag-bound producer identity
+        env: {TARGET_TAG: "${{ inputs.tag }}"}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/tags/$TARGET_TAG"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with: {version: v3.16.2}
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with: {cosign-release: v2.5.3}
+      - name: Install checksum-verified k3d
+        env: {K3D_VERSION: v5.8.3}
+        run: |
+          curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
+          curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/checksums.txt"
+          grep ' _dist/k3d-linux-amd64$' checksums.txt | sed 's#_dist/##' | sha256sum --check
+          sudo install -m 0755 k3d-linux-amd64 /usr/local/bin/k3d
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Rehearse exact owned disposable RC
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RC_DISPOSABLE_ACK: destroy-astronomer-rc-${{ github.run_id }}
+          RC_EVIDENCE_OUTPUT: rc-rehearsal-evidence.json
+        run: ./scripts/rehearse-release-candidate.sh "${{ inputs.tag }}" "${{ inputs.source_run_id }}" "${{ inputs.previous_release }}"
+      - name: Sign sanitized RC evidence
+        run: cosign sign-blob --yes --bundle rc-rehearsal-evidence.sigstore.json rc-rehearsal-evidence.json
+      - name: Retain sanitized RC evidence only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rc-rehearsal-${{ github.run_id }}
+          path: |
+            rc-rehearsal-evidence.json
+            rc-rehearsal-evidence.sigstore.json
+          if-no-files-found: error
+          retention-days: 90

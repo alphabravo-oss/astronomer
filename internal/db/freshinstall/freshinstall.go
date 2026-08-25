@@ -48,13 +48,13 @@ var RequiredV1Tables = []string{
 // Snapshot is a read-only view of the public catalog. Inspect fills it using
 // only SELECT / catalog lookups.
 type Snapshot struct {
-	LegacyTables      []string
-	HasMigrations     bool
-	PublicTableCount  int64
-	MigrationRows     int64
-	MigrationVersion  int64
-	MigrationDirty    bool
-	MissingV1Tables   []string
+	LegacyTables     []string
+	HasMigrations    bool
+	PublicTableCount int64
+	MigrationRows    int64
+	MigrationVersion int64
+	MigrationDirty   bool
+	MissingV1Tables  []string
 }
 
 func (s Snapshot) fingerprint() string {
@@ -100,7 +100,7 @@ JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public'
   AND c.relkind IN ('r', 'p')
   AND c.relname = ANY($1)`
-	migrationsExistQuery = `SELECT to_regclass('public.schema_migrations') IS NOT NULL`
+	migrationsExistQuery  = `SELECT to_regclass('public.schema_migrations') IS NOT NULL`
 	publicTableCountQuery = `
 SELECT count(*) FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace

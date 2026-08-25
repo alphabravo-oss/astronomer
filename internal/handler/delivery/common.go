@@ -63,6 +63,10 @@ func respondError(w http.ResponseWriter, status int, code, message string) {
 }
 
 func respondDatabaseError(w http.ResponseWriter, err error) {
+	if errors.Is(err, audit.ErrOutboxUnavailable) {
+		respondError(w, http.StatusServiceUnavailable, "audit_unavailable", "mandatory audit storage is unavailable")
+		return
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		respondError(w, http.StatusNotFound, "not_found", "delivery resource not found")
 		return
@@ -84,11 +88,20 @@ func respondDatabaseError(w http.ResponseWriter, err error) {
 	respondError(w, http.StatusInternalServerError, "internal_error", "delivery operation failed")
 }
 
-// recordAudit emits a best-effort, metadata-only delivery audit event. The
-// concrete production query set implements audit.Querier; narrow handler test
-// fakes are intentionally allowed to omit it. Delivery callers must never put
-// credentials, source URLs, rendered values/manifests, Secret names, or raw
-// controller messages in detail.
+type deliveryAuditEvent struct {
+	action       string
+	resourceType string
+	resourceID   string
+	resourceName string
+	status       int
+	detail       map[string]any
+}
+
+// recordAudit is the compatibility fallback for narrow unit-test fakes. The
+// production mutation path uses recordAuditOutbox through a transaction-bound
+// query set. Delivery callers must never put credentials, source URLs,
+// rendered values/manifests, Secret names, or raw controller messages in
+// detail.
 func recordAudit(r *http.Request, queries any, action, resourceType, resourceID, resourceName string, detail map[string]any) {
 	if r == nil || queries == nil {
 		return
@@ -116,6 +129,43 @@ func recordAudit(r *http.Request, queries any, action, resourceType, resourceID,
 		IPAddress:       middleware.RemoteIPAddr(r),
 		Detail:          detail,
 	}))
+}
+
+func recordAuditOutbox(r *http.Request, q audit.OutboxQuerier, event deliveryAuditEvent) error {
+	intent := newAuditIntent(r, event, "")
+	if q == nil || intent.IsZero() {
+		return audit.ErrOutboxUnavailable
+	}
+	if err := audit.RecordIntent(r.Context(), q, intent); err != nil {
+		return fmt.Errorf("%w: %w", audit.ErrOutboxUnavailable, err)
+	}
+	return nil
+}
+
+func newAuditIntent(r *http.Request, event deliveryAuditEvent, stableKey string) audit.Intent {
+	if r == nil {
+		return audit.Intent{}
+	}
+	requestID := middleware.GetRequestID(r.Context())
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+	user, _ := middleware.GetAuthenticatedUser(r.Context())
+	authMethod := ""
+	if user != nil {
+		authMethod = user.AuthMethod
+	}
+	dedupeKey := audit.MutationDedupeKey(requestID, event.action, event.resourceType, event.resourceID)
+	if stableKey != "" {
+		dedupeKey = audit.MutationDedupeKey(stableKey, event.action, event.resourceType, event.resourceID)
+	}
+	return audit.Intent{Event: audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
+		Request: r, Source: "service", CorrelationID: middleware.GetCorrelationID(r.Context()),
+		UserID: middleware.AuthenticatedUserUUID(r.Context()), ActorAuthMethod: authMethod,
+		Action: event.action, ResourceType: event.resourceType, ResourceID: event.resourceID,
+		ResourceName: event.resourceName, StatusCode: event.status, RequestID: requestID,
+		IPAddress: middleware.RemoteIPAddr(r), Detail: event.detail,
+	}), DedupeKey: dedupeKey}
 }
 
 func decodeRequest(w http.ResponseWriter, r *http.Request, destination any) error {
@@ -231,6 +281,12 @@ func respondPage(w http.ResponseWriter, r *http.Request, items any, count int64,
 		response.Previous = &previous
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func respondAcceptedOperation(w http.ResponseWriter, location string, payload any) {
+	w.Header().Set("Location", location)
+	w.Header().Set("Retry-After", "2")
+	respondData(w, http.StatusAccepted, payload)
 }
 
 func pageLink(r *http.Request, limit, offset int32) string {

@@ -105,15 +105,13 @@ func TestEmailDispatcher_UsesPreRenderedBody(t *testing.T) {
 		}},
 	}
 	sender := &preRenderedFakeSender{}
-	prev := emailDeps
-	defer func() { emailDeps = prev }()
-	ConfigureEmail(EmailDeps{
+	runtime := DispatchRuntime{Email: EmailDeps{
 		Queries:  q,
 		Sender:   sender,
 		Provider: fakeProvider{cfg: email.Settings{Enabled: true}},
-	})
+	}}
 
-	if err := HandleEmailDispatch(context.Background(), &asynq.Task{}); err != nil {
+	if err := runtime.HandleEmailDispatch(context.Background(), &asynq.Task{}); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 	if sender.preRenderedCalls != 1 {
@@ -141,15 +139,13 @@ func TestEmailDispatcher_BatchProcesses(t *testing.T) {
 		},
 	}
 	sender := &fakeSender{}
-	prev := emailDeps
-	defer func() { emailDeps = prev }()
-	ConfigureEmail(EmailDeps{
+	runtime := DispatchRuntime{Email: EmailDeps{
 		Queries:  q,
 		Sender:   sender,
 		Provider: fakeProvider{cfg: email.Settings{Enabled: true}},
-	})
+	}}
 
-	if err := HandleEmailDispatch(context.Background(), &asynq.Task{}); err != nil {
+	if err := runtime.HandleEmailDispatch(context.Background(), &asynq.Task{}); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 	if sender.calls.Load() != 2 {
@@ -175,15 +171,13 @@ func TestEmailDispatcher_SMTPDisabled_AgesQueuedRows(t *testing.T) {
 		},
 	}
 	sender := &fakeSender{}
-	prev := emailDeps
-	defer func() { emailDeps = prev }()
-	ConfigureEmail(EmailDeps{
+	runtime := DispatchRuntime{Email: EmailDeps{
 		Queries:  q,
 		Sender:   sender,
 		Provider: fakeProvider{cfg: email.Settings{Enabled: false}},
-	})
+	}}
 
-	if err := HandleEmailDispatch(context.Background(), &asynq.Task{}); err != nil {
+	if err := runtime.HandleEmailDispatch(context.Background(), &asynq.Task{}); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 	if sender.calls.Load() != 0 {
@@ -201,15 +195,13 @@ func TestEmailDispatcher_FailureRetries(t *testing.T) {
 			{ID: id, Status: "queued", Attempts: 0, ToAddress: "x@y.com", CreatedAt: time.Now()},
 		},
 	}
-	prev := emailDeps
-	defer func() { emailDeps = prev }()
-	ConfigureEmail(EmailDeps{
+	runtime := DispatchRuntime{Email: EmailDeps{
 		Queries:  q,
 		Sender:   &fakeSender{err: errors.New("connection refused")},
 		Provider: fakeProvider{cfg: email.Settings{Enabled: true}},
-	})
+	}}
 
-	if err := HandleEmailDispatch(context.Background(), &asynq.Task{}); err != nil {
+	if err := runtime.HandleEmailDispatch(context.Background(), &asynq.Task{}); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 	if len(q.failedRows) != 1 {
@@ -227,7 +219,7 @@ func TestEmailDispatcher_FailureRetries(t *testing.T) {
 		{ID: id, Status: "failed", Attempts: emailMaxAttempts - 1, ToAddress: "x@y.com", CreatedAt: time.Now()},
 	}
 	q.failedRows = nil
-	if err := HandleEmailDispatch(context.Background(), &asynq.Task{}); err != nil {
+	if err := runtime.HandleEmailDispatch(context.Background(), &asynq.Task{}); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 	if len(q.failedRows) != 1 || q.failedRows[0].Status != "failed" {
@@ -237,10 +229,8 @@ func TestEmailDispatcher_FailureRetries(t *testing.T) {
 
 func TestEmailCleanupOld_DeletesBoth(t *testing.T) {
 	q := &fakeEmailQuerier{deletedEmails: 17, deletedTokens: 4}
-	prev := emailDeps
-	defer func() { emailDeps = prev }()
-	ConfigureEmail(EmailDeps{Queries: q})
-	if err := HandleEmailCleanupOld(context.Background(), &asynq.Task{}); err != nil {
+	runtime := DispatchRuntime{Email: EmailDeps{Queries: q}}
+	if err := runtime.HandleEmailCleanupOld(context.Background(), &asynq.Task{}); err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
 }

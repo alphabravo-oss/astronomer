@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * Cluster Template form — shared between the New page and the Edit page.
@@ -16,12 +16,12 @@
  * wired in as fields. The same component handles edit by accepting an
  * `initial` snapshot.
  */
-import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react';
-import { useTools } from '@/lib/hooks';
-import { cn } from '@/lib/utils';
-import { useAppForm } from '@/lib/form';
-import { ActionButton } from '@/components/ui/action-button';
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, Loader2, Plus, Trash2 } from "lucide-react";
+import { useTools } from "@/lib/hooks/tools";
+import { cn } from "@/lib/utils";
+import { useAppForm } from "@/lib/form";
+import { ActionButton } from "@/components/ui/action-button";
 import type {
   ClusterTemplateWriteRequest,
   ClusterTemplateSpec,
@@ -29,7 +29,7 @@ import type {
   ClusterTemplateToolBinding,
   PodSecurityProfile,
   NetworkPolicyMode,
-} from '@/lib/api/project-detail';
+} from "@/lib/api/project-detail";
 
 interface TemplateFormProps {
   initial?: {
@@ -45,18 +45,26 @@ interface TemplateFormProps {
   onCancel?: () => void;
 }
 
-const psaOptions: PodSecurityProfile[] = ['privileged', 'baseline', 'restricted'];
-const netpolOptions: NetworkPolicyMode[] = ['isolated', 'allow-same-project', 'none'];
-const envOptions: ClusterTemplateSpec['environment'][] = [
-  'development',
-  'staging',
-  'production',
-  'other',
+const psaOptions: PodSecurityProfile[] = [
+  "privileged",
+  "baseline",
+  "restricted",
+];
+const netpolOptions: NetworkPolicyMode[] = [
+  "isolated",
+  "allow-same-project",
+  "none",
+];
+const envOptions: ClusterTemplateSpec["environment"][] = [
+  "development",
+  "staging",
+  "production",
+  "other",
 ];
 
 // This form's inputs are one notch tighter than the kit default — merged
 // over the kit's base input class (twMerge, later wins).
-const tplInputClassName = 'h-9 rounded-md focus:ring-1';
+const tplInputClassName = "h-9 rounded-md focus:ring-1";
 
 export function TemplateForm({
   initial,
@@ -68,25 +76,31 @@ export function TemplateForm({
 }: TemplateFormProps) {
   const form = useAppForm({
     defaultValues: {
-      name: initial?.name ?? '',
-      displayName: initial?.displayName ?? '',
-      description: initial?.description ?? '',
-      environment: initial?.spec.environment ?? ('development' as const),
+      name: initial?.name ?? "",
+      displayName: initial?.displayName ?? "",
+      description: initial?.description ?? "",
+      environment: initial?.spec.environment ?? ("development" as const),
       labels: initial?.spec.labels ?? ([] as ClusterTemplateLabel[]),
       tools: initial?.spec.tools ?? ([] as ClusterTemplateToolBinding[]),
-      projectName: initial?.spec.defaultProject.name ?? '',
-      podSecurityProfile: initial?.spec.defaultProject.podSecurityProfile ?? ('baseline' as const),
+      projectName: initial?.spec.defaultProject.name ?? "",
+      podSecurityProfile:
+        initial?.spec.defaultProject.podSecurityProfile ??
+        ("baseline" as const),
       // Quotas are kept as strings in form state and converted at submit
       // (empty = unlimited = null on the wire, exactly as before).
-      resourceQuotaCpu: initial?.spec.defaultProject.resourceQuotaCpu ?? '',
-      resourceQuotaMemory: initial?.spec.defaultProject.resourceQuotaMemory ?? '',
+      resourceQuotaCpu: initial?.spec.defaultProject.resourceQuotaCpu ?? "",
+      resourceQuotaMemory:
+        initial?.spec.defaultProject.resourceQuotaMemory ?? "",
       resourceQuotaPods:
         initial?.spec.defaultProject.resourceQuotaPods != null
           ? String(initial.spec.defaultProject.resourceQuotaPods)
-          : '',
-      networkPolicyMode: initial?.spec.defaultProject.networkPolicyMode ?? ('isolated' as const),
-      tokenRotationDays: initial?.spec.registrationPolicy.tokenRotationDays ?? 90,
-      requireApproval: initial?.spec.registrationPolicy.requireApproval ?? false,
+          : "",
+      networkPolicyMode:
+        initial?.spec.defaultProject.networkPolicyMode ?? ("isolated" as const),
+      tokenRotationDays:
+        initial?.spec.registrationPolicy.tokenRotationDays ?? 90,
+      requireApproval:
+        initial?.spec.registrationPolicy.requireApproval ?? false,
     },
     onSubmit: ({ value }) => {
       onSubmit({
@@ -124,9 +138,9 @@ export function TemplateForm({
             name="name"
             validators={{
               onSubmit: ({ value }) => {
-                if (!value.trim()) return 'Name is required';
+                if (!value.trim()) return "Name is required";
                 if (!isEdit && !/^[a-z0-9-]+$/.test(value.trim())) {
-                  return 'Name must be lowercase letters, digits, and dashes';
+                  return "Name must be lowercase letters, digits, and dashes";
                 }
                 return undefined;
               },
@@ -138,7 +152,7 @@ export function TemplateForm({
                 required
                 disabled={isEdit}
                 placeholder="prod-template"
-                transform={(v) => v.toLowerCase().replace(/[^a-z0-9-]/g, '-')}
+                transform={(v) => v.toLowerCase().replace(/[^a-z0-9-]/g, "-")}
                 className={tplInputClassName}
               />
             )}
@@ -146,7 +160,8 @@ export function TemplateForm({
           <form.AppField
             name="displayName"
             validators={{
-              onSubmit: ({ value }) => (!value.trim() ? 'Display name is required' : undefined),
+              onSubmit: ({ value }) =>
+                !value.trim() ? "Display name is required" : undefined,
             }}
           >
             {(field) => (
@@ -170,7 +185,10 @@ export function TemplateForm({
         </form.AppField>
         <form.AppField name="environment">
           {(field) => (
-            <field.SelectField label="Environment" className={tplInputClassName}>
+            <field.SelectField
+              label="Environment"
+              className={tplInputClassName}
+            >
               {envOptions.map((opt) => (
                 <option key={opt} value={opt}>
                   {opt}
@@ -183,13 +201,23 @@ export function TemplateForm({
 
       <Section title="Labels">
         <form.AppField name="labels">
-          {(field) => <LabelsEditor value={field.state.value} onChange={field.handleChange} />}
+          {(field) => (
+            <LabelsEditor
+              value={field.state.value}
+              onChange={field.handleChange}
+            />
+          )}
         </form.AppField>
       </Section>
 
       <Section title="Tools">
         <form.AppField name="tools">
-          {(field) => <ToolsEditor value={field.state.value} onChange={field.handleChange} />}
+          {(field) => (
+            <ToolsEditor
+              value={field.state.value}
+              onChange={field.handleChange}
+            />
+          )}
         </form.AppField>
       </Section>
 
@@ -207,7 +235,10 @@ export function TemplateForm({
           </form.AppField>
           <form.AppField name="podSecurityProfile">
             {(field) => (
-              <field.SelectField label="Pod Security profile" className={tplInputClassName}>
+              <field.SelectField
+                label="Pod Security profile"
+                className={tplInputClassName}
+              >
                 {psaOptions.map((opt) => (
                   <option key={opt} value={opt}>
                     {opt}
@@ -251,7 +282,10 @@ export function TemplateForm({
         </div>
         <form.AppField name="networkPolicyMode">
           {(field) => (
-            <field.SelectField label="Network Policy mode" className={tplInputClassName}>
+            <field.SelectField
+              label="Network Policy mode"
+              className={tplInputClassName}
+            >
               {netpolOptions.map((opt) => (
                 <option key={opt} value={opt}>
                   {opt}
@@ -268,7 +302,7 @@ export function TemplateForm({
             name="tokenRotationDays"
             validators={{
               onSubmit: ({ value }) =>
-                !(value > 0) ? 'Token rotation days must be > 0' : undefined,
+                !(value > 0) ? "Token rotation days must be > 0" : undefined,
             }}
           >
             {(field) => (
@@ -310,7 +344,7 @@ export function TemplateForm({
           disabled={submitting}
           loading={submitting}
         >
-          {isEdit ? 'Save template' : 'Create template'}
+          {isEdit ? "Save template" : "Create template"}
         </ActionButton>
       </div>
     </div>
@@ -346,7 +380,9 @@ function Section({
         )}
       </button>
       {/* Hidden (not unmounted) when collapsed so field validators keep running. */}
-      <div className={cn('px-5 pb-5 pt-2 space-y-4', !open && 'hidden')}>{children}</div>
+      <div className={cn("px-5 pb-5 pt-2 space-y-4", !open && "hidden")}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -363,7 +399,7 @@ function LabelsEditor({
   const updateAt = (i: number, patch: Partial<ClusterTemplateLabel>) =>
     onChange(value.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const remove = (i: number) => onChange(value.filter((_, idx) => idx !== i));
-  const add = () => onChange([...value, { key: '', value: '' }]);
+  const add = () => onChange([...value, { key: "", value: "" }]);
 
   return (
     <div className="space-y-2">
@@ -371,7 +407,10 @@ function LabelsEditor({
         <p className="text-xs text-muted-foreground">No labels yet.</p>
       )}
       {value.map((label, i) => (
-        <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+        <div
+          key={i}
+          className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center"
+        >
           <input
             type="text"
             value={label.key}
@@ -423,16 +462,20 @@ function ToolsEditor({
     () => catalog.filter((t) => !value.some((v) => v.slug === t.slug)),
     [catalog, value],
   );
-  const [pending, setPending] = useState('');
+  const [pending, setPending] = useState("");
 
   const add = () => {
     if (!pending) return;
     const tool = catalog.find((t) => t.slug === pending);
     const firstPreset = tool ? Object.keys(tool.presets || {})[0] : undefined;
-    onChange([...value, { slug: pending, preset: firstPreset, valuesOverride: '' }]);
-    setPending('');
+    onChange([
+      ...value,
+      { slug: pending, preset: firstPreset, valuesOverride: "" },
+    ]);
+    setPending("");
   };
-  const remove = (slug: string) => onChange(value.filter((v) => v.slug !== slug));
+  const remove = (slug: string) =>
+    onChange(value.filter((v) => v.slug !== slug));
   const updateAt = (slug: string, patch: Partial<ClusterTemplateToolBinding>) =>
     onChange(value.map((v) => (v.slug === slug ? { ...v, ...patch } : v)));
 
@@ -440,7 +483,8 @@ function ToolsEditor({
     <div className="space-y-3">
       {isLoading && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading tools catalog…
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading tools
+          catalog…
         </div>
       )}
       {value.length === 0 && !isLoading && (
@@ -451,10 +495,15 @@ function ToolsEditor({
         const tool = catalog.find((t) => t.slug === binding.slug);
         const presetNames = tool ? Object.keys(tool.presets || {}) : [];
         return (
-          <div key={binding.slug} className="rounded-lg border border-border bg-background p-3 space-y-3">
+          <div
+            key={binding.slug}
+            className="rounded-lg border border-border bg-background p-3 space-y-3"
+          >
             <div className="flex items-center justify-between">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">{tool?.name || binding.slug}</p>
+                <p className="text-sm font-medium text-foreground">
+                  {tool?.name || binding.slug}
+                </p>
                 {tool?.description && (
                   <p className="text-xs text-muted-foreground truncate max-w-[400px]">
                     {tool.description}
@@ -472,10 +521,20 @@ function ToolsEditor({
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">Preset</label>
+                <label
+                  className="text-xs font-medium text-foreground"
+                  htmlFor="field-639fc230-475"
+                >
+                  Preset
+                </label>
                 <select
-                  value={binding.preset || ''}
-                  onChange={(e) => updateAt(binding.slug, { preset: e.target.value || undefined })}
+                  id="field-639fc230-475"
+                  value={binding.preset || ""}
+                  onChange={(e) =>
+                    updateAt(binding.slug, {
+                      preset: e.target.value || undefined,
+                    })
+                  }
                   className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   <option value="">(no preset)</option>
@@ -487,12 +546,22 @@ function ToolsEditor({
                 </select>
               </div>
               <div className="space-y-1.5 md:col-span-2">
-                <label className="text-xs font-medium text-foreground">Values override (YAML)</label>
+                <label
+                  className="text-xs font-medium text-foreground"
+                  htmlFor="field-639fc230-490"
+                >
+                  Values override (YAML)
+                </label>
                 <textarea
-                  value={binding.valuesOverride || ''}
+                  id="field-639fc230-490"
+                  value={binding.valuesOverride || ""}
                   rows={3}
-                  placeholder={'# YAML keys overlay the preset\nresources:\n  requests:\n    cpu: 100m'}
-                  onChange={(e) => updateAt(binding.slug, { valuesOverride: e.target.value })}
+                  placeholder={
+                    "# YAML keys overlay the preset\nresources:\n  requests:\n    cpu: 100m"
+                  }
+                  onChange={(e) =>
+                    updateAt(binding.slug, { valuesOverride: e.target.value })
+                  }
                   className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-y"
                 />
               </div>

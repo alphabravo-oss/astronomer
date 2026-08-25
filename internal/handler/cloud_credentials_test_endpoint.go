@@ -36,6 +36,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/cloudcreds"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
@@ -48,14 +49,57 @@ const defaultCloudTesterTimeout = 10 * time.Second
 // Constructed once at server startup (or once per request — it's
 // stateless) and wired via CloudCredentialHandler.SetTester.
 type DefaultCloudTester struct {
-	HTTPClient *http.Client
+	HTTPClient           *http.Client
+	DigitalOceanEndpoint string
+	AWSResolver          cloudcreds.AWSCredentialResolver
+}
+
+// TestDigitalOcean verifies a personal-access token using the read-only
+// account endpoint. The token is never included in an error or response.
+func (t *DefaultCloudTester) TestDigitalOcean(ctx context.Context, blob map[string]string) (CloudTestResult, error) {
+	token := strings.TrimSpace(blob["token"])
+	if token == "" {
+		return CloudTestResult{OK: false, Message: "token is required"}, nil
+	}
+	endpoint := strings.TrimSuffix(t.DigitalOceanEndpoint, "/")
+	if endpoint == "" {
+		endpoint = "https://api.digitalocean.com/v2"
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"/account", nil)
+	if err != nil {
+		return CloudTestResult{OK: false, Message: err.Error()}, nil
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := t.httpClient().Do(req)
+	if err != nil {
+		return CloudTestResult{OK: false, Message: err.Error()}, nil
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if resp.StatusCode != http.StatusOK {
+		return CloudTestResult{OK: false, Message: fmt.Sprintf("DigitalOcean API returned status %d", resp.StatusCode)}, nil
+	}
+	var parsed struct {
+		Account struct {
+			Email  string `json:"email"`
+			Status string `json:"status"`
+		} `json:"account"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return CloudTestResult{OK: false, Message: "DigitalOcean API returned an invalid account response"}, nil
+	}
+	if parsed.Account.Status != "active" {
+		return CloudTestResult{OK: false, Message: "DigitalOcean account is not active"}, nil
+	}
+	return CloudTestResult{OK: true, Message: "authenticated to an active DigitalOcean account"}, nil
 }
 
 // NewDefaultCloudTester builds a tester with SafeClient (SEC-03 dial-time
 // public-IP enforcement). Tests may inject HTTPClient for httptest.
 func NewDefaultCloudTester() *DefaultCloudTester {
 	return &DefaultCloudTester{
-		HTTPClient: httpclient.SafeClient(defaultCloudTesterTimeout),
+		HTTPClient:  httpclient.SafeClient(defaultCloudTesterTimeout),
+		AWSResolver: cloudcreds.NewAWSResolver(),
 	}
 }
 
@@ -68,10 +112,13 @@ func NewDefaultCloudTester() *DefaultCloudTester {
 // here is the canonical "Query API" path documented in the AWS Signing
 // Process Guide.
 func (t *DefaultCloudTester) TestAWS(ctx context.Context, blob map[string]string) (CloudTestResult, error) {
-	accessKey := strings.TrimSpace(blob["access_key_id"])
-	secretKey := strings.TrimSpace(blob["secret_access_key"])
-	if accessKey == "" || secretKey == "" {
-		return CloudTestResult{OK: false, Message: "access_key_id and secret_access_key are required"}, nil
+	resolver := t.AWSResolver
+	if resolver == nil {
+		resolver = cloudcreds.NewAWSResolver()
+	}
+	credential, err := resolver.ResolveAWS(ctx, blob)
+	if err != nil {
+		return CloudTestResult{OK: false, Message: err.Error()}, nil
 	}
 	region := strings.TrimSpace(blob["region"])
 	if region == "" {
@@ -81,7 +128,7 @@ func (t *DefaultCloudTester) TestAWS(ctx context.Context, blob map[string]string
 		// configured a region still gets a meaningful test.
 		region = "us-east-1"
 	}
-	body, statusCode, err := signedGet(ctx, t.httpClient(), accessKey, secretKey, region, "sts",
+	body, statusCode, err := signedGet(ctx, t.httpClient(), credential.AccessKeyID, credential.SecretAccessKey, credential.SessionToken, region, "sts",
 		"https://sts.amazonaws.com/",
 		url.Values{
 			"Action":  []string{"GetCallerIdentity"},
@@ -360,7 +407,7 @@ func summariseAzureError(body []byte) string {
 // signature, body is empty) which is the natural fit for STS
 // GetCallerIdentity.
 
-func signedGet(ctx context.Context, client *http.Client, accessKey, secretKey, region, service, endpoint string, query url.Values) ([]byte, int, error) {
+func signedGet(ctx context.Context, client *http.Client, accessKey, secretKey, sessionToken, region, service, endpoint string, query url.Values) ([]byte, int, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, 0, fmt.Errorf("parse endpoint: %w", err)
@@ -376,12 +423,19 @@ func signedGet(ctx context.Context, client *http.Client, accessKey, secretKey, r
 	host := req.URL.Host
 	req.Header.Set("Host", host)
 	req.Header.Set("X-Amz-Date", amzDate)
+	if sessionToken != "" {
+		req.Header.Set("X-Amz-Security-Token", sessionToken)
+	}
 
 	// 1. Canonical request. The helpers from backups.go (hashSHA256 +
 	// hmacSHA256) are reused so the AWS SigV4 routine has exactly one
 	// implementation in the package.
 	signedHeaders := "host;x-amz-date"
 	canonicalHeaders := fmt.Sprintf("host:%s\nx-amz-date:%s\n", host, amzDate)
+	if sessionToken != "" {
+		signedHeaders = "host;x-amz-date;x-amz-security-token"
+		canonicalHeaders += "x-amz-security-token:" + strings.TrimSpace(sessionToken) + "\n"
+	}
 	payloadHash := hashSHA256("")
 	path := req.URL.Path
 	if path == "" {

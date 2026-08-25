@@ -216,6 +216,26 @@ func TestExecVerifierVerifiesCosignKeyOffline(t *testing.T) {
 	}
 }
 
+func TestSignatureCandidatesPreserveBinaryWhitespaceBytes(t *testing.T) {
+	for _, raw := range [][]byte{
+		{0x0a, 0x30, 0x01, 0xff},
+		{0x30, 0x01, 0xff, 0x0d},
+		{0x20, 0x30, 0x01, 0xff, 0x09},
+	} {
+		candidates := signatureCandidates(raw)
+		found := false
+		for _, candidate := range candidates {
+			if bytes.Equal(candidate, raw) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("exact binary signature %x was not preserved in %x", raw, candidates)
+		}
+	}
+}
+
 func TestExecVerifierKeylessRequiresOfflineBundle(t *testing.T) {
 	trustDirectory := t.TempDir()
 	if err := os.WriteFile(filepath.Join(trustDirectory, "trusted_root.json"), []byte(`{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`), 0o600); err != nil {

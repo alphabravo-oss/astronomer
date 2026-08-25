@@ -8,7 +8,6 @@ import (
 )
 
 func TestMaterializeClusterRegistryPasswordDecryptsEncryptedColumn(t *testing.T) {
-	t.Cleanup(ResetClusterRegistryApply)
 	key, err := auth.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
@@ -21,10 +20,10 @@ func TestMaterializeClusterRegistryPasswordDecryptsEncryptedColumn(t *testing.T)
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
-	ConfigureClusterRegistryApply(ClusterRegistryApplyDeps{Encryptor: enc})
+	runtime := ClusterRegistryRuntime{Deps: ClusterRegistryApplyDeps{Encryptor: enc}}
 
 	cfg := sqlc.ClusterRegistryConfig{RegistryPasswordEncrypted: ciphertext}
-	if err := materializeClusterRegistryPassword(&cfg); err != nil {
+	if err := runtime.materializeClusterRegistryPassword(&cfg); err != nil {
 		t.Fatalf("materializeClusterRegistryPassword: %v", err)
 	}
 	if cfg.RegistryPassword != "s3cr3t" {
@@ -33,9 +32,9 @@ func TestMaterializeClusterRegistryPasswordDecryptsEncryptedColumn(t *testing.T)
 }
 
 func TestMaterializeClusterRegistryPasswordRequiresEncryptor(t *testing.T) {
-	t.Cleanup(ResetClusterRegistryApply)
+	runtime := ClusterRegistryRuntime{}
 	cfg := sqlc.ClusterRegistryConfig{RegistryPasswordEncrypted: "ciphertext"}
-	if err := materializeClusterRegistryPassword(&cfg); err == nil {
+	if err := runtime.materializeClusterRegistryPassword(&cfg); err == nil {
 		t.Fatal("expected error for encrypted password without encryptor")
 	}
 }

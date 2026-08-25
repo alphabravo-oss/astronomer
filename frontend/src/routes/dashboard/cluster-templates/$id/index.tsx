@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * Cluster Templates · Detail.
  *
@@ -7,27 +14,31 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * row per cluster with its apply status). Edit jumps to `./edit` where the
  * full form is re-rendered.
  */
-import { Link } from '@/lib/link';
-import { useParams, useRouter } from '@/lib/navigation';
-import { ArrowLeft, PencilLine, Layers } from 'lucide-react';
-import { ActionButton } from '@/components/ui/action-button';
-import { ErrorState, LoadingState, PermissionState } from '@/components/ui/empty-state';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { useCurrentUser } from '@/lib/hooks';
+import { Link } from "@/lib/link";
+import { useParams, useRouter } from "@/lib/navigation";
+import { ArrowLeft, PencilLine, Layers } from "lucide-react";
+import { ActionButton } from "@/components/ui/action-button";
+import {
+  ErrorState,
+  LoadingState,
+  PermissionState,
+} from "@/components/ui/empty-state";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { useCurrentUser } from "@/lib/hooks";
 import {
   useClusterTemplate,
   useClusterTemplateBoundClusters,
   canReadClusterTemplates,
   canWriteClusterTemplates,
-} from '@/components/projects/hooks';
-import { formatRelativeTime, cn } from '@/lib/utils';
-import type { ClusterTemplateBoundCluster } from '@/lib/api/project-detail';
+} from "@/components/projects/hooks";
+import { formatRelativeTime, cn } from "@/lib/utils";
+import type { ClusterTemplateBoundCluster } from "@/lib/api/project-detail";
 
-const statusStyles: Record<ClusterTemplateBoundCluster['status'], string> = {
-  pending: 'bg-status-warning/10 text-status-warning',
-  applied: 'bg-status-success/10 text-status-success',
-  drift: 'bg-status-warning/20 text-status-warning',
-  failed: 'bg-status-error/10 text-status-error',
+const statusStyles: Record<ClusterTemplateBoundCluster["status"], string> = {
+  pending: "bg-status-warning/10 text-status-warning",
+  applying: "bg-status-info/10 text-status-info",
+  applied: "bg-status-success/10 text-status-success",
+  failed: "bg-status-error/10 text-status-error",
 };
 
 function ClusterTemplateDetailPage() {
@@ -39,7 +50,9 @@ function ClusterTemplateDetailPage() {
   const canWrite = canWriteClusterTemplates(user);
 
   const { data: template, isLoading } = useClusterTemplate(id);
-  const { data: bound = [] } = useClusterTemplateBoundClusters(canRead ? id : undefined);
+  const { data: bound = [] } = useClusterTemplateBoundClusters(
+    canRead ? id : undefined,
+  );
 
   if (!canRead) {
     return (
@@ -53,7 +66,12 @@ function ClusterTemplateDetailPage() {
         </Link>
         <PermissionState
           permission="cluster_templates:read"
-          description={<>You need <span className="font-mono">cluster_templates:read</span> to view this bundle.</>}
+          description={
+            <>
+              You need <span className="font-mono">cluster_templates:read</span>{" "}
+              to view this bundle.
+            </>
+          }
           className="rounded-lg border border-border bg-muted/30 p-6"
         />
       </div>
@@ -61,10 +79,17 @@ function ClusterTemplateDetailPage() {
   }
 
   if (isLoading) {
-    return <LoadingState title="Loading cluster template" className="h-32 py-0" />;
+    return (
+      <LoadingState title="Loading cluster template" className="h-32 py-0" />
+    );
   }
   if (!template) {
-    return <ErrorState title="Template not found" description="The requested cluster template does not exist or is no longer available." />;
+    return (
+      <ErrorState
+        title="Template not found"
+        description="The requested cluster template does not exist or is no longer available."
+      />
+    );
   }
 
   return (
@@ -83,7 +108,9 @@ function ClusterTemplateDetailPage() {
           <span className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-muted-foreground" />
             {template.displayName}
-            <span className="text-xs text-muted-foreground font-mono font-normal">{template.name}</span>
+            <span className="text-xs text-muted-foreground font-mono font-normal">
+              {template.name}
+            </span>
           </span>
         }
         description={template.description || undefined}
@@ -91,7 +118,9 @@ function ClusterTemplateDetailPage() {
           canWrite ? (
             <ActionButton
               icon={<PencilLine className="h-3.5 w-3.5" />}
-              onClick={() => router.push(`/dashboard/cluster-templates/${template.id}/edit`)}
+              onClick={() =>
+                router.push(`/dashboard/cluster-templates/${template.id}/edit`)
+              }
             >
               Edit
             </ActionButton>
@@ -108,37 +137,46 @@ function ClusterTemplateDetailPage() {
             label="Tools"
             value={
               template.spec.tools.length === 0
-                ? '—'
-                : template.spec.tools.map((t) => `${t.slug}${t.preset ? `:${t.preset}` : ''}`).join(', ')
+                ? "—"
+                : template.spec.tools
+                    .map((t) => `${t.slug}${t.preset ? `:${t.preset}` : ""}`)
+                    .join(", ")
             }
           />
           <DetailRow
             label="Labels"
             value={
               template.spec.labels.length === 0
-                ? '—'
-                : template.spec.labels.map((l) => `${l.key}=${l.value}`).join(', ')
+                ? "—"
+                : template.spec.labels
+                    .map((l) => `${l.key}=${l.value}`)
+                    .join(", ")
             }
           />
-          <DetailRow label="Default PSA" value={template.spec.defaultProject.podSecurityProfile} />
+          <DetailRow
+            label="Default PSA"
+            value={template.spec.defaultProject.podSecurityProfile}
+          />
           <DetailRow
             label="Default netpol"
             value={template.spec.defaultProject.networkPolicyMode}
           />
           <DetailRow
             label="Default CPU quota"
-            value={template.spec.defaultProject.resourceQuotaCpu ?? 'unlimited'}
+            value={template.spec.defaultProject.resourceQuotaCpu ?? "unlimited"}
           />
           <DetailRow
             label="Default memory quota"
-            value={template.spec.defaultProject.resourceQuotaMemory ?? 'unlimited'}
+            value={
+              template.spec.defaultProject.resourceQuotaMemory ?? "unlimited"
+            }
           />
           <DetailRow
             label="Default pod quota"
             value={
               template.spec.defaultProject.resourceQuotaPods != null
                 ? String(template.spec.defaultProject.resourceQuotaPods)
-                : 'unlimited'
+                : "unlimited"
             }
           />
           <DetailRow
@@ -147,12 +185,14 @@ function ClusterTemplateDetailPage() {
           />
           <DetailRow
             label="Approval required"
-            value={template.spec.registrationPolicy.requireApproval ? 'yes' : 'no'}
+            value={
+              template.spec.registrationPolicy.requireApproval ? "yes" : "no"
+            }
           />
         </dl>
         <p className="text-xs text-muted-foreground pt-2 border-t border-border">
           Created {formatRelativeTime(template.createdAt)}
-          {template.createdBy ? ` by ${template.createdBy}` : ''} · Updated{' '}
+          {template.createdBy ? ` by ${template.createdBy}` : ""} · Updated{" "}
           {formatRelativeTime(template.updatedAt)}
         </p>
       </section>
@@ -160,7 +200,9 @@ function ClusterTemplateDetailPage() {
       {/* Bound clusters */}
       <section className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="px-5 py-3 border-b border-border">
-          <h2 className="text-sm font-medium text-foreground">Bound clusters</h2>
+          <h2 className="text-sm font-medium text-foreground">
+            Bound clusters
+          </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             Registered clusters this bundle has been applied to.
           </p>
@@ -168,22 +210,36 @@ function ClusterTemplateDetailPage() {
         <Table className="w-full text-sm">
           <TableHeader>
             <TableRow className="text-xs text-muted-foreground border-b border-border bg-muted/30">
-              <TableHead className="text-left font-medium py-2 px-4">Cluster</TableHead>
-              <TableHead className="text-left font-medium py-2 px-4">Status</TableHead>
-              <TableHead className="text-left font-medium py-2 px-4">Last applied</TableHead>
-              <TableHead className="text-left font-medium py-2 px-4">Detail</TableHead>
+              <TableHead className="text-left font-medium py-2 px-4">
+                Cluster
+              </TableHead>
+              <TableHead className="text-left font-medium py-2 px-4">
+                Status
+              </TableHead>
+              <TableHead className="text-left font-medium py-2 px-4">
+                Last applied
+              </TableHead>
+              <TableHead className="text-left font-medium py-2 px-4">
+                Detail
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {bound.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="py-6 text-center text-xs text-muted-foreground">
+                <TableCell
+                  colSpan={4}
+                  className="py-6 text-center text-xs text-muted-foreground"
+                >
                   No clusters bound yet.
                 </TableCell>
               </TableRow>
             ) : (
               bound.map((row) => (
-                <TableRow key={row.clusterId} className="border-b border-border last:border-0">
+                <TableRow
+                  key={row.clusterId}
+                  className="border-b border-border last:border-0"
+                >
                   <TableCell className="py-2 px-4">
                     <Link
                       href={`/dashboard/clusters/${row.clusterId}`}
@@ -195,18 +251,21 @@ function ClusterTemplateDetailPage() {
                   <TableCell className="py-2 px-4">
                     <span
                       className={cn(
-                        'inline-flex px-2 py-0.5 rounded text-xs font-medium capitalize',
-                        statusStyles[row.status] ?? 'bg-muted text-muted-foreground',
+                        "inline-flex px-2 py-0.5 rounded text-xs font-medium capitalize",
+                        statusStyles[row.status] ??
+                          "bg-muted text-muted-foreground",
                       )}
                     >
                       {row.status}
                     </span>
                   </TableCell>
                   <TableCell className="py-2 px-4 text-xs text-muted-foreground">
-                    {row.lastAppliedAt ? formatRelativeTime(row.lastAppliedAt) : '—'}
+                    {row.lastAppliedAt
+                      ? formatRelativeTime(row.lastAppliedAt)
+                      : "—"}
                   </TableCell>
                   <TableCell className="py-2 px-4 text-xs text-muted-foreground truncate max-w-[260px]">
-                    {row.message || '—'}
+                    {row.message || "—"}
                   </TableCell>
                 </TableRow>
               ))
@@ -227,6 +286,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export const Route = createFileRoute('/dashboard/cluster-templates/$id/')({
+export const Route = createFileRoute("/dashboard/cluster-templates/$id/")({
   component: ClusterTemplateDetailPage,
 });

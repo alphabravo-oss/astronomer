@@ -70,6 +70,8 @@ func TestKeyMutatingHandlersEmitAudit(t *testing.T) {
 			"UpdateConnector",
 			"DeleteConnector",
 			"UpdateSettings",
+		},
+		"../handler/dex_operations.go": {
 			"Apply",
 			"RegisterAsSSO",
 		},
@@ -189,9 +191,24 @@ func TestKeyMutatingHandlersEmitAudit(t *testing.T) {
 	}
 
 	allowedAuditCalls := map[string]struct{}{
-		"recordAudit":        {},
-		"recordAuditAs":      {},
-		"recordProjectAudit": {},
+		"recordAudit":               {},
+		"recordAuditAs":             {},
+		"recordProjectAudit":        {},
+		"recordSecurityAuditOutbox": {},
+		"executeMonitoringMutation": {},
+		// This generated query commits the scan row, task intent, and
+		// sanitized audit intent in one PostgreSQL statement.
+		"CreateCISScanWithOutbox": {},
+	}
+	// These exact handlers commit their domain mutation, durable task intent,
+	// and mandatory audit intent through recordAuditOutbox in one transaction.
+	// Keep this allow-list handler-scoped: globally accepting recordAuditOutbox
+	// would let an unrelated mutator satisfy the contract accidentally.
+	atomicAuditOutboxHandlers := map[string]map[string]struct{}{
+		"../handler/dex_operations.go":  {"Apply": {}, "RegisterAsSSO": {}},
+		"../handler/delivery/source.go": {"Verify": {}},
+		"../handler/delivery/target.go": {"Delete": {}},
+		"../handler/catalog.go":         {"SyncRepo": {}},
 	}
 
 	fset := token.NewFileSet()
@@ -216,7 +233,14 @@ func TestKeyMutatingHandlersEmitAudit(t *testing.T) {
 
 		found := map[string]bool{}
 		for name, fn := range funcs {
-			if functionContainsAuditCall(fn, funcs, allowedAuditCalls, map[string]bool{}) {
+			allowedForHandler := allowedAuditCalls
+			if handlers, pathAllowed := atomicAuditOutboxHandlers[path]; pathAllowed {
+				if _, handlerAllowed := handlers[name]; handlerAllowed {
+					allowedForHandler = cloneAuditCalls(allowedAuditCalls)
+					allowedForHandler["recordAuditOutbox"] = struct{}{}
+				}
+			}
+			if functionContainsAuditCall(fn, funcs, allowedForHandler, map[string]bool{}) {
 				found[name] = true
 			}
 		}
@@ -227,6 +251,14 @@ func TestKeyMutatingHandlersEmitAudit(t *testing.T) {
 			}
 		}
 	}
+}
+
+func cloneAuditCalls(source map[string]struct{}) map[string]struct{} {
+	cloned := make(map[string]struct{}, len(source)+1)
+	for name := range source {
+		cloned[name] = struct{}{}
+	}
+	return cloned
 }
 
 func functionContainsAuditCall(fn *ast.FuncDecl, funcs map[string]*ast.FuncDecl, allowed map[string]struct{}, visiting map[string]bool) bool {

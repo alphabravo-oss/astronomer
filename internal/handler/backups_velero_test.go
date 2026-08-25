@@ -670,6 +670,22 @@ func TestCreateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
 	}
 }
 
+func TestCreateStorageConfigFailsClosedWithoutCredentialEncryptor(t *testing.T) {
+	q := &fakeBackupQuerier{}
+	h := NewBackupHandler(q)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/backups/storage/", strings.NewReader(`{"name":"primary","storage_type":"s3","bucket":"backups","access_key":"AKIA","secret_key":"SECRET"}`))
+	rec := httptest.NewRecorder()
+
+	h.CreateStorageConfig(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if q.createArg.Name != "" || q.createArg.AccessKey != "" || q.createArg.SecretKey != "" {
+		t.Fatalf("credential-bearing row was attempted without encryption: %#v", q.createArg)
+	}
+}
+
 func TestUpdateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
 	key, err := auth.GenerateKey()
 	if err != nil {

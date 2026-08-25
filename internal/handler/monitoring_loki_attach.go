@@ -27,6 +27,9 @@ func (h *MonitoringHandler) LokiAttachState(ctx context.Context) lokiAttachState
 	st.IngestPublic = boolFromAny(meta["ingestPublic"])
 	st.Host = strings.TrimSpace(stringFromMap(meta, "ingestHostname"))
 	st.Mode = stringFromMap(meta, "mode")
+	st.ManagementClusterID = stringFromMap(meta, "managementClusterId")
+	st.Namespace = defaultString(stringFromMap(meta, "namespace"), "monitoring")
+	st.ReleaseName = defaultString(stringFromMap(meta, "releaseName"), sharedLokiDefaultRelease)
 	return st
 }
 

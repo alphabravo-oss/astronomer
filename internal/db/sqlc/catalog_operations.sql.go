@@ -13,6 +13,61 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countCatalogOperations = `-- name: CountCatalogOperations :one
+SELECT count(*) FROM catalog_operations
+WHERE (
+    $1::text IS NULL OR target_type = $1::text
+) AND (
+    $2::text IS NULL OR target_key = $2::text
+) AND (
+    $3::text IS NULL OR status = $3::text
+)
+`
+
+type CountCatalogOperationsParams struct {
+	TargetType pgtype.Text `json:"target_type"`
+	TargetKey  pgtype.Text `json:"target_key"`
+	Status     pgtype.Text `json:"status"`
+}
+
+func (q *Queries) CountCatalogOperations(ctx context.Context, arg CountCatalogOperationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countCatalogOperations, arg.TargetType, arg.TargetKey, arg.Status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countCatalogOperationsForScopes = `-- name: CountCatalogOperationsForScopes :one
+SELECT count(*) FROM catalog_operations
+WHERE (
+    $1::text IS NULL OR target_type = $1::text
+) AND (
+    $2::text IS NULL OR target_key = $2::text
+) AND (
+    $3::text IS NULL OR status = $3::text
+) AND payload->>'clusterId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND (payload->>'clusterId')::uuid = ANY($4::uuid[])
+`
+
+type CountCatalogOperationsForScopesParams struct {
+	TargetType pgtype.Text `json:"target_type"`
+	TargetKey  pgtype.Text `json:"target_key"`
+	Status     pgtype.Text `json:"status"`
+	ClusterIds []uuid.UUID `json:"cluster_ids"`
+}
+
+func (q *Queries) CountCatalogOperationsForScopes(ctx context.Context, arg CountCatalogOperationsForScopesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countCatalogOperationsForScopes,
+		arg.TargetType,
+		arg.TargetKey,
+		arg.Status,
+		arg.ClusterIds,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createCatalogOperation = `-- name: CreateCatalogOperation :one
 INSERT INTO catalog_operations (
     target_type,
@@ -97,7 +152,7 @@ WHERE (
 ) AND (
     $5::text IS NULL OR status = $5::text
 )
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -116,6 +171,70 @@ func (q *Queries) ListCatalogOperations(ctx context.Context, arg ListCatalogOper
 		arg.TargetType,
 		arg.TargetKey,
 		arg.Status,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CatalogOperation{}
+	for rows.Next() {
+		var i CatalogOperation
+		if err := rows.Scan(
+			&i.ID,
+			&i.TargetType,
+			&i.TargetKey,
+			&i.OperationType,
+			&i.Payload,
+			&i.Status,
+			&i.AttemptCount,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.ErrorMessage,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCatalogOperationsForScopes = `-- name: ListCatalogOperationsForScopes :many
+SELECT id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at FROM catalog_operations
+WHERE (
+    $1::text IS NULL OR target_type = $1::text
+) AND (
+    $2::text IS NULL OR target_key = $2::text
+) AND (
+    $3::text IS NULL OR status = $3::text
+) AND payload->>'clusterId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND (payload->>'clusterId')::uuid = ANY($4::uuid[])
+ORDER BY created_at DESC, id DESC
+LIMIT $6 OFFSET $5
+`
+
+type ListCatalogOperationsForScopesParams struct {
+	TargetType  pgtype.Text `json:"target_type"`
+	TargetKey   pgtype.Text `json:"target_key"`
+	Status      pgtype.Text `json:"status"`
+	ClusterIds  []uuid.UUID `json:"cluster_ids"`
+	QueryOffset int32       `json:"query_offset"`
+	QueryLimit  int32       `json:"query_limit"`
+}
+
+func (q *Queries) ListCatalogOperationsForScopes(ctx context.Context, arg ListCatalogOperationsForScopesParams) ([]CatalogOperation, error) {
+	rows, err := q.db.Query(ctx, listCatalogOperationsForScopes,
+		arg.TargetType,
+		arg.TargetKey,
+		arg.Status,
+		arg.ClusterIds,
+		arg.QueryOffset,
+		arg.QueryLimit,
 	)
 	if err != nil {
 		return nil, err

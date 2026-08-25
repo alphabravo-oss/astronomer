@@ -18,6 +18,19 @@ runtime hot path.
 4. Contract: remove old columns, constraints, or code only after the previous
    release has fully rolled out and the backfill has converged.
 
+Any `.up.sql` file containing destructive DDL (`DROP`, `TRUNCATE`, destructive
+`ALTER COLUMN`, or renames) must carry all three review markers:
+
+```sql
+-- migration-phase: contract
+-- compatibility-window: after 1.4.x support ends
+-- destructive-change-approved: ASTRO-1234
+```
+
+`scripts/check-migrations.sh` rejects destructive SQL without these markers.
+The markers are release evidence, not a bypass: reviewers must still verify
+that every supported old binary has stopped reading or writing the old shape.
+
 ## Review Checklist
 
 - Migration works with the previous server and worker binaries still running.
@@ -52,9 +65,25 @@ Run before opening a PR:
 
 ```bash
 ./scripts/check-migrations.sh
+./scripts/check-migrations-test.sh
 go test ./internal/db ./internal/server ./internal/worker/tasks
 ```
 
 For high-risk migrations, also restore the latest production-like dump into a
 clean database, run migrations forward, run `DB.SchemaHealth`, and execute the
 management-plane restore drill.
+
+The release matrix reconstructs the 1.0.x and 1.1.x schema fixtures, upgrades
+both on PostgreSQL 16 and 17, verifies seeded data, starts concurrent migration
+installers, and terminates an in-flight database backend to prove transactional
+rollback and retry:
+
+```bash
+./scripts/release-upgrade-matrix.sh
+```
+
+The production migration binary holds a database-scoped session advisory lock
+on the same PostgreSQL session that executes SQL. Waiters use non-blocking lock
+polling so `CREATE INDEX CONCURRENTLY` cannot deadlock on a waiting session's
+virtual transaction. Do not replace this entrypoint with the generic upstream
+CLI in a release image.

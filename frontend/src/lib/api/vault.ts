@@ -7,21 +7,35 @@
  * RBAC rules (projects:read / projects:update).
  *
  * Convention:
- *   - Reads come back camelCased (axios interceptor).
- *   - Writes send snake_case keys matching the Go handler's json tags.
+ *   - Reads retain exact generated wire casing and are mapped locally.
+ *   - Writes use generated request keys matching the Go handler's json tags.
  *   - Auth blobs are typed per method; on GET secret fields arrive as
  *     the sentinel "<encrypted>" — a PUT echoing that sentinel
  *     preserves the stored value.
  */
-import api from '@/lib/api';
-import type { APIResponse } from '@/types';
+import {
+  adminVaultConnectionDelete,
+  adminVaultConnectionGet,
+  adminVaultConnectionHealth,
+  adminVaultConnectionsCreate,
+  adminVaultConnectionsList,
+  adminVaultConnectionTest,
+  adminVaultConnectionUpdate,
+  getProjectsByIdDefaultVaultConnection,
+  putProjectsByIdDefaultVaultConnection,
+} from "@/lib/api/generated/client";
+import type {
+  VaultConnection as VaultConnectionWire,
+  VaultConnectionRequest,
+  VaultTestResult as VaultTestResultWire,
+} from "@/types/openapi.generated";
 
-export type VaultAuthMethod = 'token' | 'approle' | 'kubernetes';
+export type VaultAuthMethod = "token" | "approle" | "kubernetes";
 
 /** Sentinel value the server emits in place of redacted auth fields. */
-export const VAULT_AUTH_SENTINEL = '<encrypted>';
+export const VAULT_AUTH_SENTINEL = "<encrypted>";
 
-export interface VaultConnection {
+export interface VaultConnectionView {
   id: string;
   name: string;
   description: string;
@@ -40,20 +54,14 @@ export interface VaultConnection {
   updatedAt: string;
 }
 
-export interface VaultConnectionWriteRequest {
-  name?: string;
-  description?: string;
-  addr: string;
-  auth_method: VaultAuthMethod;
+export type VaultConnectionWriteRequest = Omit<
+  VaultConnectionRequest,
+  "auth"
+> & {
   auth: Record<string, string>;
-  namespace?: string;
-  tls_skip_verify?: boolean;
-  ca_cert_pem?: string;
-  default_mount?: string;
-  enabled?: boolean;
-}
+};
 
-export interface VaultTestResult {
+export interface VaultTestResultView {
   ok: boolean;
   reachable: boolean;
   authOk: boolean;
@@ -68,68 +76,163 @@ export interface VaultHealthResult {
   message: string;
 }
 
-export async function listVaultConnections(): Promise<VaultConnection[]> {
-  const res = await api.get<APIResponse<{ items: VaultConnection[] }>>('/admin/vault-connections/');
-  const wrapped = res.data.data ?? (res.data as unknown as { items: VaultConnection[] });
-  return wrapped.items ?? [];
+export interface VaultRequestOptions {
+  signal?: AbortSignal;
 }
 
-export async function getVaultConnection(id: string): Promise<VaultConnection> {
-  const res = await api.get<APIResponse<VaultConnection>>(`/admin/vault-connections/${id}/`);
-  return res.data.data ?? (res.data as unknown as VaultConnection);
+function requireVaultConnection(
+  wire: VaultConnectionWire | undefined,
+): VaultConnectionView {
+  if (
+    !wire?.id ||
+    !wire.name ||
+    !wire.addr ||
+    !wire.auth_method ||
+    !wire.created_at ||
+    !wire.updated_at
+  ) {
+    throw new Error("Vault connection response is incomplete");
+  }
+  return {
+    id: wire.id,
+    name: wire.name,
+    description: wire.description ?? "",
+    addr: wire.addr,
+    authMethod: wire.auth_method,
+    auth: wire.auth ?? {},
+    namespace: wire.namespace ?? "",
+    tlsSkipVerify: wire.tls_skip_verify ?? false,
+    caCertPem: wire.ca_cert_pem ?? "",
+    defaultMount: wire.default_mount ?? "",
+    enabled: wire.enabled ?? false,
+    lastHealthAt: wire.last_health_at,
+    lastHealthOk: wire.last_health_ok ?? false,
+    lastError: wire.last_error,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
+  };
 }
 
-export async function createVaultConnection(body: VaultConnectionWriteRequest): Promise<VaultConnection> {
-  const res = await api.post<APIResponse<VaultConnection>>('/admin/vault-connections/', body);
-  return res.data.data ?? (res.data as unknown as VaultConnection);
+function mapVaultTestResult(wire: VaultTestResultWire): VaultTestResultView {
+  return {
+    ok: wire.ok ?? false,
+    reachable: wire.reachable ?? false,
+    authOk: wire.auth_ok ?? false,
+    latencyMs: wire.latency_ms ?? 0,
+    message: wire.message ?? "",
+    probePath: wire.probe_path,
+  };
+}
+
+export async function listVaultConnections(
+  options: VaultRequestOptions = {},
+): Promise<VaultConnectionView[]> {
+  const response = await adminVaultConnectionsList({ signal: options.signal });
+  return (response.data?.items ?? []).map(requireVaultConnection);
+}
+
+export async function getVaultConnection(
+  id: string,
+  options: VaultRequestOptions = {},
+): Promise<VaultConnectionView> {
+  const response = await adminVaultConnectionGet({
+    path: { id },
+    signal: options.signal,
+  });
+  return requireVaultConnection(response.data);
+}
+
+export async function createVaultConnection(
+  body: VaultConnectionWriteRequest,
+  options: VaultRequestOptions = {},
+): Promise<VaultConnectionView> {
+  const response = await adminVaultConnectionsCreate({
+    body,
+    signal: options.signal,
+  });
+  return requireVaultConnection(response.data);
 }
 
 export async function updateVaultConnection(
   id: string,
-  body: Partial<VaultConnectionWriteRequest>,
-): Promise<VaultConnection> {
-  const res = await api.put<APIResponse<VaultConnection>>(`/admin/vault-connections/${id}/`, body);
-  return res.data.data ?? (res.data as unknown as VaultConnection);
+  body: VaultConnectionWriteRequest,
+  options: VaultRequestOptions = {},
+): Promise<VaultConnectionView> {
+  const response = await adminVaultConnectionUpdate({
+    path: { id },
+    body,
+    signal: options.signal,
+  });
+  return requireVaultConnection(response.data);
 }
 
-export async function deleteVaultConnection(id: string): Promise<void> {
-  await api.delete(`/admin/vault-connections/${id}/`);
+export async function deleteVaultConnection(
+  id: string,
+  options: VaultRequestOptions = {},
+): Promise<void> {
+  await adminVaultConnectionDelete({ path: { id }, signal: options.signal });
 }
 
-export async function testVaultConnection(id: string, probePath?: string): Promise<VaultTestResult> {
-  const res = await api.post<APIResponse<VaultTestResult>>(
-    `/admin/vault-connections/${id}/test/`,
-    { probe_path: probePath ?? '' },
-  );
-  return res.data.data ?? (res.data as unknown as VaultTestResult);
+export async function testVaultConnection(
+  id: string,
+  probePath?: string,
+  options: VaultRequestOptions = {},
+): Promise<VaultTestResultView> {
+  const response = await adminVaultConnectionTest({
+    path: { id },
+    body: { probe_path: probePath ?? "" },
+    signal: options.signal,
+  });
+  return mapVaultTestResult(response.data ?? {});
 }
 
-export async function healthCheckVaultConnection(id: string): Promise<VaultHealthResult> {
-  const res = await api.post<APIResponse<VaultHealthResult>>(`/admin/vault-connections/${id}/health/`);
-  return res.data.data ?? (res.data as unknown as VaultHealthResult);
+export async function healthCheckVaultConnection(
+  id: string,
+  options: VaultRequestOptions = {},
+): Promise<VaultHealthResult> {
+  const response = await adminVaultConnectionHealth({
+    path: { id },
+    signal: options.signal,
+  });
+  return {
+    ok: response.data?.ok ?? false,
+    latencyMs: response.data?.latency_ms ?? 0,
+    message: response.data?.message ?? "",
+  };
 }
 
 /** Project default ----------------------------------------------------- */
 
 export interface ProjectDefaultVaultConnection {
   connectionId: string | null;
-  connection: VaultConnection | null;
+  connection: VaultConnectionView | null;
 }
 
-export async function getProjectDefaultVault(projectId: string): Promise<ProjectDefaultVaultConnection> {
-  const res = await api.get<APIResponse<ProjectDefaultVaultConnection>>(
-    `/projects/${projectId}/default-vault-connection/`,
-  );
-  return res.data.data ?? (res.data as unknown as ProjectDefaultVaultConnection);
+export async function getProjectDefaultVault(
+  projectId: string,
+  options: VaultRequestOptions = {},
+): Promise<ProjectDefaultVaultConnection> {
+  const response = await getProjectsByIdDefaultVaultConnection({
+    path: { id: projectId },
+    signal: options.signal,
+  });
+  return {
+    connectionId: response.data?.connection_id ?? null,
+    connection: response.data?.connection
+      ? requireVaultConnection(response.data.connection)
+      : null,
+  };
 }
 
 export async function setProjectDefaultVault(
   projectId: string,
   connectionId: string | null,
+  options: VaultRequestOptions = {},
 ): Promise<{ connectionId: string | null }> {
-  const res = await api.put<APIResponse<{ connectionId: string | null }>>(
-    `/projects/${projectId}/default-vault-connection/`,
-    { connection_id: connectionId },
-  );
-  return res.data.data ?? (res.data as unknown as { connectionId: string | null });
+  const response = await putProjectsByIdDefaultVaultConnection({
+    path: { id: projectId },
+    body: { connection_id: connectionId },
+    signal: options.signal,
+  });
+  return { connectionId: response.data?.connection_id ?? null };
 }

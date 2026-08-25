@@ -1,13 +1,17 @@
 // Route files are the eslint-exempted surface for direct router imports.
-import { createFileRoute } from '@tanstack/react-router';
-import { ResourceDetail } from '@/components/resources/resource-detail';
-import { resolveDetailSlug, k8sResourcePath, getResourceDef } from '@/lib/k8s-paths';
+import { createFileRoute } from "@tanstack/react-router";
+import { ResourceDetail } from "@/components/resources/resource-detail";
+import {
+  resolveDetailSlug,
+  k8sResourcePath,
+  getResourceDef,
+} from "@/lib/k8s-paths";
 
 function ResourceDetailPage() {
   // Next's `[...path]` catch-all becomes the `_splat` param: the remaining
   // path segments ([name] or [namespace, name]) joined with '/'.
   const { id: clusterId, resource: resourceType, _splat } = Route.useParams();
-  const slug = _splat ? _splat.split('/').filter(Boolean) : [];
+  const slug = _splat ? _splat.split("/").filter(Boolean) : [];
 
   const { namespace, name } = resolveDetailSlug(resourceType, slug);
 
@@ -35,6 +39,6 @@ function ResourceDetailPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id/$resource/$')({
+export const Route = createFileRoute("/dashboard/clusters/$id/$resource/$")({
   component: ResourceDetailPage,
 });

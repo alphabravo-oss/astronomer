@@ -20,7 +20,7 @@ import type {
   MonitoringStackRequestBody,
   MonitoringStackStatusBase,
   SharedGrafanaStatus,
-} from '@/lib/api/monitoring-stack';
+} from "@/lib/api/monitoring-stack";
 
 /**
  * `tristate` is a boolean the request can also leave UNSET — an empty form value
@@ -30,12 +30,7 @@ import type {
  * SERVER_BLIND_FIELDS), so a plain checkbox could only ever replay a guess.
  */
 export type StackFieldKind =
-  | 'text'
-  | 'number'
-  | 'boolean'
-  | 'tristate'
-  | 'cluster'
-  | 'storageConfig';
+  "text" | "number" | "boolean" | "tristate" | "cluster" | "storageConfig";
 
 export interface StackField {
   /** Request-body key, camelCase. Also the status-response key we seed from. */
@@ -59,7 +54,7 @@ export interface StackField {
 
 export interface StackFamilySpec {
   /** Matches MonitoringStackTarget['kind']. */
-  key: 'cluster' | 'thanos' | 'alertmanager' | 'grafana' | 'loki';
+  key: "cluster" | "thanos" | "alertmanager" | "grafana" | "loki";
   title: string;
   description: string;
   /**
@@ -131,120 +126,120 @@ export type StackFormValues = Record<string, string>;
  * three — after which they can be seeded honestly and this list shrinks.
  */
 export const SERVER_BLIND_FIELDS: readonly string[] = [
-  'chartVersion',
-  'scrapeInterval',
-  'enableGrafana',
-  'enableAlertmanager',
-  'autoRollbackOnFailure',
+  "chartVersion",
+  "scrapeInterval",
+  "enableGrafana",
+  "enableAlertmanager",
+  "autoRollbackOnFailure",
 ];
 
 /** Copy for the unset option on the two tri-state shapes we render. */
-const PLATFORM_DEFAULT = 'Use platform default';
-const CHART_DEFAULT = 'Use chart default (enabled)';
+const PLATFORM_DEFAULT = "Use platform default";
+const CHART_DEFAULT = "Use chart default (enabled)";
 
 // ─────────────────────────────────────────────────────────────────────
 // Per-cluster kube-prometheus-stack
 // ─────────────────────────────────────────────────────────────────────
 
 export const CLUSTER_STACK_FAMILY: StackFamilySpec = {
-  key: 'cluster',
-  title: 'Cluster monitoring stack',
+  key: "cluster",
+  title: "Cluster monitoring stack",
   description:
-    'kube-prometheus-stack on this cluster — Prometheus, optionally Grafana and Alertmanager, with a Thanos sidecar shipping blocks to shared object storage. Cluster Grafana is this Prometheus (15d) and survives an Astronomer outage; fleet Grafana is the lobby.',
+    "kube-prometheus-stack on this cluster — Prometheus, optionally Grafana and Alertmanager, with a Thanos sidecar shipping blocks to shared object storage. Cluster Grafana is this Prometheus (15d) and survives an Astronomer outage; shared Grafana is the lobby.",
   destroys:
-    'the Helm release, its Prometheus StatefulSet and the PersistentVolumeClaims holding this cluster’s local metrics',
+    "the Helm release, its Prometheus StatefulSet and the PersistentVolumeClaims holding this cluster’s local metrics",
   fields: [
     {
-      name: 'namespace',
-      label: 'Namespace',
-      kind: 'text',
-      placeholder: 'monitoring',
+      name: "namespace",
+      label: "Namespace",
+      kind: "text",
+      placeholder: "monitoring",
       replaceTrigger: true,
-      help: 'Namespace the release is installed into.',
+      help: "Namespace the release is installed into.",
     },
     {
-      name: 'releaseName',
-      label: 'Release name',
-      kind: 'text',
-      placeholder: 'prometheus',
+      name: "releaseName",
+      label: "Release name",
+      kind: "text",
+      placeholder: "prometheus",
       replaceTrigger: true,
-      help: 'Helm release name.',
+      help: "Helm release name.",
     },
     {
-      name: 'chartVersion',
-      label: 'Chart version',
-      kind: 'text',
-      placeholder: '61.3.2',
-      help: 'Left empty the backend keeps its own default. The status endpoint does not report the installed chart version for this family, so this box is never pre-filled — typing a value pins the release to it.',
+      name: "chartVersion",
+      label: "Chart version",
+      kind: "text",
+      placeholder: "61.3.2",
+      help: "Left empty the backend keeps its own default. The status endpoint does not report the installed chart version for this family, so this box is never pre-filled — typing a value pins the release to it.",
     },
     {
-      name: 'retention',
-      label: 'Local retention',
-      kind: 'text',
-      placeholder: '15d',
-      help: 'How long Prometheus keeps blocks locally before Thanos takes over.',
+      name: "retention",
+      label: "Local retention",
+      kind: "text",
+      placeholder: "15d",
+      help: "How long Prometheus keeps blocks locally before Thanos takes over.",
     },
     {
-      name: 'scrapeInterval',
-      label: 'Scrape interval',
-      kind: 'text',
-      placeholder: '30s',
-      help: 'Not reported by the status endpoint; left empty the backend applies 30s.',
+      name: "scrapeInterval",
+      label: "Scrape interval",
+      kind: "text",
+      placeholder: "30s",
+      help: "Not reported by the status endpoint; left empty the backend applies 30s.",
     },
     {
-      name: 'storageClass',
-      label: 'Storage class',
-      kind: 'text',
-      placeholder: 'default',
+      name: "storageClass",
+      label: "Storage class",
+      kind: "text",
+      placeholder: "default",
       replaceTrigger: true,
     },
     {
-      name: 'storageSize',
-      label: 'Storage size',
-      kind: 'text',
-      placeholder: '50Gi',
+      name: "storageSize",
+      label: "Storage size",
+      kind: "text",
+      placeholder: "50Gi",
       // clusterMonitoringReplaceRequired treats a storage-size change as
       // needing a reinstall (monitoring_stack_cluster.go:512-514), same as the
       // shared Alertmanager family already declares.
       replaceTrigger: true,
     },
     {
-      name: 'storageConfigId',
-      label: 'Object storage',
-      kind: 'storageConfig',
+      name: "storageConfigId",
+      label: "Object storage",
+      kind: "storageConfig",
       replaceTrigger: true,
-      help: 'Backup storage config used for the Thanos sidecar’s objstore secret. When shared Thanos is healthy this is pre-filled (Use shared Thanos bucket).',
+      help: "Backup storage config used for the Thanos sidecar’s objstore secret. When shared Thanos is healthy this is pre-filled (Use shared Thanos bucket).",
     },
     {
-      name: 'enableGrafana',
-      label: 'Grafana',
-      kind: 'tristate',
-      unsetLabel: 'Use backend default',
-      help: 'Cluster Grafana talks to this Prometheus (15d) and survives an Astronomer outage. Omitted: enabled, except new (not_configured) stacks default off when fleet Grafana is healthy.',
+      name: "enableGrafana",
+      label: "Grafana",
+      kind: "tristate",
+      unsetLabel: "Use backend default",
+      help: "Cluster Grafana talks to this Prometheus (15d) and survives an Astronomer outage. Omitted: enabled, except new (not_configured) stacks default off when shared Grafana is healthy.",
     },
     {
-      name: 'enableAlertmanager',
-      label: 'Alertmanager',
-      kind: 'tristate',
+      name: "enableAlertmanager",
+      label: "Alertmanager",
+      kind: "tristate",
       unsetLabel: CHART_DEFAULT,
     },
-    { name: 'thanosSidecarEnabled', label: 'Thanos sidecar', kind: 'boolean' },
+    { name: "thanosSidecarEnabled", label: "Thanos sidecar", kind: "boolean" },
     {
-      name: 'autoRollbackOnFailure',
-      label: 'Roll back on failure',
-      kind: 'tristate',
+      name: "autoRollbackOnFailure",
+      label: "Roll back on failure",
+      kind: "tristate",
       unsetLabel: PLATFORM_DEFAULT,
-      help: 'Ask the reconciler to roll the release back to its previous revision if the install fails its health checks. Left unset, the platform-wide operationPolicies.defaultAutoRollbackOnFailure applies.',
+      help: "Ask the reconciler to roll the release back to its previous revision if the install fails its health checks. Left unset, the platform-wide operationPolicies.defaultAutoRollbackOnFailure applies.",
     },
   ],
   defaults: {
-    namespace: 'monitoring',
-    releaseName: 'prometheus',
-    retention: '15d',
-    storageClass: 'default',
-    storageSize: '50Gi',
-    storageConfigId: '',
-    thanosSidecarEnabled: 'true',
+    namespace: "monitoring",
+    releaseName: "prometheus",
+    retention: "15d",
+    storageClass: "default",
+    storageSize: "50Gi",
+    storageConfigId: "",
+    thanosSidecarEnabled: "true",
     // chartVersion / scrapeInterval / enableGrafana / enableAlertmanager /
     // autoRollbackOnFailure are deliberately ABSENT — see SERVER_BLIND_FIELDS.
     // Their placeholders and unset options show the backend's default without
@@ -257,67 +252,82 @@ export const CLUSTER_STACK_FAMILY: StackFamilySpec = {
 // ─────────────────────────────────────────────────────────────────────
 
 export const SHARED_THANOS_FAMILY: StackFamilySpec = {
-  key: 'thanos',
-  title: 'Shared Thanos',
+  key: "thanos",
+  title: "Shared Thanos",
   description:
-    'The deployment-wide long-term metrics tier: query, query-frontend, store gateway and compactor, reading the blocks every cluster stack ships to object storage.',
+    "The deployment-wide long-term metrics tier: query, query-frontend, store gateway and compactor, reading the blocks every cluster stack ships to object storage.",
   destroys:
-    'the Thanos Helm release on the management cluster. Every cluster’s long-term metrics and the platform’s Thanos query endpoint go away with it; the blocks in object storage are NOT deleted',
+    "the Thanos Helm release on the management cluster. Every cluster’s long-term metrics and the platform’s Thanos query endpoint go away with it; the blocks in object storage are NOT deleted",
   fields: [
     {
-      name: 'managementClusterId',
-      label: 'Management cluster',
-      kind: 'cluster',
+      name: "managementClusterId",
+      label: "Management cluster",
+      kind: "cluster",
       required: true,
-      help: 'Cluster the shared Thanos release runs on.',
+      help: "Cluster the shared Thanos release runs on.",
     },
     {
-      name: 'storageConfigId',
-      label: 'Object storage',
-      kind: 'storageConfig',
+      name: "storageConfigId",
+      label: "Object storage",
+      kind: "storageConfig",
       required: true,
       replaceTrigger: true,
-      help: 'Bucket Thanos reads blocks from. The backend renders it into an objstore secret.',
+      help: "Bucket Thanos reads blocks from. The backend renders it into an objstore secret.",
     },
     {
-      name: 'namespace',
-      label: 'Namespace',
-      kind: 'text',
-      placeholder: 'monitoring',
+      name: "namespace",
+      label: "Namespace",
+      kind: "text",
+      placeholder: "monitoring",
       replaceTrigger: true,
     },
     {
-      name: 'releaseName',
-      label: 'Release name',
-      kind: 'text',
-      placeholder: 'thanos',
+      name: "releaseName",
+      label: "Release name",
+      kind: "text",
+      placeholder: "thanos",
       replaceTrigger: true,
     },
-    { name: 'chartVersion', label: 'Chart version', kind: 'text', placeholder: '1.23.0' },
-    { name: 'queryReplicas', label: 'Query replicas', kind: 'number', placeholder: '2' },
     {
-      name: 'storeGatewayReplicas',
-      label: 'Store gateway replicas',
-      kind: 'number',
-      placeholder: '1',
+      name: "chartVersion",
+      label: "Chart version",
+      kind: "text",
+      placeholder: "1.23.0",
     },
-    { name: 'compactorReplicas', label: 'Compactor replicas', kind: 'number', placeholder: '1' },
     {
-      name: 'autoRollbackOnFailure',
-      label: 'Roll back on failure',
-      kind: 'tristate',
+      name: "queryReplicas",
+      label: "Query replicas",
+      kind: "number",
+      placeholder: "2",
+    },
+    {
+      name: "storeGatewayReplicas",
+      label: "Store gateway replicas",
+      kind: "number",
+      placeholder: "1",
+    },
+    {
+      name: "compactorReplicas",
+      label: "Compactor replicas",
+      kind: "number",
+      placeholder: "1",
+    },
+    {
+      name: "autoRollbackOnFailure",
+      label: "Roll back on failure",
+      kind: "tristate",
       unsetLabel: PLATFORM_DEFAULT,
     },
   ],
   defaults: {
-    managementClusterId: '',
-    storageConfigId: '',
-    namespace: 'monitoring',
-    releaseName: 'thanos',
-    chartVersion: '1.23.0',
-    queryReplicas: '2',
-    storeGatewayReplicas: '1',
-    compactorReplicas: '1',
+    managementClusterId: "",
+    storageConfigId: "",
+    namespace: "monitoring",
+    releaseName: "thanos",
+    chartVersion: "1.23.0",
+    queryReplicas: "2",
+    storeGatewayReplicas: "1",
+    compactorReplicas: "1",
     // autoRollbackOnFailure absent — see SERVER_BLIND_FIELDS.
   },
 };
@@ -327,65 +337,70 @@ export const SHARED_THANOS_FAMILY: StackFamilySpec = {
 // ─────────────────────────────────────────────────────────────────────
 
 export const SHARED_ALERTMANAGER_FAMILY: StackFamilySpec = {
-  key: 'alertmanager',
-  title: 'Shared Alertmanager',
+  key: "alertmanager",
+  title: "Shared Alertmanager",
   description:
-    'The deployment-wide alert router. Platform alert rules and notification channels deliver through this release.',
+    "The deployment-wide alert router. Platform alert rules and notification channels deliver through this release.",
   destroys:
-    'the Alertmanager Helm release on the management cluster and its notification silences. Platform alerts stop being delivered until it is reinstalled',
+    "the Alertmanager Helm release on the management cluster and its notification silences. Platform alerts stop being delivered until it is reinstalled",
   fields: [
     {
-      name: 'managementClusterId',
-      label: 'Management cluster',
-      kind: 'cluster',
+      name: "managementClusterId",
+      label: "Management cluster",
+      kind: "cluster",
       required: true,
-      help: 'Cluster the shared Alertmanager release runs on.',
+      help: "Cluster the shared Alertmanager release runs on.",
     },
     {
-      name: 'namespace',
-      label: 'Namespace',
-      kind: 'text',
-      placeholder: 'monitoring',
+      name: "namespace",
+      label: "Namespace",
+      kind: "text",
+      placeholder: "monitoring",
       replaceTrigger: true,
     },
     {
-      name: 'releaseName',
-      label: 'Release name',
-      kind: 'text',
-      placeholder: 'astronomer-alertmanager',
-      replaceTrigger: true,
-    },
-    { name: 'chartVersion', label: 'Chart version', kind: 'text', placeholder: '1.18.0' },
-    { name: 'replicas', label: 'Replicas', kind: 'number', placeholder: '1' },
-    {
-      name: 'storageClass',
-      label: 'Storage class',
-      kind: 'text',
-      placeholder: 'default',
+      name: "releaseName",
+      label: "Release name",
+      kind: "text",
+      placeholder: "astronomer-alertmanager",
       replaceTrigger: true,
     },
     {
-      name: 'storageSize',
-      label: 'Storage size',
-      kind: 'text',
-      placeholder: '2Gi',
+      name: "chartVersion",
+      label: "Chart version",
+      kind: "text",
+      placeholder: "1.18.0",
+    },
+    { name: "replicas", label: "Replicas", kind: "number", placeholder: "1" },
+    {
+      name: "storageClass",
+      label: "Storage class",
+      kind: "text",
+      placeholder: "default",
       replaceTrigger: true,
     },
     {
-      name: 'autoRollbackOnFailure',
-      label: 'Roll back on failure',
-      kind: 'tristate',
+      name: "storageSize",
+      label: "Storage size",
+      kind: "text",
+      placeholder: "2Gi",
+      replaceTrigger: true,
+    },
+    {
+      name: "autoRollbackOnFailure",
+      label: "Roll back on failure",
+      kind: "tristate",
       unsetLabel: PLATFORM_DEFAULT,
     },
   ],
   defaults: {
-    managementClusterId: '',
-    namespace: 'monitoring',
-    releaseName: 'astronomer-alertmanager',
-    chartVersion: '1.18.0',
-    replicas: '1',
-    storageClass: '',
-    storageSize: '2Gi',
+    managementClusterId: "",
+    namespace: "monitoring",
+    releaseName: "astronomer-alertmanager",
+    chartVersion: "1.18.0",
+    replicas: "1",
+    storageClass: "",
+    storageSize: "2Gi",
     // autoRollbackOnFailure absent — see SERVER_BLIND_FIELDS.
   },
 };
@@ -395,83 +410,88 @@ export const SHARED_ALERTMANAGER_FAMILY: StackFamilySpec = {
 // ─────────────────────────────────────────────────────────────────────
 
 export const SHARED_GRAFANA_FAMILY: StackFamilySpec = {
-  key: 'grafana',
-  title: 'Shared Grafana',
+  key: "grafana",
+  title: "Shared Grafana",
   description:
-    'Fleet Grafana on grafana.<platform-host> via grafana-proxy (ticket bounce, Explore-lock). Datasources are shared Thanos (when installed) and an optional BYO Loki URL. Open is shown only when authMode is proxy.',
+    "Shared Grafana on grafana.<platform-host> via grafana-proxy (ticket bounce, Explore-lock). Datasources are shared Thanos (when installed) and an optional BYO Loki URL. Open is shown only when authMode is proxy.",
   destroys:
-    'the Grafana Helm release on the management cluster, grafana-proxy, and its provisioned dashboard/datasource ConfigMaps. Per-cluster Grafana is not touched',
+    "the Grafana Helm release on the management cluster, grafana-proxy, and its provisioned dashboard/datasource ConfigMaps. Per-cluster Grafana is not touched",
   fields: [
     {
-      name: 'managementClusterId',
-      label: 'Management cluster',
-      kind: 'cluster',
+      name: "managementClusterId",
+      label: "Management cluster",
+      kind: "cluster",
       required: true,
-      help: 'Cluster the shared Grafana release runs on.',
+      help: "Cluster the shared Grafana release runs on.",
     },
     {
-      name: 'namespace',
-      label: 'Namespace',
-      kind: 'text',
-      placeholder: 'monitoring',
+      name: "namespace",
+      label: "Namespace",
+      kind: "text",
+      placeholder: "monitoring",
       replaceTrigger: true,
     },
     {
-      name: 'releaseName',
-      label: 'Release name',
-      kind: 'text',
-      placeholder: 'astronomer-grafana',
+      name: "releaseName",
+      label: "Release name",
+      kind: "text",
+      placeholder: "astronomer-grafana",
       replaceTrigger: true,
     },
-    { name: 'chartVersion', label: 'Chart version', kind: 'text', placeholder: '8.12.1' },
-    { name: 'replicas', label: 'Replicas', kind: 'number', placeholder: '1' },
     {
-      name: 'storageClass',
-      label: 'Storage class',
-      kind: 'text',
-      placeholder: 'default',
+      name: "chartVersion",
+      label: "Chart version",
+      kind: "text",
+      placeholder: "8.12.1",
+    },
+    { name: "replicas", label: "Replicas", kind: "number", placeholder: "1" },
+    {
+      name: "storageClass",
+      label: "Storage class",
+      kind: "text",
+      placeholder: "default",
       replaceTrigger: true,
-      help: 'Used only when a PVC is requested below.',
+      help: "Used only when a PVC is requested below.",
     },
     {
-      name: 'storageSize',
-      label: 'Storage size',
-      kind: 'text',
-      placeholder: '1Gi',
+      name: "storageSize",
+      label: "Storage size",
+      kind: "text",
+      placeholder: "1Gi",
       replaceTrigger: true,
-      help: 'Optional 1Gi PVC for stars and prefs. Leave empty to stay stateless. Dashboards and datasources stay sidecar ConfigMaps.',
+      help: "Optional 1Gi PVC for stars and prefs. Leave empty to stay stateless. Dashboards and datasources stay sidecar ConfigMaps.",
     },
     {
-      name: 'ingressHost',
-      label: 'Grafana host',
-      kind: 'text',
-      placeholder: 'grafana.example.com',
-      help: 'Defaults to grafana.<Astronomer ServerURL host>. Never taken from the Astronomer chart ingress.host.',
+      name: "ingressHost",
+      label: "Grafana host",
+      kind: "text",
+      placeholder: "grafana.example.com",
+      help: "Defaults to grafana.<Astronomer ServerURL host>. Never taken from the Astronomer chart ingress.host.",
     },
     {
-      name: 'logDatasourceUrl',
-      label: 'BYO Loki URL',
-      kind: 'text',
-      placeholder: 'http://loki.example:3100',
-      help: 'Optional Grafana-owned Loki datasource. Astronomer Loki is a later family.',
+      name: "logDatasourceUrl",
+      label: "BYO Loki URL",
+      kind: "text",
+      placeholder: "http://loki.example:3100",
+      help: "Optional Grafana-owned Loki datasource. Astronomer Loki is a later family.",
     },
     {
-      name: 'autoRollbackOnFailure',
-      label: 'Roll back on failure',
-      kind: 'tristate',
+      name: "autoRollbackOnFailure",
+      label: "Roll back on failure",
+      kind: "tristate",
       unsetLabel: PLATFORM_DEFAULT,
     },
   ],
   defaults: {
-    managementClusterId: '',
-    namespace: 'monitoring',
-    releaseName: 'astronomer-grafana',
-    chartVersion: '8.12.1',
-    replicas: '1',
-    storageClass: '',
-    storageSize: '',
-    ingressHost: '',
-    logDatasourceUrl: '',
+    managementClusterId: "",
+    namespace: "monitoring",
+    releaseName: "astronomer-grafana",
+    chartVersion: "8.12.1",
+    replicas: "1",
+    storageClass: "",
+    storageSize: "",
+    ingressHost: "",
+    logDatasourceUrl: "",
   },
 };
 
@@ -480,118 +500,132 @@ export const SHARED_GRAFANA_FAMILY: StackFamilySpec = {
 // ─────────────────────────────────────────────────────────────────────
 
 export const SHARED_LOKI_FAMILY: StackFamilySpec = {
-  key: 'loki',
-  title: 'Shared Loki',
+  key: "loki",
+  title: "Shared Loki",
   description:
     'Optional Astronomer log warehouse on the management cluster. Install is refused unless the sizer passes. Gateway and loki-auth stay ClusterIP until ingest tokens exist. Object storage uses the same backup-storage config as Thanos, with prefix join(prefix, "loki").',
   destroys:
-    'the Loki Helm release and its WAL disks. Index and chunks in object storage (computed Loki prefix) are NOT deleted',
+    "the Loki Helm release and its WAL disks. Index and chunks in object storage (computed Loki prefix) are NOT deleted",
   fields: [
     {
-      name: 'managementClusterId',
-      label: 'Management cluster',
-      kind: 'cluster',
+      name: "managementClusterId",
+      label: "Management cluster",
+      kind: "cluster",
       required: true,
-      help: 'Cluster the shared Loki release runs on.',
+      help: "Cluster the shared Loki release runs on.",
     },
     {
-      name: 'storageConfigId',
-      label: 'Object storage',
-      kind: 'storageConfig',
+      name: "storageConfigId",
+      label: "Object storage",
+      kind: "storageConfig",
       required: true,
       replaceTrigger: true,
       help: 'Same backup-storage config as Thanos. Loki writes under join(prefix, "loki"), never Thanos objstore.yml.',
     },
     {
-      name: 'ingestHostname',
-      label: 'Ingest hostname',
-      kind: 'text',
+      name: "ingestHostname",
+      label: "Ingest hostname",
+      kind: "text",
       required: true,
-      placeholder: 'loki-ingest.example.com',
-      help: 'Required and explicit. Never derived from the Astronomer ingress host. Ingress is not created until tokens exist.',
+      placeholder: "loki-ingest.example.com",
+      help: "Required and explicit. Never derived from the Astronomer ingress host. Ingress is not created until tokens exist.",
     },
     {
-      name: 'namespace',
-      label: 'Namespace',
-      kind: 'text',
-      placeholder: 'monitoring',
+      name: "namespace",
+      label: "Namespace",
+      kind: "text",
+      placeholder: "monitoring",
       replaceTrigger: true,
     },
     {
-      name: 'releaseName',
-      label: 'Release name',
-      kind: 'text',
-      placeholder: 'astronomer-loki',
-      replaceTrigger: true,
-    },
-    { name: 'chartVersion', label: 'Chart version', kind: 'text', placeholder: '6.27.0' },
-    {
-      name: 'storageClass',
-      label: 'Storage class',
-      kind: 'text',
-      placeholder: 'default',
-      replaceTrigger: true,
-      help: 'RWO class for WAL disks.',
-    },
-    {
-      name: 'walStorageSize',
-      label: 'WAL size',
-      kind: 'text',
-      placeholder: '10Gi',
+      name: "releaseName",
+      label: "Release name",
+      kind: "text",
+      placeholder: "astronomer-loki",
       replaceTrigger: true,
     },
     {
-      name: 'mode',
-      label: 'Mode',
-      kind: 'text',
-      placeholder: 'singleBinary',
+      name: "chartVersion",
+      label: "Chart version",
+      kind: "text",
+      placeholder: "6.27.0",
+    },
+    {
+      name: "storageClass",
+      label: "Storage class",
+      kind: "text",
+      placeholder: "default",
       replaceTrigger: true,
-      help: 'Empty = sizer pick. May only narrow (singleBinary when SimpleScalable was selected). Mode change replaces the release (WAL lost, bucket kept).',
-    },
-    { name: 'retention', label: 'Retention', kind: 'text', placeholder: '14d' },
-    {
-      name: 'skipDiskCheck',
-      label: 'Skip WAL disk check',
-      kind: 'tristate',
-      unsetLabel: 'Probe WAL on install/replace',
+      help: "RWO class for WAL disks.",
     },
     {
-      name: 'autoRollbackOnFailure',
-      label: 'Roll back on failure',
-      kind: 'tristate',
+      name: "walStorageSize",
+      label: "WAL size",
+      kind: "text",
+      placeholder: "10Gi",
+      replaceTrigger: true,
+    },
+    {
+      name: "mode",
+      label: "Mode",
+      kind: "text",
+      placeholder: "singleBinary",
+      replaceTrigger: true,
+      help: "Empty = sizer pick. May only narrow (singleBinary when SimpleScalable was selected). Mode change replaces the release (WAL lost, bucket kept).",
+    },
+    { name: "retention", label: "Retention", kind: "text", placeholder: "14d" },
+    {
+      name: "skipDiskCheck",
+      label: "Skip WAL disk check",
+      kind: "tristate",
+      unsetLabel: "Probe WAL on install/replace",
+    },
+    {
+      name: "autoRollbackOnFailure",
+      label: "Roll back on failure",
+      kind: "tristate",
       unsetLabel: PLATFORM_DEFAULT,
     },
   ],
   defaults: {
-    managementClusterId: '',
-    storageConfigId: '',
-    ingestHostname: '',
-    namespace: 'monitoring',
-    releaseName: 'astronomer-loki',
-    chartVersion: '6.27.0',
-    storageClass: 'default',
-    walStorageSize: '10Gi',
-    mode: '',
-    retention: '14d',
+    managementClusterId: "",
+    storageConfigId: "",
+    ingestHostname: "",
+    namespace: "monitoring",
+    releaseName: "astronomer-loki",
+    chartVersion: "6.27.0",
+    storageClass: "default",
+    walStorageSize: "10Gi",
+    mode: "",
+    retention: "14d",
   },
 };
 
 /** Public Grafana URL only when the proxy + ticket bounce are installed. */
 export function fleetGrafanaOpenURL(
-  status?: Pick<SharedGrafanaStatus, 'status' | 'authMode' | 'grafanaHost' | 'ingressHost'> | null,
+  status?: Pick<
+    SharedGrafanaStatus,
+    "status" | "authMode" | "grafanaHost" | "ingressHost"
+  > | null,
 ): string | null {
-  if (!status || status.authMode !== 'proxy') return null;
+  if (!status || status.authMode !== "proxy") return null;
   if (!stackIsInstalled(status)) return null;
-  const raw = (status.grafanaHost || status.ingressHost || '').trim();
+  const raw = (status.grafanaHost || status.ingressHost || "").trim();
   if (!raw) return null;
-  const host = raw.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const host = raw.replace(/^https?:\/\//, "").replace(/\/+$/, "");
   if (!host) return null;
   return `https://${host}/`;
 }
 
-/** Fleet Grafana with this cluster pre-selected. Null unless the Open button exists. */
+/** Shared Grafana with this cluster pre-selected. Null unless the Open button exists. */
 export function fleetGrafanaClusterURL(
-  status: Pick<SharedGrafanaStatus, 'status' | 'authMode' | 'grafanaHost' | 'ingressHost'> | null | undefined,
+  status:
+    | Pick<
+        SharedGrafanaStatus,
+        "status" | "authMode" | "grafanaHost" | "ingressHost"
+      >
+    | null
+    | undefined,
   clusterId: string,
 ): string | null {
   const base = fleetGrafanaOpenURL(status);
@@ -610,9 +644,14 @@ export function fleetGrafanaClusterURL(
  * (clusterMonitoringReplaceRequired / sharedThanosReplaceRequired), so the
  * Install-vs-Upgrade split in the UI matches what the API will accept.
  */
-export const ABSENT_STACK_STATUSES: readonly string[] = ['not_configured', 'uninstalled'];
+export const ABSENT_STACK_STATUSES: readonly string[] = [
+  "not_configured",
+  "uninstalled",
+];
 
-export function stackIsInstalled(status: MonitoringStackStatusBase | undefined | null): boolean {
+export function stackIsInstalled(
+  status: MonitoringStackStatusBase | undefined | null,
+): boolean {
   if (!status?.status) return false;
   return !ABSENT_STACK_STATUSES.includes(status.status);
 }
@@ -620,44 +659,44 @@ export function stackIsInstalled(status: MonitoringStackStatusBase | undefined |
 /** Recorded lifecycle status → a StatusBadge tone from lib/utils statusBgColor. */
 export function stackStatusTone(status: string | undefined): string {
   switch (status) {
-    case 'healthy':
-    case 'configured':
-    case 'reinstalled':
-      return 'healthy';
-    case 'installing':
-    case 'updating':
-      return 'progressing';
-    case 'drifted':
-      return 'drifted';
-    case 'uninstalled':
-    case 'not_configured':
+    case "healthy":
+    case "configured":
+    case "reinstalled":
+      return "healthy";
+    case "installing":
+    case "updating":
+      return "progressing";
+    case "drifted":
+      return "drifted";
+    case "uninstalled":
+    case "not_configured":
     case undefined:
-      return 'unknown';
+      return "unknown";
     default:
-      return 'unknown';
+      return "unknown";
   }
 }
 
 export function stackStatusLabel(status: string | undefined): string {
   switch (status) {
-    case 'not_configured':
-      return 'Not installed';
-    case 'uninstalled':
-      return 'Uninstalled';
-    case 'installing':
-      return 'Installing';
-    case 'updating':
-      return 'Updating';
-    case 'reinstalled':
-      return 'Reinstalled';
-    case 'configured':
-      return 'Configured';
-    case 'healthy':
-      return 'Healthy';
-    case 'drifted':
-      return 'Drifted';
+    case "not_configured":
+      return "Not installed";
+    case "uninstalled":
+      return "Uninstalled";
+    case "installing":
+      return "Installing";
+    case "updating":
+      return "Updating";
+    case "reinstalled":
+      return "Reinstalled";
+    case "configured":
+      return "Configured";
+    case "healthy":
+      return "Healthy";
+    case "drifted":
+      return "Drifted";
     default:
-      return status ? status.replace(/_/g, ' ') : 'Unknown';
+      return status ? status.replace(/_/g, " ") : "Unknown";
   }
 }
 
@@ -667,9 +706,10 @@ export function stackStatusLabel(status: string | undefined): string {
 
 function stringifyStatusValue(value: unknown): string | null {
   if (value === null || value === undefined) return null;
-  if (typeof value === 'boolean') return value ? 'true' : 'false';
-  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : null;
-  if (typeof value === 'string') return value;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number")
+    return Number.isFinite(value) ? String(value) : null;
+  if (typeof value === "string") return value;
   return null;
 }
 
@@ -687,8 +727,10 @@ export function seedStackValues(
   const source = (status ?? {}) as Record<string, unknown>;
   const values: StackFormValues = {};
   for (const field of spec.fields) {
-    const fromStatus = stackIsInstalled(status) ? stringifyStatusValue(source[field.name]) : null;
-    values[field.name] = fromStatus ?? spec.defaults[field.name] ?? '';
+    const fromStatus = stackIsInstalled(status)
+      ? stringifyStatusValue(source[field.name])
+      : null;
+    values[field.name] = fromStatus ?? spec.defaults[field.name] ?? "";
   }
   return values;
 }
@@ -702,7 +744,11 @@ export function replaceTriggeringChanges(
   if (!stackIsInstalled(status)) return [];
   const seeded = seedStackValues(spec, status);
   return spec.fields
-    .filter((field) => field.replaceTrigger && (values[field.name] ?? '') !== (seeded[field.name] ?? ''))
+    .filter(
+      (field) =>
+        field.replaceTrigger &&
+        (values[field.name] ?? "") !== (seeded[field.name] ?? ""),
+    )
     .map((field) => field.label);
 }
 
@@ -711,7 +757,9 @@ export function missingRequiredFields(
   spec: StackFamilySpec,
   values: StackFormValues,
 ): StackField[] {
-  return spec.fields.filter((field) => field.required && !(values[field.name] ?? '').trim());
+  return spec.fields.filter(
+    (field) => field.required && !(values[field.name] ?? "").trim(),
+  );
 }
 
 /**
@@ -736,17 +784,17 @@ export function buildStackBody(
   const body: Record<string, unknown> = {};
   for (const field of spec.fields) {
     const raw = values[field.name];
-    if (field.kind === 'boolean') {
-      body[field.name] = raw === 'true';
+    if (field.kind === "boolean") {
+      body[field.name] = raw === "true";
       continue;
     }
-    const trimmed = (raw ?? '').trim();
+    const trimmed = (raw ?? "").trim();
     if (!trimmed) continue;
-    if (field.kind === 'tristate') {
-      body[field.name] = trimmed === 'true';
+    if (field.kind === "tristate") {
+      body[field.name] = trimmed === "true";
       continue;
     }
-    if (field.kind === 'number') {
+    if (field.kind === "number") {
       const parsed = Number(trimmed);
       if (Number.isFinite(parsed)) body[field.name] = parsed;
       continue;

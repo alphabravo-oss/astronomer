@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/auth/install/ — Dex install wizard.
  *
@@ -13,23 +13,32 @@ import { createFileRoute } from '@tanstack/react-router';
  *      Astronomer management Helm chart; this page never installs the
  *      unrelated upstream chart through the remote tools catalog.
  */
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from '@/lib/link';
-import { useRouter } from '@/lib/navigation';
-import { ArrowLeft, ArrowRight, Check, Loader2, Server, Globe } from 'lucide-react';
-import { useClusters } from '@/lib/hooks';
-import { useAppForm, useStore } from '@/lib/form';
-import { useUpdateDexSettings } from '@/components/auth/hooks';
-import { ActionButton } from '@/components/ui/action-button';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { cn } from '@/lib/utils';
-import type { Cluster } from '@/types';
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "@/lib/link";
+import { useRouter } from "@/lib/navigation";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Loader2,
+  Server,
+  Globe,
+} from "lucide-react";
+import { useClusters } from "@/lib/hooks";
+import { useAppForm, useStore } from "@/lib/form";
+import { useUpdateDexSettings } from "@/components/auth/hooks";
+import { ActionButton } from "@/components/ui/action-button";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { cn } from "@/lib/utils";
+import type { Cluster } from "@/types";
 
 type Step = 1 | 2 | 3;
 
 function InstallDexPage() {
   const router = useRouter();
-  const { data: clustersData, isLoading: clustersLoading } = useClusters({ pageSize: 100 });
+  const { data: clustersData, isLoading: clustersLoading } = useClusters({
+    pageSize: 100,
+  });
   const clusters = useMemo(() => clustersData?.data ?? [], [clustersData]);
 
   const settingsMutation = useUpdateDexSettings();
@@ -39,7 +48,7 @@ function InstallDexPage() {
   // Wizard state (cluster pick + issuer URL) lives on a TanStack form; the
   // step counter stays local UI state.
   const form = useAppForm({
-    defaultValues: { clusterId: '', issuerUrl: '' },
+    defaultValues: { clusterId: "", issuerUrl: "" },
     onSubmit: async ({ value }) => {
       const cluster = clusters.find((c) => c.id === value.clusterId);
       if (!cluster) return;
@@ -51,7 +60,7 @@ function InstallDexPage() {
           issuer_url: value.issuerUrl,
           cluster_id: cluster.id,
         });
-        router.push('/dashboard/settings/auth/');
+        router.push("/dashboard/settings/auth/");
       } catch {
         /* mutation toasts on error */
       }
@@ -65,13 +74,13 @@ function InstallDexPage() {
   // Default cluster + issuer suggestion as soon as data lands.
   useEffect(() => {
     if (!clusterId && clusters.length > 0) {
-      form.setFieldValue('clusterId', clusters[0].id);
+      form.setFieldValue("clusterId", clusters[0].id);
     }
   }, [form, clusters, clusterId]);
 
   useEffect(() => {
     if (cluster && !issuerUrl) {
-      form.setFieldValue('issuerUrl', suggestIssuerUrl(cluster));
+      form.setFieldValue("issuerUrl", suggestIssuerUrl(cluster));
     }
   }, [form, cluster, issuerUrl]);
 
@@ -90,8 +99,10 @@ function InstallDexPage() {
         title="Install Dex"
         description={
           <>
-            Dex is bundled with the Astronomer management chart. Enable <span className="font-mono">dex.enabled</span>
-            {' '}in Helm first; this workflow only binds its issuer and target cluster. Kubernetes runtime identity stays chart-owned.
+            Dex is bundled with the Astronomer management chart. Enable{" "}
+            <span className="font-mono">dex.enabled</span> in Helm first; this
+            workflow only binds its issuer and target cluster. Kubernetes
+            runtime identity stays chart-owned.
           </>
         }
       />
@@ -140,7 +151,7 @@ function InstallDexPage() {
             <ActionButton
               intent="primary"
               icon={<ArrowRight className="h-3.5 w-3.5" />}
-              onClick={() => setStep((s) => ((s + 1) as Step))}
+              onClick={() => setStep((s) => (s + 1) as Step)}
               disabled={!canAdvance}
             >
               Continue
@@ -178,9 +189,9 @@ function BackLink() {
 
 function Stepper({ step }: { step: Step }) {
   const steps = [
-    { n: 1, label: 'Cluster' },
-    { n: 2, label: 'Issuer' },
-    { n: 3, label: 'Review' },
+    { n: 1, label: "Cluster" },
+    { n: 2, label: "Issuer" },
+    { n: 3, label: "Review" },
   ] as const;
   return (
     <div className="flex items-center gap-3">
@@ -192,18 +203,20 @@ function Stepper({ step }: { step: Step }) {
             <div className="flex items-center gap-2">
               <span
                 className={cn(
-                  'flex items-center justify-center h-6 w-6 rounded-full text-xs font-medium',
-                  active && 'bg-primary text-primary-foreground',
-                  done && 'bg-status-success text-white',
-                  !active && !done && 'bg-muted text-muted-foreground'
+                  "flex items-center justify-center h-6 w-6 rounded-full text-xs font-medium",
+                  active && "bg-primary text-primary-foreground",
+                  done && "bg-status-success text-white",
+                  !active && !done && "bg-muted text-muted-foreground",
                 )}
               >
                 {done ? <Check className="h-3.5 w-3.5" /> : s.n}
               </span>
               <span
                 className={cn(
-                  'text-sm',
-                  active ? 'text-foreground font-medium' : 'text-muted-foreground'
+                  "text-sm",
+                  active
+                    ? "text-foreground font-medium"
+                    : "text-muted-foreground",
                 )}
               >
                 {s.label}
@@ -222,7 +235,9 @@ function EmptyClusters() {
   return (
     <div className="text-center py-10">
       <Server className="h-8 w-8 mx-auto text-muted-foreground" />
-      <p className="text-sm text-foreground mt-3">No clusters registered yet.</p>
+      <p className="text-sm text-foreground mt-3">
+        No clusters registered yet.
+      </p>
       <p className="text-xs text-muted-foreground mt-1">
         Register a cluster first — Dex needs somewhere to live.
       </p>
@@ -230,7 +245,7 @@ function EmptyClusters() {
         size="sm"
         intent="primary"
         className="mt-4"
-        onClick={() => router.push('/dashboard/clusters/register')}
+        onClick={() => router.push("/dashboard/clusters/register")}
       >
         Register Cluster
       </ActionButton>
@@ -276,10 +291,10 @@ function ClusterPicker({
               key={c.id}
               onClick={() => onChange(c.id)}
               className={cn(
-                'w-full flex items-center justify-between px-4 py-3 rounded-lg border text-left transition-colors',
+                "w-full flex items-center justify-between px-4 py-3 rounded-lg border text-left transition-colors",
                 active
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border bg-background hover:bg-accent/30'
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-background hover:bg-accent/30",
               )}
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -293,7 +308,9 @@ function ClusterPicker({
                   </p>
                 </div>
               </div>
-              {active && <Check className="h-4 w-4 text-primary flex-shrink-0" />}
+              {active && (
+                <Check className="h-4 w-4 text-primary flex-shrink-0" />
+              )}
             </button>
           );
         })}
@@ -317,8 +334,10 @@ function IssuerStep({
     candidates.add(suggestIssuerUrl(cluster));
     // A handful of common patterns operators tend to use.
     candidates.add(`https://dex.${cluster.name}.cluster.local`);
-    if (typeof window !== 'undefined') {
-      candidates.add(`${window.location.origin.replace(/^https?:\/\//, 'https://dex.')}`);
+    if (typeof window !== "undefined") {
+      candidates.add(
+        `${window.location.origin.replace(/^https?:\/\//, "https://dex.")}`,
+      );
     }
     return Array.from(candidates).filter(Boolean).slice(0, 3);
   }, [cluster]);
@@ -330,8 +349,8 @@ function IssuerStep({
       <div>
         <p className="text-sm font-medium text-foreground">Issuer URL</p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Public URL where Dex will serve OIDC discovery. This must match the URL the
-          login flow redirects to.
+          Public URL where Dex will serve OIDC discovery. This must match the
+          URL the login flow redirects to.
         </p>
       </div>
       <div className="space-y-1.5">
@@ -346,7 +365,9 @@ function IssuerStep({
           />
         </div>
         {!valid && value && (
-          <p className="text-xs text-status-error">Issuer must be a valid https:// URL</p>
+          <p className="text-xs text-status-error">
+            Issuer must be a valid https:// URL
+          </p>
         )}
       </div>
       {suggestions.length > 0 && (
@@ -383,12 +404,16 @@ function ReviewStep({
       <div>
         <p className="text-sm font-medium text-foreground">Review</p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          We&apos;ll bind the chart-managed Dex Deployment to its singleton settings row.
+          We&apos;ll bind the chart-managed Dex Deployment to its singleton
+          settings row.
         </p>
       </div>
       <dl className="rounded-lg border border-border divide-y divide-border">
         <ReviewRow label="Tool" value="dex" mono />
-        <ReviewRow label="Cluster" value={cluster.displayName || cluster.name} />
+        <ReviewRow
+          label="Cluster"
+          value={cluster.displayName || cluster.name}
+        />
         <ReviewRow label="Environment" value={cluster.environment} />
         <ReviewRow label="Issuer URL" value={issuerUrl} mono />
         <ReviewRow label="Namespace" value="dex" mono />
@@ -410,7 +435,9 @@ function ReviewRow({
   return (
     <div className="flex items-center justify-between px-4 py-3 text-sm">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className={cn('text-foreground', mono && 'font-mono text-xs')}>{value}</dd>
+      <dd className={cn("text-foreground", mono && "font-mono text-xs")}>
+        {value}
+      </dd>
     </div>
   );
 }
@@ -423,16 +450,16 @@ function suggestIssuerUrl(cluster: Cluster): string {
   // Operators frequently stamp this label/annotation onto management clusters
   // so the dex install can pick it up automatically.
   const labelHint =
-    cluster.labels?.['astronomer.io/dex-issuer-url'] ??
-    cluster.annotations?.['astronomer.io/dex-issuer-url'];
+    cluster.labels?.["astronomer.io/dex-issuer-url"] ??
+    cluster.annotations?.["astronomer.io/dex-issuer-url"];
   if (labelHint) return labelHint;
   const externalUrl =
-    cluster.labels?.['astronomer.io/external-url'] ??
-    cluster.annotations?.['astronomer.io/external-url'];
+    cluster.labels?.["astronomer.io/external-url"] ??
+    cluster.annotations?.["astronomer.io/external-url"];
   if (externalUrl) {
-    return `${externalUrl.replace(/\/+$/, '')}/dex`;
+    return `${externalUrl.replace(/\/+$/, "")}/dex`;
   }
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     return `${window.location.origin}/dex`;
   }
   return `https://dex.${cluster.name}.example.com`;
@@ -442,12 +469,12 @@ function isValidIssuerUrl(s: string): boolean {
   if (!s) return false;
   try {
     const u = new URL(s);
-    return u.protocol === 'https:' || u.protocol === 'http:';
+    return u.protocol === "https:" || u.protocol === "http:";
   } catch {
     return false;
   }
 }
 
-export const Route = createFileRoute('/dashboard/settings/auth/install/')({
+export const Route = createFileRoute("/dashboard/settings/auth/install/")({
   component: InstallDexPage,
 });

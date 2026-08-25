@@ -13,6 +13,80 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countLoggingOperations = `-- name: CountLoggingOperations :one
+SELECT count(*) FROM logging_operations
+WHERE (
+    $1::text IS NULL OR target_type = $1::text
+) AND (
+    $2::text IS NULL OR target_key = $2::text
+) AND (
+    $3::text IS NULL OR status = $3::text
+)
+`
+
+type CountLoggingOperationsParams struct {
+	TargetType pgtype.Text `json:"target_type"`
+	TargetKey  pgtype.Text `json:"target_key"`
+	Status     pgtype.Text `json:"status"`
+}
+
+func (q *Queries) CountLoggingOperations(ctx context.Context, arg CountLoggingOperationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLoggingOperations, arg.TargetType, arg.TargetKey, arg.Status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countLoggingOperationsForScopes = `-- name: CountLoggingOperationsForScopes :one
+SELECT count(*)
+FROM logging_operations operations
+LEFT JOIN logging_outputs output ON
+    operations.target_type = 'output'
+    AND output.id = CASE
+        WHEN operations.target_key ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN operations.target_key::uuid
+    END
+LEFT JOIN logging_pipelines pipeline ON
+    operations.target_type = 'pipeline'
+    AND pipeline.id = CASE
+        WHEN operations.target_key ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN operations.target_key::uuid
+    END
+WHERE (
+    $1::text IS NULL OR operations.target_type = $1::text
+) AND (
+    $2::text IS NULL OR operations.target_key = $2::text
+) AND (
+    $3::text IS NULL OR operations.status = $3::text
+) AND COALESCE(
+    CASE
+        WHEN operations.payload->>'cluster_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN (operations.payload->>'cluster_id')::uuid
+    END,
+    output.cluster_id,
+    pipeline.cluster_id
+) = ANY($4::uuid[])
+`
+
+type CountLoggingOperationsForScopesParams struct {
+	TargetType pgtype.Text `json:"target_type"`
+	TargetKey  pgtype.Text `json:"target_key"`
+	Status     pgtype.Text `json:"status"`
+	ClusterIds []uuid.UUID `json:"cluster_ids"`
+}
+
+func (q *Queries) CountLoggingOperationsForScopes(ctx context.Context, arg CountLoggingOperationsForScopesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLoggingOperationsForScopes,
+		arg.TargetType,
+		arg.TargetKey,
+		arg.Status,
+		arg.ClusterIds,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createLoggingOperation = `-- name: CreateLoggingOperation :one
 INSERT INTO logging_operations (
     target_type,
@@ -172,7 +246,7 @@ WHERE (
 ) AND (
     $5::text IS NULL OR status = $5::text
 )
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -191,6 +265,89 @@ func (q *Queries) ListLoggingOperations(ctx context.Context, arg ListLoggingOper
 		arg.TargetType,
 		arg.TargetKey,
 		arg.Status,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LoggingOperation{}
+	for rows.Next() {
+		var i LoggingOperation
+		if err := rows.Scan(
+			&i.ID,
+			&i.TargetType,
+			&i.TargetKey,
+			&i.OperationType,
+			&i.Payload,
+			&i.Status,
+			&i.AttemptCount,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.ErrorMessage,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLoggingOperationsForScopes = `-- name: ListLoggingOperationsForScopes :many
+SELECT operations.id, operations.target_type, operations.target_key, operations.operation_type, operations.payload, operations.status, operations.attempt_count, operations.started_at, operations.completed_at, operations.error_message, operations.created_by_id, operations.created_at, operations.updated_at
+FROM logging_operations operations
+LEFT JOIN logging_outputs output ON
+    operations.target_type = 'output'
+    AND output.id = CASE
+        WHEN operations.target_key ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN operations.target_key::uuid
+    END
+LEFT JOIN logging_pipelines pipeline ON
+    operations.target_type = 'pipeline'
+    AND pipeline.id = CASE
+        WHEN operations.target_key ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN operations.target_key::uuid
+    END
+WHERE (
+    $1::text IS NULL OR operations.target_type = $1::text
+) AND (
+    $2::text IS NULL OR operations.target_key = $2::text
+) AND (
+    $3::text IS NULL OR operations.status = $3::text
+) AND COALESCE(
+    CASE
+        WHEN operations.payload->>'cluster_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN (operations.payload->>'cluster_id')::uuid
+    END,
+    output.cluster_id,
+    pipeline.cluster_id
+) = ANY($4::uuid[])
+ORDER BY operations.created_at DESC, operations.id DESC
+LIMIT $6 OFFSET $5
+`
+
+type ListLoggingOperationsForScopesParams struct {
+	TargetType  pgtype.Text `json:"target_type"`
+	TargetKey   pgtype.Text `json:"target_key"`
+	Status      pgtype.Text `json:"status"`
+	ClusterIds  []uuid.UUID `json:"cluster_ids"`
+	QueryOffset int32       `json:"query_offset"`
+	QueryLimit  int32       `json:"query_limit"`
+}
+
+func (q *Queries) ListLoggingOperationsForScopes(ctx context.Context, arg ListLoggingOperationsForScopesParams) ([]LoggingOperation, error) {
+	rows, err := q.db.Query(ctx, listLoggingOperationsForScopes,
+		arg.TargetType,
+		arg.TargetKey,
+		arg.Status,
+		arg.ClusterIds,
+		arg.QueryOffset,
+		arg.QueryLimit,
 	)
 	if err != nil {
 		return nil, err

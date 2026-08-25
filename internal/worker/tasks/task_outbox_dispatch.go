@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -33,30 +32,15 @@ type TaskOutboxDispatchDeps struct {
 	Now      func() time.Time
 }
 
-var (
-	taskOutboxDispatchMu   sync.RWMutex
-	taskOutboxDispatchDeps TaskOutboxDispatchDeps
-)
-
-func ConfigureTaskOutboxDispatch(deps TaskOutboxDispatchDeps) {
-	taskOutboxDispatchMu.Lock()
-	defer taskOutboxDispatchMu.Unlock()
-	taskOutboxDispatchDeps = deps
-}
-
-func HandleTaskOutboxDispatch(ctx context.Context, _ *asynq.Task) error {
+func (runtime DispatchRuntime) HandleTaskOutboxDispatch(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, TaskOutboxDispatchType, func() error {
-		taskOutboxDispatchMu.RLock()
-		deps := taskOutboxDispatchDeps
-		taskOutboxDispatchMu.RUnlock()
-		return DispatchTaskOutboxOnce(ctx, deps)
+		return DispatchTaskOutboxOnce(ctx, runtime.TaskOutbox)
 	})
 }
 
 func DispatchTaskOutboxOnce(ctx context.Context, deps TaskOutboxDispatchDeps) error {
 	if deps.Queries == nil || deps.Enqueuer == nil {
-		runtimeLogger().InfoContext(ctx, "task outbox dispatch not configured, skipping")
-		return nil
+		return fmt.Errorf("task outbox dispatch runtime is not configured")
 	}
 	nowFn := deps.Now
 	if nowFn == nil {
@@ -73,7 +57,7 @@ func DispatchTaskOutboxOnce(ctx context.Context, deps TaskOutboxDispatchDeps) er
 	}
 	for _, row := range rows {
 		if err := dispatchTaskOutboxRow(ctx, deps, row, nowFn); err != nil {
-			runtimeLogger().WarnContext(ctx, "task outbox row dispatch failed",
+			runtimeLogger(ctx).WarnContext(ctx, "task outbox row dispatch failed",
 				"id", row.ID.String(),
 				"task_type", row.TaskType,
 				"error", err,

@@ -39,14 +39,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
@@ -61,7 +62,51 @@ type PlatformSettingsQuerier interface {
 	ListPlatformSettings(ctx context.Context) ([]sqlc.PlatformSetting, error)
 	ListPlatformSettingsByPrefix(ctx context.Context, prefix string) ([]sqlc.PlatformSetting, error)
 	UpsertPlatformSetting(ctx context.Context, arg sqlc.UpsertPlatformSettingParams) (sqlc.PlatformSetting, error)
+	BatchUpsertPlatformSettings(ctx context.Context, arg sqlc.BatchUpsertPlatformSettingsParams) ([]sqlc.PlatformSetting, error)
 	DeletePlatformSetting(ctx context.Context, key string) error
+}
+
+// PlatformSettingsMutationTx is the transaction-bound setting + audit surface.
+// Production supplies sqlc.New(tx), so a successful API response can never
+// describe a setting write whose mandatory audit intent rolled back (or vice
+// versa).
+type PlatformSettingsMutationTx interface {
+	PlatformSettingsQuerier
+	audit.OutboxQuerier
+}
+
+type platformSettingsRunTxFunc func(context.Context, func(PlatformSettingsMutationTx) error) error
+
+func executePlatformSettingsMutation[T any](
+	r *http.Request,
+	h *PlatformSettingsHandler,
+	mutate func(PlatformSettingsQuerier) (T, error),
+	describe func(T) clusterAuditEvent,
+) (T, error) {
+	var zero T
+	if h == nil || h.queries == nil {
+		return zero, errors.New("platform settings handler is not configured")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q PlatformSettingsMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := mutate(h.queries)
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 // settingType enumerates the JSON shapes the handler accepts. Anything
@@ -125,7 +170,7 @@ var settingsRegistry = map[string]settingSpec{
 	"feature.catalog":        {Type: typeBool, Default: true, Description: "Helm chart catalog tab"},
 	"feature.projects":       {Type: typeBool, Default: true, Description: "Projects (multi-tenancy) tab"},
 	"feature.monitoring":     {Type: typeBool, Default: true, Description: "Cluster monitoring tab"},
-	"feature.fleet_grafana":  {Type: typeBool, Default: true, Description: "Fleet Grafana panel on Shared stacks (hide only when exactly false)"},
+	"feature.shared_grafana": {Type: typeBool, Default: true, Description: "Shared Grafana panel on Shared stacks (hide only when exactly false)"},
 	"feature.hosted_loki":    {Type: typeBool, Default: false, Description: "Optional Astronomer Loki on Shared stacks (API and panel off until exactly true)"},
 	"feature.security":       {Type: typeBool, Default: true, Description: "Security / CIS scans tab"},
 	"feature.backups":        {Type: typeBool, Default: true, Description: "Backup and restore tab"},
@@ -198,6 +243,7 @@ var preAuthAllowedNamespaces = map[string]string{
 // pre-auth /api/v1/settings/branding/, /banner/ endpoints.
 type PlatformSettingsHandler struct {
 	queries PlatformSettingsQuerier
+	runTx   platformSettingsRunTxFunc
 	// cache is the FeatureGate middleware's cache, shared so that PUT /
 	// DELETE invalidate it. Optional — the handler works without one.
 	cache            *SettingsCache
@@ -211,6 +257,18 @@ type PlatformSettingsHandler struct {
 // degenerate test installs; the handler then 503s on every endpoint.
 func NewPlatformSettingsHandler(queries PlatformSettingsQuerier) *PlatformSettingsHandler {
 	return &PlatformSettingsHandler{queries: queries}
+}
+
+// SetRunTx wires the production transaction used by every platform-setting
+// mutation. Narrow handler fakes may omit it and retain the legacy direct path.
+func (h *PlatformSettingsHandler) SetRunTx(runTx platformSettingsRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *PlatformSettingsHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
 }
 
 // SetCache attaches the shared FeatureGate cache so mutations
@@ -293,8 +351,115 @@ func (h *PlatformSettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // updateRequest is the body shape for PUT.
+// openapi:request PlatformSettingUpdateRequest
 type updateRequest struct {
 	Value json.RawMessage `json:"value"`
+}
+
+// platformSettingsBatchUpdateRequest is the atomic form-save body.
+// openapi:request PlatformSettingsBatchUpdateRequest
+type platformSettingsBatchUpdateRequest struct {
+	Updates map[string]json.RawMessage `json:"updates"`
+}
+
+type platformSettingBatchRecord struct {
+	Key         string          `json:"key"`
+	Value       json.RawMessage `json:"value"`
+	Description string          `json:"description"`
+}
+
+// BatchUpdate handles PUT /api/v1/admin/settings/. Every key and value is
+// validated before the single-statement upsert executes, preventing the
+// settings form from partially committing when one field is invalid.
+func (h *PlatformSettingsHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
+	if !h.gate(w, r) {
+		return
+	}
+	if h.queries == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Settings store not configured")
+		return
+	}
+	var req platformSettingsBatchUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		return
+	}
+	if len(req.Updates) == 0 {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "updates must contain at least one setting")
+		return
+	}
+	if len(req.Updates) > len(settingsRegistry) {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "updates contains more settings than the platform registry")
+		return
+	}
+
+	keys := make([]string, 0, len(req.Updates))
+	for key := range req.Updates {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	records := make([]platformSettingBatchRecord, 0, len(keys))
+	for _, key := range keys {
+		spec, known := settingsRegistry[key]
+		if !known {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.UnknownKey, "Unknown setting key: "+key)
+			return
+		}
+		if key == "feature.charlie" {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "feature.charlie must be updated independently so its runtime lifecycle can be coordinated")
+			return
+		}
+		value := req.Updates[key]
+		if len(value) == 0 {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "value is required for "+key)
+			return
+		}
+		if err := validateValue(spec, value); err != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, key+": "+err.Error())
+			return
+		}
+		records = append(records, platformSettingBatchRecord{Key: key, Value: value, Description: spec.Description})
+	}
+	payload, err := json.Marshal(records)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode validated settings")
+		return
+	}
+	actor := currentUserUUID(r)
+	if !actor.Valid {
+		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		return
+	}
+	rows, err := executePlatformSettingsMutation(r, h,
+		func(q PlatformSettingsQuerier) ([]sqlc.PlatformSetting, error) {
+			return q.BatchUpsertPlatformSettings(r.Context(), sqlc.BatchUpsertPlatformSettingsParams{
+				Payload: payload, UpdatedBy: uuid.UUID(actor.Bytes),
+			})
+		},
+		func(rows []sqlc.PlatformSetting) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.platform_settings.batch_updated", resourceType: "platform_settings",
+				resourceID: "batch", resourceName: "batch", status: http.StatusOK,
+				detail: map[string]any{"keys": keys, "setting_count": len(rows)},
+			}
+		},
+	)
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to save platform settings")
+		return
+	}
+	rowByKey := make(map[string]sqlc.PlatformSetting, len(rows))
+	for _, row := range rows {
+		rowByKey[row.Key] = row
+	}
+	out := make([]settingResponse, 0, len(keys))
+	for _, key := range keys {
+		if h.cache != nil {
+			h.cache.Invalidate(key)
+		}
+		out = append(out, buildResponse(key, settingsRegistry[key], rowByKey[key]))
+	}
+	RespondJSON(w, http.StatusOK, out)
 }
 
 // Update handles PUT /api/v1/admin/settings/{key}/.
@@ -331,74 +496,83 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Capture the previous value for the audit trail. ErrNoRows is the
-	// normal "first write" case — record an empty old_value.
-	var oldValueJSON json.RawMessage
-	oldValueExists := false
-	if prev, err := h.queries.GetPlatformSetting(r.Context(), key); err == nil {
-		oldValueJSON = prev.Value
-		oldValueExists = true
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
-		return
-	}
 	charlieEnabled := false
+	charlieTransition := 0 // -1 disabled, +1 enabled; compensated if DB commit fails.
 	if key == "feature.charlie" {
+		if h.charlieLifecycle == nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Charlie feature lifecycle is unavailable")
+			return
+		}
 		_ = json.Unmarshal(req.Value, &charlieEnabled)
-		if charlieEnabled {
+		previousEnabled, err := h.currentCharlieEnabled(r.Context())
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load Charlie feature state")
+			return
+		}
+		if charlieEnabled && !previousEnabled {
 			if err := requireCharlieAdminAudit(r, h.queries, "charlie.feature.enabled", "charlie_feature", "feature.charlie", map[string]any{"enabled": true}); err != nil {
 				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie feature authority audit is unavailable")
 				return
 			}
-		}
-		if !charlieEnabled && h.charlieLifecycle != nil {
+			if err := h.charlieLifecycle.Enable(r.Context(), platformSettingActor(r)); err != nil {
+				RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, err.Error())
+				return
+			}
+			charlieTransition = 1
+		} else if !charlieEnabled && previousEnabled {
 			if err := h.charlieLifecycle.Disable(r.Context(), platformSettingActor(r)); err != nil {
 				RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, err.Error())
 				return
 			}
+			charlieTransition = -1
 		}
 	}
 
-	row, err := h.queries.UpsertPlatformSetting(r.Context(), sqlc.UpsertPlatformSettingParams{
-		Key:         key,
-		Value:       req.Value,
-		Description: spec.Description,
-		UpdatedBy:   currentUserUUID(r),
-	})
+	type updateResult struct {
+		row       sqlc.PlatformSetting
+		hadValue  bool
+		wasChange bool
+	}
+	result, err := executePlatformSettingsMutation(r, h,
+		func(q PlatformSettingsQuerier) (updateResult, error) {
+			var oldValue json.RawMessage
+			hadValue := false
+			if prev, getErr := q.GetPlatformSetting(r.Context(), key); getErr == nil {
+				oldValue = prev.Value
+				hadValue = true
+			} else if !errors.Is(getErr, pgx.ErrNoRows) {
+				return updateResult{}, getErr
+			}
+			row, updateErr := q.UpsertPlatformSetting(r.Context(), sqlc.UpsertPlatformSettingParams{
+				Key: key, Value: req.Value, Description: spec.Description, UpdatedBy: currentUserUUID(r),
+			})
+			return updateResult{row: row, hadValue: hadValue, wasChange: !hadValue || string(oldValue) != string(req.Value)}, updateErr
+		},
+		func(result updateResult) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.platform_settings.updated", resourceType: "platform_setting",
+				resourceID: key, resourceName: key, status: http.StatusOK,
+				detail: map[string]any{"key": key, "previous_override": result.hadValue, "value_changed": result.wasChange},
+			}
+		},
+	)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		// Charlie runtime transitions precede persistence so routes never expose
+		// an unavailable runtime. Restore the prior runtime posture if the
+		// setting/audit transaction cannot commit.
+		if compensationErr := h.compensateCharlieTransition(r.Context(), charlieTransition, platformSettingActor(r)); compensationErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Platform setting was not committed and Charlie runtime recovery did not complete")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to save platform setting")
 		return
 	}
 
 	if h.cache != nil {
 		h.cache.Invalidate(key)
 	}
-	if key == "feature.charlie" && charlieEnabled && h.charlieLifecycle != nil {
-		if err := h.charlieLifecycle.Enable(r.Context(), platformSettingActor(r)); err != nil {
-			// Enabling is atomic from the operator's perspective. If runtime
-			// restoration fails, restore the prior persisted feature value.
-			if oldValueExists {
-				_, _ = h.queries.UpsertPlatformSetting(r.Context(), sqlc.UpsertPlatformSettingParams{
-					Key: key, Value: oldValueJSON, Description: spec.Description, UpdatedBy: currentUserUUID(r),
-				})
-			} else {
-				_ = h.queries.DeletePlatformSetting(r.Context(), key)
-			}
-			if h.cache != nil {
-				h.cache.Invalidate(key)
-			}
-			RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, err.Error())
-			return
-		}
-	}
 
-	recordAudit(r, h.queries, "admin.platform_settings.updated", "platform_setting", key, key, map[string]any{
-		"key":       key,
-		"old_value": rawOrNull(oldValueJSON),
-		"new_value": rawOrNull(req.Value),
-	})
-
-	RespondJSON(w, http.StatusOK, buildResponse(key, spec, row))
+	RespondJSON(w, http.StatusOK, buildResponse(key, spec, result.row))
 }
 
 // Delete handles DELETE /api/v1/admin/settings/{key}/.
@@ -419,29 +593,83 @@ func (h *PlatformSettingsHandler) Delete(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Settings store not configured")
 		return
 	}
-	var oldValueJSON json.RawMessage
-	if prev, err := h.queries.GetPlatformSetting(r.Context(), key); err == nil {
-		oldValueJSON = prev.Value
-	}
-	if key == "feature.charlie" && h.charlieLifecycle != nil {
-		if err := h.charlieLifecycle.Disable(r.Context(), platformSettingActor(r)); err != nil {
-			RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, err.Error())
+	charlieTransition := false
+	if key == "feature.charlie" {
+		if h.charlieLifecycle == nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Charlie feature lifecycle is unavailable")
 			return
 		}
+		previousEnabled, err := h.currentCharlieEnabled(r.Context())
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load Charlie feature state")
+			return
+		}
+		if previousEnabled {
+			if err := h.charlieLifecycle.Disable(r.Context(), platformSettingActor(r)); err != nil {
+				RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, err.Error())
+				return
+			}
+			charlieTransition = true
+		}
 	}
-	if err := h.queries.DeletePlatformSetting(r.Context(), key); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+	type deleteResult struct{ hadValue bool }
+	_, err := executePlatformSettingsMutation(r, h,
+		func(q PlatformSettingsQuerier) (deleteResult, error) {
+			_, getErr := q.GetPlatformSetting(r.Context(), key)
+			hadValue := getErr == nil
+			if getErr != nil && !errors.Is(getErr, pgx.ErrNoRows) {
+				return deleteResult{}, getErr
+			}
+			return deleteResult{hadValue: hadValue}, q.DeletePlatformSetting(r.Context(), key)
+		},
+		func(result deleteResult) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.platform_settings.reset", resourceType: "platform_setting",
+				resourceID: key, resourceName: key, status: http.StatusOK,
+				detail: map[string]any{"key": key, "previous_override": result.hadValue},
+			}
+		},
+	)
+	if err != nil {
+		if charlieTransition {
+			if compensationErr := h.compensateCharlieTransition(r.Context(), -1, platformSettingActor(r)); compensationErr != nil {
+				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Platform setting was not reset and Charlie runtime recovery did not complete")
+				return
+			}
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to reset platform setting")
 		return
 	}
 	if h.cache != nil {
 		h.cache.Invalidate(key)
 	}
-	recordAudit(r, h.queries, "admin.platform_settings.reset", "platform_setting", key, key, map[string]any{
-		"key":       key,
-		"old_value": rawOrNull(oldValueJSON),
-	})
 	// Echo back the default so the SPA doesn't have to refetch.
 	RespondJSON(w, http.StatusOK, buildResponse(key, spec, sqlc.PlatformSetting{}))
+}
+
+func (h *PlatformSettingsHandler) compensateCharlieTransition(ctx context.Context, transition int, actor string) error {
+	if transition > 0 {
+		return h.charlieLifecycle.Disable(ctx, actor)
+	}
+	if transition < 0 {
+		return h.charlieLifecycle.Enable(ctx, actor)
+	}
+	return nil
+}
+
+func (h *PlatformSettingsHandler) currentCharlieEnabled(ctx context.Context) (bool, error) {
+	row, err := h.queries.GetPlatformSetting(ctx, "feature.charlie")
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var enabled bool
+	if err := json.Unmarshal(row.Value, &enabled); err != nil {
+		return false, fmt.Errorf("decode feature.charlie: %w", err)
+	}
+	return enabled, nil
 }
 
 func platformSettingActor(r *http.Request) string {
@@ -567,6 +795,10 @@ func featureSubsetResponse(rows []sqlc.PlatformSetting) map[string]bool {
 		}
 		out[key] = value
 	}
+	// Deprecated API compatibility alias. The stored/operator-facing key is
+	// feature.shared_grafana; older generated clients still deserialize the
+	// original name during the documented v1 sunset window.
+	out["feature.fleet_grafana"] = out["feature.shared_grafana"]
 	return out
 }
 
@@ -686,22 +918,3 @@ func validateValue(spec settingSpec, raw json.RawMessage) error {
 	}
 	return nil
 }
-
-// rawOrNull turns a JSONB RawMessage into something json.Marshal can
-// embed in the audit detail map. Empty input → nil so the audit row
-// shows `null` rather than `""`.
-func rawOrNull(b json.RawMessage) any {
-	if len(b) == 0 {
-		return nil
-	}
-	var v any
-	if err := json.Unmarshal(b, &v); err != nil {
-		return string(b)
-	}
-	return v
-}
-
-// updatedByPGType is unused here directly but kept for symmetry with
-// the rest of the package — see auth_context.currentUserUUID. The line
-// below silences "imported and not used" if all callers vanish.
-var _ = pgtype.UUID{}

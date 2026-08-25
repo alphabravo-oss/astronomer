@@ -73,7 +73,7 @@ export function RolloutsPage() {
     queryKey: queryKeys.delivery.rollouts(projectId, params),
     queryFn: ({ signal }) => {
       signal.throwIfAborted();
-      return listDeliveryRollouts(projectId, params);
+      return listDeliveryRollouts(projectId, params, signal);
     },
     enabled: Boolean(projectId && allowed),
     refetchInterval: (current) => {
@@ -165,40 +165,40 @@ export function RolloutsPage() {
           title="Rollouts"
           description="Immutable placement attempts with fenced actions, approvals, cohorts, budgets, and known-good rollback."
         />
-          <DataTable
-            data={query.data?.data ?? []}
-            columns={columns}
-            keyExtractor={(row) => row.id}
-            loading={query.isLoading}
-            isError={query.isError}
-            onRetry={() => void query.refetch()}
-            searchable={false}
-            emptyMessage="No rollouts match this filter"
-            toolbar={
-              <select
-                aria-label="Rollout state"
-                value={state ?? ""}
-                onChange={(e) => setFilters(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">All states</option>
-                {states.map((value) => (
-                  <option key={value} value={value}>
-                    {value.replaceAll("_", " ")}
-                  </option>
-                ))}
-              </select>
-            }
-            onRowClick={(row) => router.push(entityHref("rollouts", row.id))}
-            serverSide={{
-              rowCount: query.data?.count ?? 0,
-              pagination: { pageIndex, pageSize },
-              onPaginationChange: (next) =>
-                setFilters(state ?? "", next.pageIndex),
-            }}
-          />
-        </PageShell>
-      </DeliveryProjectGate>
+        <DataTable
+          data={query.data?.data ?? []}
+          columns={columns}
+          keyExtractor={(row) => row.id}
+          loading={query.isLoading}
+          isError={query.isError}
+          onRetry={() => void query.refetch()}
+          searchable={false}
+          emptyMessage="No rollouts match this filter"
+          toolbar={
+            <select
+              aria-label="Rollout state"
+              value={state ?? ""}
+              onChange={(e) => setFilters(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">All states</option>
+              {states.map((value) => (
+                <option key={value} value={value}>
+                  {value.replaceAll("_", " ")}
+                </option>
+              ))}
+            </select>
+          }
+          onRowClick={(row) => router.push(entityHref("rollouts", row.id))}
+          serverSide={{
+            rowCount: query.data?.count ?? 0,
+            pagination: { pageIndex, pageSize },
+            onPaginationChange: (next) =>
+              setFilters(state ?? "", next.pageIndex),
+          }}
+        />
+      </PageShell>
+    </DeliveryProjectGate>
   );
 }
 export const Route = createFileRoute("/dashboard/delivery/rollouts/")({

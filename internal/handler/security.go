@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -12,31 +13,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 )
-
-// SecurityIngestEnqueuer is the slice of asynq.Client we actually need. Defined
-// as an interface so tests can stub it without spinning up Redis. We keep
-// the interface even though the in-process poller is the primary ingestion
-// path — leaving it as an extension point if a future deployment topology
-// runs ingestion in the worker process via a side-channel HTTP call.
-type SecurityIngestEnqueuer interface {
-	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
-}
-
-// SecurityIngestPersister is the slice of the DB querier the in-process
-// poller needs. Decoupled from SecurityQuerier so the poller can run with
-// only the methods it actually touches.
-type SecurityIngestPersister interface {
-	UpdateSecurityScanReport(ctx context.Context, arg sqlc.UpdateSecurityScanReportParams) error
-	UpdateSecurityScanFailedWithMessage(ctx context.Context, arg sqlc.UpdateSecurityScanFailedWithMessageParams) error
-}
 
 // SecurityClusterQuerier exposes the single cluster lookup we need to default
 // the CIS profile from cluster.distribution. Kept as its own interface so
@@ -71,15 +58,59 @@ type SecurityQuerier interface {
 	CountSecurityScanResults(ctx context.Context) (int64, error)
 }
 
+// securityScanScopeQuerier is the production query surface required by
+// cluster-scoped scan reads. It is deliberately separate from SecurityQuerier
+// so small unit fakes that never serve these endpoints do not need unrelated
+// methods. The handler fails closed when the scoped query is unavailable.
+type securityScanScopeQuerier interface {
+	GetSecurityScanResultByClusterAndID(ctx context.Context, arg sqlc.GetSecurityScanResultByClusterAndIDParams) (sqlc.SecurityScanResult, error)
+	CountSecurityScanResultsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+}
+
+// securityEstateScanScopeQuerier applies cluster visibility before the page
+// boundary for fleet security lists and object reads. A global security grant
+// admits the route; it does not silently grant visibility into every cluster.
+type securityEstateScanScopeQuerier interface {
+	GetActiveSecurityScanResultByID(context.Context, uuid.UUID) (sqlc.SecurityScanResult, error)
+	GetActiveSecurityScanResultByIDForScopes(context.Context, sqlc.GetActiveSecurityScanResultByIDForScopesParams) (sqlc.SecurityScanResult, error)
+	ListSecurityScanResultsForScopes(context.Context, sqlc.ListSecurityScanResultsForScopesParams) ([]sqlc.SecurityScanResult, error)
+	CountSecurityScanResultsForScopes(context.Context, []uuid.UUID) (int64, error)
+}
+
+// securityScanLifecycleQuerier is intentionally mandatory for scan mutations.
+// Its create query commits the product row and first task-outbox intent in one
+// PostgreSQL statement; cancellation and failure use terminal-state CAS updates.
+type securityScanLifecycleQuerier interface {
+	CreateCISScanWithOutbox(ctx context.Context, arg sqlc.CreateCISScanWithOutboxParams) (sqlc.CreateCISScanWithOutboxRow, error)
+	FailSecurityScanPoll(ctx context.Context, arg sqlc.FailSecurityScanPollParams) (int64, error)
+	CancelSecurityScan(ctx context.Context, arg sqlc.CancelSecurityScanParams) (sqlc.SecurityScanResult, error)
+}
+
+// SecurityMutationTx is the transaction-bound surface for security state that
+// must commit with durable audit intent. Production passes sqlc.New(tx); narrow
+// tests can model the same all-or-nothing contract in memory.
+type SecurityMutationTx interface {
+	audit.OutboxQuerier
+	CreatePodSecurityTemplate(context.Context, sqlc.CreatePodSecurityTemplateParams) (sqlc.PodSecurityTemplate, error)
+	UpdatePodSecurityTemplate(context.Context, sqlc.UpdatePodSecurityTemplateParams) (sqlc.PodSecurityTemplate, error)
+	DeletePodSecurityTemplate(context.Context, uuid.UUID) error
+	CreateClusterSecurityPolicy(context.Context, sqlc.CreateClusterSecurityPolicyParams) (sqlc.ClusterSecurityPolicy, error)
+	UpdateClusterSecurityPolicyApplied(context.Context, uuid.UUID) error
+	DeleteClusterSecurityPolicy(context.Context, uuid.UUID) error
+	CancelSecurityScan(context.Context, sqlc.CancelSecurityScanParams) (sqlc.SecurityScanResult, error)
+}
+
+type securityRunTxFunc func(context.Context, func(SecurityMutationTx) error) error
+
 // SecurityHandler handles security endpoints.
 type SecurityHandler struct {
-	queries   SecurityQuerier
-	persister SecurityIngestPersister
-	clusters  SecurityClusterQuerier
-	k8s       K8sRequester
-	queue     SecurityIngestEnqueuer
-	log       *slog.Logger
-	bus       *events.Bus
+	queries  SecurityQuerier
+	clusters SecurityClusterQuerier
+	authz    authorizationSupport
+	k8s      K8sRequester
+	log      *slog.Logger
+	bus      *events.Bus
+	runTx    securityRunTxFunc
 }
 
 // SetEventBus wires the SSE bus for cis_scan.changed liveness events (P4.5).
@@ -123,6 +154,23 @@ func NewSecurityHandler(queries SecurityQuerier) *SecurityHandler {
 	return &SecurityHandler{queries: queries, log: slog.Default()}
 }
 
+// SetRunTx enables production's atomic security-mutation + audit-outbox path.
+func (h *SecurityHandler) SetRunTx(runTx securityRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *SecurityHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+	if h != nil {
+		h.authz.SetAuthorization(engine, querier)
+	}
+}
+
+func (h *SecurityHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
+}
+
 // SetK8sRequester wires the tunnel-backed Kubernetes API client. Optional:
 // when nil the CIS scan trigger short-circuits with a 503 and tests can run
 // the rest of the handlers without standing up a tunnel hub.
@@ -137,22 +185,6 @@ func (h *SecurityHandler) SetK8sRequester(req K8sRequester) {
 func (h *SecurityHandler) SetClusterQuerier(q SecurityClusterQuerier) {
 	if h != nil {
 		h.clusters = q
-	}
-}
-
-// SetIngestQueue wires the asynq client used to schedule the report-ingest
-// follow-up. Optional: nil means the row is created but no async polling fires.
-func (h *SecurityHandler) SetIngestQueue(q SecurityIngestEnqueuer) {
-	if h != nil {
-		h.queue = q
-	}
-}
-
-// SetIngestPersister wires the DB methods the in-process poller needs.
-// Typically this is the same `*sqlc.Queries` already in use elsewhere.
-func (h *SecurityHandler) SetIngestPersister(p SecurityIngestPersister) {
-	if h != nil {
-		h.persister = p
 	}
 }
 
@@ -242,6 +274,7 @@ func (h *SecurityHandler) controllerSummary(ctx context.Context) (map[string]any
 // --- Request types ---
 
 // CreateTemplateRequest represents the request body for creating a pod security template.
+// openapi:request PodSecurityTemplateWriteRequest
 type CreateTemplateRequest struct {
 	Name                 string          `json:"name" validate:"required"`
 	Description          string          `json:"description"`
@@ -302,7 +335,7 @@ func (h *SecurityHandler) CreateTemplate(w http.ResponseWriter, r *http.Request)
 		exemptNamespaces = json.RawMessage(`[]`)
 	}
 
-	template, err := h.queries.CreatePodSecurityTemplate(r.Context(), sqlc.CreatePodSecurityTemplateParams{
+	params := sqlc.CreatePodSecurityTemplateParams{
 		Name:                 req.Name,
 		Description:          req.Description,
 		IsDefault:            req.IsDefault,
@@ -316,18 +349,37 @@ func (h *SecurityHandler) CreateTemplate(w http.ResponseWriter, r *http.Request)
 		ExemptRuntimeClasses: exemptRuntimeClasses,
 		ExemptNamespaces:     exemptNamespaces,
 		CreatedByID:          currentUserUUID(r),
-	})
+	}
+	var template sqlc.PodSecurityTemplate
+	auditCommitted := false
+	var err error
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q SecurityMutationTx) error {
+			var createErr error
+			template, createErr = q.CreatePodSecurityTemplate(r.Context(), params)
+			if createErr != nil {
+				return createErr
+			}
+			return recordSecurityAuditOutbox(r, q, "security.template.create", "pod_security_template", template.ID.String(), template.Name, http.StatusCreated, map[string]any{
+				"enforce_level": template.EnforceLevel, "audit_level": template.AuditLevel,
+				"warn_level": template.WarnLevel, "is_default": template.IsDefault,
+			})
+		})
+		auditCommitted = err == nil
+	} else {
+		template, err = h.queries.CreatePodSecurityTemplate(r.Context(), params)
+	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create security template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create security template")
 		return
 	}
 
-	recordAudit(r, h.queries, "security.template.create", "pod_security_template", template.ID.String(), template.Name, map[string]any{
-		"enforce_level": template.EnforceLevel,
-		"audit_level":   template.AuditLevel,
-		"warn_level":    template.WarnLevel,
-		"is_default":    template.IsDefault,
-	})
+	if !auditCommitted {
+		recordAudit(r, h.queries, "security.template.create", "pod_security_template", template.ID.String(), template.Name, map[string]any{
+			"enforce_level": template.EnforceLevel, "audit_level": template.AuditLevel,
+			"warn_level": template.WarnLevel, "is_default": template.IsDefault,
+		})
+	}
 
 	w.Header().Set("Location", "/api/v1/security/templates/"+template.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, template)
@@ -343,7 +395,7 @@ func (h *SecurityHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 
 	template, err := h.queries.GetPodSecurityTemplateByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security template not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Security template not found")
 		return
 	}
 
@@ -372,11 +424,25 @@ func (h *SecurityHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request)
 		}
 		templateName = existing.Name
 	}
-	if err := h.queries.DeletePodSecurityTemplate(r.Context(), id); err != nil {
+	auditCommitted := false
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q SecurityMutationTx) error {
+			if deleteErr := q.DeletePodSecurityTemplate(r.Context(), id); deleteErr != nil {
+				return deleteErr
+			}
+			return recordSecurityAuditOutbox(r, q, "security.template.delete", "pod_security_template", id.String(), templateName, http.StatusNoContent, nil)
+		})
+		auditCommitted = err == nil
+	} else {
+		err = h.queries.DeletePodSecurityTemplate(r.Context(), id)
+	}
+	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security template not found")
 		return
 	}
-	recordAudit(r, h.queries, "security.template.delete", "pod_security_template", id.String(), templateName, nil)
+	if !auditCommitted {
+		recordAudit(r, h.queries, "security.template.delete", "pod_security_template", id.String(), templateName, nil)
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -401,7 +467,7 @@ func (h *SecurityHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
-	template, err := h.queries.UpdatePodSecurityTemplate(r.Context(), sqlc.UpdatePodSecurityTemplateParams{
+	params := sqlc.UpdatePodSecurityTemplateParams{
 		ID:                   id,
 		Name:                 req.Name,
 		Description:          req.Description,
@@ -415,15 +481,33 @@ func (h *SecurityHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request)
 		ExemptUsernames:      req.ExemptUsernames,
 		ExemptRuntimeClasses: req.ExemptRuntimeClasses,
 		ExemptNamespaces:     req.ExemptNamespaces,
-	})
+	}
+	var template sqlc.PodSecurityTemplate
+	auditCommitted := false
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q SecurityMutationTx) error {
+			var updateErr error
+			template, updateErr = q.UpdatePodSecurityTemplate(r.Context(), params)
+			if updateErr != nil {
+				return updateErr
+			}
+			return recordSecurityAuditOutbox(r, q, "security.template.update", "pod_security_template", template.ID.String(), template.Name, http.StatusOK, map[string]any{
+				"enforce_level": template.EnforceLevel, "is_default": template.IsDefault,
+			})
+		})
+		auditCommitted = err == nil
+	} else {
+		template, err = h.queries.UpdatePodSecurityTemplate(r.Context(), params)
+	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update security template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update security template")
 		return
 	}
-	recordAudit(r, h.queries, "security.template.update", "pod_security_template", template.ID.String(), template.Name, map[string]any{
-		"enforce_level": template.EnforceLevel,
-		"is_default":    template.IsDefault,
-	})
+	if !auditCommitted {
+		recordAudit(r, h.queries, "security.template.update", "pod_security_template", template.ID.String(), template.Name, map[string]any{
+			"enforce_level": template.EnforceLevel, "is_default": template.IsDefault,
+		})
+	}
 	RespondJSON(w, http.StatusOK, template)
 }
 
@@ -465,7 +549,12 @@ func (h *SecurityHandler) ListScans(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total, err := h.queries.CountSecurityScanResults(r.Context())
+	scoped, ok := h.queries.(securityScanScopeQuerier)
+	if !ok {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Security scan authorization is not configured")
+		return
+	}
+	total, err := scoped.CountSecurityScanResultsByCluster(r.Context(), clusterID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count security scans")
 		return
@@ -476,19 +565,104 @@ func (h *SecurityHandler) ListScans(w http.ResponseWriter, r *http.Request) {
 
 // GetScan handles GET /api/v1/clusters/{cluster_id}/security/scans/{id}/.
 func (h *SecurityHandler) GetScan(w http.ResponseWriter, r *http.Request) {
+	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid scan ID")
 		return
 	}
 
-	scan, err := h.queries.GetSecurityScanResultByID(r.Context(), id)
+	scoped, ok := h.queries.(securityScanScopeQuerier)
+	if !ok {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Security scan authorization is not configured")
+		return
+	}
+	scan, err := scoped.GetSecurityScanResultByClusterAndID(r.Context(), sqlc.GetSecurityScanResultByClusterAndIDParams{
+		ClusterID: clusterID,
+		ID:        id,
+	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security scan not found")
 		return
 	}
 
 	RespondJSON(w, http.StatusOK, scan)
+}
+
+// CancelScan handles POST /api/v1/clusters/{cluster_id}/security/scans/{id}/cancel/.
+// The cluster-qualified lookup and update prevent cross-tenant object access;
+// the terminal-state CAS makes cancellation win or lose exactly once against a
+// concurrently completing ingestion worker.
+func (h *SecurityHandler) CancelScan(w http.ResponseWriter, r *http.Request) {
+	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid scan ID")
+		return
+	}
+	lifecycle, ok := h.queries.(securityScanLifecycleQuerier)
+	if !ok {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "CIS scan lifecycle is not configured")
+		return
+	}
+	var scan sqlc.SecurityScanResult
+	auditCommitted := false
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q SecurityMutationTx) error {
+			var cancelErr error
+			scan, cancelErr = q.CancelSecurityScan(r.Context(), sqlc.CancelSecurityScanParams{ClusterID: clusterID, ID: id})
+			if cancelErr != nil {
+				return cancelErr
+			}
+			return recordSecurityAuditOutbox(r, q, "security.scan.cancel", "security_scan", scan.ID.String(), scan.ClusterScanName, http.StatusOK, map[string]any{
+				"cluster_id": clusterID.String(),
+			})
+		})
+		auditCommitted = err == nil
+	} else {
+		scan, err = lifecycle.CancelSecurityScan(r.Context(), sqlc.CancelSecurityScanParams{ClusterID: clusterID, ID: id})
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		scoped, scopedOK := h.queries.(securityScanScopeQuerier)
+		if !scopedOK {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Security scan authorization is not configured")
+			return
+		}
+		existing, getErr := scoped.GetSecurityScanResultByClusterAndID(r.Context(), sqlc.GetSecurityScanResultByClusterAndIDParams{ClusterID: clusterID, ID: id})
+		if errors.Is(getErr, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security scan not found")
+			return
+		}
+		if getErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load security scan")
+			return
+		}
+		if existing.Status == "cancelled" {
+			RespondJSON(w, http.StatusOK, scanWithFindings(existing))
+			return
+		}
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Security scan is already terminal")
+		return
+	}
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.StatusError, "Failed to cancel security scan")
+		return
+	}
+	h.publishCISScanChanged(clusterID, scan.ID)
+	if !auditCommitted {
+		recordAudit(r, h.queries, "security.scan.cancel", "security_scan", scan.ID.String(), scan.ClusterScanName, map[string]any{
+			"cluster_id": clusterID.String(),
+		})
+	}
+	RespondJSON(w, http.StatusOK, scanWithFindings(scan))
 }
 
 // ListPolicies handles GET /api/v1/security/policies/.
@@ -511,6 +685,7 @@ func (h *SecurityHandler) ListPolicies(w http.ResponseWriter, r *http.Request) {
 
 // CreatePolicy handles POST /api/v1/security/policies/.
 func (h *SecurityHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
+	// openapi:request ClusterSecurityPolicyCreateRequest
 	var req struct {
 		ClusterID  uuid.UUID `json:"cluster_id"`
 		TemplateID uuid.UUID `json:"template_id"`
@@ -518,20 +693,39 @@ func (h *SecurityHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
-	policy, err := h.queries.CreateClusterSecurityPolicy(r.Context(), sqlc.CreateClusterSecurityPolicyParams{
+	params := sqlc.CreateClusterSecurityPolicyParams{
 		ClusterID:  req.ClusterID,
 		TemplateID: req.TemplateID,
 		SyncStatus: "pending",
-	})
+	}
+	var policy sqlc.ClusterSecurityPolicy
+	auditCommitted := false
+	var err error
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q SecurityMutationTx) error {
+			var createErr error
+			policy, createErr = q.CreateClusterSecurityPolicy(r.Context(), params)
+			if createErr != nil {
+				return createErr
+			}
+			return recordSecurityAuditOutbox(r, q, "security.policy.create", "cluster_security_policy", policy.ID.String(), "", http.StatusCreated, map[string]any{
+				"cluster_id": req.ClusterID.String(), "template_id": req.TemplateID.String(),
+			})
+		})
+		auditCommitted = err == nil
+	} else {
+		policy, err = h.queries.CreateClusterSecurityPolicy(r.Context(), params)
+	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create security policy")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create security policy")
 		return
 	}
 	h.publishSecurityPolicyChanged(req.ClusterID, policy.ID)
-	recordAudit(r, h.queries, "security.policy.create", "cluster_security_policy", policy.ID.String(), "", map[string]any{
-		"cluster_id":  req.ClusterID.String(),
-		"template_id": req.TemplateID.String(),
-	})
+	if !auditCommitted {
+		recordAudit(r, h.queries, "security.policy.create", "cluster_security_policy", policy.ID.String(), "", map[string]any{
+			"cluster_id": req.ClusterID.String(), "template_id": req.TemplateID.String(),
+		})
+	}
 	w.Header().Set("Location", "/api/v1/security/policies/"+policy.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, policy)
 }
@@ -547,16 +741,32 @@ func (h *SecurityHandler) ApplyPolicy(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security policy not found")
 		return
 	}
-	if err := h.queries.UpdateClusterSecurityPolicyApplied(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ApplyError, "Failed to apply security policy")
+	policy, _ := h.queries.GetClusterSecurityPolicyByID(r.Context(), id)
+	auditCommitted := false
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q SecurityMutationTx) error {
+			if updateErr := q.UpdateClusterSecurityPolicyApplied(r.Context(), id); updateErr != nil {
+				return updateErr
+			}
+			return recordSecurityAuditOutbox(r, q, "security.policy.update", "cluster_security_policy", id.String(), "", http.StatusOK, map[string]any{
+				"action": "apply", "cluster_id": policy.ClusterID.String(),
+			})
+		})
+		auditCommitted = err == nil
+	} else {
+		err = h.queries.UpdateClusterSecurityPolicyApplied(r.Context(), id)
+	}
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.ApplyError, "Failed to apply security policy")
 		return
 	}
-	policy, _ := h.queries.GetClusterSecurityPolicyByID(r.Context(), id)
+	policy, _ = h.queries.GetClusterSecurityPolicyByID(r.Context(), id)
 	h.publishSecurityPolicyChanged(policy.ClusterID, id)
-	recordAudit(r, h.queries, "security.policy.update", "cluster_security_policy", id.String(), "", map[string]any{
-		"action":     "apply",
-		"cluster_id": policy.ClusterID.String(),
-	})
+	if !auditCommitted {
+		recordAudit(r, h.queries, "security.policy.update", "cluster_security_policy", id.String(), "", map[string]any{
+			"action": "apply", "cluster_id": policy.ClusterID.String(),
+		})
+	}
 	RespondJSON(w, http.StatusOK, policy)
 }
 
@@ -573,60 +783,125 @@ func (h *SecurityHandler) DeletePolicy(w http.ResponseWriter, r *http.Request) {
 		clusterID = existing.ClusterID.String()
 		clusterUUID = existing.ClusterID
 	}
-	if err := h.queries.DeleteClusterSecurityPolicy(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete security policy")
+	auditCommitted := false
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q SecurityMutationTx) error {
+			if deleteErr := q.DeleteClusterSecurityPolicy(r.Context(), id); deleteErr != nil {
+				return deleteErr
+			}
+			return recordSecurityAuditOutbox(r, q, "security.policy.delete", "cluster_security_policy", id.String(), "", http.StatusNoContent, map[string]any{"cluster_id": clusterID})
+		})
+		auditCommitted = err == nil
+	} else {
+		err = h.queries.DeleteClusterSecurityPolicy(r.Context(), id)
+	}
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete security policy")
 		return
 	}
 	h.publishSecurityPolicyChanged(clusterUUID, id)
-	recordAudit(r, h.queries, "security.policy.delete", "cluster_security_policy", id.String(), "", map[string]any{
-		"cluster_id": clusterID,
-	})
+	if !auditCommitted {
+		recordAudit(r, h.queries, "security.policy.delete", "cluster_security_policy", id.String(), "", map[string]any{"cluster_id": clusterID})
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // ListAllScans handles GET /api/v1/security/scans/.
 func (h *SecurityHandler) ListAllScans(w http.ResponseWriter, r *http.Request) {
-	scans, err := h.queries.ListSecurityScanResults(r.Context(), sqlc.ListSecurityScanResultsParams{
-		Limit:  int32(queryLimit(r, 20)),
-		Offset: int32(queryInt(r, "offset", 0)),
-	})
+	limit := int32(queryLimit(r, 20))
+	offset := int32(queryInt(r, "offset", 0))
+	all, clusterIDs, err := h.securityScanVisibility(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		return
+	}
+	var scans []sqlc.SecurityScanResult
+	var total int64
+	if all {
+		scans, err = h.queries.ListSecurityScanResults(r.Context(), sqlc.ListSecurityScanResultsParams{Limit: limit, Offset: offset})
+		if err == nil {
+			total, err = h.queries.CountSecurityScanResults(r.Context())
+		}
+	} else {
+		scoped, ok := h.queries.(securityEstateScanScopeQuerier)
+		if !ok {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Scoped security scan pagination is unavailable")
+			return
+		}
+		scans, err = scoped.ListSecurityScanResultsForScopes(r.Context(), sqlc.ListSecurityScanResultsForScopesParams{
+			ClusterIds: clusterIDs, QueryLimit: limit, QueryOffset: offset,
+		})
+		if err == nil {
+			total, err = scoped.CountSecurityScanResultsForScopes(r.Context(), clusterIDs)
+		}
+	}
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list security scans")
 		return
 	}
-	total, err := h.queries.CountSecurityScanResults(r.Context())
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count security scans")
-		return
-	}
 	RespondPaginated(w, r, scans, total)
+}
+
+func (h *SecurityHandler) securityScanVisibility(ctx context.Context) (bool, []uuid.UUID, error) {
+	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(ctx, rbac.ResourceClusters, rbac.VerbRead, rbac.NarrowedClustersWiden)
+	return all, clusterIDs, err
+}
+
+func (h *SecurityHandler) loadVisibleEstateScan(ctx context.Context, id uuid.UUID) (sqlc.SecurityScanResult, error) {
+	all, clusterIDs, err := h.securityScanVisibility(ctx)
+	if err != nil {
+		return sqlc.SecurityScanResult{}, err
+	}
+	scoped, ok := h.queries.(securityEstateScanScopeQuerier)
+	if all {
+		if ok {
+			return scoped.GetActiveSecurityScanResultByID(ctx, id)
+		}
+		// Small direct-handler fakes predate the active-cluster read surface.
+		// Production's generated querier always takes the branch above.
+		return h.queries.GetSecurityScanResultByID(ctx, id)
+	}
+	if !ok {
+		return sqlc.SecurityScanResult{}, errAuthorizationNotConfigured
+	}
+	return scoped.GetActiveSecurityScanResultByIDForScopes(ctx, sqlc.GetActiveSecurityScanResultByIDForScopesParams{
+		ID: id, ClusterIds: clusterIDs,
+	})
+}
+
+// CISScanCreateRequest starts one adopted-cluster CIS assessment.
+// openapi:request CISScanCreateRequest
+type CISScanCreateRequest struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	// Profile is the current field. ScanType remains a compatibility alias for
+	// clients created before the cluster-profile discovery endpoint shipped.
+	Profile  string `json:"profile"`
+	ScanType string `json:"scan_type"`
 }
 
 // CreateScan handles POST /api/v1/security/scans/.
 //
 // Phase B5: instead of just inserting a row, this now:
 //  1. resolves the cluster to default the CIS profile from cluster.distribution,
-//  2. POSTs a ClusterScan CR into the agent's `cis-operator-system` namespace
-//     via the tunnel-backed K8s requester,
-//  3. records our row with the upstream CR name so the worker can ingest the
-//     ClusterScanReport,
-//  4. enqueues an `security:ingest_scan_results` task for periodic polling.
-//
-// If the K8s requester is unset we fall back to the legacy (DB-only) path so
-// older callers and the test suite continue to function.
+//  2. atomically records the scan row and durable tunnel-queue intent,
+//  3. POSTs a ClusterScan CR through the tunnel-backed K8s requester, and
+//  4. leaves all report polling to the lease-owned worker lifecycle.
 func (h *SecurityHandler) CreateScan(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ClusterID uuid.UUID `json:"cluster_id"`
-		// `profile` is the new field; `scan_type` kept for backward
-		// compatibility with the existing UI.
-		Profile  string `json:"profile"`
-		ScanType string `json:"scan_type"`
-	}
+	var req CISScanCreateRequest
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	if req.ClusterID == uuid.Nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cluster_id is required")
+		return
+	}
+	if h.k8s == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "CIS scan tunnel runtime is unavailable")
+		return
+	}
+	lifecycle, ok := h.queries.(securityScanLifecycleQuerier)
+	if !ok {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "CIS scan lifecycle is not configured")
 		return
 	}
 
@@ -650,130 +925,62 @@ func (h *SecurityHandler) CreateScan(w http.ResponseWriter, r *http.Request) {
 	if profile == "" {
 		profile = "cis-1.8"
 	}
-	if h.k8s != nil {
-		resolveInput := profile
-		if !explicitProfile {
-			resolveInput = ""
-		}
-		if resolved := h.resolveClusterScanProfileName(r.Context(), req.ClusterID, clusterDistribution, resolveInput); strings.TrimSpace(resolved) != "" {
-			profile = resolved
-		}
+	resolveInput := profile
+	if !explicitProfile {
+		resolveInput = ""
+	}
+	if resolved := h.resolveClusterScanProfileName(r.Context(), req.ClusterID, clusterDistribution, resolveInput); strings.TrimSpace(resolved) != "" {
+		profile = resolved
 	}
 
-	scanName := fmt.Sprintf("astronomer-cis-%d", time.Now().UTC().Unix())
-
-	if h.k8s != nil {
-		if err := h.createClusterScanCR(r.Context(), req.ClusterID, scanName, profile); err != nil {
-			h.log.Warn("create ClusterScan CR failed", "cluster_id", req.ClusterID.String(), "error", err)
-			RespondRequestError(w, r, http.StatusBadGateway, apierror.CRCreateError, err.Error())
-			return
-		}
+	scanName := fmt.Sprintf("astronomer-cis-%d-%s", time.Now().UTC().Unix(), uuid.NewString()[:8])
+	auditRequestID := middleware.GetRequestID(r.Context())
+	if auditRequestID == "" {
+		auditRequestID = uuid.NewString()
 	}
-
-	scan, err := h.queries.CreateCISScan(r.Context(), sqlc.CreateCISScanParams{
-		ClusterID:       req.ClusterID,
-		ScanType:        profile,
-		Status:          "running",
-		Summary:         json.RawMessage(`{}`),
-		Results:         json.RawMessage(`[]`),
-		ClusterScanName: scanName,
-		InitiatedByID:   currentUserUUID(r),
+	auditDetail, _ := json.Marshal(audit.SanitizeDetail(map[string]any{
+		"cluster_id": req.ClusterID.String(), "profile": profile,
+		"phase": "scan_row_and_task_committed",
+	}))
+	created, err := lifecycle.CreateCISScanWithOutbox(r.Context(), sqlc.CreateCISScanWithOutboxParams{
+		ClusterID:            req.ClusterID,
+		ScanType:             profile,
+		ClusterScanName:      scanName,
+		InitiatedByID:        currentUserUUID(r),
+		AuditID:              uuid.New(),
+		AuditDedupeKey:       audit.MutationDedupeKey(auditRequestID, "security.scan.create", "cluster", req.ClusterID.String()),
+		AuditActorAuthMethod: authMethodFromRequest(r),
+		AuditHttpMethod:      r.Method,
+		AuditPath:            r.URL.Path,
+		AuditRequestID:       auditRequestID,
+		AuditIpAddress:       middleware.RemoteIPAddr(r),
+		AuditUserAgent:       r.UserAgent(),
+		AuditDetail:          auditDetail,
+		AuditCorrelationID:   middleware.GetCorrelationID(r.Context()),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create security scan")
 		return
 	}
+	scan := securityScanResultFromCreate(created)
 
-	// Start the in-process ingest poller. We don't use asynq here even
-	// though the worker package registers a task type for it: the worker
-	// runs in a separate process with no tunnel hub, so the only place
-	// ingestion can happen today is alongside the server. Keeping this in
-	// a goroutine on a long-running context is fine — the loop is bounded
-	// (up to 30 min) and exits cleanly on shutdown.
-	if h.k8s != nil && h.persister != nil {
-		go h.pollScanReport(scan.ID, req.ClusterID, scanName)
+	if err := h.createClusterScanCR(r.Context(), req.ClusterID, scanName, profile); err != nil {
+		h.log.Warn("create ClusterScan CR failed", "cluster_id", req.ClusterID.String(), "scan_id", scan.ID.String(), "error", err)
+		_, failErr := lifecycle.FailSecurityScanPoll(r.Context(), sqlc.FailSecurityScanPollParams{
+			Reason: "ClusterScan creation failed: " + err.Error(), ID: scan.ID,
+			Generation: scan.PollGeneration, Owner: "",
+		})
+		if failErr != nil {
+			h.log.Error("record ClusterScan creation failure", "scan_id", scan.ID.String(), "error", failErr)
+		}
+		h.publishCISScanChanged(req.ClusterID, scan.ID)
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.CRCreateError, err.Error())
+		return
 	}
 
 	h.publishCISScanChanged(req.ClusterID, scan.ID)
-	recordAudit(r, h.queries, "security.scan.create", "security_scan", scan.ID.String(), scanName, map[string]any{
-		"cluster_id": req.ClusterID.String(),
-		"profile":    profile,
-	})
-
 	w.Header().Set("Location", "/api/v1/security/scans/"+scan.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, scanWithFindings(scan))
-}
-
-// pollScanReport runs the in-process ingest loop. It checks the
-// ClusterScanReport every 30 seconds for up to 30 minutes; on success it
-// flattens the report into our row, on timeout it marks the row failed.
-func (h *SecurityHandler) pollScanReport(scanID, clusterID uuid.UUID, scanName string) {
-	const (
-		interval    = 30 * time.Second
-		maxAttempts = 60 // 30 minutes
-	)
-	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Minute)
-	defer cancel()
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		select {
-		case <-ctx.Done():
-			h.markScanFailed(context.Background(), clusterID, scanID, "ingest context cancelled")
-			return
-		case <-ticker.C:
-		}
-		report, found, err := h.fetchClusterScanReport(ctx, clusterID, scanName)
-		if err != nil {
-			h.log.Debug("fetch ClusterScanReport failed",
-				"scan_id", scanID.String(), "attempt", attempt, "error", err)
-			continue
-		}
-		if !found {
-			continue
-		}
-		counts, findings, summary, results := flattenCISReport(report)
-		if err := h.persister.UpdateSecurityScanReport(ctx, sqlc.UpdateSecurityScanReportParams{
-			ID:       scanID,
-			Summary:  summary,
-			Results:  results,
-			Passed:   counts.Pass,
-			Failed:   counts.Fail,
-			Warned:   counts.Warn,
-			Skipped:  counts.Skip,
-			Findings: findings,
-		}); err != nil {
-			h.log.Error("persist CIS scan report failed",
-				"scan_id", scanID.String(), "error", err)
-			h.markScanFailed(context.Background(), clusterID, scanID, "persist failed: "+err.Error())
-			return
-		}
-		h.publishCISScanChanged(clusterID, scanID)
-		h.log.Info("CIS scan ingested",
-			"scan_id", scanID.String(),
-			"pass", counts.Pass, "fail", counts.Fail,
-			"warn", counts.Warn, "skip", counts.Skip)
-		return
-	}
-	h.markScanFailed(context.Background(), clusterID, scanID,
-		fmt.Sprintf("ClusterScanReport not available after %d attempts", maxAttempts))
-}
-
-func (h *SecurityHandler) markScanFailed(ctx context.Context, clusterID, scanID uuid.UUID, reason string) {
-	if h.persister == nil {
-		return
-	}
-	if err := h.persister.UpdateSecurityScanFailedWithMessage(ctx, sqlc.UpdateSecurityScanFailedWithMessageParams{
-		ID:           scanID,
-		ErrorMessage: reason,
-	}); err != nil {
-		h.log.Error("mark CIS scan failed failed",
-			"scan_id", scanID.String(), "error", err)
-		return
-	}
-	h.publishCISScanChanged(clusterID, scanID)
 }
 
 // fetchClusterScanReport returns (report, true, nil) when the report exists
@@ -882,8 +1089,12 @@ func (h *SecurityHandler) GetScanFull(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid scan ID")
 		return
 	}
-	scan, err := h.queries.GetSecurityScanResultByID(r.Context(), id)
+	scan, err := h.loadVisibleEstateScan(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, errAuthorizationNotConfigured) {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+			return
+		}
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security scan not found")
 		return
 	}
@@ -899,12 +1110,23 @@ func (h *SecurityHandler) ExportScanCSV(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid scan ID")
 		return
 	}
-	scan, err := h.queries.GetSecurityScanResultByID(r.Context(), id)
+	scan, err := h.loadVisibleEstateScan(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, errAuthorizationNotConfigured) {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+			return
+		}
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security scan not found")
 		return
 	}
 	findings, _ := parseCISFindings(scan.Findings)
+	if err := recordMandatoryAudit(r, h.queries, "compliance.report.export", "security_scan", scan.ID.String(), scan.ClusterScanName, map[string]any{
+		"cluster_id": scan.ClusterID.String(),
+		"scan_type":  scan.ScanType,
+	}); err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+		return
+	}
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="cis-scan-%s.csv"`, id.String()))
 	cw := csv.NewWriter(w)
@@ -913,6 +1135,10 @@ func (h *SecurityHandler) ExportScanCSV(w http.ResponseWriter, r *http.Request) 
 	for _, f := range findings {
 		_ = cw.Write([]string{f.TestID, f.Severity, f.Status, f.Description, f.Remediation})
 	}
+}
+
+func recordSecurityAuditOutbox(r *http.Request, q audit.OutboxQuerier, action, resourceType, resourceID, resourceName string, status int, detail map[string]any) error {
+	return recordAuditOutbox(r, q, action, resourceType, resourceID, resourceName, status, detail)
 }
 
 // ListProfiles handles GET /api/v1/security/profiles/?cluster_id=X — returns
@@ -928,6 +1154,9 @@ func (h *SecurityHandler) ListProfiles(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(clusterIDStr)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceClusters, rbac.VerbRead) {
 		return
 	}
 	if h.k8s == nil {
@@ -1184,6 +1413,8 @@ func scanWithFindings(scan sqlc.SecurityScanResult) map[string]any {
 		"findings":          findings,
 		"created_at":        scan.CreatedAt.UTC().Format(time.RFC3339),
 		"updated_at":        scan.UpdatedAt.UTC().Format(time.RFC3339),
+		"poll_attempt":      scan.PollAttempt,
+		"terminal_reason":   scan.TerminalReason,
 	}
 	if scan.CompletedAt.Valid {
 		out["completed_at"] = scan.CompletedAt.Time.UTC().Format(time.RFC3339)
@@ -1191,6 +1422,10 @@ func scanWithFindings(scan sqlc.SecurityScanResult) map[string]any {
 		out["completed_at"] = nil
 	}
 	return out
+}
+
+func securityScanResultFromCreate(row sqlc.CreateCISScanWithOutboxRow) sqlc.SecurityScanResult {
+	return sqlc.SecurityScanResult(row)
 }
 
 // defaultCISProfileForDistribution maps the distribution string the cluster

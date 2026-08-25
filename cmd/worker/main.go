@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	allowlistproviders "github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
@@ -21,15 +24,19 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/systemrollout"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
+	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
+	"github.com/alphabravocompany/astronomer-go/internal/notify"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
-	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
@@ -41,6 +48,22 @@ type unavailableDeliveryDecryptor struct{}
 
 func (unavailableDeliveryDecryptor) DecryptBytes(string) ([]byte, error) {
 	return nil, fmt.Errorf("platform encryption key is unavailable")
+}
+
+func allowPrivateRCWebhooks(cfg *config.Config) bool {
+	return cfg != nil && !strings.EqualFold(strings.TrimSpace(cfg.Env), "production") &&
+		strings.EqualFold(strings.TrimSpace(os.Getenv("ASTRONOMER_RC_ALLOW_PRIVATE_WEBHOOKS")), "true")
+}
+
+func webhookHTTPClient(cfg *config.Config) *http.Client {
+	// RC uses an owned disposable development cluster and an explicit opt-in so
+	// the webhook dispatcher can prove product-path Fernet decryption against a
+	// host-side one-shot receiver. Production always retains the public-only
+	// SSRF guard, even if the environment variable is set accidentally.
+	if allowPrivateRCWebhooks(cfg) {
+		return httpclient.SafeClientAllowPrivate(30 * time.Second)
+	}
+	return httpclient.SafeClient(30 * time.Second)
 }
 
 func main() {
@@ -173,7 +196,16 @@ func main() {
 	if client, ok := runtimeRedisOpt.MakeRedisClient().(*redis.Client); ok && client != nil {
 		eventBus.AttachRedis(client, events.DefaultRedisChannel, log)
 	}
-	tasks.ConfigureRuntime(tasks.RuntimeDependencies{
+	backupQueries := sqlc.New(database.Pool())
+	backupExecutor := handler.NewAdminDrillHandler(backupQueries)
+	backupExecutor.SetEncryptor(platformEncryptor)
+	backupExecutor.SetBackupRuntime(os.Getenv("MANAGEMENT_BACKUP_IMAGE"), os.Getenv("MANAGEMENT_BACKUP_SERVICE_ACCOUNT"))
+	if restCfg, kErr := rest.InClusterConfig(); kErr == nil {
+		if client, clientErr := kubernetes.NewForConfig(restCfg); clientErr == nil {
+			backupExecutor.SetKubernetes(client, os.Getenv("POD_NAMESPACE"), os.Getenv("RELEASE_NAME"))
+		}
+	}
+	coreRuntime := tasks.CoreRuntime{Deps: tasks.RuntimeDependencies{
 		Queries:                       sqlc.New(database.Pool()),
 		Log:                           log,
 		AgentImageRepo:                cfg.AgentImageRepository,
@@ -191,7 +223,32 @@ func main() {
 		Bus:                           eventBus,
 		CatalogDecryptor:              tasks.CatalogDecryptorFor(platformEncryptor),
 		MonitoringCipher:              tasks.MonitoringCipherFor(platformEncryptor),
-	})
+		ManagementBackup:              backupExecutor,
+	}}
+	allowlistQueries := sqlc.New(database.Pool())
+	var allowlistMaterializer allowlistproviders.CloudCredentialMaterializer
+	if platformEncryptor != nil {
+		materializer, materializerErr := allowlistproviders.NewSQLCredentialMaterializer(allowlistQueries, platformEncryptor)
+		if materializerErr != nil {
+			log.Error("failed to configure API-server allow-list credential materializer", "error", materializerErr)
+			os.Exit(1)
+		}
+		allowlistMaterializer = materializer
+	} else {
+		log.Warn("API-server allow-list cloud writes will fail closed: encryption key is unavailable")
+	}
+	allowlistRegistry := allowlistproviders.NewRegistry()
+	allowlistRegistry.Register(allowlistproviders.NewEKSProvider(allowlistMaterializer))
+	allowlistRegistry.Register(allowlistproviders.NewGKEProvider(allowlistMaterializer))
+	allowlistRegistry.Register(allowlistproviders.NewAKSProvider(allowlistMaterializer))
+	allowlistRegistry.Register(allowlistproviders.NewDOKSProvider(allowlistMaterializer))
+	allowlistRegistry.Register(allowlistproviders.NewSelfManagedProvider())
+	allowlistRuntime := tasks.ApiserverAllowlistRuntime{Deps: tasks.ApiserverAllowlistReconcileDeps{
+		Queries:       allowlistQueries,
+		Registry:      allowlistRegistry,
+		ClusterShaper: allowlistproviders.ClusterFromSQLC,
+		AuditWriter:   allowlistQueries,
+	}}
 	deliveryQueries := sqlc.New(database.Pool())
 	deliveryVerifier, deliveryVerifierErr := deliveryresolver.NewExecVerifier(cfg.DeliverySourceTrustDirectory)
 	if deliveryVerifierErr != nil {
@@ -234,7 +291,6 @@ func main() {
 		deliverySourceWorker.SetBaseCABundle(caBundle)
 		clear(caBundle)
 	}
-	tasks.ConfigureDeliverySourceResolver(deliverySourceWorker)
 	deliveryReconciler, deliveryReconcilerErr := deliveryrollout.NewPostgresReconciler(
 		database.Pool(), maintenance.NewEvaluator(deliveryQueries), "",
 	)
@@ -242,68 +298,72 @@ func main() {
 		log.Error("failed to configure delivery rollout reconciler", "error", deliveryReconcilerErr)
 		os.Exit(1)
 	}
-	tasks.ConfigureDeliveryRolloutReconciler(deliveryReconciler)
 	deliverySystemReconciler, deliverySystemReconcilerErr := systemrollout.New(database.Pool())
 	if deliverySystemReconcilerErr != nil {
 		log.Error("failed to configure delivery system rollout reconciler", "error", deliverySystemReconcilerErr)
 		os.Exit(1)
 	}
-	tasks.ConfigureDeliverySystemRolloutReconciler(deliverySystemReconciler)
-	var controlPlaneDyn dynamic.Interface
-	if restCfg, kErr := rest.InClusterConfig(); kErr == nil {
-		if dyn, dErr := dynamic.NewForConfig(restCfg); dErr == nil {
-			controlPlaneDyn = dyn
-		}
+	deliveryRuntime := tasks.DeliveryRuntime{
+		SourceResolver:          deliverySourceWorker,
+		RolloutReconciler:       deliveryReconciler,
+		SystemRolloutReconciler: deliverySystemReconciler,
 	}
-	tasks.ConfigureCRDOwnershipDrift(tasks.CRDOwnershipDriftDeps{
-		Queries: sqlc.New(database.Pool()),
-		Dynamic: controlPlaneDyn,
-	})
-	// Cluster decommission reconciler: the standalone worker process
-	// doesn't have the tunnel hub (the hub lives in the server pod), so
-	// Tunnel is nil. The reconciler treats a nil Tunnel as "agent
-	// unreachable" — the notify_agent + revoke_agent_token phases skip
-	// with a logged warning. Every other phase (archive_audit,
-	// delete_dependents, tombstone_cluster) still runs from here, and
-	// the periodic sweep picks up rows whose worker crashed mid-run.
-	// When the server pod processes a decommission task it has the
-	// hub, so the full flow including tunnel ops works there.
-	tasks.ConfigureClusterDecommission(tasks.ClusterDecommissionDeps{
-		Queries: sqlc.New(database.Pool()),
-		// TODO(rbac-invalidation): the standalone worker process has no
-		// in-process RBAC cache to flush, but when it runs the decommission
-		// phase from here, the server pod's cache still holds stale per-user
-		// cluster bindings until the 15s TTL elapses. Cross-process
-		// invalidation (pub/sub or a notify channel) would close this gap.
-		RBACCache: nil,
-	})
-	tasks.ConfigurePlaintextCredentialMigration(tasks.PlaintextCredentialMigrationDeps{
-		Queries:   sqlc.New(database.Pool()),
-		Encryptor: platformEncryptor,
-	})
+	maintenanceRuntime := tasks.MaintenanceRuntime{
+		AgentTokens: tasks.AgentTokenRotateDeps{Queries: sqlc.New(database.Pool())},
+		PlaintextCredentials: tasks.PlaintextCredentialMigrationDeps{
+			Queries: sqlc.New(database.Pool()), Encryptor: platformEncryptor,
+		},
+	}
+	gitopsRuntime := tasks.GitOpsRuntime{Deps: tasks.GitOpsDeps{
+		Queries:    sqlc.New(database.Pool()),
+		Enqueuer:   runtimeEnqueuer,
+		TaskOutbox: sqlc.New(database.Pool()),
+		Decryptor:  platformEncryptor,
+		Log:        log,
+	}}
 
-	// Email dispatch (migration 047). Wired only when the encryptor
-	// is available — the SMTP password is Fernet-encrypted and the
-	// dispatcher can't decrypt without a key. The runtime no-ops on
-	// a nil sender, so a misconfigured deployment degrades to a logged
-	// "email dispatcher not configured" line and queued rows pile up
-	// (the dispatcher's 1-hour ageRowsToSkipped guard catches them).
-	if cfg.EncryptionKey != "" {
-		if enc, encErr := auth.NewEncryptor(cfg.EncryptionKey); encErr == nil {
-			q := sqlc.New(database.Pool())
-			provider := email.NewSQLSettingsProvider(q, enc, 5*time.Second)
-			sender := email.NewSender(provider, enc, log)
-			sender.SetBrandingProvider(email.NewPlatformConfigBrandingProvider(q, ""))
-			tasks.ConfigureEmail(tasks.EmailDeps{
-				Queries:  q,
-				Sender:   sender,
-				Provider: provider,
-			})
-		} else {
-			log.Warn("email dispatch disabled: encryptor init failed", "error", encErr)
-		}
+	// Email dispatch (migration 047). The SMTP password is Fernet-encrypted,
+	// so production startup validation refuses queue consumption unless the
+	// encryptor, settings provider, and sender are all present.
+	var emailDispatchDeps tasks.EmailDeps
+	if platformEncryptor != nil {
+		q := sqlc.New(database.Pool())
+		provider := email.NewSQLSettingsProvider(q, platformEncryptor, 5*time.Second)
+		sender := email.NewSender(provider, platformEncryptor, log)
+		sender.SetBrandingProvider(email.NewPlatformConfigBrandingProvider(q, ""))
+		emailDispatchDeps = tasks.EmailDeps{Queries: q, Sender: sender, Provider: provider}
 	} else {
 		log.Warn("email dispatch disabled: ASTRONOMER_ENCRYPTION_KEY is not set")
+	}
+
+	// Webhook and SIEM dispatch are worker-owned outbound jobs. Their bus taps
+	// live in the API process, but the durable delivery queues are drained here.
+	var webhookDispatchDeps tasks.WebhookDeps
+	var siemDispatchDeps tasks.SIEMDeps
+	if platformEncryptor != nil {
+		q := sqlc.New(database.Pool())
+		webhookSender := webhook.NewSender(webhookHTTPClient(cfg))
+		webhookSender.SetOverrideLookup(func(ctx context.Context, key string) (string, bool) {
+			resolved, resolveErr := notify.Resolve(ctx, q, key)
+			if resolveErr != nil || !resolved.HasOverride {
+				return "", false
+			}
+			return resolved.Body, true
+		})
+		webhookDispatchDeps = tasks.WebhookDeps{Queries: q, Sender: webhookSender, Encryptor: platformEncryptor}
+		siemDispatchDeps = tasks.SIEMDeps{
+			Queries: q, Encryptor: platformEncryptor, HTTPClient: httpclient.SafeClient(30 * time.Second),
+		}
+	}
+	queueInspector := asynq.NewInspector(runtimeRedisOpt)
+	defer func() { _ = queueInspector.Close() }()
+	dispatchRuntime := tasks.DispatchRuntime{
+		Email:       emailDispatchDeps,
+		Webhook:     webhookDispatchDeps,
+		SIEM:        siemDispatchDeps,
+		TaskOutbox:  tasks.TaskOutboxDispatchDeps{Queries: sqlc.New(database.Pool()), Enqueuer: runtimeEnqueuer},
+		AuditOutbox: tasks.AuditOutboxDispatchDeps{Queries: sqlc.New(database.Pool())},
+		AdminQueue:  tasks.AdminQueueOperationDeps{Queries: sqlc.New(database.Pool()), Inspector: queueInspector},
 	}
 
 	// Create worker and scheduler. Both fail-fast on invalid REDIS_URL —
@@ -314,40 +374,51 @@ func main() {
 		log.Error("failed to configure Charlie queue terminal failure publisher")
 		os.Exit(1)
 	}
-	w, werr := worker.NewWorker(cfg.RedisURL, log, worker.NewTerminalFailureErrorHandler(queueTerminalPublisher, log))
-	if werr != nil {
-		log.Error("failed to start worker", "error", werr)
-		os.Exit(1)
-	}
-	redisOpt, redisErr := asynq.ParseRedisURI(cfg.RedisURL)
-	if redisErr != nil {
-		// Already validated by NewWorker above; keep this fail-fast in case
-		// a future edit changes worker initialization order.
-		log.Error("failed to parse REDIS_URL for task outbox dispatcher", "error", redisErr)
-		os.Exit(1)
-	}
-	taskOutboxClient := asynq.NewClient(redisOpt)
-	defer func() {
-		_ = taskOutboxClient.Close()
-	}()
-	tasks.ConfigureTaskOutboxDispatch(tasks.TaskOutboxDispatchDeps{
-		Queries:  sqlc.New(database.Pool()),
-		Enqueuer: taskOutboxClient,
-	})
-	// The standalone worker participates in the same Postgres advisory
-	// shared/exclusive protocol as every API replica. Its fence is process-local
-	// for admission bookkeeping but coordinates with feature disable and mode
-	// drains through the stable Charlie advisory-lock key.
-	tasks.ConfigureCharlieAlertDispatch(sqlc.New(database.Pool()), charlie.NewDistributedWriteFence(database.Pool()))
 	charlieAlertPlanner, plannerErr := charlie.NewFindingAlertPlanner(database.Pool())
 	if plannerErr != nil {
 		log.Error("failed to configure Charlie alert reconciliation")
 		os.Exit(1)
 	}
-	tasks.ConfigureCharlieAlertReconciler(charlieAlertPlanner)
+	alertRuntime := tasks.CharlieAlertRuntime{
+		Queries:    sqlc.New(database.Pool()),
+		WriteFence: charlie.NewDistributedWriteFence(database.Pool()),
+		Reconciler: charlieAlertPlanner,
+	}
+	standaloneRuntime := worker.StandaloneRuntime{
+		Features: tasks.StandaloneRuntimeFeatures{ManagementBackup: cfg.ManagementBackupEnabled},
+		Core:     coreRuntime,
+		Delivery: deliveryRuntime, Dispatch: dispatchRuntime, Alerts: alertRuntime,
+		Maintenance: maintenanceRuntime, Allowlists: allowlistRuntime, GitOps: gitopsRuntime,
+	}
+	w, werr := worker.NewWorker(cfg.RedisURL, log, standaloneRuntime, worker.NewTerminalFailureErrorHandler(queueTerminalPublisher, log))
+	if werr != nil {
+		log.Error("failed to start worker", "error", werr)
+		os.Exit(1)
+	}
+	if err := worker.ValidateTaskRegistry(); err != nil {
+		log.Error("invalid task ownership registry", "error", err)
+		os.Exit(1)
+	}
+	if config.IsProduction(cfg) {
+		capabilities := map[worker.TaskCapability]bool{
+			worker.CapabilityDatabase:     true,
+			worker.CapabilityRedis:        true,
+			worker.CapabilityOutboundHTTP: true,
+			worker.CapabilityDelivery:     true,
+			worker.CapabilityEncryption:   platformEncryptor != nil,
+		}
+		if err := worker.ValidateTaskCapabilities(worker.TaskOwnerWorker, capabilities); err != nil {
+			log.Error("worker task dependencies incomplete; refusing to consume queues", "error", err)
+			os.Exit(1)
+		}
+		if err := tasks.ValidateStandaloneRuntime(standaloneRuntime.Features, coreRuntime, deliveryRuntime, dispatchRuntime, alertRuntime, maintenanceRuntime, allowlistRuntime, gitopsRuntime); err != nil {
+			log.Error("worker runtime composition incomplete; refusing to consume queues", "error", err)
+			os.Exit(1)
+		}
+	}
 	w.RegisterHandlers()
 
-	s, serr := worker.NewScheduler(cfg.RedisURL, log)
+	s, serr := worker.NewScheduler(cfg.RedisURL, log, worker.SchedulerFeatures{CRDOwnership: cfg.CRDEnabled})
 	if serr != nil {
 		log.Error("failed to start scheduler", "error", serr)
 		os.Exit(1)
@@ -361,11 +432,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	db.StartMetricsReporter(ctx, database.Pool(), log)
-	inspector := asynq.NewInspector(redisOpt)
-	defer func() {
-		_ = inspector.Close()
-	}()
-	worker.StartQueueMetricsReporter(ctx, inspector, log)
+	worker.StartQueueMetricsReporter(ctx, queueInspector, log)
 
 	// Start worker and scheduler in background goroutines.
 	errCh := make(chan error, 3)

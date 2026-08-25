@@ -88,13 +88,24 @@ DELETE FROM siem_forwarders WHERE id = $1;
 INSERT INTO siem_forward_queue (
     forwarder_id, event_name, payload, severity
 ) VALUES ($1, $2, $3, $4)
-RETURNING id, forwarder_id, event_name, payload, severity, attempts, created_at;
+RETURNING id, forwarder_id, event_name, payload, severity, attempts, created_at, dedupe_key;
+
+-- name: EnqueueSIEMEventDeduped :one
+-- Mandatory audit delivery uses a stable event UUID. A dispatcher crash after
+-- enqueue but before acknowledgement can safely replay without producing a
+-- duplicate destination row.
+INSERT INTO siem_forward_queue (
+    forwarder_id, event_name, payload, severity, dedupe_key
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (forwarder_id, dedupe_key) WHERE dedupe_key IS NOT NULL
+DO UPDATE SET dedupe_key = EXCLUDED.dedupe_key
+RETURNING id, forwarder_id, event_name, payload, severity, attempts, created_at, dedupe_key;
 
 -- name: ListSIEMQueueBatch :many
 -- Dispatcher batch read. Ordered by id ascending so the dispatcher
 -- processes oldest-first and the per-forwarder partial index serves
 -- this query in constant time.
-SELECT id, forwarder_id, event_name, payload, severity, attempts, created_at
+SELECT id, forwarder_id, event_name, payload, severity, attempts, created_at, dedupe_key
 FROM siem_forward_queue
 WHERE forwarder_id = $1
 ORDER BY id ASC
@@ -118,9 +129,11 @@ WHERE id = ANY($1::bigint[]);
 -- Returns rows that have hit the retry cap. The dispatcher deletes
 -- these + counts them as dropped — they aren't going to succeed and
 -- holding them in the queue starves the rest of the batch.
-SELECT id, forwarder_id, event_name, payload, severity, attempts, created_at
+SELECT id, forwarder_id, event_name, payload, severity, attempts, created_at, dedupe_key
 FROM siem_forward_queue
-WHERE forwarder_id = $1 AND attempts >= $2
+WHERE forwarder_id = $1
+  AND attempts >= $2
+  AND (dedupe_key IS NULL OR dedupe_key NOT LIKE 'audit:%')
 ORDER BY id ASC
 LIMIT $3;
 
@@ -129,17 +142,21 @@ SELECT count(*) FROM siem_forward_queue WHERE forwarder_id = $1;
 
 -- name: ListOldestSIEMQueue :many
 -- Used by the tap when the queue depth hits the chart-tunable cap. We
--- delete the oldest N rows to make room for the new ones.
+-- delete the oldest disposable rows to make room for the new ones. Mandatory
+-- transactional audit receipts are never eviction candidates.
 SELECT id FROM siem_forward_queue
 WHERE forwarder_id = $1
+  AND (dedupe_key IS NULL OR (dedupe_key NOT LIKE 'audit:%' AND dedupe_key NOT LIKE 'siem-test:%'))
 ORDER BY id ASC
 LIMIT $2;
 
 -- name: DeleteSIEMQueueOlderThan :execrows
--- Daily retention sweep. Removes queue rows older than the cutoff
--- regardless of forwarder status so a stuck/disabled forwarder doesn't
--- pin disk.
-DELETE FROM siem_forward_queue WHERE created_at < $1;
+-- Daily retention applies to best-effort product events only. Transactional
+-- audit receipts are mandatory evidence and remain until an external sink
+-- acknowledges them, regardless of outage duration or retry count.
+DELETE FROM siem_forward_queue
+WHERE created_at < $1
+  AND (dedupe_key IS NULL OR (dedupe_key NOT LIKE 'audit:%' AND dedupe_key NOT LIKE 'siem-test:%'));
 
 -- name: UpsertSIEMForwarderStatus :exec
 -- Called by the dispatcher after each tick. The composite parameters

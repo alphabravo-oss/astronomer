@@ -61,8 +61,6 @@ func sealedSweepRepo(t *testing.T, enc *auth.Encryptor, name, url, authType, doc
 // repository would have started failing on the schedule while its Sync button
 // still worked.
 func TestHandleCatalogSyncDecryptsSealedRepoAuth(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
 	defer httpclient.DisableGuardForTest()()
 
 	enc := sweepTestEncryptor(t)
@@ -74,12 +72,12 @@ func TestHandleCatalogSyncDecryptsSealedRepoAuth(t *testing.T) {
 		sealedSweepRepo(t, enc, "private-bearer", bearerSrv.URL, "bearer", `{"token":"tok"}`),
 	}
 	q := &catalogSweepQuerier{repos: repos}
-	runtimeDeps = RuntimeDependencies{
+	ctx := testRuntimeContext(RuntimeDependencies{
 		Queries: q, Log: slog.Default(),
 		CatalogDecryptor: CatalogDecryptorFor(enc),
-	}
+	})
 
-	if err := HandleCatalogSync(context.Background(), &asynq.Task{}); err != nil {
+	if err := HandleCatalogSync(ctx, &asynq.Task{}); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
 
@@ -105,8 +103,6 @@ func TestHandleCatalogSyncDecryptsSealedRepoAuth(t *testing.T) {
 // problem — pointing the operator at registry ACLs when the actual fault is
 // ASTRONOMER_ENCRYPTION_KEY.
 func TestHandleCatalogSyncSendsNoCredentialWhenDecryptFails(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
 	defer httpclient.DisableGuardForTest()()
 
 	srv, seen := indexServer(t, 200)
@@ -115,12 +111,12 @@ func TestHandleCatalogSyncSendsNoCredentialWhenDecryptFails(t *testing.T) {
 	repoRecord := sealedSweepRepo(t, sweepTestEncryptor(t), "private", srv.URL, "basic",
 		`{"username":"u","password":"p"}`)
 	q := &catalogSweepQuerier{repos: []sqlc.HelmRepository{repoRecord}}
-	runtimeDeps = RuntimeDependencies{
+	ctx := testRuntimeContext(RuntimeDependencies{
 		Queries: q, Log: slog.Default(),
 		CatalogDecryptor: CatalogDecryptorFor(sweepTestEncryptor(t)),
-	}
+	})
 
-	if err := HandleCatalogSync(context.Background(), &asynq.Task{}); err != nil {
+	if err := HandleCatalogSync(ctx, &asynq.Task{}); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
 
@@ -141,8 +137,6 @@ func TestHandleCatalogSyncSendsNoCredentialWhenDecryptFails(t *testing.T) {
 // document in the JSONB with an empty envelope, and the sweep must keep
 // authenticating it.
 func TestHandleCatalogSyncStillReadsPreMigrationPlaintextRow(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
 	defer httpclient.DisableGuardForTest()()
 
 	srv, seen := indexServer(t, 200)
@@ -153,12 +147,12 @@ func TestHandleCatalogSyncStillReadsPreMigrationPlaintextRow(t *testing.T) {
 		// AuthConfigEncrypted empty — the pre-upgrade shape.
 	}
 	q := &catalogSweepQuerier{repos: []sqlc.HelmRepository{legacy}}
-	runtimeDeps = RuntimeDependencies{
+	ctx := testRuntimeContext(RuntimeDependencies{
 		Queries: q, Log: slog.Default(),
 		CatalogDecryptor: CatalogDecryptorFor(sweepTestEncryptor(t)),
-	}
+	})
 
-	if err := HandleCatalogSync(context.Background(), &asynq.Task{}); err != nil {
+	if err := HandleCatalogSync(ctx, &asynq.Task{}); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
 	reqs := seen()
@@ -179,7 +173,6 @@ func TestHandleCatalogSyncStillReadsPreMigrationPlaintextRow(t *testing.T) {
 // indefinitely, so the security fix would only ever have applied to rows
 // somebody happened to edit.
 func TestPlaintextCredentialMigrationSealsChartRepositoryAuthConfig(t *testing.T) {
-	ResetPlaintextCredentialMigration()
 	enc := sweepTestEncryptor(t)
 
 	legacy := sqlc.HelmRepository{
@@ -193,10 +186,9 @@ func TestPlaintextCredentialMigrationSealsChartRepositoryAuthConfig(t *testing.T
 		AuthConfig: json.RawMessage(`{"charts":["app"]}`),
 	}
 	q := &fakePlaintextCredentialMigrationQuerier{repos: []sqlc.HelmRepository{legacy, noSecret}}
-	ConfigurePlaintextCredentialMigration(PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc})
-	t.Cleanup(ResetPlaintextCredentialMigration)
+	runtime := MaintenanceRuntime{PlaintextCredentials: PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc}}
 
-	if err := HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
+	if err := runtime.HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
 		t.Fatalf("migration: %v", err)
 	}
 
@@ -229,7 +221,7 @@ func TestPlaintextCredentialMigrationSealsChartRepositoryAuthConfig(t *testing.T
 	// Idempotent: a second run finds nothing left to do (the fake mirrors the
 	// SQL predicate, so a sealed row stops matching).
 	before := len(q.repoSeals)
-	if err := HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
+	if err := runtime.HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
 		t.Fatalf("second migration run: %v", err)
 	}
 	if len(q.repoSeals) != before {
@@ -252,7 +244,6 @@ func TestPlaintextCredentialMigrationSealsChartRepositoryAuthConfig(t *testing.T
 // pageSize is 500, so the fixture needs more than that to reach the bug at
 // all; the 2-row fixture above cannot.
 func TestPlaintextCredentialMigrationSealsPastAFullPageOfUnsealableRows(t *testing.T) {
-	ResetPlaintextCredentialMigration()
 	enc := sweepTestEncryptor(t)
 
 	const unsealableRows = 600 // > the sweep's 500-row page
@@ -283,14 +274,12 @@ func TestPlaintextCredentialMigrationSealsPastAFullPageOfUnsealableRows(t *testi
 		{"loose sql predicate (pre-fix)", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ResetPlaintextCredentialMigration()
 			rows := make([]sqlc.HelmRepository, len(repos))
 			copy(rows, repos)
 			q := &fakePlaintextCredentialMigrationQuerier{repos: rows, looseRepoListPredicate: tc.loose}
-			ConfigurePlaintextCredentialMigration(PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc})
-			t.Cleanup(ResetPlaintextCredentialMigration)
+			runtime := MaintenanceRuntime{PlaintextCredentials: PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc}}
 
-			if err := HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
+			if err := runtime.HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
 				t.Fatalf("migration: %v", err)
 			}
 

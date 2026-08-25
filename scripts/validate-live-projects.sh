@@ -38,7 +38,6 @@ CREATED_TEMPLATE_ID=""
 ORIGINAL_REGISTRY_JSON=""
 ORIGINAL_REGISTRY_PRESENT=0
 EXPECT_REGISTRY_DELETE_AUDIT=0
-REMOVE_COMPLETED=0
 PROJECT_DELETED=0
 NAMESPACE_CREATED=0
 AUDIT_CURSOR=""
@@ -340,7 +339,6 @@ api \
   -X POST \
   "${API_BASE}/projects/${PROJECT_ID}/remove-namespace/" \
   -d "{\"namespace\":\"${NAMESPACE}\"}" >/dev/null
-REMOVE_COMPLETED=1
 
 for i in $(seq 1 "${EVENT_TIMEOUT}"); do
   label_value="$(kubectl --context "${REMOTE_CONTEXT}" get namespace "${NAMESPACE}" -o jsonpath='{.metadata.labels.astronomer\.io/project-id}' 2>/dev/null || true)"
@@ -405,6 +403,8 @@ fetch_audit_json() {
   fi
 }
 
+# The dollar-prefixed names are jq variables supplied by --arg below.
+# shellcheck disable=SC2016
 audit_filter='
   [ .data[] | select(.resource_id == $project_id) | .action ] as $actions
   | ($actions | index("project.create"))

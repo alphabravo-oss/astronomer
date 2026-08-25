@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * Project · Policy tab.
  *
@@ -15,63 +22,73 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * user lacks the role we render the same form in read-only mode (inputs
  * disabled, Save hidden) so non-admins can still inspect policy.
  */
-import { useEffect, useMemo } from 'react';
-import { useParams } from '@/lib/navigation';
-import { useAppForm, useStore } from '@/lib/form';
-import { Loader2, Save, AlertCircle, ExternalLink } from 'lucide-react';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { useCurrentUser } from '@/lib/hooks';
+import { useEffect, useMemo } from "react";
+import { useParams } from "@/lib/navigation";
+import { useAppForm, useStore } from "@/lib/form";
+import { Loader2, Save, AlertCircle, ExternalLink } from "lucide-react";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { useCurrentUser } from "@/lib/hooks";
 import {
   useProjectPolicy,
   useUpdateProjectPolicy,
   useProjectQuotaUsage,
   canEditProject,
-} from '@/components/projects/hooks';
+} from "@/components/projects/hooks";
 import type {
   PodSecurityProfile,
   NetworkPolicyMode,
   ProjectPolicyPatch,
-} from '@/lib/api/project-detail';
-import { cn } from '@/lib/utils';
+} from "@/lib/api/project-detail";
+import { cn } from "@/lib/utils";
 
-
-const psaOptions: { value: PodSecurityProfile; label: string; description: string }[] = [
+const psaOptions: {
+  value: PodSecurityProfile;
+  label: string;
+  description: string;
+}[] = [
   {
-    value: 'privileged',
-    label: 'Privileged',
+    value: "privileged",
+    label: "Privileged",
     description:
-      'Unrestricted. Allows known privilege escalations — only safe for trusted system workloads.',
+      "Unrestricted. Allows known privilege escalations — only safe for trusted system workloads.",
   },
   {
-    value: 'baseline',
-    label: 'Baseline',
+    value: "baseline",
+    label: "Baseline",
     description:
-      'Minimally restrictive. Prevents known privilege escalations while remaining easy to adopt.',
+      "Minimally restrictive. Prevents known privilege escalations while remaining easy to adopt.",
   },
   {
-    value: 'restricted',
-    label: 'Restricted',
+    value: "restricted",
+    label: "Restricted",
     description:
-      'Heavily restricted. Enforces current pod-hardening best practices for application workloads.',
+      "Heavily restricted. Enforces current pod-hardening best practices for application workloads.",
   },
 ];
 
-const netpolOptions: { value: NetworkPolicyMode; label: string; description: string }[] = [
+const netpolOptions: {
+  value: NetworkPolicyMode;
+  label: string;
+  description: string;
+}[] = [
   {
-    value: 'isolated',
-    label: 'Isolated',
-    description: 'Default-deny ingress to project namespaces; only explicit NetworkPolicies allow traffic.',
+    value: "isolated",
+    label: "Isolated",
+    description:
+      "Default-deny ingress to project namespaces; only explicit NetworkPolicies allow traffic.",
   },
   {
-    value: 'allow-same-project',
-    label: 'Allow same project',
-    description: 'Allow pods within the project to talk freely; deny ingress from other namespaces.',
+    value: "allow-same-project",
+    label: "Allow same project",
+    description:
+      "Allow pods within the project to talk freely; deny ingress from other namespaces.",
   },
   {
-    value: 'none',
-    label: 'None',
-    description: 'No managed NetworkPolicies; rely on the cluster default (usually allow-all).',
+    value: "none",
+    label: "None",
+    description:
+      "No managed NetworkPolicies; rely on the cluster default (usually allow-all).",
   },
 ];
 
@@ -90,11 +107,11 @@ function PolicyPage() {
   // null/undefined in every onChange.
   const form = useAppForm({
     defaultValues: {
-      psa: 'baseline' as PodSecurityProfile,
-      cpu: '',
-      memory: '',
-      pods: '',
-      netpol: 'isolated' as NetworkPolicyMode,
+      psa: "baseline" as PodSecurityProfile,
+      cpu: "",
+      memory: "",
+      pods: "",
+      netpol: "isolated" as NetworkPolicyMode,
     },
     onSubmit: ({ value }) => {
       if (!canEdit) return;
@@ -103,9 +120,11 @@ function PolicyPage() {
       const patch: ProjectPolicyPatch = {
         podSecurityProfile: value.psa,
         networkPolicyMode: value.netpol,
-        resourceQuotaCpu: value.cpu.trim() === '' ? null : value.cpu.trim(),
-        resourceQuotaMemory: value.memory.trim() === '' ? null : value.memory.trim(),
-        resourceQuotaPods: value.pods.trim() === '' ? null : Number(value.pods.trim()),
+        resourceQuotaCpu: value.cpu.trim() === "" ? null : value.cpu.trim(),
+        resourceQuotaMemory:
+          value.memory.trim() === "" ? null : value.memory.trim(),
+        resourceQuotaPods:
+          value.pods.trim() === "" ? null : Number(value.pods.trim()),
       };
       updateMutation.mutate(patch);
     },
@@ -117,9 +136,12 @@ function PolicyPage() {
     if (!policy) return;
     form.reset({
       psa: policy.podSecurityProfile,
-      cpu: policy.resourceQuotaCpu ?? '',
-      memory: policy.resourceQuotaMemory ?? '',
-      pods: policy.resourceQuotaPods != null ? String(policy.resourceQuotaPods) : '',
+      cpu: policy.resourceQuotaCpu ?? "",
+      memory: policy.resourceQuotaMemory ?? "",
+      pods:
+        policy.resourceQuotaPods != null
+          ? String(policy.resourceQuotaPods)
+          : "",
       netpol: policy.networkPolicyMode,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -158,8 +180,9 @@ function PolicyPage() {
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
           <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
           <p>
-            You can view this project&apos;s policy but not change it. Editing requires the{' '}
-            <span className="font-mono">projects:update</span> permission.
+            You can view this project&apos;s policy but not change it. Editing
+            requires the <span className="font-mono">projects:update</span>{" "}
+            permission.
           </p>
         </div>
       )}
@@ -169,7 +192,8 @@ function PolicyPage() {
         <header>
           <h2 className="text-sm font-medium text-foreground">Pod Security</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Sets the Kubernetes Pod Security Standard enforced on every namespace in this project.{' '}
+            Sets the Kubernetes Pod Security Standard enforced on every
+            namespace in this project.{" "}
             <a
               href="https://kubernetes.io/docs/concepts/security/pod-security-standards/"
               target="_blank"
@@ -187,25 +211,31 @@ function PolicyPage() {
               type="button"
               key={opt.value}
               disabled={!canEdit}
-              onClick={() => form.setFieldValue('psa', opt.value)}
+              onClick={() => form.setFieldValue("psa", opt.value)}
               className={cn(
-                'text-left p-3 rounded-lg border transition-colors',
+                "text-left p-3 rounded-lg border transition-colors",
                 psa === opt.value
-                  ? 'border-foreground/40 bg-accent/40'
-                  : 'border-border bg-background hover:bg-accent/30',
-                !canEdit && 'opacity-60 cursor-not-allowed hover:bg-background',
+                  ? "border-foreground/40 bg-accent/40"
+                  : "border-border bg-background hover:bg-accent/30",
+                !canEdit && "opacity-60 cursor-not-allowed hover:bg-background",
               )}
             >
               <div className="flex items-center gap-2">
                 <span
                   className={cn(
-                    'h-3.5 w-3.5 rounded-full border',
-                    psa === opt.value ? 'border-foreground bg-foreground/80' : 'border-border',
+                    "h-3.5 w-3.5 rounded-full border",
+                    psa === opt.value
+                      ? "border-foreground bg-foreground/80"
+                      : "border-border",
                   )}
                 />
-                <span className="text-sm font-medium text-foreground">{opt.label}</span>
+                <span className="text-sm font-medium text-foreground">
+                  {opt.label}
+                </span>
               </div>
-              <p className="text-xs text-muted-foreground mt-1.5">{opt.description}</p>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                {opt.description}
+              </p>
             </button>
           ))}
         </div>
@@ -214,10 +244,12 @@ function PolicyPage() {
       {/* --- Resource Quota --- */}
       <section className="rounded-xl border border-border bg-card p-5 space-y-4">
         <header>
-          <h2 className="text-sm font-medium text-foreground">Resource Quota</h2>
+          <h2 className="text-sm font-medium text-foreground">
+            Resource Quota
+          </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Applied as ResourceQuota objects in every project namespace. Leave a field empty for
-            no limit.
+            Applied as ResourceQuota objects in every project namespace. Leave a
+            field empty for no limit.
           </p>
         </header>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -275,7 +307,9 @@ function PolicyPage() {
       {/* --- Network Policy --- */}
       <section className="rounded-xl border border-border bg-card p-5 space-y-4">
         <header>
-          <h2 className="text-sm font-medium text-foreground">Network Policy</h2>
+          <h2 className="text-sm font-medium text-foreground">
+            Network Policy
+          </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             Controls the default ingress posture managed for project namespaces.
           </p>
@@ -285,11 +319,11 @@ function PolicyPage() {
             <label
               key={opt.value}
               className={cn(
-                'flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer',
+                "flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer",
                 netpol === opt.value
-                  ? 'border-foreground/40 bg-accent/40'
-                  : 'border-border bg-background hover:bg-accent/30',
-                !canEdit && 'opacity-60 cursor-not-allowed hover:bg-background',
+                  ? "border-foreground/40 bg-accent/40"
+                  : "border-border bg-background hover:bg-accent/30",
+                !canEdit && "opacity-60 cursor-not-allowed hover:bg-background",
               )}
             >
               <input
@@ -298,12 +332,16 @@ function PolicyPage() {
                 value={opt.value}
                 checked={netpol === opt.value}
                 disabled={!canEdit}
-                onChange={() => form.setFieldValue('netpol', opt.value)}
+                onChange={() => form.setFieldValue("netpol", opt.value)}
                 className="mt-0.5"
               />
               <div>
-                <p className="text-sm font-medium text-foreground">{opt.label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{opt.description}</p>
+                <p className="text-sm font-medium text-foreground">
+                  {opt.label}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {opt.description}
+                </p>
               </div>
             </label>
           ))}
@@ -329,18 +367,34 @@ function PolicyPage() {
         <header>
           <h2 className="text-sm font-medium text-foreground">Quota usage</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Live ResourceQuota.status.used per cluster / namespace. Polls every 30 seconds.
+            Live ResourceQuota.status.used per cluster / namespace. Polls every
+            30 seconds.
           </p>
         </header>
-        <div className="overflow-x-auto">
+        <div
+          className="overflow-x-auto"
+          role="region"
+          aria-label="Project policy matrix"
+          tabIndex={0}
+        >
           <Table className="w-full text-sm">
             <TableHeader>
               <TableRow className="text-xs text-muted-foreground border-b border-border">
-                <TableHead className="text-left font-medium py-2 px-3">Cluster</TableHead>
-                <TableHead className="text-left font-medium py-2 px-3">Namespace</TableHead>
-                <TableHead className="text-left font-medium py-2 px-3">CPU</TableHead>
-                <TableHead className="text-left font-medium py-2 px-3">Memory</TableHead>
-                <TableHead className="text-left font-medium py-2 px-3">Pods</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Cluster
+                </TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Namespace
+                </TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  CPU
+                </TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Memory
+                </TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Pods
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -350,24 +404,29 @@ function PolicyPage() {
                     key={`${row.clusterId}/${row.namespace}`}
                     className="border-b border-border last:border-0"
                   >
-                    <TableCell className="py-2 px-3 text-foreground">{row.clusterName}</TableCell>
+                    <TableCell className="py-2 px-3 text-foreground">
+                      {row.clusterName}
+                    </TableCell>
                     <TableCell className="py-2 px-3 font-mono text-xs text-muted-foreground">
                       {row.namespace}
                     </TableCell>
                     <TableCell className="py-2 px-3 tabular-nums">
-                      {row.cpuUsed || '0'} / {row.cpuLimit || '—'}
+                      {row.cpuUsed || "0"} / {row.cpuLimit || "—"}
                     </TableCell>
                     <TableCell className="py-2 px-3 tabular-nums">
-                      {row.memoryUsed || '0'} / {row.memoryLimit || '—'}
+                      {row.memoryUsed || "0"} / {row.memoryLimit || "—"}
                     </TableCell>
                     <TableCell className="py-2 px-3 tabular-nums">
-                      {row.podsUsed ?? 0} / {row.podsLimit ?? '—'}
+                      {row.podsUsed ?? 0} / {row.podsLimit ?? "—"}
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">
+                  <TableCell
+                    colSpan={5}
+                    className="py-6 text-center text-xs text-muted-foreground"
+                  >
                     No quotas applied yet.
                   </TableCell>
                 </TableRow>
@@ -405,7 +464,9 @@ function QuotaInput({
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
       />
-      <p className="text-xs text-muted-foreground">{hint || 'Empty = unlimited'}</p>
+      <p className="text-xs text-muted-foreground">
+        {hint || "Empty = unlimited"}
+      </p>
     </div>
   );
 }
@@ -416,7 +477,7 @@ function QuotaInput({
 function parseCpu(input: string): number {
   if (!input) return 0;
   const trimmed = input.trim();
-  if (trimmed.endsWith('m')) {
+  if (trimmed.endsWith("m")) {
     const millis = Number(trimmed.slice(0, -1));
     return isFinite(millis) ? millis / 1000 : 0;
   }
@@ -432,21 +493,21 @@ function parseMemMiB(input: string): number {
   const n = Number(m[1]);
   if (!isFinite(n)) return 0;
   switch (m[2]) {
-    case 'Ki':
+    case "Ki":
       return n / 1024;
-    case 'Mi':
+    case "Mi":
       return n;
-    case 'Gi':
+    case "Gi":
       return n * 1024;
-    case 'Ti':
+    case "Ti":
       return n * 1024 * 1024;
-    case 'K':
+    case "K":
       return (n * 1000) / (1024 * 1024);
-    case 'M':
+    case "M":
       return (n * 1000 * 1000) / (1024 * 1024);
-    case 'G':
+    case "G":
       return (n * 1000 * 1000 * 1000) / (1024 * 1024);
-    case 'T':
+    case "T":
       return (n * 1000 * 1000 * 1000 * 1000) / (1024 * 1024);
     default:
       // bytes
@@ -459,6 +520,6 @@ function formatMiB(mib: number): string {
   return `${mib.toFixed(0)} MiB`;
 }
 
-export const Route = createFileRoute('/dashboard/projects/$id/policy/')({
+export const Route = createFileRoute("/dashboard/projects/$id/policy/")({
   component: PolicyPage,
 });

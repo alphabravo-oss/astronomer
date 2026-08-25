@@ -1,11 +1,11 @@
-import type { MockedFunction } from 'vitest';
-import { ReactNode } from 'react';
-import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useClusterMetricsSummary } from '@/lib/hooks';
-import * as api from '@/lib/api';
+import type { MockedFunction } from "vitest";
+import { ReactNode } from "react";
+import { renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useClusterMetricsSummary } from "@/lib/hooks";
+import * as api from "@/lib/api";
 
-vi.mock('@/lib/api');
+vi.mock("@/lib/api");
 
 const mockedGet = api.getClusterMetricsSummary as MockedFunction<
   typeof api.getClusterMetricsSummary
@@ -18,22 +18,26 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-describe('useClusterMetricsSummary', () => {
+describe("useClusterMetricsSummary", () => {
   afterEach(() => vi.clearAllMocks());
 
-  it('always attempts the metrics query (not feature-gated) for a cluster id', async () => {
+  it("always attempts the metrics query (not feature-gated) for a cluster id", async () => {
     mockedGet.mockResolvedValue({ cpuPercentage: 12 } as never);
 
-    const { result } = renderHook(() => useClusterMetricsSummary('c1'), { wrapper });
+    const { result } = renderHook(() => useClusterMetricsSummary("c1"), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockedGet).toHaveBeenCalledWith('c1');
+    expect(mockedGet).toHaveBeenCalledWith("c1", expect.any(AbortSignal));
   });
 
-  it('surfaces an error state when metrics are unavailable instead of swallowing it', async () => {
-    mockedGet.mockRejectedValue(new Error('metrics unavailable'));
+  it("surfaces an error state when metrics are unavailable instead of swallowing it", async () => {
+    mockedGet.mockRejectedValue(new Error("metrics unavailable"));
 
-    const { result } = renderHook(() => useClusterMetricsSummary('c1'), { wrapper });
+    const { result } = renderHook(() => useClusterMetricsSummary("c1"), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
   });

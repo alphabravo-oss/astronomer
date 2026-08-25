@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import { useId } from 'react';
-import type { ReactNode } from 'react';
-import { X } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { useId } from "react";
+import type { ReactNode } from "react";
+import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { OverlayShell } from "@/components/ui/overlay-shell";
 
-type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
+type ModalSize = "sm" | "md" | "lg" | "xl";
 
 interface ModalShellProps {
   title: string;
@@ -23,10 +23,10 @@ interface ModalShellProps {
 }
 
 const sizeClass: Record<ModalSize, string> = {
-  sm: 'max-w-md',
-  md: 'max-w-lg',
-  lg: 'max-w-2xl',
-  xl: 'max-w-4xl',
+  sm: "max-w-md",
+  md: "max-w-lg",
+  lg: "max-w-2xl",
+  xl: "max-w-4xl",
 };
 
 export function ModalShell({
@@ -37,7 +37,7 @@ export function ModalShell({
   subtitle,
   headerActions,
   titleIcon,
-  size = 'md',
+  size = "md",
   bodyClassName,
   footerClassName,
   panelClassName,
@@ -51,7 +51,7 @@ export function ModalShell({
         aria-modal="true"
         aria-labelledby={titleId}
         className={cn(
-          'relative w-full mx-4 rounded-lg border border-border bg-card shadow-xl animate-fade-in max-h-[90vh] overflow-y-auto',
+          "relative w-full mx-4 rounded-lg border border-border bg-card shadow-xl animate-fade-in max-h-[90vh] overflow-y-auto",
           sizeClass[size],
           panelClassName,
         )}
@@ -61,10 +61,19 @@ export function ModalShell({
             {titleIcon}
             <div className="min-w-0">
               <div className="flex items-center gap-2 min-w-0">
-                <h2 id={titleId} className="text-base font-semibold text-foreground truncate">{title}</h2>
+                <h2
+                  id={titleId}
+                  className="text-base font-semibold text-foreground truncate"
+                >
+                  {title}
+                </h2>
                 {headerActions}
               </div>
-              {subtitle && <div className="mt-1 text-xs text-muted-foreground">{subtitle}</div>}
+              {subtitle && (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {subtitle}
+                </div>
+              )}
             </div>
           </div>
           <button
@@ -75,8 +84,14 @@ export function ModalShell({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className={cn('p-6 space-y-4', bodyClassName)}>{children}</div>
-        {footer && <div className={cn('px-6 py-4 border-t border-border', footerClassName)}>{footer}</div>}
+        <div className={cn("p-6 space-y-4", bodyClassName)}>{children}</div>
+        {footer && (
+          <div
+            className={cn("px-6 py-4 border-t border-border", footerClassName)}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </OverlayShell>
   );

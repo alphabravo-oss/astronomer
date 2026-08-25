@@ -33,7 +33,9 @@ const SAFE_CAPABILITY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SAFE_TOOL_CALL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SAFE_TURN_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
-export function initialCharlieTurnProgress(now = Date.now()): CharlieTurnProgress {
+export function initialCharlieTurnProgress(
+  now = Date.now(),
+): CharlieTurnProgress {
   return {
     stage: "queued",
     label: "Sending request to Charlie",
@@ -107,12 +109,18 @@ export function updateCharlieTurnProgress(
 
   switch (event.type) {
     case "turn.started":
-      return { ...next, stage: "planning", label: "Planning the investigation" };
+      return {
+        ...next,
+        stage: "planning",
+        label: "Planning the investigation",
+      };
     case "tool.proposed":
       return {
         ...next,
         stage: "preparing_tool",
-        label: capability ? `Preparing ${capability}` : "Preparing a diagnostic tool",
+        label: capability
+          ? `Preparing ${capability}`
+          : "Preparing a diagnostic tool",
         capability,
         toolCallIds: appendUnique(current.toolCallIds, toolCallID),
       };
@@ -120,7 +128,9 @@ export function updateCharlieTurnProgress(
       return {
         ...next,
         stage: "running_tool",
-        label: capability ? `Calling ${capability}` : "Calling a diagnostic tool",
+        label: capability
+          ? `Calling ${capability}`
+          : "Calling a diagnostic tool",
         capability,
         toolCallIds: appendUnique(current.toolCallIds, toolCallID),
       };
@@ -128,10 +138,15 @@ export function updateCharlieTurnProgress(
       return {
         ...next,
         stage: "analyzing",
-        label: capability ? `${capability} completed · Analyzing results` : "Tool completed · Analyzing results",
+        label: capability
+          ? `${capability} completed · Analyzing results`
+          : "Tool completed · Analyzing results",
         capability,
         toolCallIds: appendUnique(current.toolCallIds, toolCallID),
-        completedToolCallIds: appendUnique(current.completedToolCallIds, toolCallID),
+        completedToolCallIds: appendUnique(
+          current.completedToolCallIds,
+          toolCallID,
+        ),
       };
     case "tool.failed": {
       const errorCode = boundedID(data.error_code, SAFE_CAPABILITY);
@@ -144,7 +159,10 @@ export function updateCharlieTurnProgress(
           : `Tool ${blocked ? "was blocked" : "failed"} · Adjusting the investigation`,
         capability,
         toolCallIds: appendUnique(current.toolCallIds, toolCallID),
-        completedToolCallIds: appendUnique(current.completedToolCallIds, toolCallID),
+        completedToolCallIds: appendUnique(
+          current.completedToolCallIds,
+          toolCallID,
+        ),
         failedToolCallIds: blocked
           ? current.failedToolCallIds
           : appendUnique(current.failedToolCallIds, toolCallID),
@@ -157,19 +175,29 @@ export function updateCharlieTurnProgress(
       return {
         ...next,
         stage: "waiting_approval",
-        label: capability ? `Waiting for approval · ${capability}` : "Waiting for approval",
+        label: capability
+          ? `Waiting for approval · ${capability}`
+          : "Waiting for approval",
         capability,
         toolCallIds: appendUnique(current.toolCallIds, toolCallID),
       };
     case "permission.responded":
-      return { ...next, stage: "analyzing", label: "Approval decision received · Continuing" };
+      return {
+        ...next,
+        stage: "analyzing",
+        label: "Approval decision received · Continuing",
+      };
     case "text.delta":
       return { ...next, stage: "drafting", label: "Drafting the response" };
     case "turn.completed":
       return { ...next, stage: "completed", label: "Response complete" };
     case "turn.failed":
     case "charlie.error":
-      return { ...next, stage: "failed", label: "Charlie could not complete the response" };
+      return {
+        ...next,
+        stage: "failed",
+        label: "Charlie could not complete the response",
+      };
     case "turn.aborted":
       return { ...next, stage: "aborted", label: "Turn aborted" };
     default:

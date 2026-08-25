@@ -38,7 +38,6 @@ package providers
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 
@@ -69,6 +68,9 @@ type Cluster struct {
 	// the AWS / GCP / Azure client. Zero UUID when the cluster has no
 	// linked credential (self-managed clusters).
 	CredentialID uuid.UUID
+	// ProviderResourceID is the immutable cloud-side identifier when it
+	// differs from Name (notably the DigitalOcean Kubernetes cluster UUID).
+	ProviderResourceID string
 	// Annotations carries the cluster's stamped annotations (used by
 	// Detect when the Provider field is empty).
 	Annotations map[string]string
@@ -114,7 +116,62 @@ type CloudCredentialMaterializer interface {
 	// ResolveForCluster returns the {key: value} map of decrypted
 	// credential fields associated with the cluster's credential_id, or
 	// an error if the credential isn't materialised.
-	ResolveForCluster(ctx context.Context, clusterID uuid.UUID) (map[string]string, error)
+	ResolveForCluster(ctx context.Context, cluster Cluster, provider ProviderID) (map[string]string, error)
+}
+
+// Capability is the stable, API-visible contract for a provider driver. It is
+// deliberately independent of credential readiness: credentials can be
+// repaired, while a monitor-only driver fundamentally cannot honor enforce.
+type Capability struct {
+	Provider         ProviderID `json:"provider"`
+	CanMonitor       bool       `json:"can_monitor"`
+	CanEnforce       bool       `json:"can_enforce"`
+	Reason           string     `json:"reason,omitempty"`
+	RequiredMetadata []string   `json:"required_metadata,omitempty"`
+}
+
+// CapabilityProvider is optional so small test providers do not need boilerplate.
+// Production drivers all implement it; an unannotated provider fails closed as
+// monitor-only.
+type CapabilityProvider interface {
+	Capability() Capability
+}
+
+// CapabilityFor returns the declared capability of the detected driver.
+func (r *Registry) CapabilityFor(ctx context.Context, cluster Cluster) Capability {
+	id, driver := r.Detect(ctx, cluster)
+	if driver == nil {
+		return Capability{Provider: ProviderUnknown, Reason: "no provider driver detected"}
+	}
+	if capable, ok := driver.(CapabilityProvider); ok {
+		capability := capable.Capability()
+		capability.Provider = id
+		return capability
+	}
+	return Capability{Provider: id, CanMonitor: true, Reason: "provider has no enforcement capability declaration"}
+}
+
+// DeclaredCapability is used by the synchronous HTTP validation path. The
+// worker still calls Registry.CapabilityFor before any cloud operation.
+func DeclaredCapability(cluster Cluster) Capability {
+	id := ProviderID(strings.ToLower(strings.TrimSpace(cluster.Provider)))
+	if annotated := strings.ToLower(strings.TrimSpace(cluster.Annotations["astronomer.io/provider"])); annotated != "" {
+		id = annotated
+	}
+	switch id {
+	case ProviderEKS:
+		return Capability{Provider: id, CanMonitor: true, CanEnforce: true, RequiredMetadata: []string{"name", "region", "cloud credential"}}
+	case ProviderGKE:
+		return Capability{Provider: id, CanMonitor: true, CanEnforce: true, RequiredMetadata: []string{"name", "region", "project_id", "cloud credential"}}
+	case ProviderAKS:
+		return Capability{Provider: id, CanMonitor: true, CanEnforce: true, RequiredMetadata: []string{"name", "resource_group", "cloud credential"}}
+	case ProviderDOKS:
+		return Capability{Provider: id, CanMonitor: true, CanEnforce: true, RequiredMetadata: []string{"provider_cluster_id", "cloud credential"}}
+	case ProviderSelfManaged, "":
+		return Capability{Provider: ProviderSelfManaged, CanMonitor: true, Reason: "self-managed API-server firewalls are operator-owned"}
+	default:
+		return Capability{Provider: ProviderUnknown, Reason: "provider is not supported by the allow-list controller"}
+	}
 }
 
 // Registry is an ordered list of providers. The reconciler iterates
@@ -186,19 +243,4 @@ func matchAnnotationOrProvider(cluster Cluster, want ProviderID) bool {
 		return true
 	}
 	return false
-}
-
-// errProviderNotImplemented is the sentinel scaffolded providers return
-// from Apply when they're called in v1. The reconciler treats this as
-// "log a warning, keep the row in 'monitor' even if mode='enforce'".
-var errProviderNotImplemented = fmt.Errorf("provider not implemented in v1")
-
-// ErrProviderNotImplemented reports whether the given error is the
-// not-implemented sentinel. Used by the reconciler to special-case the
-// scaffolded providers.
-func ErrProviderNotImplemented(err error) bool {
-	// Substring match (not errors.Is): scaffolded providers surface this via
-	// wrapped/reformatted errors whose chain no longer carries the sentinel, so
-	// errors.Is misses them — see TestReconciler_HandlesProviderNotImplemented.
-	return err != nil && strings.Contains(err.Error(), "provider not implemented")
 }

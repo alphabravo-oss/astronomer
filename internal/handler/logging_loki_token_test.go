@@ -63,6 +63,7 @@ func TestRotateOutputTokenMintsHashAndFernet(t *testing.T) {
 	}}})
 
 	req := authedLoggingReq(http.MethodPost, "/api/v1/logging/outputs/"+out.ID.String()+"/rotate-token/", nil)
+	req.Header.Set("Idempotency-Key", "token-rotate-1")
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", out.ID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))
@@ -71,13 +72,16 @@ func TestRotateOutputTokenMintsHashAndFernet(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	h.RotateOutputToken(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", w.Code, w.Body.String())
 	}
 	var wrap struct {
 		Data struct {
 			ClusterID string `json:"clusterId"`
 			Token     string `json:"token"`
+			Operation struct {
+				ID string `json:"id"`
+			} `json:"operation"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &wrap); err != nil {
@@ -85,6 +89,9 @@ func TestRotateOutputTokenMintsHashAndFernet(t *testing.T) {
 	}
 	if wrap.Data.ClusterID != clusterID.String() || wrap.Data.Token == "" {
 		t.Fatalf("response = %+v", wrap.Data)
+	}
+	if wrap.Data.Operation.ID == "" || w.Header().Get("Location") != "/api/v1/logging/operations/"+wrap.Data.Operation.ID+"/" || w.Header().Get("Retry-After") != "2" {
+		t.Fatalf("operation receipt or headers missing: operation=%+v headers=%v", wrap.Data.Operation, w.Header())
 	}
 	if strings.Contains(w.Body.String(), "token_hash") || strings.Contains(w.Body.String(), "token_encrypted") {
 		t.Fatal("response leaked hash or ciphertext")

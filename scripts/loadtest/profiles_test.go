@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -51,6 +52,40 @@ agents:
 	}
 	if _, err := loadScaleProfile(path); err == nil {
 		t.Fatalf("expected invalid profile error")
+	}
+}
+
+func TestLoadScaleProfileRejectsAuditCapThatTruncatesWindow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "truncated-audit.yaml")
+	if err := os.WriteFile(path, []byte(`name: truncated-audit
+clusters: 1
+rps: 1
+duration: 10m
+mandatoryAudit: {ratePerSecond: 2, maxOperations: 100}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadScaleProfile(path); err == nil || !strings.Contains(err.Error(), "sustain") {
+		t.Fatalf("error=%v, want sustained-window rejection", err)
+	}
+}
+
+func TestCertificationProfilesUseExactEstateRungs(t *testing.T) {
+	profiles := map[string]int{
+		"estate-100.yaml": 100, "estate-500.yaml": 500,
+		"estate-1000.yaml": 1000, "estate-1000-soak.yaml": 1000,
+		"estate-2000-lab.yaml": 2000,
+	}
+	for name, clusters := range profiles {
+		t.Run(name, func(t *testing.T) {
+			profile, err := loadScaleProfile(filepath.Join("profiles", name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if profile.Clusters != clusters || len(profile.Day2FailureDrills) < 5 {
+				t.Fatalf("profile = %+v", profile)
+			}
+		})
 	}
 }
 

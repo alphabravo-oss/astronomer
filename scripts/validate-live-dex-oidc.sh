@@ -150,7 +150,7 @@ docker run -d --name "${KEYCLOAK_CONTAINER}" -p "${KEYCLOAK_PORT}:8080" \
   quay.io/keycloak/keycloak:26.1.2 \
   start-dev --http-port=8080 --hostname="http://host.k3d.internal:${KEYCLOAK_PORT}" --import-realm >/dev/null
 
-for i in $(seq 1 60); do
+for _ in {1..60}; do
   if curl -fsS --resolve "host.k3d.internal:${KEYCLOAK_PORT}:127.0.0.1" \
     "http://host.k3d.internal:${KEYCLOAK_PORT}/realms/astronomer/.well-known/openid-configuration" >/dev/null 2>&1; then
     break

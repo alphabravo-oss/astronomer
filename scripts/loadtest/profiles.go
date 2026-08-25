@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -10,14 +11,20 @@ import (
 )
 
 type scaleProfile struct {
-	Name              string         `yaml:"name"`
-	Clusters          int            `yaml:"clusters"`
-	RPS               int            `yaml:"rps"`
-	Duration          string         `yaml:"duration"`
-	Agents            scaleAgents    `yaml:"agents"`
-	Resources         scaleResources `yaml:"resources"`
-	EventsPerSecond   int            `yaml:"eventsPerSecond"`
-	Day2FailureDrills []string       `yaml:"day2FailureDrills"`
+	Name              string                `yaml:"name"`
+	Clusters          int                   `yaml:"clusters"`
+	RPS               int                   `yaml:"rps"`
+	Duration          string                `yaml:"duration"`
+	Agents            scaleAgents           `yaml:"agents"`
+	Resources         scaleResources        `yaml:"resources"`
+	EventsPerSecond   int                   `yaml:"eventsPerSecond"`
+	MandatoryAudit    mandatoryAuditProfile `yaml:"mandatoryAudit"`
+	Day2FailureDrills []string              `yaml:"day2FailureDrills"`
+}
+
+type mandatoryAuditProfile struct {
+	RatePerSecond int `yaml:"ratePerSecond"`
+	MaxOperations int `yaml:"maxOperations"`
 }
 
 type scaleAgents struct {
@@ -68,7 +75,8 @@ func loadScaleProfile(path string) (*scaleProfile, error) {
 	if strings.TrimSpace(profile.Duration) == "" {
 		return nil, fmt.Errorf("duration is required")
 	}
-	if _, err := time.ParseDuration(profile.Duration); err != nil {
+	duration, err := time.ParseDuration(profile.Duration)
+	if err != nil {
 		return nil, fmt.Errorf("duration: %w", err)
 	}
 	if profile.Agents.Mode == "" {
@@ -81,6 +89,22 @@ func loadScaleProfile(path string) (*scaleProfile, error) {
 		profile.Resources.DeploymentsPerCluster < 0 ||
 		profile.Resources.ServicesPerCluster < 0 {
 		return nil, fmt.Errorf("resource counts must be >= 0")
+	}
+	if profile.EventsPerSecond < 0 {
+		return nil, fmt.Errorf("eventsPerSecond must be >= 0")
+	}
+	if profile.MandatoryAudit.RatePerSecond < 0 || profile.MandatoryAudit.MaxOperations < 0 {
+		return nil, fmt.Errorf("mandatoryAudit values must be >= 0")
+	}
+	if (profile.MandatoryAudit.RatePerSecond == 0) != (profile.MandatoryAudit.MaxOperations == 0) {
+		return nil, fmt.Errorf("mandatoryAudit ratePerSecond and maxOperations must both be zero or both be positive")
+	}
+	minimumAuditOperations := int(math.Ceil(duration.Seconds() * float64(profile.MandatoryAudit.RatePerSecond)))
+	if profile.MandatoryAudit.MaxOperations > 0 && profile.MandatoryAudit.MaxOperations < minimumAuditOperations {
+		return nil, fmt.Errorf(
+			"mandatoryAudit.maxOperations must be at least %d to sustain %d operations/second for %s",
+			minimumAuditOperations, profile.MandatoryAudit.RatePerSecond, profile.Duration,
+		)
 	}
 	if profile.Agents.ReconnectStorm.Enabled {
 		if profile.Agents.ReconnectStorm.BatchPercent < 0 || profile.Agents.ReconnectStorm.BatchPercent > 100 {
@@ -115,6 +139,7 @@ func (p *scaleProfile) apply(cfg *config) error {
 	cfg.resources = p.Resources
 	cfg.resources.ProfileName = p.Name
 	cfg.resources.EventsPerSecond = p.EventsPerSecond
+	cfg.mandatoryAudit = p.MandatoryAudit
 	cfg.day2FailureDrill = append([]string{}, p.Day2FailureDrills...)
 	if p.Agents.ReconnectStorm.Enabled {
 		cfg.reconnectStorm.Enabled = true

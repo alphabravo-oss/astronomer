@@ -63,7 +63,7 @@ DELETE FROM cluster_security_policies WHERE id = $1;
 SELECT count(*) FROM cluster_security_policies;
 
 -- name: ListClusterIDsWithSecurityPolicy :many
--- Fleet-wide set of cluster_ids that have at least one security policy
+-- Estate-wide set of cluster_ids that have at least one security policy
 -- row. Unbounded (no LIMIT/OFFSET) so the compliance-posture rollup can
 -- answer "does this cluster have a policy?" for any fleet size in one
 -- query instead of a per-cluster page that silently caps at 10 rows.
@@ -87,14 +87,47 @@ ORDER BY cluster_id, created_at DESC;
 -- name: GetSecurityScanResultByID :one
 SELECT * FROM security_scan_results WHERE id = $1;
 
+-- name: GetSecurityScanResultByClusterAndID :one
+SELECT s.*
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.cluster_id = $1 AND s.id = $2;
+
+-- name: GetActiveSecurityScanResultByID :one
+SELECT s.*
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.id = $1;
+
+-- name: GetActiveSecurityScanResultByIDForScopes :one
+SELECT s.*
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.id = sqlc.arg(id)
+  AND s.cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[]);
+
 -- name: ListSecurityScanResults :many
-SELECT * FROM security_scan_results ORDER BY created_at DESC LIMIT $1 OFFSET $2;
+SELECT s.*
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT $1 OFFSET $2;
+
+-- name: ListSecurityScanResultsForScopes :many
+SELECT s.*
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: ListScansByCluster :many
-SELECT * FROM security_scan_results WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
-
--- name: ListScansByClusterAndType :many
-SELECT * FROM security_scan_results WHERE cluster_id = $1 AND scan_type = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4;
+SELECT s.*
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.cluster_id = $1
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT $2 OFFSET $3;
 
 -- name: CreateSecurityScanResult :one
 INSERT INTO security_scan_results (cluster_id, scan_type, status, summary, results, initiated_by_id)
@@ -106,35 +139,179 @@ RETURNING *;
 -- name: CreateCISScan :one
 INSERT INTO security_scan_results (
     cluster_id, scan_type, status, summary, results,
-    cluster_scan_name, initiated_by_id
+    cluster_scan_name, initiated_by_id, next_poll_at, poll_deadline
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+VALUES ($1, $2, $3, $4, $5, $6, $7, now() + interval '30 seconds', now() + interval '35 minutes')
 RETURNING *;
 
--- Phase B5: full report ingestion. Writes flattened counts + findings in one
--- statement so the row reaches its terminal state atomically and the UI never
--- sees a half-populated scan.
--- name: UpdateSecurityScanReport :exec
-UPDATE security_scan_results SET
-    status = 'completed',
-    summary = $2,
-    results = $3,
-    passed = $4,
-    failed = $5,
-    warned = $6,
-    skipped = $7,
-    findings = $8,
-    completed_at = now()
-WHERE id = $1;
+-- Create the management-plane scan row and its first tunnel-queue delivery
+-- intent atomically. The payload needs only the generated scan id: every other
+-- mutable lifecycle field is reloaded under a database lease by the consumer.
+-- name: CreateCISScanWithOutbox :one
+WITH scan AS (
+    INSERT INTO security_scan_results (
+        cluster_id, scan_type, status, summary, results,
+        cluster_scan_name, initiated_by_id, next_poll_at, poll_deadline
+    )
+    VALUES (
+        sqlc.arg(cluster_id), sqlc.arg(scan_type), 'running', '{}'::jsonb, '[]'::jsonb,
+        sqlc.arg(cluster_scan_name), sqlc.arg(initiated_by_id),
+        now() + interval '30 seconds', now() + interval '35 minutes'
+    )
+    RETURNING *
+), task AS (
+    INSERT INTO task_outbox (
+        dedupe_key, task_type, payload, queue_name, max_retry,
+        timeout_seconds, unique_seconds, max_delivery_attempts, next_attempt_at
+    )
+    SELECT
+        'security_scan_ingest:' || scan.id::text || ':1',
+        'security:ingest_scan_results',
+        convert_to(jsonb_build_object('scan_id', scan.id::text)::text, 'UTF8'),
+        'tunnel', 3, 120, 0, 20, scan.next_poll_at
+    FROM scan
+    ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO UPDATE
+    SET status = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.status ELSE 'pending' END,
+        attempt_count = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.attempt_count ELSE 0 END,
+        next_attempt_at = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.next_attempt_at ELSE EXCLUDED.next_attempt_at END,
+        locked_until = NULL,
+        last_error = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.last_error ELSE '' END,
+        updated_at = now()
+    RETURNING id
+), audit_intent AS (
+    INSERT INTO audit_outbox (
+        id, dedupe_key, event_created_at, schema_version, user_id,
+        actor_auth_method, action, resource_type, resource_id, resource_name,
+        http_method, path, status_code, request_id, ip_address, user_agent,
+        detail, source, correlation_id, action_class, max_attempts
+    )
+    SELECT
+        sqlc.arg(audit_id), sqlc.arg(audit_dedupe_key), now(), 'audit-v1',
+        sqlc.arg(initiated_by_id), sqlc.arg(audit_actor_auth_method),
+        'security.scan.create', 'security_scan', scan.id::text,
+        scan.cluster_scan_name, sqlc.arg(audit_http_method), sqlc.arg(audit_path),
+        201, sqlc.arg(audit_request_id), sqlc.narg(audit_ip_address),
+        sqlc.arg(audit_user_agent), sqlc.arg(audit_detail), 'service',
+        sqlc.arg(audit_correlation_id), 'mutation', 20
+    FROM scan
+    ON CONFLICT (dedupe_key) DO UPDATE
+    SET dedupe_key = EXCLUDED.dedupe_key
+    RETURNING id
+)
+SELECT scan.* FROM scan, task, audit_intent;
 
--- Phase B5: failure path that preserves the operator/agent message so users
--- can see *why* an ingest timed out, instead of a blank "failed" badge.
--- name: UpdateSecurityScanFailedWithMessage :exec
-UPDATE security_scan_results SET
-    status = 'failed',
-    summary = jsonb_set(coalesce(summary, '{}'::jsonb), '{error}', to_jsonb(sqlc.arg(error_message)::text), true),
-    completed_at = now()
-WHERE id = sqlc.arg(id);
+-- A poll is executable only after winning the row's renewable lease. The
+-- generation guard prevents a stale delivery from a prior retry generation
+-- from completing or failing a newly restarted scan.
+-- name: ClaimSecurityScanPoll :one
+UPDATE security_scan_results
+SET poll_owner = sqlc.arg(owner),
+    poll_lease_expires_at = sqlc.arg(lease_expires_at),
+    poll_attempt = poll_attempt + 1,
+    next_poll_at = NULL,
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND poll_generation = sqlc.arg(generation)
+  AND status IN ('pending', 'running', 'in_progress')
+  AND cancel_requested_at IS NULL
+  AND (next_poll_at IS NULL OR next_poll_at <= sqlc.arg(now_at))
+  AND (poll_lease_expires_at IS NULL OR poll_lease_expires_at <= sqlc.arg(now_at))
+RETURNING *;
+
+-- name: RescheduleSecurityScanPoll :execrows
+UPDATE security_scan_results
+SET status = 'running',
+    next_poll_at = sqlc.arg(next_poll_at),
+    poll_owner = '',
+    poll_lease_expires_at = NULL,
+    terminal_reason = left(sqlc.arg(reason), 2048),
+    summary = jsonb_set(coalesce(summary, '{}'::jsonb), '{progress}', to_jsonb(left(sqlc.arg(reason), 2048)::text), true),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND poll_generation = sqlc.arg(generation)
+  AND poll_owner = sqlc.arg(owner)
+  AND status IN ('pending', 'running', 'in_progress')
+  AND cancel_requested_at IS NULL;
+
+-- name: FinalizeSecurityScanReport :execrows
+UPDATE security_scan_results
+SET status = 'completed',
+    summary = sqlc.arg(summary),
+    results = sqlc.arg(results),
+    passed = sqlc.arg(passed),
+    failed = sqlc.arg(failed),
+    warned = sqlc.arg(warned),
+    skipped = sqlc.arg(skipped),
+    findings = sqlc.arg(findings),
+    upstream_report_name = sqlc.arg(upstream_report_name),
+    terminal_reason = '',
+    next_poll_at = NULL,
+    poll_owner = '',
+    poll_lease_expires_at = NULL,
+    completed_at = now(),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND poll_generation = sqlc.arg(generation)
+  AND poll_owner = sqlc.arg(owner)
+  AND status IN ('pending', 'running', 'in_progress')
+  AND cancel_requested_at IS NULL;
+
+-- name: FailSecurityScanPoll :execrows
+UPDATE security_scan_results
+SET status = 'failed',
+    terminal_reason = left(sqlc.arg(reason), 2048),
+    summary = jsonb_set(coalesce(summary, '{}'::jsonb), '{error}', to_jsonb(left(sqlc.arg(reason), 2048)::text), true),
+    next_poll_at = NULL,
+    poll_owner = '',
+    poll_lease_expires_at = NULL,
+    completed_at = now(),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND poll_generation = sqlc.arg(generation)
+  AND (sqlc.arg(owner)::text = '' OR poll_owner = sqlc.arg(owner))
+  AND status IN ('pending', 'running', 'in_progress')
+  AND cancel_requested_at IS NULL;
+
+-- name: CancelSecurityScan :one
+UPDATE security_scan_results
+SET status = 'cancelled',
+    cancel_requested_at = now(),
+    terminal_reason = 'cancelled by operator',
+    next_poll_at = NULL,
+    poll_owner = '',
+    poll_lease_expires_at = NULL,
+    completed_at = now(),
+    updated_at = now()
+WHERE cluster_id = sqlc.arg(cluster_id)
+  AND id = sqlc.arg(id)
+  AND status IN ('pending', 'running', 'in_progress')
+RETURNING *;
+
+-- Recover rows whose initial delivery was lost, whose consumer crashed while
+-- holding a lease, or whose durable next-poll timestamp is now due.
+-- name: ListRecoverableSecurityScans :many
+SELECT *
+FROM security_scan_results
+WHERE status IN ('pending', 'running', 'in_progress')
+  AND cancel_requested_at IS NULL
+  AND (next_poll_at IS NULL OR next_poll_at <= sqlc.arg(now_at))
+  AND (poll_lease_expires_at IS NULL OR poll_lease_expires_at <= sqlc.arg(now_at))
+ORDER BY coalesce(next_poll_at, started_at), created_at
+LIMIT sqlc.arg(row_limit);
 
 -- name: CountSecurityScanResults :one
-SELECT count(*) FROM security_scan_results;
+SELECT count(*)
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL;
+
+-- name: CountSecurityScanResultsForScopes :one
+SELECT count(*)
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[]);
+
+-- name: CountSecurityScanResultsByCluster :one
+SELECT count(*)
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.cluster_id = $1;

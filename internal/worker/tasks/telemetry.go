@@ -75,16 +75,14 @@ func NewTelemetrySendTask() *asynq.Task {
 // installs don't double-post.
 func HandleTelemetrySend(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, TelemetrySendType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "telemetry: runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("telemetry runtime is not configured")
 		}
-		q, ok := runtimeDeps.Queries.(telemetryQuerier)
+		q, ok := runtimeDependencies(ctx).Queries.(telemetryQuerier)
 		if !ok {
-			runtimeLogger().WarnContext(ctx, "telemetry: runtime querier missing required methods, skipping")
-			return nil
+			return fmt.Errorf("telemetry runtime querier does not implement required methods")
 		}
-		return sendTelemetry(ctx, q, runtimeDeps.HTTPClient, time.Now().UTC())
+		return sendTelemetry(ctx, q, runtimeDependencies(ctx).HTTPClient, time.Now().UTC())
 	})
 }
 
@@ -94,13 +92,12 @@ func HandleTelemetrySend(ctx context.Context, _ *asynq.Task) error {
 func sendTelemetry(ctx context.Context, q telemetryQuerier, client *http.Client, now time.Time) error {
 	enabled, _ := readTelemetryBool(ctx, q, "telemetry.enabled")
 	if !enabled {
-		runtimeLogger().DebugContext(ctx, "telemetry: opt-in disabled, skipping")
-		return nil
+		runtimeLogger(ctx).DebugContext(ctx, "telemetry: opt-in disabled, skipping")
+		return ErrPeriodicTaskSkipped
 	}
 	endpoint, _ := readTelemetryString(ctx, q, "telemetry.endpoint")
 	if endpoint == "" {
-		runtimeLogger().WarnContext(ctx, "telemetry: endpoint not configured, skipping")
-		return nil
+		return fmt.Errorf("telemetry is enabled but telemetry.endpoint is not configured")
 	}
 
 	clusters, err := q.CountClusters(ctx)
@@ -147,17 +144,17 @@ func sendTelemetry(ctx context.Context, q telemetryQuerier, client *http.Client,
 		// Logged + swallowed. The telemetry endpoint being down today
 		// doesn't justify a worker pod restart; the next day's run
 		// will retry on the daily cadence.
-		runtimeLogger().WarnContext(ctx, "telemetry: POST failed", "error", err, "endpoint", endpoint)
+		runtimeLogger(ctx).WarnContext(ctx, "telemetry: POST failed", "error", err, "endpoint", endpoint)
 		return nil
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode >= 400 {
-		runtimeLogger().WarnContext(ctx, "telemetry: non-2xx from endpoint", "status", resp.StatusCode, "endpoint", endpoint)
+		runtimeLogger(ctx).WarnContext(ctx, "telemetry: non-2xx from endpoint", "status", resp.StatusCode, "endpoint", endpoint)
 		return nil
 	}
-	runtimeLogger().InfoContext(ctx, "telemetry: posted", "endpoint", endpoint, "cluster_count", clusters, "user_count", users, "project_count", projects)
+	runtimeLogger(ctx).InfoContext(ctx, "telemetry: posted", "endpoint", endpoint, "cluster_count", clusters, "user_count", users, "project_count", projects)
 	return nil
 }
 

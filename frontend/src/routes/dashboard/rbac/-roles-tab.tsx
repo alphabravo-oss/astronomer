@@ -1,53 +1,70 @@
-import { Shield } from 'lucide-react';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { Badge } from '@/components/ui/badge';
-import { formatRelativeTime } from '@/lib/utils';
-import type { ClusterRole, GlobalRole, ProjectRole } from '@/types';
-import { crdGrantCount, isBuiltinRole, roleTitle, type RoleLike } from './-utils';
+import { Shield } from "lucide-react";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { formatRelativeTime } from "@/lib/utils";
+import type { ClusterRole, GlobalRole, ProjectRole } from "@/types";
+import {
+  crdGrantCount,
+  isBuiltinRole,
+  roleTitle,
+  type RoleLike,
+} from "./-utils";
 
 function TypeBadge({ builtin }: { builtin: boolean }) {
-  return <Badge variant={builtin ? 'secondary' : 'info'}>{builtin ? 'Built-in' : 'Custom'}</Badge>;
+  return (
+    <Badge variant={builtin ? "secondary" : "info"}>
+      {builtin ? "Built-in" : "Custom"}
+    </Badge>
+  );
 }
 
 function roleColumns<T extends RoleLike>(): Column<T>[] {
   return [
     {
-      key: 'name',
-      header: 'Role',
+      key: "name",
+      header: "Role",
       accessor: (row) => (
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="font-medium text-foreground">{roleTitle(row)}</p>
-            <p className="text-xs text-muted-foreground font-mono">{row.name}</p>
+            <p className="text-xs text-muted-foreground font-mono">
+              {row.name}
+            </p>
           </div>
         </div>
       ),
       sortAccessor: (row) => roleTitle(row),
     },
     {
-      key: 'description',
-      header: 'Description',
-      accessor: (row) => <span className="text-sm text-muted-foreground">{row.description || '—'}</span>,
+      key: "description",
+      header: "Description",
+      accessor: (row) => (
+        <span className="text-sm text-muted-foreground">
+          {row.description || "—"}
+        </span>
+      ),
       sortable: false,
     },
     {
-      key: 'builtin',
-      header: 'Type',
+      key: "builtin",
+      header: "Type",
       accessor: (row) => <TypeBadge builtin={isBuiltinRole(row)} />,
-      sortAccessor: (row) => (isBuiltinRole(row) ? 'Built-in' : 'Custom'),
-      filter: { label: 'Type' },
+      sortAccessor: (row) => (isBuiltinRole(row) ? "Built-in" : "Custom"),
+      filter: { label: "Type" },
     },
     {
-      key: 'rules',
-      header: 'Rules',
-      accessor: (row) => <span className="tabular-nums text-sm">{row.rules?.length ?? 0}</span>,
+      key: "rules",
+      header: "Rules",
+      accessor: (row) => (
+        <span className="tabular-nums text-sm">{row.rules?.length ?? 0}</span>
+      ),
       sortAccessor: (row) => row.rules?.length ?? 0,
-      align: 'center',
+      align: "center",
     },
     {
-      key: 'crd',
-      header: 'CRD grants',
+      key: "crd",
+      header: "CRD grants",
       accessor: (row) => {
         const count = crdGrantCount(row.rules);
         return count > 0 ? (
@@ -57,17 +74,17 @@ function roleColumns<T extends RoleLike>(): Column<T>[] {
         );
       },
       sortAccessor: (row) => crdGrantCount(row.rules),
-      align: 'center',
+      align: "center",
     },
     {
-      key: 'created',
-      header: 'Created',
+      key: "created",
+      header: "Created",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {row.createdAt ? formatRelativeTime(row.createdAt) : '—'}
+          {row.createdAt ? formatRelativeTime(row.createdAt) : "—"}
         </span>
       ),
-      sortAccessor: (row) => row.createdAt || '',
+      sortAccessor: (row) => row.createdAt || "",
     },
   ];
 }
@@ -79,7 +96,12 @@ interface RolesTabProps<T> {
   onRetry: () => void;
 }
 
-export function GlobalRolesTab({ data, loading, isError, onRetry }: RolesTabProps<GlobalRole>) {
+export function GlobalRolesTab({
+  data,
+  loading,
+  isError,
+  onRetry,
+}: RolesTabProps<GlobalRole>) {
   return (
     <DataTable
       data={data}
@@ -94,7 +116,12 @@ export function GlobalRolesTab({ data, loading, isError, onRetry }: RolesTabProp
   );
 }
 
-export function ClusterRolesTab({ data, loading, isError, onRetry }: RolesTabProps<ClusterRole>) {
+export function ClusterRolesTab({
+  data,
+  loading,
+  isError,
+  onRetry,
+}: RolesTabProps<ClusterRole>) {
   return (
     <DataTable
       data={data}
@@ -109,7 +136,12 @@ export function ClusterRolesTab({ data, loading, isError, onRetry }: RolesTabPro
   );
 }
 
-export function ProjectRolesTab({ data, loading, isError, onRetry }: RolesTabProps<ProjectRole>) {
+export function ProjectRolesTab({
+  data,
+  loading,
+  isError,
+  onRetry,
+}: RolesTabProps<ProjectRole>) {
   return (
     <DataTable
       data={data}

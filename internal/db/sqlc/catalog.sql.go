@@ -226,6 +226,18 @@ func (q *Queries) CountInstalledChartsByCluster(ctx context.Context, clusterID u
 	return count, err
 }
 
+const countInstalledChartsForScopes = `-- name: CountInstalledChartsForScopes :one
+SELECT count(*) FROM installed_charts
+WHERE cluster_id = ANY($1::uuid[])
+`
+
+func (q *Queries) CountInstalledChartsForScopes(ctx context.Context, clusterIds []uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countInstalledChartsForScopes, clusterIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createHelmChart = `-- name: CreateHelmChart :one
 INSERT INTO helm_charts (repository_id, name, display_name, description, icon_url, home_url, category, keywords, maintainers, deprecated)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -1225,7 +1237,7 @@ func (q *Queries) ListHelmRepositoriesWithLegacyAuthConfig(ctx context.Context, 
 }
 
 const listInstalledCharts = `-- name: ListInstalledCharts :many
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts ORDER BY created_at DESC, id DESC LIMIT $1 OFFSET $2
 `
 
 type ListInstalledChartsParams struct {
@@ -1333,6 +1345,58 @@ LIMIT $1
 // or already removed) are worth comparing.
 func (q *Queries) ListInstalledChartsForDriftSweep(ctx context.Context, limit int32) ([]InstalledChart, error) {
 	rows, err := q.db.Query(ctx, listInstalledChartsForDriftSweep, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InstalledChart{}
+	for rows.Next() {
+		var i InstalledChart
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.ChartVersionID,
+			&i.ReleaseName,
+			&i.Namespace,
+			&i.ValuesOverride,
+			&i.Status,
+			&i.Revision,
+			&i.Notes,
+			&i.InstalledByID,
+			&i.RequestID,
+			&i.ToolSlug,
+			&i.PresetUsed,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DriftDetected,
+			&i.DriftDetail,
+			&i.DriftCheckedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInstalledChartsForScopes = `-- name: ListInstalledChartsForScopes :many
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts
+WHERE cluster_id = ANY($1::uuid[])
+ORDER BY created_at DESC, id DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListInstalledChartsForScopesParams struct {
+	ClusterIds  []uuid.UUID `json:"cluster_ids"`
+	QueryOffset int32       `json:"query_offset"`
+	QueryLimit  int32       `json:"query_limit"`
+}
+
+func (q *Queries) ListInstalledChartsForScopes(ctx context.Context, arg ListInstalledChartsForScopesParams) ([]InstalledChart, error) {
+	rows, err := q.db.Query(ctx, listInstalledChartsForScopes, arg.ClusterIds, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -1529,26 +1593,29 @@ func (q *Queries) UpdateInstalledChartStatus(ctx context.Context, arg UpdateInst
 
 const updateInstalledChartValues = `-- name: UpdateInstalledChartValues :one
 UPDATE installed_charts SET
+    chart_version_id = COALESCE($1, chart_version_id),
     values_override = $2,
     status = $3,
     revision = $4
-WHERE id = $1
+WHERE id = $5
 RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at
 `
 
 type UpdateInstalledChartValuesParams struct {
-	ID             uuid.UUID `json:"id"`
-	ValuesOverride string    `json:"values_override"`
-	Status         string    `json:"status"`
-	Revision       int32     `json:"revision"`
+	ChartVersionID pgtype.UUID `json:"chart_version_id"`
+	ValuesOverride string      `json:"values_override"`
+	Status         string      `json:"status"`
+	Revision       int32       `json:"revision"`
+	ID             uuid.UUID   `json:"id"`
 }
 
 func (q *Queries) UpdateInstalledChartValues(ctx context.Context, arg UpdateInstalledChartValuesParams) (InstalledChart, error) {
 	row := q.db.QueryRow(ctx, updateInstalledChartValues,
-		arg.ID,
+		arg.ChartVersionID,
 		arg.ValuesOverride,
 		arg.Status,
 		arg.Revision,
+		arg.ID,
 	)
 	var i InstalledChart
 	err := row.Scan(

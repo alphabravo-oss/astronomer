@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // §HostMounts — ExtensionSlot: the ONE integration point a host page adds per
 // mount location. `<ExtensionSlot point="clusterTab" context={{clusterId}} />`
@@ -15,17 +15,17 @@
 // placeholder is intentionally text-only (no third-party HTML) — the same
 // fail-closed posture the real renderers must keep.
 
-import type { ReactNode } from 'react';
-import { Loader2 } from 'lucide-react';
-import { useExtensionRuntime, useExtensionMounts } from './ExtensionProvider';
-import { ExtensionErrorBoundary } from './ExtensionErrorBoundary';
-import { DeclarativeWidget } from './DeclarativeWidget';
-import { SandboxedExtension } from './SandboxedExtension';
+import type { ReactNode } from "react";
+import { Loader2 } from "lucide-react";
+import { useExtensionRuntime, useExtensionMounts } from "./ExtensionProvider";
+import { ExtensionErrorBoundary } from "./ExtensionErrorBoundary";
+import { DeclarativeWidget } from "./DeclarativeWidget";
+import { SandboxedExtension } from "./SandboxedExtension";
 import type {
   ExtensionContext,
   ExtensionMount,
   ExtensionPointKind,
-} from '@/lib/api/extensions';
+} from "@/lib/api/extensions";
 
 // A host page may inject the real renderer once it ships (item 3/4). When no
 // renderer is supplied the slot falls back to the placeholder below, so wiring
@@ -73,7 +73,11 @@ function MountContent({
   const declarative = mount.render?.declarative;
   if (declarative) {
     return (
-      <DeclarativeWidget extensionName={mount.extension} spec={declarative} context={context} />
+      <DeclarativeWidget
+        extensionName={mount.extension}
+        spec={declarative}
+        context={context}
+      />
     );
   }
   if (mount.render?.bundle) {
@@ -93,7 +97,7 @@ function MountPlaceholder({ mount }: { mount: ExtensionMount }) {
           {mount.label || mount.displayName || mount.extension}
         </span>
         <span className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-          {tier === 2 ? 'iframe' : 'widget'}
+          {tier === 2 ? "iframe" : "widget"}
         </span>
       </div>
       <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
@@ -104,7 +108,12 @@ function MountPlaceholder({ mount }: { mount: ExtensionMount }) {
   );
 }
 
-export function ExtensionSlot({ point, context, render, className }: ExtensionSlotProps) {
+export function ExtensionSlot({
+  point,
+  context,
+  render,
+  className,
+}: ExtensionSlotProps) {
   const { isLoading } = useExtensionRuntime();
   const mounts = useExtensionMounts(point);
 
@@ -117,7 +126,10 @@ export function ExtensionSlot({ point, context, render, className }: ExtensionSl
   return (
     <div className={className} data-extension-slot={point}>
       {mounts.map((mount) => (
-        <ExtensionErrorBoundary key={`${mount.extension}:${mount.pointId}`} extensionName={mount.extension}>
+        <ExtensionErrorBoundary
+          key={`${mount.extension}:${mount.pointId}`}
+          extensionName={mount.extension}
+        >
           <MountContent mount={mount} context={context} render={render} />
         </ExtensionErrorBoundary>
       ))}

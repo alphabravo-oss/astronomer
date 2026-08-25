@@ -53,20 +53,17 @@ func HandleGatekeeperPolicyApply(ctx context.Context, _ *asynq.Task) error {
 		ctx, cancel := context.WithTimeout(ctx, gatekeeperPolicySweepDeadline)
 		defer cancel()
 
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().DebugContext(ctx, "gatekeeper policy runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("gatekeeper policy runtime is not configured")
 		}
-		if runtimeDeps.K8s == nil {
-			// Only the server process holds the tunnel requester.
-			runtimeLogger().DebugContext(ctx, "gatekeeper policy: no tunnel requester, skipping")
-			return nil
+		if runtimeDependencies(ctx).K8s == nil {
+			return fmt.Errorf("gatekeeper policy tunnel requester is not configured")
 		}
 		manifests, err := gatekeeperpolicy.Manifests()
 		if err != nil {
 			return fmt.Errorf("load gatekeeper bundle: %w", err)
 		}
-		clusters, err := listAllClustersPaged(ctx, runtimeDeps.Queries.ListClusters)
+		clusters, err := listAllClustersPaged(ctx, runtimeDependencies(ctx).Queries.ListClusters)
 		if err != nil {
 			return fmt.Errorf("list clusters: %w", err)
 		}
@@ -88,7 +85,7 @@ func HandleGatekeeperPolicyApply(ctx context.Context, _ *asynq.Task) error {
 // constraint-template API. A tunnel error (disconnected cluster) reads as
 // "not installed" so the sweep simply skips it.
 func gatekeeperInstalled(ctx context.Context, clusterID uuid.UUID) bool {
-	resp, err := runtimeDeps.K8s.Do(ctx, clusterID.String(), http.MethodGet, "/apis/templates.gatekeeper.sh/v1/constrainttemplates", nil, nil)
+	resp, err := runtimeDependencies(ctx).K8s.Do(ctx, clusterID.String(), http.MethodGet, "/apis/templates.gatekeeper.sh/v1/constrainttemplates", nil, nil)
 	return err == nil && resp != nil && resp.StatusCode == http.StatusOK
 }
 
@@ -99,21 +96,21 @@ func applyGatekeeperBundle(ctx context.Context, clusterID uuid.UUID, manifests [
 			FieldManager: gatekeeperPolicyFieldManager,
 			Force:        true,
 		})
-		resp, err := runtimeDeps.K8s.Do(ctx, clusterID.String(), http.MethodPatch, path, m.JSON, kubeutil.ApplyPatchHeaders())
+		resp, err := runtimeDependencies(ctx).K8s.Do(ctx, clusterID.String(), http.MethodPatch, path, m.JSON, kubeutil.ApplyPatchHeaders())
 		if err != nil {
-			runtimeLogger().WarnContext(ctx, "gatekeeper policy apply failed",
+			runtimeLogger(ctx).WarnContext(ctx, "gatekeeper policy apply failed",
 				"cluster", clusterID.String(), "resource", m.Kind+"/"+m.Name, "error", err)
 			continue
 		}
 		if resp.StatusCode >= http.StatusBadRequest {
 			// A 404 here is the expected first-pass case (constraint CRD not yet
 			// created by Gatekeeper); the next sweep converges.
-			runtimeLogger().DebugContext(ctx, "gatekeeper policy apply rejected (will retry next sweep)",
+			runtimeLogger(ctx).DebugContext(ctx, "gatekeeper policy apply rejected (will retry next sweep)",
 				"cluster", clusterID.String(), "resource", m.Kind+"/"+m.Name, "status", resp.StatusCode)
 			continue
 		}
 		applied++
 	}
-	runtimeLogger().InfoContext(ctx, "gatekeeper policy bundle applied",
+	runtimeLogger(ctx).InfoContext(ctx, "gatekeeper policy bundle applied",
 		"cluster", clusterID.String(), "applied", applied, "total", len(manifests))
 }

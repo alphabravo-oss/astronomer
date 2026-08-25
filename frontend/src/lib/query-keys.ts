@@ -189,8 +189,6 @@ export const queryKeys = {
       ["rbac", "cluster-roles", clusterId] as const,
     projectRoles: (projectId?: string) =>
       ["rbac", "project-roles", projectId] as const,
-    bindings: (params?: Record<string, unknown>) =>
-      ["rbac", "bindings", params] as const,
     clusterRoleBindings: (params?: Record<string, unknown>) =>
       ["rbac", "cluster-role-bindings", params] as const,
     globalRoleBindings: ["rbac", "global-role-bindings"] as const,
@@ -198,8 +196,11 @@ export const queryKeys = {
       ["rbac", "project-role-bindings", params] as const,
     myPermissions: (params?: apiClient.EffectivePermissionParams) =>
       ["rbac", "my-permissions", params] as const,
-    effectivePermissions: (userId: string, params?: apiClient.EffectivePermissionParams) =>
-      ["rbac", "effective-permissions", userId, params] as const,
+    effectivePermissions: (
+      userId: string,
+      params?: apiClient.EffectivePermissionParams,
+      self?: boolean,
+    ) => ["rbac", "effective-permissions", userId, params, { self }] as const,
   },
   users: {
     all: ["users"] as const,
@@ -232,7 +233,7 @@ export const queryKeys = {
     rulesAll: ["alerting", "rules"] as const,
     rules: (clusterId?: string) =>
       ["alerting", "rules", clusterId ?? "all"] as const,
-    events: (params?: Record<string, unknown>) =>
+    events: (params?: object) =>
       ["alerting", "events", params] as const,
     // Prefix matching every `events(params)` variant — used by the live
     // routing table on `alerting.changed` (kind: event).
@@ -276,7 +277,8 @@ export const queryKeys = {
     // the `operation(id)` detail rows at once — used by retry to invalidate all.
     operationsAll: ["logging", "operations"] as const,
     operation: (id: string) => ["logging", "operations", "detail", id] as const,
-    attachStatus: (clusterId: string) => ["logging", "attach", clusterId] as const,
+    attachStatus: (clusterId: string) =>
+      ["logging", "attach", clusterId] as const,
   },
   // Monitoring-stack LIFECYCLE (install/upgrade/replace/uninstall) across the
   // three families. Distinct from the `clusters.metrics*` keys, which cache the
@@ -318,7 +320,7 @@ export const queryKeys = {
   delivery: {
     all: ["delivery"] as const,
     system: ["delivery", "system"] as const,
-    fleet: ["delivery", "fleet"] as const,
+    estate: ["delivery", "estate"] as const,
     sources: (projectId: string, params?: Record<string, unknown>) =>
       ["delivery", projectId, "sources", params] as const,
     sourcesAll: (projectId: string) =>
@@ -495,6 +497,10 @@ export const queryKeys = {
     all: ["generic"] as const,
     resources: (clusterId: string, resourceType: string) =>
       ["generic", clusterId, resourceType] as const,
+    discovery: (clusterId: string) =>
+      ["generic", clusterId, "discovery"] as const,
+    schema: (clusterId: string, resourceType: apiClient.ResourceType) =>
+      ["generic", clusterId, "schema", resourceType] as const,
   },
   k8s: {
     // Top-level prefix used to invalidate every k8s-proxy cache entry at once

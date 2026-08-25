@@ -51,14 +51,27 @@ func (h *LoggingHandler) upsertSystemLoggingOutput(ctx context.Context, spec sys
 	if h == nil || h.queries == nil {
 		return sqlc.LoggingOutput{}, errors.New("logging store not configured")
 	}
+	return upsertSystemLoggingOutputWith(ctx, h.queries, spec)
+}
+
+type systemLoggingOutputWriter interface {
+	GetSystemLoggingOutputByCluster(context.Context, pgtype.UUID) (sqlc.LoggingOutput, error)
+	CreateLoggingOutput(context.Context, sqlc.CreateLoggingOutputParams) (sqlc.LoggingOutput, error)
+	UpdateLoggingOutput(context.Context, sqlc.UpdateLoggingOutputParams) (sqlc.LoggingOutput, error)
+}
+
+func upsertSystemLoggingOutputWith(ctx context.Context, q systemLoggingOutputWriter, spec systemLoggingOutputSpec) (sqlc.LoggingOutput, error) {
+	if q == nil {
+		return sqlc.LoggingOutput{}, errors.New("logging store not configured")
+	}
 	if spec.ClusterID == uuid.Nil {
 		return sqlc.LoggingOutput{}, errors.New("system logging output requires cluster_id")
 	}
 	cfg := systemLoggingOutputConfiguration(spec.ClusterID, spec.Host, spec.Port)
 	cluster := pgtype.UUID{Bytes: spec.ClusterID, Valid: true}
-	existing, err := h.queries.GetSystemLoggingOutputByCluster(ctx, cluster)
+	existing, err := q.GetSystemLoggingOutputByCluster(ctx, cluster)
 	if err == nil {
-		return h.queries.UpdateLoggingOutput(ctx, sqlc.UpdateLoggingOutputParams{
+		return q.UpdateLoggingOutput(ctx, sqlc.UpdateLoggingOutputParams{
 			ID:            existing.ID,
 			Name:          systemLoggingOutputName,
 			OutputType:    "loki",
@@ -69,7 +82,7 @@ func (h *LoggingHandler) upsertSystemLoggingOutput(ctx context.Context, spec sys
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return sqlc.LoggingOutput{}, err
 	}
-	created, err := h.queries.CreateLoggingOutput(ctx, sqlc.CreateLoggingOutputParams{
+	created, err := q.CreateLoggingOutput(ctx, sqlc.CreateLoggingOutputParams{
 		Name:          systemLoggingOutputName,
 		OutputType:    "loki",
 		Configuration: cfg,
@@ -84,11 +97,11 @@ func (h *LoggingHandler) upsertSystemLoggingOutput(ctx context.Context, spec sys
 	if !isUniqueViolation(err) {
 		return sqlc.LoggingOutput{}, err
 	}
-	existing, err = h.queries.GetSystemLoggingOutputByCluster(ctx, cluster)
+	existing, err = q.GetSystemLoggingOutputByCluster(ctx, cluster)
 	if err != nil {
 		return sqlc.LoggingOutput{}, err
 	}
-	return h.queries.UpdateLoggingOutput(ctx, sqlc.UpdateLoggingOutputParams{
+	return q.UpdateLoggingOutput(ctx, sqlc.UpdateLoggingOutputParams{
 		ID:            existing.ID,
 		Name:          systemLoggingOutputName,
 		OutputType:    "loki",
@@ -124,25 +137,90 @@ func rejectSystemOutputMutation(w http.ResponseWriter, r *http.Request, output s
 	return true
 }
 
-func loggingOutputDTO(o sqlc.LoggingOutput) sqlc.LoggingOutput {
-	o.Configuration = redactLoggingOutputConfiguration(o)
-	return o
+type loggingOutputResponse struct {
+	sqlc.LoggingOutput
+	Capabilities loggingOutputCapabilities `json:"capabilities"`
 }
 
-func loggingOutputDTOs(outputs []sqlc.LoggingOutput) []sqlc.LoggingOutput {
-	out := make([]sqlc.LoggingOutput, len(outputs))
+func loggingOutputDTO(o sqlc.LoggingOutput) loggingOutputResponse {
+	o.Configuration = redactLoggingOutputConfiguration(o)
+	return loggingOutputResponse{
+		LoggingOutput: o,
+		Capabilities:  loggingCapabilitiesFor(o),
+	}
+}
+
+func loggingOutputDTOs(outputs []sqlc.LoggingOutput) []loggingOutputResponse {
+	out := make([]loggingOutputResponse, len(outputs))
 	for i, o := range outputs {
 		out[i] = loggingOutputDTO(o)
 	}
 	return out
 }
 
+type loggingPipelineResponse struct {
+	sqlc.LoggingPipeline
+	OutputIDs   []uuid.UUID `json:"output_ids"`
+	OutputNames []string    `json:"output_names"`
+}
+
+func loggingPipelineDTO(pipeline sqlc.LoggingPipeline, outputIDs []uuid.UUID, outputNames []string) loggingPipelineResponse {
+	if outputIDs == nil {
+		outputIDs = []uuid.UUID{}
+	}
+	if outputNames == nil {
+		outputNames = []string{}
+	}
+	return loggingPipelineResponse{
+		LoggingPipeline: pipeline,
+		OutputIDs:       outputIDs,
+		OutputNames:     outputNames,
+	}
+}
+
+// loggingPipelineDTOs resolves associations in one query so the fleet and
+// cluster list APIs do not regress into an N+1 read pattern.
+func (h *LoggingHandler) loggingPipelineDTOs(ctx context.Context, pipelines []sqlc.LoggingPipeline) ([]loggingPipelineResponse, error) {
+	responses := make([]loggingPipelineResponse, len(pipelines))
+	if len(pipelines) == 0 {
+		return responses, nil
+	}
+	ids := make([]uuid.UUID, len(pipelines))
+	for i, pipeline := range pipelines {
+		ids[i] = pipeline.ID
+		responses[i] = loggingPipelineDTO(pipeline, nil, nil)
+	}
+	details, err := h.queries.ListLoggingPipelineOutputDetails(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	index := make(map[uuid.UUID]int, len(pipelines))
+	for i, id := range ids {
+		index[id] = i
+	}
+	for _, detail := range details {
+		i, ok := index[detail.LoggingPipelineID]
+		if !ok {
+			continue
+		}
+		responses[i].OutputIDs = append(responses[i].OutputIDs, detail.LoggingOutputID)
+		responses[i].OutputNames = append(responses[i].OutputNames, detail.LoggingOutputName)
+	}
+	return responses, nil
+}
+
 var systemLoggingOutputConfigKeys = []string{"host", "port", "tls", "tenant_id", "labels"}
+
+var loggingSecretConfigKeys = map[string]struct{}{
+	"access_key": {}, "access_key_id": {}, "api_key": {}, "application_key": {},
+	"bearer_token": {}, "bearerToken": {}, "credentials": {}, "http_passwd": {},
+	"password": {}, "private_key": {}, "query_token": {}, "secret": {},
+	"secret_access_key": {}, "secret_key": {}, "token": {},
+}
 
 func redactLoggingOutputConfiguration(o sqlc.LoggingOutput) json.RawMessage {
 	cfg := decodeConfiguration(o.Configuration)
-	delete(cfg, "bearer_token")
-	delete(cfg, "bearerToken")
+	redactLoggingSecrets(cfg)
 	if o.IsSystem {
 		safe := make(map[string]any, len(systemLoggingOutputConfigKeys))
 		for _, k := range systemLoggingOutputConfigKeys {
@@ -157,6 +235,25 @@ func redactLoggingOutputConfiguration(o sqlc.LoggingOutput) json.RawMessage {
 		return json.RawMessage(`{}`)
 	}
 	return raw
+}
+
+func redactLoggingSecrets(value map[string]any) {
+	for key, item := range value {
+		if _, sensitive := loggingSecretConfigKeys[key]; sensitive {
+			delete(value, key)
+			continue
+		}
+		switch nested := item.(type) {
+		case map[string]any:
+			redactLoggingSecrets(nested)
+		case []any:
+			for _, child := range nested {
+				if object, ok := child.(map[string]any); ok {
+					redactLoggingSecrets(object)
+				}
+			}
+		}
+	}
 }
 
 func stripBearerFromLoggingConfiguration(raw json.RawMessage) json.RawMessage {

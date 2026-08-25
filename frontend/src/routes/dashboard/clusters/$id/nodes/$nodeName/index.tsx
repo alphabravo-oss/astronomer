@@ -1,23 +1,29 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
-import { useParams, useRouter } from '@/lib/navigation';
-import { useTabParam } from '@/lib/use-tab-param';
-import { useState } from 'react';
-import { useNodeDetail } from '@/lib/hooks';
-import * as apiClient from '@/lib/api';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
-import { ResourceActions } from '@/components/workloads/resource-actions';
-import { k8sResourcePath } from '@/lib/k8s-paths';
-import { usePermissionDecision } from '@/lib/permission-hooks';
-import { formatBytes, formatCPU, formatRelativeTime, cn } from '@/lib/utils';
-import type { NodePod, NodeEvent, NodeTaint, NodeImage, NodeDetailCondition } from '@/types';
+import { createFileRoute } from "@tanstack/react-router";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { useParams, useRouter } from "@/lib/navigation";
+import { useTabParam } from "@/lib/use-tab-param";
+import { useState } from "react";
+import { useNodeDetail, useNodeOperation } from "@/lib/hooks";
+import * as apiClient from "@/lib/api";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
+import { ResourceActions } from "@/components/workloads/resource-actions";
+import { k8sResourcePath } from "@/lib/k8s-paths";
+import { usePermissionDecision } from "@/lib/permission-hooks";
+import { formatBytes, formatCPU, formatRelativeTime, cn } from "@/lib/utils";
+import type {
+  NodePod,
+  NodeEvent,
+  NodeTaint,
+  NodeImage,
+  NodeDetailCondition,
+} from "@/types";
 import {
   Loader2,
   ArrowLeft,
@@ -34,88 +40,110 @@ import {
   Unplug,
   Plus,
   Trash2,
-} from 'lucide-react';
-import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
+} from "lucide-react";
+import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
+import { OperationPartialError } from "@/lib/api/operation-polling";
 
 // ── Tabs ──
 
 const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'pods', label: 'Pods' },
-  { id: 'conditions', label: 'Conditions' },
-  { id: 'info', label: 'Info' },
-  { id: 'taints', label: 'Taints' },
-  { id: 'images', label: 'Images' },
-  { id: 'events', label: 'Events' },
+  { id: "overview", label: "Overview" },
+  { id: "pods", label: "Pods" },
+  { id: "conditions", label: "Conditions" },
+  { id: "info", label: "Info" },
+  { id: "taints", label: "Taints" },
+  { id: "images", label: "Images" },
+  { id: "events", label: "Events" },
 ] as const;
 
-type TabId = (typeof TABS)[number]['id'];
+type TabId = (typeof TABS)[number]["id"];
 
 // ── Column Definitions ──
 
 const podColumns: Column<NodePod>[] = [
   {
-    key: 'name',
-    header: 'Name',
-    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+    key: "name",
+    header: "Name",
+    accessor: (row) => (
+      <span className="font-medium text-foreground font-mono text-xs">
+        {row.name}
+      </span>
+    ),
   },
   {
-    key: 'namespace',
-    header: 'Namespace',
-    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span>,
+    key: "namespace",
+    header: "Namespace",
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground font-mono">
+        {row.namespace}
+      </span>
+    ),
   },
   {
-    key: 'status',
-    header: 'Status',
+    key: "status",
+    header: "Status",
     accessor: (row) => <StatusBadge status={row.status} />,
   },
   {
-    key: 'ready',
-    header: 'Ready',
-    accessor: (row) => <span className="tabular-nums text-xs">{row.ready}</span>,
-    align: 'center',
+    key: "ready",
+    header: "Ready",
+    accessor: (row) => (
+      <span className="tabular-nums text-xs">{row.ready}</span>
+    ),
+    align: "center",
   },
   {
-    key: 'restarts',
-    header: 'Restarts',
+    key: "restarts",
+    header: "Restarts",
     accessor: (row) => (
-      <span className={cn('tabular-nums text-xs', row.restarts > 0 ? 'text-status-warning' : 'text-muted-foreground')}>
+      <span
+        className={cn(
+          "tabular-nums text-xs",
+          row.restarts > 0 ? "text-status-warning" : "text-muted-foreground",
+        )}
+      >
         {row.restarts}
       </span>
     ),
     sortAccessor: (row) => row.restarts,
-    align: 'center',
+    align: "center",
   },
   {
-    key: 'image',
-    header: 'Image',
+    key: "image",
+    header: "Image",
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono truncate max-w-[220px] block">
-        {row.images?.[0] || '-'}
+        {row.images?.[0] || "-"}
       </span>
     ),
     sortable: false,
   },
   {
-    key: 'age',
-    header: 'Age',
-    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+    key: "age",
+    header: "Age",
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground">
+        {formatRelativeTime(row.createdAt)}
+      </span>
+    ),
   },
 ];
 
 const conditionColumns: Column<NodeDetailCondition>[] = [
   {
-    key: 'type',
-    header: 'Type',
-    accessor: (row) => <span className="font-medium text-foreground text-xs">{row.type}</span>,
+    key: "type",
+    header: "Type",
+    accessor: (row) => (
+      <span className="font-medium text-foreground text-xs">{row.type}</span>
+    ),
   },
   {
-    key: 'status',
-    header: 'Status',
+    key: "status",
+    header: "Status",
     accessor: (row) => {
       const isHealthy =
-        (row.type === 'Ready' && row.status === 'True') ||
-        (row.type !== 'Ready' && row.status === 'False');
+        (row.type === "Ready" && row.status === "True") ||
+        (row.type !== "Ready" && row.status === "False");
       return (
         <div className="flex items-center gap-1.5">
           {isHealthy ? (
@@ -129,49 +157,75 @@ const conditionColumns: Column<NodeDetailCondition>[] = [
     },
   },
   {
-    key: 'reason',
-    header: 'Reason',
-    accessor: (row) => <span className="text-xs text-muted-foreground">{row.reason || '-'}</span>,
+    key: "reason",
+    header: "Reason",
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground">{row.reason || "-"}</span>
+    ),
   },
   {
-    key: 'message',
-    header: 'Message',
-    accessor: (row) => <span className="text-xs text-muted-foreground line-clamp-2">{row.message || '-'}</span>,
+    key: "message",
+    header: "Message",
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground line-clamp-2">
+        {row.message || "-"}
+      </span>
+    ),
     sortable: false,
   },
   {
-    key: 'lastHeartbeat',
-    header: 'Last Heartbeat',
-    accessor: (row) => <span className="text-xs text-muted-foreground">{row.lastHeartbeat ? formatRelativeTime(row.lastHeartbeat) : '-'}</span>,
+    key: "lastHeartbeat",
+    header: "Last Heartbeat",
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground">
+        {row.lastHeartbeat ? formatRelativeTime(row.lastHeartbeat) : "-"}
+      </span>
+    ),
   },
   {
-    key: 'lastTransition',
-    header: 'Last Transition',
-    accessor: (row) => <span className="text-xs text-muted-foreground">{row.lastTransition ? formatRelativeTime(row.lastTransition) : '-'}</span>,
+    key: "lastTransition",
+    header: "Last Transition",
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground">
+        {row.lastTransition ? formatRelativeTime(row.lastTransition) : "-"}
+      </span>
+    ),
   },
 ];
 
 const taintColumns: Column<NodeTaint>[] = [
   {
-    key: 'key',
-    header: 'Key',
-    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.key}</span>,
-  },
-  {
-    key: 'value',
-    header: 'Value',
-    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.value || '-'}</span>,
-  },
-  {
-    key: 'effect',
-    header: 'Effect',
+    key: "key",
+    header: "Key",
     accessor: (row) => (
-      <span className={cn(
-        'px-1.5 py-0.5 rounded text-2xs',
-        row.effect === 'NoSchedule' ? 'bg-status-warning/10 text-status-warning' :
-        row.effect === 'NoExecute' ? 'bg-status-error/10 text-status-error' :
-        'bg-muted text-muted-foreground'
-      )}>
+      <span className="font-medium text-foreground font-mono text-xs">
+        {row.key}
+      </span>
+    ),
+  },
+  {
+    key: "value",
+    header: "Value",
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground font-mono">
+        {row.value || "-"}
+      </span>
+    ),
+  },
+  {
+    key: "effect",
+    header: "Effect",
+    accessor: (row) => (
+      <span
+        className={cn(
+          "px-1.5 py-0.5 rounded text-2xs",
+          row.effect === "NoSchedule"
+            ? "bg-status-warning/10 text-status-warning"
+            : row.effect === "NoExecute"
+              ? "bg-status-error/10 text-status-error"
+              : "bg-muted text-muted-foreground",
+        )}
+      >
         {row.effect}
       </span>
     ),
@@ -180,51 +234,76 @@ const taintColumns: Column<NodeTaint>[] = [
 
 const imageColumns: Column<NodeImage>[] = [
   {
-    key: 'name',
-    header: 'Image',
-    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs truncate max-w-[500px] block">{row.name}</span>,
+    key: "name",
+    header: "Image",
+    accessor: (row) => (
+      <span className="font-medium text-foreground font-mono text-xs truncate max-w-[500px] block">
+        {row.name}
+      </span>
+    ),
   },
   {
-    key: 'size',
-    header: 'Size',
-    accessor: (row) => <span className="text-xs text-muted-foreground tabular-nums">{row.sizeBytes > 0 ? formatBytes(row.sizeBytes) : '-'}</span>,
+    key: "size",
+    header: "Size",
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {row.sizeBytes > 0 ? formatBytes(row.sizeBytes) : "-"}
+      </span>
+    ),
     sortAccessor: (row) => row.sizeBytes,
-    align: 'right',
+    align: "right",
   },
 ];
 
 const eventColumns: Column<NodeEvent>[] = [
   {
-    key: 'type',
-    header: 'Type',
+    key: "type",
+    header: "Type",
     accessor: (row) => (
-      <span className={cn('text-xs font-medium', row.type === 'Warning' ? 'text-status-warning' : 'text-status-info')}>
+      <span
+        className={cn(
+          "text-xs font-medium",
+          row.type === "Warning" ? "text-status-warning" : "text-status-info",
+        )}
+      >
         {row.type}
       </span>
     ),
   },
   {
-    key: 'reason',
-    header: 'Reason',
-    accessor: (row) => <span className="font-medium text-foreground text-xs">{row.reason}</span>,
+    key: "reason",
+    header: "Reason",
+    accessor: (row) => (
+      <span className="font-medium text-foreground text-xs">{row.reason}</span>
+    ),
   },
   {
-    key: 'message',
-    header: 'Message',
-    accessor: (row) => <span className="text-xs text-muted-foreground line-clamp-2">{row.message}</span>,
+    key: "message",
+    header: "Message",
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground line-clamp-2">
+        {row.message}
+      </span>
+    ),
     sortable: false,
   },
   {
-    key: 'count',
-    header: 'Count',
-    accessor: (row) => <span className="tabular-nums text-xs">{row.count}</span>,
+    key: "count",
+    header: "Count",
+    accessor: (row) => (
+      <span className="tabular-nums text-xs">{row.count}</span>
+    ),
     sortAccessor: (row) => row.count,
-    align: 'center',
+    align: "center",
   },
   {
-    key: 'lastSeen',
-    header: 'Last Seen',
-    accessor: (row) => <span className="text-xs text-muted-foreground">{row.lastTimestamp ? formatRelativeTime(row.lastTimestamp) : '-'}</span>,
+    key: "lastSeen",
+    header: "Last Seen",
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground">
+        {row.lastTimestamp ? formatRelativeTime(row.lastTimestamp) : "-"}
+      </span>
+    ),
   },
 ];
 
@@ -244,8 +323,18 @@ function ResourceGauge({
   formatFn: (v: number) => string;
 }) {
   const pct = total > 0 ? (used / total) * 100 : 0;
-  const color = pct >= 90 ? 'bg-status-error' : pct >= 75 ? 'bg-status-warning' : 'bg-status-success';
-  const textColor = pct >= 90 ? 'text-status-error' : pct >= 75 ? 'text-status-warning' : 'text-status-success';
+  const color =
+    pct >= 90
+      ? "bg-status-error"
+      : pct >= 75
+        ? "bg-status-warning"
+        : "bg-status-success";
+  const textColor =
+    pct >= 90
+      ? "text-status-error"
+      : pct >= 75
+        ? "text-status-warning"
+        : "text-status-success";
 
   return (
     <div className="bg-card border border-border rounded-lg p-4">
@@ -254,12 +343,15 @@ function ResourceGauge({
         <span className="text-sm font-medium text-foreground">{label}</span>
       </div>
       <div className="flex items-end gap-2 mb-2">
-        <span className={cn('text-2xl font-bold tabular-nums', textColor)}>
+        <span className={cn("text-2xl font-bold tabular-nums", textColor)}>
           {Math.round(pct)}%
         </span>
       </div>
       <div className="w-full h-2 bg-muted rounded-full overflow-hidden mb-2">
-        <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${Math.min(pct, 100)}%` }} />
+        <div
+          className={cn("h-full rounded-full transition-all", color)}
+          style={{ width: `${Math.min(pct, 100)}%` }}
+        />
       </div>
       <p className="text-xs text-muted-foreground tabular-nums">
         {formatFn(used)} / {formatFn(total)}
@@ -272,13 +364,19 @@ function ResourceGauge({
 
 function ConditionAlert({ label, ok }: { label: string; ok: boolean }) {
   return (
-    <div className={cn(
-      'flex items-center gap-2 px-3 py-2 rounded-md border text-xs font-medium',
-      ok
-        ? 'bg-status-success/5 border-status-success/20 text-status-success'
-        : 'bg-status-error/5 border-status-error/20 text-status-error'
-    )}>
-      {ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+    <div
+      className={cn(
+        "flex items-center gap-2 px-3 py-2 rounded-md border text-xs font-medium",
+        ok
+          ? "bg-status-success/5 border-status-success/20 text-status-success"
+          : "bg-status-error/5 border-status-error/20 text-status-error",
+      )}
+    >
+      {ok ? (
+        <CheckCircle2 className="h-3.5 w-3.5" />
+      ) : (
+        <XCircle className="h-3.5 w-3.5" />
+      )}
       {label}
     </div>
   );
@@ -293,37 +391,60 @@ function NodeDetailPage() {
   const nodeName = params.nodeName as string;
   const [activeTab, setActiveTab] = useTabParam<TabId>(
     TABS.map((t) => t.id),
-    'overview',
+    "overview",
   );
 
   const { data: node, isLoading, refetch } = useNodeDetail(clusterId, nodeName);
+  const nodeOperation = useNodeOperation();
   const [showYaml, setShowYaml] = useState(false);
   const [showDrain, setShowDrain] = useState(false);
   const [showAddTaint, setShowAddTaint] = useState(false);
-  const [newTaint, setNewTaint] = useState<apiClient.NodeTaintRequest>({ key: '', value: '', effect: 'NoSchedule' });
+  const [newTaint, setNewTaint] = useState<apiClient.NodeTaintRequest>({
+    key: "",
+    value: "",
+    effect: "NoSchedule",
+  });
   const [showAddLabel, setShowAddLabel] = useState(false);
-  const [newLabel, setNewLabel] = useState({ key: '', value: '' });
+  const [newLabel, setNewLabel] = useState({ key: "", value: "" });
   const [showAddAnnotation, setShowAddAnnotation] = useState(false);
-  const [newAnnotation, setNewAnnotation] = useState({ key: '', value: '' });
+  const [newAnnotation, setNewAnnotation] = useState({ key: "", value: "" });
   const [nodeActionPending, setNodeActionPending] = useState(false);
-  const nodeScope = { type: 'cluster' as const, id: clusterId };
-  const nodeUpdateDecision = usePermissionDecision('nodes', 'update', nodeScope);
-  const nodeManageDecision = usePermissionDecision('nodes', 'manage', nodeScope);
-  const nodeUpdateBlockedReason = nodeUpdateDecision.allowed ? undefined : nodeUpdateDecision.disabledReason;
-  const nodeManageBlockedReason = nodeManageDecision.allowed ? undefined : nodeManageDecision.disabledReason;
+  const nodeScope = { type: "cluster" as const, id: clusterId };
+  const nodeUpdateDecision = usePermissionDecision(
+    "nodes",
+    "update",
+    nodeScope,
+  );
+  const nodeManageDecision = usePermissionDecision(
+    "nodes",
+    "manage",
+    nodeScope,
+  );
+  const nodeUpdateBlockedReason = nodeUpdateDecision.allowed
+    ? undefined
+    : nodeUpdateDecision.disabledReason;
+  const nodeManageBlockedReason = nodeManageDecision.allowed
+    ? undefined
+    : nodeManageDecision.disabledReason;
 
   const handleCordon = async () => {
     if (!nodeUpdateDecision.allowed) {
-      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      toastWarning(
+        nodeUpdateDecision.disabledReason || "Requires nodes:update",
+      );
       return;
     }
     setNodeActionPending(true);
     try {
-      await apiClient.cordonNode(clusterId, nodeName);
+      await nodeOperation.mutateAsync({
+        clusterId,
+        nodeName,
+        action: "cordon",
+      });
       refetch();
-      toastSuccess('Node cordoned');
+      toastSuccess("Node cordoned");
     } catch (error) {
-      toastApiError('Failed to cordon node', error);
+      toastApiError("Failed to cordon node", error);
     } finally {
       setNodeActionPending(false);
     }
@@ -331,16 +452,22 @@ function NodeDetailPage() {
 
   const handleUncordon = async () => {
     if (!nodeUpdateDecision.allowed) {
-      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      toastWarning(
+        nodeUpdateDecision.disabledReason || "Requires nodes:update",
+      );
       return;
     }
     setNodeActionPending(true);
     try {
-      await apiClient.uncordonNode(clusterId, nodeName);
+      await nodeOperation.mutateAsync({
+        clusterId,
+        nodeName,
+        action: "uncordon",
+      });
       refetch();
-      toastSuccess('Node uncordoned');
+      toastSuccess("Node uncordoned");
     } catch (error) {
-      toastApiError('Failed to uncordon node', error);
+      toastApiError("Failed to uncordon node", error);
     } finally {
       setNodeActionPending(false);
     }
@@ -348,23 +475,26 @@ function NodeDetailPage() {
 
   const handleDrain = async () => {
     if (!nodeManageDecision.allowed) {
-      toastWarning(nodeManageDecision.disabledReason || 'Requires nodes:manage');
+      toastWarning(
+        nodeManageDecision.disabledReason || "Requires nodes:manage",
+      );
       return;
     }
     setNodeActionPending(true);
     try {
-      const result = await apiClient.drainNode(clusterId, nodeName);
-      if (result.status === 'blocked') {
-        toastWarning(result.message || `Drain blocked for ${nodeName}`);
-      } else if (result.status === 'partial') {
-        toastWarning(result.message || `Node ${nodeName} partially drained`);
-      } else {
-        toastSuccess(result.message || `Node ${nodeName} drained`);
-      }
+      await nodeOperation.mutateAsync({ clusterId, nodeName, action: "drain" });
+      toastSuccess(`Node ${nodeName} drained`);
       setShowDrain(false);
       refetch();
     } catch (error) {
-      toastApiError('Failed to drain', error);
+      if (error instanceof OperationPartialError) {
+        const blockers =
+          error.operation.errorMessage ||
+          "one or more pods could not be evicted";
+        toastWarning(`Drain incomplete; node remains cordoned: ${blockers}`);
+      } else {
+        toastApiError("Failed to drain", error);
+      }
     } finally {
       setNodeActionPending(false);
     }
@@ -373,18 +503,25 @@ function NodeDetailPage() {
   const handleAddTaint = async () => {
     if (!newTaint.key) return;
     if (!nodeUpdateDecision.allowed) {
-      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      toastWarning(
+        nodeUpdateDecision.disabledReason || "Requires nodes:update",
+      );
       return;
     }
     setNodeActionPending(true);
     try {
-      await apiClient.addNodeTaint(clusterId, nodeName, newTaint);
+      await nodeOperation.mutateAsync({
+        clusterId,
+        nodeName,
+        action: "add_taint",
+        body: newTaint,
+      });
       refetch();
       setShowAddTaint(false);
-      setNewTaint({ key: '', value: '', effect: 'NoSchedule' });
-      toastSuccess('Taint added');
+      setNewTaint({ key: "", value: "", effect: "NoSchedule" });
+      toastSuccess("Taint added");
     } catch (error) {
-      toastApiError('Failed to add taint', error);
+      toastApiError("Failed to add taint", error);
     } finally {
       setNodeActionPending(false);
     }
@@ -392,16 +529,23 @@ function NodeDetailPage() {
 
   const handleRemoveTaint = async (taint: NodeTaint) => {
     if (!nodeUpdateDecision.allowed) {
-      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      toastWarning(
+        nodeUpdateDecision.disabledReason || "Requires nodes:update",
+      );
       return;
     }
     setNodeActionPending(true);
     try {
-      await apiClient.removeNodeTaint(clusterId, nodeName, { key: taint.key, effect: taint.effect });
+      await nodeOperation.mutateAsync({
+        clusterId,
+        nodeName,
+        action: "remove_taint",
+        body: { key: taint.key, effect: taint.effect },
+      });
       refetch();
-      toastSuccess('Taint removed');
+      toastSuccess("Taint removed");
     } catch (error) {
-      toastApiError('Failed to remove taint', error);
+      toastApiError("Failed to remove taint", error);
     } finally {
       setNodeActionPending(false);
     }
@@ -410,18 +554,25 @@ function NodeDetailPage() {
   const handleAddLabel = async () => {
     if (!newLabel.key) return;
     if (!nodeUpdateDecision.allowed) {
-      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      toastWarning(
+        nodeUpdateDecision.disabledReason || "Requires nodes:update",
+      );
       return;
     }
     setNodeActionPending(true);
     try {
-      await apiClient.setNodeLabel(clusterId, nodeName, newLabel);
+      await nodeOperation.mutateAsync({
+        clusterId,
+        nodeName,
+        action: "set_label",
+        body: newLabel,
+      });
       refetch();
       setShowAddLabel(false);
-      setNewLabel({ key: '', value: '' });
-      toastSuccess('Label added');
+      setNewLabel({ key: "", value: "" });
+      toastSuccess("Label added");
     } catch (error) {
-      toastApiError('Failed to add label', error);
+      toastApiError("Failed to add label", error);
     } finally {
       setNodeActionPending(false);
     }
@@ -429,16 +580,23 @@ function NodeDetailPage() {
 
   const handleRemoveLabel = async (key: string) => {
     if (!nodeUpdateDecision.allowed) {
-      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      toastWarning(
+        nodeUpdateDecision.disabledReason || "Requires nodes:update",
+      );
       return;
     }
     setNodeActionPending(true);
     try {
-      await apiClient.removeNodeLabel(clusterId, nodeName, { key });
+      await nodeOperation.mutateAsync({
+        clusterId,
+        nodeName,
+        action: "remove_label",
+        body: { key },
+      });
       refetch();
-      toastSuccess('Label removed');
+      toastSuccess("Label removed");
     } catch (error) {
-      toastApiError('Failed to remove label', error);
+      toastApiError("Failed to remove label", error);
     } finally {
       setNodeActionPending(false);
     }
@@ -447,18 +605,25 @@ function NodeDetailPage() {
   const handleAddAnnotation = async () => {
     if (!newAnnotation.key) return;
     if (!nodeUpdateDecision.allowed) {
-      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      toastWarning(
+        nodeUpdateDecision.disabledReason || "Requires nodes:update",
+      );
       return;
     }
     setNodeActionPending(true);
     try {
-      await apiClient.setNodeAnnotation(clusterId, nodeName, newAnnotation);
+      await nodeOperation.mutateAsync({
+        clusterId,
+        nodeName,
+        action: "set_annotation",
+        body: newAnnotation,
+      });
       refetch();
       setShowAddAnnotation(false);
-      setNewAnnotation({ key: '', value: '' });
-      toastSuccess('Annotation added');
+      setNewAnnotation({ key: "", value: "" });
+      toastSuccess("Annotation added");
     } catch (error) {
-      toastApiError('Failed to add annotation', error);
+      toastApiError("Failed to add annotation", error);
     } finally {
       setNodeActionPending(false);
     }
@@ -466,16 +631,23 @@ function NodeDetailPage() {
 
   const handleRemoveAnnotation = async (key: string) => {
     if (!nodeUpdateDecision.allowed) {
-      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      toastWarning(
+        nodeUpdateDecision.disabledReason || "Requires nodes:update",
+      );
       return;
     }
     setNodeActionPending(true);
     try {
-      await apiClient.removeNodeAnnotation(clusterId, nodeName, { key });
+      await nodeOperation.mutateAsync({
+        clusterId,
+        nodeName,
+        action: "remove_annotation",
+        body: { key },
+      });
       refetch();
-      toastSuccess('Annotation removed');
+      toastSuccess("Annotation removed");
     } catch (error) {
-      toastApiError('Failed to remove annotation', error);
+      toastApiError("Failed to remove annotation", error);
     } finally {
       setNodeActionPending(false);
     }
@@ -499,25 +671,36 @@ function NodeDetailPage() {
   }
 
   // Derive condition health
-  const condMap = Object.fromEntries(node.conditions.map((c) => [c.type, c.status]));
-  const isKubeletOk = condMap['Ready'] === 'True';
-  const isMemoryPressureOk = condMap['MemoryPressure'] === 'False';
-  const isDiskPressureOk = condMap['DiskPressure'] === 'False';
-  const isPidPressureOk = condMap['PIDPressure'] === 'False';
+  const condMap = Object.fromEntries(
+    node.conditions.map((c) => [c.type, c.status]),
+  );
+  const isKubeletOk = condMap["Ready"] === "True";
+  const isMemoryPressureOk = condMap["MemoryPressure"] === "False";
+  const isDiskPressureOk = condMap["DiskPressure"] === "False";
+  const isPidPressureOk = condMap["PIDPressure"] === "False";
 
   return (
     <div className="space-y-6">
+      <p className="sr-only" role="status" aria-live="polite">
+        {nodeOperation.isPending
+          ? `Node operation ${nodeOperation.operationState.phase}`
+          : ""}
+      </p>
       {/* Header */}
       <div className="flex items-start gap-4">
         <button
+          type="button"
           onClick={() => router.push(`/dashboard/clusters/${clusterId}/nodes`)}
+          aria-label="Back to nodes"
           className="mt-1 p-1 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-xl font-semibold text-foreground tracking-tight font-mono truncate">{node.name}</h1>
+            <h1 className="text-xl font-semibold text-foreground tracking-tight font-mono truncate">
+              {node.name}
+            </h1>
             <StatusBadge status={node.status} />
             {node.unschedulable && (
               <span className="px-2 py-0.5 rounded text-2xs bg-status-warning/10 text-status-warning font-medium">
@@ -526,7 +709,7 @@ function NodeDetailPage() {
             )}
           </div>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span>Roles: {node.roles.join(', ')}</span>
+            <span>Roles: {node.roles.join(", ")}</span>
             <span>Age: {formatRelativeTime(node.createdAt)}</span>
             <span>{node.nodeInfo.kubeletVersion}</span>
           </div>
@@ -579,7 +762,9 @@ function NodeDetailPage() {
             clusterId={clusterId}
             kind="Node"
             name={nodeName}
-            onDeleted={() => router.push(`/dashboard/clusters/${clusterId}/nodes`)}
+            onDeleted={() =>
+              router.push(`/dashboard/clusters/${clusterId}/nodes`)
+            }
           />
         </div>
       </div>
@@ -592,21 +777,27 @@ function NodeDetailPage() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'px-4 py-2 text-sm font-medium border-b-2 transition-colors',
+                "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
                 activeTab === tab.id
-                  ? 'border-foreground text-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
+                  ? "border-foreground text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30",
               )}
             >
               {tab.label}
-              {tab.id === 'pods' && node.pods.length > 0 && (
-                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-2xs bg-muted">{node.pods.length}</span>
+              {tab.id === "pods" && node.pods.length > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-2xs bg-muted">
+                  {node.pods.length}
+                </span>
               )}
-              {tab.id === 'taints' && node.taints.length > 0 && (
-                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-2xs bg-muted">{node.taints.length}</span>
+              {tab.id === "taints" && node.taints.length > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-2xs bg-muted">
+                  {node.taints.length}
+                </span>
               )}
-              {tab.id === 'events' && node.events.length > 0 && (
-                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-2xs bg-muted">{node.events.length}</span>
+              {tab.id === "events" && node.events.length > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-2xs bg-muted">
+                  {node.events.length}
+                </span>
               )}
             </button>
           ))}
@@ -614,7 +805,7 @@ function NodeDetailPage() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'overview' && (
+      {activeTab === "overview" && (
         <div className="space-y-6">
           {/* Health Status Alerts */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -626,20 +817,47 @@ function NodeDetailPage() {
 
           {/* Resource Gauges */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <ResourceGauge label="CPU" icon={Cpu} used={node.cpuUsage} total={node.cpuCapacity} formatFn={formatCPU} />
-            <ResourceGauge label="Memory" icon={MemoryStick} used={node.memoryUsage} total={node.memoryCapacity} formatFn={formatBytes} />
-            <ResourceGauge label="Pods" icon={Box} used={node.podCount} total={node.podCapacity} formatFn={(v) => String(v)} />
+            <ResourceGauge
+              label="CPU"
+              icon={Cpu}
+              used={node.cpuUsage}
+              total={node.cpuCapacity}
+              formatFn={formatCPU}
+            />
+            <ResourceGauge
+              label="Memory"
+              icon={MemoryStick}
+              used={node.memoryUsage}
+              total={node.memoryCapacity}
+              formatFn={formatBytes}
+            />
+            <ResourceGauge
+              label="Pods"
+              icon={Box}
+              used={node.podCount}
+              total={node.podCapacity}
+              formatFn={(v) => String(v)}
+            />
           </div>
 
           {/* Addresses */}
           {node.addresses.length > 0 && (
             <div className="bg-card border border-border rounded-lg p-4">
-              <h3 className="text-sm font-medium text-foreground mb-3">Addresses</h3>
+              <h3 className="text-sm font-medium text-foreground mb-3">
+                Addresses
+              </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {node.addresses.map((addr) => (
-                  <div key={`${addr.type}-${addr.address}`} className="flex items-center gap-2">
-                    <span className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground min-w-[80px] text-center">{addr.type}</span>
-                    <span className="text-xs font-mono text-foreground">{addr.address}</span>
+                  <div
+                    key={`${addr.type}-${addr.address}`}
+                    className="flex items-center gap-2"
+                  >
+                    <span className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground min-w-[80px] text-center">
+                      {addr.type}
+                    </span>
+                    <span className="text-xs font-mono text-foreground">
+                      {addr.address}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -652,7 +870,9 @@ function NodeDetailPage() {
               <div className="flex items-center gap-2">
                 <Tag className="h-4 w-4 text-muted-foreground" />
                 <h3 className="text-sm font-medium text-foreground">Labels</h3>
-                <span className="text-xs text-muted-foreground">({Object.keys(node.labels).length})</span>
+                <span className="text-xs text-muted-foreground">
+                  ({Object.keys(node.labels).length})
+                </span>
               </div>
               <button
                 onClick={() => setShowAddLabel(true)}
@@ -666,7 +886,10 @@ function NodeDetailPage() {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {Object.entries(node.labels).map(([k, v]) => (
-                <span key={k} className="inline-flex items-center gap-1 px-2 py-1 rounded text-2xs bg-muted text-muted-foreground font-mono group">
+                <span
+                  key={k}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-2xs bg-muted text-muted-foreground font-mono group"
+                >
                   <span className="text-foreground">{k}</span>
                   {v && <span>= {v}</span>}
                   <button
@@ -687,8 +910,12 @@ function NodeDetailPage() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Code className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-medium text-foreground">Annotations</h3>
-                <span className="text-xs text-muted-foreground">({Object.keys(node.annotations).length})</span>
+                <h3 className="text-sm font-medium text-foreground">
+                  Annotations
+                </h3>
+                <span className="text-xs text-muted-foreground">
+                  ({Object.keys(node.annotations).length})
+                </span>
               </div>
               <button
                 onClick={() => setShowAddAnnotation(true)}
@@ -702,7 +929,10 @@ function NodeDetailPage() {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {Object.entries(node.annotations).map(([k, v]) => (
-                <span key={k} className="inline-flex items-center gap-1 px-2 py-1 rounded text-2xs bg-muted text-muted-foreground font-mono group">
+                <span
+                  key={k}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-2xs bg-muted text-muted-foreground font-mono group"
+                >
                   <span className="text-foreground">{k}</span>
                   {v && <span>= {v}</span>}
                   <button
@@ -720,7 +950,7 @@ function NodeDetailPage() {
         </div>
       )}
 
-      {activeTab === 'pods' && (
+      {activeTab === "pods" && (
         <DataTable
           data={node.pods}
           columns={podColumns}
@@ -730,7 +960,7 @@ function NodeDetailPage() {
         />
       )}
 
-      {activeTab === 'conditions' && (
+      {activeTab === "conditions" && (
         <DataTable
           data={node.conditions}
           columns={conditionColumns}
@@ -739,25 +969,29 @@ function NodeDetailPage() {
         />
       )}
 
-      {activeTab === 'info' && (
+      {activeTab === "info" && (
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <Table className="w-full">
             <TableBody className="divide-y divide-border">
               {[
-                ['Machine ID', node.nodeInfo.machineId],
-                ['System UUID', node.nodeInfo.systemUuid],
-                ['Boot ID', node.nodeInfo.bootId],
-                ['Kernel Version', node.nodeInfo.kernelVersion],
-                ['OS Image', node.nodeInfo.osImage],
-                ['Container Runtime', node.nodeInfo.containerRuntimeVersion],
-                ['Kubelet Version', node.nodeInfo.kubeletVersion],
-                ['Kube-Proxy Version', node.nodeInfo.kubeProxyVersion],
-                ['Operating System', node.nodeInfo.operatingSystem],
-                ['Architecture', node.nodeInfo.architecture],
+                ["Machine ID", node.nodeInfo.machineId],
+                ["System UUID", node.nodeInfo.systemUuid],
+                ["Boot ID", node.nodeInfo.bootId],
+                ["Kernel Version", node.nodeInfo.kernelVersion],
+                ["OS Image", node.nodeInfo.osImage],
+                ["Container Runtime", node.nodeInfo.containerRuntimeVersion],
+                ["Kubelet Version", node.nodeInfo.kubeletVersion],
+                ["Kube-Proxy Version", node.nodeInfo.kubeProxyVersion],
+                ["Operating System", node.nodeInfo.operatingSystem],
+                ["Architecture", node.nodeInfo.architecture],
               ].map(([label, value]) => (
                 <TableRow key={label}>
-                  <TableCell className="px-4 py-2.5 text-xs font-medium text-muted-foreground w-48">{label}</TableCell>
-                  <TableCell className="px-4 py-2.5 text-xs text-foreground font-mono">{value || '-'}</TableCell>
+                  <TableCell className="px-4 py-2.5 text-xs font-medium text-muted-foreground w-48">
+                    {label}
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 text-xs text-foreground font-mono">
+                    {value || "-"}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -765,7 +999,7 @@ function NodeDetailPage() {
         </div>
       )}
 
-      {activeTab === 'taints' && (
+      {activeTab === "taints" && (
         <div className="space-y-3">
           <div className="flex justify-end">
             <button
@@ -783,8 +1017,8 @@ function NodeDetailPage() {
             columns={[
               ...taintColumns,
               {
-                key: 'actions',
-                header: '',
+                key: "actions",
+                header: "",
                 accessor: (row) => (
                   <button
                     onClick={() => handleRemoveTaint(row)}
@@ -796,7 +1030,7 @@ function NodeDetailPage() {
                   </button>
                 ),
                 sortable: false,
-                align: 'center' as const,
+                align: "center" as const,
               },
             ]}
             keyExtractor={(r) => `${r.key}-${r.effect}`}
@@ -805,7 +1039,7 @@ function NodeDetailPage() {
         </div>
       )}
 
-      {activeTab === 'images' && (
+      {activeTab === "images" && (
         <DataTable
           data={node.images}
           columns={imageColumns}
@@ -815,7 +1049,7 @@ function NodeDetailPage() {
         />
       )}
 
-      {activeTab === 'events' && (
+      {activeTab === "events" && (
         <DataTable
           data={node.events}
           columns={eventColumns}
@@ -830,9 +1064,10 @@ function NodeDetailPage() {
         open={showYaml}
         onClose={() => setShowYaml(false)}
         clusterId={clusterId}
-        k8sPath={k8sResourcePath('nodes', nodeName)}
+        k8sPath={k8sResourcePath("nodes", nodeName)}
         title={`Node: ${nodeName}`}
         allowEdit={nodeUpdateDecision.allowed}
+        forceConflictPermission={nodeManageDecision}
       />
 
       {/* Drain Confirm Dialog */}
@@ -857,12 +1092,22 @@ function NodeDetailPage() {
           footerClassName="flex items-center justify-end gap-2"
           footer={
             <>
-              <ActionButton size="sm" intent="ghost" onClick={() => setShowAddTaint(false)}>Cancel</ActionButton>
+              <ActionButton
+                size="sm"
+                intent="ghost"
+                onClick={() => setShowAddTaint(false)}
+              >
+                Cancel
+              </ActionButton>
               <ActionButton
                 size="sm"
                 intent="primary"
                 onClick={handleAddTaint}
-                disabled={!newTaint.key || nodeActionPending || !nodeUpdateDecision.allowed}
+                disabled={
+                  !newTaint.key ||
+                  nodeActionPending ||
+                  !nodeUpdateDecision.allowed
+                }
                 disabledReason={nodeUpdateBlockedReason}
                 loading={nodeActionPending}
               >
@@ -871,26 +1116,67 @@ function NodeDetailPage() {
             </>
           }
         >
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Key</label>
-              <Input type="text" value={newTaint.key} onChange={(e) => setNewTaint({ ...newTaint, key: e.target.value })}
-                placeholder="node.kubernetes.io/unreachable" autoFocus className="h-8 font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Value</label>
-              <Input type="text" value={newTaint.value ?? ''} onChange={(e) => setNewTaint({ ...newTaint, value: e.target.value })}
-                placeholder="(optional)" className="h-8 font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Effect</label>
-              <Select value={newTaint.effect}
-                onChange={(e) => setNewTaint({ ...newTaint, effect: e.target.value as apiClient.NodeTaintRequest['effect'] })}
-                className="h-8">
-                <option value="NoSchedule">NoSchedule</option>
-                <option value="PreferNoSchedule">PreferNoSchedule</option>
-                <option value="NoExecute">NoExecute</option>
-              </Select>
-            </div>
+          <div>
+            <label
+              className="block text-xs text-muted-foreground mb-1"
+              htmlFor="field-b10d840c-875"
+            >
+              Key
+            </label>
+            <Input
+              id="field-b10d840c-875"
+              type="text"
+              value={newTaint.key}
+              onChange={(e) =>
+                setNewTaint({ ...newTaint, key: e.target.value })
+              }
+              placeholder="node.kubernetes.io/unreachable"
+              data-initial-focus
+              className="h-8 font-mono"
+            />
+          </div>
+          <div>
+            <label
+              className="block text-xs text-muted-foreground mb-1"
+              htmlFor="field-b10d840c-880"
+            >
+              Value
+            </label>
+            <Input
+              id="field-b10d840c-880"
+              type="text"
+              value={newTaint.value ?? ""}
+              onChange={(e) =>
+                setNewTaint({ ...newTaint, value: e.target.value })
+              }
+              placeholder="(optional)"
+              className="h-8 font-mono"
+            />
+          </div>
+          <div>
+            <label
+              className="block text-xs text-muted-foreground mb-1"
+              htmlFor="field-b10d840c-885"
+            >
+              Effect
+            </label>
+            <Select
+              id="field-b10d840c-885"
+              value={newTaint.effect}
+              onChange={(e) =>
+                setNewTaint({
+                  ...newTaint,
+                  effect: e.target
+                    .value as apiClient.NodeTaintRequest["effect"],
+                })
+              }
+              className="h-8"
+            >
+              <option value="NoSchedule">NoSchedule</option>
+              <option value="PreferNoSchedule">PreferNoSchedule</option>
+              <option value="NoExecute">NoExecute</option>
+            </Select>
+          </div>
         </ModalShell>
       )}
 
@@ -903,12 +1189,22 @@ function NodeDetailPage() {
           footerClassName="flex items-center justify-end gap-2"
           footer={
             <>
-              <ActionButton size="sm" intent="ghost" onClick={() => setShowAddLabel(false)}>Cancel</ActionButton>
+              <ActionButton
+                size="sm"
+                intent="ghost"
+                onClick={() => setShowAddLabel(false)}
+              >
+                Cancel
+              </ActionButton>
               <ActionButton
                 size="sm"
                 intent="primary"
                 onClick={handleAddLabel}
-                disabled={!newLabel.key || nodeActionPending || !nodeUpdateDecision.allowed}
+                disabled={
+                  !newLabel.key ||
+                  nodeActionPending ||
+                  !nodeUpdateDecision.allowed
+                }
                 disabledReason={nodeUpdateBlockedReason}
                 loading={nodeActionPending}
               >
@@ -917,16 +1213,43 @@ function NodeDetailPage() {
             </>
           }
         >
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Key</label>
-              <Input type="text" value={newLabel.key} onChange={(e) => setNewLabel({ ...newLabel, key: e.target.value })}
-                placeholder="app.kubernetes.io/name" autoFocus className="h-8 font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Value</label>
-              <Input type="text" value={newLabel.value} onChange={(e) => setNewLabel({ ...newLabel, value: e.target.value })}
-                placeholder="my-app" className="h-8 font-mono" />
-            </div>
+          <div>
+            <label
+              className="block text-xs text-muted-foreground mb-1"
+              htmlFor="field-b10d840c-921"
+            >
+              Key
+            </label>
+            <Input
+              id="field-b10d840c-921"
+              type="text"
+              value={newLabel.key}
+              onChange={(e) =>
+                setNewLabel({ ...newLabel, key: e.target.value })
+              }
+              placeholder="app.kubernetes.io/name"
+              data-initial-focus
+              className="h-8 font-mono"
+            />
+          </div>
+          <div>
+            <label
+              className="block text-xs text-muted-foreground mb-1"
+              htmlFor="field-b10d840c-926"
+            >
+              Value
+            </label>
+            <Input
+              id="field-b10d840c-926"
+              type="text"
+              value={newLabel.value}
+              onChange={(e) =>
+                setNewLabel({ ...newLabel, value: e.target.value })
+              }
+              placeholder="my-app"
+              className="h-8 font-mono"
+            />
+          </div>
         </ModalShell>
       )}
 
@@ -939,12 +1262,22 @@ function NodeDetailPage() {
           footerClassName="flex items-center justify-end gap-2"
           footer={
             <>
-              <ActionButton size="sm" intent="ghost" onClick={() => setShowAddAnnotation(false)}>Cancel</ActionButton>
+              <ActionButton
+                size="sm"
+                intent="ghost"
+                onClick={() => setShowAddAnnotation(false)}
+              >
+                Cancel
+              </ActionButton>
               <ActionButton
                 size="sm"
                 intent="primary"
                 onClick={handleAddAnnotation}
-                disabled={!newAnnotation.key || nodeActionPending || !nodeUpdateDecision.allowed}
+                disabled={
+                  !newAnnotation.key ||
+                  nodeActionPending ||
+                  !nodeUpdateDecision.allowed
+                }
                 disabledReason={nodeUpdateBlockedReason}
                 loading={nodeActionPending}
               >
@@ -953,23 +1286,52 @@ function NodeDetailPage() {
             </>
           }
         >
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Key</label>
-              <Input type="text" value={newAnnotation.key} onChange={(e) => setNewAnnotation({ ...newAnnotation, key: e.target.value })}
-                placeholder="example.com/owner" autoFocus className="h-8 font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Value</label>
-              <Input type="text" value={newAnnotation.value} onChange={(e) => setNewAnnotation({ ...newAnnotation, value: e.target.value })}
-                placeholder="platform" className="h-8 font-mono" />
-            </div>
+          <div>
+            <label
+              className="block text-xs text-muted-foreground mb-1"
+              htmlFor="field-b10d840c-957"
+            >
+              Key
+            </label>
+            <Input
+              id="field-b10d840c-957"
+              type="text"
+              value={newAnnotation.key}
+              onChange={(e) =>
+                setNewAnnotation({ ...newAnnotation, key: e.target.value })
+              }
+              placeholder="example.com/owner"
+              data-initial-focus
+              className="h-8 font-mono"
+            />
+          </div>
+          <div>
+            <label
+              className="block text-xs text-muted-foreground mb-1"
+              htmlFor="field-b10d840c-962"
+            >
+              Value
+            </label>
+            <Input
+              id="field-b10d840c-962"
+              type="text"
+              value={newAnnotation.value}
+              onChange={(e) =>
+                setNewAnnotation({ ...newAnnotation, value: e.target.value })
+              }
+              placeholder="platform"
+              className="h-8 font-mono"
+            />
+          </div>
         </ModalShell>
       )}
     </div>
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id/nodes/$nodeName/')({
+export const Route = createFileRoute(
+  "/dashboard/clusters/$id/nodes/$nodeName/",
+)({
   // ?tab= deep-link (P2.4): typed passthrough — useTabParam's allowlist stays the real validator.
   validateSearch: (search: Record<string, unknown>) =>
     search as { tab?: string } & Record<string, unknown>,

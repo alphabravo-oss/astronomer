@@ -44,8 +44,8 @@ func (stubControlPlaneQ) ListControlPlaneSilences(ctx context.Context, arg sqlc.
 func (stubControlPlaneQ) GetActiveControlPlaneSilences(ctx context.Context) ([]sqlc.ControlPlaneSilence, error) {
 	return nil, nil
 }
-func (stubControlPlaneQ) DeleteControlPlaneSilence(ctx context.Context, id uuid.UUID) error {
-	return nil
+func (stubControlPlaneQ) DeleteControlPlaneSilence(ctx context.Context, id uuid.UUID) (sqlc.ControlPlaneSilence, error) {
+	return sqlc.ControlPlaneSilence{ID: id}, nil
 }
 func (stubControlPlaneQ) ListEnabledNotificationChannels(ctx context.Context) ([]sqlc.NotificationChannel, error) {
 	return nil, nil

@@ -1,14 +1,14 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 // Migration 065 / sprint 17 — in-browser kubectl shell page.
 //
 // Full-page xterm.js terminal wired to a kubectl_sessions row. The page
 // itself just hosts the ClusterShell component; lifecycle (open / close /
 // stream) lives there.
 
-import { useParams } from '@/lib/navigation';
-import { useCluster } from '@/lib/hooks';
-import { ClusterShell } from '@/components/clusters/cluster-shell';
-import { Loader2, Server, TerminalSquare } from 'lucide-react';
+import { useParams } from "@/lib/navigation";
+import { useCluster } from "@/lib/hooks";
+import { ClusterShell } from "@/components/clusters/cluster-shell";
+import { Loader2, Server, TerminalSquare } from "lucide-react";
 
 function ClusterShellPage() {
   const params = useParams();
@@ -41,7 +41,9 @@ function ClusterShellPage() {
         </p>
         <p className="text-xs">
           The kubectl shell flow needs a real remote agent and tunnel. Use
-          <code className="mx-1 px-1.5 py-0.5 rounded bg-muted font-mono">kubectl exec</code>
+          <code className="mx-1 px-1.5 py-0.5 rounded bg-muted font-mono">
+            kubectl exec
+          </code>
           directly against this cluster, or register a managed cluster and open
           a shell there.
         </p>
@@ -56,6 +58,6 @@ function ClusterShellPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id/shell/')({
+export const Route = createFileRoute("/dashboard/clusters/$id/shell/")({
   component: ClusterShellPage,
 });

@@ -1,20 +1,20 @@
-import { render, screen } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
-import type { LoggingOutput } from '@/types';
+import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import type { LoggingOutput } from "@/types";
 
-vi.mock('@/lib/toast', () => ({
+vi.mock("@/lib/toast", () => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
 }));
 
-vi.mock('@/lib/api', () => ({
+vi.mock("@/lib/api", () => ({
   deleteLoggingOutput: vi.fn(),
   updateLoggingOutput: vi.fn(),
 }));
 
-vi.mock('@/lib/hooks', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/hooks')>();
+vi.mock("@/lib/hooks", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/hooks")>();
   return {
     ...actual,
     useLoggingOutputs: vi.fn(),
@@ -22,21 +22,23 @@ vi.mock('@/lib/hooks', async (importOriginal) => {
   };
 });
 
-import { useLoggingOutputs } from '@/lib/hooks';
-import { OutputsTab } from './-outputs-tab';
+import { useLoggingOutputs } from "@/lib/hooks";
+import { OutputsTab } from "./-outputs-tab";
 
 const useOutputs = vi.mocked(useLoggingOutputs);
 
 function wrap(node: ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>;
 }
 
 const systemRow: LoggingOutput = {
-  id: 'sys-1',
-  name: 'Astronomer logs',
-  outputType: 'loki',
-  clusterId: 'cluster-1',
+  id: "sys-1",
+  name: "Astronomer logs",
+  outputType: "loki",
+  clusterId: "cluster-1",
   enabled: true,
   isSystem: true,
   createdAt: new Date().toISOString(),
@@ -44,17 +46,38 @@ const systemRow: LoggingOutput = {
 };
 
 const byoRow: LoggingOutput = {
-  id: 'byo-1',
-  name: 'Splunk HEC',
-  outputType: 'splunk',
-  clusterId: 'cluster-1',
+  id: "byo-1",
+  name: "Splunk HEC",
+  outputType: "splunk",
+  clusterId: "cluster-1",
   enabled: true,
   isSystem: false,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
 
-describe('OutputsTab system destination', () => {
+const datadogRow: LoggingOutput = {
+  id: "datadog-1",
+  name: "Datadog",
+  outputType: "datadog",
+  clusterId: "cluster-1",
+  enabled: true,
+  capabilities: {
+    ship: true,
+    test: true,
+    query: false,
+    tail: false,
+    aggregate: false,
+    linkOut: true,
+    linkOutUrl: "https://app.datadoghq.com/logs?query=cluster%3Acluster-1",
+    retentionVisibility: false,
+    queryMode: "link_out",
+  },
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+
+describe("OutputsTab system destination", () => {
   beforeEach(() => {
     useOutputs.mockReturnValue({
       data: [systemRow, byoRow],
@@ -64,11 +87,27 @@ describe('OutputsTab system destination', () => {
     } as unknown as ReturnType<typeof useLoggingOutputs>);
   });
 
-  it('shows a System badge and hides delete for is_system rows', () => {
+  it("shows a System badge and hides delete for is_system rows", () => {
     render(wrap(<OutputsTab />));
-    expect(screen.getByTestId('system-output-badge')).toHaveTextContent('System');
-    expect(screen.getByText('Astronomer logs')).toBeInTheDocument();
-    const deleteButtons = screen.getAllByTitle('Delete output');
+    expect(screen.getByTestId("system-output-badge")).toHaveTextContent(
+      "System",
+    );
+    expect(screen.getByText("Astronomer logs")).toBeInTheDocument();
+    const deleteButtons = screen.getAllByTitle("Delete output");
     expect(deleteButtons).toHaveLength(1);
+  });
+
+  it("renders backend-approved provider links with an isolated browser target", () => {
+    useOutputs.mockReturnValue({
+      data: [datadogRow],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useLoggingOutputs>);
+    render(wrap(<OutputsTab />));
+    const link = screen.getByRole("link", { name: "Open Datadog in datadog" });
+    expect(link).toHaveAttribute("href", datadogRow.capabilities?.linkOutUrl);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 });

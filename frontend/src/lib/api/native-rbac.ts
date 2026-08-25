@@ -14,12 +14,15 @@
  * API 404s. Callers should degrade gracefully (DataTable `isError` state)
  * rather than crash.
  *
- * Response bodies are camelized by the shared axios interceptor in ../api.ts,
- * so every field below is camelCase.
+ * This handler already emits camelCase fields; the generated client preserves
+ * that wire contract without transport-level key rewriting.
  */
 
-import api from '../api';
-import type { APIResponse } from '@/types';
+import {
+  deleteNativeRbacRulesById,
+  getNativeRbacRules,
+  postNativeRbacRules,
+} from "@/lib/api/generated/client";
 
 // ============================================================
 // Types
@@ -30,13 +33,7 @@ import type { APIResponse } from '@/types';
  * backend rejects `exec` and `logs`, so they are deliberately absent here.
  */
 export type NativeRuleVerb =
-  | 'read'
-  | 'list'
-  | 'watch'
-  | 'create'
-  | 'update'
-  | 'delete'
-  | '*';
+  "read" | "list" | "watch" | "create" | "update" | "delete" | "*";
 
 export interface NativeRule {
   id: string;
@@ -49,7 +46,7 @@ export interface NativeRule {
   apiGroup: string;
   /** Plural resource name (e.g. `certificates`) or `*` for all resources. */
   resource: string;
-  verbs: string[];
+  verbs: NativeRuleVerb[];
   createdAt: string;
   createdBy?: string;
 }
@@ -65,27 +62,32 @@ export interface CreateNativeRuleRequest {
   apiGroup?: string;
   /** Plural resource name or `*` (required). */
   resource: string;
-  verbs: string[];
+  verbs: NativeRuleVerb[];
 }
 
 // ============================================================
 // Endpoints
 // ============================================================
 
-export async function listNativeRules(userId?: string): Promise<NativeRule[]> {
-  const res = await api.get<APIResponse<NativeRule[]>>('/native-rbac-rules/', {
-    params: userId ? { userId } : undefined,
+export async function listNativeRules(
+  userId?: string,
+  signal?: AbortSignal,
+): Promise<NativeRule[]> {
+  const response = await getNativeRbacRules({
+    query: userId ? { userId } : undefined,
+    signal,
   });
-  return res.data.data ?? [];
+  return response.data ?? [];
 }
 
 export async function createNativeRule(
   body: CreateNativeRuleRequest,
+  signal?: AbortSignal,
 ): Promise<NativeRule> {
-  const res = await api.post<APIResponse<NativeRule>>('/native-rbac-rules/', body);
-  return res.data.data;
+  const response = await postNativeRbacRules({ body, signal });
+  return response.data;
 }
 
-export async function deleteNativeRule(id: string): Promise<void> {
-  await api.delete(`/native-rbac-rules/${id}/`);
+export async function deleteNativeRule(id: string, signal?: AbortSignal): Promise<void> {
+  await deleteNativeRbacRulesById({ path: { id }, signal });
 }

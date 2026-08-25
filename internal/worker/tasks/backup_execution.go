@@ -61,23 +61,22 @@ func HandleBackupExecution(ctx context.Context, t *asynq.Task) error {
 		"backup_id", p.BackupID,
 	)
 
-	if runtimeDeps.Queries == nil {
-		runtimeLogger().InfoContext(ctx, "backup runtime not configured, skipping DB-backed execution")
-		return nil
+	if runtimeDependencies(ctx).Queries == nil {
+		return fmt.Errorf("backup execution runtime is not configured")
 	}
 
 	backupID, err := uuid.Parse(p.BackupID)
 	if err != nil {
 		return fmt.Errorf("invalid backup_id: %w", err)
 	}
-	q := runtimeDeps.Queries
+	q := runtimeDependencies(ctx).Queries
 	backup, err := q.GetBackupByID(ctx, backupID)
 	if err != nil {
 		return fmt.Errorf("loading backup row: %w", err)
 	}
 	switch backup.Status {
 	case "completed", "failed":
-		runtimeLogger().InfoContext(ctx, "backup already terminal, nothing to do",
+		runtimeLogger(ctx).InfoContext(ctx, "backup already terminal, nothing to do",
 			"backup_id", backup.ID.String(), "status", backup.Status)
 		return nil
 	case "running":
@@ -104,7 +103,7 @@ func HandleBackupExecution(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("backup %s not claimable (already running or terminal)", backup.ID)
 	}
 
-	runtimeLogger().InfoContext(ctx, "backup row marked running; server-side reconciler will drive Velero CR",
+	runtimeLogger(ctx).InfoContext(ctx, "backup row marked running; server-side reconciler will drive Velero CR",
 		"backup_id", backup.ID.String(),
 		"velero_backup_name", backup.VeleroBackupName,
 	)

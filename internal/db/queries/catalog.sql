@@ -251,7 +251,13 @@ ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: ListInstalledCharts :many
-SELECT * FROM installed_charts ORDER BY created_at DESC LIMIT $1 OFFSET $2;
+SELECT * FROM installed_charts ORDER BY created_at DESC, id DESC LIMIT $1 OFFSET $2;
+
+-- name: ListInstalledChartsForScopes :many
+SELECT * FROM installed_charts
+WHERE cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: ListInstalledChartsByCluster :many
 SELECT * FROM installed_charts WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
@@ -292,10 +298,11 @@ RETURNING *;
 
 -- name: UpdateInstalledChartValues :one
 UPDATE installed_charts SET
-    values_override = $2,
-    status = $3,
-    revision = $4
-WHERE id = $1
+    chart_version_id = COALESCE(sqlc.narg(chart_version_id), chart_version_id),
+    values_override = sqlc.arg(values_override),
+    status = sqlc.arg(status),
+    revision = sqlc.arg(revision)
+WHERE id = sqlc.arg(id)
 RETURNING *;
 
 -- name: DeleteInstalledChart :exec
@@ -303,6 +310,10 @@ DELETE FROM installed_charts WHERE id = $1;
 
 -- name: CountInstalledCharts :one
 SELECT count(*) FROM installed_charts;
+
+-- name: CountInstalledChartsForScopes :one
+SELECT count(*) FROM installed_charts
+WHERE cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[]);
 
 -- name: CountInstalledChartsByCluster :one
 SELECT count(*) FROM installed_charts WHERE cluster_id = $1;

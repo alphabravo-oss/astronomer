@@ -1,89 +1,115 @@
-import type { Mocked } from 'vitest';
-import api from '@/lib/api';
 import {
-  listInhibitions,
-  getInhibition,
+  deleteAdminAlertingInhibitionsById,
+  getAdminAlertingInhibitions,
+  getAdminAlertingInhibitionsById,
+  postAdminAlertingInhibitions,
+  putAdminAlertingInhibitionsById,
+} from "@/lib/api/generated/client";
+import {
   createInhibition,
-  updateInhibition,
   deleteInhibition,
+  getInhibition,
+  listInhibitions,
   toInhibitionWriteRequest,
-} from './alerting-inhibitions';
+  updateInhibition,
+} from "@/lib/api/alerting-inhibitions";
 
-vi.mock('@/lib/api', () => ({
-  __esModule: true,
-  default: {
-    get: vi.fn(),
-    post: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-  },
+vi.mock("@/lib/api/generated/client", () => ({
+  deleteAdminAlertingInhibitionsById: vi.fn(),
+  getAdminAlertingInhibitions: vi.fn(),
+  getAdminAlertingInhibitionsById: vi.fn(),
+  postAdminAlertingInhibitions: vi.fn(),
+  putAdminAlertingInhibitionsById: vi.fn(),
 }));
 
-const mockedApi = api as Mocked<typeof api>;
+const inhibitionWire = {
+  id: "4b53f94f-83b4-4f55-99a8-a26c696cb796",
+  name: "suppress-node-warnings",
+  source_matchers: [
+    { label: "alertname", value: "ClusterDown", is_regex: false },
+  ],
+  target_matchers: [{ label: "severity", value: "warn.*", is_regex: true }],
+  equal_labels: ["cluster"],
+  enabled: true,
+  created_at: "2026-08-24T07:00:00Z",
+  updated_at: "2026-08-24T07:05:00Z",
+};
 
-describe('alerting inhibitions API client', () => {
+const writeBody = {
+  name: inhibitionWire.name,
+  source_matchers: inhibitionWire.source_matchers,
+  target_matchers: inhibitionWire.target_matchers,
+  equal_labels: inhibitionWire.equal_labels,
+  enabled: true,
+};
+
+describe("alerting inhibition generated API boundary", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('maps camelCase form matchers to snake_case is_regex on write', () => {
-    const body = toInhibitionWriteRequest({
-      name: 'suppress-node',
-      enabled: true,
-      sourceMatchers: [{ label: 'alertname', value: 'ClusterDown', isRegex: false }],
-      targetMatchers: [{ label: 'severity', value: 'warn.*', isRegex: true }],
-      equalLabels: ['cluster'],
-    });
-    expect(body).toEqual({
-      name: 'suppress-node',
-      enabled: true,
-      source_matchers: [{ label: 'alertname', value: 'ClusterDown', is_regex: false }],
-      target_matchers: [{ label: 'severity', value: 'warn.*', is_regex: true }],
-      equal_labels: ['cluster'],
-    });
+  it("maps camelCase form matchers to the generated wire request", () => {
+    expect(
+      toInhibitionWriteRequest({
+        name: writeBody.name,
+        enabled: true,
+        sourceMatchers: [
+          { label: "alertname", value: "ClusterDown", isRegex: false },
+        ],
+        targetMatchers: [{ label: "severity", value: "warn.*", isRegex: true }],
+        equalLabels: ["cluster"],
+      }),
+    ).toEqual(writeBody);
   });
 
-  it('unwraps the { data } list envelope', async () => {
-    mockedApi.get.mockResolvedValueOnce({ data: { data: [{ id: 'i1', name: 'r' }] } });
+  it("maps list and detail response casing explicitly", async () => {
+    vi.mocked(getAdminAlertingInhibitions).mockResolvedValueOnce({
+      data: [inhibitionWire],
+      pagination: { limit: 50, offset: 0, has_more: false, next_offset: null },
+    });
     await expect(listInhibitions()).resolves.toEqual([
-      expect.objectContaining({ id: 'i1' }),
+      expect.objectContaining({
+        id: inhibitionWire.id,
+        sourceMatchers: [expect.objectContaining({ isRegex: false })],
+        equalLabels: ["cluster"],
+      }),
     ]);
-    expect(mockedApi.get).toHaveBeenCalledWith('/admin/alerting/inhibitions/');
+
+    vi.mocked(getAdminAlertingInhibitionsById).mockResolvedValueOnce({
+      data: inhibitionWire,
+    });
+    await expect(getInhibition(inhibitionWire.id)).resolves.toEqual(
+      expect.objectContaining({ name: inhibitionWire.name }),
+    );
   });
 
-  it('gets a single inhibition by id', async () => {
-    mockedApi.get.mockResolvedValueOnce({ data: { data: { id: 'i1' } } });
-    await expect(getInhibition('i1')).resolves.toEqual(expect.objectContaining({ id: 'i1' }));
-    expect(mockedApi.get).toHaveBeenCalledWith('/admin/alerting/inhibitions/i1/');
-  });
+  it("uses generated create and update operations", async () => {
+    vi.mocked(postAdminAlertingInhibitions).mockResolvedValueOnce({
+      data: inhibitionWire,
+    });
+    await createInhibition(writeBody);
+    expect(postAdminAlertingInhibitions).toHaveBeenCalledWith({
+      body: writeBody,
+    });
 
-  it('posts the write body on create', async () => {
-    mockedApi.post.mockResolvedValueOnce({ data: { data: { id: 'i2' } } });
-    const body = {
-      name: 'r',
-      source_matchers: [],
-      target_matchers: [],
-      equal_labels: [],
-      enabled: true,
-    };
-    await createInhibition(body);
-    expect(mockedApi.post).toHaveBeenCalledWith('/admin/alerting/inhibitions/', body);
-  });
-
-  it('puts to the id path on update', async () => {
-    mockedApi.put.mockResolvedValueOnce({ data: { data: { id: 'i2' } } });
-    const body = {
-      name: 'r',
-      source_matchers: [],
-      target_matchers: [],
-      equal_labels: [],
+    vi.mocked(putAdminAlertingInhibitionsById).mockResolvedValueOnce({
+      data: { ...inhibitionWire, enabled: false },
+    });
+    await updateInhibition(inhibitionWire.id, {
+      ...writeBody,
       enabled: false,
-    };
-    await updateInhibition('i2', body);
-    expect(mockedApi.put).toHaveBeenCalledWith('/admin/alerting/inhibitions/i2/', body);
+    });
+    expect(putAdminAlertingInhibitionsById).toHaveBeenCalledWith({
+      path: { id: inhibitionWire.id },
+      body: { ...writeBody, enabled: false },
+    });
   });
 
-  it('deletes at the id path', async () => {
-    mockedApi.delete.mockResolvedValueOnce({});
-    await deleteInhibition('i2');
-    expect(mockedApi.delete).toHaveBeenCalledWith('/admin/alerting/inhibitions/i2/');
+  it("uses the generated delete path", async () => {
+    vi.mocked(deleteAdminAlertingInhibitionsById).mockResolvedValueOnce(
+      undefined,
+    );
+    await deleteInhibition(inhibitionWire.id);
+    expect(deleteAdminAlertingInhibitionsById).toHaveBeenCalledWith({
+      path: { id: inhibitionWire.id },
+    });
   });
 });

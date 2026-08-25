@@ -106,7 +106,7 @@ func newNodesListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersClusterIdNodesWithResponse(cmd.Context(), clusterID)
+			resp, err := client.GetClustersByClusterIdNodesWithResponse(cmd.Context(), clusterID, nil)
 			if err != nil {
 				return err
 			}
@@ -132,7 +132,7 @@ func newNodesGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersClusterIdNodesNodeNameWithResponse(cmd.Context(), clusterID, args[1])
+			resp, err := client.GetClustersByClusterIdNodesByNodeNameWithResponse(cmd.Context(), clusterID, args[1])
 			if err != nil {
 				return err
 			}
@@ -162,14 +162,15 @@ func newNodesCordonCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1NodesClusterIdNodeNameCordonWithResponse(cmd.Context(), clusterID, args[1])
+			params := &astroclient.PostNodesByClusterIdByNodeNameCordonParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostNodesByClusterIdByNodeNameCordonWithResponse(cmd.Context(), clusterID, args[1], params)
 			if err != nil {
 				return err
 			}
-			if resp.JSON200 == nil {
+			if resp.JSON202 == nil {
 				return sdkStatusErr("cordon node", resp.HTTPResponse, resp.Body)
 			}
-			return renderSDK(cmd, *resp.JSON200)
+			return renderSDK(cmd, resp.JSON202.Data)
 		},
 	}
 }
@@ -188,14 +189,15 @@ func newNodesUncordonCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1NodesClusterIdNodeNameUncordonWithResponse(cmd.Context(), clusterID, args[1])
+			params := &astroclient.PostNodesByClusterIdByNodeNameUncordonParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostNodesByClusterIdByNodeNameUncordonWithResponse(cmd.Context(), clusterID, args[1], params)
 			if err != nil {
 				return err
 			}
-			if resp.JSON200 == nil {
+			if resp.JSON202 == nil {
 				return sdkStatusErr("uncordon node", resp.HTTPResponse, resp.Body)
 			}
-			return renderSDK(cmd, *resp.JSON200)
+			return renderSDK(cmd, resp.JSON202.Data)
 		},
 	}
 }
@@ -211,8 +213,8 @@ func newNodesDrainCmd() *cobra.Command {
 		Use:   "drain <cluster-id> <node>",
 		Short: "Evict pods from a node (cordons first)",
 		Long: `Drain evicts the node's pods so it can be taken out of service.
-Returns 200 when the drain completed synchronously or 202 when it was
-accepted and is proceeding asynchronously.`,
+A dry run returns a synchronous preview. A real drain returns a durable
+operation receipt whose status and partial progress can be tracked.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			clusterID, err := parseClusterID(args[0])
@@ -223,7 +225,7 @@ accepted and is proceeding asynchronously.`,
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1NodesClusterIdNodeNameDrainJSONRequestBody{
+			body := astroclient.PostNodesByClusterIdByNodeNameDrainJSONRequestBody{
 				DryRun: &dryRun,
 			}
 			if cmd.Flags().Changed("delete-emptydir-data") {
@@ -235,7 +237,8 @@ accepted and is proceeding asynchronously.`,
 			if cmd.Flags().Changed("grace-period") {
 				body.GracePeriodSeconds = &gracePeriod
 			}
-			resp, err := client.PostApiV1NodesClusterIdNodeNameDrainWithResponse(cmd.Context(), clusterID, args[1], body)
+			params := &astroclient.PostNodesByClusterIdByNodeNameDrainParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostNodesByClusterIdByNodeNameDrainWithResponse(cmd.Context(), clusterID, args[1], params, body)
 			if err != nil {
 				return err
 			}
@@ -274,18 +277,19 @@ func newNodesLabelCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1NodesClusterIdNodeNameLabelsJSONRequestBody{Key: args[2]}
+			body := astroclient.PostNodesByClusterIdByNodeNameLabelsJSONRequestBody{Key: args[2]}
 			if len(args) == 4 {
 				body.Value = &args[3]
 			}
-			resp, err := client.PostApiV1NodesClusterIdNodeNameLabelsWithResponse(cmd.Context(), clusterID, args[1], body)
+			params := &astroclient.PostNodesByClusterIdByNodeNameLabelsParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostNodesByClusterIdByNodeNameLabelsWithResponse(cmd.Context(), clusterID, args[1], params, body)
 			if err != nil {
 				return err
 			}
-			if resp.JSON200 == nil {
+			if resp.JSON202 == nil {
 				return sdkStatusErr("label node", resp.HTTPResponse, resp.Body)
 			}
-			return renderSDK(cmd, resp.JSON200.Data)
+			return renderSDK(cmd, resp.JSON202.Data)
 		},
 	}
 }
@@ -304,15 +308,16 @@ func newNodesLabelRemoveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1NodesClusterIdNodeNameLabelsRemoveJSONRequestBody{Key: args[2]}
-			resp, err := client.PostApiV1NodesClusterIdNodeNameLabelsRemoveWithResponse(cmd.Context(), clusterID, args[1], body)
+			body := astroclient.PostNodesByClusterIdByNodeNameLabelsRemoveJSONRequestBody{Key: args[2]}
+			params := &astroclient.PostNodesByClusterIdByNodeNameLabelsRemoveParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostNodesByClusterIdByNodeNameLabelsRemoveWithResponse(cmd.Context(), clusterID, args[1], params, body)
 			if err != nil {
 				return err
 			}
-			if resp.JSON200 == nil {
+			if resp.JSON202 == nil {
 				return sdkStatusErr("remove node label", resp.HTTPResponse, resp.Body)
 			}
-			return renderSDK(cmd, resp.JSON200.Data)
+			return renderSDK(cmd, resp.JSON202.Data)
 		},
 	}
 }
@@ -342,21 +347,22 @@ NoSchedule, PreferNoSchedule, or NoExecute.`,
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1NodesClusterIdNodeNameTaintsJSONRequestBody{
+			body := astroclient.PostNodesByClusterIdByNodeNameTaintsJSONRequestBody{
 				Key:    args[2],
 				Effect: eff,
 			}
 			if len(args) == 4 {
 				body.Value = &args[3]
 			}
-			resp, err := client.PostApiV1NodesClusterIdNodeNameTaintsWithResponse(cmd.Context(), clusterID, args[1], body)
+			params := &astroclient.PostNodesByClusterIdByNodeNameTaintsParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostNodesByClusterIdByNodeNameTaintsWithResponse(cmd.Context(), clusterID, args[1], params, body)
 			if err != nil {
 				return err
 			}
-			if resp.JSON200 == nil {
+			if resp.JSON202 == nil {
 				return sdkStatusErr("taint node", resp.HTTPResponse, resp.Body)
 			}
-			return renderSDK(cmd, resp.JSON200.Data)
+			return renderSDK(cmd, resp.JSON202.Data)
 		},
 	}
 	cmd.Flags().StringVar(&effect, "effect", "", "taint effect: NoSchedule|PreferNoSchedule|NoExecute (required)")
@@ -382,7 +388,7 @@ with that exact effect is removed.`,
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1NodesClusterIdNodeNameTaintsRemoveJSONRequestBody{Key: args[2]}
+			body := astroclient.PostNodesByClusterIdByNodeNameTaintsRemoveJSONRequestBody{Key: args[2]}
 			if cmd.Flags().Changed("effect") {
 				eff, err := parseTaintEffect(effect)
 				if err != nil {
@@ -391,14 +397,15 @@ with that exact effect is removed.`,
 				rmEff := astroclient.NodeTaintRemoveRequestEffect(eff)
 				body.Effect = &rmEff
 			}
-			resp, err := client.PostApiV1NodesClusterIdNodeNameTaintsRemoveWithResponse(cmd.Context(), clusterID, args[1], body)
+			params := &astroclient.PostNodesByClusterIdByNodeNameTaintsRemoveParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostNodesByClusterIdByNodeNameTaintsRemoveWithResponse(cmd.Context(), clusterID, args[1], params, body)
 			if err != nil {
 				return err
 			}
-			if resp.JSON200 == nil {
+			if resp.JSON202 == nil {
 				return sdkStatusErr("remove node taint", resp.HTTPResponse, resp.Body)
 			}
-			return renderSDK(cmd, resp.JSON200.Data)
+			return renderSDK(cmd, resp.JSON202.Data)
 		},
 	}
 	cmd.Flags().StringVar(&effect, "effect", "", "only remove the taint with this effect: NoSchedule|PreferNoSchedule|NoExecute")
@@ -437,18 +444,19 @@ func newNodesAnnotateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1NodesClusterIdNodeNameAnnotationsJSONRequestBody{Key: args[2]}
+			body := astroclient.PostNodesByClusterIdByNodeNameAnnotationsJSONRequestBody{Key: args[2]}
 			if len(args) == 4 {
 				body.Value = &args[3]
 			}
-			resp, err := client.PostApiV1NodesClusterIdNodeNameAnnotationsWithResponse(cmd.Context(), clusterID, args[1], body)
+			params := &astroclient.PostNodesByClusterIdByNodeNameAnnotationsParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostNodesByClusterIdByNodeNameAnnotationsWithResponse(cmd.Context(), clusterID, args[1], params, body)
 			if err != nil {
 				return err
 			}
-			if resp.JSON200 == nil {
+			if resp.JSON202 == nil {
 				return sdkStatusErr("annotate node", resp.HTTPResponse, resp.Body)
 			}
-			return renderSDK(cmd, resp.JSON200.Data)
+			return renderSDK(cmd, resp.JSON202.Data)
 		},
 	}
 }
@@ -467,15 +475,16 @@ func newNodesAnnotateRemoveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1NodesClusterIdNodeNameAnnotationsRemoveJSONRequestBody{Key: args[2]}
-			resp, err := client.PostApiV1NodesClusterIdNodeNameAnnotationsRemoveWithResponse(cmd.Context(), clusterID, args[1], body)
+			body := astroclient.PostNodesByClusterIdByNodeNameAnnotationsRemoveJSONRequestBody{Key: args[2]}
+			params := &astroclient.PostNodesByClusterIdByNodeNameAnnotationsRemoveParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostNodesByClusterIdByNodeNameAnnotationsRemoveWithResponse(cmd.Context(), clusterID, args[1], params, body)
 			if err != nil {
 				return err
 			}
-			if resp.JSON200 == nil {
+			if resp.JSON202 == nil {
 				return sdkStatusErr("remove node annotation", resp.HTTPResponse, resp.Body)
 			}
-			return renderSDK(cmd, resp.JSON200.Data)
+			return renderSDK(cmd, resp.JSON202.Data)
 		},
 	}
 }

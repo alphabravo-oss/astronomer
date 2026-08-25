@@ -235,6 +235,7 @@ func (h *TOTPHandler) EnrollStart(w http.ResponseWriter, r *http.Request) {
 
 // --- Enrollment: confirm ---
 
+// openapi:request-operation postAuthTotpEnrollConfirm
 type enrollConfirmRequest struct {
 	ChallengeToken string `json:"challenge_token" validate:"required"`
 	Challenge      string `json:"challenge" validate:"required"`
@@ -396,6 +397,7 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 
 // --- Disable ---
 
+// openapi:request-operation postAuthTotpDisable
 type disableRequest struct {
 	Password string `json:"password" validate:"required"`
 	Code     string `json:"code" validate:"required"`
@@ -521,6 +523,7 @@ func (h *TOTPHandler) Status(w http.ResponseWriter, r *http.Request) {
 
 // --- Recovery code regeneration ---
 
+// openapi:request-operation postAuthTotpRecoveryCodesRegenerate
 type regenerateRequest struct {
 	Code string `json:"code" validate:"required"`
 }
@@ -602,6 +605,7 @@ func (h *TOTPHandler) RegenerateRecoveryCodes(w http.ResponseWriter, r *http.Req
 
 // --- Verify (challenge -> session JWT) ---
 
+// openapi:request-operation postAuthTotpVerify
 type verifyRequest struct {
 	ChallengeToken string `json:"challenge_token" validate:"required"`
 	Code           string `json:"code" validate:"required"`

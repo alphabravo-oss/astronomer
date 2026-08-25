@@ -369,9 +369,8 @@ func (h *KubectlShellHandler) List(w http.ResponseWriter, r *http.Request) {
 		count, _ := h.Queries.CountKubectlSessionCommands(r.Context(), row.ID)
 		out = append(out, kubectl.ToSessionInfo(row, count, h.idleTimeout()))
 	}
-	// Active-session list is unpaginated (no limit/offset, no COUNT query);
-	// report the page length as the total. // TODO(total)
-	RespondList(w, out, NewPagination(len(out), queryInt(r, "limit", 0), queryInt(r, "offset", 0), len(out)))
+	// Active-session list is complete and intentionally unpaginated.
+	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
 }
 
 // Get handles GET /clusters/{cluster_id}/shell/sessions/{id}/.
@@ -466,9 +465,8 @@ func (h *KubectlShellHandler) AdminListAll(w http.ResponseWriter, r *http.Reques
 		count, _ := h.Queries.CountKubectlSessionCommands(r.Context(), row.ID)
 		out = append(out, kubectl.ToSessionInfo(row, count, h.idleTimeout()))
 	}
-	// Admin active-session list is unpaginated (no limit/offset, no COUNT
-	// query); report the page length as the total. // TODO(total)
-	RespondList(w, out, NewPagination(len(out), queryInt(r, "limit", 0), queryInt(r, "offset", 0), len(out)))
+	// Admin active-session list is complete and intentionally unpaginated.
+	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
 }
 
 // AdminCommands handles GET /admin/shell-sessions/{id}/commands/.

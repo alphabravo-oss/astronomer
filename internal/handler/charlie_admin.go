@@ -505,8 +505,24 @@ type charlieTriggerRetryRequest struct {
 	RequestID string `json:"request_id"`
 }
 
+type charlieDurableTriggerBackend interface {
+	RetryTriggerEventDurable(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (charlie.AdminTriggerEventView, error)
+	GetTriggerEvent(context.Context, uuid.UUID) (charlie.AdminTriggerEventView, error)
+}
+
+type charlieTriggerRetryReceipt struct {
+	OperationID uuid.UUID `json:"operation_id"`
+	EventID     string    `json:"event_id"`
+	Status      string    `json:"status"`
+	StatusURL   string    `json:"status_url"`
+}
+
 func (h *CharlieAdminHandler) RetryTriggerEvent(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.actor(w, r); !ok {
+	actor, ok := h.actor(w, r)
+	if !ok {
+		return
+	}
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	eventID, err := uuid.Parse(chi.URLParam(r, "event_id"))
@@ -518,21 +534,57 @@ func (h *CharlieAdminHandler) RetryTriggerEvent(w http.ResponseWriter, r *http.R
 	if !decodeCharlieJSON(w, r, &request) {
 		return
 	}
-	requestID, err := uuid.Parse(request.RequestID)
-	if err != nil {
+	if request.RequestID != "" {
+		if _, err := uuid.Parse(request.RequestID); err != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger retry request")
+			return
+		}
+	}
+	actorID := mustUserID(actor)
+	if actorID == uuid.Nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger retry request")
 		return
 	}
-	if !h.requireAuthorityAudit(w, r, "admin.charlie.trigger.retry", "charlie_trigger_event", eventID.String(), nil) {
+	backend, ok := h.backend.(charlieDurableTriggerBackend)
+	if !ok {
+		h.respondError(w, r, charlie.ErrAdminUnavailable)
 		return
 	}
-	view, err := h.backend.RetryTriggerEvent(r.Context(), eventID, requestID)
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	requestID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("charlie-trigger-retry:"+actorID.String()+":"+eventID.String()+":"+key))
+	view, err := backend.RetryTriggerEventDurable(r.Context(), eventID, requestID, actorID)
 	if err != nil {
 		h.respondError(w, r, err)
 		return
 	}
-	recordCharlieAdminAudit(r, h.audit, "admin.charlie.trigger.retry", "charlie_trigger_event", view.ID, nil)
-	RespondJSON(w, http.StatusAccepted, map[string]any{"event": view})
+	statusURL := "/api/v1/admin/charlie/trigger-events/" + view.ID + "/"
+	w.Header().Set("Location", statusURL)
+	w.Header().Set("Retry-After", "2")
+	RespondJSON(w, http.StatusAccepted, charlieTriggerRetryReceipt{
+		OperationID: requestID, EventID: view.ID, Status: view.State, StatusURL: statusURL,
+	})
+}
+
+func (h *CharlieAdminHandler) GetTriggerEvent(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	eventID, err := uuid.Parse(chi.URLParam(r, "event_id"))
+	if err != nil || eventID == uuid.Nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger event ID")
+		return
+	}
+	backend, ok := h.backend.(charlieDurableTriggerBackend)
+	if !ok {
+		h.respondError(w, r, charlie.ErrAdminUnavailable)
+		return
+	}
+	view, err := backend.GetTriggerEvent(r.Context(), eventID)
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, view)
 }
 
 type charlieAdminAccessActor interface {

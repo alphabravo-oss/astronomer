@@ -8,12 +8,12 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 389
-- Frontend source lines: 108995
-- Go source files under `internal/` excluding generated sqlc and tests: 536
-- Go source files scanned for sqlc query references excluding generated sqlc: 1205
-- sqlc query declarations: 948
-- Component files scanned: 118
+- Frontend source files: 627
+- Frontend source lines: 169299
+- Go source files under `internal/` excluding generated sqlc and tests: 710
+- Go source files scanned for sqlc query references excluding generated sqlc: 1633
+- sqlc query declarations: 1145
+- Component files scanned: 164
 - Helm top-level values scanned: 34
 
 ## Hard Gates
@@ -94,64 +94,47 @@ Owner: frontend/platform. Target abstraction: shared `queryKeys` or feature hook
 
 Owner: backend/platform. Target abstraction: shared helper package only when call sites perform the same behavior.
 
-- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:2020`](internal/server/routes.go:2020)
+- `actionTransition` in [`internal/delivery/rollout/control.go:359`](internal/delivery/rollout/control.go:359), [`internal/delivery/systemrollout/service.go:396`](internal/delivery/systemrollout/service.go:396)
+- `bearerToken` in [`internal/handler/scim.go:224`](internal/handler/scim.go:224), [`internal/lokiauth/auth.go:326`](internal/lokiauth/auth.go:326)
+- `canonicalCandidates` in [`internal/delivery/placement/placement.go:412`](internal/delivery/placement/placement.go:412), [`internal/delivery/rollout/cohorts.go:85`](internal/delivery/rollout/cohorts.go:85)
+- `cloneStringMap` in [`internal/delivery/model/placement.go:193`](internal/delivery/model/placement.go:193), [`internal/delivery/placement/placement.go:557`](internal/delivery/placement/placement.go:557)
+- `contains` in [`internal/delivery/placement/placement.go:565`](internal/delivery/placement/placement.go:565), [`internal/server/vault_observer.go:108`](internal/server/vault_observer.go:108)
+- `containsControl` in [`internal/delivery/model/types.go:618`](internal/delivery/model/types.go:618), [`internal/handler/delivery/common.go:347`](internal/handler/delivery/common.go:347)
+- `containsString` in [`internal/agent/delivery/validator.go:454`](internal/agent/delivery/validator.go:454), [`internal/charlie/capability_schema.go:357`](internal/charlie/capability_schema.go:357)
+- `decisionDigest` in [`internal/delivery/rollout/scheduler.go:558`](internal/delivery/rollout/scheduler.go:558), [`internal/delivery/systemrollout/service.go:735`](internal/delivery/systemrollout/service.go:735)
 - `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
-- `decodeRoleRules` in [`internal/handler/rbac.go:1110`](internal/handler/rbac.go:1110), [`internal/server/middleware/rbac_queries.go:238`](internal/server/middleware/rbac_queries.go:238)
-- `ensureJSONEOF` in [`internal/handler/charlie_onboarding.go:117`](internal/handler/charlie_onboarding.go:117), [`internal/sessionpolicy/session_timeout.go:80`](internal/sessionpolicy/session_timeout.go:80)
+- `decodeRoleRules` in [`internal/handler/rbac.go:1326`](internal/handler/rbac.go:1326), [`internal/server/middleware/rbac_queries.go:238`](internal/server/middleware/rbac_queries.go:238)
+- `decodeStrict` in [`internal/delivery/provider/provider.go:456`](internal/delivery/provider/provider.go:456), [`internal/delivery/rollout/postgres_store.go:310`](internal/delivery/rollout/postgres_store.go:310)
+- `denied` in [`internal/charlie/action_guard.go:806`](internal/charlie/action_guard.go:806), [`internal/delivery/resolver/network.go:186`](internal/delivery/resolver/network.go:186)
+- `digestBytes` in [`internal/charlie/action_guard.go:801`](internal/charlie/action_guard.go:801), [`internal/delivery/resolver/service.go:171`](internal/delivery/resolver/service.go:171)
+- `ensureJSONEOF` in [`internal/handler/charlie_onboarding.go:134`](internal/handler/charlie_onboarding.go:134), [`internal/sessionpolicy/session_timeout.go:80`](internal/sessionpolicy/session_timeout.go:80)
 - `isEmpty` in [`internal/dexconfig/validate.go:504`](internal/dexconfig/validate.go:504), [`internal/notify/render.go:147`](internal/notify/render.go:147)
-- `podReady` in [`internal/charlie/management_kubernetes_adapter.go:30`](internal/charlie/management_kubernetes_adapter.go:30), [`internal/handler/monitoring_operations.go:912`](internal/handler/monitoring_operations.go:912)
+- `missingCapabilities` in [`internal/agentcompat/compat.go:119`](internal/agentcompat/compat.go:119), [`internal/delivery/placement/placement.go:392`](internal/delivery/placement/placement.go:392)
+- `nullableTime` in [`internal/charlie/cluster_agent_capability_adapter.go:192`](internal/charlie/cluster_agent_capability_adapter.go:192), [`internal/handler/alerting.go:2456`](internal/handler/alerting.go:2456)
+- `nullableUUID` in [`internal/charlie/delivery_capability_adapter.go:530`](internal/charlie/delivery_capability_adapter.go:530), [`internal/handler/alerting.go:2442`](internal/handler/alerting.go:2442)
+- `percentile` in [`internal/anomaly/stats.go:184`](internal/anomaly/stats.go:184), [`internal/delivery/qualification/report.go:134`](internal/delivery/qualification/report.go:134)
+- `podReady` in [`internal/charlie/management_kubernetes_adapter.go:30`](internal/charlie/management_kubernetes_adapter.go:30), [`internal/handler/monitoring_operations.go:1070`](internal/handler/monitoring_operations.go:1070)
+- `recordAudit` in [`internal/handler/audit_helpers.go:38`](internal/handler/audit_helpers.go:38), [`internal/handler/delivery/common.go:105`](internal/handler/delivery/common.go:105)
+- `recordAuditOutbox` in [`internal/handler/audit_helpers.go:105`](internal/handler/audit_helpers.go:105), [`internal/handler/delivery/common.go:134`](internal/handler/delivery/common.go:134)
 - `requireSuperuser` in [`internal/handler/authorization.go:88`](internal/handler/authorization.go:88), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
-- `verbMatches` in [`internal/rbac/native.go:85`](internal/rbac/native.go:85), [`internal/server/middleware/read_audit.go:166`](internal/server/middleware/read_audit.go:166)
-- `writeError` in [`internal/charlie/contract/fakebridge/fake.go:314`](internal/charlie/contract/fakebridge/fake.go:314), [`internal/charliequalification/hook.go:221`](internal/charliequalification/hook.go:221)
-- `writeJSON` in [`internal/charlie/contract/fakebridge/fake.go:308`](internal/charlie/contract/fakebridge/fake.go:308), [`internal/charliequalification/hook.go:215`](internal/charliequalification/hook.go:215), [`internal/handler/response.go:161`](internal/handler/response.go:161)
+- `retryAfter` in [`internal/apisvr/allowlist/providers/errors.go:51`](internal/apisvr/allowlist/providers/errors.go:51), [`internal/delivery/builtin/provisioner.go:558`](internal/delivery/builtin/provisioner.go:558)
+- `sortedUUIDs` in [`internal/delivery/model/placement.go:187`](internal/delivery/model/placement.go:187), [`internal/handler/authorization.go:220`](internal/handler/authorization.go:220)
+- `strictJSON` in [`internal/agent/delivery/checkpoint.go:276`](internal/agent/delivery/checkpoint.go:276), [`internal/delivery/resolver/postgres_worker.go:381`](internal/delivery/resolver/postgres_worker.go:381)
+- `stringValue` in [`internal/agent/delivery/observer.go:440`](internal/agent/delivery/observer.go:440), [`internal/handler/resource_presenters.go:566`](internal/handler/resource_presenters.go:566)
+- `stripHopByHop` in [`internal/grafanaproxy/proxy.go:303`](internal/grafanaproxy/proxy.go:303), [`internal/lokiauth/auth.go:389`](internal/lokiauth/auth.go:389)
+- `timestamptz` in [`internal/delivery/rollout/postgres_store.go:396`](internal/delivery/rollout/postgres_store.go:396), [`internal/worker/tasks/security_scan.go:320`](internal/worker/tasks/security_scan.go:320)
+- `verbMatches` in [`internal/rbac/native.go:152`](internal/rbac/native.go:152), [`internal/server/middleware/read_audit.go:166`](internal/server/middleware/read_audit.go:166)
+- ... 2 more
 
 ### Dead-Code Candidates
 
 Owner: database/backend. Classification rule: remove only after confirming no handler, worker, CLI, migration test, or planned compatibility path uses the query.
 
-- `ArchiveAuditLogsForCluster` declared at [`internal/db/queries/cluster_decommission.sql:193`](internal/db/queries/cluster_decommission.sql:193) has no non-generated Go reference
-- `CharlieAgentReconnectStats` declared at [`internal/db/queries/charlie.sql:164`](internal/db/queries/charlie.sql:164) has no non-generated Go reference
-- `CharlieClusterAgentGet` declared at [`internal/db/queries/charlie.sql:139`](internal/db/queries/charlie.sql:139) has no non-generated Go reference
-- `CharlieClusterAgentSummary` declared at [`internal/db/queries/charlie.sql:79`](internal/db/queries/charlie.sql:79) has no non-generated Go reference
-- `CharlieTunnelRecentErrors` declared at [`internal/db/queries/charlie.sql:179`](internal/db/queries/charlie.sql:179) has no non-generated Go reference
-- `ClaimDueCharlieTriggerEvents` declared at [`internal/db/queries/charlie.sql:899`](internal/db/queries/charlie.sql:899) has no non-generated Go reference
-- `ClearCharlieEmergencyDisabled` declared at [`internal/db/queries/charlie.sql:342`](internal/db/queries/charlie.sql:342) has no non-generated Go reference
-- `CompareAndSetCharlieMode` declared at [`internal/db/queries/charlie.sql:318`](internal/db/queries/charlie.sql:318) has no non-generated Go reference
-- `CountBlessedCharts` declared at [`internal/db/queries/catalog_blessed.sql:29`](internal/db/queries/catalog_blessed.sql:29) has no non-generated Go reference
-- `CreateCharlieTriggerEvent` declared at [`internal/db/queries/charlie.sql:832`](internal/db/queries/charlie.sql:832) has no non-generated Go reference
-- `DisconnectCharlieConnection` declared at [`internal/db/queries/charlie.sql:367`](internal/db/queries/charlie.sql:367) has no non-generated Go reference
-- `GetBlessedChart` declared at [`internal/db/queries/catalog_blessed.sql:26`](internal/db/queries/catalog_blessed.sql:26) has no non-generated Go reference
-- `GetXClusterAnomalyBaseline` declared at [`internal/db/queries/xcluster_anomaly_baselines.sql:11`](internal/db/queries/xcluster_anomaly_baselines.sql:11) has no non-generated Go reference
-- `ListBlessedCharts` declared at [`internal/db/queries/catalog_blessed.sql:23`](internal/db/queries/catalog_blessed.sql:23) has no non-generated Go reference
-- `ListCharlieAmbiguousReceipts` declared at [`internal/db/queries/charlie.sql:630`](internal/db/queries/charlie.sql:630) has no non-generated Go reference
-- `ListConnectionsByCluster` declared at [`internal/db/queries/agents.sql:1`](internal/db/queries/agents.sql:1) has no non-generated Go reference
-- `ListLatestConnectionsByClusters` declared at [`internal/db/queries/agents.sql:7`](internal/db/queries/agents.sql:7) has no non-generated Go reference
-- `ListScansByClusterAndType` declared at [`internal/db/queries/security.sql:96`](internal/db/queries/security.sql:96) has no non-generated Go reference
-- `ListXClusterAnomalyBaselines` declared at [`internal/db/queries/xcluster_anomaly_baselines.sql:5`](internal/db/queries/xcluster_anomaly_baselines.sql:5) has no non-generated Go reference
-- `RecordTunnelLocatorEvent` declared at [`internal/db/queries/charlie.sql:71`](internal/db/queries/charlie.sql:71) has no non-generated Go reference
-- `RevokeCharlieDelegation` declared at [`internal/db/queries/charlie.sql:494`](internal/db/queries/charlie.sql:494) has no non-generated Go reference
-- `RevokeCharlieDelegationsForPrincipal` declared at [`internal/db/queries/charlie.sql:502`](internal/db/queries/charlie.sql:502) has no non-generated Go reference
-- `SetCharlieEmergencyDisabled` declared at [`internal/db/queries/charlie.sql:332`](internal/db/queries/charlie.sql:332) has no non-generated Go reference
-- `SetCharlieTriggerRuleEnabled` declared at [`internal/db/queries/charlie.sql:809`](internal/db/queries/charlie.sql:809) has no non-generated Go reference
-- `UpsertAgentOperationalStatus` declared at [`internal/db/queries/charlie.sql:13`](internal/db/queries/charlie.sql:13) has no non-generated Go reference
+- None.
 
 Owner: frontend/platform. Classification rule: verify relative imports and dynamic imports before removal.
 
-- `@/components/auth/connector-form.test` (frontend/src/components/auth/connector-form.test.tsx) has no absolute `@/components/...` import
-- `@/components/auth/hooks.test` (frontend/src/components/auth/hooks.test.ts) has no absolute `@/components/...` import
-- `@/components/backups/restore-modal.test` (frontend/src/components/backups/restore-modal.test.tsx) has no absolute `@/components/...` import
-- `@/components/dashboards/widget-grid.test` (frontend/src/components/dashboards/widget-grid.test.tsx) has no absolute `@/components/...` import
-- `@/components/extensions/declarative.test` (frontend/src/components/extensions/declarative.test.ts) has no absolute `@/components/...` import
-- `@/components/extensions/DeclarativeWidget.test` (frontend/src/components/extensions/DeclarativeWidget.test.tsx) has no absolute `@/components/...` import
-- `@/components/extensions/ExtensionNavItems.test` (frontend/src/components/extensions/ExtensionNavItems.test.tsx) has no absolute `@/components/...` import
-- `@/components/extensions/ExtensionProvider.test` (frontend/src/components/extensions/ExtensionProvider.test.tsx) has no absolute `@/components/...` import
-- `@/components/extensions/ExtensionSlot.test` (frontend/src/components/extensions/ExtensionSlot.test.tsx) has no absolute `@/components/...` import
-- `@/components/extensions/ExtForm.test` (frontend/src/components/extensions/ExtForm.test.tsx) has no absolute `@/components/...` import
-- `@/components/extensions/SandboxedExtension.test` (frontend/src/components/extensions/SandboxedExtension.test.tsx) has no absolute `@/components/...` import
-- `@/components/projects/cluster-templates/template-form.test` (frontend/src/components/projects/cluster-templates/template-form.test.tsx) has no absolute `@/components/...` import
-- `@/components/resources/key-value-editor` (frontend/src/components/resources/key-value-editor.tsx) has no absolute `@/components/...` import
-- `@/components/ui/yaml-view-dialog.test` (frontend/src/components/ui/yaml-view-dialog.test.tsx) has no absolute `@/components/...` import
-- `@/components/workloads/pod-terminal.test` (frontend/src/components/workloads/pod-terminal.test.tsx) has no absolute `@/components/...` import
+- None.
 
 Owner: deployment/platform. Classification rule: keep if consumed by tests, docs, subcharts, or future production overrides; otherwise remove from values and schema together.
 
@@ -160,8 +143,8 @@ Owner: deployment/platform. Classification rule: keep if consumed by tests, docs
 ## Summary
 
 - Hard failures: 0
-- Duplicate-code candidates: 10
-- Dead-code candidates: 40
+- Duplicate-code candidates: 32
+- Dead-code candidates: 0
 
 ## Definition Of Done For Each Candidate
 

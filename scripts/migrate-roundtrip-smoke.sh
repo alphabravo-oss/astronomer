@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Apply the canonical greenfield schema, reverse it completely, and re-apply it.
-# With Docker, the same contract runs on PostgreSQL 16 and 17 and compares a
-# normalized catalog + seed signature across both supported majors.
+# Apply every ordered migration, exercise every reversible down/up edge, reverse
+# the disposable schema completely, and re-apply it. With Docker, the same
+# contract runs on PostgreSQL 16 and 17 and compares a normalized catalog + seed
+# signature across both supported majors.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,25 +10,37 @@ cd "$ROOT"
 
 mapfile -t UP_FILES < <(find internal/db/migrations -maxdepth 1 -name '*.up.sql' -type f | sort)
 mapfile -t DOWN_FILES < <(find internal/db/migrations -maxdepth 1 -name '*.down.sql' -type f | sort)
-if [[ ${#UP_FILES[@]} -ne 1 || ${#DOWN_FILES[@]} -ne 1 || ${UP_FILES[0]##*/} != 001_initial.up.sql || ${DOWN_FILES[0]##*/} != 001_initial.down.sql ]]; then
-  echo "expected exactly 001_initial.up.sql and 001_initial.down.sql" >&2
+if [[ ${#UP_FILES[@]} -eq 0 || ${#UP_FILES[@]} -ne ${#DOWN_FILES[@]} ]]; then
+  echo "expected a non-empty, paired set of .up.sql and .down.sql migrations" >&2
   exit 1
 fi
+for up_file in "${UP_FILES[@]}"; do
+  down_file="${up_file%.up.sql}.down.sql"
+  if [[ ! -f "$down_file" ]]; then
+    echo "missing down migration paired with ${up_file##*/}" >&2
+    exit 1
+  fi
+done
+latest_name="${UP_FILES[${#UP_FILES[@]}-1]##*/}"
+EXPECTED_VERSION="$((10#${latest_name%%_*}))"
 
 if ! command -v migrate >/dev/null 2>&1 && [[ -x "$(go env GOPATH)/bin/migrate" ]]; then
-  export PATH="$(go env GOPATH)/bin:$PATH"
+  gopath_bin="$(go env GOPATH)/bin"
+  export PATH="${gopath_bin}:$PATH"
 fi
 if ! command -v migrate >/dev/null 2>&1; then
   echo "installing golang-migrate CLI via go install..."
   go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.1
-  export PATH="$(go env GOPATH)/bin:$PATH"
+  gopath_bin="$(go env GOPATH)/bin"
+  export PATH="${gopath_bin}:$PATH"
 fi
 
 if [[ -n "${DATABASE_URL:-}" ]]; then
-  echo "migrate up/down/up against supplied DATABASE_URL"
+  echo "migrate all up/latest down/up against supplied DATABASE_URL"
   migrate -database "$DATABASE_URL" -path internal/db/migrations up
+  [[ "$(migrate -database "$DATABASE_URL" -path internal/db/migrations version 2>/dev/null | awk '{print $1}')" == "$EXPECTED_VERSION" ]]
   migrate -database "$DATABASE_URL" -path internal/db/migrations down 1
-  migrate -database "$DATABASE_URL" -path internal/db/migrations up
+  migrate -database "$DATABASE_URL" -path internal/db/migrations up 1
   echo "migrate-roundtrip-smoke: supplied database OK"
   exit 0
 fi
@@ -75,7 +88,7 @@ SELECT string_agg(signature, E'\\n' ORDER BY signature) FROM (
 run_major() {
   local major="$1"
   local container="astronomer-migration-pg${major}-$$"
-  local database_url port first_schema first_seeds remaining_tables
+  local database_url port first_schema first_seeds remaining_tables version
 
   docker run -d --rm --name "$container" \
     -e POSTGRES_PASSWORD=astro -e POSTGRES_USER=astro -e POSTGRES_DB=astro \
@@ -93,12 +106,26 @@ run_major() {
 
   echo "PostgreSQL ${major}: up"
   migrate -database "$database_url" -path internal/db/migrations up
-  [[ "$(docker exec "$container" psql -X -U astro -d astro -Atc 'SELECT version || '"'"'|'"'"' || CASE WHEN dirty THEN '"'"'t'"'"' ELSE '"'"'f'"'"' END FROM schema_migrations')" == "1|f" ]]
+  [[ "$(docker exec "$container" psql -X -U astro -d astro -Atc 'SELECT version || '"'"'|'"'"' || CASE WHEN dirty THEN '"'"'t'"'"' ELSE '"'"'f'"'"' END FROM schema_migrations')" == "${EXPECTED_VERSION}|f" ]]
+  echo "PostgreSQL ${major}: transactional audit outbox rollback/replay smoke"
+  docker exec -i "$container" psql -X -q -U astro -d astro \
+    < scripts/testdata/audit-outbox-postgres-smoke.sql
+  echo "PostgreSQL ${major}: durable audit-to-SIEM fan-out/replay smoke"
+  AUDIT_OUTBOX_TEST_DATABASE_URL="$database_url" \
+    go test ./internal/db/sqlc -run 'Test(AuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders|LoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted)$' -count=1
   first_schema="$(docker exec "$container" psql -X -U astro -d astro -Atc "$schema_signature_sql")"
   first_seeds="$(docker exec "$container" psql -X -U astro -d astro -Atc "$seed_signature_sql")"
 
-  echo "PostgreSQL ${major}: down"
-  migrate -database "$database_url" -path internal/db/migrations down 1
+  echo "PostgreSQL ${major}: every reversible down/up edge"
+  for ((version=EXPECTED_VERSION; version>=1; version--)); do
+    migrate -database "$database_url" -path internal/db/migrations down 1
+    if (( version > 1 )); then
+      [[ "$(docker exec "$container" psql -X -U astro -d astro -Atc 'SELECT version || '"'"'|'"'"' || CASE WHEN dirty THEN '"'"'t'"'"' ELSE '"'"'f'"'"' END FROM schema_migrations')" == "$((version-1))|f" ]]
+    fi
+    migrate -database "$database_url" -path internal/db/migrations up 1
+    [[ "$(docker exec "$container" psql -X -U astro -d astro -Atc 'SELECT version || '"'"'|'"'"' || CASE WHEN dirty THEN '"'"'t'"'"' ELSE '"'"'f'"'"' END FROM schema_migrations')" == "${version}|f" ]]
+    migrate -database "$database_url" -path internal/db/migrations down 1
+  done
   remaining_tables="$(docker exec "$container" psql -X -U astro -d astro -Atc "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename <> 'schema_migrations'")"
   [[ "$remaining_tables" == "0" ]]
 

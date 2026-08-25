@@ -14,7 +14,11 @@ function finding(
     severity,
     state,
     reasonNoAction,
-    affectedResource: { type: "installation", id: "deployment-a", requiredVerb: "read" },
+    affectedResource: {
+      type: "installation",
+      id: "deployment-a",
+      requiredVerb: "read",
+    },
     summary: "bounded",
     workflowState: "manual_remediation_required",
     availableDecisions: ["acknowledge", "start_remediation", "dismiss"],
@@ -43,11 +47,14 @@ describe("Charlie topbar finding semantics", () => {
   it("deduplicates before applying the bounded notification limit", () => {
     const duplicate = finding("same", "high", "open", "scope_denied");
     expect(
-      selectImportantCharlieFindings([
-        duplicate,
-        duplicate,
-        finding("next", "critical", "open", "read_only"),
-      ], 2).map((item) => item.id),
+      selectImportantCharlieFindings(
+        [
+          duplicate,
+          duplicate,
+          finding("next", "critical", "open", "read_only"),
+        ],
+        2,
+      ).map((item) => item.id),
     ).toEqual(["same", "next"]);
   });
 });

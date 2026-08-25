@@ -3,10 +3,21 @@ package worker
 import (
 	"fmt"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/hibiken/asynq"
 )
+
+const managementBackupObservationRetryDelay = 15 * time.Second
+
+func retryDelay(n int, err error, task *asynq.Task) time.Duration {
+	if task != nil && task.Type() == tasks.ManagementBackupOperationType && err != nil && strings.Contains(err.Error(), "backup_in_progress") {
+		return managementBackupObservationRetryDelay
+	}
+	return asynq.DefaultRetryDelayFunc(n, err, task)
+}
 
 // Task type constants
 const (
@@ -20,12 +31,14 @@ const (
 	// Phase B5: cis-operator report ingestion. Re-enqueues itself every 30s
 	// for up to ~30 min until the matching ClusterScanReport is available.
 	TypeSecurityIngest                   = tasks.SecurityIngestType
+	TypeSecurityIngestRecovery           = tasks.SecurityIngestRecoveryType
 	TypeNotificationSend                 = "notification:send"
 	TypeAgentManifest                    = "agent:generate_manifest"
 	TypeCleanupExpiredRegistrationTokens = tasks.CleanupExpiredRegistrationTokensType
 	TypeCleanupOldAlertEvents            = tasks.CleanupOldAlertEventsType
 	TypeEnsureAuditLogPartitions         = tasks.EnsureAuditLogPartitionsType
 	TypeEnforceAuditLogRetention         = tasks.EnforceAuditLogRetentionType
+	TypeAuditOutboxDispatch              = tasks.AuditOutboxDispatchType
 	TypeRunScheduledBackups              = tasks.RunScheduledBackupsType
 	TypeEnforceBackupRetention           = tasks.EnforceBackupRetentionType
 	TypeRunRestore                       = tasks.RunRestoreType
@@ -59,11 +72,11 @@ const (
 	TypeClusterApplyRegistrySecret    = tasks.ClusterApplyRegistrySecretType
 	TypeClusterRegistryDriftReconcile = tasks.ClusterRegistryDriftReconcileType
 	// Migration 052: per-cluster Velero snapshot lifecycle. Three task
-	// types share one querier + driver wiring; see
-	// tasks.ConfigureClusterSnapshotTasks.
+	// types share one immutable ClusterSnapshotRuntime.
 	TypeClusterSnapshotPoll              = tasks.ClusterSnapshotPollType
 	TypeClusterSnapshotDispatchScheduled = tasks.ClusterSnapshotDispatchScheduledType
 	TypeClusterSnapshotCleanupExpired    = tasks.ClusterSnapshotCleanupExpiredType
+	TypeClusterSnapshotApplyOperation    = tasks.ClusterSnapshotApplyOperationType
 	// Migration 053: cloud credentials → in-cluster k8s Secret. The
 	// CloudCredentialMaterialize task runs for one (credential, cluster,
 	// namespace) tuple; the CloudCredentialDriftReconcile sweep walks
@@ -82,6 +95,7 @@ const (
 	// Migration 092: durable Postgres task outbox dispatcher. This is the
 	// retry bridge from committed DB task intents into Redis/Asynq.
 	TypeTaskOutboxDispatch     = tasks.TaskOutboxDispatchType
+	TypeAdminQueueOperation    = tasks.AdminQueueOperationType
 	TypeCharlieTriggerDispatch = tasks.CharlieTriggerDispatchType
 	TypeCharlieAlertDispatch   = tasks.CharlieAlertDispatchTaskType
 	TypeCharlieAlertReconcile  = tasks.CharlieAlertReconcileType
@@ -104,8 +118,7 @@ const (
 	// cluster_conditions.
 	TypeCRDOwnershipDriftCheck = tasks.CRDOwnershipDriftCheckType
 	// Migration 070: apiserver allow-list reconciler. Three task types
-	// share one querier + registry wiring; see
-	// tasks.ConfigureApiserverAllowlistReconcile.
+	// share one immutable ApiserverAllowlistRuntime.
 	//   - Reconcile         : per-cluster reconcile (enqueued by handler
 	//                         and by the periodic ReconcileAll sweep).
 	//   - ReconcileAll      : every-15m sweep over every active row.
@@ -119,6 +132,10 @@ const (
 	TypeXClusterAnomalyRecompute = tasks.XClusterAnomalyRecomputeType
 	// Sprint 073: nightly chart-rating aggregate + co-installation matrix recompute.
 	TypeChartRecommendationsRecompute = tasks.ChartRecommendationsRecomputeType
+	// Durable, tunnel-owned deletion/recreation of Trivy VulnerabilityReport
+	// objects for one committed workload operation.
+	TypeImageVulnerabilityRescan = tasks.ImageVulnerabilityRescanType
+	TypePodDelete                = tasks.PodDeleteType
 	// P1 item 16/22: tool drift reconciliation sweep. Tunnel-queue task —
 	// probes each installed_charts row's live helm release and flags drift.
 	TypeToolDriftSweep = tasks.ToolDriftSweepType
@@ -126,9 +143,249 @@ const (
 
 // Worker wraps the Asynq server for processing background tasks.
 type Worker struct {
-	server *asynq.Server
-	mux    *asynq.ServeMux
-	log    *slog.Logger
+	server      *asynq.Server
+	mux         *asynq.ServeMux
+	log         *slog.Logger
+	descriptors []TaskDescriptor
+}
+
+// StandaloneRuntime is the explicit, immutable handler graph owned by the
+// standalone worker process. It contains the complete composition graph; task
+// packages expose no mutable startup configurators.
+type StandaloneRuntime struct {
+	Features    tasks.StandaloneRuntimeFeatures
+	Core        tasks.CoreRuntime
+	Delivery    tasks.DeliveryRuntime
+	Dispatch    tasks.DispatchRuntime
+	Alerts      tasks.CharlieAlertRuntime
+	Maintenance tasks.MaintenanceRuntime
+	Allowlists  tasks.ApiserverAllowlistRuntime
+	GitOps      tasks.GitOpsRuntime
+}
+
+// TunnelRuntime is the explicit handler graph owned by the server-embedded
+// worker that drains only tunnel-dependent tasks.
+type TunnelRuntime struct {
+	Features             tasks.TunnelRuntimeFeatures
+	Core                 tasks.CoreRuntime
+	ToolDrift            tasks.ToolDriftRuntime
+	CharlieTrigger       *tasks.CharlieTriggerRuntime
+	ClusterTemplate      tasks.ClusterTemplateRuntime
+	NetworkPolicy        tasks.NetworkPolicyRuntime
+	Mesh                 tasks.MeshRuntime
+	CloudCredential      tasks.CloudCredentialRuntime
+	ClusterRegistry      tasks.ClusterRegistryRuntime
+	Project              tasks.ProjectRuntime
+	ClusterSnapshot      tasks.ClusterSnapshotRuntime
+	ClusterDecommission  tasks.ClusterDecommissionRuntime
+	ControlPlaneSnapshot tasks.ControlPlaneSnapshotRuntime
+	Deferred             tasks.DeferredRuntime
+	KubectlSessionReap   tasks.KubectlSessionReapRuntime
+	SecurityIngest       tasks.SecurityIngestRuntime
+	CRDOwnership         tasks.CRDOwnershipRuntime
+	Dex                  tasks.DexOperationRuntime
+}
+
+func (runtime TunnelRuntime) handlerBindings() (map[string]asynq.HandlerFunc, error) {
+	bindings, err := runtime.ToolDrift.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	dexBindings, err := runtime.Dex.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range dexBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	triggerBindings, err := runtime.CharlieTrigger.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range triggerBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	templateBindings, err := runtime.ClusterTemplate.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range templateBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	networkPolicyBindings, err := runtime.NetworkPolicy.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range networkPolicyBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	meshBindings, err := runtime.Mesh.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range meshBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	cloudBindings, err := runtime.CloudCredential.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range cloudBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	registryBindings, err := runtime.ClusterRegistry.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range registryBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	projectBindings, err := runtime.Project.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range projectBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	snapshotBindings, err := runtime.ClusterSnapshot.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range snapshotBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	decommissionBindings, err := runtime.ClusterDecommission.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range decommissionBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	controlPlaneBindings, err := runtime.ControlPlaneSnapshot.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range controlPlaneBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	deferredBindings, err := runtime.Deferred.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range deferredBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	kubectlBindings, err := runtime.KubectlSessionReap.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range kubectlBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	securityBindings, err := runtime.SecurityIngest.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range securityBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	if runtime.Features.CRDOwnership {
+		crdOwnershipBindings, err := runtime.CRDOwnership.HandlerBindings()
+		if err != nil {
+			return nil, err
+		}
+		for taskType, handler := range crdOwnershipBindings {
+			if _, exists := bindings[taskType]; exists {
+				return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+			}
+			bindings[taskType] = handler
+		}
+	}
+	if err := runtime.Core.ValidateTunnel(); err != nil {
+		return nil, fmt.Errorf("validate tunnel core runtime: %w", err)
+	}
+	return bindCoreRuntimeHandlersForDescriptors(runtime.Core, bindings, descriptorsForTunnel(runtime.Features)), nil
+}
+
+func (runtime StandaloneRuntime) handlerBindings() (map[string]asynq.HandlerFunc, error) {
+	bindings := make(map[string]asynq.HandlerFunc)
+	families := []func() (map[string]asynq.HandlerFunc, error){
+		runtime.Delivery.HandlerBindings,
+		runtime.Dispatch.HandlerBindings,
+		runtime.Alerts.HandlerBindings,
+		runtime.Maintenance.HandlerBindings,
+		runtime.Allowlists.HandlerBindings,
+		runtime.GitOps.HandlerBindings,
+	}
+	for _, build := range families {
+		familyBindings, err := build()
+		if err != nil {
+			return nil, err
+		}
+		for taskType, handler := range familyBindings {
+			if _, exists := bindings[taskType]; exists {
+				return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+			}
+			bindings[taskType] = handler
+		}
+	}
+	if err := runtime.Core.ValidateStandalone(runtime.Features); err != nil {
+		return nil, fmt.Errorf("validate standalone core runtime: %w", err)
+	}
+	return bindCoreRuntimeHandlersForDescriptors(runtime.Core, bindings, descriptorsForStandalone(runtime.Features)), nil
+}
+
+func bindCoreRuntimeHandlersForDescriptors(core tasks.CoreRuntime, bindings map[string]asynq.HandlerFunc, descriptors []TaskDescriptor) map[string]asynq.HandlerFunc {
+	for _, descriptor := range descriptors {
+		handler := bindings[descriptor.Type]
+		if handler == nil {
+			handler = descriptor.Handler
+		}
+		bindings[descriptor.Type] = core.BindHandler(handler)
+	}
+	return bindings
 }
 
 // NewWorker creates a new Asynq-based background worker.
@@ -138,14 +395,23 @@ type Worker struct {
 // footgun in air-gapped or split-network production clusters — the worker
 // would come up, fail every redis op invisibly, and take hours to
 // diagnose. Now a bad URL surfaces at process start.
-func NewWorker(redisURL string, log *slog.Logger, errorHandlers ...asynq.ErrorHandler) (*Worker, error) {
+func NewWorker(redisURL string, log *slog.Logger, runtime StandaloneRuntime, errorHandlers ...asynq.ErrorHandler) (*Worker, error) {
+	bindings, err := runtime.handlerBindings()
+	if err != nil {
+		return nil, fmt.Errorf("compose standalone worker runtime: %w", err)
+	}
+	descriptors, err := resolveTaskDescriptorSet(TaskOwnerWorker, descriptorsForStandalone(runtime.Features), bindings)
+	if err != nil {
+		return nil, fmt.Errorf("compose standalone worker handlers: %w", err)
+	}
 	redisOpt, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
 	}
 
 	config := asynq.Config{
-		Concurrency: 10,
+		Concurrency:    10,
+		RetryDelayFunc: retryDelay,
 		Queues: map[string]int{
 			"critical": 6,
 			"default":  3,
@@ -158,9 +424,10 @@ func NewWorker(redisURL string, log *slog.Logger, errorHandlers ...asynq.ErrorHa
 	srv := asynq.NewServer(redisOpt, config)
 
 	return &Worker{
-		server: srv,
-		mux:    asynq.NewServeMux(),
-		log:    log,
+		server:      srv,
+		mux:         asynq.NewServeMux(),
+		log:         log,
+		descriptors: descriptors,
 	}, nil
 }
 
@@ -183,7 +450,7 @@ const defaultTunnelWorkerConcurrency = 8
 // apply runs (helm install of multiple operators, up to ~10m each) starved every
 // short tunnel RPC across the platform. A non-positive value falls back to
 // defaultTunnelWorkerConcurrency.
-func NewTunnelWorker(redisURL string, concurrency int, log *slog.Logger, errorHandlers ...asynq.ErrorHandler) (*Worker, error) {
+func NewTunnelWorker(redisURL string, concurrency int, log *slog.Logger, runtime TunnelRuntime, errorHandlers ...asynq.ErrorHandler) (*Worker, error) {
 	redisOpt, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
@@ -192,7 +459,8 @@ func NewTunnelWorker(redisURL string, concurrency int, log *slog.Logger, errorHa
 		concurrency = defaultTunnelWorkerConcurrency
 	}
 	config := asynq.Config{
-		Concurrency: concurrency,
+		Concurrency:    concurrency,
+		RetryDelayFunc: retryDelay,
 		Queues: map[string]int{
 			TunnelQueueName: 1,
 		},
@@ -201,10 +469,19 @@ func NewTunnelWorker(redisURL string, concurrency int, log *slog.Logger, errorHa
 		config.ErrorHandler = errorHandlers[0]
 	}
 	srv := asynq.NewServer(redisOpt, config)
+	bindings, err := runtime.handlerBindings()
+	if err != nil {
+		return nil, fmt.Errorf("compose tunnel worker runtime: %w", err)
+	}
+	descriptors, err := resolveTaskDescriptorSet(TaskOwnerTunnel, descriptorsForTunnel(runtime.Features), bindings)
+	if err != nil {
+		return nil, fmt.Errorf("compose tunnel worker handlers: %w", err)
+	}
 	return &Worker{
-		server: srv,
-		mux:    asynq.NewServeMux(),
-		log:    log,
+		server:      srv,
+		mux:         asynq.NewServeMux(),
+		log:         log,
+		descriptors: descriptors,
 	}, nil
 }
 
@@ -213,103 +490,18 @@ func NewTunnelWorker(redisURL string, concurrency int, log *slog.Logger, errorHa
 // registered on the standalone worker pod (where it'd just short-circuit
 // with "runtime not configured" and waste a redis round-trip).
 func (w *Worker) RegisterTunnelHandlers() {
-	w.mux.HandleFunc(TypeClusterTemplateApply, instrumentTask(TypeClusterTemplateApply, tasks.HandleClusterTemplateApply))
-	w.mux.HandleFunc(TypeClusterTemplateDriftCheck, instrumentTask(TypeClusterTemplateDriftCheck, tasks.HandleClusterTemplateDriftCheck))
-	w.mux.HandleFunc(tasks.MeshDetectType, instrumentTask(tasks.MeshDetectType, tasks.HandleMeshDetect))
-	w.mux.HandleFunc(tasks.ClusterGroupMetricsRefreshType, instrumentTask(tasks.ClusterGroupMetricsRefreshType, tasks.HandleClusterGroupMetricsRefresh))
-	w.mux.HandleFunc(tasks.GatekeeperPolicyApplyType, instrumentTask(tasks.GatekeeperPolicyApplyType, tasks.HandleGatekeeperPolicyApply))
-	w.mux.HandleFunc(TypeToolDriftSweep, instrumentTask(TypeToolDriftSweep, tasks.HandleToolDriftSweep))
-	// Charlie trigger dispatch requires the server-owned local Product Bridge,
-	// so it is a server/tunnel-queue task even though it never opens a
-	// downstream cluster tunnel. The standalone worker must never claim it.
-	w.mux.HandleFunc(TypeCharlieTriggerDispatch, instrumentTask(TypeCharlieTriggerDispatch, tasks.HandleCharlieTriggerDispatch))
-	// Decommission (individual + periodic sweep) runs here, not on the
-	// standalone worker, so the managed-side cleanup phase can reach a
-	// connected agent via the hub.
-	w.mux.HandleFunc(TypeClusterDecommission, instrumentTask(TypeClusterDecommission, tasks.HandleClusterDecommission))
-	w.mux.HandleFunc(TypeClusterDecommissionAll, instrumentTask(TypeClusterDecommissionAll, tasks.HandleClusterDecommissionAll))
-	w.log.Info("registered tunnel-queue task handlers")
+	for _, item := range w.descriptors {
+		w.mux.HandleFunc(item.Type, instrumentTask(item.Type, item.Handler))
+	}
+	w.log.Info("registered tunnel-queue task handlers", "count", len(w.descriptors))
 }
 
 // RegisterHandlers sets up all task handlers on the mux.
 func (w *Worker) RegisterHandlers() {
-	w.mux.HandleFunc(TypeHealthCheck, instrumentTask(TypeHealthCheck, tasks.HandleHealthCheck))
-	// Sprint 086 — cluster-condition remediation reconciler.
-	w.mux.HandleFunc(tasks.ClusterConditionReconcileType, instrumentTask(tasks.ClusterConditionReconcileType, tasks.HandleClusterConditionReconcile))
-	w.mux.HandleFunc(TypeAlertEvaluation, instrumentTask(TypeAlertEvaluation, tasks.HandleAlertEvaluation))
-	w.mux.HandleFunc(TypeCatalogSync, instrumentTask(TypeCatalogSync, tasks.HandleCatalogSync))
-	w.mux.HandleFunc(TypeMetricsAggregation, instrumentTask(TypeMetricsAggregation, tasks.HandleMetricsAggregation))
-	w.mux.HandleFunc(TypeMonitoringReconcile, instrumentTask(TypeMonitoringReconcile, tasks.HandleMonitoringReconcile))
-	w.mux.HandleFunc(TypeBackupExecution, instrumentTask(TypeBackupExecution, tasks.HandleBackupExecution))
-	w.mux.HandleFunc(TypeSecurityScan, instrumentTask(TypeSecurityScan, tasks.HandleSecurityScan))
-	w.mux.HandleFunc(TypeSecurityIngest, instrumentTask(TypeSecurityIngest, tasks.HandleSecurityIngest))
-	w.mux.HandleFunc(TypeNotificationSend, instrumentTask(TypeNotificationSend, tasks.HandleNotificationSend))
-	w.mux.HandleFunc(TypeCharlieAlertDispatch, instrumentTask(TypeCharlieAlertDispatch, tasks.HandleCharlieAlertDispatch))
-	w.mux.HandleFunc(TypeCharlieAlertReconcile, instrumentTask(TypeCharlieAlertReconcile, tasks.HandleCharlieAlertReconcile))
-	w.mux.HandleFunc(TypeAgentManifest, instrumentTask(TypeAgentManifest, tasks.HandleAgentManifest))
-	w.mux.HandleFunc(TypeCleanupExpiredRegistrationTokens, instrumentTask(TypeCleanupExpiredRegistrationTokens, tasks.HandleCleanupRegistrationTokens))
-	w.mux.HandleFunc(TypeCleanupOldAlertEvents, instrumentTask(TypeCleanupOldAlertEvents, tasks.HandleCleanupAlertEvents))
-	w.mux.HandleFunc(TypeEnsureAuditLogPartitions, instrumentTask(TypeEnsureAuditLogPartitions, tasks.HandleEnsureAuditLogPartitions))
-	w.mux.HandleFunc(TypeEnforceAuditLogRetention, instrumentTask(TypeEnforceAuditLogRetention, tasks.HandleEnforceAuditLogRetention))
-	w.mux.HandleFunc(tasks.ApiserverAuditRetentionType, instrumentTask(tasks.ApiserverAuditRetentionType, tasks.HandleApiserverAuditRetention))
-	w.mux.HandleFunc(TypeRunScheduledBackups, instrumentTask(TypeRunScheduledBackups, tasks.HandleRunScheduledBackups))
-	w.mux.HandleFunc(TypeEnforceBackupRetention, instrumentTask(TypeEnforceBackupRetention, tasks.HandleEnforceBackupRetention))
-	w.mux.HandleFunc(tasks.ClusterTombstoneRetentionType, instrumentTask(tasks.ClusterTombstoneRetentionType, tasks.HandleClusterTombstoneRetention))
-	w.mux.HandleFunc(TypeRunRestore, instrumentTask(TypeRunRestore, tasks.HandleRunRestore))
-	w.mux.HandleFunc(TypeProjectReconcile, instrumentTask(TypeProjectReconcile, tasks.HandleProjectReconcile))
-	w.mux.HandleFunc(TypeProjectReconcileAll, instrumentTask(TypeProjectReconcileAll, tasks.HandleProjectReconcileAll))
-	// NOTE: cluster:decommission and cluster:decommission_all are NOT registered
-	// on the standalone worker. They need the WS tunnel hub (managed-side agent
-	// uninstall), which lives only in the server pod — so both run on the
-	// server's tunnel-queue worker (see RegisterTunnelHandlers) and are
-	// enqueued/scheduled to the "tunnel" queue.
-	w.mux.HandleFunc(tasks.RefreshGroupSyncMetricsType, instrumentTask(tasks.RefreshGroupSyncMetricsType, tasks.HandleRefreshGroupSyncMetrics))
-	w.mux.HandleFunc(TypeTelemetrySend, instrumentTask(TypeTelemetrySend, tasks.HandleTelemetrySend))
-	w.mux.HandleFunc(TypeEmailDispatch, instrumentTask(TypeEmailDispatch, tasks.HandleEmailDispatch))
-	w.mux.HandleFunc(TypeEmailCleanupOld, instrumentTask(TypeEmailCleanupOld, tasks.HandleEmailCleanupOld))
-	w.mux.HandleFunc(TypeWebhookDispatch, instrumentTask(TypeWebhookDispatch, tasks.HandleWebhookDispatch))
-	w.mux.HandleFunc(TypeWebhookCleanupOld, instrumentTask(TypeWebhookCleanupOld, tasks.HandleWebhookCleanupOld))
-	// cluster_template:apply + drift_check are tunnel-only — registered
-	// on the server-embedded tunnel worker, not here. See RegisterTunnelHandlers.
-	w.mux.HandleFunc(TypeClusterApplyRegistrySecret, instrumentTask(TypeClusterApplyRegistrySecret, tasks.HandleClusterApplyRegistrySecret))
-	w.mux.HandleFunc(TypeClusterRegistryDriftReconcile, instrumentTask(TypeClusterRegistryDriftReconcile, tasks.HandleClusterRegistryDriftReconcile))
-	w.mux.HandleFunc(TypeClusterSnapshotPoll, instrumentTask(TypeClusterSnapshotPoll, tasks.HandleClusterSnapshotPoll))
-	w.mux.HandleFunc(TypeClusterSnapshotDispatchScheduled, instrumentTask(TypeClusterSnapshotDispatchScheduled, tasks.HandleClusterSnapshotDispatchScheduled))
-	w.mux.HandleFunc(TypeClusterSnapshotCleanupExpired, instrumentTask(TypeClusterSnapshotCleanupExpired, tasks.HandleClusterSnapshotCleanupExpired))
-	w.mux.HandleFunc(tasks.ControlPlaneSnapshotSweepType, instrumentTask(tasks.ControlPlaneSnapshotSweepType, tasks.HandleControlPlaneSnapshotSweep))
-	w.mux.HandleFunc(TypeCloudCredentialMaterialize, instrumentTask(TypeCloudCredentialMaterialize, tasks.HandleCloudCredentialMaterialize))
-	w.mux.HandleFunc(TypeCloudCredentialDriftReconcile, instrumentTask(TypeCloudCredentialDriftReconcile, tasks.HandleCloudCredentialDriftReconcile))
-	w.mux.HandleFunc(TypePlaintextCredentialMigration, instrumentTask(TypePlaintextCredentialMigration, tasks.HandlePlaintextCredentialMigration))
-	w.mux.HandleFunc(TypeSIEMDispatch, instrumentTask(TypeSIEMDispatch, tasks.HandleSIEMDispatch))
-	w.mux.HandleFunc(TypeSIEMCleanupOld, instrumentTask(TypeSIEMCleanupOld, tasks.HandleSIEMCleanupOld))
-	// Durable agent-token rotation policy sweep (task A2). DB-only —
-	// flags clusters whose token_rotation_days policy elapsed; the tunnel
-	// server drives the grace rotation on the agent's next connect.
-	w.mux.HandleFunc(tasks.AgentTokenRotateSweepType, instrumentTask(tasks.AgentTokenRotateSweepType, tasks.HandleAgentTokenRotateSweep))
-	w.mux.HandleFunc(tasks.AgentUpgradeStuckSweepType, instrumentTask(tasks.AgentUpgradeStuckSweepType, tasks.HandleAgentUpgradeStuckSweep))
-	w.mux.HandleFunc(TypeDispatchDeferred, instrumentTask(TypeDispatchDeferred, tasks.HandleDispatchDeferred))
-	w.mux.HandleFunc(TypeTaskOutboxDispatch, instrumentTask(TypeTaskOutboxDispatch, tasks.HandleTaskOutboxDispatch))
-	w.mux.HandleFunc(tasks.DeliveryRolloutReconcileType, instrumentTask(tasks.DeliveryRolloutReconcileType, tasks.HandleDeliveryRolloutReconcile))
-	w.mux.HandleFunc(tasks.DeliverySourceResolutionType, instrumentTask(tasks.DeliverySourceResolutionType, tasks.HandleDeliverySourceResolution))
-	w.mux.HandleFunc(tasks.DeliverySystemRolloutReconcileType, instrumentTask(tasks.DeliverySystemRolloutReconcileType, tasks.HandleDeliverySystemRolloutReconcile))
-	// Migration 060: GitOps cluster registration sync.
-	w.mux.HandleFunc(tasks.GitOpsSyncType, instrumentTask(tasks.GitOpsSyncType, tasks.HandleGitOpsSync))
-	w.mux.HandleFunc(TypeKubectlSessionReap, instrumentTask(TypeKubectlSessionReap, tasks.HandleKubectlSessionReap))
-	// Migration 068: NetworkPolicy template reconciler + drift sweep.
-	w.mux.HandleFunc(TypeNetworkPolicyApply, instrumentTask(TypeNetworkPolicyApply, tasks.HandleNetworkPolicyApply))
-	w.mux.HandleFunc(TypeNetworkPolicyDriftCheck, instrumentTask(TypeNetworkPolicyDriftCheck, tasks.HandleNetworkPolicyDriftCheck))
-	w.mux.HandleFunc(TypeCrdMirrorPruneStale, instrumentTask(TypeCrdMirrorPruneStale, tasks.HandleCrdMirrorPruneStale))
-	w.mux.HandleFunc(TypeCrdMirrorGaugePopulate, instrumentTask(TypeCrdMirrorGaugePopulate, tasks.HandleCrdMirrorGaugePopulate))
-	w.mux.HandleFunc(TypeCRDOwnershipDriftCheck, instrumentTask(TypeCRDOwnershipDriftCheck, tasks.HandleCRDOwnershipDriftCheck))
-	// Migration 070: apiserver allow-list reconciler.
-	w.mux.HandleFunc(TypeApiserverAllowlistReconcile, instrumentTask(TypeApiserverAllowlistReconcile, tasks.HandleApiserverAllowlistReconcile))
-	w.mux.HandleFunc(TypeApiserverAllowlistReconcileAll, instrumentTask(TypeApiserverAllowlistReconcileAll, tasks.HandleApiserverAllowlistReconcileAll))
-	w.mux.HandleFunc(TypeApiserverAllowlistCleanupSnapshots, instrumentTask(TypeApiserverAllowlistCleanupSnapshots, tasks.HandleApiserverAllowlistCleanupSnapshots))
-	w.mux.HandleFunc(TypeAnomalyBaselineRecompute, instrumentTask(TypeAnomalyBaselineRecompute, tasks.HandleAnomalyBaselineRecompute))
-	w.mux.HandleFunc(TypeXClusterAnomalyRecompute, instrumentTask(TypeXClusterAnomalyRecompute, tasks.HandleXClusterAnomalyRecompute))
-	w.mux.HandleFunc(TypeChartRecommendationsRecompute, instrumentTask(TypeChartRecommendationsRecompute, tasks.HandleChartRecommendationsRecompute))
-
-	w.log.Info("registered all task handlers")
+	for _, item := range w.descriptors {
+		w.mux.HandleFunc(item.Type, instrumentTask(item.Type, item.Handler))
+	}
+	w.log.Info("registered worker task handlers", "count", len(w.descriptors))
 }
 
 // Start begins processing tasks. This blocks until Shutdown is called.

@@ -251,7 +251,7 @@ Typical first workflows:
 | `cmd/worker` | Background worker for durable operations and reconciliation tasks. |
 | `cmd/agent` | Adopted-cluster agent for outbound connectivity and cluster-local execution. |
 | `cmd/astro` | CLI-oriented helper surface. |
-| `frontend` | Next.js dashboard. |
+| `frontend` | Vite + React 19 operator console with TanStack Router/Query and generated OpenAPI operations. |
 | `internal` | Product domains, handlers, workers, CRD controllers, RBAC, auth, audit, tunnel, and database access. |
 | `deploy/chart` | Helm chart for the management plane. |
 | `deploy/agent` | Agent install manifest rendering. |

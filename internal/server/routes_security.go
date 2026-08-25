@@ -9,7 +9,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
-	"github.com/hibiken/asynq"
 )
 
 // Code organization: this file holds a domain-specific slice of the
@@ -18,34 +17,37 @@ import (
 
 func registerSecurityRoutes(r chi.Router, cfg *config.Config, deps RouterDependencies, rateLimit func(appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler) {
 	if deps.Security != nil {
-		// Per-route authorization for the mutating security surface. Previously
-		// these routes sat behind ONLY the feature-flag gate, so any
-		// authenticated principal (including a zero-grant viewer) could mutate
-		// templates/policies/scans. ApplyPolicy + CreateScan push config to a
-		// managed cluster through the tunnel, so they additionally carry the
-		// write-clusters scope backstop, mirroring the apiserver-audit ingest
-		// composition below.
+		// Per-route authorization for the complete security surface. Authentication
+		// alone is never sufficient here: templates, policies and CIS findings are
+		// fleet security data. Global reads require security:read; cluster-scoped
+		// reads additionally resolve the {cluster_id} scope through clusters:read.
+		// ApplyPolicy + CreateScan push config to a managed cluster through the
+		// tunnel, so they also carry the write-clusters token-scope backstop.
+		secRead := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbRead)
 		secCreate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbCreate)
 		secUpdate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbUpdate)
 		secDelete := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbDelete)
+		clusterRead := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)
 		secWriteClusters := requireScope(iauth.ScopeWriteClusters)
 		r.With(featureGate("feature.security", deps.SettingsCache)).Route("/security", func(r chi.Router) {
-			r.Get("/controller/status/", deps.Security.ControllerStatus)
-			r.Get("/templates/", deps.Security.ListTemplates)
+			r.With(secRead).Get("/controller/status/", deps.Security.ControllerStatus)
+			r.With(secRead).Get("/templates/", deps.Security.ListTemplates)
 			r.With(secCreate).Post("/templates/", deps.Security.CreateTemplate)
-			r.Get("/templates/{id}/", deps.Security.GetTemplate)
+			r.With(secRead).Get("/templates/{id}/", deps.Security.GetTemplate)
 			r.With(secUpdate).Put("/templates/{id}/", deps.Security.UpdateTemplate)
 			r.With(secDelete).Delete("/templates/{id}/", deps.Security.DeleteTemplate)
-			r.Get("/policies/", deps.Security.ListPolicies)
+			r.With(secRead).Get("/policies/", deps.Security.ListPolicies)
 			r.With(secCreate).Post("/policies/", deps.Security.CreatePolicy)
 			r.With(secWriteClusters, secUpdate).Post("/policies/{id}/apply/", deps.Security.ApplyPolicy)
 			r.With(secDelete).Delete("/policies/{id}/", deps.Security.DeletePolicy)
-			r.Get("/scans/", deps.Security.ListAllScans)
+			r.With(secRead).Get("/scans/", deps.Security.ListAllScans)
 			r.With(secWriteClusters, secCreate).Post("/scans/", deps.Security.CreateScan)
 		})
-		r.Get("/clusters/{cluster_id}/security/policy/", deps.Security.GetPolicy)
-		r.Get("/clusters/{cluster_id}/security/scans/", deps.Security.ListScans)
-		r.Get("/clusters/{cluster_id}/security/scans/{id}/", deps.Security.GetScan)
+		r.With(clusterRead).Get("/clusters/{cluster_id}/security/policy/", deps.Security.GetPolicy)
+		r.With(clusterRead).Get("/clusters/{cluster_id}/security/scans/", deps.Security.ListScans)
+		r.With(clusterRead).Get("/clusters/{cluster_id}/security/scans/{id}/", deps.Security.GetScan)
+		r.With(featureGate("feature.security", deps.SettingsCache), secWriteClusters, secUpdate, clusterRead).
+			Post("/clusters/{cluster_id}/security/scans/{id}/cancel/", deps.Security.CancelScan)
 	}
 
 	// --- P1 item 7: kube-apiserver audit-event collection -----------------
@@ -63,18 +65,21 @@ func registerSecurityRoutes(r chi.Router, cfg *config.Config, deps RouterDepende
 	}
 
 	// --- Sprint 062: image vulnerability scanning -------------------------
-	// Cluster-scoped routes gate on cluster:read; the fleet rollup pair
+	// Cluster-scoped reads gate on cluster:read; the rescan mutation also
+	// requires cluster:update plus the write-clusters token scope. The fleet rollup pair
 	// gates on security:read. Cluster routes live OUTSIDE the `/security`
 	// mount so the existing CIS-benchmark routes stay untouched. The fleet
 	// routes are nested under `/security/vulnerabilities/` so they pair
 	// naturally with the CIS surface in the dashboard.
 	if deps.ImageVulns != nil {
 		ivClusterRead := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)
+		ivClusterUpdate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)
+		ivWriteClusters := requireScope(iauth.ScopeWriteClusters)
 		ivSecurityRead := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbRead)
 		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/summary/", deps.ImageVulns.ClusterSummary)
 		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/images/", deps.ImageVulns.ClusterTopImages)
 		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/reports/{id}/", deps.ImageVulns.ClusterReportDetail)
-		r.With(ivClusterRead).Post("/clusters/{cluster_id}/vulnerabilities/rescan/", deps.ImageVulns.ClusterRescan)
+		r.With(ivWriteClusters, ivClusterUpdate, ivClusterRead).Post("/clusters/{cluster_id}/vulnerabilities/rescan/", deps.ImageVulns.ClusterRescan)
 		// Sprint 081: scan history sparkline + latest-vs-prior diff +
 		// CSV download. All three are read-only and gated by the same
 		// cluster:read RBAC the rest of the vuln surface uses.
@@ -126,21 +131,12 @@ func registerSecurityRoutes(r chi.Router, cfg *config.Config, deps RouterDepende
 		}
 		if deps.RemoteQueries != nil {
 			deps.Security.SetClusterQuerier(deps.RemoteQueries)
-			deps.Security.SetIngestPersister(deps.RemoteQueries)
-		}
-		// Optional asynq client wiring kept for parity with other handlers
-		// — the in-process poller does the actual ingestion today, but a
-		// queue connection is still useful for any future cross-process
-		// triggers (e.g. webhook → enqueue).
-		if cfg != nil && cfg.RedisURL != "" {
-			if redisOpt, err := asynq.ParseRedisURI(cfg.RedisURL); err == nil {
-				deps.Security.SetIngestQueue(asynq.NewClient(redisOpt))
-			}
 		}
 		secGate := featureGate("feature.security", deps.SettingsCache)
-		r.With(secGate).Get("/security/profiles/", deps.Security.ListProfiles)
-		r.With(secGate).Get("/security/scans/{id}/", deps.Security.GetScanFull)
-		r.With(secGate).Get("/security/scans/{id}/report.csv", deps.Security.ExportScanCSV)
+		secRead := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbRead)
+		r.With(secGate, secRead).Get("/security/profiles/", deps.Security.ListProfiles)
+		r.With(secGate, secRead).Get("/security/scans/{id}/", deps.Security.GetScanFull)
+		r.With(secGate, secRead).Get("/security/scans/{id}/report.csv", deps.Security.ExportScanCSV)
 	}
 
 }

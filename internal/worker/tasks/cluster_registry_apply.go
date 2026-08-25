@@ -117,19 +117,6 @@ type ClusterRegistryApplyDeps struct {
 	Encryptor *auth.Encryptor
 }
 
-var clusterRegistryApplyDeps ClusterRegistryApplyDeps
-
-// ConfigureClusterRegistryApply stores the task's runtime dependencies.
-// Called from server startup once the K8s tunnel hub and DB are wired.
-func ConfigureClusterRegistryApply(deps ClusterRegistryApplyDeps) {
-	clusterRegistryApplyDeps = deps
-}
-
-// ResetClusterRegistryApply clears runtime deps. Used by tests.
-func ResetClusterRegistryApply() {
-	clusterRegistryApplyDeps = ClusterRegistryApplyDeps{}
-}
-
 // clusterRegistryAppliesTotal counts every apply / unapply outcome.
 // outcome ∈ {success, failure}; phase ∈ {apply, unapply}.
 var clusterRegistryAppliesTotal = prometheus.NewCounterVec(
@@ -169,10 +156,9 @@ func RegistryProbeURL(raw string) string {
 }
 
 // HandleClusterApplyRegistrySecret is the asynq mux handler.
-func HandleClusterApplyRegistrySecret(ctx context.Context, t *asynq.Task) error {
-	if clusterRegistryApplyDeps.Queries == nil || clusterRegistryApplyDeps.Requester == nil {
-		runtimeLogger().InfoContext(ctx, "cluster registry apply runtime not configured, skipping")
-		return nil
+func (runtime ClusterRegistryRuntime) HandleClusterApplyRegistrySecret(ctx context.Context, t *asynq.Task) error {
+	if runtime.Deps.Queries == nil || runtime.Deps.Requester == nil {
+		return fmt.Errorf("cluster registry apply runtime is not configured")
 	}
 	var p ClusterApplyRegistrySecretPayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
@@ -193,9 +179,9 @@ func HandleClusterApplyRegistrySecret(ctx context.Context, t *asynq.Task) error 
 
 	switch op {
 	case "unapply":
-		return runUnapply(ctx, registryID, clusterID, p.SnapshotSecret, p.SnapshotNamespace, p.SnapshotInjectSA)
+		return runtime.runUnapply(ctx, registryID, clusterID, p.SnapshotSecret, p.SnapshotNamespace, p.SnapshotInjectSA)
 	default:
-		return runApply(ctx, registryID, clusterID)
+		return runtime.runApply(ctx, registryID, clusterID)
 	}
 }
 
@@ -203,13 +189,12 @@ func HandleClusterApplyRegistrySecret(ctx context.Context, t *asynq.Task) error 
 // walks every cluster_registry_configs row and re-applies — the apply
 // helpers below are idempotent (SSA on the Secret, JSON-merge on the SA)
 // so re-runs are cheap when the state already matches.
-func HandleClusterRegistryDriftReconcile(ctx context.Context, _ *asynq.Task) error {
+func (runtime ClusterRegistryRuntime) HandleClusterRegistryDriftReconcile(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ClusterRegistryDriftReconcileType, func() error {
-		if clusterRegistryApplyDeps.Queries == nil || clusterRegistryApplyDeps.Requester == nil {
-			runtimeLogger().InfoContext(ctx, "cluster registry apply runtime not configured, skipping drift sweep")
-			return nil
+		if runtime.Deps.Queries == nil || runtime.Deps.Requester == nil {
+			return fmt.Errorf("cluster registry apply runtime is not configured")
 		}
-		rows, err := clusterRegistryApplyDeps.Queries.ListAllClusterRegistryConfigs(ctx)
+		rows, err := runtime.Deps.Queries.ListAllClusterRegistryConfigs(ctx)
 		if err != nil {
 			return fmt.Errorf("list cluster registry configs: %w", err)
 		}
@@ -217,8 +202,8 @@ func HandleClusterRegistryDriftReconcile(ctx context.Context, _ *asynq.Task) err
 		// the sweep — one broken row shouldn't stop the others from
 		// converging.
 		for _, row := range rows {
-			if err := runApply(ctx, row.ID, row.ClusterID); err != nil {
-				runtimeLogger().WarnContext(ctx, "cluster registry drift reconcile error", "registry_id", row.ID.String(), "cluster_id", row.ClusterID.String(), "error", err)
+			if err := runtime.runApply(ctx, row.ID, row.ClusterID); err != nil {
+				runtimeLogger(ctx).WarnContext(ctx, "cluster registry drift reconcile error", "registry_id", row.ID.String(), "cluster_id", row.ClusterID.String(), "error", err)
 			}
 		}
 		return nil
@@ -227,8 +212,8 @@ func HandleClusterRegistryDriftReconcile(ctx context.Context, _ *asynq.Task) err
 
 // runApply is the apply-path body, shared by the single-task handler and
 // the periodic sweep.
-func runApply(ctx context.Context, registryID, clusterID uuid.UUID) error {
-	cfg, err := clusterRegistryApplyDeps.Queries.GetClusterRegistryConfigByID(ctx, registryID)
+func (runtime ClusterRegistryRuntime) runApply(ctx context.Context, registryID, clusterID uuid.UUID) error {
+	cfg, err := runtime.Deps.Queries.GetClusterRegistryConfigByID(ctx, registryID)
 	if err != nil {
 		clusterRegistryAppliesTotal.WithLabelValues(observability.MetricValues("apply", "failure")...).Inc()
 		return fmt.Errorf("load registry config: %w", err)
@@ -239,39 +224,39 @@ func runApply(ctx context.Context, registryID, clusterID uuid.UUID) error {
 		clusterRegistryAppliesTotal.WithLabelValues(observability.MetricValues("apply", "failure")...).Inc()
 		return fmt.Errorf("registry %s does not belong to cluster %s", registryID, clusterID)
 	}
-	if err := materializeClusterRegistryPassword(&cfg); err != nil {
+	if err := runtime.materializeClusterRegistryPassword(&cfg); err != nil {
 		clusterRegistryAppliesTotal.WithLabelValues(observability.MetricValues("apply", "failure")...).Inc()
-		_ = markRegistryError(ctx, cfg.ID, fmt.Sprintf("decrypt registry password: %v", err))
+		_ = runtime.markRegistryError(ctx, cfg.ID, fmt.Sprintf("decrypt registry password: %v", err))
 		return err
 	}
 	secretName := strings.TrimSpace(cfg.SecretName)
 	if secretName == "" {
 		secretName = clusterRegistrySecretNamePrefix + cfg.ID.String()
 	}
-	namespaces, err := resolveTargetNamespaces(ctx, cfg)
+	namespaces, err := runtime.resolveTargetNamespaces(ctx, cfg)
 	if err != nil {
 		clusterRegistryAppliesTotal.WithLabelValues(observability.MetricValues("apply", "failure")...).Inc()
-		_ = markRegistryError(ctx, cfg.ID, fmt.Sprintf("resolve namespaces: %v", err))
+		_ = runtime.markRegistryError(ctx, cfg.ID, fmt.Sprintf("resolve namespaces: %v", err))
 		return err
 	}
 	if len(namespaces) == 0 {
 		// No project namespaces yet → nothing to apply, but record a
 		// clean state so the UI doesn't surface a stale error.
-		_ = clusterRegistryApplyDeps.Queries.MarkClusterRegistryApplied(ctx, cfg.ID)
+		_ = runtime.Deps.Queries.MarkClusterRegistryApplied(ctx, cfg.ID)
 		clusterRegistryAppliesTotal.WithLabelValues(observability.MetricValues("apply", "success")...).Inc()
 		return nil
 	}
 
 	var firstErr error
 	for _, ns := range namespaces {
-		if err := applyRegistrySecretToNamespace(ctx, clusterID.String(), ns, secretName, cfg); err != nil {
+		if err := runtime.applyRegistrySecretToNamespace(ctx, clusterID.String(), ns, secretName, cfg); err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
 			continue
 		}
 		if cfg.InjectDefaultSa {
-			if err := ensureDefaultSAImagePullSecret(ctx, clusterID.String(), ns, secretName); err != nil {
+			if err := runtime.ensureDefaultSAImagePullSecret(ctx, clusterID.String(), ns, secretName); err != nil {
 				if firstErr == nil {
 					firstErr = err
 				}
@@ -282,11 +267,11 @@ func runApply(ctx context.Context, registryID, clusterID uuid.UUID) error {
 
 	if firstErr != nil {
 		clusterRegistryAppliesTotal.WithLabelValues(observability.MetricValues("apply", "failure")...).Inc()
-		_ = markRegistryError(ctx, cfg.ID, firstErr.Error())
+		_ = runtime.markRegistryError(ctx, cfg.ID, firstErr.Error())
 		return firstErr
 	}
 	clusterRegistryAppliesTotal.WithLabelValues(observability.MetricValues("apply", "success")...).Inc()
-	if err := clusterRegistryApplyDeps.Queries.MarkClusterRegistryApplied(ctx, cfg.ID); err != nil {
+	if err := runtime.Deps.Queries.MarkClusterRegistryApplied(ctx, cfg.ID); err != nil {
 		return fmt.Errorf("mark registry applied: %w", err)
 	}
 	return nil
@@ -298,7 +283,7 @@ func runApply(ctx context.Context, registryID, clusterID uuid.UUID) error {
 // retry up to asynq's max-retry; after that the row is already gone
 // (we DELETE in the handler before enqueueing) so the worst case is a
 // dangling Secret an operator can clean up manually.
-func runUnapply(ctx context.Context, registryID, clusterID uuid.UUID, snapshotSecret string, snapshotNamespaces []string, _ bool) error {
+func (runtime ClusterRegistryRuntime) runUnapply(ctx context.Context, registryID, clusterID uuid.UUID, snapshotSecret string, snapshotNamespaces []string, _ bool) error {
 	if snapshotSecret == "" {
 		snapshotSecret = clusterRegistrySecretNamePrefix + registryID.String()
 	}
@@ -307,7 +292,7 @@ func runUnapply(ctx context.Context, registryID, clusterID uuid.UUID, snapshotSe
 		// No namespace snapshot — best-effort fan out across every
 		// project_namespaces row for the cluster so we don't strand the
 		// Secret in unknown namespaces.
-		all, err := clusterRegistryApplyDeps.Queries.ListAllProjectNamespaces(ctx)
+		all, err := runtime.Deps.Queries.ListAllProjectNamespaces(ctx)
 		if err == nil {
 			for _, row := range all {
 				if row.ClusterID == clusterID {
@@ -318,10 +303,10 @@ func runUnapply(ctx context.Context, registryID, clusterID uuid.UUID, snapshotSe
 	}
 	var firstErr error
 	for _, ns := range namespaces {
-		if err := removeDefaultSAImagePullSecret(ctx, clusterID.String(), ns, snapshotSecret); err != nil && firstErr == nil {
+		if err := runtime.removeDefaultSAImagePullSecret(ctx, clusterID.String(), ns, snapshotSecret); err != nil && firstErr == nil {
 			firstErr = err
 		}
-		if err := deleteIfExists(ctx, clusterRegistryApplyDeps.Requester, clusterID.String(), fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", ns, snapshotSecret)); err != nil && firstErr == nil {
+		if err := deleteIfExists(ctx, runtime.Deps.Requester, clusterID.String(), fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", ns, snapshotSecret)); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
@@ -336,7 +321,7 @@ func runUnapply(ctx context.Context, registryID, clusterID uuid.UUID, snapshotSe
 // resolveTargetNamespaces returns the list of namespaces the registry
 // config should be materialised into. Explicit list wins; otherwise we
 // fan out across every project_namespaces row under this cluster.
-func resolveTargetNamespaces(ctx context.Context, cfg sqlc.ClusterRegistryConfig) ([]string, error) {
+func (runtime ClusterRegistryRuntime) resolveTargetNamespaces(ctx context.Context, cfg sqlc.ClusterRegistryConfig) ([]string, error) {
 	if len(cfg.Namespaces) > 0 {
 		var explicit []string
 		if err := json.Unmarshal(cfg.Namespaces, &explicit); err != nil {
@@ -359,7 +344,7 @@ func resolveTargetNamespaces(ctx context.Context, cfg sqlc.ClusterRegistryConfig
 			return out, nil
 		}
 	}
-	rows, err := clusterRegistryApplyDeps.Queries.ListAllProjectNamespaces(ctx)
+	rows, err := runtime.Deps.Queries.ListAllProjectNamespaces(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list project namespaces: %w", err)
 	}
@@ -380,7 +365,7 @@ func resolveTargetNamespaces(ctx context.Context, cfg sqlc.ClusterRegistryConfig
 
 // applyRegistrySecretToNamespace builds the dockerconfigjson body and
 // SSAs the Secret into the namespace under the configured manager.
-func applyRegistrySecretToNamespace(ctx context.Context, clusterID, namespace, secretName string, cfg sqlc.ClusterRegistryConfig) error {
+func (runtime ClusterRegistryRuntime) applyRegistrySecretToNamespace(ctx context.Context, clusterID, namespace, secretName string, cfg sqlc.ClusterRegistryConfig) error {
 	dockerCfg := buildDockerConfigJSON(cfg)
 	rawDockerCfg, err := json.Marshal(dockerCfg)
 	if err != nil {
@@ -410,7 +395,7 @@ func applyRegistrySecretToNamespace(ctx context.Context, clusterID, namespace, s
 		fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, secretName),
 		kubeutil.ApplyOptions{FieldManager: clusterRegistryFieldManager, Force: true},
 	)
-	resp, err := clusterRegistryApplyDeps.Requester.Do(ctx, clusterID, http.MethodPatch, path, body, kubeutil.ApplyPatchHeaders())
+	resp, err := runtime.Deps.Requester.Do(ctx, clusterID, http.MethodPatch, path, body, kubeutil.ApplyPatchHeaders())
 	if err != nil {
 		return fmt.Errorf("apply secret: %w", err)
 	}
@@ -434,14 +419,14 @@ func buildDockerConfigJSON(cfg sqlc.ClusterRegistryConfig) map[string]any {
 	}
 }
 
-func materializeClusterRegistryPassword(cfg *sqlc.ClusterRegistryConfig) error {
+func (runtime ClusterRegistryRuntime) materializeClusterRegistryPassword(cfg *sqlc.ClusterRegistryConfig) error {
 	if cfg == nil || strings.TrimSpace(cfg.RegistryPasswordEncrypted) == "" {
 		return nil
 	}
-	if clusterRegistryApplyDeps.Encryptor == nil {
+	if runtime.Deps.Encryptor == nil {
 		return fmt.Errorf("encrypted registry password present but encryptor is not configured")
 	}
-	password, err := clusterRegistryApplyDeps.Encryptor.Decrypt(cfg.RegistryPasswordEncrypted)
+	password, err := runtime.Deps.Encryptor.Decrypt(cfg.RegistryPasswordEncrypted)
 	if err != nil {
 		return err
 	}
@@ -468,8 +453,8 @@ func canonicalRegistryHost(raw string) string {
 // the secret to its imagePullSecrets array, and PATCHes via strategic-
 // merge so we don't clobber pull secrets owned by other controllers.
 // Idempotent: returns nil when the secret is already in the list.
-func ensureDefaultSAImagePullSecret(ctx context.Context, clusterID, namespace, secretName string) error {
-	current, err := readSAImagePullSecrets(ctx, clusterID, namespace)
+func (runtime ClusterRegistryRuntime) ensureDefaultSAImagePullSecret(ctx context.Context, clusterID, namespace, secretName string) error {
+	current, err := runtime.readSAImagePullSecrets(ctx, clusterID, namespace)
 	if err != nil {
 		return err
 	}
@@ -479,13 +464,13 @@ func ensureDefaultSAImagePullSecret(ctx context.Context, clusterID, namespace, s
 		}
 	}
 	merged := append(current, secretName)
-	return writeSAImagePullSecrets(ctx, clusterID, namespace, merged)
+	return runtime.writeSAImagePullSecrets(ctx, clusterID, namespace, merged)
 }
 
 // removeDefaultSAImagePullSecret is the de-patch path: drops secretName
 // from the SA's imagePullSecrets, leaving everything else intact.
-func removeDefaultSAImagePullSecret(ctx context.Context, clusterID, namespace, secretName string) error {
-	current, err := readSAImagePullSecrets(ctx, clusterID, namespace)
+func (runtime ClusterRegistryRuntime) removeDefaultSAImagePullSecret(ctx context.Context, clusterID, namespace, secretName string) error {
+	current, err := runtime.readSAImagePullSecrets(ctx, clusterID, namespace)
 	if err != nil {
 		return err
 	}
@@ -501,7 +486,7 @@ func removeDefaultSAImagePullSecret(ctx context.Context, clusterID, namespace, s
 	if !found {
 		return nil
 	}
-	return writeSAImagePullSecrets(ctx, clusterID, namespace, filtered)
+	return runtime.writeSAImagePullSecrets(ctx, clusterID, namespace, filtered)
 }
 
 // readSAImagePullSecrets fetches the namespace's default ServiceAccount
@@ -509,8 +494,8 @@ func removeDefaultSAImagePullSecret(ctx context.Context, clusterID, namespace, s
 // (no SA in the namespace yet, e.g. brand-new namespace; the apply task
 // will be re-tried by the periodic sweep when k8s gets around to
 // creating the default SA).
-func readSAImagePullSecrets(ctx context.Context, clusterID, namespace string) ([]string, error) {
-	resp, err := clusterRegistryApplyDeps.Requester.Do(ctx, clusterID, http.MethodGet, fmt.Sprintf("/api/v1/namespaces/%s/serviceaccounts/default", namespace), nil, map[string]string{
+func (runtime ClusterRegistryRuntime) readSAImagePullSecrets(ctx context.Context, clusterID, namespace string) ([]string, error) {
+	resp, err := runtime.Deps.Requester.Do(ctx, clusterID, http.MethodGet, fmt.Sprintf("/api/v1/namespaces/%s/serviceaccounts/default", namespace), nil, map[string]string{
 		"Accept": "application/json",
 	})
 	if err != nil {
@@ -545,7 +530,7 @@ func readSAImagePullSecrets(ctx context.Context, clusterID, namespace string) ([
 // writeSAImagePullSecrets PATCHes the SA's imagePullSecrets array. We use
 // strategic-merge so the patch only touches the imagePullSecrets field —
 // other fields on the SA (secrets[], annotations) stay untouched.
-func writeSAImagePullSecrets(ctx context.Context, clusterID, namespace string, names []string) error {
+func (runtime ClusterRegistryRuntime) writeSAImagePullSecrets(ctx context.Context, clusterID, namespace string, names []string) error {
 	items := make([]map[string]string, 0, len(names))
 	for _, name := range names {
 		name = strings.TrimSpace(name)
@@ -561,7 +546,7 @@ func writeSAImagePullSecrets(ctx context.Context, clusterID, namespace string, n
 	if err != nil {
 		return err
 	}
-	resp, err := clusterRegistryApplyDeps.Requester.Do(ctx, clusterID, http.MethodPatch, fmt.Sprintf("/api/v1/namespaces/%s/serviceaccounts/default", namespace), raw, map[string]string{
+	resp, err := runtime.Deps.Requester.Do(ctx, clusterID, http.MethodPatch, fmt.Sprintf("/api/v1/namespaces/%s/serviceaccounts/default", namespace), raw, map[string]string{
 		"Content-Type": "application/strategic-merge-patch+json",
 		"Accept":       "application/json",
 	})
@@ -578,8 +563,8 @@ func writeSAImagePullSecrets(ctx context.Context, clusterID, namespace string, n
 // UI can show "last apply failed: …". Empty `errMsg` resets the column;
 // the handler picks the success path through MarkClusterRegistryApplied
 // instead.
-func markRegistryError(ctx context.Context, id uuid.UUID, errMsg string) error {
-	return clusterRegistryApplyDeps.Queries.MarkClusterRegistryApplyError(ctx, sqlc.MarkClusterRegistryApplyErrorParams{
+func (runtime ClusterRegistryRuntime) markRegistryError(ctx context.Context, id uuid.UUID, errMsg string) error {
+	return runtime.Deps.Queries.MarkClusterRegistryApplyError(ctx, sqlc.MarkClusterRegistryApplyErrorParams{
 		ID:             id,
 		LastApplyError: errMsg,
 	})

@@ -49,6 +49,7 @@ func registerCharlieRoutes(r chi.Router, deps RouterDependencies, rateLimit func
 			r.With(gate, admin, manage).Patch("/admin/charlie/trigger-rules/{rule_id}/", deps.CharlieAdmin.UpdateTrigger)
 			r.With(gate, admin, manage).Delete("/admin/charlie/trigger-rules/{rule_id}/", deps.CharlieAdmin.DeleteTrigger)
 			r.With(gate, admin, manage).Get("/admin/charlie/trigger-events/", deps.CharlieAdmin.ListTriggerEvents)
+			r.With(gate, admin, manage).Get("/admin/charlie/trigger-events/{event_id}/", deps.CharlieAdmin.GetTriggerEvent)
 			r.With(gate, admin, manage).Post("/admin/charlie/trigger-events/{event_id}/retry/", deps.CharlieAdmin.RetryTriggerEvent)
 			r.With(gate, admin, manage).Get("/admin/charlie/access/", deps.CharlieAdmin.Access)
 			r.With(gate, admin, manage).Put("/admin/charlie/access/", deps.CharlieAdmin.UpdateAccess)

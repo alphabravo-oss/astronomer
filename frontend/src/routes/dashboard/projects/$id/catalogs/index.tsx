@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * Project · Catalogs tab (migration 061 / sprint 16 — BYO Helm catalogs).
  *
@@ -17,23 +24,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * Mirrors the cloud-credentials list page shape so the project-detail
  * tabs stay visually consistent.
  */
-import { useState } from 'react';
-import { useParams } from '@/lib/navigation';
-import { Plus, Loader2, Trash2, Link2 } from 'lucide-react';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { ModalShell } from '@/components/ui/modal-shell';
+import { useState } from "react";
+import { useParams } from "@/lib/navigation";
+import { Plus, Loader2, Trash2, Link2 } from "lucide-react";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
 import {
   useProjectCatalogs,
   useCreateProjectCatalog,
   useSubscribeProjectCatalog,
   useDeleteProjectCatalog,
   canEditProject,
-} from '@/components/projects/hooks';
-import { useCurrentUser } from '@/lib/hooks';
+} from "@/components/projects/hooks";
+import { useCurrentUser } from "@/lib/hooks";
 
-import type { ProjectCatalog } from '@/lib/api/project-detail';
-import { cn, formatRelativeTime } from '@/lib/utils';
+import type { ProjectCatalog } from "@/lib/api/project-detail";
+import { cn, formatRelativeTime } from "@/lib/utils";
 
 function ProjectCatalogsPage() {
   const params = useParams();
@@ -47,7 +54,7 @@ function ProjectCatalogsPage() {
   const deleteMutation = useDeleteProjectCatalog(projectId);
 
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: '', url: '', description: '' });
+  const [form, setForm] = useState({ name: "", url: "", description: "" });
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +65,7 @@ function ProjectCatalogsPage() {
         description: form.description,
       });
       setShowAdd(false);
-      setForm({ name: '', url: '', description: '' });
+      setForm({ name: "", url: "", description: "" });
     } catch {
       // Toast handled in the hook.
     }
@@ -69,7 +76,7 @@ function ProjectCatalogsPage() {
   };
 
   const handleUnsubscribe = (cat: ProjectCatalog) => {
-    const isOwned = cat.visibility === 'own';
+    const isOwned = cat.visibility === "own";
     const msg = isOwned
       ? `Delete the project-owned catalog "${cat.name}"? This removes the catalog and all of its charts; no other project can use it.`
       : `Unsubscribe from catalog "${cat.name}"? The catalog itself stays available to other projects.`;
@@ -82,11 +89,14 @@ function ProjectCatalogsPage() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           Helm chart catalogs available to this project. Globals are shared
-          across all projects; private catalogs are scoped to this project
-          only.
+          across all projects; private catalogs are scoped to this project only.
         </p>
         {canEdit && (
-          <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setShowAdd(true)}>
+          <ActionButton
+            intent="primary"
+            icon={<Plus className="h-4 w-4" />}
+            onClick={() => setShowAdd(true)}
+          >
             Add private catalog
           </ActionButton>
         )}
@@ -108,31 +118,52 @@ function ProjectCatalogsPage() {
           <Table className="w-full text-sm">
             <TableHeader>
               <TableRow className="text-xs text-muted-foreground border-b border-border bg-muted/30">
-                <TableHead className="text-left font-medium py-2 px-3">Name</TableHead>
-                <TableHead className="text-left font-medium py-2 px-3">URL</TableHead>
-                <TableHead className="text-left font-medium py-2 px-3">Visibility</TableHead>
-                <TableHead className="text-left font-medium py-2 px-3">Last sync</TableHead>
-                <TableHead className="text-right font-medium py-2 px-3">Actions</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Name
+                </TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  URL
+                </TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Visibility
+                </TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Last sync
+                </TableHead>
+                <TableHead className="text-right font-medium py-2 px-3">
+                  Actions
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {catalogs.map((cat) => (
-                <TableRow key={cat.id} className="border-b border-border last:border-0">
+                <TableRow
+                  key={cat.id}
+                  className="border-b border-border last:border-0"
+                >
                   <TableCell className="py-2 px-3">
-                    <div className="font-medium text-foreground">{cat.name}</div>
+                    <div className="font-medium text-foreground">
+                      {cat.name}
+                    </div>
                     {cat.description ? (
-                      <div className="text-xs text-muted-foreground">{cat.description}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {cat.description}
+                      </div>
                     ) : null}
                   </TableCell>
-                  <TableCell className="py-2 px-3 text-xs font-mono text-muted-foreground">{cat.url}</TableCell>
+                  <TableCell className="py-2 px-3 text-xs font-mono text-muted-foreground">
+                    {cat.url}
+                  </TableCell>
                   <TableCell className="py-2 px-3">
                     <VisibilityBadge visibility={cat.visibility} />
                   </TableCell>
                   <TableCell className="py-2 px-3 text-xs text-muted-foreground">
-                    {cat.lastSyncedAt ? formatRelativeTime(cat.lastSyncedAt) : 'never'}
+                    {cat.lastSyncedAt
+                      ? formatRelativeTime(cat.lastSyncedAt)
+                      : "never"}
                   </TableCell>
                   <TableCell className="py-2 px-3 text-right">
-                    {canEdit && cat.visibility === 'public' && (
+                    {canEdit && cat.visibility === "public" && (
                       <button
                         onClick={() => handleSubscribe(cat)}
                         className="inline-flex items-center gap-1 text-xs text-foreground hover:opacity-80"
@@ -141,13 +172,13 @@ function ProjectCatalogsPage() {
                         Subscribe
                       </button>
                     )}
-                    {canEdit && cat.visibility !== 'public' && (
+                    {canEdit && cat.visibility !== "public" && (
                       <button
                         onClick={() => handleUnsubscribe(cat)}
                         className="inline-flex items-center gap-1 text-xs text-destructive hover:opacity-80"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        {cat.visibility === 'own' ? 'Delete' : 'Unsubscribe'}
+                        {cat.visibility === "own" ? "Delete" : "Unsubscribe"}
                       </button>
                     )}
                   </TableCell>
@@ -168,18 +199,33 @@ function ProjectCatalogsPage() {
             footerClassName="flex items-center justify-end gap-2"
             footer={
               <>
-                <ActionButton type="button" intent="ghost" onClick={() => setShowAdd(false)}>
+                <ActionButton
+                  type="button"
+                  intent="ghost"
+                  onClick={() => setShowAdd(false)}
+                >
                   Cancel
                 </ActionButton>
-                <ActionButton type="submit" intent="primary" loading={createMutation.isPending} loadingLabel="Creating…">
+                <ActionButton
+                  type="submit"
+                  intent="primary"
+                  loading={createMutation.isPending}
+                  loadingLabel="Creating…"
+                >
                   Create
                 </ActionButton>
               </>
             }
           >
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Name</label>
+              <label
+                className="text-xs font-medium text-foreground"
+                htmlFor="field-9340992c-181"
+              >
+                Name
+              </label>
               <Input
+                id="field-9340992c-181"
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -187,8 +233,14 @@ function ProjectCatalogsPage() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Repository URL</label>
+              <label
+                className="text-xs font-medium text-foreground"
+                htmlFor="field-9340992c-190"
+              >
+                Repository URL
+              </label>
               <Input
+                id="field-9340992c-190"
                 type="url"
                 value={form.url}
                 onChange={(e) => setForm({ ...form, url: e.target.value })}
@@ -198,11 +250,19 @@ function ProjectCatalogsPage() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Description (optional)</label>
+              <label
+                className="text-xs font-medium text-foreground"
+                htmlFor="field-9340992c-201"
+              >
+                Description (optional)
+              </label>
               <Input
+                id="field-9340992c-201"
                 type="text"
                 value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
               />
             </div>
           </ModalShell>
@@ -212,30 +272,39 @@ function ProjectCatalogsPage() {
   );
 }
 
-function VisibilityBadge({ visibility }: { visibility: ProjectCatalog['visibility'] }) {
+function VisibilityBadge({
+  visibility,
+}: {
+  visibility: ProjectCatalog["visibility"];
+}) {
   const text =
-    visibility === 'own'
-      ? 'Private'
-      : visibility === 'subscribed_public'
-        ? 'Subscribed'
-        : visibility === 'foreign_private'
-          ? 'Foreign'
-          : 'Global';
+    visibility === "own"
+      ? "Private"
+      : visibility === "subscribed_public"
+        ? "Subscribed"
+        : visibility === "foreign_private"
+          ? "Foreign"
+          : "Global";
   const tone =
-    visibility === 'own'
-      ? 'bg-status-info/10 text-status-info'
-      : visibility === 'subscribed_public'
-        ? 'bg-status-success/10 text-status-success'
-        : visibility === 'foreign_private'
-          ? 'bg-status-error/10 text-status-error'
-          : 'bg-muted text-muted-foreground';
+    visibility === "own"
+      ? "bg-status-info/10 text-status-info"
+      : visibility === "subscribed_public"
+        ? "bg-status-success/10 text-status-success"
+        : visibility === "foreign_private"
+          ? "bg-status-error/10 text-status-error"
+          : "bg-muted text-muted-foreground";
   return (
-    <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium', tone)}>
+    <span
+      className={cn(
+        "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium",
+        tone,
+      )}
+    >
       {text}
     </span>
   );
 }
 
-export const Route = createFileRoute('/dashboard/projects/$id/catalogs/')({
+export const Route = createFileRoute("/dashboard/projects/$id/catalogs/")({
   component: ProjectCatalogsPage,
 });

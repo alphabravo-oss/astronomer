@@ -1,67 +1,79 @@
-# Platform baseline (sprint 075)
+# Platform baseline
 
-After install / first boot the management plane seeds well-known
-helm_repositories rows (aqua, jetstack, fluent, prometheus-community,
-ingress-nginx, open-policy-agent — migrations 075/077/079/105; migration 083 removes the original bitnami
-seed because Broadcom deprecated the public Bitnami catalog in Aug
-2025 and `helm install bitnami/...` now pulls stale unpatched images)
-and kicks a one-shot `catalog:sync` if `helm_charts` is empty. This
-closes the "register cluster → auto-install platform baseline" gap:
-the seven slugs the platform-baseline cluster_template and Argo baseline
-references —
+`deploy/bundles/catalog.json` is the sole membership and artifact contract for
+the v1.1 platform baseline. A component is part of the baseline only when it is
+present in that catalog with `default_enabled: true`. The catalog pins the chart
+version, chart archive SHA-256, enabled workload image digests, target namespace,
+release name, Kubernetes range, and required delivery capabilities.
 
-- `trivy-operator`
-- `kube-state-metrics`
-- `prometheus-node-exporter`
-- `fluent-bit`
-- `ingress-nginx`
-- `cert-manager`
-- `gatekeeper`
+The current v1.1 baseline contains exactly two components:
 
-— resolve against the seeded catalog without operator intervention.
+| Component | Chart version | Namespace | Release name |
+| --- | --- | --- | --- |
+| `kube-state-metrics` | `8.0.0` | `astronomer-monitoring` | `kube-state-metrics` |
+| `prometheus-node-exporter` | `4.56.1` | `astronomer-monitoring` | `prometheus-node-exporter` |
 
-## Verifying coverage
+The release manifest, built-in bundle archive, air-gap image inventory, and
+runtime provisioner all consume this catalog. Database `cluster_tools` rows,
+Helm repository seeds, cluster templates, documentation lists, and UI labels do
+not add components to the baseline.
 
-Hit the read-only superuser endpoint (also used by the dashboard banner
-once sprint 074's UI lands):
+## Registration and reconciliation
 
+Astronomer imports an existing Kubernetes cluster; it does not provision
+clusters. The registration API records an explicit `install_baseline` choice.
+When that choice is `true`, baseline delivery waits until the authenticated
+cluster agent reports a Ready, compatible local Flux inventory. The management
+plane then creates ordinary immutable delivery sources, bundle versions,
+targets, and rollouts for the catalog's enabled components.
+
+The agent materializes the assignments as Flux Helm resources in the managed
+cluster. Flux performs in-cluster reconciliation and continues enforcing the
+last accepted generation during management-plane outages. Astronomer does not
+use Rancher Fleet, does not auto-attach a platform-default cluster template,
+and does not install the baseline through an imperative Helm-over-tunnel path.
+
+Operators inspect the resulting resources through the normal delivery APIs:
+
+- `GET /api/v1/delivery/bundles/`
+- `GET /api/v1/delivery/targets/`
+- `GET /api/v1/delivery/rollouts/`
+- `GET /api/v1/delivery/deployments/`
+- `GET /api/v1/delivery/clusters/{clusterId}/inventory/`
+
+Registration reaches `ready` only after every enabled built-in target reports a
+successful deployment. A failed immutable rollout is visible through the same
+delivery and registration status APIs and requires an explicit retry.
+
+## Optional tools are not baseline components
+
+The Tools catalog and UI also expose optional integrations such as
+`trivy-operator`, `fluent-bit`, `cert-manager`, `ingress-nginx`, and
+`gatekeeper`. Their presence in the database tool catalog is not an implicit
+installation promise, and registration does not install them unless they are
+promoted into `deploy/bundles/catalog.json` as reviewed, default-enabled
+components.
+
+Promotion is a release-engineering change. It requires an exact chart version,
+verified chart archive SHA-256, immutable multi-platform digest coverage for
+every image enabled by the shipped values, supported-Kubernetes qualification,
+license and vulnerability review, reproducible bundle verification, complete
+air-gap inventory, and regeneration of the signed release manifest. Guessed
+versions, mutable tags, or documentation-only membership changes are not valid
+baseline updates.
+
+## Release verification
+
+Build and verify the catalog-backed artifact with:
+
+```bash
+./scripts/build-builtin-bundles.sh --output dist/astronomer-builtin-bundles-v1.1.0.tar.gz
+./scripts/build-builtin-bundles.sh --check dist/astronomer-builtin-bundles-v1.1.0.tar.gz
+make release-contract-check
 ```
-GET /api/v1/admin/platform-settings/default-cluster-template/coverage/
-```
 
-Response shape:
-
-```json
-{
-  "template_id": "",
-  "expected_slugs": ["trivy-operator", "kube-state-metrics", "prometheus-node-exporter", "fluent-bit", "ingress-nginx", "cert-manager", "gatekeeper"],
-  "resolved": [
-    { "slug": "trivy-operator", "found": true, "chart_id": "<uuid>", "repository": "aqua" }
-  ],
-  "missing_slugs": []
-}
-```
-
-`missing_slugs` is the operator's signal: empty means the baseline is
-ready to fire; non-empty means either the first-boot `catalog:sync`
-hasn't drained yet (wait ~30s after install) or the upstream chart name
-differs from the slug the template carries. If a slug is permanently
-missing, edit `defaultBaselineSlugs` in
-`internal/handler/platform_baseline_coverage.go` and the matching
-template spec to use the upstream chart name.
-
-## Operator customization
-
-The migration uses `ON CONFLICT (name) DO NOTHING`, so an operator who
-re-points a seeded repo at a private mirror (or adds repos with the
-same name before the migration runs) is never overridden on re-runs.
-The `.down.sql` deletes only the named rows so a downgrade keeps
-operator-added repos.
-
-## Frontend banner
-
-Deferred — the `/dashboard/settings/compliance/baselines` page that
-ships with sprint 074 should call the coverage endpoint and render a
-"7/7 slugs resolved" banner, linking missing slugs to
-`/dashboard/catalog?search=<slug>`. Until then operators verify via
-the API directly.
+The fresh-cluster qualification lane must derive its expected release names and
+namespaces from `deploy/bundles/catalog.json`. Component-specific checks, such
+as waiting for Trivy vulnerability reports, are valid only when that component
+is default-enabled in the signed catalog or when the test explicitly installs
+it as an optional tool.

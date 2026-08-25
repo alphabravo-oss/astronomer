@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -35,10 +36,23 @@ type ExtensionQuerier interface {
 	SetUIExtensionBundleVerified(ctx context.Context, arg sqlc.SetUIExtensionBundleVerifiedParams) (sqlc.UIExtension, error)
 }
 
+// ExtensionMutationTx is the transaction-bound extension state + mandatory
+// audit surface. Extension mutations do not enqueue reconciliation work: no
+// extension worker owns such a task, and inventing an outbox task would create
+// durable work that can never execute.
+type ExtensionMutationTx interface {
+	ExtensionQuerier
+	GetUIExtensionByNameForUpdate(ctx context.Context, name string) (sqlc.UIExtension, error)
+	audit.OutboxQuerier
+}
+
+type extensionRunTxFunc func(context.Context, func(ExtensionMutationTx) error) error
+
 type ExtensionHandler struct {
 	queries ExtensionQuerier
 	auditor any
 	current string
+	runTx   extensionRunTxFunc
 	// trustedKey is the Ed25519 public key extension bundles must be
 	// signed with. Nil means no key is configured: bundle verification
 	// fails closed (executable bundles are gated) until an operator
@@ -146,6 +160,18 @@ func (h *ExtensionHandler) SetExtensionTicketIssuer(i ExtensionTicketIssuer) {
 
 func NewExtensionHandler(queries ExtensionQuerier) *ExtensionHandler {
 	return &ExtensionHandler{queries: queries, auditor: queries, current: version.Version}
+}
+
+// SetRunTx wires production extension mutations to a database transaction.
+func (h *ExtensionHandler) SetRunTx(runTx extensionRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+// TransactionalAuditWired is a production wiring probe.
+func (h *ExtensionHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
 }
 
 // SetTrustedBundleKey installs the base64 (std encoding) Ed25519 public key
@@ -359,6 +385,7 @@ type ExtensionListResponse struct {
 	SampleManifest ExtensionManifest         `json:"sample_manifest"`
 }
 
+// openapi:request-operation postExtensions
 type InstallExtensionRequest struct {
 	Manifest ExtensionManifest `json:"manifest"`
 	Source   string            `json:"source,omitempty"`
@@ -371,6 +398,7 @@ type InstallExtensionRequest struct {
 // supplied, is the "sha256:<hex>" digest the caller expects and is checked
 // against the bundle so a tampered bundle is rejected even before the
 // signature is examined.
+// openapi:request-operation postExtensionsVerifyBundle
 type VerifyBundleRequest struct {
 	Bundle    string `json:"bundle"`
 	Signature string `json:"signature"`
@@ -440,7 +468,7 @@ func (h *ExtensionHandler) VerifyBundle(w http.ResponseWriter, r *http.Request) 
 	if name := strings.TrimSpace(req.Name); name != "" {
 		ok, gErr := h.markBundleVerified(r, name, checksum)
 		if gErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to record bundle verification")
+			respondTransactionalMutationError(w, r, gErr, http.StatusInternalServerError, apierror.UpdateError, "Failed to record bundle verification")
 			return
 		}
 		gated = ok
@@ -459,34 +487,59 @@ func (h *ExtensionHandler) markBundleVerified(r *http.Request, name, checksum st
 	if h.queries == nil || !extensionNameRE.MatchString(name) {
 		return false, nil
 	}
-	row, err := h.findExtension(r.Context(), name)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
+	verifyAndPersist := func(q ExtensionQuerier, locked *sqlc.UIExtension) (sqlc.UIExtension, bool, error) {
+		row := sqlc.UIExtension{}
+		var err error
+		if locked != nil {
+			row = *locked
+		} else {
+			row, err = findExtensionIn(r.Context(), q, name)
 		}
-		return false, err
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return sqlc.UIExtension{}, false, nil
+			}
+			return sqlc.UIExtension{}, false, err
+		}
+		var manifest ExtensionManifest
+		if json.Unmarshal(row.Manifest, &manifest) != nil || !manifestBundleHasChecksum(manifest, checksum) {
+			return sqlc.UIExtension{}, false, nil
+		}
+		updated, err := q.SetUIExtensionBundleVerified(r.Context(), sqlc.SetUIExtensionBundleVerifiedParams{Name: name, BundleVerified: true})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return sqlc.UIExtension{}, false, nil
+		}
+		return updated, err == nil, err
 	}
-	var manifest ExtensionManifest
-	if json.Unmarshal(row.Manifest, &manifest) != nil {
-		return false, nil
+
+	if h.runTx != nil {
+		candidate := false
+		err := h.runTx(r.Context(), func(q ExtensionMutationTx) error {
+			locked, err := q.GetUIExtensionByNameForUpdate(r.Context(), name)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			updated, ok, err := verifyAndPersist(q, &locked)
+			if err != nil || !ok {
+				return err
+			}
+			candidate = true
+			return recordAuditOutbox(r, q, "admin.extension.bundle_verified", "ui_extension", updated.ID.String(), updated.Name, http.StatusOK, map[string]any{
+				"name": updated.Name, "version": updated.Version, "checksum": checksum,
+			})
+		})
+		return candidate && err == nil, err
 	}
-	if !manifestBundleHasChecksum(manifest, checksum) {
-		return false, nil
-	}
-	updated, err := h.queries.SetUIExtensionBundleVerified(r.Context(), sqlc.SetUIExtensionBundleVerifiedParams{
-		Name:           name,
-		BundleVerified: true,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
+
+	updated, ok, err := verifyAndPersist(h.queries, nil)
+	if err != nil || !ok {
+		return ok, err
 	}
 	recordAudit(r, h.auditor, "admin.extension.bundle_verified", "ui_extension", updated.ID.String(), updated.Name, map[string]any{
-		"name":     updated.Name,
-		"version":  updated.Version,
-		"checksum": checksum,
+		"name": updated.Name, "version": updated.Version, "checksum": checksum,
 	})
 	return true, nil
 }
@@ -649,11 +702,7 @@ func (h *ExtensionHandler) Install(w http.ResponseWriter, r *http.Request) {
 	// the old verified flag and mount as Tier-2 without ever being re-verified.
 	// Treat the gate as still valid only when the stored bundle descriptor is
 	// byte-identical to what we're upserting.
-	prior, priorErr := h.findExtension(r.Context(), validation.Manifest.Name)
-	bundleUnchanged := priorErr == nil &&
-		prior.Checksum == validation.Checksum &&
-		string(prior.Manifest) == string(manifestBytes)
-	row, err := h.queries.UpsertUIExtension(r.Context(), sqlc.UpsertUIExtensionParams{
+	params := sqlc.UpsertUIExtensionParams{
 		Name:                validation.Manifest.Name,
 		DisplayName:         extensionDisplayName(validation.Manifest),
 		Version:             validation.Manifest.Version,
@@ -663,28 +712,49 @@ func (h *ExtensionHandler) Install(w http.ResponseWriter, r *http.Request) {
 		CompatibilityStatus: validation.CompatibilityStatus,
 		Manifest:            manifestBytes,
 		InstalledBy:         currentUserUUID(r),
-	})
+	}
+	persist := func(q ExtensionQuerier, prior sqlc.UIExtension, priorFound bool) (sqlc.UIExtension, error) {
+		bundleUnchanged := priorFound && prior.Checksum == validation.Checksum && string(prior.Manifest) == string(manifestBytes)
+		row, err := q.UpsertUIExtension(r.Context(), params)
+		if err != nil {
+			return sqlc.UIExtension{}, err
+		}
+		if row.BundleVerified && !bundleUnchanged {
+			return q.SetUIExtensionBundleVerified(r.Context(), sqlc.SetUIExtensionBundleVerifiedParams{Name: row.Name, BundleVerified: false})
+		}
+		return row, nil
+	}
+
+	var row sqlc.UIExtension
+	var err error
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q ExtensionMutationTx) error {
+			prior, lockErr := q.GetUIExtensionByNameForUpdate(r.Context(), validation.Manifest.Name)
+			priorFound := lockErr == nil
+			if lockErr != nil && !errors.Is(lockErr, pgx.ErrNoRows) {
+				return lockErr
+			}
+			row, lockErr = persist(q, prior, priorFound)
+			if lockErr != nil {
+				return lockErr
+			}
+			return recordAuditOutbox(r, q, "admin.extension.installed", "ui_extension", row.ID.String(), row.Name, http.StatusOK, map[string]any{
+				"name": row.Name, "version": row.Version, "enabled": row.Enabled, "compatibility_status": row.CompatibilityStatus,
+			})
+		})
+	} else {
+		prior, priorErr := h.findExtension(r.Context(), validation.Manifest.Name)
+		row, err = persist(h.queries, prior, priorErr == nil)
+		if err == nil {
+			recordAudit(r, h.auditor, "admin.extension.installed", "ui_extension", row.ID.String(), row.Name, map[string]any{
+				"name": row.Name, "version": row.Version, "enabled": row.Enabled, "compatibility_status": row.CompatibilityStatus,
+			})
+		}
+	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InstallFailed, "Failed to install extension")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.InstallFailed, "Failed to install extension")
 		return
 	}
-	if row.BundleVerified && !bundleUnchanged {
-		reset, rErr := h.queries.SetUIExtensionBundleVerified(r.Context(), sqlc.SetUIExtensionBundleVerifiedParams{
-			Name:           row.Name,
-			BundleVerified: false,
-		})
-		if rErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to reset bundle verification")
-			return
-		}
-		row = reset
-	}
-	recordAudit(r, h.auditor, "admin.extension.installed", "ui_extension", row.ID.String(), row.Name, map[string]any{
-		"name":                 row.Name,
-		"version":              row.Version,
-		"enabled":              row.Enabled,
-		"compatibility_status": row.CompatibilityStatus,
-	})
 	RespondJSON(w, http.StatusOK, extensionRecordResponse(row))
 }
 
@@ -706,43 +776,65 @@ func (h *ExtensionHandler) setEnabled(w http.ResponseWriter, r *http.Request, en
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Invalid extension name")
 		return
 	}
-	if enabled {
-		existing, err := h.findExtension(r.Context(), name)
-		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Extension not found")
-			return
+	var errExtensionIncompatible = errors.New("extension is incompatible")
+	mutate := func(q ExtensionQuerier, existing sqlc.UIExtension) (sqlc.UIExtension, error) {
+		if enabled && existing.CompatibilityStatus != "compatible" {
+			return sqlc.UIExtension{}, errExtensionIncompatible
 		}
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to read extension")
-			return
-		}
-		if existing.CompatibilityStatus != "compatible" {
-			RespondRequestError(w, r, http.StatusConflict, apierror.IncompatibleExtension, "Incompatible extensions cannot be enabled")
-			return
-		}
-	}
-	row, err := h.queries.SetUIExtensionEnabled(r.Context(), sqlc.SetUIExtensionEnabledParams{Name: name, Enabled: enabled})
-	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Extension not found")
-		return
-	}
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update extension")
-		return
+		return q.SetUIExtensionEnabled(r.Context(), sqlc.SetUIExtensionEnabledParams{Name: name, Enabled: enabled})
 	}
 	action := "admin.extension.disabled"
 	if enabled {
 		action = "admin.extension.enabled"
 	}
-	recordAudit(r, h.auditor, action, "ui_extension", row.ID.String(), row.Name, map[string]any{
-		"name":    row.Name,
-		"version": row.Version,
-	})
+	var row sqlc.UIExtension
+	var err error
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q ExtensionMutationTx) error {
+			existing, lockErr := q.GetUIExtensionByNameForUpdate(r.Context(), name)
+			if lockErr != nil {
+				return lockErr
+			}
+			row, lockErr = mutate(q, existing)
+			if lockErr != nil {
+				return lockErr
+			}
+			return recordAuditOutbox(r, q, action, "ui_extension", row.ID.String(), row.Name, http.StatusOK, map[string]any{
+				"name": row.Name, "version": row.Version,
+			})
+		})
+	} else {
+		existing, lookupErr := h.findExtension(r.Context(), name)
+		if lookupErr == nil {
+			row, err = mutate(h.queries, existing)
+		} else {
+			err = lookupErr
+		}
+		if err == nil {
+			recordAudit(r, h.auditor, action, "ui_extension", row.ID.String(), row.Name, map[string]any{"name": row.Name, "version": row.Version})
+		}
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Extension not found")
+		return
+	}
+	if errors.Is(err, errExtensionIncompatible) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.IncompatibleExtension, "Incompatible extensions cannot be enabled")
+		return
+	}
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update extension")
+		return
+	}
 	RespondJSON(w, http.StatusOK, extensionRecordResponse(row))
 }
 
 func (h *ExtensionHandler) findExtension(ctx context.Context, name string) (sqlc.UIExtension, error) {
-	rows, err := h.queries.ListUIExtensions(ctx)
+	return findExtensionIn(ctx, h.queries, name)
+}
+
+func findExtensionIn(ctx context.Context, q ExtensionQuerier, name string) (sqlc.UIExtension, error) {
+	rows, err := q.ListUIExtensions(ctx)
 	if err != nil {
 		return sqlc.UIExtension{}, err
 	}
@@ -759,6 +851,7 @@ func decodeExtensionManifest(r *http.Request) (ExtensionManifest, error) {
 	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		return ExtensionManifest{}, fmt.Errorf("invalid JSON body")
 	}
+	// openapi:request-operation postExtensionsValidate
 	var wrapped struct {
 		Manifest ExtensionManifest `json:"manifest"`
 	}

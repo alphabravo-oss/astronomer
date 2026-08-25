@@ -79,11 +79,10 @@ func NewAnomalyBaselineRecomputeTask() *asynq.Task {
 // (cluster, metric, window) tuples referenced by anomaly rules.
 func HandleAnomalyBaselineRecompute(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, AnomalyBaselineRecomputeType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "anomaly baseline recompute runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("anomaly baseline recompute runtime is not configured")
 		}
-		q, ok := runtimeDeps.Queries.(baselineRecomputeQuerier)
+		q, ok := runtimeDependencies(ctx).Queries.(baselineRecomputeQuerier)
 		if !ok {
 			return fmt.Errorf("anomaly baseline recompute not supported by runtime querier")
 		}
@@ -172,7 +171,7 @@ func RunAnomalyBaselineRecompute(ctx context.Context, q baselineRecomputeQuerier
 		}
 		for _, baseline := range page {
 			if err := recomputeOneBaseline(ctx, q, baseline, now); err != nil {
-				runtimeLogger().WarnContext(ctx, "anomaly baseline recompute failed for row",
+				runtimeLogger(ctx).WarnContext(ctx, "anomaly baseline recompute failed for row",
 					"baseline_id", baseline.ID.String(),
 					"cluster_id", baseline.ClusterID.String(),
 					"metric", baseline.MetricName,
@@ -193,7 +192,7 @@ func RunAnomalyBaselineRecompute(ctx context.Context, q baselineRecomputeQuerier
 	// the dedicated worker process the runtime bus is Redis-attached and
 	// fans out to the server pods' SSE relays. Nil-safe when unwired.
 	for clusterID := range recomputedClusters {
-		events.PublishChanged(runtimeDeps.Bus, "alerting", clusterID.String(), "", map[string]any{"kind": "baseline"})
+		events.PublishChanged(runtimeDependencies(ctx).Bus, "alerting", clusterID.String(), "", map[string]any{"kind": "baseline"})
 	}
 	return nil
 }

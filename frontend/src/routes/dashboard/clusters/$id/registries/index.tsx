@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * Cluster Registries tab — private image-pull credentials, per cluster.
  *
@@ -9,13 +16,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * surface auth failures before they reach a Pod.
  */
 
-import { useMemo, useState } from 'react';
-import { useParams } from '@/lib/navigation';
-import { useAppForm, useStore } from '@/lib/form';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
-import { ActionButton } from '@/components/ui/action-button';
-import { PageHeader, PageShell } from '@/components/ui/page';
+import { useMemo, useState } from "react";
+import { useParams } from "@/lib/navigation";
+import { useAppForm, useStore } from "@/lib/form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   CheckCircle2,
   Container,
@@ -29,10 +36,10 @@ import {
   Server,
   Trash2,
   XCircle,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { queryKeys, useCluster, useClusterNamespaces } from '@/lib/hooks';
-import { useClustersUpdate } from '@/lib/permission-hooks';
+import { queryKeys, useCluster, useClusterNamespaces } from "@/lib/hooks";
+import { useClustersUpdate } from "@/lib/permission-hooks";
 import {
   createClusterRegistry,
   deleteClusterRegistry,
@@ -42,16 +49,16 @@ import {
   type ClusterRegistry,
   type CreateRegistryRequest,
   type UpdateRegistryRequest,
-} from '@/lib/api/cluster-detail';
-import { cn } from '@/lib/utils';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { liveFallback } from '@/lib/live/status-store';
+} from "@/lib/api/cluster-detail";
+import { cn } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { liveFallback } from "@/lib/live/status-store";
 
-const PASSWORD_SENTINEL = '<set>';
+const PASSWORD_SENTINEL = "<set>";
 
 function fmt(iso?: string) {
-  if (!iso) return '—';
+  if (!iso) return "—";
   try {
     return new Date(iso).toLocaleString();
   } catch {
@@ -76,35 +83,45 @@ function ClusterRegistriesPage() {
 
   const [newOpen, setNewOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ClusterRegistry | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<ClusterRegistry | null>(null);
-  const [testStatus, setTestStatus] = useState<Record<string, 'ok' | 'fail' | 'pending'>>({});
+  const [deleteTarget, setDeleteTarget] = useState<ClusterRegistry | null>(
+    null,
+  );
+  const [testStatus, setTestStatus] = useState<
+    Record<string, "ok" | "fail" | "pending">
+  >({});
 
   const deleteMutation = useMutation({
-    mutationFn: (registryId: string) => deleteClusterRegistry(clusterId, registryId),
+    mutationFn: (registryId: string) =>
+      deleteClusterRegistry(clusterId, registryId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.registries(clusterId) });
-      toastSuccess('Registry removed');
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.registries(clusterId),
+      });
+      toastSuccess("Registry removed");
       setDeleteTarget(null);
     },
-    onError: (e: Error) => toastApiError('Delete failed', e),
+    onError: (e: Error) => toastApiError("Delete failed", e),
   });
 
   const testMutation = useMutation({
-    mutationFn: (registryId: string) => testClusterRegistry(clusterId, registryId),
+    mutationFn: (registryId: string) =>
+      testClusterRegistry(clusterId, registryId),
     onMutate: (registryId: string) => {
-      setTestStatus((s) => ({ ...s, [registryId]: 'pending' }));
+      setTestStatus((s) => ({ ...s, [registryId]: "pending" }));
     },
     onSuccess: (res, registryId) => {
-      setTestStatus((s) => ({ ...s, [registryId]: res.ok ? 'ok' : 'fail' }));
+      setTestStatus((s) => ({ ...s, [registryId]: res.ok ? "ok" : "fail" }));
       if (res.ok) {
-        toastSuccess(`Registry reachable${res.latencyMs ? ` (${res.latencyMs}ms)` : ''}`);
+        toastSuccess(
+          `Registry reachable${res.latencyMs ? ` (${res.latencyMs}ms)` : ""}`,
+        );
       } else {
-        toastError(res.message || 'Registry test failed');
+        toastError(res.message || "Registry test failed");
       }
     },
     onError: (e: Error, registryId) => {
-      setTestStatus((s) => ({ ...s, [registryId]: 'fail' }));
-      toastApiError('Test failed', e);
+      setTestStatus((s) => ({ ...s, [registryId]: "fail" }));
+      toastApiError("Test failed", e);
     },
   });
 
@@ -130,15 +147,15 @@ function ClusterRegistriesPage() {
         title="Registries"
         description={`Private image-pull credentials reconciled into namespaces on ${cluster.displayName}.`}
         actions={
-        <ActionButton
-          intent="primary"
-          icon={<Plus className="h-3.5 w-3.5" />}
-          onClick={() => canWrite && setNewOpen(true)}
-          disabled={!canWrite}
-          title={canWrite ? undefined : reason}
-        >
-          New Registry
-        </ActionButton>
+          <ActionButton
+            intent="primary"
+            icon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => canWrite && setNewOpen(true)}
+            disabled={!canWrite}
+            title={canWrite ? undefined : reason}
+          >
+            New Registry
+          </ActionButton>
         }
       />
 
@@ -149,9 +166,12 @@ function ClusterRegistriesPage() {
       ) : !registries || registries.length === 0 ? (
         <div className="rounded-lg border border-border bg-card p-12 flex flex-col items-center justify-center text-muted-foreground">
           <Container className="h-10 w-10 mb-3" />
-          <p className="text-sm font-medium text-foreground">No private registries configured</p>
+          <p className="text-sm font-medium text-foreground">
+            No private registries configured
+          </p>
           <p className="text-xs mt-1 max-w-md text-center">
-            Add a registry to mount image-pull secrets into namespaces on this cluster.
+            Add a registry to mount image-pull secrets into namespaces on this
+            cluster.
           </p>
           <button
             onClick={() => canWrite && setNewOpen(true)}
@@ -169,24 +189,42 @@ function ClusterRegistriesPage() {
           <Table className="w-full text-sm">
             <TableHeader className="bg-muted/30 text-xs text-muted-foreground">
               <TableRow>
-                <TableHead className="text-left font-medium px-4 py-2.5">Registry</TableHead>
-                <TableHead className="text-left font-medium px-4 py-2.5">User</TableHead>
-                <TableHead className="text-left font-medium px-4 py-2.5">Namespaces</TableHead>
-                <TableHead className="text-left font-medium px-4 py-2.5">Default SA</TableHead>
-                <TableHead className="text-left font-medium px-4 py-2.5">Last applied</TableHead>
-                <TableHead className="text-right font-medium px-4 py-2.5">Actions</TableHead>
+                <TableHead className="text-left font-medium px-4 py-2.5">
+                  Registry
+                </TableHead>
+                <TableHead className="text-left font-medium px-4 py-2.5">
+                  User
+                </TableHead>
+                <TableHead className="text-left font-medium px-4 py-2.5">
+                  Namespaces
+                </TableHead>
+                <TableHead className="text-left font-medium px-4 py-2.5">
+                  Default SA
+                </TableHead>
+                <TableHead className="text-left font-medium px-4 py-2.5">
+                  Last applied
+                </TableHead>
+                <TableHead className="text-right font-medium px-4 py-2.5">
+                  Actions
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody className="divide-y divide-border">
               {registries.map((r) => (
                 <TableRow key={r.id} className="hover:bg-accent/30 align-top">
                   <TableCell className="px-4 py-2.5">
-                    <div className="font-mono text-xs text-foreground break-all">{r.registryUrl}</div>
+                    <div className="font-mono text-xs text-foreground break-all">
+                      {r.registryUrl}
+                    </div>
                     {r.lastApplyError ? (
-                      <div className="text-xs text-status-error mt-1">{r.lastApplyError}</div>
+                      <div className="text-xs text-status-error mt-1">
+                        {r.lastApplyError}
+                      </div>
                     ) : null}
                   </TableCell>
-                  <TableCell className="px-4 py-2.5 text-xs text-muted-foreground font-mono">{r.username}</TableCell>
+                  <TableCell className="px-4 py-2.5 text-xs text-muted-foreground font-mono">
+                    {r.username}
+                  </TableCell>
                   <TableCell className="px-4 py-2.5">
                     <div className="flex flex-wrap gap-1">
                       {r.namespaces.length === 0 ? (
@@ -206,7 +244,7 @@ function ClusterRegistriesPage() {
                     </div>
                   </TableCell>
                   <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
-                    {r.injectDefaultSa ? 'Yes' : 'No'}
+                    {r.injectDefaultSa ? "Yes" : "No"}
                   </TableCell>
                   <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
                     <div className="flex items-center gap-2">
@@ -218,7 +256,10 @@ function ClusterRegistriesPage() {
                     <div className="flex items-center justify-end gap-1.5">
                       <button
                         onClick={() => testMutation.mutate(r.id)}
-                        disabled={testMutation.isPending && testStatus[r.id] === 'pending'}
+                        disabled={
+                          testMutation.isPending &&
+                          testStatus[r.id] === "pending"
+                        }
                         title="Test reachability"
                         className="inline-flex items-center gap-1 h-7 px-2 rounded text-xs text-muted-foreground
                           hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
@@ -229,7 +270,7 @@ function ClusterRegistriesPage() {
                       <button
                         onClick={() => canWrite && setEditTarget(r)}
                         disabled={!canWrite}
-                        title={canWrite ? 'Edit' : reason}
+                        title={canWrite ? "Edit" : reason}
                         className="inline-flex items-center justify-center h-7 w-7 rounded text-muted-foreground
                           hover:text-foreground hover:bg-accent transition-colors
                           disabled:opacity-50 disabled:cursor-not-allowed"
@@ -239,7 +280,7 @@ function ClusterRegistriesPage() {
                       <button
                         onClick={() => canWrite && setDeleteTarget(r)}
                         disabled={!canWrite}
-                        title={canWrite ? 'Delete' : reason}
+                        title={canWrite ? "Delete" : reason}
                         className="inline-flex items-center justify-center h-7 w-7 rounded text-muted-foreground
                           hover:text-status-error hover:bg-status-error/10 transition-colors
                           disabled:opacity-50 disabled:cursor-not-allowed"
@@ -277,7 +318,7 @@ function ClusterRegistriesPage() {
         description={
           deleteTarget
             ? `Delete the registry binding for "${deleteTarget.registryUrl}"? The associated docker-registry Secrets will also be removed from the cluster.`
-            : ''
+            : ""
         }
         confirmText="Delete"
         variant="destructive"
@@ -287,16 +328,16 @@ function ClusterRegistriesPage() {
   );
 }
 
-function TestStatusPill({ state }: { state?: 'ok' | 'fail' | 'pending' }) {
+function TestStatusPill({ state }: { state?: "ok" | "fail" | "pending" }) {
   if (!state) return null;
-  if (state === 'pending') {
+  if (state === "pending") {
     return (
       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border bg-status-info/10 text-status-info border-status-info/20">
         <Loader2 className="h-3 w-3 animate-spin" /> Testing
       </span>
     );
   }
-  if (state === 'ok') {
+  if (state === "ok") {
     return (
       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border bg-status-success/10 text-status-success border-status-success/20">
         <CheckCircle2 className="h-3 w-3" /> Reachable
@@ -327,47 +368,52 @@ function RegistryDialog({
   const [showPassword, setShowPassword] = useState(false);
 
   const create = useMutation({
-    mutationFn: (body: CreateRegistryRequest) => createClusterRegistry(clusterId, body),
+    mutationFn: (body: CreateRegistryRequest) =>
+      createClusterRegistry(clusterId, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.registries(clusterId) });
-      toastSuccess('Registry added');
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.registries(clusterId),
+      });
+      toastSuccess("Registry added");
       onClose();
     },
-    onError: (e: Error) => toastApiError('Create failed', e),
+    onError: (e: Error) => toastApiError("Create failed", e),
   });
   const update = useMutation({
     mutationFn: (body: UpdateRegistryRequest) =>
       updateClusterRegistry(clusterId, existing!.id, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.registries(clusterId) });
-      toastSuccess('Registry updated');
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.registries(clusterId),
+      });
+      toastSuccess("Registry updated");
       onClose();
     },
-    onError: (e: Error) => toastApiError('Update failed', e),
+    onError: (e: Error) => toastApiError("Update failed", e),
   });
 
   const loading = create.isPending || update.isPending;
 
   const form = useAppForm({
     defaultValues: {
-      registryUrl: existing?.registryUrl || '',
-      username: existing?.username || '',
+      registryUrl: existing?.registryUrl || "",
+      username: existing?.username || "",
       // Edit seeds the sentinel — the password is only sent when the user
       // actually types a new one (round-trip variant, unchanged).
-      password: isEdit ? PASSWORD_SENTINEL : '',
+      password: isEdit ? PASSWORD_SENTINEL : "",
       selectedNs: (existing?.namespaces || []) as string[],
-      secretName: existing?.secretName || '',
+      secretName: existing?.secretName || "",
       injectDefaultSa: existing?.injectDefaultSa ?? false,
     },
     onSubmit: ({ value }) => {
       // Old imperative checks, ported 1:1 (same messages, same order).
       if (!value.registryUrl || !value.username) {
-        toastError('Registry URL and username are required');
+        toastError("Registry URL and username are required");
         return;
       }
       // The old `passwordTouched` flag maps onto the field's isDirty meta
       // (D14: survives across renders; this form never resets mid-session).
-      const passwordTouched = form.getFieldMeta('password')?.isDirty ?? false;
+      const passwordTouched = form.getFieldMeta("password")?.isDirty ?? false;
       if (isEdit) {
         const body: UpdateRegistryRequest = {
           registry_url: value.registryUrl,
@@ -382,7 +428,7 @@ function RegistryDialog({
         update.mutate(body);
       } else {
         if (!value.password) {
-          toastError('Password is required');
+          toastError("Password is required");
           return;
         }
         create.mutate({
@@ -405,15 +451,21 @@ function RegistryDialog({
 
   return (
     <Modal
-      title={isEdit ? `Edit ${existing.registryUrl}` : 'Add registry'}
+      title={isEdit ? `Edit ${existing.registryUrl}` : "Add registry"}
       icon={<Lock className="h-4 w-4" />}
       onClose={onClose}
     >
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Registry URL</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-31a30446-413"
+        >
+          Registry URL
+        </label>
         <form.Field name="registryUrl">
           {(field) => (
             <input
+              id="field-31a30446-413"
               type="text"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -427,10 +479,16 @@ function RegistryDialog({
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Username</label>
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-31a30446-430"
+          >
+            Username
+          </label>
           <form.Field name="username">
             {(field) => (
               <input
+                id="field-31a30446-430"
                 type="text"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -442,17 +500,27 @@ function RegistryDialog({
           </form.Field>
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Password</label>
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-31a30446-445"
+          >
+            Password
+          </label>
           <div className="relative">
             <form.Field name="password">
               {(field) => (
                 <input
-                  type={showPassword ? 'text' : 'password'}
+                  id="field-31a30446-445"
+                  type={showPassword ? "text" : "password"}
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onFocus={() => {
-                    if (isEdit && !field.state.meta.isDirty && field.state.value === PASSWORD_SENTINEL) {
-                      field.handleChange('');
+                    if (
+                      isEdit &&
+                      !field.state.meta.isDirty &&
+                      field.state.value === PASSWORD_SENTINEL
+                    ) {
+                      field.handleChange("");
                     }
                   }}
                   onBlur={field.handleBlur}
@@ -465,9 +533,13 @@ function RegistryDialog({
               type="button"
               onClick={() => setShowPassword((v) => !v)}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? "Hide password" : "Show password"}
             >
-              {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              {showPassword ? (
+                <EyeOff className="h-3.5 w-3.5" />
+              ) : (
+                <Eye className="h-3.5 w-3.5" />
+              )}
             </button>
           </div>
           {isEdit && !passwordTouched && (
@@ -481,14 +553,20 @@ function RegistryDialog({
       <NamespaceMultiSelect
         namespaces={namespaces?.map((n) => n.name) || []}
         selected={selectedNs}
-        onChange={(ns) => form.setFieldValue('selectedNs', ns)}
+        onChange={(ns) => form.setFieldValue("selectedNs", ns)}
       />
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Secret name</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-31a30446-488"
+        >
+          Secret name
+        </label>
         <form.Field name="secretName">
           {(field) => (
             <input
+              id="field-31a30446-488"
               type="text"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -516,14 +594,15 @@ function RegistryDialog({
             />
           )}
         </form.Field>
-        Attach to <code className="font-mono text-xs">default</code> ServiceAccount in each namespace
+        Attach to <code className="font-mono text-xs">default</code>{" "}
+        ServiceAccount in each namespace
       </label>
 
       <ModalFooter
         onCancel={onClose}
         onSubmit={() => void form.handleSubmit()}
         loading={loading}
-        submitLabel={isEdit ? 'Save' : 'Add registry'}
+        submitLabel={isEdit ? "Save" : "Add registry"}
       />
     </Modal>
   );
@@ -540,15 +619,19 @@ function NamespaceMultiSelect({
   onChange: (ns: string[]) => void;
 }) {
   const sorted = useMemo(() => [...namespaces].sort(), [namespaces]);
-  const [filter, setFilter] = useState('');
-  const filtered = sorted.filter((n) => n.toLowerCase().includes(filter.toLowerCase()));
+  const [filter, setFilter] = useState("");
+  const filtered = sorted.filter((n) =>
+    n.toLowerCase().includes(filter.toLowerCase()),
+  );
   const toggle = (n: string) =>
-    onChange(selected.includes(n) ? selected.filter((x) => x !== n) : [...selected, n]);
+    onChange(
+      selected.includes(n) ? selected.filter((x) => x !== n) : [...selected, n],
+    );
 
   return (
     <div className="space-y-1.5">
       <label className="text-sm font-medium text-foreground">
-        Namespaces{' '}
+        Namespaces{" "}
         <span className="text-xs text-muted-foreground font-normal">
           (empty = all project namespaces)
         </span>
@@ -563,10 +646,15 @@ function NamespaceMultiSelect({
       />
       <div className="rounded-md border border-border bg-background max-h-40 overflow-y-auto">
         {filtered.length === 0 ? (
-          <div className="text-xs text-muted-foreground px-3 py-2">No namespaces match.</div>
+          <div className="text-xs text-muted-foreground px-3 py-2">
+            No namespaces match.
+          </div>
         ) : (
           filtered.map((ns) => (
-            <label key={ns} className="flex items-center gap-2 px-3 py-1 text-xs hover:bg-accent/40 cursor-pointer">
+            <label
+              key={ns}
+              className="flex items-center gap-2 px-3 py-1 text-xs hover:bg-accent/40 cursor-pointer"
+            >
               <input
                 type="checkbox"
                 checked={selected.includes(ns)}
@@ -584,12 +672,16 @@ function NamespaceMultiSelect({
             <span
               key={ns}
               className={cn(
-                'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs border',
-                'bg-muted border-border text-muted-foreground',
+                "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs border",
+                "bg-muted border-border text-muted-foreground",
               )}
             >
               {ns}
-              <button onClick={() => toggle(ns)} className="hover:text-foreground" aria-label={`Remove ${ns}`}>
+              <button
+                onClick={() => toggle(ns)}
+                className="hover:text-foreground"
+                aria-label={`Remove ${ns}`}
+              >
                 <XCircle className="h-3 w-3" />
               </button>
             </span>
@@ -646,7 +738,12 @@ function ModalFooter({
         <ActionButton onClick={onCancel} disabled={loading} intent="ghost">
           Cancel
         </ActionButton>
-        <ActionButton onClick={onSubmit} disabled={loading} intent="primary" loading={loading}>
+        <ActionButton
+          onClick={onSubmit}
+          disabled={loading}
+          intent="primary"
+          loading={loading}
+        >
           {submitLabel}
         </ActionButton>
       </div>
@@ -654,6 +751,6 @@ function ModalFooter({
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id/registries/')({
+export const Route = createFileRoute("/dashboard/clusters/$id/registries/")({
   component: ClusterRegistriesPage,
 });

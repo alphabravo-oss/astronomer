@@ -30,11 +30,24 @@ import (
 type fakeRegistrationQuerier struct {
 	mu sync.Mutex
 
-	clusters map[uuid.UUID]sqlc.Cluster
-	regs     map[uuid.UUID]*sqlc.ClusterRegistrationRecord
-	steps    []sqlc.ClusterRegistrationStep
-	users    map[uuid.UUID]sqlc.User
-	templApp map[uuid.UUID]sqlc.ClusterTemplateApplication
+	clusters  map[uuid.UUID]sqlc.Cluster
+	regs      map[uuid.UUID]*sqlc.ClusterRegistrationRecord
+	steps     []sqlc.ClusterRegistrationStep
+	users     map[uuid.UUID]sqlc.User
+	templApp  map[uuid.UUID]sqlc.ClusterTemplateApplication
+	audits    []sqlc.UpsertAuditOutboxParams
+	outboxErr error
+	stepLocks int
+}
+
+func (f *fakeRegistrationQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.outboxErr != nil {
+		return sqlc.AuditOutbox{}, f.outboxErr
+	}
+	f.audits = append(f.audits, arg)
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
 }
 
 type fakeRegistrationTaskOutbox struct {
@@ -207,6 +220,18 @@ func (f *fakeRegistrationQuerier) GetClusterRegistrationStep(ctx context.Context
 	for _, s := range f.steps {
 		if s.ID == id {
 			return s, nil
+		}
+	}
+	return sqlc.ClusterRegistrationStep{}, pgx.ErrNoRows
+}
+
+func (f *fakeRegistrationQuerier) GetClusterRegistrationStepForUpdate(_ context.Context, id uuid.UUID) (sqlc.ClusterRegistrationStep, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stepLocks++
+	for _, step := range f.steps {
+		if step.ID == id {
+			return step, nil
 		}
 	}
 	return sqlc.ClusterRegistrationStep{}, pgx.ErrNoRows

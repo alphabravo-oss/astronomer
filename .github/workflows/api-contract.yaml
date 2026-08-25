@@ -20,6 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Go
@@ -44,6 +45,18 @@ jobs:
         run: ./scripts/verify-enterprise.sh api-contract
         env:
           VERIFY_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-verify-api-contract
+          OPENAPI_BASELINE: ${{ github.event_name == 'pull_request' && format('{0}:docs/openapi.yaml', github.event.pull_request.base.sha) || github.event_name == 'push' && format('{0}:docs/openapi.yaml', github.event.before) || 'HEAD:docs/openapi.yaml' }}
+
+      - name: Retain API compatibility review
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: api-compatibility-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/astronomer-verify-api-contract/openapi-changelog.md
+            ${{ runner.temp }}/astronomer-verify-api-contract/openapi-breaking.md
+          if-no-files-found: warn
+          retention-days: 90
 
       - name: Upload failed API contract reports
         if: ${{ failure() }}

@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * /dashboard/settings/cluster-groups — operator-defined folder hierarchy
  * over clusters (migration 066).
@@ -15,61 +22,70 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * admin concept, not a settings concept; the page sits under /settings/
  * because that's where the other operator-facing CRUDs live.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import { useAppForm, useStore } from "@/lib/form";
 import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import { useAppForm, useStore } from '@/lib/form';
-import { Plus, Loader2, Trash2, Pencil, AlertCircle, Folder } from 'lucide-react';
-import * as api from '@/lib/api';
-import { queryKeys } from '@/lib/hooks';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { PageHeader, PageShell } from '@/components/ui/page';
+  Plus,
+  Loader2,
+  Trash2,
+  Pencil,
+  AlertCircle,
+  Folder,
+} from "lucide-react";
+import * as api from "@/lib/api";
+import { queryKeys } from "@/lib/hooks";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   CLUSTER_GROUP_COLORS,
   CLUSTER_GROUP_ICONS,
   type ClusterGroupTreeNode,
   type ClusterGroupWriteRequest,
-} from '@/lib/api/cluster-groups';
+} from "@/lib/api/cluster-groups";
 
 const MAX_DEPTH = 2;
 
 function useClusterGroups() {
   return useQuery({
     queryKey: queryKeys.clusterGroups.all,
-    queryFn: () => api.listClusterGroups(),
+    queryFn: ({ signal }) => api.listClusterGroups({ signal }),
   });
 }
 
 function useCreateClusterGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: ClusterGroupWriteRequest) => api.createClusterGroup(body),
+    mutationFn: (body: ClusterGroupWriteRequest) =>
+      api.createClusterGroup(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.clusterGroups.all });
-      toastSuccess('Cluster group created');
+      toastSuccess("Cluster group created");
     },
-    onError: (err: Error) => toastApiError('Failed to create', err),
+    onError: (err: Error) => toastApiError("Failed to create", err),
   });
 }
 
 function useUpdateClusterGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: ClusterGroupWriteRequest }) =>
-      api.updateClusterGroup(id, body),
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: ClusterGroupWriteRequest;
+    }) => api.updateClusterGroup(id, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.clusterGroups.all });
-      toastSuccess('Cluster group updated');
+      toastSuccess("Cluster group updated");
     },
-    onError: (err: Error) => toastApiError('Failed to update', err),
+    onError: (err: Error) => toastApiError("Failed to update", err),
   });
 }
 
@@ -79,9 +95,9 @@ function useDeleteClusterGroup() {
     mutationFn: (id: string) => api.deleteClusterGroup(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.clusterGroups.all });
-      toastSuccess('Cluster group deleted');
+      toastSuccess("Cluster group deleted");
     },
-    onError: (err: Error) => toastApiError('Failed to delete', err),
+    onError: (err: Error) => toastApiError("Failed to delete", err),
   });
 }
 
@@ -102,19 +118,21 @@ function ClusterGroupsPage() {
   const flattened = useMemo(() => {
     const byParent: Record<string, ClusterGroupTreeNode[]> = {};
     for (const node of tree) {
-      const key = node.parentId ?? '__root__';
+      const key = node.parentId ?? "__root__";
       byParent[key] = byParent[key] || [];
       byParent[key].push(node);
     }
     const out: ClusterGroupTreeNode[] = [];
     const walk = (parent: string) => {
-      const kids = (byParent[parent] || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+      const kids = (byParent[parent] || [])
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name));
       for (const k of kids) {
         out.push(k);
         walk(k.id);
       }
     };
-    walk('__root__');
+    walk("__root__");
     return out;
   }, [tree]);
 
@@ -145,23 +163,37 @@ function ClusterGroupsPage() {
       ) : flattened.length === 0 ? (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
           <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-          <p>No cluster groups yet — create one to start organizing your clusters.</p>
+          <p>
+            No cluster groups yet — create one to start organizing your
+            clusters.
+          </p>
         </div>
       ) : (
         <div className="border border-border rounded-lg overflow-hidden">
           <Table className="w-full text-sm">
             <TableHeader className="bg-muted/50 border-b border-border">
               <TableRow>
-                <TableHead className="text-left px-4 py-2 font-medium text-muted-foreground">Name</TableHead>
-                <TableHead className="text-left px-4 py-2 font-medium text-muted-foreground">Slug</TableHead>
-                <TableHead className="text-right px-4 py-2 font-medium text-muted-foreground">Clusters</TableHead>
-                <TableHead className="text-right px-4 py-2 font-medium text-muted-foreground">Subtree</TableHead>
+                <TableHead className="text-left px-4 py-2 font-medium text-muted-foreground">
+                  Name
+                </TableHead>
+                <TableHead className="text-left px-4 py-2 font-medium text-muted-foreground">
+                  Slug
+                </TableHead>
+                <TableHead className="text-right px-4 py-2 font-medium text-muted-foreground">
+                  Clusters
+                </TableHead>
+                <TableHead className="text-right px-4 py-2 font-medium text-muted-foreground">
+                  Subtree
+                </TableHead>
                 <TableHead className="px-4 py-2"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {flattened.map((g) => (
-                <TableRow key={g.id} className="border-b border-border last:border-b-0">
+                <TableRow
+                  key={g.id}
+                  className="border-b border-border last:border-b-0"
+                >
                   <TableCell className="px-4 py-2">
                     <div
                       className="flex items-center gap-2"
@@ -169,16 +201,22 @@ function ClusterGroupsPage() {
                     >
                       <span
                         className="inline-flex items-center justify-center h-5 w-5 rounded"
-                        style={{ background: g.color + '33', color: g.color }}
+                        style={{ background: g.color + "33", color: g.color }}
                         aria-label={g.icon}
                       >
                         <Folder className="h-3 w-3" />
                       </span>
-                      <span className="font-medium text-foreground">{g.name}</span>
+                      <span className="font-medium text-foreground">
+                        {g.name}
+                      </span>
                     </div>
                   </TableCell>
-                  <TableCell className="px-4 py-2 text-xs font-mono text-muted-foreground">{g.slug}</TableCell>
-                  <TableCell className="px-4 py-2 text-right tabular-nums">{g.clusterCount}</TableCell>
+                  <TableCell className="px-4 py-2 text-xs font-mono text-muted-foreground">
+                    {g.slug}
+                  </TableCell>
+                  <TableCell className="px-4 py-2 text-right tabular-nums">
+                    {g.clusterCount}
+                  </TableCell>
                   <TableCell className="px-4 py-2 text-right tabular-nums text-muted-foreground">
                     {g.clusterCountTree}
                   </TableCell>
@@ -250,15 +288,20 @@ interface FormProps {
   onClose: () => void;
 }
 
-function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps) {
+function ClusterGroupForm({
+  existing,
+  allGroups,
+  onSubmit,
+  onClose,
+}: FormProps) {
   const [slugTouched, setSlugTouched] = useState(!!existing);
 
   const form = useAppForm({
     defaultValues: {
-      name: existing?.name ?? '',
-      slug: existing?.slug ?? '',
-      description: existing?.description ?? '',
-      parentId: existing?.parentId ?? '',
+      name: existing?.name ?? "",
+      slug: existing?.slug ?? "",
+      description: existing?.description ?? "",
+      parentId: existing?.parentId ?? "",
       color: existing?.color ?? CLUSTER_GROUP_COLORS[0],
       icon: existing?.icon ?? CLUSTER_GROUP_ICONS[0],
     },
@@ -279,14 +322,14 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
 
   // Auto-derive slug from name unless the user typed one explicitly.
   const handleName = (v: string) => {
-    form.setFieldValue('name', v);
+    form.setFieldValue("name", v);
     if (!slugTouched) {
       form.setFieldValue(
-        'slug',
+        "slug",
         v
           .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, ''),
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, ""),
       );
     }
   };
@@ -316,7 +359,7 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
 
   return (
     <ModalShell
-      title={existing ? 'Edit cluster group' : 'New cluster group'}
+      title={existing ? "Edit cluster group" : "New cluster group"}
       onClose={onClose}
       size="md"
       footerClassName="flex items-center justify-end gap-2"
@@ -331,63 +374,123 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
             onClick={() => void form.handleSubmit()}
             disabled={!name || !slug}
           >
-            {existing ? 'Save' : 'Create'}
+            {existing ? "Save" : "Create"}
           </ActionButton>
         </>
       }
     >
-        <div className="space-y-3">
+      <div className="space-y-3">
+        <label className="block">
+          <span className="text-xs font-medium text-muted-foreground">
+            Name
+          </span>
+          <form.Field name="name">
+            {(field) => (
+              <Input
+                type="text"
+                value={field.state.value}
+                onChange={(e) => handleName(e.target.value)}
+                onBlur={field.handleBlur}
+                className="mt-1"
+                data-initial-focus
+              />
+            )}
+          </form.Field>
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-muted-foreground">
+            Slug{" "}
+            <span className="text-muted-foreground/60">
+              (URL-safe identifier)
+            </span>
+          </span>
+          <form.Field name="slug">
+            {(field) => (
+              <Input
+                type="text"
+                value={field.state.value}
+                onChange={(e) => {
+                  field.handleChange(e.target.value);
+                  setSlugTouched(true);
+                }}
+                onBlur={field.handleBlur}
+                className="mt-1 font-mono"
+              />
+            )}
+          </form.Field>
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-muted-foreground">
+            Description
+          </span>
+          <form.Field name="description">
+            {(field) => (
+              <Textarea
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                rows={2}
+                className="mt-1 min-h-0"
+              />
+            )}
+          </form.Field>
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-muted-foreground">
+            Parent
+          </span>
+          <form.Field name="parentId">
+            {(field) => (
+              <Select
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                className="mt-1"
+              >
+                <option value="">— Top-level —</option>
+                {parentOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {"— ".repeat(p.depth)}
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </form.Field>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="text-xs font-medium text-muted-foreground">Name</span>
-            <form.Field name="name">
+            <span className="text-xs font-medium text-muted-foreground">
+              Color
+            </span>
+            <form.Field name="color">
               {(field) => (
-                <Input
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => handleName(e.target.value)}
-                  onBlur={field.handleBlur}
-                  className="mt-1"
-                  autoFocus
-                />
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {CLUSTER_GROUP_COLORS.map((c) => (
+                    <button
+                      type="button"
+                      key={c}
+                      onClick={() => field.handleChange(c)}
+                      className="h-7 w-7 rounded border-2"
+                      style={{
+                        background: c,
+                        borderColor:
+                          field.state.value === c ? "#fff" : "transparent",
+                        outline:
+                          field.state.value === c ? `2px solid ${c}` : "none",
+                      }}
+                      aria-label={`Color ${c}`}
+                    />
+                  ))}
+                </div>
               )}
             </form.Field>
           </label>
           <label className="block">
             <span className="text-xs font-medium text-muted-foreground">
-              Slug <span className="text-muted-foreground/60">(URL-safe identifier)</span>
+              Icon
             </span>
-            <form.Field name="slug">
-              {(field) => (
-                <Input
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => {
-                    field.handleChange(e.target.value);
-                    setSlugTouched(true);
-                  }}
-                  onBlur={field.handleBlur}
-                  className="mt-1 font-mono"
-                />
-              )}
-            </form.Field>
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-muted-foreground">Description</span>
-            <form.Field name="description">
-              {(field) => (
-                <Textarea
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  rows={2}
-                  className="mt-1 min-h-0"
-                />
-              )}
-            </form.Field>
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-muted-foreground">Parent</span>
-            <form.Field name="parentId">
+            <form.Field name="icon">
               {(field) => (
                 <Select
                   value={field.state.value}
@@ -395,66 +498,21 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
                   onBlur={field.handleBlur}
                   className="mt-1"
                 >
-                  <option value="">— Top-level —</option>
-                  {parentOptions.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {'— '.repeat(p.depth)}
-                      {p.name}
+                  {CLUSTER_GROUP_ICONS.map((i) => (
+                    <option key={i} value={i}>
+                      {i}
                     </option>
                   ))}
                 </Select>
               )}
             </form.Field>
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="text-xs font-medium text-muted-foreground">Color</span>
-              <form.Field name="color">
-                {(field) => (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {CLUSTER_GROUP_COLORS.map((c) => (
-                      <button
-                        type="button"
-                        key={c}
-                        onClick={() => field.handleChange(c)}
-                        className="h-7 w-7 rounded border-2"
-                        style={{
-                          background: c,
-                          borderColor: field.state.value === c ? '#fff' : 'transparent',
-                          outline: field.state.value === c ? `2px solid ${c}` : 'none',
-                        }}
-                        aria-label={`Color ${c}`}
-                      />
-                    ))}
-                  </div>
-                )}
-              </form.Field>
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-muted-foreground">Icon</span>
-              <form.Field name="icon">
-                {(field) => (
-                  <Select
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    className="mt-1"
-                  >
-                    {CLUSTER_GROUP_ICONS.map((i) => (
-                      <option key={i} value={i}>
-                        {i}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </form.Field>
-            </label>
-          </div>
         </div>
+      </div>
     </ModalShell>
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/cluster-groups/')({
+export const Route = createFileRoute("/dashboard/settings/cluster-groups/")({
   component: ClusterGroupsPage,
 });

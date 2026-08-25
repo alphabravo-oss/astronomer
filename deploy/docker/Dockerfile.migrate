@@ -1,12 +1,18 @@
 # syntax=docker/dockerfile:1.6
 # ── Migrate image ─────────────────────────────────────────────────────────────
-# Build golang-migrate from source on the same Go toolchain as the other
-# first-party images. The upstream migrate image lags stdlib and library
-# patches and fails the HIGH/CRITICAL image-scan gate.
+# Build the repository-owned migration wrapper on the same Go toolchain as the
+# other first-party images. It takes a database-scoped session lock before
+# golang-migrate touches schema state, preventing concurrent installer
+# deadlocks around non-transactional PostgreSQL DDL.
 FROM golang:1.26.6-alpine@sha256:1a9c10cf505a9e6b1e96ea77ebdbfe79a0f10380181faf88bc3b51d7e4315fae AS builder
 RUN apk add --no-cache git
-RUN GOBIN=/out CGO_ENABLED=0 go install -trimpath -ldflags="-s -w" -tags 'postgres' \
-    github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/migrator ./cmd/migrator
+ARG VERSION=1.1.0
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildVersion=${VERSION}" \
+    -o /out/migrate ./cmd/migrator
 
 FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
 

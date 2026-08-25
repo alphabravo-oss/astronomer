@@ -55,7 +55,7 @@ export function TargetsPage() {
     queryKey: queryKeys.delivery.targets(projectId, params),
     queryFn: ({ signal }) => {
       signal.throwIfAborted();
-      return listDeliveryTargets(projectId, params);
+      return listDeliveryTargets(projectId, params, signal);
     },
     enabled: Boolean(projectId && allowed),
     refetchInterval: liveFallback(20_000),
@@ -195,14 +195,15 @@ function CreateTargetDialog({
   const [formError, setFormError] = useState<Error | null>(null);
   const bundles = useQuery({
     queryKey: queryKeys.delivery.bundles(projectId, { limit: 200 }),
-    queryFn: () => listComponentBundles(projectId, { limit: 200 }),
+    queryFn: ({ signal }) =>
+      listComponentBundles(projectId, { limit: 200 }, signal),
   });
   const versions = useQuery({
     queryKey: queryKeys.delivery.bundleVersions(projectId, bundleId, {
       limit: 200,
     }),
-    queryFn: () =>
-      listComponentBundleVersions(projectId, bundleId, { limit: 200 }),
+    queryFn: ({ signal }) =>
+      listComponentBundleVersions(projectId, bundleId, { limit: 200 }, signal),
     enabled: Boolean(bundleId),
   });
   const mutation = useMutation({
@@ -214,9 +215,7 @@ function CreateTargetDialog({
       });
       toastSuccess("Delivery target created");
       onClose();
-      router.push(
-        entityHref("targets", data.id),
-      );
+      router.push(entityHref("targets", data.id));
     },
   });
   const submit = (event: FormEvent<HTMLFormElement>) => {

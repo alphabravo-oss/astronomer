@@ -91,23 +91,11 @@ type EmailSettingsProvider interface {
 	Provide(ctx context.Context) (email.Settings, error)
 }
 
-// EmailDeps is the bag of dependencies wired by NewApp before the
-// dispatcher task can do anything useful. Stored in a package var so
-// the asynq HandleFunc signature stays standard (it can't carry a
-// closure-bound deps).
+// EmailDeps is the email dispatcher's explicit dependency set.
 type EmailDeps struct {
 	Queries  EmailQuerier
 	Sender   EmailSender
 	Provider EmailSettingsProvider
-}
-
-var emailDeps EmailDeps
-
-// ConfigureEmail wires the email dispatcher's dependencies. Safe to
-// call multiple times (last call wins) but every productionish path
-// calls it once at startup.
-func ConfigureEmail(deps EmailDeps) {
-	emailDeps = deps
 }
 
 // HandleEmailDispatch is the periodic worker that drains queued rows.
@@ -125,21 +113,20 @@ func ConfigureEmail(deps EmailDeps) {
 // enqueue-time. That preserves branding-at-the-time-of-event semantics
 // and means a dispatcher restart can't crash the loop on a templating
 // error.
-func HandleEmailDispatch(ctx context.Context, _ *asynq.Task) error {
+func (runtime DispatchRuntime) HandleEmailDispatch(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, EmailDispatchType, func() error {
-		if emailDeps.Queries == nil || emailDeps.Sender == nil || emailDeps.Provider == nil {
-			runtimeLogger().InfoContext(ctx, "email dispatcher not configured, skipping")
-			return nil
+		if runtime.Email.Queries == nil || runtime.Email.Sender == nil || runtime.Email.Provider == nil {
+			return fmt.Errorf("email dispatcher runtime is not configured")
 		}
-		cfg, err := emailDeps.Provider.Provide(ctx)
+		cfg, err := runtime.Email.Provider.Provide(ctx)
 		if err != nil {
-			runtimeLogger().WarnContext(ctx, "email dispatcher could not load smtp settings", "error", err)
+			runtimeLogger(ctx).WarnContext(ctx, "email dispatcher could not load smtp settings", "error", err)
 			// Don't return an error — the asynq retry would just
 			// re-run on the next tick. Logging is enough.
 			return nil
 		}
 
-		rows, err := emailDeps.Queries.ListQueuedEmails(ctx, emailDispatchBatchSize)
+		rows, err := runtime.Email.Queries.ListQueuedEmails(ctx, emailDispatchBatchSize)
 		if err != nil {
 			return fmt.Errorf("list queued emails: %w", err)
 		}
@@ -151,7 +138,7 @@ func HandleEmailDispatch(ctx context.Context, _ *asynq.Task) error {
 		// the queue too long. We DON'T try to send these — that's
 		// exactly the case the skipped status is for.
 		if !cfg.Enabled {
-			ageRowsToSkipped(ctx, rows)
+			runtime.ageRowsToSkipped(ctx, rows)
 			return nil
 		}
 
@@ -162,7 +149,7 @@ func HandleEmailDispatch(ctx context.Context, _ *asynq.Task) error {
 			if err := ctx.Err(); err != nil {
 				return nil
 			}
-			sendOne(ctx, row, now)
+			runtime.sendEmail(ctx, row, now)
 		}
 		return nil
 	})
@@ -172,17 +159,17 @@ func HandleEmailDispatch(ctx context.Context, _ *asynq.Task) error {
 // while SMTP is disabled. The cutoff means a freshly-queued row gets a
 // grace window — operators sometimes flip SMTP on a minute after a
 // lockout fires, and we don't want to drop those.
-func ageRowsToSkipped(ctx context.Context, rows []sqlc.EmailMessage) {
+func (runtime DispatchRuntime) ageRowsToSkipped(ctx context.Context, rows []sqlc.EmailMessage) {
 	cutoff := time.Now().Add(-emailSkippedAge)
 	for _, row := range rows {
 		if row.CreatedAt.After(cutoff) {
 			continue
 		}
-		if err := emailDeps.Queries.MarkEmailSkipped(ctx, sqlc.MarkEmailSkippedParams{
+		if err := runtime.Email.Queries.MarkEmailSkipped(ctx, sqlc.MarkEmailSkippedParams{
 			ID:        row.ID,
 			LastError: "smtp delivery disabled at dispatch time",
 		}); err != nil {
-			runtimeLogger().WarnContext(ctx, "email skip mark failed", "id", row.ID.String(), "error", err)
+			runtimeLogger(ctx).WarnContext(ctx, "email skip mark failed", "id", row.ID.String(), "error", err)
 		}
 	}
 }
@@ -195,11 +182,11 @@ func ageRowsToSkipped(ctx context.Context, rows []sqlc.EmailMessage) {
 // legacy template re-render; the legacy path is a KNOWN lossy path (it renders
 // against an empty Data bag) kept solely so the dispatcher still compiles/sends
 // before the Sender grows SendPreRendered.
-func deliverEmail(ctx context.Context, row sqlc.EmailMessage) error {
-	if pr, ok := emailDeps.Sender.(preRenderedEmailSender); ok {
+func (runtime DispatchRuntime) deliverEmail(ctx context.Context, row sqlc.EmailMessage) error {
+	if pr, ok := runtime.Email.Sender.(preRenderedEmailSender); ok {
 		return pr.SendPreRendered(ctx, row.ToAddress, row.CcAddress, row.Subject, row.BodyText, row.BodyHtml)
 	}
-	return emailDeps.Sender.Send(ctx, email.Message{
+	return runtime.Email.Sender.Send(ctx, email.Message{
 		To:       row.ToAddress,
 		CC:       row.CcAddress,
 		Template: row.Template,
@@ -213,13 +200,13 @@ func deliverEmail(ctx context.Context, row sqlc.EmailMessage) error {
 
 // sendOne is the per-row send. It stamps the delivery outcome
 // (sent/failed/skipped) onto the row after deliverEmail ships it.
-func sendOne(ctx context.Context, row sqlc.EmailMessage, now time.Time) {
-	if err := deliverEmail(ctx, row); err != nil {
+func (runtime DispatchRuntime) sendEmail(ctx context.Context, row sqlc.EmailMessage, now time.Time) {
+	if err := runtime.deliverEmail(ctx, row); err != nil {
 		if errors.Is(err, email.ErrSMTPDisabled) {
 			// Racey but plausible: settings flipped between
 			// Provide() and Send(). Mark skipped, same as the
 			// disabled-path branch.
-			_ = emailDeps.Queries.MarkEmailSkipped(ctx, sqlc.MarkEmailSkippedParams{
+			_ = runtime.Email.Queries.MarkEmailSkipped(ctx, sqlc.MarkEmailSkippedParams{
 				ID:        row.ID,
 				LastError: "smtp delivery disabled during send",
 			})
@@ -231,13 +218,13 @@ func sendOne(ctx context.Context, row sqlc.EmailMessage, now time.Time) {
 			status = "failed"
 		}
 		errMsg := truncateDispatchLastError(err.Error(), 1024)
-		_ = emailDeps.Queries.MarkEmailFailed(ctx, sqlc.MarkEmailFailedParams{
+		_ = runtime.Email.Queries.MarkEmailFailed(ctx, sqlc.MarkEmailFailedParams{
 			ID:        row.ID,
 			Status:    status,
 			Attempts:  newAttempts,
 			LastError: errMsg,
 		})
-		runtimeLogger().WarnContext(ctx, "email send failed",
+		runtimeLogger(ctx).WarnContext(ctx, "email send failed",
 			"id", row.ID.String(),
 			"template", row.Template,
 			"attempt", newAttempts,
@@ -245,33 +232,32 @@ func sendOne(ctx context.Context, row sqlc.EmailMessage, now time.Time) {
 		)
 		return
 	}
-	if err := emailDeps.Queries.MarkEmailSent(ctx, sqlc.MarkEmailSentParams{
+	if err := runtime.Email.Queries.MarkEmailSent(ctx, sqlc.MarkEmailSentParams{
 		ID:     row.ID,
 		SentAt: pgtype.Timestamptz{Time: now, Valid: true},
 	}); err != nil {
-		runtimeLogger().WarnContext(ctx, "email mark-sent failed", "id", row.ID.String(), "error", err)
+		runtimeLogger(ctx).WarnContext(ctx, "email mark-sent failed", "id", row.ID.String(), "error", err)
 	}
 }
 
 // HandleEmailCleanupOld deletes email_messages rows older than the
 // retention window AND password_reset_tokens whose expiry has long
 // passed. Daily cadence; cooperative DB lease.
-func HandleEmailCleanupOld(ctx context.Context, _ *asynq.Task) error {
+func (runtime DispatchRuntime) HandleEmailCleanupOld(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, EmailCleanupOldType, func() error {
-		if emailDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "email cleanup not configured, skipping")
-			return nil
+		if runtime.Email.Queries == nil {
+			return fmt.Errorf("email cleanup runtime is not configured")
 		}
 		cutoff := time.Now().Add(-emailRetention)
-		removed, err := emailDeps.Queries.DeleteEmailsOlderThan(ctx, cutoff)
+		removed, err := runtime.Email.Queries.DeleteEmailsOlderThan(ctx, cutoff)
 		if err != nil {
 			return fmt.Errorf("delete old emails: %w", err)
 		}
-		expired, err := emailDeps.Queries.DeleteExpiredPasswordResetTokens(ctx, time.Now())
+		expired, err := runtime.Email.Queries.DeleteExpiredPasswordResetTokens(ctx, time.Now())
 		if err != nil {
 			return fmt.Errorf("delete expired reset tokens: %w", err)
 		}
-		runtimeLogger().InfoContext(ctx, "email retention sweep",
+		runtimeLogger(ctx).InfoContext(ctx, "email retention sweep",
 			"emails_deleted", removed,
 			"reset_tokens_deleted", expired,
 			"cutoff", cutoff.Format(time.RFC3339),

@@ -34,8 +34,8 @@ func TestPageWindow(t *testing.T) {
 	if len(page) != 20 {
 		t.Fatalf("page 1 len = %d, want 20", len(page))
 	}
-	if pg.Total != 25 {
-		t.Fatalf("total = %d, want 25", pg.Total)
+	if pg.Total == nil || *pg.Total != 25 {
+		t.Fatalf("total = %v, want 25", pg.Total)
 	}
 	if !pg.HasMore || pg.NextOffset == nil || *pg.NextOffset != 20 {
 		t.Fatalf("page 1 should advertise next_offset=20, got has_more=%v next=%v", pg.HasMore, pg.NextOffset)
@@ -89,8 +89,8 @@ func TestListNodes_HonoursLimitOffset(t *testing.T) {
 	if len(first.Data) != 20 {
 		t.Fatalf("page 1 returned %d nodes, want 20 (limit ignored)", len(first.Data))
 	}
-	if first.Pagination.Total != 25 {
-		t.Fatalf("page 1 total = %d, want 25", first.Pagination.Total)
+	if first.Pagination.Total == nil || *first.Pagination.Total != 25 {
+		t.Fatalf("page 1 total = %v, want 25", first.Pagination.Total)
 	}
 	if !first.Pagination.HasMore || first.Pagination.NextOffset == nil || *first.Pagination.NextOffset != 20 {
 		t.Fatalf("page 1 should advertise next_offset=20, got %+v", first.Pagination)

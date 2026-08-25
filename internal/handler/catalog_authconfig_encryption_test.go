@@ -104,6 +104,23 @@ func sealRepo(t *testing.T, enc *auth.Encryptor, name, url, authType, doc string
 
 // --- write path -------------------------------------------------------------
 
+func TestCreateRepoRejectsCredentialWhenEncryptionIsUnavailable(t *testing.T) {
+	q := &sealingCatalogQuerier{}
+	h := &CatalogHandler{queries: q, log: slog.Default()}
+	body := `{"name":"private","url":"https://charts.example.com","auth_config":{"username":"u","password":"s3cret"}}`
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/catalog/repositories/", bytes.NewBufferString(body))
+	response := httptest.NewRecorder()
+
+	h.CreateRepo(response, request)
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusServiceUnavailable, response.Body.String())
+	}
+	if q.created.Name != "" {
+		t.Fatal("credential-bearing repository was persisted without encryption")
+	}
+}
+
 // TestCreateRepoSealsCredentialAtRest is the round-trip: what the operator
 // posts must not be what lands in the JSONB column.
 //

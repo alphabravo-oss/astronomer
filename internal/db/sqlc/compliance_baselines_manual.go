@@ -226,6 +226,23 @@ func (q *Queries) GetComplianceBaselineApplication(ctx context.Context, id uuid.
 	return i, err
 }
 
+const getComplianceBaselineApplicationForUpdate = `-- name: GetComplianceBaselineApplicationForUpdate :one
+SELECT id, baseline_id, previous_state, applied_by, applied_at, status, reverted_at, reverted_by, notes
+FROM compliance_baseline_applications
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetComplianceBaselineApplicationForUpdate(ctx context.Context, id uuid.UUID) (ComplianceBaselineApplication, error) {
+	row := q.db.QueryRow(ctx, getComplianceBaselineApplicationForUpdate, id)
+	var i ComplianceBaselineApplication
+	err := row.Scan(
+		&i.ID, &i.BaselineID, &i.PreviousState, &i.AppliedBy, &i.AppliedAt,
+		&i.Status, &i.RevertedAt, &i.RevertedBy, &i.Notes,
+	)
+	return i, err
+}
+
 const getActiveComplianceBaselineApplication = `-- name: GetActiveComplianceBaselineApplication :one
 SELECT id, baseline_id, previous_state, applied_by, applied_at, status, reverted_at, reverted_by, notes
 FROM compliance_baseline_applications
@@ -250,6 +267,25 @@ func (q *Queries) GetActiveComplianceBaselineApplication(ctx context.Context) (C
 		&i.RevertedAt,
 		&i.RevertedBy,
 		&i.Notes,
+	)
+	return i, err
+}
+
+const getActiveComplianceBaselineApplicationForUpdate = `-- name: GetActiveComplianceBaselineApplicationForUpdate :one
+SELECT id, baseline_id, previous_state, applied_by, applied_at, status, reverted_at, reverted_by, notes
+FROM compliance_baseline_applications
+WHERE status = 'applied'
+ORDER BY applied_at DESC
+LIMIT 1
+FOR UPDATE
+`
+
+func (q *Queries) GetActiveComplianceBaselineApplicationForUpdate(ctx context.Context) (ComplianceBaselineApplication, error) {
+	row := q.db.QueryRow(ctx, getActiveComplianceBaselineApplicationForUpdate)
+	var i ComplianceBaselineApplication
+	err := row.Scan(
+		&i.ID, &i.BaselineID, &i.PreviousState, &i.AppliedBy, &i.AppliedAt,
+		&i.Status, &i.RevertedAt, &i.RevertedBy, &i.Notes,
 	)
 	return i, err
 }

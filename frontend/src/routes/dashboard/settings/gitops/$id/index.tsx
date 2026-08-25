@@ -1,33 +1,40 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * /dashboard/settings/gitops/[id] — single-source detail.
  *
  * Shows the source config, the managed-clusters table, and exposes
  * "Sync now" + "Dry-run preview" + "Save changes" actions.
  */
-import { useEffect, useMemo, useState } from 'react';
-import { useParams } from '@/lib/navigation';
-import { Link } from '@/lib/link';
-import { useAppForm, useStore } from '@/lib/form';
-import { ArrowLeft, GitBranch, Loader2, Play, RefreshCw } from 'lucide-react';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
-import { ActionButton } from '@/components/ui/action-button';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { StatusBadge } from '@/components/ui/status-badge';
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "@/lib/navigation";
+import { Link } from "@/lib/link";
+import { useAppForm, useStore } from "@/lib/form";
+import { ArrowLeft, GitBranch, Loader2, Play, RefreshCw } from "lucide-react";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { ActionButton } from "@/components/ui/action-button";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
   useGitOpsSource,
   useGitOpsSourceClusters,
   usePreviewGitOpsSource,
   useSyncGitOpsSource,
   useUpdateGitOpsSource,
-} from '@/components/settings/hooks';
+} from "@/components/settings/hooks";
 import type {
   GitOpsPreviewResult,
   GitOpsSourceWriteRequest,
-} from '@/lib/api/settings';
-import { GITOPS_AUTH_SENTINEL } from '@/lib/api/settings';
-import { formatRelativeTime } from '@/lib/utils';
+} from "@/lib/api/gitops";
+import { GITOPS_AUTH_SENTINEL } from "@/lib/api/gitops";
+import { formatRelativeTime } from "@/lib/utils";
 
 // Snapshot of the source row in write-request shape — the form's baseline;
 // the auth column round-trips as the sentinel when a blob is stored.
@@ -36,12 +43,13 @@ function toWriteRequest(source: {
   repo_url: string;
   branch?: string;
   path_prefix?: string;
-  auth_mode: GitOpsSourceWriteRequest['auth_mode'];
+  auth_mode: GitOpsSourceWriteRequest["auth_mode"];
   auth_configured?: boolean;
-  sync_mode: GitOpsSourceWriteRequest['sync_mode'];
+  sync_mode: GitOpsSourceWriteRequest["sync_mode"];
   sync_interval_seconds?: number;
-  on_delete: GitOpsSourceWriteRequest['on_delete'];
+  on_delete: GitOpsSourceWriteRequest["on_delete"];
   enabled?: boolean;
+  allow_mass_decommission?: boolean;
 }): GitOpsSourceWriteRequest {
   return {
     name: source.name,
@@ -49,11 +57,12 @@ function toWriteRequest(source: {
     branch: source.branch,
     path_prefix: source.path_prefix,
     auth_mode: source.auth_mode,
-    auth: source.auth_configured ? GITOPS_AUTH_SENTINEL : '',
+    auth: source.auth_configured ? GITOPS_AUTH_SENTINEL : "",
     sync_mode: source.sync_mode,
     sync_interval_seconds: source.sync_interval_seconds,
     on_delete: source.on_delete,
     enabled: source.enabled,
+    allow_mass_decommission: source.allow_mass_decommission,
   };
 }
 
@@ -63,26 +72,31 @@ function DetailInner({ id }: { id: string }) {
   const update = useUpdateGitOpsSource();
   const sync = useSyncGitOpsSource();
   const preview = usePreviewGitOpsSource();
-  const [previewResult, setPreviewResult] = useState<GitOpsPreviewResult | null>(
-    null,
+  const [previewResult, setPreviewResult] =
+    useState<GitOpsPreviewResult | null>(null);
+
+  const initial = useMemo(
+    () => (source ? toWriteRequest(source) : null),
+    [source],
   );
 
-  const initial = useMemo(() => (source ? toWriteRequest(source) : null), [source]);
-
   const form = useAppForm({
-    defaultValues: (initial ?? toWriteRequest({
-      name: '',
-      repo_url: '',
-      auth_mode: 'none',
-      sync_mode: 'interval',
-      on_delete: 'log',
-    })) as GitOpsSourceWriteRequest,
+    defaultValues: (initial ??
+      toWriteRequest({
+        name: "",
+        repo_url: "",
+        auth_mode: "none",
+        sync_mode: "interval",
+        on_delete: "log",
+      })) as GitOpsSourceWriteRequest,
     onSubmit: ({ value }) => {
       if (!source || !initial) return;
       // Old behavior: the PUT body carries only the keys the operator
       // actually changed (a Partial), never the whole snapshot.
       const body: Partial<GitOpsSourceWriteRequest> = {};
-      for (const k of Object.keys(value) as (keyof GitOpsSourceWriteRequest)[]) {
+      for (const k of Object.keys(
+        value,
+      ) as (keyof GitOpsSourceWriteRequest)[]) {
         if (value[k] !== initial[k]) {
           (body as Record<string, unknown>)[k] = value[k];
         }
@@ -93,6 +107,7 @@ function DetailInner({ id }: { id: string }) {
   });
   const authMode = useStore(form.store, (s) => s.values.auth_mode);
   const syncMode = useStore(form.store, (s) => s.values.sync_mode);
+  const onDelete = useStore(form.store, (s) => s.values.on_delete);
 
   // Rebase the form whenever the source snapshot (re)loads.
   useEffect(() => {
@@ -116,7 +131,11 @@ function DetailInner({ id }: { id: string }) {
             {source.name}
           </span>
         }
-        description={<span className="font-mono">{source.repo_url} · {source.branch}</span>}
+        description={
+          <span className="font-mono">
+            {source.repo_url} · {source.branch}
+          </span>
+        }
         actions={
           <>
             <ActionButton
@@ -146,28 +165,34 @@ function DetailInner({ id }: { id: string }) {
           <p className="text-muted-foreground uppercase tracking-wide">Mode</p>
           <p className="font-mono mt-0.5">
             {source.sync_mode}
-            {source.sync_mode === 'interval'
+            {source.sync_mode === "interval"
               ? ` · ${source.sync_interval_seconds}s`
-              : ''}
+              : ""}
           </p>
         </div>
         <div>
-          <p className="text-muted-foreground uppercase tracking-wide">On delete</p>
+          <p className="text-muted-foreground uppercase tracking-wide">
+            On delete
+          </p>
           <p className="font-mono mt-0.5">{source.on_delete}</p>
         </div>
         <div>
-          <p className="text-muted-foreground uppercase tracking-wide">Last sync</p>
+          <p className="text-muted-foreground uppercase tracking-wide">
+            Last sync
+          </p>
           <p className="font-mono mt-0.5">
             {source.last_synced_at
               ? formatRelativeTime(source.last_synced_at)
-              : 'never'}
+              : "never"}
           </p>
         </div>
       </div>
 
       {source.last_error ? (
         <div className="rounded border border-status-error/40 bg-status-error/5 p-3 text-xs">
-          <p className="font-semibold text-status-error mb-1">Last sync error</p>
+          <p className="font-semibold text-status-error mb-1">
+            Last sync error
+          </p>
           <pre className="whitespace-pre-wrap font-mono text-status-error/80">
             {source.last_error}
           </pre>
@@ -184,11 +209,17 @@ function DetailInner({ id }: { id: string }) {
         <h3 className="text-sm font-semibold text-foreground">Configuration</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Branch</label>
+            <label
+              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              htmlFor="field-6a74d3c2-187"
+            >
+              Branch
+            </label>
             <form.Field name="branch">
               {(field) => (
                 <input
-                  value={field.state.value ?? ''}
+                  id="field-6a74d3c2-187"
+                  value={field.state.value ?? ""}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
@@ -197,11 +228,17 @@ function DetailInner({ id }: { id: string }) {
             </form.Field>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Path prefix</label>
+            <label
+              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              htmlFor="field-6a74d3c2-200"
+            >
+              Path prefix
+            </label>
             <form.Field name="path_prefix">
               {(field) => (
                 <input
-                  value={field.state.value ?? ''}
+                  id="field-6a74d3c2-200"
+                  value={field.state.value ?? ""}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
@@ -212,12 +249,22 @@ function DetailInner({ id }: { id: string }) {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Auth mode</label>
+            <label
+              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              htmlFor="field-6a74d3c2-215"
+            >
+              Auth mode
+            </label>
             <form.Field name="auth_mode">
               {(field) => (
                 <select
+                  id="field-6a74d3c2-215"
                   value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value as 'none' | 'https_token' | 'ssh_key')}
+                  onChange={(e) =>
+                    field.handleChange(
+                      e.target.value as "none" | "https_token" | "ssh_key",
+                    )
+                  }
                   onBlur={field.handleBlur}
                   className="w-full h-9 px-3 rounded border bg-background text-sm"
                 >
@@ -229,17 +276,23 @@ function DetailInner({ id }: { id: string }) {
             </form.Field>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Auth blob</label>
+            <label
+              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              htmlFor="field-6a74d3c2-232"
+            >
+              Auth blob
+            </label>
             <form.Field name="auth">
               {(field) => (
                 <input
+                  id="field-6a74d3c2-232"
                   type="password"
-                  value={field.state.value ?? ''}
+                  value={field.state.value ?? ""}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  disabled={authMode === 'none'}
+                  disabled={authMode === "none"}
                   className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
-                  placeholder={authMode === 'none' ? '(not required)' : ''}
+                  placeholder={authMode === "none" ? "(not required)" : ""}
                 />
               )}
             </form.Field>
@@ -251,12 +304,20 @@ function DetailInner({ id }: { id: string }) {
         </div>
         <div className="grid grid-cols-3 gap-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Sync mode</label>
+            <label
+              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              htmlFor="field-6a74d3c2-254"
+            >
+              Sync mode
+            </label>
             <form.Field name="sync_mode">
               {(field) => (
                 <select
+                  id="field-6a74d3c2-254"
                   value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value as 'manual' | 'interval')}
+                  onChange={(e) =>
+                    field.handleChange(e.target.value as "manual" | "interval")
+                  }
                   onBlur={field.handleBlur}
                   className="w-full h-9 px-3 rounded border bg-background text-sm"
                 >
@@ -267,28 +328,45 @@ function DetailInner({ id }: { id: string }) {
             </form.Field>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Interval (sec)</label>
+            <label
+              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              htmlFor="field-6a74d3c2-270"
+            >
+              Interval (sec)
+            </label>
             <form.Field name="sync_interval_seconds">
               {(field) => (
                 <input
+                  id="field-6a74d3c2-270"
                   type="number"
                   min={30}
                   value={field.state.value ?? 60}
                   onChange={(e) => field.handleChange(Number(e.target.value))}
                   onBlur={field.handleBlur}
-                  disabled={syncMode === 'manual'}
+                  disabled={syncMode === "manual"}
                   className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
                 />
               )}
             </form.Field>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On delete</label>
+            <label
+              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              htmlFor="gitops-on-delete"
+            >
+              On delete
+            </label>
             <form.Field name="on_delete">
               {(field) => (
                 <select
+                  id="gitops-on-delete"
+                  aria-label="On delete behavior"
                   value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value as 'log' | 'tombstone' | 'decommission')}
+                  onChange={(e) =>
+                    field.handleChange(
+                      e.target.value as "log" | "tombstone" | "decommission",
+                    )
+                  }
                   onBlur={field.handleBlur}
                   className="w-full h-9 px-3 rounded border bg-background text-sm"
                 >
@@ -312,11 +390,44 @@ function DetailInner({ id }: { id: string }) {
               />
             )}
           </form.Field>
-          <label htmlFor="enabled" className="text-sm text-foreground">Enabled</label>
+          <label htmlFor="enabled" className="text-sm text-foreground">
+            Enabled
+          </label>
         </div>
+        {onDelete === "decommission" ? (
+          <div className="rounded border border-status-warning/40 bg-status-warning/5 p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <form.Field name="allow_mass_decommission">
+                {(field) => (
+                  <input
+                    id="allow-mass-decommission"
+                    type="checkbox"
+                    checked={field.state.value ?? false}
+                    onChange={(e) => field.handleChange(e.target.checked)}
+                    onBlur={field.handleBlur}
+                  />
+                )}
+              </form.Field>
+              <label
+                htmlFor="allow-mass-decommission"
+                className="text-sm font-medium text-status-warning"
+              >
+                Arm one-time mass decommission override
+              </label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Allows the next sync to decommission more clusters than the
+              safety threshold. The worker consumes this override once; every
+              arm or disarm is audit logged.
+            </p>
+          </div>
+        ) : null}
         <div className="flex justify-end pt-2">
           <form.Subscribe
-            selector={(s) => initial != null && JSON.stringify(s.values) !== JSON.stringify(initial)}
+            selector={(s) =>
+              initial != null &&
+              JSON.stringify(s.values) !== JSON.stringify(initial)
+            }
           >
             {(dirty) => (
               <ActionButton
@@ -334,8 +445,10 @@ function DetailInner({ id }: { id: string }) {
       </form>
 
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">Managed clusters</h3>
-        {(!clusters || clusters.length === 0) ? (
+        <h3 className="text-sm font-semibold text-foreground">
+          Managed clusters
+        </h3>
+        {!clusters || clusters.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No clusters tracked by this source yet.
           </p>
@@ -352,14 +465,18 @@ function DetailInner({ id }: { id: string }) {
             <TableBody>
               {clusters.map((c) => (
                 <TableRow key={c.cluster_id} className="border-t">
-                  <TableCell className="py-2 font-mono">{c.cluster_name ?? c.cluster_id}</TableCell>
-                  <TableCell className="py-2 font-mono text-xs text-muted-foreground">{c.repo_path}</TableCell>
+                  <TableCell className="py-2 font-mono">
+                    {c.cluster_name ?? c.cluster_id}
+                  </TableCell>
+                  <TableCell className="py-2 font-mono text-xs text-muted-foreground">
+                    {c.repo_path}
+                  </TableCell>
                   <TableCell className="py-2 text-xs text-muted-foreground">
                     {formatRelativeTime(c.last_applied_at)}
                   </TableCell>
                   <TableCell className="py-2">
                     <StatusBadge
-                      status={c.status === 'active' ? 'active' : 'warning'}
+                      status={c.status === "active" ? "active" : "warning"}
                       label={c.status}
                       size="sm"
                     />
@@ -375,9 +492,9 @@ function DetailInner({ id }: { id: string }) {
         <div className="rounded border bg-muted/30 p-4 text-xs space-y-2">
           <h3 className="text-sm font-semibold">Dry-run preview</h3>
           <p className="font-mono text-muted-foreground">
-            HEAD {previewResult.head_sha.slice(0, 12)} ·{' '}
-            {previewResult.applies.length} would-apply ·{' '}
-            {previewResult.would_miss.length} would-miss ·{' '}
+            HEAD {previewResult.head_sha.slice(0, 12)} ·{" "}
+            {previewResult.applies.length} would-apply ·{" "}
+            {previewResult.would_miss.length} would-miss ·{" "}
             {previewResult.would_restore.length} would-restore
           </p>
           <pre className="whitespace-pre-wrap font-mono text-2xs">
@@ -407,6 +524,6 @@ function GitOpsSourceDetailPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/gitops/$id/')({
+export const Route = createFileRoute("/dashboard/settings/gitops/$id/")({
   component: GitOpsSourceDetailPage,
 });

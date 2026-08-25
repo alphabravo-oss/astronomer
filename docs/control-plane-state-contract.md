@@ -1,173 +1,174 @@
-# Control-Plane State Contract
+# Control-plane state and ownership contract
 
-Date: 2026-06-12
+Status: normative
+Release line: 1.1.x
+Last reviewed: 2026-08-23
 
-> **Version scope:** The body of this document records the v0.3.x Argo-era
-> baseline needed to characterize and delete that implementation safely. The
-> accepted v1 target is the [Flux-native delivery ADR](architecture/decisions/flux-native-delivery.md)
-> and the target-state addendum below. Where they differ, the ADR governs v1;
-> the old tables are not a compatibility promise.
+This document defines which system owns Astronomer state, how that state moves
+to adopted clusters, and what must happen during conflicts and failures. The
+[Flux-native delivery decision](architecture/decisions/flux-native-delivery.md)
+governs implementation details; the generated
+[compatibility matrix](architecture/compatibility.md) governs supported
+versions and bounds.
 
-## Accepted v1 target-state addendum
+## Product boundary
 
-For Astronomer v1, **PostgreSQL remains authoritative** for product intent and
-history: delivery sources, encrypted credentials, bundles and immutable bundle
-versions, targets, placement snapshots, rollouts, per-cluster deployments,
-assignment generations, normalized status, operations, audit events, and the
-transactional outbox.
+Astronomer manages clusters after they exist. It does not own infrastructure,
+machines, cloud node pools, or cluster provisioning. Rancher Fleet is not a
+dependency or compatibility target. Delivery uses the exact Flux distribution
+declared by `deploy/release/compatibility.yaml` and installed in each adopted
+cluster.
 
-Each managed cluster runs **local Flux** source, Kustomize, and Helm controllers.
-Flux CRDs and workload objects are downstream reconciliation state. They do not
-replace PostgreSQL, choose placement, approve rollouts, or become a public
-Astronomer API. The outbound Astronomer agent is the sole management path and
-translates typed, cluster-bound assignments into a closed set of Flux objects.
-It reports normalized, bounded status; it never reports credential material.
+## Authoritative owners
 
-Rancher Fleet is not installed and `fleet.cattle.io` is prohibited in runtime
-artifacts. Argo CD and Astronomer's legacy `fleet_operations` engine are removed
-rather than retained behind providers or feature flags. Management-plane Helm
-releases remain explicit operator actions and are not self-managed by downstream
-Flux.
-
-The v1 database is **fresh-install-only** and is created by one clean initial
-migration. Pre-v1 databases fail a non-mutating preflight with reinstall
-guidance; there is no legacy data importer or automatic reset. Machine-enforced
-support bounds and SLOs live in [`deploy/release/compatibility.yaml`](../deploy/release/compatibility.yaml)
-and its [generated documentation](architecture/compatibility.md).
-
-Astronomer uses Postgres as the durable product database and Kubernetes/etcd as the reconciliation substrate. That split is intentional: Postgres is better for relational product state, audit history, identity, credentials, and cross-cluster inventory; Kubernetes is better for declarative desired state, controller-owned status, and GitOps fan-out.
-
-This contract defines which system owns each class of state and how conflicts must be handled.
-
-## Ownership Classes
-
-| Class | Owner | Examples | Contract |
+| State class | Authoritative owner | Replicas and caches | Required behavior |
 | --- | --- | --- | --- |
-| Product state | Postgres | users, teams, API tokens, RBAC bindings, projects, cluster inventory, operation rows, audit logs | Authoritative. Kubernetes objects may reference or mirror this state, but must not replace the DB as the system of record. |
-| Secret material | Postgres encrypted columns or Kubernetes Secrets, depending on consumer | ArgoCD tokens, registry credentials, backup credentials, Dex client secrets | Store only where the consuming controller requires it. DB values must be encrypted or hashed; Kubernetes Secrets must be reconciled from encrypted source material or explicitly marked externally managed. |
-| Operator intent | CRDs when enabled, otherwise REST/UI-backed Postgres rows | `Cluster`, `Project`, future `ClusterBaseline`, `ComponentBundle`, `AgentProfile`, and `GitOpsTarget` | CRD-owned rows carry `managed_by`, `external_ref_*`, and `observed_generation` metadata in Postgres when mirrored to product tables so REST/UI can reject or transfer ownership safely. |
-| Kubernetes desired state | Kubernetes API and ArgoCD CRDs | ArgoCD `ApplicationSet`, `Application`, `AppProject`, cluster Secret labels, generated workload manifests | Kubernetes controllers own reconciliation. Astronomer writes desired state and observes status; it should not continuously overwrite controller-owned status fields. |
-| Cached status | Postgres cache tables and CRD status | health summaries, vulnerability reports, discovered resources, ArgoCD adoption phase | Rebuildable. Losing cached status must not lose product intent or credentials. |
+| Identity, sessions, tokens, RBAC, projects, cluster inventory | PostgreSQL | Redis authorization/revocation caches; CRD status | Database commits define product truth. Cache loss must not lose authorization or intent. |
+| Delivery sources, encrypted credentials, bundle versions, targets, placement snapshots, rollouts, deployments, assignment generations | PostgreSQL | Worker queue and cluster-local Flux objects | Every external side effect originates from durable committed intent and an idempotent operation/outbox record. |
+| Audit history and mutation intent | PostgreSQL plus transactional outbox | SIEM destinations | A protected mutation fails closed when its required audit intent cannot commit. External delivery retries independently. |
+| Live Kubernetes resources | The adopted cluster's Kubernetes API | Bounded inventory/status in PostgreSQL and browser caches | Astronomer observes or mutates through authenticated agent/proxy paths. Cached state never overrides live resource truth. |
+| Downstream delivery convergence | Cluster-local Flux CRDs and controllers | Normalized delivery status in PostgreSQL | Flux owns controller status and managed fields. Astronomer supplies desired objects and observes conditions; it does not forge controller status. |
+| Background execution | PostgreSQL intent/outbox; Redis/asynq transport | Worker leases and metrics | Queue loss or worker restart cannot erase committed work. Replay is idempotent and bounded. |
+| Secret material | Encrypted PostgreSQL column, hashed verifier, external reference, or Kubernetes Secret required by its consumer | Redacted response views only | Clear values never enter task payloads, audit details, support bundles, metrics, or API responses. |
+| Optional management CRD intent | Kubernetes CRD spec, mirrored with ownership metadata in PostgreSQL | CRD status and product views | REST/UI cannot silently overwrite CRD-owned fields. Ownership transfer is explicit, authorized, and audited. |
 
-## Current Source Of Truth
+## Delivery state machine
 
-| Domain | Source of Truth | Notes |
-| --- | --- | --- |
-| Users, sessions, API tokens | Postgres plus HttpOnly browser cookies | API-token secrets are hashed; browser sessions use HttpOnly cookies with CSRF protection for unsafe requests. |
-| RBAC roles and bindings | Postgres | Middleware reads DB-backed role bindings. CRDs should not manage user identity or RBAC until an explicit identity API exists. |
-| Cluster inventory | Postgres | CRD `Cluster` can create/update rows when CRDs are enabled. `clusters.managed_by`, `external_ref_*`, and `observed_generation` identify CRD-owned rows and support conflict handling. |
-| Cluster connectivity and health | Agent tunnel plus Postgres status/cache | Heartbeats and health are observed status, not CRD spec. |
-| Projects | Postgres | CRD `Project` can create/update rows when enabled. `projects.managed_by`, `external_ref_*`, and `observed_generation` identify CRD-owned rows and support conflict handling. |
-| ArgoCD managed cluster registration | Postgres plus ArgoCD cluster Secret | Postgres tracks the product relationship; ArgoCD Secret is the Kubernetes credential surface consumed by ArgoCD. Repair jobs must be able to recreate either side. |
-| Baseline component deployment | ArgoCD `ApplicationSet` when `argocd.manage_platform_baseline=true` | Legacy cluster-template install skips ArgoCD-owned baseline tools on adopted clusters when this setting is enabled. |
-| Tool/catalog installs outside platform baseline | Postgres operation rows plus Helm release state | Existing Helm-over-tunnel path remains authoritative until a tool explicitly moves to ArgoCD ownership. |
-| Audit history | Postgres | Kubernetes events/logs are supplemental and do not replace the audit table. |
+```text
+source revision -> immutable bundle version -> target + frozen placement
+      -> approved rollout -> per-cluster deployment -> assignment generation
+      -> agent acceptance -> local Flux reconciliation -> normalized status
+```
 
-`ClusterBaseline` override state follows the same split. Literal
-`spec.bundles[].values` entries are product intent and may be mirrored or
-audited as non-secret Helm parameters. Git `valuesFrom` entries are source
-references and become Argo CD Helm `valueFiles`. Secret and ConfigMap
-`valuesFrom` entries are same-namespace governance references only; the
-controller must not persist rendered Secret/ConfigMap contents into Postgres or
-inline them into generated Argo ApplicationSets.
+The following invariants are mandatory:
 
-## ArgoCD Cluster Secret Label Contract
+1. Source credentials are write-only and encrypted or externally referenced.
+2. A bundle version records an immutable commit, digest, or version plus
+   checksum; a mutable tag alone is not a deployable identity.
+3. Placement is resolved centrally and frozen for an approved rollout.
+   Subsequent label changes do not silently rewrite the cohort.
+4. Each cluster receives monotonically increasing assignment generations.
+   Duplicate delivery is safe; stale generations are rejected.
+5. The agent accepts only assignments bound to its authenticated cluster and
+   supported protocol/capability range.
+6. The agent materializes only the permitted Flux object set in
+   Astronomer-owned namespaces and reports bounded, secret-free status.
+7. Pauses, approvals, retries, supersession, rollback, and cancellation are
+   durable operations, not browser-only state.
+8. The last accepted generation continues reconciling locally during a
+   management-plane outage.
 
-Astronomer-owned ArgoCD cluster Secrets must carry the following labels so
-ApplicationSet cluster generators and repair jobs can target the same clusters
-without relying on Argo's generated Secret names:
+## Kubernetes write ownership
 
-- Always: `astronomer.io/managed-by=astronomer`,
-  `astronomer.io/cluster-id`, `astronomer.io/cluster-name`, and
-  `astronomer.io/is-local`.
-- When set on the cluster row: `astronomer.io/environment`,
-  `astronomer.io/region`, `astronomer.io/provider`, and
-  `astronomer.io/distribution`.
-- Always, from the normalized reserved cluster annotation:
-  `astronomer.io/agent-privilege-profile`.
-- When set on the cluster row, with Kubernetes-label-safe sanitized values:
-  `astronomer.io/agent-version` and `astronomer.io/kubernetes-version`.
-- For project membership: `astronomer.io/project-id.<uuid>=true` for every
-  project on the cluster, `astronomer.io/project.<sanitized-name>=true` for
-  every project with a usable name, and the singular `astronomer.io/project-id`
-  / `astronomer.io/project` labels only when the cluster belongs to exactly one
-  project.
-- For user-managed cluster labels: sanitized
-  `astronomer.io/label-<key>` projections.
+Ordinary Kubernetes edits use server-side apply with an Astronomer field
+manager and `force=false`. The UI must perform strict dry-run and show a diff
+before save. A field-ownership conflict is a safe stop.
 
-User-provided registration labels must not use the `astronomer.io` or
-`argocd.argoproj.io` prefixes.
+Taking ownership requires a separate explicit action, stronger management
+permission, `force=true`, and an audit record naming the resource and field
+manager without recording secret contents. Force does not bypass Kubernetes
+authorization, admission, policy, or namespace scope.
 
-## ArgoCD Baseline Sync-Wave Contract
+Astronomer-created resources carry stable ownership metadata. Deletion and
+decommission reconcilers may prune only objects whose identity and ownership
+proof match the durable operation. Unowned objects are surfaced as drift and
+left untouched.
 
-Built-in platform baseline ApplicationSets stamp
-`argocd.argoproj.io/sync-wave` on the generated Application template and
-`astronomer.io/sync-phase` on both the ApplicationSet and generated
-Applications. The current phase order is:
+## CRD and REST conflict rules
 
-| Phase | Wave | Purpose |
-| --- | ---: | --- |
-| `namespaces` | -40 | Namespace and prerequisite tenancy objects. |
-| `crds` | -30 | CRD installers and CRD-owning platform packages such as cert-manager. |
-| `operators` | -20 | Controllers/operators that reconcile later resources. |
-| `policies` | -10 | Admission, network, image, and platform policy bundles. |
-| `workloads` | 10 | Normal baseline workloads such as metrics and logging agents. |
-| `health-checks` | 30 | Post-deploy scanners, health checks, and validators. |
+When a `Cluster`, `Project`, or `AgentProfile` CRD owns declarative fields, the
+PostgreSQL row records the external API version, kind, namespace, name,
+generation, and `managed_by=crd`.
 
-The policy phase is intentionally reserved even when no default policy bundle
-is installed. Future policy-stack bundles should use that phase so they run
-after CRDs/operators are available but before general workloads depend on the
-policy posture.
+- REST/UI reads remain available.
+- A REST/UI write to a CRD-owned field returns conflict.
+- Non-owned operational fields may be updated when their endpoint explicitly
+  permits it.
+- Ownership takeover is a dedicated API operation with authorization, audit,
+  and a resulting ownership record.
+- Reconciliation writes status and `observedGeneration`; it never writes
+  generated status back into spec.
+- Cross-namespace references and ambiguous same-name adoption are refused.
 
-## Write Precedence
+## Connectivity and proxy state
 
-1. CRD-owned `clusters` and `projects` rows must set `managed_by=crd`, `external_ref_*`, and `observed_generation` metadata in Postgres.
-2. REST/UI updates to CRD-owned `Cluster` and `Project` spec fields are rejected with `409 conflict`; takeover is explicit through `POST /api/v1/clusters/{id}/ownership/takeover/` or `POST /api/v1/projects/{id}/ownership/takeover/`.
-3. REST/UI updates to non-CRD-owned fields may continue if they do not mutate CRD-owned spec fields.
-4. ArgoCD-owned deployment fields must not be mutated by the legacy Helm-over-tunnel reconciler.
-5. Controller-owned status must be written only to status fields or cache tables, never back into declarative spec without an explicit reconcile decision.
+An adopted cluster authenticates with its own hashed/revocable agent identity.
+Tunnel ownership is leased so only one server replica routes a session at a
+time. Reconnect replaces the previous generation and cannot inherit another
+cluster's work.
 
-## Restore And Repair Rules
+User proxy requests are authorized at global, project, cluster, namespace,
+resource, and verb scope before forwarding. The agent independently constrains
+the request to its privilege profile. Impersonation identity and correlation
+metadata are preserved where supported. Streaming responses remain bounded by
+timeouts, frame limits, and cleanup on disconnect.
 
-| Scenario | Required Behavior |
+Generated kubeconfigs contain a short-lived, revocable, read-only Astronomer
+credential and an Astronomer proxy endpoint. They do not disclose a direct
+cluster endpoint or long-lived cluster credential.
+
+## Failure and replay semantics
+
+| Failure | Required outcome |
 | --- | --- |
-| Postgres restored, CRDs still exist | Reconcile CRDs against DB rows by `external_ref`; recreate missing rows only when ownership metadata proves CRD ownership or operator opts into import. |
-| CRDs restored, Postgres rows already exist | Match by `external_ref` first. Refuse same-name rows that are not already owned by the same CRD until an operator runs an explicit ownership-transfer/import operation. |
-| ArgoCD cluster Secret missing, DB row exists | Recreate the Secret from encrypted proxy token material or mark adoption degraded if token material is unavailable. |
-| ArgoCD Secret exists, DB row missing | Import only if labels prove Astronomer ownership; otherwise leave unmanaged and surface drift. |
-| Worker operation stuck `running` | Recovery sweeps should move stale operations to retryable/failed state using durable idempotency keys. |
+| API process exits after DB commit but before queue publish | The transactional outbox republishes the committed operation. |
+| Worker exits during execution | The lease expires; a bounded idempotent retry continues or records a terminal failure. |
+| Redis is unavailable | New durable intent may commit to the outbox; operators see backlog age; recovery republishes without losing intent. |
+| PostgreSQL is unavailable | Mutations fail safely before external side effects. Existing cluster-local Flux state continues. |
+| Agent disconnects | No central write is treated as applied. The assignment remains pending/stale and resumes on authenticated reconnect. |
+| Status event is duplicated or reordered | Cluster, assignment generation, event identity, and compare-and-swap checks make ingestion idempotent. |
+| Tunnel owner disappears | Lease transfer routes the next authenticated session; no operation may double-apply outside its idempotency contract. |
+| Audit/SIEM destination is unavailable | Required audit intent remains durable; external forwarding retries and exposes backlog/DLQ state. |
+| A controller reports an unknown future schema | Admission rejects it and records a compatibility reason; it is never guessed compatible. |
 
-## CRD Expansion Rules
+## Backup, restore, and repair
 
-Add a new Astronomer CRD only when it gives operators a useful declarative workflow. Do not mirror every Postgres row into Kubernetes.
+A recoverable management-plane backup contains PostgreSQL, encryption/signing
+key custody references, release/compatibility identity, and externally stored
+artifacts required by the configured topology. Redis is not the source of
+truth and is rebuilt from PostgreSQL/outbox state.
 
-New CRDs must include:
+After restore:
 
-- OpenAPI validation for required fields, enums, min/max values, and defaults.
-- `status` subresource.
-- Standard Kubernetes conditions with `type`, `status`, `reason`, `message`, `observedGeneration`, and `lastTransitionTime`.
-- Finalizers when external cleanup is required.
-- Printer columns for phase/readiness and owning DB row when applicable.
-- Versioning and conversion strategy before a breaking schema change.
+1. Run schema/version preflight before serving mutations.
+2. Restore keys before reading encrypted columns; a lost encryption key is not
+   recoverable from ciphertext.
+3. Replay committed outbox work with its original idempotency keys.
+4. Reconcile CRD ownership by stable external reference, never by name alone.
+5. Let authenticated agents reconnect and report their accepted generations.
+6. Compare local Flux inventory/status to durable deployments and surface
+   orphan, stale, and drift conditions.
+7. Complete a recorded restore drill before declaring the plane recovered.
 
-## Planned CRD Ownership
+## Public API contract
 
-These CRDs are the planned Kubernetes-facing desired-state surfaces. They do not make Postgres behave like etcd; they expose operator intent while Postgres keeps product history, auditability, and relational views.
+PostgreSQL tables, Redis payloads, Flux CRDs, and agent frames are internal
+implementation contracts. The supported automation surface is the documented
+Astronomer REST API, generated clients, CLI workflows, and the explicitly
+documented management CRDs.
 
-| CRD | Owns | Does Not Own | Backing Product State |
-| --- | --- | --- | --- |
-| `Cluster` | Adopted cluster declarative metadata and adoption intent | Raw workload objects, live health, or Kubernetes node/pod state | `clusters`, ownership metadata, registration/adoption operation rows |
-| `Project` | Project policy intent and cluster membership references | User identity or global RBAC by itself | `projects`, ownership metadata, project operation rows |
-| `ClusterBaseline` | Desired baseline profile targeting and sync policy for clusters/groups | Individual Argo Application health or raw Helm release state | baseline operation rows, Argo ApplicationSet ownership references, status caches |
-| `ComponentBundle` | Reusable component source, default values contract, capability requirements, and upgrade policy | Secret values or rendered Kubernetes manifests as product state | bundle catalog rows or Git-backed bundle references, audit/operation history |
-| `AgentProfile` | Agent privilege mode, allowed feature surface, namespace scope, and install posture | Per-request user authorization or standalone agent decisions | cluster annotations/profile references, agent status/compatibility rows |
-| `GitOpsTarget` | Argo ApplicationSet targeting policy, selectors, sync windows, prune/self-heal intent | Argo controller status or target-cluster workload state | Argo operation rows, ApplicationSet references, drift summary cache |
+A public mutation is complete only when it has:
 
-Every planned CRD must use `secretRef` for secret material, write status without leaking credentials, and record durable product operations in Postgres when reconciliation creates, updates, or deletes external state.
+- an OpenAPI operation with typed request/success/error contracts;
+- authentication, API-token scope, RBAC, and object-ownership policy;
+- request/response/concurrency/time bounds;
+- idempotency and audit semantics;
+- a generated client operation and permission-aware UI consumer when exposed
+  in the console;
+- upgrade/deprecation behavior when its durable shape changes.
 
-## Required Follow-Up Work
+## Change review requirements
 
-- Add an explicit ownership-transfer operation for taking a CRD-owned `Cluster` or `Project` back under UI/API ownership.
-- Add drift repair jobs for Postgres, CRDs, ArgoCD Secrets, and ArgoCD Applications.
-- Keep the Postgres restore runbook and restore drill current with every schema release, including mismatched Postgres and Kubernetes/etcd snapshot scenarios.
-- Enforce the production Postgres contract from `deploy/chart/README.md`: external managed/HA Postgres, TLS, backups, PITR, restore drills, and pool sizing.
+Changes to this contract require the matching code, tests, and documentation in
+the same change. In particular:
+
+- delivery state changes update migrations, assignment/status protocol tests,
+  the Flux ADR, and failure-recovery tests;
+- CRD changes update schemas, generated deepcopy/code, ownership tests, and
+  `docs/crd-api.md`;
+- compatibility changes update `deploy/release/compatibility.yaml` and
+  regenerate `docs/architecture/compatibility.md`;
+- proxy or credential changes update the threat model, authorization negative
+  tests, audit policy, and proxy inventory;
+- backup topology changes update restore automation and runbooks, then produce
+  a new drill artifact.

@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/backup — Astronomer's own management-plane backup.
  *
@@ -7,8 +7,8 @@ import { createFileRoute } from '@tanstack/react-router';
  * Velero, live on each cluster, and only appear after Velero is installed
  * there. Restore of this dump is an operator procedure (not a one-click UI).
  */
-import { useState } from 'react';
-import { Link } from '@/lib/link';
+import { useState } from "react";
+import { Link } from "@/lib/link";
 import {
   ArrowLeft,
   KeyRound,
@@ -19,18 +19,17 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trash2,
-} from 'lucide-react';
-import { toastSuccess } from '@/lib/toast';
-import { useAppForm } from '@/lib/form';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { ActionButton } from '@/components/ui/action-button';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { cn, formatRelativeTime } from '@/lib/utils';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { cronToHuman } from '@/components/backups/cron';
+} from "lucide-react";
+import { useAppForm } from "@/lib/form";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { ActionButton } from "@/components/ui/action-button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { cn, formatRelativeTime } from "@/lib/utils";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { cronToHuman } from "@/components/backups/cron";
 import {
   useBackupDrillHistory,
   useCreateManagementBackupDestination,
@@ -40,34 +39,38 @@ import {
   useRunManagementBackupDestination,
   useTestManagementBackupDestination,
   useUpdateManagementBackupDestination,
-} from '@/components/settings/hooks';
+} from "@/components/settings/hooks";
 import type {
-  BackupDrillResult,
-  ManagementBackupDestination,
-  ManagementBackupStatus,
-} from '@/lib/api/settings';
-import { MANAGEMENT_BACKUP_SECRET_SENTINEL } from '@/lib/api/settings';
+  BackupDrillResultView,
+  ManagementBackupDestinationView,
+  ManagementBackupStatusView,
+} from "@/lib/api/settings";
+import { MANAGEMENT_BACKUP_SECRET_SENTINEL } from "@/lib/api/settings";
 
-function statusToVariant(status: BackupDrillResult['status']) {
+function statusToVariant(status: BackupDrillResultView["status"]) {
   switch (status) {
-    case 'success':
-      return 'active' as const;
-    case 'partial':
-      return 'warning' as const;
-    case 'failure':
-      return 'error' as const;
-    case 'running':
-      return 'connecting' as const;
+    case "success":
+      return "active" as const;
+    case "partial":
+      return "warning" as const;
+    case "failure":
+      return "error" as const;
+    case "running":
+      return "connecting" as const;
     default:
-      return 'disconnected' as const;
+      return "disconnected" as const;
   }
 }
 
-function durationLabel(startedAt?: string, finishedAt?: string, seconds?: number | null) {
+function durationLabel(
+  startedAt?: string,
+  finishedAt?: string,
+  seconds?: number | null,
+) {
   if (seconds != null) return `${seconds}s`;
-  if (!startedAt || !finishedAt) return '—';
+  if (!startedAt || !finishedAt) return "—";
   const ms = new Date(finishedAt).getTime() - new Date(startedAt).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (!Number.isFinite(ms) || ms < 0) return "—";
   return `${Math.round(ms / 1000)}s`;
 }
 
@@ -75,7 +78,9 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border bg-background p-3">
       <p className="text-muted-foreground">{label}</p>
-      <p className="text-sm font-mono text-foreground truncate mt-0.5">{value || '—'}</p>
+      <p className="text-sm font-mono text-foreground truncate mt-0.5">
+        {value || "—"}
+      </p>
     </div>
   );
 }
@@ -96,30 +101,30 @@ type DestForm = {
 };
 
 const emptyForm = (): DestForm => ({
-  name: '',
-  bucket: '',
-  prefix: 'astronomer-pg',
-  region: 'us-east-1',
-  endpoint_url: '',
-  access_key: '',
-  secret_key: '',
-  schedule: '0 3 * * *',
+  name: "",
+  bucket: "",
+  prefix: "astronomer-pg",
+  region: "us-east-1",
+  endpoint_url: "",
+  access_key: "",
+  secret_key: "",
+  schedule: "0 3 * * *",
   enabled: true,
   keep_daily: 30,
   keep_weekly: 12,
   keep_monthly: 6,
 });
 
-function formFromDest(row: ManagementBackupDestination): DestForm {
+function formFromDest(row: ManagementBackupDestinationView): DestForm {
   return {
     name: row.name,
     bucket: row.bucket,
-    prefix: row.prefix || 'astronomer-pg',
-    region: row.region || 'us-east-1',
-    endpoint_url: row.endpoint || '',
-    access_key: row.hasCredentials ? MANAGEMENT_BACKUP_SECRET_SENTINEL : '',
-    secret_key: row.hasCredentials ? MANAGEMENT_BACKUP_SECRET_SENTINEL : '',
-    schedule: row.schedule || '0 3 * * *',
+    prefix: row.prefix || "astronomer-pg",
+    region: row.region || "us-east-1",
+    endpoint_url: row.endpoint || "",
+    access_key: row.hasCredentials ? MANAGEMENT_BACKUP_SECRET_SENTINEL : "",
+    secret_key: row.hasCredentials ? MANAGEMENT_BACKUP_SECRET_SENTINEL : "",
+    schedule: row.schedule || "0 3 * * *",
     enabled: row.enabled,
     keep_daily: row.keepDaily || 30,
     keep_weekly: row.keepWeekly || 12,
@@ -127,9 +132,13 @@ function formFromDest(row: ManagementBackupDestination): DestForm {
   };
 }
 
-function DestinationsSection({ data }: { data: ManagementBackupStatus }) {
-  const [editor, setEditor] = useState<ManagementBackupDestination | 'new' | null>(null);
-  const [remove, setRemove] = useState<ManagementBackupDestination | null>(null);
+function DestinationsSection({ data }: { data: ManagementBackupStatusView }) {
+  const [editor, setEditor] = useState<
+    ManagementBackupDestinationView | "new" | null
+  >(null);
+  const [remove, setRemove] = useState<ManagementBackupDestinationView | null>(
+    null,
+  );
   const del = useDeleteManagementBackupDestination();
   const run = useRunManagementBackupDestination();
   const rows = data.destinations ?? [];
@@ -138,12 +147,19 @@ function DestinationsSection({ data }: { data: ManagementBackupStatus }) {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-foreground">S3 destinations</h2>
+          <h2 className="text-base font-semibold text-foreground">
+            S3 destinations
+          </h2>
           <p className="text-xs text-muted-foreground">
-            Each destination gets its own nightly dump CronJob. Add a second bucket for DR or a different schedule.
+            Each destination gets its own nightly dump CronJob. Add a second
+            bucket for DR or a different schedule.
           </p>
         </div>
-        <ActionButton intent="primary" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setEditor('new')}>
+        <ActionButton
+          intent="primary"
+          icon={<Plus className="h-3.5 w-3.5" />}
+          onClick={() => setEditor("new")}
+        >
           Add destination
         </ActionButton>
       </div>
@@ -151,7 +167,8 @@ function DestinationsSection({ data }: { data: ManagementBackupStatus }) {
         <div className="rounded-xl border border-dashed border-border bg-card p-6 space-y-2">
           <p className="text-sm text-foreground">No dump destinations yet.</p>
           <p className="text-xs text-muted-foreground">
-            {data.reason || 'Add an S3 bucket to start nightly dumps of Astronomer’s database.'}
+            {data.reason ||
+              "Add an S3 bucket to start nightly dumps of Astronomer’s database."}
           </p>
         </div>
       ) : (
@@ -159,55 +176,81 @@ function DestinationsSection({ data }: { data: ManagementBackupStatus }) {
           data={rows}
           columns={[
             {
-              key: 'name',
-              header: 'Name',
+              key: "name",
+              header: "Name",
               accessor: (row) => (
                 <div>
                   <p className="text-sm text-foreground">{row.name}</p>
-                  <p className="text-2xs text-muted-foreground font-mono">{row.bucket}</p>
+                  <p className="text-2xs text-muted-foreground font-mono">
+                    {row.bucket}
+                  </p>
                 </div>
               ),
             },
             {
-              key: 'schedule',
-              header: 'Schedule',
+              key: "schedule",
+              header: "Schedule",
               accessor: (row) => (
                 <span className="text-xs text-muted-foreground">
-                  {row.schedule ? cronToHuman(row.schedule) : '—'}
+                  {row.schedule ? cronToHuman(row.schedule) : "—"}
                 </span>
               ),
             },
             {
-              key: 'status',
-              header: 'Status',
+              key: "status",
+              header: "Status",
               accessor: (row) => (
                 <StatusBadge
-                  status={row.enabled ? 'active' : 'disconnected'}
-                  label={row.enabled ? (row.source === 'helm' ? 'helm' : 'scheduled') : 'paused'}
+                  status={
+                    row.reconcileStatus === "failed"
+                      ? "error"
+                      : row.reconcileStatus === "running" ||
+                          row.reconcileStatus === "pending" ||
+                          row.reconcileStatus === "retrying"
+                        ? "connecting"
+                        : row.enabled
+                          ? "active"
+                          : "disconnected"
+                  }
+                  label={
+                    row.reconcileStatus === "failed"
+                      ? "failed"
+                      : row.reconcileStatus === "running" ||
+                          row.reconcileStatus === "pending" ||
+                          row.reconcileStatus === "retrying"
+                        ? row.reconcileStatus
+                        : row.enabled
+                          ? row.source === "helm"
+                            ? "helm"
+                            : "scheduled"
+                          : "paused"
+                  }
                   size="sm"
                 />
               ),
             },
             {
-              key: 'last',
-              header: 'Last job',
+              key: "last",
+              header: "Last job",
               accessor: (row) => (
                 <span className="text-xs text-muted-foreground">
                   {row.lastJob?.completionTime
                     ? formatRelativeTime(row.lastJob.completionTime)
                     : row.lastJob?.startTime
                       ? formatRelativeTime(row.lastJob.startTime)
-                      : 'never'}
+                      : "never"}
                 </span>
               ),
             },
             {
-              key: 'actions',
-              header: '',
+              key: "actions",
+              header: "",
               sortable: false,
               accessor: (row) =>
                 row.readOnly ? (
-                  <span className="text-2xs text-muted-foreground">Helm-managed</span>
+                  <span className="text-2xs text-muted-foreground">
+                    Helm-managed
+                  </span>
                 ) : (
                   <div className="flex items-center justify-end gap-1">
                     <ActionButton
@@ -219,10 +262,20 @@ function DestinationsSection({ data }: { data: ManagementBackupStatus }) {
                     >
                       Run
                     </ActionButton>
-                    <ActionButton intent="ghost" size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor(row)}>
+                    <ActionButton
+                      intent="ghost"
+                      size="sm"
+                      icon={<Pencil className="h-3.5 w-3.5" />}
+                      onClick={() => setEditor(row)}
+                    >
                       Edit
                     </ActionButton>
-                    <ActionButton intent="ghost" size="sm" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setRemove(row)}>
+                    <ActionButton
+                      intent="ghost"
+                      size="sm"
+                      icon={<Trash2 className="h-3.5 w-3.5" />}
+                      onClick={() => setRemove(row)}
+                    >
                       Remove
                     </ActionButton>
                   </div>
@@ -235,15 +288,26 @@ function DestinationsSection({ data }: { data: ManagementBackupStatus }) {
       )}
       {editor && (
         <DestinationModal
-          existing={editor === 'new' ? null : editor}
+          existing={editor === "new" ? null : editor}
           onClose={() => setEditor(null)}
         />
       )}
+      <p className="sr-only" role="status" aria-live="polite">
+        {run.isPending
+          ? `Backup run ${run.operationState.phase}`
+          : del.isPending
+            ? "Backup destination removal queued"
+            : ""}
+      </p>
       <ConfirmDialog
         open={!!remove}
         onClose={() => setRemove(null)}
         title="Remove destination"
-        description={remove ? `Stop dumping to ${remove.bucket} and delete the CronJob.` : ''}
+        description={
+          remove
+            ? `Stop dumping to ${remove.bucket} and delete the CronJob.`
+            : ""
+        }
         confirmText="Remove"
         onConfirm={() => {
           if (remove) del.mutate(remove.id);
@@ -258,7 +322,7 @@ function DestinationModal({
   existing,
   onClose,
 }: {
-  existing: ManagementBackupDestination | null;
+  existing: ManagementBackupDestinationView | null;
   onClose: () => void;
 }) {
   const create = useCreateManagementBackupDestination();
@@ -293,15 +357,18 @@ function DestinationModal({
 
   return (
     <ModalShell
-      title={existing ? 'Edit destination' : 'Add S3 destination'}
+      title={existing ? "Edit destination" : "Add S3 destination"}
       subtitle="Credentials are stored encrypted. The dump CronJob starts as soon as you save."
       onClose={onClose}
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
           <ActionButton onClick={onClose}>Cancel</ActionButton>
-          <ActionButton intent="primary" onClick={() => void form.handleSubmit()}>
-            {existing ? 'Save' : 'Add destination'}
+          <ActionButton
+            intent="primary"
+            onClick={() => void form.handleSubmit()}
+          >
+            {existing ? "Save" : "Add destination"}
           </ActionButton>
         </div>
       }
@@ -314,14 +381,27 @@ function DestinationModal({
         }}
       >
         <form.AppField name="name">
-          {(field) => <field.TextField label="Name" required placeholder="primary" />}
+          {(field) => (
+            <field.TextField label="Name" required placeholder="primary" />
+          )}
         </form.AppField>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <form.AppField name="bucket">
-            {(field) => <field.TextField label="Bucket" required placeholder="astronomer-backups" />}
+            {(field) => (
+              <field.TextField
+                label="Bucket"
+                required
+                placeholder="astronomer-backups"
+              />
+            )}
           </form.AppField>
           <form.AppField name="prefix">
-            {(field) => <field.TextField label="Prefix" helper="Object key prefix inside the bucket" />}
+            {(field) => (
+              <field.TextField
+                label="Prefix"
+                helper="Object key prefix inside the bucket"
+              />
+            )}
           </form.AppField>
           <form.AppField name="region">
             {(field) => <field.TextField label="Region" />}
@@ -339,29 +419,48 @@ function DestinationModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <form.AppField name="access_key">
             {(field) => (
-              <field.SecretField label="Access key" required stored={!!existing?.hasCredentials} revealable />
+              <field.SecretField
+                label="Access key"
+                required
+                stored={!!existing?.hasCredentials}
+                revealable
+              />
             )}
           </form.AppField>
           <form.AppField name="secret_key">
             {(field) => (
-              <field.SecretField label="Secret key" required stored={!!existing?.hasCredentials} revealable />
+              <field.SecretField
+                label="Secret key"
+                required
+                stored={!!existing?.hasCredentials}
+                revealable
+              />
             )}
           </form.AppField>
         </div>
         <form.AppField name="schedule">
           {(field) => (
-            <field.TextField label="Cron schedule" helper="UTC. Default is 03:00 every day." />
+            <field.TextField
+              label="Cron schedule"
+              helper="UTC. Default is 03:00 every day."
+            />
           )}
         </form.AppField>
         <div className="grid grid-cols-3 gap-3">
           <form.AppField name="keep_daily">
-            {(field) => <field.NumberField label="Keep daily" min={1} max={365} />}
+            {(field) => (
+              <field.NumberField label="Keep daily" min={1} max={365} />
+            )}
           </form.AppField>
           <form.AppField name="keep_weekly">
-            {(field) => <field.NumberField label="Keep weekly" min={1} max={52} />}
+            {(field) => (
+              <field.NumberField label="Keep weekly" min={1} max={52} />
+            )}
           </form.AppField>
           <form.AppField name="keep_monthly">
-            {(field) => <field.NumberField label="Keep monthly" min={1} max={36} />}
+            {(field) => (
+              <field.NumberField label="Keep monthly" min={1} max={36} />
+            )}
           </form.AppField>
         </div>
         <form.AppField name="enabled">
@@ -374,30 +473,30 @@ function DestinationModal({
         </form.AppField>
         {existing && (
           <ActionButton
-            onClick={async () => {
-              const result = await test.mutateAsync(existing.id);
-              if (result.success) toastSuccess(result.message);
-            }}
+            onClick={() => void test.mutateAsync(existing.id)}
             disabled={test.isPending}
           >
             Test connection
           </ActionButton>
         )}
+        <p className="sr-only" role="status" aria-live="polite">
+          {test.isPending ? `Connection test ${test.operationState.phase}` : ""}
+        </p>
       </form>
     </ModalShell>
   );
 }
 
-function EncryptionCard({ data }: { data: ManagementBackupStatus }) {
+function EncryptionCard({ data }: { data: ManagementBackupStatusView }) {
   if (!(data.destinations ?? []).length) return null;
   const wrapped = data.encryptionKeyBackup?.wrappingConfigured;
   return (
     <div
       className={cn(
-        'rounded-xl border p-6 space-y-2',
+        "rounded-xl border p-6 space-y-2",
         wrapped
-          ? 'border-border bg-card'
-          : 'border-status-warning/30 bg-status-warning/5',
+          ? "border-border bg-card"
+          : "border-status-warning/30 bg-status-warning/5",
       )}
     >
       <div className="flex items-center gap-2">
@@ -406,17 +505,20 @@ function EncryptionCard({ data }: { data: ManagementBackupStatus }) {
         ) : (
           <ShieldAlert className="h-4 w-4 text-status-warning" />
         )}
-        <h2 className="text-sm font-medium text-foreground">Encryption key backup</h2>
+        <h2 className="text-sm font-medium text-foreground">
+          Encryption key backup
+        </h2>
       </div>
       {wrapped ? (
         <p className="text-xs text-muted-foreground">
-          The platform encryption key is wrapped and stored with each dump. A restore onto a
-          new cluster can decrypt agent tokens and SSO secrets.
+          The platform encryption key is wrapped and stored with each dump. A
+          restore onto a new cluster can decrypt agent tokens and SSO secrets.
         </p>
       ) : (
         <p className="text-xs text-status-warning">
-          Dumps are running without a wrapped copy of the encryption key. Restoring onto a new
-          cluster would leave encrypted columns undecryptable. Set
+          Dumps are running without a wrapped copy of the encryption key.
+          Restoring onto a new cluster would leave encrypted columns
+          undecryptable. Set
           managementBackup.encryptionKeyBackup.wrappingSecretRef in Helm values.
         </p>
       )}
@@ -441,7 +543,8 @@ function LatestDrillCard() {
       <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center space-y-2">
         <p className="text-sm text-foreground">No restore drill has run yet.</p>
         <p className="text-xs text-muted-foreground">
-          The weekly drill restores the latest dump into a scratch Postgres and records the result here.
+          The weekly drill restores the latest dump into a scratch Postgres and
+          records the result here.
         </p>
       </div>
     );
@@ -454,29 +557,50 @@ function LatestDrillCard() {
     <div className="rounded-xl border border-border bg-card p-6 space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Latest restore drill</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Latest restore drill
+          </p>
           <div className="flex items-center gap-3">
-            <StatusBadge status={statusToVariant(latest.status)} label={latest.status} size="sm" />
-            <span className={cn('text-xs', stale ? 'text-status-warning' : 'text-muted-foreground')}>
+            <StatusBadge
+              status={statusToVariant(latest.status)}
+              label={latest.status}
+              size="sm"
+            />
+            <span
+              className={cn(
+                "text-xs",
+                stale ? "text-status-warning" : "text-muted-foreground",
+              )}
+            >
               {formatRelativeTime(latest.finishedAt ?? latest.startedAt)}
             </span>
           </div>
           {latest.errorMessage && (
-            <p className="text-sm text-status-error mt-2">{latest.errorMessage}</p>
+            <p className="text-sm text-status-error mt-2">
+              {latest.errorMessage}
+            </p>
           )}
         </div>
         <div className="grid grid-cols-2 gap-3 text-xs">
           <Stat
             label="Schema version"
-            value={latest.schemaVersion != null ? String(latest.schemaVersion) : '—'}
+            value={
+              latest.schemaVersion != null ? String(latest.schemaVersion) : "—"
+            }
           />
-          <Stat label="Duration" value={durationLabel(latest.startedAt, latest.finishedAt)} />
-          {latest.backupKey && <Stat label="Source dump" value={latest.backupKey} />}
+          <Stat
+            label="Duration"
+            value={durationLabel(latest.startedAt, latest.finishedAt)}
+          />
+          {latest.backupKey && (
+            <Stat label="Source dump" value={latest.backupKey} />
+          )}
         </div>
       </div>
       {stale && (
         <div className="rounded-lg border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs text-status-warning">
-          Last successful drill is over a week old. Restore confidence is decaying — check the drill CronJob.
+          Last successful drill is over a week old. Restore confidence is
+          decaying — check the drill CronJob.
         </div>
       )}
     </div>
@@ -488,32 +612,40 @@ function HistoryTable() {
   const { data, isLoading } = useBackupDrillHistory({ page, page_size: 25 });
   const rows = data?.data ?? [];
 
-  const columns: Column<BackupDrillResult>[] = [
+  const columns: Column<BackupDrillResultView>[] = [
     {
-      key: 'startedAt',
-      header: 'Started',
+      key: "startedAt",
+      header: "Started",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground font-mono">{formatRelativeTime(row.startedAt)}</span>
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      accessor: (row) => <StatusBadge status={statusToVariant(row.status)} label={row.status} size="sm" />,
-    },
-    {
-      key: 'schemaVersion',
-      header: 'Schema',
-      accessor: (row) => (
-        <span className="text-xs font-mono text-muted-foreground">
-          {row.schemaVersion != null ? row.schemaVersion : '—'}
+        <span className="text-xs text-muted-foreground font-mono">
+          {formatRelativeTime(row.startedAt)}
         </span>
       ),
     },
     {
-      key: 'duration',
-      header: 'Duration',
-      align: 'right',
+      key: "status",
+      header: "Status",
+      accessor: (row) => (
+        <StatusBadge
+          status={statusToVariant(row.status)}
+          label={row.status}
+          size="sm"
+        />
+      ),
+    },
+    {
+      key: "schemaVersion",
+      header: "Schema",
+      accessor: (row) => (
+        <span className="text-xs font-mono text-muted-foreground">
+          {row.schemaVersion != null ? row.schemaVersion : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "duration",
+      header: "Duration",
+      align: "right",
       accessor: (row) => (
         <span className="text-xs font-mono tabular-nums text-muted-foreground">
           {durationLabel(row.startedAt, row.finishedAt)}
@@ -521,12 +653,12 @@ function HistoryTable() {
       ),
     },
     {
-      key: 'error',
-      header: 'Error',
+      key: "error",
+      header: "Error",
       sortable: false,
       accessor: (row) => (
         <span className="text-xs text-status-error truncate max-w-[260px] block">
-          {row.errorMessage || '—'}
+          {row.errorMessage || "—"}
         </span>
       ),
     },
@@ -534,7 +666,9 @@ function HistoryTable() {
 
   return (
     <div className="space-y-3">
-      <h2 className="text-base font-semibold text-foreground">Restore drill history</h2>
+      <h2 className="text-base font-semibold text-foreground">
+        Restore drill history
+      </h2>
       <DataTable
         data={rows}
         columns={columns}
@@ -610,6 +744,6 @@ function AstronomerBackupPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/backup/')({
+export const Route = createFileRoute("/dashboard/settings/backup/")({
   component: AstronomerBackupPage,
 });

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-catalog="$root_dir/deploy/bundles/catalog.json"
+catalog="${BUNDLE_CATALOG:-$root_dir/deploy/bundles/catalog.json}"
 output=""
 check=""
 publish=""
@@ -16,9 +16,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for tool in jq helm sha256sum tar gzip; do
+for tool in go jq helm sha256sum tar gzip; do
   command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 1; }
 done
+(cd "$root_dir" && go run ./deploy/bundles/cmd/validate "$catalog")
 jq -e '.schema_version == 1 and (.components | length > 0) and all(.components[];
   .source.kind == "helm_http" and
   (.source.chart_digest | test("^sha256:[0-9a-f]{64}$")) and
@@ -33,11 +34,19 @@ install -m 0644 "$root_dir/deploy/bundles/README.md" "$build_dir/README.md"
 mkdir -p "$build_dir/charts"
 
 while IFS=$'\t' read -r repository chart version digest; do
-  helm pull "$chart" --repo "$repository" --version "$version" --destination "$build_dir/charts" >/dev/null
-  archive="$build_dir/charts/$chart-$version.tgz"
+  chart_dir="$build_dir/charts"
+  if [[ "$repository" != "https://prometheus-community.github.io/helm-charts" ]]; then
+    source_key="$(printf '%s' "$repository" | sha256sum | awk '{print substr($1,1,16)}')"
+    chart_dir="$build_dir/charts/sources/$source_key"
+    mkdir -p "$chart_dir"
+  fi
+  archive="$chart_dir/$chart-$version.tgz"
+  if [[ ! -f "$archive" ]]; then
+    helm pull "$chart" --repo "$repository" --version "$version" --destination "$chart_dir" >/dev/null
+  fi
   actual="sha256:$(sha256sum "$archive" | awk '{print $1}')"
   [[ "$actual" == "$digest" ]] || { echo "$chart $version digest mismatch: $actual != $digest" >&2; exit 1; }
-done < <(jq -r '.components[] | [.source.url,.source.chart,.source.version,.source.chart_digest] | @tsv' "$catalog")
+done < <(jq -r '.components[] | [.source.url,.source.chart,.source.version,.source.chart_digest] | @tsv' "$catalog" | sort -u)
 
 artifact="$build_dir/builtin-bundles.tar.gz"
 TZ=UTC tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -C "$build_dir" \

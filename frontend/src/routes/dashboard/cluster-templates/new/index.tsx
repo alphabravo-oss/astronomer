@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * Cluster Templates · New.
  *
@@ -8,19 +8,19 @@ import { createFileRoute } from '@tanstack/react-router';
  * mounted in read-only-via-disabled-submit mode if the user lacks the role
  * (so deep-links don't 404), but the Save button refuses to fire.
  */
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { useRouter } from '@/lib/navigation';
-import { ArrowLeft } from 'lucide-react';
-import { PermissionState } from '@/components/ui/empty-state';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { extractApiErrorMessage } from '@/lib/api/errors';
-import { useCurrentUser } from '@/lib/hooks';
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { useRouter } from "@/lib/navigation";
+import { ArrowLeft } from "lucide-react";
+import { PermissionState } from "@/components/ui/empty-state";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { extractApiErrorMessage } from "@/lib/api/errors";
+import { useCurrentUser } from "@/lib/hooks";
 import {
   useCreateClusterTemplate,
   canWriteClusterTemplates,
-} from '@/components/projects/hooks';
-import { TemplateForm } from '@/components/projects/cluster-templates/template-form';
+} from "@/components/projects/hooks";
+import { TemplateForm } from "@/components/projects/cluster-templates/template-form";
 
 function NewClusterTemplatePage() {
   const router = useRouter();
@@ -49,7 +49,12 @@ function NewClusterTemplatePage() {
         <PermissionState
           title="Write permission required"
           permission="cluster_templates:write"
-          description={<>Saving requires the <span className="font-mono">cluster_templates:write</span> role.</>}
+          description={
+            <>
+              Saving requires the{" "}
+              <span className="font-mono">cluster_templates:write</span> role.
+            </>
+          }
           className="rounded-lg border border-border bg-muted/30 p-6"
         />
       )}
@@ -57,10 +62,12 @@ function NewClusterTemplatePage() {
       <TemplateForm
         submitting={createMutation.isPending}
         serverError={serverError}
-        onCancel={() => router.push('/dashboard/cluster-templates')}
+        onCancel={() => router.push("/dashboard/cluster-templates")}
         onSubmit={async (body) => {
           if (!canWrite) {
-            setServerError('You do not have permission to create cluster templates.');
+            setServerError(
+              "You do not have permission to create cluster templates.",
+            );
             return;
           }
           setServerError(null);
@@ -68,7 +75,8 @@ function NewClusterTemplatePage() {
             const created = await createMutation.mutateAsync(body);
             router.push(`/dashboard/cluster-templates/${created.id}`);
           } catch (err) {
-            const msg = extractApiErrorMessage(err) ?? 'Failed to create template.';
+            const msg =
+              extractApiErrorMessage(err) ?? "Failed to create template.";
             setServerError(msg);
           }
         }}
@@ -77,6 +85,6 @@ function NewClusterTemplatePage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/cluster-templates/new/')({
+export const Route = createFileRoute("/dashboard/cluster-templates/new/")({
   component: NewClusterTemplatePage,
 });

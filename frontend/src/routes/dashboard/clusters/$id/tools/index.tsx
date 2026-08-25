@@ -1,9 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useParams } from '@/lib/navigation';
-import { useCluster } from '@/lib/hooks';
-import { ToolsTab } from '@/components/clusters/tools-tab';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { Loader2, Server } from 'lucide-react';
+import { createFileRoute } from "@tanstack/react-router";
+import { useParams } from "@/lib/navigation";
+import { useCluster } from "@/lib/hooks";
+import { ToolsTab } from "@/components/clusters/tools-tab";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { Loader2, Server } from "lucide-react";
 
 function ClusterToolsPage() {
   const params = useParams();
@@ -33,11 +33,15 @@ function ClusterToolsPage() {
         title="Tools"
         description={`Manage operational tools for ${cluster.displayName}`}
       />
-      <ToolsTab clusterId={clusterId} clusterEnvironment={cluster.environment} clusterStatus={cluster.status} />
+      <ToolsTab
+        clusterId={clusterId}
+        clusterEnvironment={cluster.environment}
+        clusterStatus={cluster.status}
+      />
     </PageShell>
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id/tools/')({
+export const Route = createFileRoute("/dashboard/clusters/$id/tools/")({
   component: ClusterToolsPage,
 });

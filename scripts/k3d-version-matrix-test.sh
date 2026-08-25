@@ -60,9 +60,9 @@ TOKEN="$(curl -fsS -X POST -H 'Content-Type: application/json' \
 [[ -n "${TOKEN:-}" ]] || { bad "login failed"; exit 1; }
 ok "authenticated as $ASTRO_EMAIL"
 
-NET_ARG=""
+NET_ARGS=()
 if [[ -n "$MGMT_NETWORK" ]] && docker network inspect "$MGMT_NETWORK" >/dev/null 2>&1; then
-  NET_ARG="--network $MGMT_NETWORK"
+  NET_ARGS=(--network "$MGMT_NETWORK")
 fi
 
 declare -a RESULTS
@@ -70,12 +70,12 @@ declare -a RESULTS
 test_version() {
   local ver="$1"
   local name="astro-ver-${ver//./-}"
-  local cid="" hb="" phase="" ns=0 nodes=0 pods=0 kver=""
+  local cid="" hb="" ns=0 nodes=0 pods=0 kver=""
   local result="FAIL"
 
   step "[$ver] create single-node k3d cluster $name"
   if ! k3d cluster create "$name" --no-lb --k3s-arg "--disable=traefik@server:0" \
-        $NET_ARG --image "rancher/k3s:$ver" >/dev/null 2>&1; then
+        "${NET_ARGS[@]}" --image "rancher/k3s:$ver" >/dev/null 2>&1; then
     bad "[$ver] k3d create failed (image rancher/k3s:$ver may not exist)"
     RESULTS+=("$ver|CREATE_FAIL|-|-|-|-|-")
     return
@@ -83,7 +83,11 @@ test_version() {
   ok "[$ver] cluster up"
 
   step "[$ver] import agent image"
-  k3d image import -c "$name" "$AGENT_IMAGE" >/dev/null 2>&1 && ok "imported $AGENT_IMAGE" || bad "image import failed"
+  if k3d image import -c "$name" "$AGENT_IMAGE" >/dev/null 2>&1; then
+    ok "imported $AGENT_IMAGE"
+  else
+    bad "image import failed"
+  fi
 
   step "[$ver] register via wizard API"
   cid="$(api POST /api/v1/clusters/ -d "{\"name\":\"$name\",\"display_name\":\"ver $ver\",\"environment\":\"dev\",\"provider\":\"k3d\",\"distribution\":\"k3s\",\"region\":\"local\"}" | jget "['data']['id']")"
@@ -96,7 +100,11 @@ test_version() {
   local mf; mf="$(mktemp)"
   curl -fsS -H "Authorization: Bearer $TOKEN" "$ASTRO_URL/api/v1/clusters/$cid/manifest/" > "$mf" 2>/dev/null
   if ! grep -q . "$mf"; then bad "[$ver] manifest empty"; rm -f "$mf"; RESULTS+=("$ver|MANIFEST_FAIL|$cid|-|-|-|-"); teardown "$name" "$cid"; return; fi
-  kubectl --context "k3d-$name" apply -f "$mf" >/dev/null 2>&1 && ok "manifest applied ($(wc -l <"$mf") lines)" || bad "apply failed"
+  if kubectl --context "k3d-$name" apply -f "$mf" >/dev/null 2>&1; then
+    ok "manifest applied ($(wc -l <"$mf") lines)"
+  else
+    bad "apply failed"
+  fi
   rm -f "$mf"
 
   step "[$ver] wait for agent heartbeat (<=${AGENT_TIMEOUT}s)"

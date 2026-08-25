@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import type { MetricsSummary, MetricsSeries } from '@/types';
+import { useEffect, useState } from "react";
+import type { MetricsSummary, MetricsSeries } from "@/types";
 
 // A bounded live window: at a 30–60s summary poll this is ~1–2h of history.
 // It's session-local — starts empty, fills as samples arrive, resets on cluster
@@ -18,7 +18,10 @@ export interface RollingState {
   samples: RollingSample[];
 }
 
-type SummaryScalars = Pick<MetricsSummary, 'cpuPercentage' | 'memoryPercentage' | 'podCount'>;
+type SummaryScalars = Pick<
+  MetricsSummary,
+  "cpuPercentage" | "memoryPercentage" | "podCount"
+>;
 
 // appendRollingSample is the pure core: append one summary sample, resetting the
 // buffer when the cluster changed, and cap to `max` (drop-oldest). Kept separate
@@ -50,27 +53,39 @@ export interface RollingMetrics {
 // useRollingMetrics accumulates the scalar /metrics/summary samples the page
 // already polls into an in-memory time-series, so live CPU / memory / pod trends
 // render without any Prometheus backend.
-export function useRollingMetrics(clusterId: string, summary: SummaryScalars | undefined): RollingMetrics {
-  const [state, setState] = useState<RollingState>({ cid: clusterId, samples: [] });
+export function useRollingMetrics(
+  clusterId: string,
+  summary: SummaryScalars | undefined,
+): RollingMetrics {
+  const [state, setState] = useState<RollingState>({
+    cid: clusterId,
+    samples: [],
+  });
 
   useEffect(() => {
     if (!summary || !clusterId) return;
-    setState((prev) => appendRollingSample(prev, clusterId, summary, new Date().toISOString()));
+    setState((prev) =>
+      appendRollingSample(prev, clusterId, summary, new Date().toISOString()),
+    );
   }, [summary, clusterId]);
 
   // Guard against a one-render mismatch right after a cluster switch (state still
   // holds the previous cluster's samples until the effect runs).
   const samples = state.cid === clusterId ? state.samples : [];
-  const series = (key: keyof Omit<RollingSample, 't'>, name: string, unit: string): MetricsSeries => ({
+  const series = (
+    key: keyof Omit<RollingSample, "t">,
+    name: string,
+    unit: string,
+  ): MetricsSeries => ({
     name,
     unit,
     data: samples.map((s) => ({ timestamp: s.t, value: s[key] })),
   });
 
   return {
-    cpu: series('cpu', 'CPU %', '%'),
-    mem: series('mem', 'Memory %', '%'),
-    pods: series('pods', 'Pods', ''),
+    cpu: series("cpu", "CPU %", "%"),
+    mem: series("mem", "Memory %", "%"),
+    pods: series("pods", "Pods", ""),
     count: samples.length,
   };
 }

@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
-import { cn, gaugeColor, gaugeTextColor } from '@/lib/utils';
-import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
+import { cn, gaugeColor, gaugeTextColor } from "@/lib/utils";
+import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 
 interface MetricCardProps {
   title: string;
   value: string | number;
   unit?: string;
   subtitle?: string;
-  trend?: 'up' | 'down' | 'flat';
+  trend?: "up" | "down" | "flat";
   trendValue?: string;
   percentage?: number;
   thresholdWarning?: number;
@@ -33,8 +33,8 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        'rounded-lg border border-border bg-card p-5 transition-colors hover:bg-card/80',
-        className
+        "rounded-lg border border-border bg-card p-5 transition-colors hover:bg-card/80",
+        className,
       )}
     >
       <div className="flex items-start justify-between">
@@ -43,13 +43,17 @@ export function MetricCard({
           <div className="flex items-baseline gap-1.5">
             <span
               className={cn(
-                'text-2xl font-semibold tracking-tight',
-                percentage !== undefined ? gaugeTextColor(percentage) : 'text-foreground'
+                "text-2xl font-semibold tracking-tight",
+                percentage !== undefined
+                  ? gaugeTextColor(percentage)
+                  : "text-foreground",
               )}
             >
               {value}
             </span>
-            {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+            {unit && (
+              <span className="text-sm text-muted-foreground">{unit}</span>
+            )}
           </div>
           {subtitle && (
             <p className="text-xs text-muted-foreground">{subtitle}</p>
@@ -66,15 +70,15 @@ export function MetricCard({
           {trend && trendValue && (
             <div
               className={cn(
-                'flex items-center gap-0.5 text-xs font-medium',
-                trend === 'up' && 'text-status-error',
-                trend === 'down' && 'text-status-success',
-                trend === 'flat' && 'text-muted-foreground'
+                "flex items-center gap-0.5 text-xs font-medium",
+                trend === "up" && "text-status-error",
+                trend === "down" && "text-status-success",
+                trend === "flat" && "text-muted-foreground",
               )}
             >
-              {trend === 'up' && <ArrowUpRight className="h-3 w-3" />}
-              {trend === 'down' && <ArrowDownRight className="h-3 w-3" />}
-              {trend === 'flat' && <Minus className="h-3 w-3" />}
+              {trend === "up" && <ArrowUpRight className="h-3 w-3" />}
+              {trend === "down" && <ArrowDownRight className="h-3 w-3" />}
+              {trend === "flat" && <Minus className="h-3 w-3" />}
               {trendValue}
             </div>
           )}
@@ -86,7 +90,7 @@ export function MetricCard({
         <div className="mt-3">
           <div className="gauge-bar">
             <div
-              className={cn('gauge-bar-fill', gaugeColor(percentage))}
+              className={cn("gauge-bar-fill", gaugeColor(percentage))}
               style={{ width: `${Math.min(percentage, 100)}%` }}
             />
           </div>

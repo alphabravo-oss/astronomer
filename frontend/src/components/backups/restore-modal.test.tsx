@@ -1,24 +1,29 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { RestoreModal } from './restore-modal';
-import type { BackupRun } from '@/types';
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { RestoreModal } from "./restore-modal";
+import type { BackupRun } from "@/types";
 
 // Router is only used for the post-success redirect; a no-op push is enough.
-vi.mock('@/lib/navigation', () => ({
+vi.mock("@/lib/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
 // Capture the restore-creation call so we can assert on the request body.
 // vi.mock factories are hoisted above this const, so hoist it alongside them.
-const mockMutateAsync = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'r1' }));
-vi.mock('./hooks', () => ({
-  useB2CreateRestore: () => ({ mutateAsync: mockMutateAsync, isPending: false }),
+const mockMutateAsync = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ id: "r1" }),
+);
+vi.mock("./hooks", () => ({
+  useB2CreateRestore: () => ({
+    mutateAsync: mockMutateAsync,
+    isPending: false,
+  }),
 }));
 
 function makeBackup(): BackupRun {
   return {
-    id: 'b1',
-    name: 'daily',
-    includedNamespaces: ['prod', 'staging'],
+    id: "b1",
+    name: "daily",
+    includedNamespaces: ["prod", "staging"],
   } as unknown as BackupRun;
 }
 
@@ -26,40 +31,48 @@ beforeEach(() => {
   mockMutateAsync.mockClear();
 });
 
-describe('RestoreModal namespace selection', () => {
-  it('blocks submit when every namespace is deselected (never widens to restore-all)', () => {
+describe("RestoreModal namespace selection", () => {
+  it("blocks submit when every namespace is deselected (never widens to restore-all)", () => {
     render(<RestoreModal backup={makeBackup()} onClose={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'prod' }));
-    fireEvent.click(screen.getByRole('button', { name: 'staging' }));
-    fireEvent.change(screen.getByPlaceholderText('daily'), { target: { value: 'daily' } });
+    fireEvent.click(screen.getByRole("button", { name: "prod" }));
+    fireEvent.click(screen.getByRole("button", { name: "staging" }));
+    fireEvent.change(screen.getByPlaceholderText("daily"), {
+      target: { value: "daily" },
+    });
 
-    const start = screen.getByRole('button', { name: 'Start Restore' });
+    const start = screen.getByRole("button", { name: "Start Restore" });
     expect(start).toBeDisabled();
-    expect(screen.getByText('Select at least one namespace to restore.')).toBeInTheDocument();
+    expect(
+      screen.getByText("Select at least one namespace to restore."),
+    ).toBeInTheDocument();
 
     fireEvent.click(start);
     expect(mockMutateAsync).not.toHaveBeenCalled();
   });
 
-  it('sends the explicit subset when a strict subset is selected', async () => {
+  it("sends the explicit subset when a strict subset is selected", async () => {
     render(<RestoreModal backup={makeBackup()} onClose={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'staging' })); // deselect staging
-    fireEvent.change(screen.getByPlaceholderText('daily'), { target: { value: 'daily' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Start Restore' }));
+    fireEvent.click(screen.getByRole("button", { name: "staging" })); // deselect staging
+    fireEvent.change(screen.getByPlaceholderText("daily"), {
+      target: { value: "daily" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start Restore" }));
 
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
     expect(mockMutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ included_namespaces: ['prod'] }),
+      expect.objectContaining({ included_namespaces: ["prod"] }),
     );
   });
 
-  it('omits the filter (restore everything) only when the full set is selected', async () => {
+  it("omits the filter (restore everything) only when the full set is selected", async () => {
     render(<RestoreModal backup={makeBackup()} onClose={vi.fn()} />);
 
-    fireEvent.change(screen.getByPlaceholderText('daily'), { target: { value: 'daily' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Start Restore' }));
+    fireEvent.change(screen.getByPlaceholderText("daily"), {
+      target: { value: "daily" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start Restore" }));
 
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
     expect(mockMutateAsync).toHaveBeenCalledWith(

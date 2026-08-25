@@ -321,7 +321,9 @@ for _ in $(seq 1 50); do
 done
 [[ -s "$fixture_port_file" ]] || fail "local fixture server did not publish its port"
 fixture_port="$(tr -d '\n' <"$fixture_port_file")"
-[[ "$fixture_port" =~ ^[0-9]+$ ]] && ((fixture_port >= 1024 && fixture_port <= 65535)) || fail "fixture server returned an invalid port"
+if [[ ! "$fixture_port" =~ ^[0-9]+$ ]] || ((fixture_port < 1024 || fixture_port > 65535)); then
+    fail "fixture server returned an invalid port"
+fi
 curl --fail --silent --show-error "http://127.0.0.1:${fixture_port}/healthz" >/dev/null
 git ls-remote "http://127.0.0.1:${fixture_port}/git/repository.git" refs/heads/main >/dev/null
 helm repo index "$fixture_root/helm" --url "http://host.k3d.internal:${fixture_port}/helm"

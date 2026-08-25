@@ -16,7 +16,12 @@ import { useDeliveryProjectScope } from "@/components/delivery/shared";
 
 const tabs = [
   { key: "flux", label: "Flux", icon: Radio, segment: "" },
-  { key: "deployments", label: "Deployments", icon: Layers, segment: "/deployments" },
+  {
+    key: "deployments",
+    label: "Deployments",
+    icon: Layers,
+    segment: "/deployments",
+  },
   { key: "rollouts", label: "Rollouts", icon: RouteIcon, segment: "/rollouts" },
   { key: "sources", label: "Sources", icon: GitBranch, segment: "/sources" },
   { key: "bundles", label: "Bundles", icon: Boxes, segment: "/bundles" },
@@ -35,13 +40,16 @@ function ClusterDeliveryLayout() {
   const projectQuery = projectId
     ? `?project=${encodeURIComponent(projectId)}`
     : "";
-  const remaining = pathname.startsWith(base) ? pathname.slice(base.length) : "";
+  const remaining = pathname.startsWith(base)
+    ? pathname.slice(base.length)
+    : "";
   const activeKey =
     tabs
       .filter(
         (tab) =>
           tab.segment &&
-          (remaining === tab.segment || remaining.startsWith(`${tab.segment}/`)),
+          (remaining === tab.segment ||
+            remaining.startsWith(`${tab.segment}/`)),
       )
       .sort((a, b) => b.segment.length - a.segment.length)[0]?.key ?? "flux";
 

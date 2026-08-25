@@ -1,28 +1,28 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from '@/lib/navigation';
-import { useClusters, useDeleteCluster, queryKeys } from '@/lib/hooks';
-import { useLiveQueryInvalidation } from '@/lib/live/hooks';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { ActionButton } from '@/components/ui/action-button';
-import { Select } from '@/components/ui/select';
-import { PageHeader, PageShell } from '@/components/ui/page';
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "@/lib/navigation";
+import { useClusters, useDeleteCluster, queryKeys } from "@/lib/hooks";
+import { useLiveQueryInvalidation } from "@/lib/live/hooks";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ActionButton } from "@/components/ui/action-button";
+import { Select } from "@/components/ui/select";
+import { PageHeader, PageShell } from "@/components/ui/page";
 // RegisterClusterModal removed in sprint 22 — replaced by the
 // /dashboard/clusters/register/* wizard. The "Re-show install command"
 // row action now navigates to the wizard's step 2 for the existing
 // cluster, which is the moral equivalent.
-import { EditClusterModal } from '@/components/clusters/edit-cluster-modal';
-import { ActionMenu } from '@/components/ui/action-menu';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { EditClusterModal } from "@/components/clusters/edit-cluster-modal";
+import { ActionMenu } from "@/components/ui/action-menu";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   formatRelativeTime,
   formatPercentage,
   providerDisplayName,
   distributionDisplayName,
-} from '@/lib/utils';
-import type { Cluster } from '@/types';
-import { Plus, Terminal, Pencil, Trash2 } from 'lucide-react';
+} from "@/lib/utils";
+import type { Cluster } from "@/types";
+import { Plus, Terminal, Pencil, Trash2 } from "lucide-react";
 
 function ClustersPage() {
   const router = useRouter();
@@ -30,15 +30,15 @@ function ClustersPage() {
   // Legacy ?register=true query param redirects to the new wizard
   // entry route. We do the redirect inside useEffect so deep-linked
   // bookmarks keep working without flashing the cluster list.
-  const legacyRegisterParam = searchParams.get('register') === 'true';
+  const legacyRegisterParam = searchParams.get("register") === "true";
   useEffect(() => {
     if (legacyRegisterParam) {
-      router.replace('/dashboard/clusters/register');
+      router.replace("/dashboard/clusters/register");
     }
   }, [legacyRegisterParam, router]);
-  const [statusFilter, setStatusFilter] = useState<string>('');
-  const [providerFilter, setProviderFilter] = useState<string>('');
-  const [envFilter, setEnvFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [providerFilter, setProviderFilter] = useState<string>("");
+  const [envFilter, setEnvFilter] = useState<string>("");
 
   // Action menu state
   // Sprint 22 removed the legacy register-cluster modal; the
@@ -62,15 +62,15 @@ function ClustersPage() {
   // metric ticks are merged in place by the layout's metrics merger.
   useLiveQueryInvalidation(
     [
-      'cluster.connected',
-      'cluster.disconnected',
-      'cluster.created',
-      'cluster.updated',
-      'cluster.deleted',
-      'cluster.status_changed',
-      'cluster.heartbeat',
-      'agent.reconnecting',
-      'agent.failed',
+      "cluster.connected",
+      "cluster.disconnected",
+      "cluster.created",
+      "cluster.updated",
+      "cluster.deleted",
+      "cluster.status_changed",
+      "cluster.heartbeat",
+      "agent.reconnecting",
+      "agent.failed",
     ],
     [queryKeys.clusters.all],
   );
@@ -80,7 +80,10 @@ function ClustersPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await deleteMutation.mutateAsync({ id: deleteTarget.id, force: forceDelete });
+      await deleteMutation.mutateAsync({
+        id: deleteTarget.id,
+        force: forceDelete,
+      });
       setDeleteTarget(null);
     } catch {
       // Error handled by mutation
@@ -89,8 +92,8 @@ function ClustersPage() {
 
   const columns: Column<Cluster>[] = [
     {
-      key: 'name',
-      header: 'Name',
+      key: "name",
+      header: "Name",
       accessor: (row) => (
         <div>
           <p className="font-medium text-foreground">{row.displayName}</p>
@@ -100,28 +103,31 @@ function ClustersPage() {
       sortAccessor: (row) => row.displayName,
     },
     {
-      key: 'status',
-      header: 'Status',
+      key: "status",
+      header: "Status",
       accessor: (row) =>
         row.decommissioning ? (
           <StatusBadge status="decommissioning" label="Decommissioning" pulse />
         ) : (
           <StatusBadge status={row.status} />
         ),
-      sortAccessor: (row) => (row.decommissioning ? 'decommissioning' : row.status),
+      sortAccessor: (row) =>
+        row.decommissioning ? "decommissioning" : row.status,
     },
     {
-      key: 'provider',
-      header: 'Provider',
+      key: "provider",
+      header: "Provider",
       accessor: (row) => (
-        <span className="text-muted-foreground">{providerDisplayName(row.provider)}</span>
+        <span className="text-muted-foreground">
+          {providerDisplayName(row.provider)}
+        </span>
       ),
       sortAccessor: (row) => row.provider,
-      filter: { label: 'Provider' },
+      filter: { label: "Provider" },
     },
     {
-      key: 'distribution',
-      header: 'Distribution',
+      key: "distribution",
+      header: "Distribution",
       accessor: (row) => (
         <span className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">
           {distributionDisplayName(row.distribution)}
@@ -130,107 +136,120 @@ function ClustersPage() {
       sortAccessor: (row) => row.distribution,
     },
     {
-      key: 'version',
-      header: 'K8s Version',
-      accessor: (row) => <span className="font-mono text-xs text-muted-foreground">{row.kubernetesVersion}</span>,
+      key: "version",
+      header: "K8s Version",
+      accessor: (row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.kubernetesVersion}
+        </span>
+      ),
     },
     {
-      key: 'nodes',
-      header: 'Nodes',
+      key: "nodes",
+      header: "Nodes",
       accessor: (row) => <span className="tabular-nums">{row.nodeCount}</span>,
       sortAccessor: (row) => row.nodeCount,
-      align: 'center',
+      align: "center",
     },
     {
-      key: 'pods',
-      header: 'Pods',
+      key: "pods",
+      header: "Pods",
       accessor: (row) => <span className="tabular-nums">{row.podCount}</span>,
       sortAccessor: (row) => row.podCount,
-      align: 'center',
+      align: "center",
     },
     {
-      key: 'cpu',
-      header: 'CPU%',
+      key: "cpu",
+      header: "CPU%",
       accessor: (row) => (
         <div className="flex items-center gap-2">
           <div className="w-16 gauge-bar">
             <div
               className={`gauge-bar-fill ${
                 row.cpuPercentage >= 90
-                  ? 'bg-status-error'
+                  ? "bg-status-error"
                   : row.cpuPercentage >= 75
-                    ? 'bg-status-warning'
-                    : 'bg-status-success'
+                    ? "bg-status-warning"
+                    : "bg-status-success"
               }`}
               style={{ width: `${Math.min(row.cpuPercentage, 100)}%` }}
             />
           </div>
           <span className="text-xs tabular-nums text-muted-foreground w-10">
-            {formatPercentage(row.cpuPercentage, row.cpuPercentage < 10 ? 1 : 0)}
+            {formatPercentage(
+              row.cpuPercentage,
+              row.cpuPercentage < 10 ? 1 : 0,
+            )}
           </span>
         </div>
       ),
       sortAccessor: (row) => row.cpuPercentage,
     },
     {
-      key: 'mem',
-      header: 'Mem%',
+      key: "mem",
+      header: "Mem%",
       accessor: (row) => (
         <div className="flex items-center gap-2">
           <div className="w-16 gauge-bar">
             <div
               className={`gauge-bar-fill ${
                 row.memoryPercentage >= 90
-                  ? 'bg-status-error'
+                  ? "bg-status-error"
                   : row.memoryPercentage >= 75
-                    ? 'bg-status-warning'
-                    : 'bg-status-success'
+                    ? "bg-status-warning"
+                    : "bg-status-success"
               }`}
               style={{ width: `${Math.min(row.memoryPercentage, 100)}%` }}
             />
           </div>
           <span className="text-xs tabular-nums text-muted-foreground w-10">
-            {formatPercentage(row.memoryPercentage, row.memoryPercentage < 10 ? 1 : 0)}
+            {formatPercentage(
+              row.memoryPercentage,
+              row.memoryPercentage < 10 ? 1 : 0,
+            )}
           </span>
         </div>
       ),
       sortAccessor: (row) => row.memoryPercentage,
     },
     {
-      key: 'heartbeat',
-      header: 'Last Heartbeat',
+      key: "heartbeat",
+      header: "Last Heartbeat",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground">{formatRelativeTime(row.lastHeartbeat)}</span>
+        <span className="text-xs text-muted-foreground">
+          {row.lastHeartbeat ? formatRelativeTime(row.lastHeartbeat) : "Never"}
+        </span>
       ),
-      sortAccessor: (row) => row.lastHeartbeat,
+      sortAccessor: (row) => row.lastHeartbeat ?? "",
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       accessor: (row) => (
         <ActionMenu
           items={[
             {
-              label: 'Registration Command',
+              label: "Registration Command",
               icon: <Terminal className="h-3.5 w-3.5" />,
-              onClick: () => router.push(`/dashboard/clusters/register/${row.id}/connect`),
+              onClick: () =>
+                router.push(`/dashboard/clusters/register/${row.id}/connect`),
             },
             {
-              label: 'Edit',
+              label: "Edit",
               icon: <Pencil className="h-3.5 w-3.5" />,
               onClick: () => setEditCluster(row),
             },
             {
-              label: 'Delete',
+              label: "Delete",
               icon: <Trash2 className="h-3.5 w-3.5" />,
               onClick: () => setDeleteTarget(row),
-              variant: 'destructive',
+              variant: "destructive",
               separator: true,
             },
           ]}
         />
       ),
-      align: 'center',
+      align: "center",
     },
   ];
 
@@ -240,7 +259,11 @@ function ClustersPage() {
         title="Clusters"
         description="Monitor and manage the existing Kubernetes clusters you've registered with Astronomer"
         actions={
-          <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => router.push('/dashboard/clusters/register')}>
+          <ActionButton
+            intent="primary"
+            icon={<Plus className="h-4 w-4" />}
+            onClick={() => router.push("/dashboard/clusters/register")}
+          >
             Register Cluster
           </ActionButton>
         }
@@ -259,6 +282,7 @@ function ClustersPage() {
         toolbar={
           <div className="flex items-center gap-2">
             <Select
+              aria-label="Filter clusters by status"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-auto"
@@ -272,6 +296,7 @@ function ClustersPage() {
             </Select>
 
             <Select
+              aria-label="Filter clusters by provider"
               value={providerFilter}
               onChange={(e) => setProviderFilter(e.target.value)}
               className="w-auto"
@@ -285,6 +310,7 @@ function ClustersPage() {
             </Select>
 
             <Select
+              aria-label="Filter clusters by environment"
               value={envFilter}
               onChange={(e) => setEnvFilter(e.target.value)}
               className="w-auto"
@@ -335,9 +361,10 @@ function ClustersPage() {
             className="mt-0.5 h-3.5 w-3.5 rounded border-border"
           />
           <span>
-            <span className="font-medium text-foreground">Force delete</span> — remove immediately
-            instead of waiting for the agent to clean up. Use when the cluster is already gone;
-            in-cluster Astronomer resources won&apos;t be uninstalled if the agent is unreachable.
+            <span className="font-medium text-foreground">Force delete</span> —
+            remove immediately instead of waiting for the agent to clean up. Use
+            when the cluster is already gone; in-cluster Astronomer resources
+            won&apos;t be uninstalled if the agent is unreachable.
           </span>
         </label>
       </ConfirmDialog>
@@ -345,7 +372,7 @@ function ClustersPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/')({
+export const Route = createFileRoute("/dashboard/clusters/")({
   // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
   validateSearch: (search: Record<string, unknown>) =>
     search as { register?: string } & Record<string, unknown>,

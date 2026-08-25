@@ -25,14 +25,11 @@ func (q *apiserverAuditPurgeQuerier) PruneApiserverAuditEventsBefore(_ context.C
 }
 
 func TestApiserverAuditRetention_PrunesWithDefaultWindow(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	q := &apiserverAuditPurgeQuerier{pruned: 5}
-	runtimeDeps = RuntimeDependencies{Queries: q}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q})
 
 	before := time.Now().UTC().Add(-apiserverAuditRetention)
-	if err := HandleApiserverAuditRetention(context.Background(), &asynq.Task{}); err != nil {
+	if err := HandleApiserverAuditRetention(ctx, &asynq.Task{}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if q.calls != 1 {
@@ -46,13 +43,10 @@ func TestApiserverAuditRetention_PrunesWithDefaultWindow(t *testing.T) {
 
 // The prune must be leader-gated so only the lease holder runs the DELETE.
 func TestApiserverAuditRetention_SkippedOnNonLeader(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	q := &apiserverAuditPurgeQuerier{}
-	runtimeDeps = RuntimeDependencies{Queries: q, Leader: &fakeLeader{held: false}}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, Leader: &fakeLeader{held: false}})
 
-	if err := HandleApiserverAuditRetention(context.Background(), &asynq.Task{}); err != nil {
+	if err := HandleApiserverAuditRetention(ctx, &asynq.Task{}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if q.calls != 0 {

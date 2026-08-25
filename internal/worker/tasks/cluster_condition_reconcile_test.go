@@ -48,9 +48,6 @@ func TestRemediateConnectedFalse_SkipsWhenAgentReconnected(t *testing.T) {
 	clusterID := uuid.New()
 	row := sqlc.ClusterCondition{ClusterID: clusterID, Type: ConditionConnected, Status: "False"}
 
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	// Fresh heartbeat (30s ago, well inside the 2m window) => reconnected.
 	freshQ := &ccrPrecheckQuerier{
 		cluster: sqlc.Cluster{
@@ -58,8 +55,8 @@ func TestRemediateConnectedFalse_SkipsWhenAgentReconnected(t *testing.T) {
 			LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-30 * time.Second), Valid: true},
 		},
 	}
-	runtimeDeps = RuntimeDependencies{Queries: freshQ}
-	if err := remediateConnectedFalse(context.Background(), row); err != nil {
+	freshCtx := testRuntimeContext(RuntimeDependencies{Queries: freshQ})
+	if err := remediateConnectedFalse(freshCtx, row); err != nil {
 		t.Fatalf("remediateConnectedFalse (fresh) returned error: %v", err)
 	}
 	if freshQ.tokensCreated != 0 {
@@ -76,8 +73,8 @@ func TestRemediateConnectedFalse_SkipsWhenAgentReconnected(t *testing.T) {
 			LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-5 * time.Minute), Valid: true},
 		},
 	}
-	runtimeDeps = RuntimeDependencies{Queries: staleQ}
-	if err := remediateConnectedFalse(context.Background(), row); err != nil {
+	staleCtx := testRuntimeContext(RuntimeDependencies{Queries: staleQ})
+	if err := remediateConnectedFalse(staleCtx, row); err != nil {
 		t.Fatalf("remediateConnectedFalse (stale) returned error: %v", err)
 	}
 	if staleQ.tokensCreated != 1 {

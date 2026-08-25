@@ -28,3 +28,19 @@ func TestClassifyActionClass(t *testing.T) {
 		}
 	}
 }
+
+func TestClassifyPersistence(t *testing.T) {
+	for _, tc := range []struct {
+		action, class, want string
+	}{
+		{"cluster.delete", ClassMutation, PersistenceMandatoryMutation},
+		{"auth.login", ClassAuth, PersistenceMandatoryMutation},
+		{"cluster.secret.read", ClassRead, PersistenceMandatoryRead},
+		{"compliance.report.export", ClassRead, PersistenceMandatoryRead},
+		{"read.cluster_list", ClassRead, PersistenceSampledRead},
+	} {
+		if got := ClassifyPersistence(tc.action, tc.class); got != tc.want {
+			t.Errorf("ClassifyPersistence(%q, %q) = %q, want %q", tc.action, tc.class, got, tc.want)
+		}
+	}
+}

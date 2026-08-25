@@ -67,7 +67,7 @@ export function BundleDetailPage() {
   const pageSize = 25;
   const bundle = useQuery({
     queryKey: queryKeys.delivery.bundle(projectId, bundleId),
-    queryFn: () => getComponentBundle(projectId, bundleId),
+    queryFn: ({ signal }) => getComponentBundle(projectId, bundleId, signal),
     enabled: Boolean(projectId && bundleId && allowed),
   });
   const versions = useQuery({
@@ -75,11 +75,16 @@ export function BundleDetailPage() {
       limit: pageSize,
       offset: pageIndex * pageSize,
     }),
-    queryFn: () =>
-      listComponentBundleVersions(projectId, bundleId, {
-        limit: pageSize,
-        offset: pageIndex * pageSize,
-      }),
+    queryFn: ({ signal }) =>
+      listComponentBundleVersions(
+        projectId,
+        bundleId,
+        {
+          limit: pageSize,
+          offset: pageIndex * pageSize,
+        },
+        signal,
+      ),
     enabled: Boolean(projectId && bundleId && allowed),
   });
   const columns: Column<ComponentBundleVersion>[] = [
@@ -247,7 +252,8 @@ function CreateVersionDialog({
   const [formError, setFormError] = useState<Error | null>(null);
   const sources = useQuery({
     queryKey: queryKeys.delivery.sources(projectId, { limit: 200 }),
-    queryFn: () => listDeliverySources(projectId, { limit: 200 }),
+    queryFn: ({ signal }) =>
+      listDeliverySources(projectId, { limit: 200 }, signal),
   });
   const mutation = useMutation({
     mutationFn: (body: CreateBundleVersionRequest) =>

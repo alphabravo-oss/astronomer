@@ -19,11 +19,12 @@ func NewRunScheduledBackupsTask() *asynq.Task {
 	return asynq.NewTask(RunScheduledBackupsType, nil, asynq.MaxRetry(2))
 }
 
-// HandleRunScheduledBackups is intentionally a no-op in the Velero engine.
+// HandleRunScheduledBackups is intentionally a watchdog-only compatibility
+// consumer in the Velero engine.
 // Velero's own controller in each cluster watches Schedule CRs and creates
 // Backup CRs on cron — our server-side reconciler ingests those into our
-// `backups` table. This handler stays in place so the existing scheduler
-// registration continues to enqueue without error.
+// `backups` table. The registry retains this handler without a schedule so
+// tasks left in Redis by an older release are drained cleanly after upgrade.
 //
 // A future iteration may use this hook for a watchdog that re-applies
 // missing Velero Schedule CRs (e.g. after a cluster reconnect drops the
@@ -31,20 +32,19 @@ func NewRunScheduledBackupsTask() *asynq.Task {
 // so it is the BackupHandler reconciler's job, not ours.
 func HandleRunScheduledBackups(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, RunScheduledBackupsType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().DebugContext(ctx, "scheduled backups runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("scheduled backups runtime is not configured")
 		}
 		// Touch the schedules table so an out-of-band sanity check in the test
 		// suite can verify this handler still runs without error.
-		schedules, err := runtimeDeps.Queries.GetActiveSchedules(ctx)
+		schedules, err := runtimeDependencies(ctx).Queries.GetActiveSchedules(ctx)
 		if err != nil {
 			return fmt.Errorf("listing active backup schedules: %w", err)
 		}
 		if len(schedules) == 0 {
 			return nil
 		}
-		runtimeLogger().DebugContext(ctx, "scheduled backups watchdog complete",
+		runtimeLogger(ctx).DebugContext(ctx, "scheduled backups watchdog complete",
 			"active_schedules", len(schedules),
 			"sampled_at", time.Now().UTC().Format(time.RFC3339),
 		)

@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +19,35 @@ func TestBoundRequestBodiesRejectsDeclaredOverflow(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusRequestEntityTooLarge || called {
 		t.Fatalf("status=%d called=%v", response.Code, called)
+	}
+	if got := response.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type=%q", got)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil || body.Error.Code != "request_body_too_large" {
+		t.Fatalf("error envelope code=%q err=%v", body.Error.Code, err)
+	}
+}
+
+func TestBoundRequestBodiesIncludesRequestID(t *testing.T) {
+	handler := BoundRequestBodies(4, time.Second)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("oversized request reached handler")
+	}))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", strings.NewReader("12345"))
+	request = request.WithContext(context.WithValue(request.Context(), requestIDKey, "request-413"))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	var body struct {
+		Error struct {
+			RequestID string `json:"request_id"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil || body.Error.RequestID != "request-413" {
+		t.Fatalf("request_id=%q err=%v", body.Error.RequestID, err)
 	}
 }
 

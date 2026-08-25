@@ -19,8 +19,10 @@ import (
 
 // fakeNotifyQuerier satisfies NotificationTemplateQuerier for tests.
 type fakeNotifyQuerier struct {
-	rows  map[string]sqlc.NotificationTemplate
-	users map[uuid.UUID]sqlc.User
+	rows      map[string]sqlc.NotificationTemplate
+	users     map[uuid.UUID]sqlc.User
+	outboxErr error
+	auditOps  []string
 }
 
 func (f *fakeNotifyQuerier) GetNotificationTemplate(_ context.Context, key string) (sqlc.NotificationTemplate, error) {
@@ -67,6 +69,14 @@ func (f *fakeNotifyQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.U
 		return u, nil
 	}
 	return sqlc.User{}, pgx.ErrNoRows
+}
+
+func (f *fakeNotifyQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	if f.outboxErr != nil {
+		return sqlc.AuditOutbox{}, f.outboxErr
+	}
+	f.auditOps = append(f.auditOps, arg.Action)
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
 }
 
 func newNotifyHandler(t *testing.T) (*NotificationTemplateHandler, *fakeNotifyQuerier, context.Context) {

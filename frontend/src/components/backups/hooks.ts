@@ -8,16 +8,12 @@
  * calls for user-visible side-effects.
  */
 
-'use client';
+"use client";
 
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import { liveFallback } from '@/lib/live/status-store';
-import * as api from '@/lib/api';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import { liveFallback } from "@/lib/live/status-store";
+import * as api from "@/lib/api";
 import type {
   BackupRestore,
   BackupRun,
@@ -27,22 +23,22 @@ import type {
   CreateRestoreRequestB2,
   CreateScheduleRequestB2,
   TestStorageResult,
-} from '@/types';
+} from "@/types";
 
 /** Stable query keys for cache invalidation. */
 export const b2Keys = {
-  all: ['b2-backups'] as const,
+  all: ["b2-backups"] as const,
   storage: (params?: Record<string, unknown>) =>
-    ['b2-backups', 'storage', params] as const,
+    ["b2-backups", "storage", params] as const,
   schedules: (params?: Record<string, unknown>) =>
-    ['b2-backups', 'schedules', params] as const,
+    ["b2-backups", "schedules", params] as const,
   runs: (params?: Record<string, unknown>) =>
-    ['b2-backups', 'runs', params] as const,
-  runDetail: (id: string) => ['b2-backups', 'runs', 'detail', id] as const,
+    ["b2-backups", "runs", params] as const,
+  runDetail: (id: string) => ["b2-backups", "runs", "detail", id] as const,
   restores: (params?: Record<string, unknown>) =>
-    ['b2-backups', 'restores', params] as const,
+    ["b2-backups", "restores", params] as const,
   restoreDetail: (id: string) =>
-    ['b2-backups', 'restores', 'detail', id] as const,
+    ["b2-backups", "restores", "detail", id] as const,
 };
 
 // --- Storage Locations ---
@@ -60,9 +56,9 @@ export function useB2CreateStorageLocation() {
     mutationFn: (body) => api.b2CreateStorageLocation(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toastSuccess('Storage location created');
+      toastSuccess("Storage location created");
     },
-    onError: (e) => toastApiError('Failed to create storage', e),
+    onError: (e) => toastApiError("Failed to create storage", e),
   });
 }
 
@@ -72,9 +68,9 @@ export function useB2DeleteStorageLocation() {
     mutationFn: (id) => api.b2DeleteStorageLocation(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toastSuccess('Storage location deleted');
+      toastSuccess("Storage location deleted");
     },
-    onError: (e) => toastApiError('Failed to delete storage', e),
+    onError: (e) => toastApiError("Failed to delete storage", e),
   });
 }
 
@@ -101,9 +97,9 @@ export function useB2CreateSchedule() {
     mutationFn: (body) => api.b2CreateSchedule(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toastSuccess('Schedule created');
+      toastSuccess("Schedule created");
     },
-    onError: (e) => toastApiError('Failed to create schedule', e),
+    onError: (e) => toastApiError("Failed to create schedule", e),
   });
 }
 
@@ -118,7 +114,7 @@ export function useB2UpdateSchedule() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
     },
-    onError: (e) => toastApiError('Failed to update schedule', e),
+    onError: (e) => toastApiError("Failed to update schedule", e),
   });
 }
 
@@ -128,9 +124,9 @@ export function useB2DeleteSchedule() {
     mutationFn: (id) => api.b2DeleteSchedule(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toastSuccess('Schedule deleted');
+      toastSuccess("Schedule deleted");
     },
-    onError: (e) => toastApiError('Failed to delete schedule', e),
+    onError: (e) => toastApiError("Failed to delete schedule", e),
   });
 }
 
@@ -140,9 +136,9 @@ export function useB2TriggerScheduleNow() {
     mutationFn: (id) => api.b2TriggerScheduleNow(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toastSuccess('One-off backup triggered');
+      toastSuccess("One-off backup triggered");
     },
-    onError: (e) => toastApiError('Failed to trigger backup', e),
+    onError: (e) => toastApiError("Failed to trigger backup", e),
   });
 }
 
@@ -182,8 +178,8 @@ export function useB2CreateRestore() {
     mutationFn: (body) => api.b2CreateRestore(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toastSuccess('Restore initiated');
+      toastSuccess("Restore initiated");
     },
-    onError: (e) => toastApiError('Failed to start restore', e),
+    onError: (e) => toastApiError("Failed to start restore", e),
   });
 }

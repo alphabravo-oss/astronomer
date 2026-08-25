@@ -22,7 +22,7 @@ import (
 // Keep the complete dependency-free management-plane chart in the embedded
 // repository so it can be served and rendered without network access.
 //
-//go:embed chart/Chart.yaml chart/DEPENDENCIES.md chart/README.md chart/values.yaml chart/values.schema.json chart/templates/*
+//go:embed chart/Chart.yaml chart/DEPENDENCIES.md chart/README.md chart/values.yaml chart/values.schema.json chart/files/* chart/templates/*
 var chartFS embed.FS
 
 type chartMetadata struct {

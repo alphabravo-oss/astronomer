@@ -34,9 +34,6 @@ func (q *agentUpgradeSweepQuerier) FailStuckAgentUpgradeOperations(_ context.Con
 // goes dark — so an unswept operation would sit in `running` forever and a
 // batched fleet rollout would keep marching against a dead cluster.
 func TestAgentUpgradeStuckSweep_FailsOperationsPastTheDeadline(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	q := &agentUpgradeSweepQuerier{rows: []sqlc.AgentLifecycleOperation{{
 		ID:            uuid.New(),
 		ClusterID:     uuid.New(),
@@ -45,9 +42,9 @@ func TestAgentUpgradeStuckSweep_FailsOperationsPastTheDeadline(t *testing.T) {
 		TargetVersion: "v1.2.3",
 		TargetImage:   "example.com/astronomer-agent:v1.2.3",
 	}}}
-	runtimeDeps = RuntimeDependencies{Queries: q}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q})
 
-	if err := HandleAgentUpgradeStuckSweep(context.Background(), &asynq.Task{}); err != nil {
+	if err := HandleAgentUpgradeStuckSweep(ctx, &asynq.Task{}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if len(q.calls) != 1 {
@@ -68,21 +65,14 @@ func TestAgentUpgradeStuckSweep_FailsOperationsPastTheDeadline(t *testing.T) {
 }
 
 func TestAgentUpgradeStuckSweep_PropagatesQueryFailure(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
-	runtimeDeps = RuntimeDependencies{Queries: &agentUpgradeSweepQuerier{err: errors.New("boom")}}
-	if err := HandleAgentUpgradeStuckSweep(context.Background(), &asynq.Task{}); err == nil {
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: &agentUpgradeSweepQuerier{err: errors.New("boom")}})
+	if err := HandleAgentUpgradeStuckSweep(ctx, &asynq.Task{}); err == nil {
 		t.Fatal("handle returned nil, want the query error surfaced for asynq retry")
 	}
 }
 
-func TestAgentUpgradeStuckSweep_SkipsWhenRuntimeUnconfigured(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
-	runtimeDeps = RuntimeDependencies{}
-	if err := HandleAgentUpgradeStuckSweep(context.Background(), &asynq.Task{}); err != nil {
-		t.Fatalf("handle: %v", err)
+func TestAgentUpgradeStuckSweep_FailsWhenRuntimeUnconfigured(t *testing.T) {
+	if err := HandleAgentUpgradeStuckSweep(testRuntimeContext(RuntimeDependencies{}), &asynq.Task{}); err == nil {
+		t.Fatal("handle returned nil, want an unconfigured-runtime error")
 	}
 }

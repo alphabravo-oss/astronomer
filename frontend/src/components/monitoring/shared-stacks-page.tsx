@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * /dashboard/settings/monitoring — lifecycle for the SHARED monitoring
@@ -18,37 +18,37 @@
  * stack does. Every mutating verb, install and uninstall included, is
  * monitoring:update at GLOBAL scope.
  */
-import { Link } from '@/lib/link';
-import { AlertTriangle, ArrowLeft, BarChart3, Database } from 'lucide-react';
+import { Link } from "@/lib/link";
+import { AlertTriangle, ArrowLeft, BarChart3, Database } from "lucide-react";
 
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { PermissionState } from '@/components/ui/empty-state';
-import { usePermissionDecision } from '@/lib/permission-hooks';
-import { useQuery } from '@tanstack/react-query';
-import { useClusters, useFeatureFlags } from '@/lib/hooks';
-import { queryKeys } from '@/lib/query-keys';
-import { getMonitoringSizer } from '@/lib/api/monitoring-stack';
-import { useB2StorageLocations } from '@/components/backups/hooks';
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { PermissionState } from "@/components/ui/empty-state";
+import { usePermissionDecision } from "@/lib/permission-hooks";
+import { useQuery } from "@tanstack/react-query";
+import { useClusters, useFeatureFlags } from "@/lib/hooks";
+import { queryKeys } from "@/lib/query-keys";
+import { getMonitoringSizer } from "@/lib/api/monitoring-stack";
+import { useB2StorageLocations } from "@/components/backups/hooks";
 import {
   StackLifecyclePanel,
   type StackLifecyclePermissions,
   type StackOption,
-} from '@/components/monitoring/stack-lifecycle-panel';
+} from "@/components/monitoring/stack-lifecycle-panel";
 import {
   SHARED_ALERTMANAGER_FAMILY,
   SHARED_GRAFANA_FAMILY,
   SHARED_LOKI_FAMILY,
   SHARED_THANOS_FAMILY,
-} from '@/components/monitoring/stack-spec';
+} from "@/components/monitoring/stack-spec";
 
-const THANOS_TARGET = { kind: 'thanos' } as const;
-const ALERTMANAGER_TARGET = { kind: 'alertmanager' } as const;
-const GRAFANA_TARGET = { kind: 'grafana' } as const;
-const LOKI_TARGET = { kind: 'loki' } as const;
+const THANOS_TARGET = { kind: "thanos" } as const;
+const ALERTMANAGER_TARGET = { kind: "alertmanager" } as const;
+const GRAFANA_TARGET = { kind: "grafana" } as const;
+const LOKI_TARGET = { kind: "loki" } as const;
 
 export function SharedMonitoringStacksPage() {
-  const read = usePermissionDecision('monitoring', 'read');
-  const update = usePermissionDecision('monitoring', 'update');
+  const read = usePermissionDecision("monitoring", "read");
+  const update = usePermissionDecision("monitoring", "update");
   // install / uninstall are monitoring:update on the shared families — the
   // create/delete split only exists on the per-cluster routes.
   const permissions: StackLifecyclePermissions = {
@@ -60,8 +60,8 @@ export function SharedMonitoringStacksPage() {
 
   const { data: featureFlags } = useFeatureFlags();
   // Hide only when the flag is exactly false. Missing/loading defaults on.
-  const showGrafana = featureFlags?.['feature.fleet_grafana'] !== false;
-  const showLoki = featureFlags?.['feature.hosted_loki'] === true;
+  const showGrafana = featureFlags?.["feature.shared_grafana"] !== false;
+  const showLoki = featureFlags?.["feature.hosted_loki"] === true;
 
   const sizerQuery = useQuery({
     queryKey: queryKeys.monitoringStack.sizer,
@@ -83,13 +83,18 @@ export function SharedMonitoringStacksPage() {
       ? `${cluster.displayName || cluster.name} (management)`
       : cluster.displayName || cluster.name,
   }));
-  const storageOptions: StackOption[] = (storageQuery.data?.data ?? []).map((location) => ({
-    id: location.id,
-    label: `${location.name} — ${location.bucket}`,
-  }));
+  const storageOptions: StackOption[] = (storageQuery.data?.data ?? []).map(
+    (location) => ({
+      id: location.id,
+      label: `${location.name} — ${location.bucket}`,
+    }),
+  );
 
-  const managementClusterId = clusters.find((cluster) => cluster.isLocal)?.id ?? '';
-  const seedOverrides = managementClusterId ? { managementClusterId } : undefined;
+  const managementClusterId =
+    clusters.find((cluster) => cluster.isLocal)?.id ?? "";
+  const seedOverrides = managementClusterId
+    ? { managementClusterId }
+    : undefined;
 
   return (
     <PageShell>
@@ -111,22 +116,26 @@ export function SharedMonitoringStacksPage() {
             className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <BarChart3 className="h-3.5 w-3.5" />
-            Fleet metrics
+            Shared metrics
           </Link>
         }
       />
 
       {!read.allowed ? (
-        <PermissionState title="Monitoring access required" permission="monitoring:read" />
+        <PermissionState
+          title="Monitoring access required"
+          permission="monitoring:read"
+        />
       ) : (
         <div className="space-y-4">
           <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
             <Database className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
             <p>
-              Object storage is required only for Thanos below — it reads historical blocks from a
-              bucket. To simply collect metrics on a cluster you don&apos;t need a bucket: install the
-              per-cluster Prometheus stack from that cluster&apos;s Monitoring Stack page, which defaults to
-              in-cluster rolling storage (15-day retention).
+              Object storage is required only for Thanos below — it reads
+              historical blocks from a bucket. To simply collect metrics on a
+              cluster you don&apos;t need a bucket: install the per-cluster
+              Prometheus stack from that cluster&apos;s Monitoring Stack page,
+              which defaults to in-cluster rolling storage (15-day retention).
             </p>
           </div>
           <StackLifecyclePanel
@@ -188,23 +197,23 @@ function LokiSizerBanner({
   reasons?: string[];
   prefix?: string;
 }) {
-  const pass = result === 'pass';
+  const pass = result === "pass";
   return (
     <div
       data-testid="loki-sizer-banner"
       className={
         pass
-          ? 'flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground'
-          : 'flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive'
+          ? "flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground"
+          : "flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive"
       }
     >
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
       <p>
-        Loki sizer: <span className="font-medium">{result || 'unknown'}</span>
-        {mode ? ` (${mode})` : ''}.
-        {reasons && reasons.length > 0 ? ` ${reasons.join(', ')}.` : ''}
-        {prefix ? ` Object prefix ${prefix}.` : ''} ClusterIP only — ingest is not public until
-        tokens exist.
+        Loki sizer: <span className="font-medium">{result || "unknown"}</span>
+        {mode ? ` (${mode})` : ""}.
+        {reasons && reasons.length > 0 ? ` ${reasons.join(", ")}.` : ""}
+        {prefix ? ` Object prefix ${prefix}.` : ""} ClusterIP only — ingest is
+        not public until tokens exist.
       </p>
     </div>
   );

@@ -39,6 +39,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
@@ -75,12 +76,32 @@ type ClusterRegistryQuerier interface {
 	DeleteClusterRegistryConfigByID(ctx context.Context, id uuid.UUID) error
 }
 
+// ClusterRegistryMutationTx is the transaction-bound write surface for the
+// Rancher-style multi-registry API. Registry state, durable reconciliation
+// intent, and audit evidence commit or roll back together.
+type ClusterRegistryMutationTx interface {
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+	CreateClusterRegistryConfig(context.Context, sqlc.CreateClusterRegistryConfigParams) (sqlc.ClusterRegistryConfig, error)
+	UpdateClusterRegistryConfig(context.Context, sqlc.UpdateClusterRegistryConfigParams) (sqlc.ClusterRegistryConfig, error)
+	DeleteClusterRegistryConfigByID(context.Context, uuid.UUID) error
+	DeleteClusterRegistryConfigByIDWithTaskOutbox(context.Context, sqlc.DeleteClusterRegistryConfigByIDWithTaskOutboxParams) error
+}
+
+type clusterRegistryRunTxFunc func(context.Context, func(ClusterRegistryMutationTx) error) error
+
+type clusterRegistryMutationResult struct {
+	row         sqlc.ClusterRegistryConfig
+	durableTask bool
+}
+
 // ClusterRegistriesHandler owns the /clusters/{cluster_id}/registries/*
 // route group. ApplyEnqueue + Requester are optional — when unwired the
 // handler still mutates the DB and returns 200/201, but the materialise
 // step has to wait for the periodic sweep.
 type ClusterRegistriesHandler struct {
 	queries      ClusterRegistryQuerier
+	runTx        clusterRegistryRunTxFunc
 	applyEnqueue ClusterRegistryEnqueuer
 	taskOutbox   tasks.TaskOutboxWriter
 	requester    K8sRequester
@@ -102,6 +123,49 @@ func (h *ClusterRegistriesHandler) SetEventBus(bus *events.Bus) {
 // setter pattern below so test wiring can stay minimal.
 func NewClusterRegistriesHandler(queries ClusterRegistryQuerier) *ClusterRegistriesHandler {
 	return &ClusterRegistriesHandler{queries: queries}
+}
+
+func (h *ClusterRegistriesHandler) SetRunTx(runTx clusterRegistryRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *ClusterRegistriesHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
+}
+
+func executeClusterRegistryMutation(
+	r *http.Request,
+	h *ClusterRegistriesHandler,
+	mutate func(ClusterRegistryMutationTx) (clusterRegistryMutationResult, error),
+	fallback func() (clusterRegistryMutationResult, error),
+	describe func(clusterRegistryMutationResult) clusterAuditEvent,
+) (clusterRegistryMutationResult, error) {
+	if h == nil {
+		return clusterRegistryMutationResult{}, fmt.Errorf("cluster registry handler is nil")
+	}
+	if h.runTx != nil {
+		var result clusterRegistryMutationResult
+		err := h.runTx(r.Context(), func(q ClusterRegistryMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+
+	result, err := fallback()
+	if err != nil {
+		return clusterRegistryMutationResult{}, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 // SetApplyEnqueue wires the asynq client used to schedule the apply
@@ -355,7 +419,7 @@ func (h *ClusterRegistriesHandler) Create(w http.ResponseWriter, r *http.Request
 		inject = *req.InjectDefaultSa
 	}
 
-	row, err := h.queries.CreateClusterRegistryConfig(r.Context(), sqlc.CreateClusterRegistryConfigParams{
+	params := sqlc.CreateClusterRegistryConfigParams{
 		ClusterID:                 clusterID,
 		PrivateRegistryUrl:        strings.TrimSpace(req.PrivateRegistryUrl),
 		RegistryUsername:          req.RegistryUsername,
@@ -366,23 +430,42 @@ func (h *ClusterRegistriesHandler) Create(w http.ResponseWriter, r *http.Request
 		Namespaces:                encodeNamespaces(req.Namespaces),
 		InjectDefaultSa:           inject,
 		SecretName:                strings.TrimSpace(req.SecretName),
-	})
+	}
+	result, err := executeClusterRegistryMutation(r, h,
+		func(q ClusterRegistryMutationTx) (clusterRegistryMutationResult, error) {
+			row, mutationErr := q.CreateClusterRegistryConfig(r.Context(), params)
+			if mutationErr != nil {
+				return clusterRegistryMutationResult{}, mutationErr
+			}
+			durable, mutationErr := h.enqueueApplyOutbox(r, q, row.ID, clusterID, "apply")
+			return clusterRegistryMutationResult{row: row, durableTask: durable}, mutationErr
+		},
+		func() (clusterRegistryMutationResult, error) {
+			row, mutationErr := h.queries.CreateClusterRegistryConfig(r.Context(), params)
+			return clusterRegistryMutationResult{row: row}, mutationErr
+		},
+		func(result clusterRegistryMutationResult) clusterAuditEvent {
+			row := result.row
+			return clusterAuditEvent{
+				action: "cluster.registry.created", resourceType: "cluster_registry_config", resourceID: row.ID.String(), resourceName: cluster.Name,
+				status: http.StatusCreated,
+				detail: map[string]any{
+					"cluster_id": clusterID.String(), "private_registry_url": row.PrivateRegistryUrl,
+					"registry_username": row.RegistryUsername, "insecure": row.Insecure,
+					"namespaces": decodeNamespacesJSON(row.Namespaces), "inject_default_sa": row.InjectDefaultSa,
+				},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create registry config")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create registry config")
 		return
 	}
+	row := result.row
 
 	events.PublishChanged(h.bus, "registry", clusterID.String(), row.ID.String(), nil)
-	recordAudit(r, h.queries, "cluster.registry.created", "cluster_registry_config", row.ID.String(), cluster.Name, map[string]any{
-		"cluster_id":           clusterID.String(),
-		"private_registry_url": row.PrivateRegistryUrl,
-		"registry_username":    row.RegistryUsername,
-		"insecure":             row.Insecure,
-		"namespaces":           decodeNamespacesJSON(row.Namespaces),
-		"inject_default_sa":    row.InjectDefaultSa,
-	})
-
-	h.enqueueApply(r, row.ID, clusterID, "apply")
+	if !result.durableTask {
+		h.enqueueApply(r, row.ID, clusterID, "apply")
+	}
 
 	RespondJSON(w, http.StatusCreated, clusterRegistryConfigToResponse(row))
 }
@@ -440,7 +523,7 @@ func (h *ClusterRegistriesHandler) Update(w http.ResponseWriter, r *http.Request
 		inject = *req.InjectDefaultSa
 	}
 
-	row, err := h.queries.UpdateClusterRegistryConfig(r.Context(), sqlc.UpdateClusterRegistryConfigParams{
+	params := sqlc.UpdateClusterRegistryConfigParams{
 		ID:                        registryID,
 		PrivateRegistryUrl:        strings.TrimSpace(req.PrivateRegistryUrl),
 		RegistryUsername:          req.RegistryUsername,
@@ -451,23 +534,42 @@ func (h *ClusterRegistriesHandler) Update(w http.ResponseWriter, r *http.Request
 		Namespaces:                encodeNamespaces(req.Namespaces),
 		InjectDefaultSa:           inject,
 		SecretName:                strings.TrimSpace(req.SecretName),
-	})
+	}
+	result, err := executeClusterRegistryMutation(r, h,
+		func(q ClusterRegistryMutationTx) (clusterRegistryMutationResult, error) {
+			row, mutationErr := q.UpdateClusterRegistryConfig(r.Context(), params)
+			if mutationErr != nil {
+				return clusterRegistryMutationResult{}, mutationErr
+			}
+			durable, mutationErr := h.enqueueApplyOutbox(r, q, row.ID, clusterID, "apply")
+			return clusterRegistryMutationResult{row: row, durableTask: durable}, mutationErr
+		},
+		func() (clusterRegistryMutationResult, error) {
+			row, mutationErr := h.queries.UpdateClusterRegistryConfig(r.Context(), params)
+			return clusterRegistryMutationResult{row: row}, mutationErr
+		},
+		func(result clusterRegistryMutationResult) clusterAuditEvent {
+			row := result.row
+			return clusterAuditEvent{
+				action: "cluster.registry.updated", resourceType: "cluster_registry_config", resourceID: row.ID.String(), resourceName: cluster.Name,
+				status: http.StatusOK,
+				detail: map[string]any{
+					"cluster_id": clusterID.String(), "private_registry_url": row.PrivateRegistryUrl,
+					"registry_username": row.RegistryUsername, "insecure": row.Insecure,
+					"namespaces": decodeNamespacesJSON(row.Namespaces), "inject_default_sa": row.InjectDefaultSa,
+				},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update registry config")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update registry config")
 		return
 	}
+	row := result.row
 
 	events.PublishChanged(h.bus, "registry", clusterID.String(), row.ID.String(), nil)
-	recordAudit(r, h.queries, "cluster.registry.updated", "cluster_registry_config", row.ID.String(), cluster.Name, map[string]any{
-		"cluster_id":           clusterID.String(),
-		"private_registry_url": row.PrivateRegistryUrl,
-		"registry_username":    row.RegistryUsername,
-		"insecure":             row.Insecure,
-		"namespaces":           decodeNamespacesJSON(row.Namespaces),
-		"inject_default_sa":    row.InjectDefaultSa,
-	})
-
-	h.enqueueApply(r, row.ID, clusterID, "apply")
+	if !result.durableTask {
+		h.enqueueApply(r, row.ID, clusterID, "apply")
+	}
 
 	RespondJSON(w, http.StatusOK, clusterRegistryConfigToResponse(row))
 }
@@ -497,27 +599,41 @@ func (h *ClusterRegistriesHandler) Delete(w http.ResponseWriter, r *http.Request
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TaskError, "Failed to build registry cleanup task")
 		return
 	}
-	deletedWithOutbox, err := h.deleteWithUnapplyOutbox(r.Context(), existing, task)
+	_, err = executeClusterRegistryMutation(r, h,
+		func(q ClusterRegistryMutationTx) (clusterRegistryMutationResult, error) {
+			durable, mutationErr := h.deleteWithUnapplyOutbox(r.Context(), q, existing, task)
+			if mutationErr != nil {
+				return clusterRegistryMutationResult{}, mutationErr
+			}
+			if !durable {
+				mutationErr = q.DeleteClusterRegistryConfigByID(r.Context(), registryID)
+			}
+			return clusterRegistryMutationResult{row: existing, durableTask: durable}, mutationErr
+		},
+		func() (clusterRegistryMutationResult, error) {
+			durable, mutationErr := h.deleteWithUnapplyOutbox(r.Context(), h.queries, existing, task)
+			if mutationErr != nil {
+				return clusterRegistryMutationResult{}, mutationErr
+			}
+			if !durable {
+				h.enqueueUnapplyTask(task)
+				mutationErr = h.queries.DeleteClusterRegistryConfigByID(r.Context(), registryID)
+			}
+			return clusterRegistryMutationResult{row: existing, durableTask: durable}, mutationErr
+		},
+		func(result clusterRegistryMutationResult) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.registry.deleted", resourceType: "cluster_registry_config", resourceID: registryID.String(),
+				status: http.StatusNoContent,
+				detail: map[string]any{"cluster_id": clusterID.String(), "private_registry_url": result.row.PrivateRegistryUrl},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete registry config")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete registry config")
 		return
-	}
-	if !deletedWithOutbox {
-		// Enqueue cleanup BEFORE the row goes away — the worker reads from the
-		// passed-in payload (secret_name + namespaces snapshot) so it doesn't
-		// matter that the row vanishes during the worker's run.
-		h.enqueueUnapplyTask(task)
-		if err := h.queries.DeleteClusterRegistryConfigByID(r.Context(), registryID); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete registry config")
-			return
-		}
 	}
 
 	events.PublishChanged(h.bus, "registry", clusterID.String(), registryID.String(), nil)
-	recordAudit(r, h.queries, "cluster.registry.deleted", "cluster_registry_config", registryID.String(), "", map[string]any{
-		"cluster_id":           clusterID.String(),
-		"private_registry_url": existing.PrivateRegistryUrl,
-	})
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -582,13 +698,17 @@ func (h *ClusterRegistriesHandler) Test(w http.ResponseWriter, r *http.Request) 
 	// passing the full URL as the "path" — the agent dials it directly.
 	resp, err := h.requester.Do(r.Context(), clusterID.String(), http.MethodGet, url, nil, headers)
 	if err != nil {
-		recordAudit(r, h.queries, "cluster.registry.tested", "cluster_registry_config", existing.ID.String(), existing.PrivateRegistryUrl, map[string]any{
+		if auditErr := recordMandatoryAudit(r, h.queries, "cluster.registry.tested", "cluster_registry_config", existing.ID.String(), existing.PrivateRegistryUrl, map[string]any{
 			"cluster_id":           clusterID.String(),
 			"private_registry_url": existing.PrivateRegistryUrl,
 			"ok":                   false,
 			"status_code":          0,
 			"result":               "tunnel_error",
-		})
+		}); auditErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+				"Mandatory audit storage is unavailable; the registry test result was not returned")
+			return
+		}
 		RespondJSON(w, http.StatusOK, ClusterRegistryTestResponse{
 			OK:      false,
 			Message: fmt.Sprintf("Tunnel error: %s", err.Error()),
@@ -616,12 +736,16 @@ func (h *ClusterRegistriesHandler) Test(w http.ResponseWriter, r *http.Request) 
 		out.OK = false
 		out.Message = fmt.Sprintf("Registry returned unexpected status %d.", resp.StatusCode)
 	}
-	recordAudit(r, h.queries, "cluster.registry.tested", "cluster_registry_config", existing.ID.String(), existing.PrivateRegistryUrl, map[string]any{
+	if auditErr := recordMandatoryAudit(r, h.queries, "cluster.registry.tested", "cluster_registry_config", existing.ID.String(), existing.PrivateRegistryUrl, map[string]any{
 		"cluster_id":           clusterID.String(),
 		"private_registry_url": existing.PrivateRegistryUrl,
 		"ok":                   out.OK,
 		"status_code":          resp.StatusCode,
-	})
+	}); auditErr != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+			"Mandatory audit storage is unavailable; the registry test result was not returned")
+		return
+	}
 	RespondJSON(w, http.StatusOK, out)
 }
 
@@ -632,44 +756,63 @@ func (h *ClusterRegistriesHandler) enqueueApply(r *http.Request, registryID, clu
 	if h == nil || h.applyEnqueue == nil {
 		return
 	}
+	task, err := h.newApplyTask(r, registryID, clusterID, op)
+	if err != nil {
+		return
+	}
+	_, _ = h.applyEnqueue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
+}
+
+func (h *ClusterRegistriesHandler) newApplyTask(r *http.Request, registryID, clusterID uuid.UUID, op string) (*asynq.Task, error) {
 	task, err := tasks.NewClusterApplyRegistrySecretTask(tasks.ClusterApplyRegistrySecretPayload{
 		RegistryID: registryID.String(),
 		ClusterID:  clusterID.String(),
 		Op:         op,
 	})
 	if err != nil {
-		return
+		return nil, err
 	}
 	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
-	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
-	_, _ = h.applyEnqueue.Enqueue(task)
+	return asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3)), nil
 }
 
-// ConfigureWorkerDeps wires the cluster-registry apply task's runtime
-// dependencies. Called once at server startup, after the K8s tunnel +
-// queries are wired. The worker is a no-op until this fires — the
-// handler still returns 200/201 immediately and the periodic drift
-// sweep catches up once the worker has its dependencies.
+func (h *ClusterRegistriesHandler) enqueueApplyOutbox(r *http.Request, q tasks.TaskOutboxWriter, registryID, clusterID uuid.UUID, op string) (bool, error) {
+	if h == nil || h.taskOutbox == nil {
+		return false, nil
+	}
+	task, err := h.newApplyTask(r, registryID, clusterID, op)
+	if err != nil {
+		return false, err
+	}
+	requestID := middleware.GetRequestID(r.Context())
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+	_, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{
+		DedupeKey:           fmt.Sprintf("cluster_registry_%s:%s:%s", op, registryID.String(), requestID),
+		QueueName:           tasks.ClusterTemplateApplyQueueName,
+		MaxRetry:            3,
+		MaxDeliveryAttempts: 20,
+	})
+	return true, err
+}
+
+// WorkerRuntime builds the cluster-registry task runtime after the tunnel,
+// query surface, and encryptor are wired.
 //
 // We bridge the handler.K8sRequester into tasks.ProjectK8sRequester via a
 // thin adapter on this file rather than re-using the project package's
 // private adapter — the indirection keeps the two reconcilers truly
 // independent.
-func (h *ClusterRegistriesHandler) ConfigureWorkerDeps(queries tasks.ClusterRegistryApplyQuerier) {
+func (h *ClusterRegistriesHandler) WorkerRuntime(queries tasks.ClusterRegistryApplyQuerier) tasks.ClusterRegistryRuntime {
 	if h == nil {
-		return
+		return tasks.ClusterRegistryRuntime{}
 	}
-	if queries == nil || h.requester == nil {
-		// Without DB + tunnel requester the task can't do anything. Leaving
-		// it unwired is a clean no-op (HandleClusterApplyRegistrySecret
-		// short-circuits when deps are zero).
-		return
-	}
-	tasks.ConfigureClusterRegistryApply(tasks.ClusterRegistryApplyDeps{
+	return tasks.ClusterRegistryRuntime{Deps: tasks.ClusterRegistryApplyDeps{
 		Queries:   queries,
 		Requester: clusterRegistryRequesterAdapter{r: h.requester},
 		Encryptor: h.encryptor,
-	})
+	}}
 }
 
 func (h *ClusterRegistriesHandler) encryptRegistryPassword(password string) (string, string, error) {
@@ -729,18 +872,18 @@ func (h *ClusterRegistriesHandler) enqueueUnapplyTask(task *asynq.Task) {
 	if h == nil || h.applyEnqueue == nil || task == nil {
 		return
 	}
-	_, _ = h.applyEnqueue.Enqueue(task)
+	_, _ = h.applyEnqueue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
 }
 
 type clusterRegistryDeleteTaskOutboxQuerier interface {
 	DeleteClusterRegistryConfigByIDWithTaskOutbox(ctx context.Context, arg sqlc.DeleteClusterRegistryConfigByIDWithTaskOutboxParams) error
 }
 
-func (h *ClusterRegistriesHandler) deleteWithUnapplyOutbox(ctx context.Context, row sqlc.ClusterRegistryConfig, task *asynq.Task) (bool, error) {
+func (h *ClusterRegistriesHandler) deleteWithUnapplyOutbox(ctx context.Context, q any, row sqlc.ClusterRegistryConfig, task *asynq.Task) (bool, error) {
 	if h == nil || h.taskOutbox == nil || task == nil {
 		return false, nil
 	}
-	atomicQ, ok := h.queries.(clusterRegistryDeleteTaskOutboxQuerier)
+	atomicQ, ok := q.(clusterRegistryDeleteTaskOutboxQuerier)
 	if !ok {
 		return false, nil
 	}
@@ -749,7 +892,7 @@ func (h *ClusterRegistriesHandler) deleteWithUnapplyOutbox(ctx context.Context, 
 		DedupeKey:           pgtype.Text{String: fmt.Sprintf("cluster_registry_unapply:%s", row.ID.String()), Valid: true},
 		TaskType:            task.Type(),
 		Payload:             task.Payload(),
-		QueueName:           "default",
+		QueueName:           tasks.ClusterTemplateApplyQueueName,
 		MaxRetry:            3,
 		MaxDeliveryAttempts: 20,
 		NextAttemptAt:       pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},

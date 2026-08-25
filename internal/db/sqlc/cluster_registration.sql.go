@@ -131,6 +131,33 @@ func (q *Queries) GetClusterRegistrationStep(ctx context.Context, id uuid.UUID) 
 	return i, err
 }
 
+const getClusterRegistrationStepForUpdate = `-- name: GetClusterRegistrationStepForUpdate :one
+SELECT id, cluster_id, step_name, label, status, progress_pct, detail_json, started_at, completed_at, error_message, created_at, step_order
+FROM cluster_registration_steps
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetClusterRegistrationStepForUpdate(ctx context.Context, id uuid.UUID) (ClusterRegistrationStep, error) {
+	row := q.db.QueryRow(ctx, getClusterRegistrationStepForUpdate, id)
+	var i ClusterRegistrationStep
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.StepName,
+		&i.Label,
+		&i.Status,
+		&i.ProgressPct,
+		&i.DetailJson,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.StepOrder,
+	)
+	return i, err
+}
+
 const insertClusterRegistrationStep = `-- name: InsertClusterRegistrationStep :one
 INSERT INTO cluster_registration_steps
     (cluster_id, step_name, label, status, progress_pct, detail_json, started_at, completed_at, error_message, step_order)

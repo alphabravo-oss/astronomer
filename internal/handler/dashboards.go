@@ -63,6 +63,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/dashboards"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -90,9 +91,48 @@ type DashboardQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 }
 
+// DashboardMutationTx is the transaction-bound state + audit surface for
+// widget and Prometheus datasource administration. Production supplies
+// sqlc.New(tx), ensuring a successful API response cannot describe state whose
+// mandatory audit intent failed to commit (or vice versa).
+type DashboardMutationTx interface {
+	DashboardQuerier
+	audit.OutboxQuerier
+}
+
+type dashboardRunTxFunc func(context.Context, func(DashboardMutationTx) error) error
+
+func executeDashboardMutation[T any](r *http.Request, h *DashboardHandler, mutate func(DashboardMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("dashboard handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q DashboardMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.auditor, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
+}
+
 // DashboardHandler owns the admin CRUD + the public render endpoints.
 type DashboardHandler struct {
 	queries   DashboardQuerier
+	runTx     dashboardRunTxFunc
 	auditor   any
 	encryptor *auth.Encryptor
 	cache     *dashboards.Cache
@@ -120,6 +160,16 @@ func NewDashboardHandler(queries DashboardQuerier) *DashboardHandler {
 		cache:   c,
 	}
 }
+
+// SetRunTx wires the production database transaction used to commit each
+// dashboard state mutation and its audit outbox intent atomically.
+func (h *DashboardHandler) SetRunTx(runTx dashboardRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *DashboardHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // SetAuditor wires the audit writer. Argument type is `any` because
 // recordAudit type-asserts internally — see audit_helpers.go.
@@ -230,6 +280,7 @@ type WidgetGrid struct {
 // WidgetRequest is the POST / PUT body. Spec is intentionally opaque
 // (json.RawMessage) — the validator unmarshals it per widget_type and
 // rejects unknown fields, but the storage layer doesn't normalise it.
+// openapi:request DashboardWidgetRequest
 type WidgetRequest struct {
 	Name           string          `json:"name"`
 	Description    string          `json:"description"`
@@ -289,6 +340,7 @@ type WidgetData struct {
 // DatasourceRequest is the POST / PUT body for the datasource admin
 // endpoints. Auth is split into Basic vs Bearer; an empty Auth section
 // means "no auth".
+// openapi:request PrometheusDatasourceRequest
 type DatasourceRequest struct {
 	Name          string `json:"name"`
 	URL           string `json:"url"`
@@ -337,10 +389,11 @@ func (h *DashboardHandler) AdminList(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		out = append(out, widgetToResponse(row))
 	}
-	// ListDashboardWidgets returns the full set in one query (no SQL
-	// limit/offset), so the page is the whole result. // TODO(total): add a
-	// counted, paged query if widget counts ever grow unbounded.
-	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
+	// The current SQL query materializes the bounded admin collection. Apply
+	// the shared in-memory window so the advertised pagination is real and an
+	// empty collection still carries a contract-valid positive limit.
+	page, pagination := pageWindow(r, out)
+	RespondList(w, page, pagination)
 }
 
 // AdminGet handles GET /api/v1/admin/dashboard-widgets/{id}/.
@@ -387,7 +440,7 @@ func (h *DashboardHandler) AdminCreate(w http.ResponseWriter, r *http.Request) {
 	if scopeIDs == nil {
 		scopeIDs = []uuid.UUID{}
 	}
-	row, err := h.queries.CreateDashboardWidget(r.Context(), sqlc.CreateDashboardWidgetParams{
+	params := sqlc.CreateDashboardWidgetParams{
 		Name:           req.Name,
 		Description:    req.Description,
 		WidgetType:     req.WidgetType,
@@ -401,15 +454,25 @@ func (h *DashboardHandler) AdminCreate(w http.ResponseWriter, r *http.Request) {
 		RefreshSeconds: defaultInt32(req.RefreshSeconds, 60),
 		Enabled:        enabled,
 		CreatedBy:      currentUserUUID(r),
-	})
+	}
+	row, err := executeDashboardMutation(r, h,
+		func(q DashboardMutationTx) (sqlc.DashboardWidget, error) {
+			return q.CreateDashboardWidget(r.Context(), params)
+		},
+		func() (sqlc.DashboardWidget, error) {
+			return h.queries.CreateDashboardWidget(r.Context(), params)
+		},
+		func(row sqlc.DashboardWidget) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.dashboard_widget.created", resourceType: "dashboard_widget",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated,
+				detail: map[string]any{"widget_type": row.WidgetType, "scope": row.Scope},
+			}
+		})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
-	recordAudit(r, h.auditor, "admin.dashboard_widget.created", "dashboard_widget", row.ID.String(), row.Name, map[string]any{
-		"widget_type": row.WidgetType,
-		"scope":       row.Scope,
-	})
 	w.Header().Set("Location", "/api/v1/admin/dashboard-widgets/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, widgetToResponse(row))
 }
@@ -441,7 +504,7 @@ func (h *DashboardHandler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 	if scopeIDs == nil {
 		scopeIDs = []uuid.UUID{}
 	}
-	row, err := h.queries.UpdateDashboardWidget(r.Context(), sqlc.UpdateDashboardWidgetParams{
+	params := sqlc.UpdateDashboardWidgetParams{
 		ID:             id,
 		Name:           req.Name,
 		Description:    req.Description,
@@ -455,7 +518,21 @@ func (h *DashboardHandler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 		GridH:          defaultInt32(req.Grid.H, 2),
 		RefreshSeconds: defaultInt32(req.RefreshSeconds, 60),
 		Enabled:        enabled,
-	})
+	}
+	row, err := executeDashboardMutation(r, h,
+		func(q DashboardMutationTx) (sqlc.DashboardWidget, error) {
+			return q.UpdateDashboardWidget(r.Context(), params)
+		},
+		func() (sqlc.DashboardWidget, error) {
+			return h.queries.UpdateDashboardWidget(r.Context(), params)
+		},
+		func(row sqlc.DashboardWidget) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.dashboard_widget.updated", resourceType: "dashboard_widget",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusOK,
+				detail: map[string]any{"widget_type": row.WidgetType, "scope": row.Scope},
+			}
+		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Widget not found")
@@ -464,10 +541,6 @@ func (h *DashboardHandler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
-	recordAudit(r, h.auditor, "admin.dashboard_widget.updated", "dashboard_widget", row.ID.String(), row.Name, map[string]any{
-		"widget_type": row.WidgetType,
-		"scope":       row.Scope,
-	})
 	RespondJSON(w, http.StatusOK, widgetToResponse(row))
 }
 
@@ -481,7 +554,25 @@ func (h *DashboardHandler) AdminDelete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid widget ID")
 		return
 	}
-	row, err := h.queries.GetDashboardWidgetByID(r.Context(), id)
+	deleteWidget := func(q DashboardQuerier) (sqlc.DashboardWidget, error) {
+		row, getErr := q.GetDashboardWidgetByID(r.Context(), id)
+		if getErr != nil {
+			return sqlc.DashboardWidget{}, getErr
+		}
+		if deleteErr := q.DeleteDashboardWidget(r.Context(), id); deleteErr != nil {
+			return sqlc.DashboardWidget{}, deleteErr
+		}
+		return row, nil
+	}
+	_, err = executeDashboardMutation(r, h,
+		func(q DashboardMutationTx) (sqlc.DashboardWidget, error) { return deleteWidget(q) },
+		func() (sqlc.DashboardWidget, error) { return deleteWidget(h.queries) },
+		func(row sqlc.DashboardWidget) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.dashboard_widget.deleted", resourceType: "dashboard_widget",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusNoContent,
+			}
+		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Widget not found")
@@ -490,11 +581,6 @@ func (h *DashboardHandler) AdminDelete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
-	if err := h.queries.DeleteDashboardWidget(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
-		return
-	}
-	recordAudit(r, h.auditor, "admin.dashboard_widget.deleted", "dashboard_widget", id.String(), row.Name, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -514,10 +600,8 @@ func (h *DashboardHandler) AdminListDatasources(w http.ResponseWriter, r *http.R
 	for _, row := range rows {
 		out = append(out, datasourceToResponse(row))
 	}
-	// ListPrometheusDatasources returns the full set in one query (no SQL
-	// limit/offset), so the page is the whole result. // TODO(total): add a
-	// counted, paged query if datasource counts ever grow unbounded.
-	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
+	page, pagination := pageWindow(r, out)
+	RespondList(w, page, pagination)
 }
 
 // AdminCreateDatasource handles POST /api/v1/admin/prometheus-datasources/.
@@ -543,20 +627,31 @@ func (h *DashboardHandler) AdminCreateDatasource(w http.ResponseWriter, r *http.
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	row, err := h.queries.CreatePrometheusDatasource(r.Context(), sqlc.CreatePrometheusDatasourceParams{
+	params := sqlc.CreatePrometheusDatasourceParams{
 		Name:          req.Name,
 		Url:           req.URL,
 		AuthEncrypted: encrypted,
 		TlsSkipVerify: req.TLSSkipVerify,
 		Enabled:       enabled,
-	})
+	}
+	row, err := executeDashboardMutation(r, h,
+		func(q DashboardMutationTx) (sqlc.PrometheusDatasource, error) {
+			return q.CreatePrometheusDatasource(r.Context(), params)
+		},
+		func() (sqlc.PrometheusDatasource, error) {
+			return h.queries.CreatePrometheusDatasource(r.Context(), params)
+		},
+		func(row sqlc.PrometheusDatasource) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.prometheus_datasource.created", resourceType: "prometheus_datasource",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated,
+				detail: datasourceAuditDetail(row),
+			}
+		})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
-	recordAudit(r, h.auditor, "admin.prometheus_datasource.created", "prometheus_datasource", row.ID.String(), row.Name, map[string]any{
-		"url": row.Url,
-	})
 	w.Header().Set("Location", "/api/v1/admin/prometheus-datasources/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, datasourceToResponse(row))
 }
@@ -571,7 +666,56 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid datasource ID")
 		return
 	}
-	existing, err := h.queries.GetPrometheusDatasourceByID(r.Context(), id)
+	var req DatasourceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
+		return
+	}
+	if err := validateDatasourceRequest(req); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		return
+	}
+	// Seal replacement credentials before opening a database transaction; no
+	// cleartext secret is retained in state. Empty auth fields retain their PUT
+	// compatibility meaning of "preserve existing ciphertext".
+	replaceAuth := req.BasicAuthUser != "" || req.BasicAuthPass != "" || req.BearerToken != ""
+	var replacementCiphertext string
+	if replaceAuth {
+		enc, err := h.sealAuth(req)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, err.Error())
+			return
+		}
+		replacementCiphertext = enc
+	}
+	updateDatasource := func(q DashboardQuerier) (sqlc.PrometheusDatasource, error) {
+		existing, getErr := q.GetPrometheusDatasourceByID(r.Context(), id)
+		if getErr != nil {
+			return sqlc.PrometheusDatasource{}, getErr
+		}
+		encrypted := existing.AuthEncrypted
+		if replaceAuth {
+			encrypted = replacementCiphertext
+		}
+		enabled := existing.Enabled
+		if req.Enabled != nil {
+			enabled = *req.Enabled
+		}
+		return q.UpdatePrometheusDatasource(r.Context(), sqlc.UpdatePrometheusDatasourceParams{
+			ID: id, Name: req.Name, Url: req.URL, AuthEncrypted: encrypted,
+			TlsSkipVerify: req.TLSSkipVerify, Enabled: enabled,
+		})
+	}
+	row, err := executeDashboardMutation(r, h,
+		func(q DashboardMutationTx) (sqlc.PrometheusDatasource, error) { return updateDatasource(q) },
+		func() (sqlc.PrometheusDatasource, error) { return updateDatasource(h.queries) },
+		func(row sqlc.PrometheusDatasource) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.prometheus_datasource.updated", resourceType: "prometheus_datasource",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusOK,
+				detail: datasourceAuditDetail(row),
+			}
+		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Datasource not found")
@@ -580,44 +724,6 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
-	var req DatasourceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
-		return
-	}
-	// PUT may carry empty auth fields meaning "preserve" — encode that
-	// by reusing the existing ciphertext when ALL three fields are empty.
-	encrypted := existing.AuthEncrypted
-	if req.BasicAuthUser != "" || req.BasicAuthPass != "" || req.BearerToken != "" {
-		enc, err := h.sealAuth(req)
-		if err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, err.Error())
-			return
-		}
-		encrypted = enc
-	}
-	if err := validateDatasourceRequest(req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
-		return
-	}
-	enabled := existing.Enabled
-	if req.Enabled != nil {
-		enabled = *req.Enabled
-	}
-	row, err := h.queries.UpdatePrometheusDatasource(r.Context(), sqlc.UpdatePrometheusDatasourceParams{
-		ID:            id,
-		Url:           req.URL,
-		AuthEncrypted: encrypted,
-		TlsSkipVerify: req.TLSSkipVerify,
-		Enabled:       enabled,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
-		return
-	}
-	recordAudit(r, h.auditor, "admin.prometheus_datasource.updated", "prometheus_datasource", row.ID.String(), row.Name, map[string]any{
-		"url": row.Url,
-	})
 	RespondJSON(w, http.StatusOK, datasourceToResponse(row))
 }
 
@@ -631,7 +737,25 @@ func (h *DashboardHandler) AdminDeleteDatasource(w http.ResponseWriter, r *http.
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid datasource ID")
 		return
 	}
-	row, err := h.queries.GetPrometheusDatasourceByID(r.Context(), id)
+	deleteDatasource := func(q DashboardQuerier) (sqlc.PrometheusDatasource, error) {
+		row, getErr := q.GetPrometheusDatasourceByID(r.Context(), id)
+		if getErr != nil {
+			return sqlc.PrometheusDatasource{}, getErr
+		}
+		if deleteErr := q.DeletePrometheusDatasource(r.Context(), id); deleteErr != nil {
+			return sqlc.PrometheusDatasource{}, deleteErr
+		}
+		return row, nil
+	}
+	_, err = executeDashboardMutation(r, h,
+		func(q DashboardMutationTx) (sqlc.PrometheusDatasource, error) { return deleteDatasource(q) },
+		func() (sqlc.PrometheusDatasource, error) { return deleteDatasource(h.queries) },
+		func(row sqlc.PrometheusDatasource) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.prometheus_datasource.deleted", resourceType: "prometheus_datasource",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusNoContent,
+			}
+		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Datasource not found")
@@ -640,11 +764,6 @@ func (h *DashboardHandler) AdminDeleteDatasource(w http.ResponseWriter, r *http.
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
-	if err := h.queries.DeletePrometheusDatasource(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
-		return
-	}
-	recordAudit(r, h.auditor, "admin.prometheus_datasource.deleted", "prometheus_datasource", id.String(), row.Name, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1076,7 +1195,29 @@ func validateDatasourceRequest(req DatasourceRequest) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("url must be http or https")
 	}
+	if u.Host == "" {
+		return fmt.Errorf("url must include a host")
+	}
+	if u.User != nil {
+		return fmt.Errorf("url must not include credentials; use the datasource auth fields")
+	}
 	return nil
+}
+
+// datasourceAuditDetail deliberately records only the endpoint origin. A
+// Prometheus base URL may contain tenant selectors or tokens in its path/query;
+// those values must never be copied into audit sinks.
+func datasourceAuditDetail(row sqlc.PrometheusDatasource) map[string]any {
+	origin := ""
+	if parsed, err := url.Parse(row.Url); err == nil && parsed.Host != "" {
+		origin = parsed.Scheme + "://" + parsed.Host
+	}
+	return map[string]any{
+		"endpoint_origin": origin,
+		"has_auth":        row.AuthEncrypted != "",
+		"tls_skip_verify": row.TlsSkipVerify,
+		"enabled":         row.Enabled,
+	}
 }
 
 // allowedIframeHosts returns the comma-separated list of hosts the

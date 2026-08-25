@@ -43,6 +43,7 @@ type fakeGroupMappings struct {
 	// CreateAuditLogV1 satisfies auditWriterV1; counted so the test
 	// can assert on audit calls.
 	auditCalls int
+	outboxErr  error
 }
 
 func newFakeMappings() *fakeGroupMappings {
@@ -259,6 +260,14 @@ func (f *fakeGroupMappings) DeleteGroupSyncProjectBinding(_ context.Context, id 
 func (f *fakeGroupMappings) CreateAuditLogV1(_ context.Context, _ sqlc.CreateAuditLogV1Params) error {
 	f.auditCalls++
 	return nil
+}
+
+func (f *fakeGroupMappings) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	if f.outboxErr != nil {
+		return sqlc.AuditOutbox{}, f.outboxErr
+	}
+	f.auditCalls++
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
 }
 
 // makeAuthedRequest builds a *http.Request with an authenticated user

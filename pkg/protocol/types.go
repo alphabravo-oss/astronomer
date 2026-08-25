@@ -336,11 +336,14 @@ type Message struct {
 
 // ConnectPayload is sent by the agent when establishing a connection.
 type ConnectPayload struct {
-	ClusterID               string `json:"cluster_id"`
-	AgentID                 string `json:"agent_id"`
-	AgentVersion            string `json:"agent_version"`
-	DeliveryProtocolVersion string `json:"delivery_protocol_version"`
-	Token                   string `json:"token"`
+	ClusterID               string   `json:"cluster_id"`
+	AgentID                 string   `json:"agent_id"`
+	AgentVersion            string   `json:"agent_version"`
+	TunnelProtocolVersion   int      `json:"tunnel_protocol_version"`
+	HeartbeatSchemaVersion  int      `json:"heartbeat_schema_version"`
+	DeliveryProtocolVersion string   `json:"delivery_protocol_version"`
+	Capabilities            []string `json:"capabilities"`
+	Token                   string   `json:"token"`
 }
 
 // ConnectAckPayload is sent by the server to acknowledge a connection.
@@ -353,9 +356,13 @@ type ConnectAckPayload struct {
 	// HTTP instead of the WS tunnel (PATH A). Empty when the server does not
 	// issue one — the agent then falls back to the tunnel sender. Delivered
 	// once on connect; treated as a credential and never logged.
-	AuditIngestToken string `json:"audit_ingest_token,omitempty"`
-	Accepted         bool   `json:"accepted"`
-	Reason           string `json:"reason,omitempty"`
+	AuditIngestToken      string `json:"audit_ingest_token,omitempty"`
+	Accepted              bool   `json:"accepted"`
+	Reason                string `json:"reason,omitempty"`
+	ReasonCode            string `json:"reason_code,omitempty"`
+	Message               string `json:"message,omitempty"`
+	UpgradeRecommendation string `json:"upgrade_recommendation,omitempty"`
+	SupportedContract     string `json:"supported_contract,omitempty"`
 }
 
 // K8sRequestPayload represents a proxied Kubernetes API request.
@@ -363,6 +370,7 @@ type ConnectAckPayload struct {
 // The embedded CallerIdentity is populated server-side from the authenticated
 // session (or stamped as an explicit machine origin) and is UNUSED in Phase 0 —
 // see identity.go and docs/design/downstream-impersonation.md §8.
+// openapi:request-operation internalTunnelK8s
 type K8sRequestPayload struct {
 	Method  string            `json:"method"`
 	Path    string            `json:"path"`
@@ -464,8 +472,6 @@ type ErrorPayload struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
-
-const HeartbeatSchemaVersion = 2
 
 // HeartbeatPayload from agent health reports.
 type HeartbeatPayload struct {

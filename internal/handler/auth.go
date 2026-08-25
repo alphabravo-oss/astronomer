@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -105,6 +107,23 @@ type TokenQuerier interface {
 	RevokeAPIToken(ctx context.Context, id uuid.UUID) error
 }
 
+// AuthMutationTx is the transaction-bound surface for self-service credential
+// mutations. It prevents password/token state from committing when mandatory
+// audit evidence or session invalidation cannot be persisted.
+type AuthMutationTx interface {
+	audit.OutboxQuerier
+	GetUserByIDForUpdate(context.Context, uuid.UUID) (sqlc.User, error)
+	RecordFailedLoginAttempt(context.Context, sqlc.RecordFailedLoginAttemptParams) (sqlc.User, error)
+	UpdateUserPasswordHash(context.Context, sqlc.UpdateUserPasswordHashParams) error
+	ClearMustChangePassword(context.Context, uuid.UUID) error
+	RevokeJWT(context.Context, sqlc.RevokeJWTParams) error
+	InvalidateAllTokens(context.Context, sqlc.InvalidateAllTokensParams) error
+	CreateAPIToken(context.Context, sqlc.CreateAPITokenParams) (sqlc.ApiToken, error)
+	RevokeAPIToken(context.Context, uuid.UUID) error
+}
+
+type authRunTxFunc func(context.Context, func(AuthMutationTx) error) error
+
 // AuthHandler handles authentication endpoints.
 type AuthHandler struct {
 	queries    UserQuerier
@@ -172,6 +191,15 @@ type AuthHandler struct {
 	// post-logout-redirect parameter — most IdPs accept that and bounce
 	// to their default post-logout page.
 	postLogoutRedirectURL string
+	runTx                 authRunTxFunc
+}
+
+var errCurrentPasswordIncorrect = errors.New("current password is incorrect")
+
+type logoutMutationResult struct {
+	jti       string
+	userID    uuid.UUID
+	expiresAt time.Time
 }
 
 // SetQuotaEnforcer wires the per-tenant quota enforcer for the auth
@@ -226,6 +254,59 @@ func NewAuthHandlerWithTokens(queries UserQuerier, tokens TokenQuerier, jwt *aut
 		jwt:     jwt,
 		log:     slog.Default(),
 	}
+}
+
+func (h *AuthHandler) SetRunTx(runTx authRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *AuthHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
+}
+
+func executeAuthMutation[T any](
+	r *http.Request,
+	h *AuthHandler,
+	mutate func(AuthMutationTx) (T, error),
+	fallback func() (T, error),
+	describe func(T) clusterAuditEvent,
+) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, fmt.Errorf("auth handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q AuthMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.audit, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
+}
+
+func (h *AuthHandler) recordCredentialAuditAs(r *http.Request, userID pgtype.UUID, action, resourceType, resourceID, resourceName string, detail map[string]any) error {
+	// Preserve narrow unit-fake compatibility. Production always wires both
+	// runTx and the audit writer; a missing writer there is a fail-closed
+	// composition error.
+	if h != nil && h.audit == nil && h.runTx == nil {
+		return nil
+	}
+	return recordMandatoryAuditAs(r, h.audit, userID, action, resourceType, resourceID, resourceName, detail)
 }
 
 // SetPasswordRehasher attaches the rehash hook used by Login() to upgrade
@@ -502,6 +583,7 @@ func newBrowserCSRFToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b[:]), nil
 }
 
+// openapi:request-operation postAuthRefresh
 type refreshRequest struct {
 	Refresh string `json:"refresh"`
 }
@@ -562,9 +644,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		// User-not-found is recorded under the attempted identifier so a
 		// brute-force scan for valid accounts is visible in the audit
 		// stream. user_id stays NULL because there's no row to attribute.
-		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.login_failed", "user", "", email, map[string]any{
-			"reason": "user_not_found",
-		})
+		if auditErr := h.recordCredentialAuditAs(r, pgtype.UUID{}, "auth.login_failed", "user", "", email, map[string]any{"reason": "user_not_found"}); auditErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+				"Mandatory audit storage is unavailable; authentication is temporarily unavailable")
+			return
+		}
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid credentials")
 		return
 	}
@@ -574,12 +658,16 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// CPU). An expired lock falls through naturally because the
 	// timestamp comparison returns false. NIST 800-53 AC-7.
 	if user.LockedUntil.Valid && user.LockedUntil.Time.After(time.Now()) {
-		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
+		if auditErr := h.recordCredentialAuditAs(r, pgtype.UUID{Bytes: user.ID, Valid: true},
 			"auth.login_locked", "user", user.ID.String(), user.Username, map[string]any{
 				"reason":        "account_locked",
 				"locked_until":  user.LockedUntil.Time.UTC().Format(time.RFC3339),
 				"locked_reason": user.LockedReason,
-			})
+			}); auditErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+				"Mandatory audit storage is unavailable; authentication is temporarily unavailable")
+			return
+		}
 		// 423 Locked is the RFC 4918 status that fits best; we keep
 		// the JSON error envelope shape unchanged so the frontend
 		// can surface "account_locked" without parsing the status.
@@ -594,20 +682,28 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		if h.log != nil {
 			h.log.Warn("password verification error", "user_id", user.ID.String(), "error", verifyErr)
 		}
-		h.handleFailedAttempt(ctx, r, user, "verify_error")
+		if attemptErr := h.handleFailedAttempt(ctx, r, user, "verify_error"); attemptErr != nil {
+			respondTransactionalMutationError(w, r, attemptErr, http.StatusServiceUnavailable, apierror.StatusError, "Authentication safeguards are temporarily unavailable")
+			return
+		}
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid credentials")
 		return
 	}
 	if !ok {
-		h.handleFailedAttempt(ctx, r, user, "bad_password")
+		if attemptErr := h.handleFailedAttempt(ctx, r, user, "bad_password"); attemptErr != nil {
+			respondTransactionalMutationError(w, r, attemptErr, http.StatusServiceUnavailable, apierror.StatusError, "Authentication safeguards are temporarily unavailable")
+			return
+		}
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid credentials")
 		return
 	}
 
 	if !user.IsActive {
-		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true}, "auth.login_failed", "user", user.ID.String(), user.Username, map[string]any{
-			"reason": "account_disabled",
-		})
+		if auditErr := h.recordCredentialAuditAs(r, pgtype.UUID{Bytes: user.ID, Valid: true}, "auth.login_failed", "user", user.ID.String(), user.Username, map[string]any{"reason": "account_disabled"}); auditErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+				"Mandatory audit storage is unavailable; authentication is temporarily unavailable")
+			return
+		}
 		RespondRequestError(w, r, http.StatusForbidden, apierror.AccountDisabled, "Account is disabled")
 		return
 	}
@@ -647,10 +743,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to mint TOTP challenge")
 			return
 		}
-		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
-			"auth.login_totp_required", "user", user.ID.String(), user.Username, map[string]any{
-				"identifier_type": "email",
-			})
+		if auditErr := h.recordCredentialAuditAs(r, pgtype.UUID{Bytes: user.ID, Valid: true},
+			"auth.login_totp_required", "user", user.ID.String(), user.Username, map[string]any{"identifier_type": "email"}); auditErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+				"Mandatory audit storage is unavailable; the authentication challenge was not issued")
+			return
+		}
 		RespondJSONUnwrapped(w, http.StatusLocked, map[string]any{
 			"error":           "totp_required",
 			"challenge_token": challenge,
@@ -667,8 +765,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to mint enrollment challenge")
 			return
 		}
-		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
-			"auth.login_totp_enroll_required", "user", user.ID.String(), user.Username, nil)
+		if auditErr := h.recordCredentialAuditAs(r, pgtype.UUID{Bytes: user.ID, Valid: true},
+			"auth.login_totp_enroll_required", "user", user.ID.String(), user.Username, nil); auditErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+				"Mandatory audit storage is unavailable; the enrollment challenge was not issued")
+			return
+		}
 		RespondJSONUnwrapped(w, http.StatusLocked, map[string]any{
 			"error":           "totp_enrollment_required",
 			"challenge_token": enrollChallenge,
@@ -692,11 +794,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		User:    userToResponse(user),
 	}
 
-	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
-		"auth.login", "user", user.ID.String(), user.Username, map[string]any{
-			"identifier_type": "email",
-		},
-	)
+	if auditErr := h.recordCredentialAuditAs(r, pgtype.UUID{Bytes: user.ID, Valid: true},
+		"auth.login", "user", user.ID.String(), user.Username, map[string]any{"identifier_type": "email"}); auditErr != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+			"Mandatory audit storage is unavailable; the session was not issued")
+		return
+	}
 
 	setBrowserSessionCookies(w, r, accessToken, refreshToken)
 	RespondJSON(w, http.StatusOK, resp)
@@ -724,8 +827,52 @@ func normalizeLoginEmail(value string) (string, error) {
 // "stored hash unparseable" (verify_error); both count toward the
 // threshold because either way the caller didn't prove possession of
 // the credential.
-func (h *AuthHandler) handleFailedAttempt(ctx context.Context, r *http.Request, user sqlc.User, reason string) {
+func (h *AuthHandler) handleFailedAttempt(ctx context.Context, r *http.Request, user sqlc.User, reason string) error {
 	threshold, lockDur := h.effectiveLockoutPolicy()
+	now := time.Now().UTC()
+	lockedUntil := now.Add(lockDur)
+
+	if h.runTx != nil {
+		var updated sqlc.User
+		err := h.runTx(ctx, func(q AuthMutationTx) error {
+			var mutationErr error
+			updated, mutationErr = q.RecordFailedLoginAttempt(ctx, sqlc.RecordFailedLoginAttemptParams{
+				ID: user.ID, FailedLoginAt: pgtype.Timestamptz{Time: now, Valid: true},
+				LockoutThreshold: int32(threshold), LockedUntil: pgtype.Timestamptz{Time: lockedUntil, Valid: true},
+				LockedReason: auth.LockoutReasonTooManyFailedAttempts,
+			})
+			if mutationErr != nil {
+				return mutationErr
+			}
+			locked := updated.LockedUntil.Valid && !updated.LockedUntil.Time.Before(now)
+			action := "auth.login_failed"
+			if locked {
+				action = "auth.login_locked"
+			}
+			detail := map[string]any{
+				"reason": reason, "failed_login_count": updated.FailedLoginCount,
+				"lockout_threshold": threshold, "locked": locked,
+			}
+			if locked {
+				detail["locked_until"] = updated.LockedUntil.Time.UTC().Format(time.RFC3339)
+			}
+			return recordAuditOutboxAs(r, q, pgtype.UUID{Bytes: user.ID, Valid: true},
+				action, "user", user.ID.String(), user.Username, http.StatusUnauthorized, detail)
+		})
+		if err != nil {
+			return err
+		}
+		if updated.LockedUntil.Valid && !updated.LockedUntil.Time.Before(now) {
+			auth.AccountLockoutsTotal.WithLabelValues(observability.MetricValues(auth.LockoutReasonTooManyFailedAttempts)...).Inc()
+			if h.emails != nil && user.Email != "" {
+				h.emails.EnqueueAndLog(ctx, EmailNotifierRequest{
+					To: user.Email, Template: "account_locked", UserID: user.ID,
+					Data: map[string]any{"Username": user.Username, "UnlockAt": updated.LockedUntil.Time.UTC().Format(time.RFC3339)},
+				})
+			}
+		}
+		return nil
+	}
 
 	// Default audit row mirrors the legacy bad-password path so
 	// downstream consumers don't have to special-case the new
@@ -737,7 +884,6 @@ func (h *AuthHandler) handleFailedAttempt(ctx context.Context, r *http.Request, 
 	}
 
 	if h.lockout != nil {
-		now := time.Now()
 		if err := h.lockout.IncrementFailedLoginCount(ctx, sqlc.IncrementFailedLoginCountParams{
 			ID:            user.ID,
 			FailedLoginAt: pgtype.Timestamptz{Time: now, Valid: true},
@@ -751,7 +897,6 @@ func (h *AuthHandler) handleFailedAttempt(ctx context.Context, r *http.Request, 
 		// observed the increment. If the row was already at
 		// (threshold-1), this attempt is the one that crosses it.
 		if int(user.FailedLoginCount)+1 >= threshold {
-			lockedUntil := now.Add(lockDur)
 			if err := h.lockout.LockUser(ctx, sqlc.LockUserParams{
 				ID:           user.ID,
 				LockedUntil:  pgtype.Timestamptz{Time: lockedUntil, Valid: true},
@@ -780,13 +925,14 @@ func (h *AuthHandler) handleFailedAttempt(ctx context.Context, r *http.Request, 
 				}
 				recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
 					"auth.login_locked", "user", user.ID.String(), user.Username, auditDetail)
-				return
+				return nil
 			}
 		}
 	}
 
 	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
 		"auth.login_failed", "user", user.ID.String(), user.Username, auditDetail)
+	return nil
 }
 
 // Refresh handles POST /api/v1/auth/refresh/.
@@ -848,8 +994,12 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to mint enrollment challenge")
 			return
 		}
-		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
-			"auth.refresh_totp_enroll_required", "user", user.ID.String(), user.Username, nil)
+		if auditErr := h.recordCredentialAuditAs(r, pgtype.UUID{Bytes: user.ID, Valid: true},
+			"auth.refresh_totp_enroll_required", "user", user.ID.String(), user.Username, nil); auditErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+				"Mandatory audit storage is unavailable; the enrollment challenge was not issued")
+			return
+		}
 		RespondJSONUnwrapped(w, http.StatusLocked, map[string]any{
 			"error":           "totp_enrollment_required",
 			"challenge_token": enrollChallenge,
@@ -864,7 +1014,11 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true}, "auth.refresh", "user", user.ID.String(), user.Username, nil)
+	if auditErr := h.recordCredentialAuditAs(r, pgtype.UUID{Bytes: user.ID, Valid: true}, "auth.refresh", "user", user.ID.String(), user.Username, nil); auditErr != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+			"Mandatory audit storage is unavailable; the refreshed session was not issued")
+		return
+	}
 
 	setBrowserSessionCookies(w, r, accessToken, refreshToken)
 	RespondJSON(w, http.StatusOK, map[string]string{
@@ -903,6 +1057,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// when the access JTI has rotated past a silent refresh (the row is keyed
 	// on the login-time access JTI, which no longer matches).
 	var userIDForSLO uuid.UUID
+	auditRecorded := false
 
 	// Extract the JTI from the bearer JWT so we can add THIS token's
 	// JTI to the deny list. We don't trust the AuthenticatedUser to
@@ -910,53 +1065,58 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// parse from the Authorization header.
 	if h.revocation != nil && h.jwt != nil {
 		if token := bearerTokenFromRequest(r); token != "" {
-			if claims, err := h.jwt.ValidateTokenContext(r.Context(), token); err == nil {
+			if claims, validateErr := h.jwt.ValidateTokenContext(r.Context(), token); validateErr == nil {
 				expiresAt := time.Time{}
 				if claims.ExpiresAt != nil {
 					expiresAt = claims.ExpiresAt.Time
 				}
 				if expiresAt.IsZero() {
-					// Belt-and-braces: a token with no exp shouldn't
-					// reach here (ValidateToken rejects), but if it
-					// did, hold the deny entry for one access lifetime
-					// so it can't be replayed forever.
 					expiresAt = time.Now().Add(24 * time.Hour)
 				}
-				if err := h.revocation.RevokeJWT(r.Context(), sqlc.RevokeJWTParams{
-					Jti:       claims.ID,
-					UserID:    claims.UserID,
-					ExpiresAt: expiresAt,
-					Reason:    "user_logout",
-				}); err != nil {
-					if h.log != nil {
-						h.log.Warn("failed to revoke JWT", "user_id", claims.UserID.String(), "jti", claims.ID, "error", err)
-					}
-				} else {
-					auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("jti", "user_logout")...).Inc()
-					auditDetail["jti"] = claims.ID
-					auditDetail["revoked"] = true
-					jtiForSLO = claims.ID
-					userIDForSLO = claims.UserID
-					h.jwt.InvalidateJTI(r.Context(), claims.ID)
+				revokeParams := sqlc.RevokeJWTParams{Jti: claims.ID, UserID: claims.UserID, ExpiresAt: expiresAt, Reason: "user_logout"}
+				invalidateParams := sqlc.InvalidateAllTokensParams{
+					ID: claims.UserID, TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
 				}
-				// Terminate the entire session, not just this access token.
-				// The refresh token (7-day lifetime) carries a JTI we don't
-				// possess here, so denylisting the access JTI alone leaves the
-				// refresh token live — an attacker who kept it could re-mint a
-				// session via /auth/refresh after the victim logs out. Bump the
-				// per-user cutoff (same mechanism force-logout / password-reset
-				// use) so every token issued before now, access AND refresh, is
-				// rejected by checkRevocations.
-				if err := h.revocation.InvalidateAllTokens(r.Context(), sqlc.InvalidateAllTokensParams{
-					ID:                  claims.UserID,
-					TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-				}); err != nil {
-					if h.log != nil {
-						h.log.Warn("failed to invalidate user tokens on logout", "user_id", claims.UserID.String(), "error", err)
-					}
-				} else {
-					h.jwt.InvalidateUser(r.Context(), claims.UserID)
+				result, mutationErr := executeAuthMutation(r, h,
+					func(q AuthMutationTx) (logoutMutationResult, error) {
+						if err := q.RevokeJWT(r.Context(), revokeParams); err != nil {
+							return logoutMutationResult{}, err
+						}
+						if err := q.InvalidateAllTokens(r.Context(), invalidateParams); err != nil {
+							return logoutMutationResult{}, err
+						}
+						return logoutMutationResult{jti: claims.ID, userID: claims.UserID, expiresAt: expiresAt}, nil
+					},
+					func() (logoutMutationResult, error) {
+						if err := h.revocation.RevokeJWT(r.Context(), revokeParams); err != nil {
+							return logoutMutationResult{}, err
+						}
+						if err := h.revocation.InvalidateAllTokens(r.Context(), invalidateParams); err != nil {
+							return logoutMutationResult{}, err
+						}
+						return logoutMutationResult{jti: claims.ID, userID: claims.UserID, expiresAt: expiresAt}, nil
+					},
+					func(result logoutMutationResult) clusterAuditEvent {
+						resourceName := ""
+						if authUser != nil {
+							resourceName = authUser.Username
+						}
+						return clusterAuditEvent{
+							action: "auth.logout", resourceType: "user", resourceID: result.userID.String(), resourceName: resourceName,
+							status: http.StatusOK, detail: map[string]any{"jti": result.jti, "revoked": true, "all_tokens_invalidated": true},
+						}
+					})
+				if mutationErr != nil {
+					respondTransactionalMutationError(w, r, mutationErr, http.StatusServiceUnavailable, apierror.RevokeError,
+						"Logout could not revoke the active session; retry")
+					return
 				}
+				auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("jti", "user_logout")...).Inc()
+				auditDetail["jti"], auditDetail["revoked"] = result.jti, true
+				jtiForSLO, userIDForSLO = result.jti, result.userID
+				h.jwt.InvalidateJTI(r.Context(), result.jti)
+				h.jwt.InvalidateUser(r.Context(), result.userID)
+				auditRecorded = true
 			}
 		}
 	}
@@ -972,12 +1132,20 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		redirectURL = h.buildSSOLogoutRedirect(r, jtiForSLO, userIDForSLO, &auditDetail)
 	}
 
-	if ok && authUser != nil {
-		recordAudit(r, h.audit, "auth.logout", "user", authUser.ID, authUser.Username, auditDetail)
-	} else {
-		// Anonymous logout (no auth header / expired) — keep the audit
-		// trail so brute-force probes of /logout are still visible.
-		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.logout", "user", "", "", auditDetail)
+	if !auditRecorded {
+		actorID := pgtype.UUID{}
+		resourceID, resourceName := "", ""
+		if ok && authUser != nil {
+			resourceID, resourceName = authUser.ID, authUser.Username
+			if parsed, parseErr := uuid.Parse(authUser.ID); parseErr == nil {
+				actorID = pgtype.UUID{Bytes: parsed, Valid: true}
+			}
+		}
+		if auditErr := h.recordCredentialAuditAs(r, actorID, "auth.logout", "user", resourceID, resourceName, auditDetail); auditErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+				"Mandatory audit storage is unavailable; logout was not completed")
+			return
+		}
 	}
 
 	resp := map[string]any{"detail": "Logged out"}
@@ -1183,6 +1351,7 @@ func bearerTokenFromRequest(r *http.Request) string {
 }
 
 // ChangePasswordRequest is the body for POST /api/v1/auth/change-password/.
+// openapi:request-operation postAuthChangePassword
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"current_password"`
 	NewPassword     string `json:"new_password"`
@@ -1241,37 +1410,68 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Password updates are not configured")
 		return
 	}
-	if err := h.rehasher.UpdateUserPasswordHash(r.Context(), sqlc.UpdateUserPasswordHashParams{
-		ID:       userID,
-		Password: newHash,
-	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update password")
-		return
+	passwordParams := sqlc.UpdateUserPasswordHashParams{ID: userID, Password: newHash}
+	invalidateParams := sqlc.InvalidateAllTokensParams{
+		ID: userID, TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
 	}
-	if h.revocation != nil {
-		if err := h.revocation.InvalidateAllTokens(r.Context(), sqlc.InvalidateAllTokensParams{
-			ID: userID, TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		}); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Password changed but session invalidation failed")
+	dbUser, err = executeAuthMutation(r, h,
+		func(q AuthMutationTx) (sqlc.User, error) {
+			locked, mutationErr := q.GetUserByIDForUpdate(r.Context(), userID)
+			if mutationErr != nil {
+				return sqlc.User{}, mutationErr
+			}
+			verified, _, verifyErr := auth.VerifyPassword(locked.Password, req.CurrentPassword)
+			if verifyErr != nil || !verified {
+				return sqlc.User{}, errCurrentPasswordIncorrect
+			}
+			if mutationErr = q.UpdateUserPasswordHash(r.Context(), passwordParams); mutationErr != nil {
+				return sqlc.User{}, mutationErr
+			}
+			if h.revocation != nil {
+				if mutationErr = q.InvalidateAllTokens(r.Context(), invalidateParams); mutationErr != nil {
+					return sqlc.User{}, mutationErr
+				}
+			}
+			if locked.MustChangePassword {
+				if mutationErr = q.ClearMustChangePassword(r.Context(), userID); mutationErr != nil {
+					return sqlc.User{}, mutationErr
+				}
+			}
+			return locked, nil
+		},
+		func() (sqlc.User, error) {
+			if mutationErr := h.rehasher.UpdateUserPasswordHash(r.Context(), passwordParams); mutationErr != nil {
+				return sqlc.User{}, mutationErr
+			}
+			if h.revocation != nil {
+				if mutationErr := h.revocation.InvalidateAllTokens(r.Context(), invalidateParams); mutationErr != nil {
+					return sqlc.User{}, mutationErr
+				}
+			}
+			if dbUser.MustChangePassword {
+				if mutationErr := h.rehasher.ClearMustChangePassword(r.Context(), userID); mutationErr != nil && h.log != nil {
+					h.log.Warn("failed to clear must_change_password flag", "user_id", userID.String(), "error", mutationErr)
+				}
+			}
+			return dbUser, nil
+		},
+		func(user sqlc.User) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "auth.change_password", resourceType: "user", resourceID: user.ID.String(), resourceName: user.Username,
+				status: http.StatusOK, detail: map[string]any{"sessions_invalidated": h.revocation != nil},
+			}
+		})
+	if err != nil {
+		if errors.Is(err, errCurrentPasswordIncorrect) {
+			RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Current password is incorrect")
 			return
 		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update password and invalidate sessions")
+		return
+	}
+	if h.revocation != nil && h.jwt != nil {
 		h.jwt.InvalidateUser(r.Context(), userID)
 	}
-
-	// If an admin has marked this account for forced rotation, clear the flag
-	// after a successful password change so the dashboard stops redirecting.
-	if dbUser.MustChangePassword {
-		if err := h.rehasher.ClearMustChangePassword(r.Context(), userID); err != nil {
-			// Log + audit but don't fail the request: the password has
-			// already been rotated, the worst case is the user sees the
-			// change-password screen once more.
-			if h.log != nil {
-				h.log.Warn("failed to clear must_change_password flag", "user_id", userID.String(), "error", err)
-			}
-		}
-	}
-
-	recordAudit(r, h.audit, "auth.change_password", "user", dbUser.ID.String(), dbUser.Username, nil)
 
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{
 		"detail":               "Password updated",
@@ -1387,6 +1587,8 @@ func (h *AuthHandler) collectRoles(ctx context.Context, userID uuid.UUID) map[st
 // --- API Token CRUD ---
 
 // CreateTokenRequest represents the request body for creating an API token.
+// openapi:request-operation postAuthTokens
+// openapi:request-operation postSettingsTokens
 type CreateTokenRequest struct {
 	Name          string   `json:"name"`
 	ExpiresInDays int      `json:"expires_in_days"`
@@ -1515,7 +1717,7 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	token, err := h.tokens.CreateAPIToken(r.Context(), sqlc.CreateAPITokenParams{
+	params := sqlc.CreateAPITokenParams{
 		UserID:       userID,
 		Name:         req.Name,
 		TokenHash:    tokenHash,
@@ -1523,26 +1725,28 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:    expiresAt,
 		Scopes:       scopes,
 		AllowedCidrs: allowedCIDRs,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create token")
-		return
 	}
-
-	// The audit row captures the scope set + whether an IP allowlist
-	// was attached (count, not the literal CIDRs — those are operator-
-	// supplied operational data, not credentials, but the count is what
-	// reviewers actually need to flag "this token is unrestricted").
 	cidrCount := 0
 	if allowedCIDRs != "" {
 		cidrCount = strings.Count(allowedCIDRs, ",") + 1
 	}
-	recordAudit(r, h.audit, "auth.token.create", "api_token", token.ID.String(), token.Name, map[string]any{
-		"prefix":             token.Prefix,
-		"expires_in_days":    req.ExpiresInDays,
-		"scopes":             req.Scopes,
-		"allowed_cidr_count": cidrCount,
-	})
+	token, err := executeAuthMutation(r, h,
+		func(q AuthMutationTx) (sqlc.ApiToken, error) { return q.CreateAPIToken(r.Context(), params) },
+		func() (sqlc.ApiToken, error) { return h.tokens.CreateAPIToken(r.Context(), params) },
+		func(token sqlc.ApiToken) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "auth.token.create", resourceType: "api_token", resourceID: token.ID.String(), resourceName: token.Name,
+				status: http.StatusCreated,
+				detail: map[string]any{
+					"prefix": token.Prefix, "expires_in_days": req.ExpiresInDays,
+					"scopes": req.Scopes, "allowed_cidr_count": cidrCount,
+				},
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create token")
+		return
+	}
 
 	// Security-FYI email — "a new token was issued; if this wasn't
 	// you...". Best-effort, never blocks the response.
@@ -1693,14 +1897,23 @@ func (h *AuthHandler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tokens.RevokeAPIToken(r.Context(), tokenID); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RevokeError, "Failed to revoke token")
+	_, err = executeAuthMutation(r, h,
+		func(q AuthMutationTx) (sqlc.ApiToken, error) {
+			return token, q.RevokeAPIToken(r.Context(), tokenID)
+		},
+		func() (sqlc.ApiToken, error) {
+			return token, h.tokens.RevokeAPIToken(r.Context(), tokenID)
+		},
+		func(token sqlc.ApiToken) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "auth.token.revoke", resourceType: "api_token", resourceID: token.ID.String(), resourceName: token.Name,
+				status: http.StatusNoContent, detail: map[string]any{"prefix": token.Prefix},
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.RevokeError, "Failed to revoke token")
 		return
 	}
-
-	recordAudit(r, h.audit, "auth.token.revoke", "api_token", token.ID.String(), token.Name, map[string]any{
-		"prefix": token.Prefix,
-	})
 
 	w.WriteHeader(http.StatusNoContent)
 }

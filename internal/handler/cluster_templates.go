@@ -37,10 +37,12 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -58,6 +60,7 @@ type ClusterTemplateQuerier interface {
 	UpdateClusterTemplate(ctx context.Context, arg sqlc.UpdateClusterTemplateParams) (sqlc.ClusterTemplate, error)
 	DeleteClusterTemplate(ctx context.Context, id uuid.UUID) error
 	CountClusterTemplateApplicationsByTemplate(ctx context.Context, templateID uuid.UUID) (int64, error)
+	ListClusterTemplateBoundClusters(ctx context.Context, templateID uuid.UUID) ([]sqlc.ListClusterTemplateBoundClustersRow, error)
 
 	// Application + status surface.
 	GetClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterTemplateApplication, error)
@@ -73,6 +76,45 @@ type ClusterTemplateQuerier interface {
 	DeleteClusterRegistrationPolicy(ctx context.Context, clusterID uuid.UUID) error
 }
 
+type ClusterTemplateMutationTx interface {
+	ClusterTemplateQuerier
+	clusterTemplateApplicationTaskOutboxQuerier
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+}
+
+type clusterTemplateRunTxFunc func(context.Context, func(ClusterTemplateMutationTx) error) error
+
+func executeClusterTemplateMutation[T any](r *http.Request, h *ClusterTemplateHandler, mutate func(ClusterTemplateMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("cluster template handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q ClusterTemplateMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			if event.action == "" {
+				return nil
+			}
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
+}
+
 // ClusterTemplateEnqueuer is the minimal asynq.Client surface used to
 // schedule cluster_template:apply tasks. Mirrors the pattern from
 // ClusterDecommissionEnqueuer in clusters.go.
@@ -84,6 +126,8 @@ type ClusterTemplateEnqueuer interface {
 // cluster /api/v1/clusters/{cluster_id}/template/* endpoints.
 type ClusterTemplateHandler struct {
 	queries ClusterTemplateQuerier
+	authz   authorizationSupport
+	runTx   clusterTemplateRunTxFunc
 	bus     *events.Bus
 	// queue is the asynq client used to schedule apply tasks. Optional —
 	// nil-safe so tests can drive the handler without a Redis-backed
@@ -101,6 +145,12 @@ type ClusterTemplateHandler struct {
 	vaultResolver *avault.Resolver
 }
 
+func (h *ClusterTemplateHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+	if h != nil {
+		h.authz.SetAuthorization(engine, querier)
+	}
+}
+
 // SetVaultResolver wires the Vault resolver used to pre-flight
 // ${vault://...} references in template specs at Apply time.
 func (h *ClusterTemplateHandler) SetVaultResolver(r *avault.Resolver) {
@@ -114,6 +164,14 @@ func (h *ClusterTemplateHandler) SetVaultResolver(r *avault.Resolver) {
 func NewClusterTemplateHandler(queries ClusterTemplateQuerier) *ClusterTemplateHandler {
 	return &ClusterTemplateHandler{queries: queries}
 }
+
+func (h *ClusterTemplateHandler) SetRunTx(runTx clusterTemplateRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *ClusterTemplateHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // SetQueue wires the asynq client used to enqueue apply tasks. Optional;
 // when not wired, applies still write the pending row but rely on the
@@ -174,6 +232,12 @@ const (
 	ClusterTemplateStatusFailed   = "failed"
 )
 
+type clusterTemplateInUseError struct{ count int64 }
+
+func (e *clusterTemplateInUseError) Error() string {
+	return fmt.Sprintf("cluster template is applied to %d cluster(s)", e.count)
+}
+
 // ClusterTemplateResponse is the wire shape returned by the list/get/
 // create/update endpoints.
 type ClusterTemplateResponse struct {
@@ -184,6 +248,14 @@ type ClusterTemplateResponse struct {
 	CreatedBy   string          `json:"created_by,omitempty"`
 	CreatedAt   string          `json:"created_at"`
 	UpdatedAt   string          `json:"updated_at"`
+}
+
+type ClusterTemplateBoundClusterResponse struct {
+	ClusterID     string `json:"cluster_id"`
+	ClusterName   string `json:"cluster_name"`
+	Status        string `json:"status"`
+	LastAppliedAt string `json:"last_applied_at,omitempty"`
+	Message       string `json:"message,omitempty"`
 }
 
 func templateToResponse(t sqlc.ClusterTemplate) ClusterTemplateResponse {
@@ -387,6 +459,52 @@ func (h *ClusterTemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusOK, templateToResponse(tmpl))
 }
 
+// ListBoundClusters handles GET /api/v1/cluster-templates/{id}/clusters/.
+func (h *ClusterTemplateHandler) ListBoundClusters(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid template ID")
+		return
+	}
+	if _, err := h.queries.GetClusterTemplateByID(r.Context(), id); err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster template not found")
+		return
+	}
+	all, allowedClusterIDs, _, err := h.authz.authorizedScopeIDs(
+		r.Context(), rbac.ResourceClusters, rbac.VerbRead, rbac.NarrowedClustersWiden,
+	)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		return
+	}
+	rows, err := h.queries.ListClusterTemplateBoundClusters(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters bound to template")
+		return
+	}
+	items := make([]ClusterTemplateBoundClusterResponse, 0, len(rows))
+	allowed := make(map[uuid.UUID]struct{}, len(allowedClusterIDs))
+	for _, clusterID := range allowedClusterIDs {
+		allowed[clusterID] = struct{}{}
+	}
+	for _, row := range rows {
+		if !all {
+			if _, ok := allowed[row.ClusterID]; !ok {
+				continue
+			}
+		}
+		item := ClusterTemplateBoundClusterResponse{
+			ClusterID: row.ClusterID.String(), ClusterName: row.ClusterName,
+			Status: row.Status, Message: row.LastError,
+		}
+		if row.AppliedAt.Valid {
+			item.LastAppliedAt = row.AppliedAt.Time.UTC().Format("2006-01-02T15:04:05Z")
+		}
+		items = append(items, item)
+	}
+	RespondJSON(w, http.StatusOK, items)
+}
+
 // Create handles POST /api/v1/cluster-templates/.
 func (h *ClusterTemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateClusterTemplateRequest
@@ -414,12 +532,26 @@ func (h *ClusterTemplateHandler) Create(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	tmpl, err := h.queries.CreateClusterTemplate(r.Context(), sqlc.CreateClusterTemplateParams{
+	params := sqlc.CreateClusterTemplateParams{
 		Name:        req.Name,
 		Description: req.Description,
 		Spec:        spec,
 		CreatedBy:   currentUserUUID(r),
-	})
+	}
+	tmpl, err := executeClusterTemplateMutation(r, h,
+		func(q ClusterTemplateMutationTx) (sqlc.ClusterTemplate, error) {
+			return q.CreateClusterTemplate(r.Context(), params)
+		},
+		func() (sqlc.ClusterTemplate, error) {
+			return h.queries.CreateClusterTemplate(r.Context(), params)
+		},
+		func(row sqlc.ClusterTemplate) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.cluster_template.created", resourceType: "cluster_template",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated,
+				detail: map[string]any{"description": row.Description},
+			}
+		})
 	if err != nil {
 		// Unique-name conflict on cluster_templates_name_key bubbles up as
 		// a 23505. Translate so the UI sees a clean 409 rather than 500.
@@ -427,12 +559,9 @@ func (h *ClusterTemplateHandler) Create(w http.ResponseWriter, r *http.Request) 
 			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A template with this name already exists")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster template")
 		return
 	}
-	recordAudit(r, h.queries, "admin.cluster_template.created", "cluster_template", tmpl.ID.String(), tmpl.Name, map[string]any{
-		"description": tmpl.Description,
-	})
 	w.Header().Set("Location", "/api/v1/cluster-templates/"+tmpl.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, templateToResponse(tmpl))
 }
@@ -481,12 +610,25 @@ func (h *ClusterTemplateHandler) Update(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
-	tmpl, err := h.queries.UpdateClusterTemplate(r.Context(), sqlc.UpdateClusterTemplateParams{
+	params := sqlc.UpdateClusterTemplateParams{
 		ID:          id,
 		Name:        req.Name,
 		Description: req.Description,
 		Spec:        spec,
-	})
+	}
+	tmpl, err := executeClusterTemplateMutation(r, h,
+		func(q ClusterTemplateMutationTx) (sqlc.ClusterTemplate, error) {
+			return q.UpdateClusterTemplate(r.Context(), params)
+		},
+		func() (sqlc.ClusterTemplate, error) {
+			return h.queries.UpdateClusterTemplate(r.Context(), params)
+		},
+		func(row sqlc.ClusterTemplate) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.cluster_template.updated", resourceType: "cluster_template",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusOK,
+			}
+		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster template not found")
@@ -496,10 +638,9 @@ func (h *ClusterTemplateHandler) Update(w http.ResponseWriter, r *http.Request) 
 			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A template with this name already exists")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update cluster template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update cluster template")
 		return
 	}
-	recordAudit(r, h.queries, "admin.cluster_template.updated", "cluster_template", tmpl.ID.String(), tmpl.Name, nil)
 	RespondJSON(w, http.StatusOK, templateToResponse(tmpl))
 }
 
@@ -550,7 +691,36 @@ func (h *ClusterTemplateHandler) Delete(w http.ResponseWriter, r *http.Request) 
 
 		return
 	}
-	if err := h.queries.DeleteClusterTemplate(r.Context(), id); err != nil {
+	_, err = executeClusterTemplateMutation(r, h,
+		func(q ClusterTemplateMutationTx) (struct{}, error) {
+			// Repeat the in-use check inside the transaction so a concurrent
+			// binding cannot race the audit decision. The FK remains the final
+			// integrity guard.
+			applications, countErr := q.CountClusterTemplateApplicationsByTemplate(r.Context(), id)
+			if countErr != nil {
+				return struct{}{}, countErr
+			}
+			if applications > 0 {
+				return struct{}{}, &clusterTemplateInUseError{count: applications}
+			}
+			return struct{}{}, q.DeleteClusterTemplate(r.Context(), id)
+		},
+		func() (struct{}, error) {
+			return struct{}{}, h.queries.DeleteClusterTemplate(r.Context(), id)
+		},
+		func(struct{}) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.cluster_template.deleted", resourceType: "cluster_template",
+				resourceID: tmpl.ID.String(), resourceName: tmpl.Name, status: http.StatusNoContent,
+			}
+		})
+	if err != nil {
+		var inUse *clusterTemplateInUseError
+		if errors.As(err, &inUse) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.TemplateInUse,
+				fmt.Sprintf("Template is applied to %d cluster(s); detach it from those clusters before deleting.", inUse.count))
+			return
+		}
 		// Belt-and-suspenders: the count check above closes the race for
 		// normal traffic, but a concurrent POST to /clusters/{id}/template/
 		// could insert a binding between count and delete. Treat the FK
@@ -559,10 +729,9 @@ func (h *ClusterTemplateHandler) Delete(w http.ResponseWriter, r *http.Request) 
 			RespondRequestError(w, r, http.StatusConflict, apierror.TemplateInUse, "Template is in use; detach from clusters first.")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete cluster template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete cluster template")
 		return
 	}
-	recordAudit(r, h.queries, "admin.cluster_template.deleted", "cluster_template", tmpl.ID.String(), tmpl.Name, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -577,6 +746,9 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
@@ -616,23 +788,77 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.VaultResolveFailed, vaultErr.Error())
 		return
 	}
-
-	app, err := h.upsertApplicationAndEnqueue(r, sqlc.UpsertClusterTemplateApplicationParams{
-		ClusterID:    clusterID,
-		TemplateID:   tmpl.ID,
-		SpecSnapshot: tmpl.Spec,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ApplyError, "Failed to bind template to cluster")
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "cluster template transaction runner is not configured")
 		return
 	}
 
-	h.publishTemplateBindingChanged(clusterID, app.Status)
-	recordAudit(r, h.queries, "cluster.template_applied", "cluster", clusterID.String(), cluster.Name, map[string]any{
-		"template_id":   tmpl.ID.String(),
-		"template_name": tmpl.Name,
-	})
-	RespondJSON(w, http.StatusAccepted, applicationToResponse(app, tmpl.Name))
+	params := sqlc.UpsertClusterTemplateApplicationParams{
+		ClusterID:    clusterID,
+		TemplateID:   tmpl.ID,
+		SpecSnapshot: tmpl.Spec,
+	}
+	r = r.WithContext(withOperationIdempotency(r, "cluster_template_apply"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		ClusterID  string `json:"cluster_id"`
+		TemplateID string `json:"template_id"`
+	}{ClusterID: clusterID.String(), TemplateID: tmpl.ID.String()})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode template application request")
+		return
+	}
+	var receipt ClusterTemplateApplicationResponse
+	replayed := false
+	app, err := executeClusterTemplateMutation(r, h,
+		func(q ClusterTemplateMutationTx) (sqlc.ClusterTemplateApplication, error) {
+			idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+			if !ok {
+				return sqlc.ClusterTemplateApplication{}, errors.New("cluster template idempotency store is not configured")
+			}
+			_, stored, replay, claimErr := claimOperationReceipt[ClusterTemplateApplicationResponse](r.Context(), idemQ, "cluster_template_applications", digest)
+			if claimErr != nil {
+				return sqlc.ClusterTemplateApplication{}, claimErr
+			}
+			if replay {
+				receipt, replayed = stored, true
+				return sqlc.ClusterTemplateApplication{}, nil
+			}
+			row, mutationErr := upsertClusterTemplateApplicationAndTask(r, q, params)
+			if mutationErr != nil {
+				return sqlc.ClusterTemplateApplication{}, mutationErr
+			}
+			receipt = applicationToResponse(row, tmpl.Name)
+			if attachErr := attachOperationReceipt(r.Context(), idemQ, "cluster_template_applications", clusterID, digest, receipt); attachErr != nil {
+				return sqlc.ClusterTemplateApplication{}, attachErr
+			}
+			return row, nil
+		},
+		func() (sqlc.ClusterTemplateApplication, error) {
+			return h.upsertApplicationAndEnqueue(r, params)
+		},
+		func(row sqlc.ClusterTemplateApplication) clusterAuditEvent {
+			if replayed {
+				return clusterAuditEvent{}
+			}
+			return clusterAuditEvent{
+				action: "cluster.template_applied", resourceType: "cluster",
+				resourceID: clusterID.String(), resourceName: cluster.Name, status: http.StatusAccepted,
+				detail: map[string]any{"template_id": tmpl.ID.String(), "template_name": tmpl.Name},
+			}
+		})
+	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different template application")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.ApplyError, "Failed to bind template to cluster")
+		return
+	}
+
+	if !replayed {
+		h.publishTemplateBindingChanged(clusterID, app.Status)
+	}
+	RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/template/", receipt)
 }
 
 // GetApplication handles GET /api/v1/clusters/{cluster_id}/template/.
@@ -669,6 +895,9 @@ func (h *ClusterTemplateHandler) Reapply(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
@@ -688,21 +917,74 @@ func (h *ClusterTemplateHandler) Reapply(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Template no longer exists")
 		return
 	}
-	app, err = h.upsertApplicationAndEnqueue(r, sqlc.UpsertClusterTemplateApplicationParams{
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "cluster template transaction runner is not configured")
+		return
+	}
+	params := sqlc.UpsertClusterTemplateApplicationParams{
 		ClusterID:    clusterID,
 		TemplateID:   tmpl.ID,
 		SpecSnapshot: tmpl.Spec,
-	})
+	}
+	r = r.WithContext(withOperationIdempotency(r, "cluster_template_reapply"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		ClusterID string `json:"cluster_id"`
+	}{ClusterID: clusterID.String()})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ApplyError, "Failed to reset template application")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode template reapply request")
 		return
 	}
-	h.publishTemplateBindingChanged(clusterID, app.Status)
-	recordAudit(r, h.queries, "cluster.template_reapplied", "cluster", clusterID.String(), cluster.Name, map[string]any{
-		"template_id":   tmpl.ID.String(),
-		"template_name": tmpl.Name,
-	})
-	RespondJSON(w, http.StatusAccepted, applicationToResponse(app, tmpl.Name))
+	var receipt ClusterTemplateApplicationResponse
+	replayed := false
+	app, err = executeClusterTemplateMutation(r, h,
+		func(q ClusterTemplateMutationTx) (sqlc.ClusterTemplateApplication, error) {
+			idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+			if !ok {
+				return sqlc.ClusterTemplateApplication{}, errors.New("cluster template idempotency store is not configured")
+			}
+			_, stored, replay, claimErr := claimOperationReceipt[ClusterTemplateApplicationResponse](r.Context(), idemQ, "cluster_template_reapplications", digest)
+			if claimErr != nil {
+				return sqlc.ClusterTemplateApplication{}, claimErr
+			}
+			if replay {
+				receipt, replayed = stored, true
+				return sqlc.ClusterTemplateApplication{}, nil
+			}
+			row, mutationErr := upsertClusterTemplateApplicationAndTask(r, q, params)
+			if mutationErr != nil {
+				return sqlc.ClusterTemplateApplication{}, mutationErr
+			}
+			receipt = applicationToResponse(row, tmpl.Name)
+			if attachErr := attachOperationReceipt(r.Context(), idemQ, "cluster_template_reapplications", clusterID, digest, receipt); attachErr != nil {
+				return sqlc.ClusterTemplateApplication{}, attachErr
+			}
+			return row, nil
+		},
+		func() (sqlc.ClusterTemplateApplication, error) {
+			return h.upsertApplicationAndEnqueue(r, params)
+		},
+		func(row sqlc.ClusterTemplateApplication) clusterAuditEvent {
+			if replayed {
+				return clusterAuditEvent{}
+			}
+			return clusterAuditEvent{
+				action: "cluster.template_reapplied", resourceType: "cluster",
+				resourceID: clusterID.String(), resourceName: cluster.Name, status: http.StatusAccepted,
+				detail: map[string]any{"template_id": tmpl.ID.String(), "template_name": tmpl.Name},
+			}
+		})
+	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different template reapply request")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.ApplyError, "Failed to reset template application")
+		return
+	}
+	if !replayed {
+		h.publishTemplateBindingChanged(clusterID, app.Status)
+	}
+	RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/template/", receipt)
 }
 
 // Detach handles DELETE /api/v1/clusters/{cluster_id}/template/. Removes
@@ -722,32 +1004,76 @@ func (h *ClusterTemplateHandler) Detach(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
-	if err := h.queries.DeleteClusterTemplateApplication(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DetachError, "Failed to detach template")
+	_, err = executeClusterTemplateMutation(r, h,
+		func(q ClusterTemplateMutationTx) (struct{}, error) {
+			if deleteErr := q.DeleteClusterTemplateApplication(r.Context(), clusterID); deleteErr != nil {
+				return struct{}{}, deleteErr
+			}
+			if policyErr := q.DeleteClusterRegistrationPolicy(r.Context(), clusterID); policyErr != nil {
+				return struct{}{}, policyErr
+			}
+			return struct{}{}, nil
+		},
+		func() (struct{}, error) {
+			if deleteErr := h.queries.DeleteClusterTemplateApplication(r.Context(), clusterID); deleteErr != nil {
+				return struct{}{}, deleteErr
+			}
+			// Legacy/test fallback preserves the historical best-effort policy
+			// cleanup; production always uses the transaction above.
+			_ = h.queries.DeleteClusterRegistrationPolicy(r.Context(), clusterID)
+			return struct{}{}, nil
+		},
+		func(struct{}) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.template_detached", resourceType: "cluster",
+				resourceID: clusterID.String(), resourceName: cluster.Name, status: http.StatusNoContent,
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DetachError, "Failed to detach template")
 		return
 	}
-	// Best-effort detach of the policy stamp. Errors here are non-fatal —
-	// the binding is already gone; the worst case is a stale policy row
-	// that the next apply (to any template) will overwrite.
-	_ = h.queries.DeleteClusterRegistrationPolicy(r.Context(), clusterID)
 	h.publishTemplateBindingChanged(clusterID, "detached")
-	recordAudit(r, h.queries, "cluster.template_detached", "cluster", clusterID.String(), cluster.Name, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // enqueueApply schedules a cluster_template:apply task. Optional —
 // nil-safe when no queue is wired, in which case the periodic sweep
 // will eventually pick up pending rows.
+func newClusterTemplateApplyTask(r *http.Request, clusterID uuid.UUID) (*asynq.Task, error) {
+	task, err := tasks.NewClusterTemplateApplyTask(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+	return asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3)), nil
+}
+
+func upsertClusterTemplateApplicationAndTask(r *http.Request, q ClusterTemplateMutationTx, params sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error) {
+	task, err := newClusterTemplateApplyTask(r, params.ClusterID)
+	if err != nil {
+		return sqlc.ClusterTemplateApplication{}, err
+	}
+	app, atomic, err := upsertClusterTemplateApplicationWithTaskOutbox(r.Context(), q, q, params, task, tasks.TaskOutboxOptions{
+		DedupeKey:           clusterTemplateRequestDedupeKey(r, params.ClusterID),
+		QueueName:           tasks.ClusterTemplateApplyQueueName,
+		MaxRetry:            3,
+		MaxDeliveryAttempts: 20,
+	})
+	if !atomic {
+		return sqlc.ClusterTemplateApplication{}, errors.New("cluster template task outbox transaction is unavailable")
+	}
+	return app, err
+}
+
 func (h *ClusterTemplateHandler) enqueueApply(r *http.Request, clusterID uuid.UUID) {
 	if h == nil || (h.queue == nil && h.taskOutbox == nil) {
 		return
 	}
-	task, err := tasks.NewClusterTemplateApplyTask(clusterID)
+	task, err := newClusterTemplateApplyTask(r, clusterID)
 	if err != nil {
 		return
 	}
-	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
-	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
 	if enqueueClusterTemplateApplyOutbox(r.Context(), h.taskOutbox, task, clusterID) {
 		return
 	}
@@ -758,11 +1084,9 @@ func (h *ClusterTemplateHandler) enqueueApply(r *http.Request, clusterID uuid.UU
 
 func (h *ClusterTemplateHandler) upsertApplicationAndEnqueue(r *http.Request, params sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error) {
 	if h != nil && h.taskOutbox != nil {
-		if task, err := tasks.NewClusterTemplateApplyTask(params.ClusterID); err == nil {
-			payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
-			task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
+		if task, err := newClusterTemplateApplyTask(r, params.ClusterID); err == nil {
 			app, atomic, err := upsertClusterTemplateApplicationWithTaskOutbox(r.Context(), h.queries, h.taskOutbox, params, task, tasks.TaskOutboxOptions{
-				DedupeKey:           clusterTemplateApplyDedupeKey(params.ClusterID),
+				DedupeKey:           clusterTemplateRequestDedupeKey(r, params.ClusterID),
 				QueueName:           tasks.ClusterTemplateApplyQueueName,
 				MaxRetry:            3,
 				MaxDeliveryAttempts: 20,
@@ -800,10 +1124,8 @@ func isUniqueViolation(err error) bool {
 	return strings.Contains(err.Error(), "SQLSTATE 23505")
 }
 
-// isFKRestrictViolation returns true for the 23503 foreign_key_violation
-// raised when the FK ON DELETE RESTRICT clause blocks a cluster_templates
-// DELETE while at least one cluster_template_applications row still
-// references it.
+// isFKRestrictViolation returns true for PostgreSQL 23503 when a deliberate
+// ON DELETE RESTRICT policy requires the caller to detach dependants first.
 func isFKRestrictViolation(err error) bool {
 	if err == nil {
 		return false

@@ -21,6 +21,7 @@ type fakeTapQuerier struct {
 	forwarders  []sqlc.SiemForwarder
 	listErr     error
 	enqueued    []sqlc.EnqueueSIEMEventParams
+	deduped     []sqlc.EnqueueSIEMEventDedupedParams
 	enqueueErr  error
 	queueDepth  map[uuid.UUID]int64
 	oldest      map[uuid.UUID][]int64
@@ -47,6 +48,16 @@ func (f *fakeTapQuerier) EnqueueSIEMEvent(_ context.Context, arg sqlc.EnqueueSIE
 	}
 	f.enqueued = append(f.enqueued, arg)
 	return sqlc.SiemForwardQueue{ID: int64(len(f.enqueued)), ForwarderID: arg.ForwarderID, EventName: arg.EventName}, nil
+}
+
+func (f *fakeTapQuerier) EnqueueSIEMEventDeduped(_ context.Context, arg sqlc.EnqueueSIEMEventDedupedParams) (sqlc.SiemForwardQueue, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.enqueueErr != nil {
+		return sqlc.SiemForwardQueue{}, f.enqueueErr
+	}
+	f.deduped = append(f.deduped, arg)
+	return sqlc.SiemForwardQueue{ID: int64(len(f.deduped)), ForwarderID: arg.ForwarderID, EventName: arg.EventName, DedupeKey: arg.DedupeKey}, nil
 }
 
 func (f *fakeTapQuerier) CountSIEMQueueByForwarder(_ context.Context, id uuid.UUID) (int64, error) {
@@ -188,6 +199,36 @@ func TestBusTap_SkipsRemoteDuplicate(t *testing.T) {
 	defer q.mu.Unlock()
 	if got := len(q.enqueued); got != 1 {
 		t.Fatalf("SIEM enqueues = %d, want one origin delivery and no remote duplicate", got)
+	}
+}
+
+func TestBusTap_SkipsAuditEventsAlreadyFannedOutTransactionally(t *testing.T) {
+	forwarderID := mustUUID()
+	eventID := mustUUID()
+	q := &fakeTapQuerier{forwarders: []sqlc.SiemForwarder{{
+		ID: forwarderID, Name: "audit-sink", EventFilters: json.RawMessage(`["audit."]`), Enabled: true,
+	}}}
+	tap := NewBusTap(q, nil, matchByPrefix, nil)
+	tap.SetCacheTTL(time.Hour)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tap.Start(ctx)
+
+	ev := events.Event{
+		ID: 7, Type: events.Type("audit.cluster.delete"), Time: time.Now().UTC(),
+		Data: map[string]any{"event_id": eventID.String(), "resource_type": "cluster"},
+	}
+	// DeliverAuditOutbox inserted destination receipts in the same transaction.
+	// Local post-commit publication exists for webhooks/live UI only and must not
+	// touch the SIEM queue a second time.
+	tap.HandleEvent(ctx, ev)
+	ev.ID = 8
+	tap.HandleEvent(ctx, ev)
+	time.Sleep(20 * time.Millisecond)
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.enqueued) != 0 || len(q.deduped) != 0 {
+		t.Fatalf("ordinary=%d deduped=%d", len(q.enqueued), len(q.deduped))
 	}
 }
 

@@ -154,9 +154,9 @@ func TestDispatchTaskOutboxOnceMovesExhaustedRowsToDead(t *testing.T) {
 	}
 }
 
-func TestDispatchTaskOutboxOnceSkipsWhenUnconfigured(t *testing.T) {
-	if err := DispatchTaskOutboxOnce(context.Background(), TaskOutboxDispatchDeps{}); err != nil {
-		t.Fatalf("DispatchTaskOutboxOnce unconfigured: %v", err)
+func TestDispatchTaskOutboxOnceFailsWhenUnconfigured(t *testing.T) {
+	if err := DispatchTaskOutboxOnce(context.Background(), TaskOutboxDispatchDeps{}); err == nil {
+		t.Fatal("DispatchTaskOutboxOnce returned nil, want an unconfigured-runtime error")
 	}
 }
 

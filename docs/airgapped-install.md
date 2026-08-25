@@ -11,6 +11,12 @@ signed `release-manifest.json`, signature bundle, SBOMs, provenance, and
 checksums attached to the same `vX.Y.Z` GitHub release. Do not substitute a tag
 where this procedure uses `repository@sha256:...`.
 
+This is the disconnected variant of the
+[production installation runbook](runbooks/production-installation.md). Apply
+the same external PostgreSQL/Redis, key custody, backup/restore proof, canary,
+support-bundle, and acceptance requirements after replacing every public
+subject with its verified private-registry mapping.
+
 ## Trust and network boundaries
 
 Use three roles:

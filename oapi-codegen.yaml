@@ -18,10 +18,9 @@ generate:
   client: true
   embedded-spec: false
 output-options:
-  # Keep every component schema even if it's not referenced from an operation,
-  # so the 30 permissive stub schemas (type:object + additionalProperties:true)
-  # and other models survive. These stubs render as map[string]interface{} and
-  # carry no field-level type safety.
+  # Keep every component schema, including reusable compatibility and
+  # extension payloads that are intentionally not referenced by a public
+  # operation in every build profile.
   skip-prune: true
   # Patch a handful of codegen-only collisions (duplicate-normalizing path names
   # and camel/snake duplicate fields) without editing docs/openapi.yaml.

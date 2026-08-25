@@ -1,7 +1,7 @@
-import { SuggestedCatalogs } from '@/components/catalog/suggested-catalogs';
-import { PageSection } from '@/components/ui/page';
-import type { HelmRepository } from '@/types';
-import { RepositoriesTable } from './-repositories-table';
+import { SuggestedCatalogs } from "@/components/catalog/suggested-catalogs";
+import { PageSection } from "@/components/ui/page";
+import type { HelmRepository } from "@/types";
+import { RepositoriesTable } from "./-repositories-table";
 
 export function RepositoriesTab({
   repos,

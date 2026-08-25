@@ -264,9 +264,9 @@ func TestWriter_SyncFallback(t *testing.T) {
 	}
 }
 
-// TestWriter_RecordUsesAsyncWriter verifies the happy path: when a Writer
-// is installed, Record enqueues rather than touching the supplied Querier.
-func TestWriter_RecordUsesAsyncWriter(t *testing.T) {
+// TestWriter_SampledReadUsesAsyncWriter verifies that only an explicitly
+// classified ordinary read may use the bounded batch path.
+func TestWriter_SampledReadUsesAsyncWriter(t *testing.T) {
 	q := &fakeBatchQuerier{}
 	w := NewWriter(q, nil,
 		WithBatchSize(2),
@@ -284,7 +284,8 @@ func TestWriter_RecordUsesAsyncWriter(t *testing.T) {
 
 	sync := &syncFakeQuerier{}
 	Record(context.Background(), sync, Event{
-		Action:       "async.path",
+		Action:       "read.list_clusters",
+		ActionClass:  ClassRead,
 		ResourceType: "thing",
 		RequestID:    "req-async",
 	})
@@ -296,6 +297,19 @@ func TestWriter_RecordUsesAsyncWriter(t *testing.T) {
 	waitUntil(t, time.Second, func() bool {
 		return q.totalRows() >= 1
 	})
+}
+
+func TestWriter_MutationBypassesAsyncWriter(t *testing.T) {
+	w := NewWriter(&fakeBatchQuerier{}, nil)
+	previous := getDefaultWriter()
+	SetWriter(w)
+	t.Cleanup(func() { SetWriter(previous) })
+
+	sync := &syncFakeQuerier{}
+	Record(context.Background(), sync, Event{Action: "cluster.delete", ResourceType: "cluster"})
+	if sync.calls != 1 {
+		t.Fatalf("mandatory mutation sync calls = %d, want 1", sync.calls)
+	}
 }
 
 func TestWriter_BatchInsertErrorRecordsWriteFailure(t *testing.T) {

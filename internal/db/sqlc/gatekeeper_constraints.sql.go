@@ -28,7 +28,7 @@ func (q *Queries) DeleteAuthoredConstraint(ctx context.Context, arg DeleteAuthor
 }
 
 const getAuthoredConstraintByName = `-- name: GetAuthoredConstraintByName :one
-SELECT id, cluster_id, name, kind, api_version, yaml, created_by, created_at, updated_at FROM authored_constraints
+SELECT id, cluster_id, name, kind, api_version, yaml, created_by, created_at, updated_at, desired_state, sync_status, generation, observed_generation, last_error, last_reconciled_at FROM authored_constraints
 WHERE cluster_id = $1 AND name = $2
 LIMIT 1
 `
@@ -51,14 +51,56 @@ func (q *Queries) GetAuthoredConstraintByName(ctx context.Context, arg GetAuthor
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DesiredState,
+		&i.SyncStatus,
+		&i.Generation,
+		&i.ObservedGeneration,
+		&i.LastError,
+		&i.LastReconciledAt,
+	)
+	return i, err
+}
+
+const getAuthoredConstraintByNameForUpdate = `-- name: GetAuthoredConstraintByNameForUpdate :one
+SELECT id, cluster_id, name, kind, api_version, yaml, created_by, created_at, updated_at, desired_state, sync_status, generation, observed_generation, last_error, last_reconciled_at FROM authored_constraints
+WHERE cluster_id = $1 AND name = $2
+LIMIT 1
+FOR UPDATE
+`
+
+type GetAuthoredConstraintByNameForUpdateParams struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	Name      string    `json:"name"`
+}
+
+func (q *Queries) GetAuthoredConstraintByNameForUpdate(ctx context.Context, arg GetAuthoredConstraintByNameForUpdateParams) (AuthoredConstraint, error) {
+	row := q.db.QueryRow(ctx, getAuthoredConstraintByNameForUpdate, arg.ClusterID, arg.Name)
+	var i AuthoredConstraint
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.Name,
+		&i.Kind,
+		&i.ApiVersion,
+		&i.Yaml,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DesiredState,
+		&i.SyncStatus,
+		&i.Generation,
+		&i.ObservedGeneration,
+		&i.LastError,
+		&i.LastReconciledAt,
 	)
 	return i, err
 }
 
 const listAuthoredConstraintsForCluster = `-- name: ListAuthoredConstraintsForCluster :many
 
-SELECT id, cluster_id, name, kind, api_version, yaml, created_by, created_at, updated_at FROM authored_constraints
+SELECT id, cluster_id, name, kind, api_version, yaml, created_by, created_at, updated_at, desired_state, sync_status, generation, observed_generation, last_error, last_reconciled_at FROM authored_constraints
 WHERE cluster_id = $1
+  AND NOT (desired_state = 'absent' AND sync_status = 'synced')
 ORDER BY created_at DESC
 `
 
@@ -82,6 +124,12 @@ func (q *Queries) ListAuthoredConstraintsForCluster(ctx context.Context, cluster
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DesiredState,
+			&i.SyncStatus,
+			&i.Generation,
+			&i.ObservedGeneration,
+			&i.LastError,
+			&i.LastReconciledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -91,6 +139,126 @@ func (q *Queries) ListAuthoredConstraintsForCluster(ctx context.Context, cluster
 		return nil, err
 	}
 	return items, nil
+}
+
+const listRecoverableAuthoredConstraints = `-- name: ListRecoverableAuthoredConstraints :many
+SELECT id, cluster_id, name, kind, api_version, yaml, created_by, created_at, updated_at, desired_state, sync_status, generation, observed_generation, last_error, last_reconciled_at FROM authored_constraints
+WHERE sync_status = 'pending'
+   OR (
+       sync_status = 'failed'
+       AND COALESCE(last_reconciled_at, updated_at) <= now() - interval '5 minutes'
+   )
+ORDER BY updated_at ASC, cluster_id ASC, name ASC
+LIMIT $1
+`
+
+func (q *Queries) ListRecoverableAuthoredConstraints(ctx context.Context, limit int32) ([]AuthoredConstraint, error) {
+	rows, err := q.db.Query(ctx, listRecoverableAuthoredConstraints, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AuthoredConstraint{}
+	for rows.Next() {
+		var i AuthoredConstraint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.Name,
+			&i.Kind,
+			&i.ApiVersion,
+			&i.Yaml,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DesiredState,
+			&i.SyncStatus,
+			&i.Generation,
+			&i.ObservedGeneration,
+			&i.LastError,
+			&i.LastReconciledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markAuthoredConstraintDeleted = `-- name: MarkAuthoredConstraintDeleted :one
+UPDATE authored_constraints
+SET desired_state = 'absent',
+    sync_status = 'pending',
+    generation = generation + 1,
+    last_error = '',
+    updated_at = now()
+WHERE cluster_id = $1 AND name = $2
+RETURNING id, cluster_id, name, kind, api_version, yaml, created_by, created_at, updated_at, desired_state, sync_status, generation, observed_generation, last_error, last_reconciled_at
+`
+
+type MarkAuthoredConstraintDeletedParams struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	Name      string    `json:"name"`
+}
+
+func (q *Queries) MarkAuthoredConstraintDeleted(ctx context.Context, arg MarkAuthoredConstraintDeletedParams) (AuthoredConstraint, error) {
+	row := q.db.QueryRow(ctx, markAuthoredConstraintDeleted, arg.ClusterID, arg.Name)
+	var i AuthoredConstraint
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.Name,
+		&i.Kind,
+		&i.ApiVersion,
+		&i.Yaml,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DesiredState,
+		&i.SyncStatus,
+		&i.Generation,
+		&i.ObservedGeneration,
+		&i.LastError,
+		&i.LastReconciledAt,
+	)
+	return i, err
+}
+
+const markAuthoredConstraintReconcileResult = `-- name: MarkAuthoredConstraintReconcileResult :execrows
+UPDATE authored_constraints
+SET sync_status = $1::text,
+    observed_generation = CASE WHEN $1::text = 'synced' THEN $2 ELSE observed_generation END,
+    last_error = $3,
+    last_reconciled_at = now(),
+    updated_at = now()
+WHERE cluster_id = $4
+  AND name = $5
+  AND generation = $2
+`
+
+type MarkAuthoredConstraintReconcileResultParams struct {
+	SyncStatus         string    `json:"sync_status"`
+	ObservedGeneration int64     `json:"observed_generation"`
+	LastError          string    `json:"last_error"`
+	ClusterID          uuid.UUID `json:"cluster_id"`
+	Name               string    `json:"name"`
+}
+
+func (q *Queries) MarkAuthoredConstraintReconcileResult(ctx context.Context, arg MarkAuthoredConstraintReconcileResultParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markAuthoredConstraintReconcileResult,
+		arg.SyncStatus,
+		arg.ObservedGeneration,
+		arg.LastError,
+		arg.ClusterID,
+		arg.Name,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertAuthoredConstraint = `-- name: UpsertAuthoredConstraint :one
@@ -107,8 +275,13 @@ ON CONFLICT (cluster_id, name) DO UPDATE SET
     kind = EXCLUDED.kind,
     api_version = EXCLUDED.api_version,
     yaml = EXCLUDED.yaml,
+    created_by = EXCLUDED.created_by,
+    desired_state = 'present',
+    sync_status = 'pending',
+    generation = authored_constraints.generation + 1,
+    last_error = '',
     updated_at = now()
-RETURNING id, cluster_id, name, kind, api_version, yaml, created_by, created_at, updated_at
+RETURNING id, cluster_id, name, kind, api_version, yaml, created_by, created_at, updated_at, desired_state, sync_status, generation, observed_generation, last_error, last_reconciled_at
 `
 
 type UpsertAuthoredConstraintParams struct {
@@ -140,6 +313,12 @@ func (q *Queries) UpsertAuthoredConstraint(ctx context.Context, arg UpsertAuthor
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DesiredState,
+		&i.SyncStatus,
+		&i.Generation,
+		&i.ObservedGeneration,
+		&i.LastError,
+		&i.LastReconciledAt,
 	)
 	return i, err
 }

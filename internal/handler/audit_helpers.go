@@ -2,12 +2,17 @@ package handler
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
@@ -15,8 +20,10 @@ type auditWriterV1 interface {
 	CreateAuditLogV1(ctx context.Context, arg sqlc.CreateAuditLogV1Params) error
 }
 
-// recordAudit best-effort writes an audit row. It MUST NOT fail the calling
-// HTTP request — every error path simply logs a warning. The detail map is
+// recordAudit writes mandatory mutations synchronously and leaves only
+// explicitly sampled reads eligible for batching. The enclosing mutation
+// middleware reserves a content-free audit intent before entering handlers,
+// so a database outage fails closed before a side effect can occur. The detail map is
 // JSON-encoded into the JSONB column and sanitized for well-known secret
 // keys; pass nil to omit detail.
 //
@@ -44,6 +51,103 @@ func recordAudit(r *http.Request, q any, action, resourceType, resourceID, resou
 // endpoints that the mutating-HTTP audit middleware skips.
 func RecordAuditFromRequest(r *http.Request, q any, action, resourceType, resourceID, resourceName string, detail map[string]any) {
 	recordAudit(r, q, action, resourceType, resourceID, resourceName, detail)
+}
+
+// recordMandatoryAudit is the fail-closed variant for sensitive reads and
+// downloads. Callers must invoke it before writing any response bytes.
+func recordMandatoryAudit(r *http.Request, q any, action, resourceType, resourceID, resourceName string, detail map[string]any) error {
+	if r == nil || q == nil {
+		return audit.ErrMandatoryPersistenceUnavailable
+	}
+	v1, ok := q.(auditWriterV1)
+	if !ok || v1 == nil {
+		return audit.ErrMandatoryPersistenceUnavailable
+	}
+	return audit.RecordMandatory(r.Context(), v1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
+		Request:         r,
+		Source:          "service",
+		CorrelationID:   middleware.GetCorrelationID(r.Context()),
+		UserID:          currentUserUUID(r),
+		ActorAuthMethod: authMethodFromRequest(r),
+		Action:          action,
+		ResourceType:    resourceType,
+		ResourceID:      resourceID,
+		ResourceName:    resourceName,
+		RequestID:       middleware.GetRequestID(r.Context()),
+		IPAddress:       middleware.RemoteIPAddr(r),
+		Detail:          detail,
+	}))
+}
+
+// recordMandatoryAuditAs is the identity-aware form used before returning
+// login, refresh, and MFA challenge credentials. Those requests have not yet
+// populated the normal authenticated-user context, so the actor must be
+// supplied from the verified database row.
+func recordMandatoryAuditAs(r *http.Request, q any, userID pgtype.UUID, action, resourceType, resourceID, resourceName string, detail map[string]any) error {
+	if r == nil || q == nil {
+		return audit.ErrMandatoryPersistenceUnavailable
+	}
+	v1, ok := q.(auditWriterV1)
+	if !ok || v1 == nil {
+		return audit.ErrMandatoryPersistenceUnavailable
+	}
+	return audit.RecordMandatory(r.Context(), v1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
+		Request: r, Source: "service", CorrelationID: middleware.GetCorrelationID(r.Context()),
+		UserID: userID, ActorAuthMethod: authMethodFromRequest(r),
+		Action: action, ResourceType: resourceType, ResourceID: resourceID, ResourceName: resourceName,
+		RequestID: middleware.GetRequestID(r.Context()), IPAddress: middleware.RemoteIPAddr(r), Detail: detail,
+	}))
+}
+
+// recordAuditOutbox writes the request-shaped audit-v1 envelope through a
+// transaction-bound querier. Callers must invoke it inside the same database
+// transaction as their domain mutation.
+func recordAuditOutbox(r *http.Request, q audit.OutboxQuerier, action, resourceType, resourceID, resourceName string, status int, detail map[string]any) error {
+	return recordAuditOutboxAs(r, q, currentUserUUID(r), action, resourceType, resourceID, resourceName, status, detail)
+}
+
+func recordAuditOutboxAs(r *http.Request, q audit.OutboxQuerier, userID pgtype.UUID, action, resourceType, resourceID, resourceName string, status int, detail map[string]any) error {
+	if r == nil || q == nil {
+		return audit.ErrOutboxUnavailable
+	}
+	requestID := middleware.GetRequestID(r.Context())
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+	event := audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
+		Request: r, Source: "service", CorrelationID: middleware.GetCorrelationID(r.Context()),
+		UserID: userID, ActorAuthMethod: authMethodFromRequest(r),
+		Action: action, ResourceType: resourceType, ResourceID: resourceID,
+		ResourceName: resourceName, StatusCode: status, RequestID: requestID,
+		IPAddress: middleware.RemoteIPAddr(r), Detail: detail,
+	})
+	dedupeSeed := requestID
+	if values := r.Header.Values("Idempotency-Key"); len(values) == 1 && validOperationIdempotencyKey(values[0]) {
+		actor := "anonymous"
+		if userID.Valid {
+			actor = uuid.UUID(userID.Bytes).String()
+		}
+		dedupeSeed = audit.MutationDedupeKey(strings.TrimSpace(values[0]), actor, r.Method, r.URL.EscapedPath())
+	}
+	_, err := audit.RecordOutbox(r.Context(), q, event,
+		audit.MutationDedupeKey(dedupeSeed, action, resourceType, resourceID),
+		audit.OutboxOptions{})
+	if err != nil {
+		return fmt.Errorf("%w: %w", audit.ErrOutboxUnavailable, err)
+	}
+	return nil
+}
+
+// respondTransactionalMutationError preserves the handler's ordinary error
+// contract while giving audit-intent failures a truthful fail-closed response.
+// In particular, a rolled-back DELETE must never be reported as "not found".
+func respondTransactionalMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackStatus int, fallbackCode, fallbackMessage string) {
+	if errors.Is(err, audit.ErrOutboxUnavailable) {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+			"Mandatory audit storage is unavailable; mutation success was not confirmed")
+		return
+	}
+	RespondRequestError(w, r, fallbackStatus, fallbackCode, fallbackMessage)
 }
 
 // recordAuditAs is the variant used when the user_id has to be resolved

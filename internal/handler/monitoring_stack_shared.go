@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -94,10 +95,13 @@ type sharedStackLifecycle[Req any] struct {
 	// replaceRequired reports whether the persisted metadata makes the request
 	// a reinstall rather than an in-place upgrade.
 	replaceRequired func(map[string]any, Req) (bool, []string)
-	// persist stamps this family's metadata (and status) onto the backend row.
-	persist func(context.Context, sqlc.MonitoringBackend, Req, string) error
-	// enqueue creates the async operation that does the actual Helm work.
-	enqueue func(context.Context, pgtype.UUID, string, Req, map[string]any, *objectStoreSecretSpec) (sqlc.MonitoringOperation, error)
+	// persistWith stamps this family's metadata (and status) through the writer
+	// supplied by the lifecycle transaction.
+	persistWith func(context.Context, monitoringSharedMutationWriter, sqlc.MonitoringBackend, Req, string) error
+	// enqueueWith creates the async operation through that same writer. Keeping
+	// both callbacks transaction-bound prevents desired metadata without an
+	// operation, or an operation without its mandatory audit intent.
+	enqueueWith func(context.Context, monitoringSharedMutationWriter, pgtype.UUID, string, Req, map[string]any, *objectStoreSecretSpec) (sqlc.MonitoringOperation, error)
 	// target reads the three routing fields out of a request.
 	target func(Req) (clusterID, namespace, releaseName string)
 	// retarget rewrites those three fields, preserving whichever of the
@@ -115,7 +119,21 @@ type sharedStackLifecycle[Req any] struct {
 	// in-place upgrade and sizer_ratchet skip the mode gate. Preview does
 	// not call it.
 	precheck func(ctx context.Context, req Req, op string) (status int, code, msg string, ok bool)
+	// afterCommit is for non-transactional wakeups and external reconciliation.
+	// It is never called until metadata, operation, and audit intent commit.
+	afterCommit func(context.Context, string)
 }
+
+type monitoringSharedMutationWriter interface {
+	monitoringOperationCreator
+	GetDefaultMonitoringBackend(context.Context) (sqlc.MonitoringBackend, error)
+	UpsertDefaultMonitoringBackend(context.Context, sqlc.UpsertDefaultMonitoringBackendParams) (sqlc.MonitoringBackend, error)
+}
+
+var (
+	errSharedStackMetadataPersistence = errors.New("shared monitoring metadata persistence failed")
+	errSharedStackOperationCreation   = errors.New("shared monitoring operation creation failed")
+)
 
 func (l sharedStackLifecycle[Req]) preview(w http.ResponseWriter, r *http.Request) {
 	if !l.h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbRead) {
@@ -145,6 +163,9 @@ func (l sharedStackLifecycle[Req]) install(w http.ResponseWriter, r *http.Reques
 	if !l.h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
 		return
 	}
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
 	req, values, secretSpec, backend, err := l.payload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -153,22 +174,20 @@ func (l sharedStackLifecycle[Req]) install(w http.ResponseWriter, r *http.Reques
 	if !l.runPrecheck(w, r, req, "install") {
 		return
 	}
-	if err := l.persist(r.Context(), backend, req, "installing"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, l.persistFailure())
-		return
-	}
-	op, err := l.enqueue(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "install", req, values, secretSpec)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
-		return
-	}
 	clusterID, namespace, releaseName := l.target(req)
-	l.recordLifecycleAudit(r, "install", backend, clusterID, namespace, releaseName, op)
-	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
+	op, err := l.stageMutation(r, backend, req, req, "installing", "install", values, secretSpec, clusterID, namespace, releaseName)
+	if err != nil {
+		l.respondStageMutationError(w, r, err)
+		return
+	}
+	RespondAcceptedOperation(w, "/api/v1/settings/monitoring/operations/"+op.ID.String()+"/", monitoringOperationResponse(op))
 }
 
 func (l sharedStackLifecycle[Req]) upgrade(w http.ResponseWriter, r *http.Request) {
 	if !l.h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
+		return
+	}
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	req, values, secretSpec, backend, err := l.payload(r.Context(), r)
@@ -188,22 +207,20 @@ func (l sharedStackLifecycle[Req]) upgrade(w http.ResponseWriter, r *http.Reques
 		})
 		return
 	}
-	if err := l.persist(r.Context(), backend, req, "updating"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, l.persistFailure())
-		return
-	}
-	op, err := l.enqueue(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "upgrade", req, values, secretSpec)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
-		return
-	}
 	clusterID, namespace, releaseName := l.target(req)
-	l.recordLifecycleAudit(r, "upgrade", backend, clusterID, namespace, releaseName, op)
-	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
+	op, err := l.stageMutation(r, backend, req, req, "updating", "upgrade", values, secretSpec, clusterID, namespace, releaseName)
+	if err != nil {
+		l.respondStageMutationError(w, r, err)
+		return
+	}
+	RespondAcceptedOperation(w, "/api/v1/settings/monitoring/operations/"+op.ID.String()+"/", monitoringOperationResponse(op))
 }
 
 func (l sharedStackLifecycle[Req]) replace(w http.ResponseWriter, r *http.Request) {
 	if !l.h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
+		return
+	}
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	req, values, secretSpec, backend, err := l.payload(r.Context(), r)
@@ -223,25 +240,23 @@ func (l sharedStackLifecycle[Req]) replace(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "managementClusterId is required")
 		return
 	}
-	// Persisted from the REQUEST, while the operation is enqueued from the
-	// metadata-defaulted target below. That asymmetry predates this driver and
-	// is preserved verbatim: a Replace with an empty body stamps empty metadata
-	// but still uninstalls/reinstalls the release the metadata named.
-	if err := l.persist(r.Context(), backend, req, "reinstalled"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, l.persistFailure())
-		return
-	}
-	op, err := l.enqueue(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "replace", l.retarget(req, clusterID, namespace, releaseName), values, secretSpec)
+	// Persist and enqueue the same metadata-defaulted target. A replace with an
+	// omitted target must not stamp empty desired state while operating on the
+	// previously configured release.
+	target := l.retarget(req, clusterID, namespace, releaseName)
+	op, err := l.stageMutation(r, backend, target, target, "reinstalled", "replace", values, secretSpec, clusterID, namespace, releaseName)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
+		l.respondStageMutationError(w, r, err)
 		return
 	}
-	l.recordLifecycleAudit(r, "replace", backend, clusterID, namespace, releaseName, op)
-	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
+	RespondAcceptedOperation(w, "/api/v1/settings/monitoring/operations/"+op.ID.String()+"/", monitoringOperationResponse(op))
 }
 
 func (l sharedStackLifecycle[Req]) uninstall(w http.ResponseWriter, r *http.Request) {
 	if !l.h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
+		return
+	}
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	if l.h.helm == nil || l.h.queries == nil {
@@ -268,17 +283,12 @@ func (l sharedStackLifecycle[Req]) uninstall(w http.ResponseWriter, r *http.Requ
 	// retargeted at the release the metadata names.
 	var zero Req
 	target := l.retarget(zero, clusterID, namespace, releaseName)
-	if err := l.persist(r.Context(), backend, target, "uninstalled"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, l.persistFailure())
-		return
-	}
-	op, err := l.enqueue(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "uninstall", target, nil, nil)
+	op, err := l.stageMutation(r, backend, target, target, "uninstalled", "uninstall", nil, nil, clusterID, namespace, releaseName)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
+		l.respondStageMutationError(w, r, err)
 		return
 	}
-	l.recordLifecycleAudit(r, "uninstall", backend, clusterID, namespace, releaseName, op)
-	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
+	RespondAcceptedOperation(w, "/api/v1/settings/monitoring/operations/"+op.ID.String()+"/", monitoringOperationResponse(op))
 }
 
 func (l sharedStackLifecycle[Req]) status(w http.ResponseWriter, r *http.Request) {
@@ -332,6 +342,65 @@ func (l sharedStackLifecycle[Req]) persistFailure() string {
 	return "Failed to persist shared " + l.noun + " metadata"
 }
 
+// stageMutation is the commit boundary for every shared-stack lifecycle
+// mutation. Production supplies runTx; the fallback keeps lightweight handler
+// tests and development embeddings functional while preserving the legacy
+// direct audit path.
+func (l sharedStackLifecycle[Req]) stageMutation(r *http.Request, backend sqlc.MonitoringBackend, persistReq, operationReq Req, desiredStatus, verb string, values map[string]any, secretSpec *objectStoreSecretSpec, clusterID, namespace, releaseName string) (sqlc.MonitoringOperation, error) {
+	ctx := withOperationIdempotency(r, "monitoring")
+	mutate := func(q monitoringSharedMutationWriter) (sqlc.MonitoringOperation, error) {
+		if err := l.persistWith(r.Context(), q, backend, persistReq, desiredStatus); err != nil {
+			return sqlc.MonitoringOperation{}, fmt.Errorf("%w: %w", errSharedStackMetadataPersistence, err)
+		}
+		op, err := l.enqueueWith(ctx, q, currentUserUUID(r), verb, operationReq, values, secretSpec)
+		if err != nil {
+			return sqlc.MonitoringOperation{}, fmt.Errorf("%w: %w", errSharedStackOperationCreation, err)
+		}
+		return op, nil
+	}
+
+	var op sqlc.MonitoringOperation
+	if l.h.runTx != nil {
+		err := l.h.runTx(r.Context(), func(q MonitoringMutationTx) error {
+			var err error
+			op, err = mutate(q)
+			if err != nil {
+				return err
+			}
+			return recordAuditOutbox(r, q, l.auditPrefix+"."+verb, "monitoring_backend", backend.ID.String(), backend.BackendType, http.StatusAccepted, map[string]any{
+				"managementClusterId": clusterID,
+				"namespace":           namespace,
+				"releaseName":         releaseName,
+				"operationId":         op.ID.String(),
+			})
+		})
+		if err != nil {
+			return sqlc.MonitoringOperation{}, err
+		}
+	} else {
+		var err error
+		op, err = mutate(l.h.queries)
+		if err != nil {
+			return sqlc.MonitoringOperation{}, err
+		}
+		l.recordLifecycleAudit(r, verb, backend, clusterID, namespace, releaseName, op)
+	}
+
+	l.h.TriggerReconcile()
+	if l.afterCommit != nil {
+		l.afterCommit(r.Context(), desiredStatus)
+	}
+	return op, nil
+}
+
+func (l sharedStackLifecycle[Req]) respondStageMutationError(w http.ResponseWriter, r *http.Request, err error) {
+	message := "Failed to create monitoring operation"
+	if errors.Is(err, errSharedStackMetadataPersistence) {
+		message = l.persistFailure()
+	}
+	respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, message)
+}
+
 func (l sharedStackLifecycle[Req]) runPrecheck(w http.ResponseWriter, r *http.Request, req Req, op string) bool {
 	if l.precheck == nil {
 		return true
@@ -381,8 +450,8 @@ func (h *MonitoringHandler) sharedThanosLifecycle() sharedStackLifecycle[SharedT
 			return req, values, &secretSpec, backend, nil
 		},
 		replaceRequired: sharedThanosReplaceRequired,
-		persist:         h.updateSharedThanosMetadata,
-		enqueue:         h.enqueueSharedThanosOperation,
+		persistWith:     h.updateSharedThanosMetadataWith,
+		enqueueWith:     h.enqueueSharedThanosOperationWith,
 		target: func(req SharedThanosStackRequest) (string, string, string) {
 			return req.ManagementClusterID, req.Namespace, req.ReleaseName
 		},
@@ -436,9 +505,9 @@ func (h *MonitoringHandler) sharedAlertmanagerLifecycle() sharedStackLifecycle[S
 			return req, values, nil, backend, err
 		},
 		replaceRequired: sharedAlertmanagerReplaceRequired,
-		persist:         h.updateSharedAlertmanagerMetadata,
-		enqueue: func(ctx context.Context, userID pgtype.UUID, opType string, req SharedAlertmanagerRequest, values map[string]any, _ *objectStoreSecretSpec) (sqlc.MonitoringOperation, error) {
-			return h.enqueueSharedAlertmanagerOperation(ctx, userID, opType, req, values)
+		persistWith:     h.updateSharedAlertmanagerMetadataWith,
+		enqueueWith: func(ctx context.Context, q monitoringSharedMutationWriter, userID pgtype.UUID, opType string, req SharedAlertmanagerRequest, values map[string]any, _ *objectStoreSecretSpec) (sqlc.MonitoringOperation, error) {
+			return h.enqueueSharedAlertmanagerOperationWith(ctx, q, userID, opType, req, values)
 		},
 		target: func(req SharedAlertmanagerRequest) (string, string, string) {
 			return req.ManagementClusterID, req.Namespace, req.ReleaseName
@@ -487,9 +556,9 @@ func (h *MonitoringHandler) sharedGrafanaLifecycle() sharedStackLifecycle[Shared
 			return req, values, nil, backend, err
 		},
 		replaceRequired: sharedGrafanaReplaceRequired,
-		persist:         h.updateSharedGrafanaMetadata,
-		enqueue: func(ctx context.Context, userID pgtype.UUID, opType string, req SharedGrafanaRequest, values map[string]any, _ *objectStoreSecretSpec) (sqlc.MonitoringOperation, error) {
-			return h.enqueueSharedGrafanaOperation(ctx, userID, opType, req, values)
+		persistWith:     h.updateSharedGrafanaMetadataWith,
+		enqueueWith: func(ctx context.Context, q monitoringSharedMutationWriter, userID pgtype.UUID, opType string, req SharedGrafanaRequest, values map[string]any, _ *objectStoreSecretSpec) (sqlc.MonitoringOperation, error) {
+			return h.enqueueSharedGrafanaOperationWith(ctx, q, userID, opType, req, values)
 		},
 		target: func(req SharedGrafanaRequest) (string, string, string) {
 			return req.ManagementClusterID, req.Namespace, req.ReleaseName
@@ -546,9 +615,9 @@ func (h *MonitoringHandler) sharedLokiLifecycle() sharedStackLifecycle[SharedLok
 			return req, values, nil, backend, err
 		},
 		replaceRequired: sharedLokiReplaceRequired,
-		persist:         h.updateSharedLokiMetadata,
-		enqueue: func(ctx context.Context, userID pgtype.UUID, opType string, req SharedLokiRequest, values map[string]any, _ *objectStoreSecretSpec) (sqlc.MonitoringOperation, error) {
-			return h.enqueueSharedLokiOperation(ctx, userID, opType, req, values)
+		persistWith:     h.updateSharedLokiMetadataWith,
+		enqueueWith: func(ctx context.Context, q monitoringSharedMutationWriter, userID pgtype.UUID, opType string, req SharedLokiRequest, values map[string]any, _ *objectStoreSecretSpec) (sqlc.MonitoringOperation, error) {
+			return h.enqueueSharedLokiOperationWith(ctx, q, userID, opType, req, values)
 		},
 		target: func(req SharedLokiRequest) (string, string, string) {
 			return req.ManagementClusterID, req.Namespace, req.ReleaseName
@@ -597,7 +666,8 @@ func (h *MonitoringHandler) sharedLokiLifecycle() sharedStackLifecycle[SharedLok
 				"desiredSpecHash":         stringFromMap(metadata, "lastAppliedSpecHash"),
 			}
 		},
-		precheck: h.sharedLokiPrecheck,
+		precheck:    h.sharedLokiPrecheck,
+		afterCommit: h.afterSharedLokiMetadataCommit,
 	}
 }
 
@@ -839,6 +909,10 @@ func (h *MonitoringHandler) updateSharedThanosMetadata(ctx context.Context, back
 	if h.queries == nil {
 		return nil
 	}
+	return h.updateSharedThanosMetadataWith(ctx, h.queries, backend, req, status)
+}
+
+func (h *MonitoringHandler) updateSharedThanosMetadataWith(ctx context.Context, q monitoringSharedMutationWriter, backend sqlc.MonitoringBackend, req SharedThanosStackRequest, status string) error {
 	appliedSpecHash := specHash(map[string]any{
 		"managementClusterId":     req.ManagementClusterID,
 		"namespace":               defaultString(req.Namespace, "monitoring"),
@@ -891,7 +965,7 @@ func (h *MonitoringHandler) updateSharedThanosMetadata(ctx context.Context, back
 	if err := imonitoring.SealInto(&params, authCfg, h.monitoringSealer()); err != nil {
 		return err
 	}
-	_, err = h.queries.UpsertDefaultMonitoringBackend(ctx, params)
+	_, err = q.UpsertDefaultMonitoringBackend(ctx, params)
 	return err
 }
 
@@ -899,6 +973,10 @@ func (h *MonitoringHandler) updateSharedAlertmanagerMetadata(ctx context.Context
 	if h.queries == nil {
 		return nil
 	}
+	return h.updateSharedAlertmanagerMetadataWith(ctx, h.queries, backend, req, status)
+}
+
+func (h *MonitoringHandler) updateSharedAlertmanagerMetadataWith(ctx context.Context, q monitoringSharedMutationWriter, backend sqlc.MonitoringBackend, req SharedAlertmanagerRequest, status string) error {
 	appliedSpecHash := specHash(map[string]any{
 		"managementClusterId":   req.ManagementClusterID,
 		"namespace":             defaultString(req.Namespace, "monitoring"),
@@ -940,7 +1018,7 @@ func (h *MonitoringHandler) updateSharedAlertmanagerMetadata(ctx context.Context
 	if err := imonitoring.SealInto(&params, authCfg, h.monitoringSealer()); err != nil {
 		return err
 	}
-	_, err = h.queries.UpsertDefaultMonitoringBackend(ctx, params)
+	_, err = q.UpsertDefaultMonitoringBackend(ctx, params)
 	return err
 }
 

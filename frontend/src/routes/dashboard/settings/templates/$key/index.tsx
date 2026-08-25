@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * /dashboard/settings/templates/[key] — split-view template editor.
  *
@@ -12,23 +19,30 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * edits + sample variables. Backend enforces required-set and returns
  * a 400 with `missing` when applicable; we surface those names inline.
  */
-import { useEffect, useMemo, useState } from 'react';
-import { useParams } from '@/lib/navigation';
-import { Link } from '@/lib/link';
-import { ArrowLeft, Eye, FileText, Loader2, RotateCcw, Save } from 'lucide-react';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { useAppForm } from '@/lib/form';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
-import { EmptyState } from '@/components/ui/empty-state';
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "@/lib/navigation";
+import { Link } from "@/lib/link";
+import {
+  ArrowLeft,
+  Eye,
+  FileText,
+  Loader2,
+  RotateCcw,
+  Save,
+} from "lucide-react";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { useAppForm } from "@/lib/form";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   getNotificationTemplate,
   previewNotificationTemplate,
   resetNotificationTemplate,
   updateNotificationTemplate,
-  type NotificationTemplateDetail,
-  type NotificationTemplatePreviewResult,
-} from '@/lib/api/settings';
+  type NotificationTemplateDetailView,
+  type NotificationTemplatePreviewResultView,
+} from "@/lib/api/settings";
 
 function NotificationTemplateEditorPage() {
   return (
@@ -40,9 +54,12 @@ function NotificationTemplateEditorPage() {
 
 function NotificationTemplateEditor() {
   const params = useParams();
-  const key = decodeURIComponent(String(params?.key ?? ''));
-  const [detail, setDetail] = useState<NotificationTemplateDetail | null>(null);
-  const [preview, setPreview] = useState<NotificationTemplatePreviewResult | null>(null);
+  const key = decodeURIComponent(String(params?.key ?? ""));
+  const [detail, setDetail] = useState<NotificationTemplateDetailView | null>(
+    null,
+  );
+  const [preview, setPreview] =
+    useState<NotificationTemplatePreviewResultView | null>(null);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const [previewMissing, setPreviewMissing] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +69,7 @@ function NotificationTemplateEditor() {
   // Override subject/body/enabled + the sample-variables JSON live on one
   // form; save uses the first three, Preview reads all of them.
   const form = useAppForm({
-    defaultValues: { subject: '', body: '', enabled: true, samples: '{}' },
+    defaultValues: { subject: "", body: "", enabled: true, samples: "{}" },
     onSubmit: async ({ value }) => {
       if (!detail) return;
       setSaving(true);
@@ -64,9 +81,9 @@ function NotificationTemplateEditor() {
           enabled: value.enabled,
         });
         setDetail(updated);
-        toastSuccess('Template override saved');
+        toastSuccess("Template override saved");
       } catch (err) {
-        toastApiError('', err, 'Save failed');
+        toastApiError("", err, "Save failed");
       } finally {
         setSaving(false);
       }
@@ -75,10 +92,13 @@ function NotificationTemplateEditor() {
 
   useEffect(() => {
     if (!key) return;
+    const controller = new AbortController();
     let cancelled = false;
     (async () => {
       try {
-        const d = await getNotificationTemplate(key);
+        const d = await getNotificationTemplate(key, {
+          signal: controller.signal,
+        });
         if (cancelled) return;
         setDetail(d);
         form.reset({
@@ -88,19 +108,24 @@ function NotificationTemplateEditor() {
           samples: seedSamples(d),
         });
       } catch (err) {
-        toastApiError('', err, 'Failed to load template');
+        toastApiError("", err, "Failed to load template");
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [form, key]);
 
   const handleReset = async () => {
     if (!detail) return;
-    if (!window.confirm('Revert to the built-in default? Any saved override will be deleted.')) {
+    if (
+      !window.confirm(
+        "Revert to the built-in default? Any saved override will be deleted.",
+      )
+    ) {
       return;
     }
     setSaving(true);
@@ -115,9 +140,9 @@ function NotificationTemplateEditor() {
         enabled: true,
         samples: form.state.values.samples,
       });
-      toastSuccess('Reverted to default');
+      toastSuccess("Reverted to default");
     } catch (err) {
-      toastApiError('', err, 'Reset failed');
+      toastApiError("", err, "Reset failed");
     } finally {
       setSaving(false);
     }
@@ -129,7 +154,7 @@ function NotificationTemplateEditor() {
     setPreviewMissing(null);
     try {
       const { subject, body, samples } = form.state.values;
-      const variables = JSON.parse(samples || '{}');
+      const variables = JSON.parse(samples || "{}");
       const result = await previewNotificationTemplate(key, {
         subject,
         body,
@@ -139,14 +164,18 @@ function NotificationTemplateEditor() {
       setPreview(result);
     } catch (err: unknown) {
       // Try to surface the backend's structured 400 (missing[]).
-      const e = err as { response?: { data?: { data?: { missing?: string[] }; missing?: string[] } } };
+      const e = err as {
+        response?: {
+          data?: { data?: { missing?: string[] }; missing?: string[] };
+        };
+      };
       const missing =
         e.response?.data?.data?.missing ?? e.response?.data?.missing ?? null;
       if (missing && missing.length > 0) {
         setPreviewMissing(missing);
-        setPreviewErr('Sample variables are missing required entries.');
+        setPreviewErr("Sample variables are missing required entries.");
       } else {
-        setPreviewErr(err instanceof Error ? err.message : 'Preview failed');
+        setPreviewErr(err instanceof Error ? err.message : "Preview failed");
       }
       setPreview(null);
     } finally {
@@ -190,8 +219,12 @@ function NotificationTemplateEditor() {
           <>
             {detail.description}
             <span className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="px-2 py-0.5 rounded bg-muted">{detail.channel}</span>
-              <span className="px-2 py-0.5 rounded bg-muted">{detail.bodyFormat}</span>
+              <span className="px-2 py-0.5 rounded bg-muted">
+                {detail.channel}
+              </span>
+              <span className="px-2 py-0.5 rounded bg-muted">
+                {detail.bodyFormat}
+              </span>
               {detail.hasOverride && (
                 <span className="px-2 py-0.5 rounded bg-status-success/15 text-status-success">
                   override active
@@ -204,27 +237,33 @@ function NotificationTemplateEditor() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
             Default subject
-          </label>
+          </p>
           <pre className="rounded-md border border-border bg-muted/30 p-3 text-xs whitespace-pre-wrap overflow-auto">
-            {detail.defaultSubject || <span className="text-muted-foreground">(none)</span>}
+            {detail.defaultSubject || (
+              <span className="text-muted-foreground">(none)</span>
+            )}
           </pre>
-          <label className="text-xs uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
             Default body
-          </label>
+          </p>
           <pre className="rounded-md border border-border bg-muted/30 p-3 text-xs font-mono whitespace-pre-wrap overflow-auto max-h-96">
             {detail.defaultBody}
           </pre>
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wide text-muted-foreground">
+          <label
+            className="text-xs uppercase tracking-wide text-muted-foreground"
+            htmlFor="field-4e945644-222"
+          >
             Override subject
           </label>
           <form.Field name="subject">
             {(field) => (
               <input
+                id="field-4e945644-222"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
@@ -233,12 +272,16 @@ function NotificationTemplateEditor() {
               />
             )}
           </form.Field>
-          <label className="text-xs uppercase tracking-wide text-muted-foreground">
+          <label
+            className="text-xs uppercase tracking-wide text-muted-foreground"
+            htmlFor="field-4e945644-236"
+          >
             Override body
           </label>
           <form.Field name="body">
             {(field) => (
               <textarea
+                id="field-4e945644-236"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
@@ -261,7 +304,8 @@ function NotificationTemplateEditor() {
               )}
             </form.Field>
             <label htmlFor="enabled" className="text-foreground">
-              Enabled (uncheck to keep the override on file but use the default at delivery)
+              Enabled (uncheck to keep the override on file but use the default
+              at delivery)
             </label>
           </div>
           <div className="flex items-center gap-2 pt-1">
@@ -271,7 +315,11 @@ function NotificationTemplateEditor() {
               disabled={saving}
               className="inline-flex items-center gap-1 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50"
             >
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              {saving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
               Save override
             </button>
             <button
@@ -288,29 +336,44 @@ function NotificationTemplateEditor() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
             Variables
-          </label>
+          </p>
           <div className="rounded-md border border-border overflow-hidden">
             <Table className="w-full text-xs">
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="px-3 py-1.5 text-left font-medium">Name</TableHead>
-                  <TableHead className="px-3 py-1.5 text-left font-medium">Description</TableHead>
-                  <TableHead className="px-3 py-1.5 text-left font-medium">Required</TableHead>
+                  <TableHead className="px-3 py-1.5 text-left font-medium">
+                    Name
+                  </TableHead>
+                  <TableHead className="px-3 py-1.5 text-left font-medium">
+                    Description
+                  </TableHead>
+                  <TableHead className="px-3 py-1.5 text-left font-medium">
+                    Required
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {variableList.map((v) => (
                   <TableRow key={v.name} className="border-t border-border">
-                    <TableCell className="px-3 py-1.5 font-mono">{v.name}</TableCell>
-                    <TableCell className="px-3 py-1.5 text-muted-foreground">{v.description}</TableCell>
-                    <TableCell className="px-3 py-1.5">{v.required ? 'yes' : 'no'}</TableCell>
+                    <TableCell className="px-3 py-1.5 font-mono">
+                      {v.name}
+                    </TableCell>
+                    <TableCell className="px-3 py-1.5 text-muted-foreground">
+                      {v.description}
+                    </TableCell>
+                    <TableCell className="px-3 py-1.5">
+                      {v.required ? "yes" : "no"}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {variableList.length === 0 && (
                   <TableRow>
-                    <TableCell className="px-3 py-3 text-center text-muted-foreground" colSpan={3}>
+                    <TableCell
+                      className="px-3 py-3 text-center text-muted-foreground"
+                      colSpan={3}
+                    >
                       No declared variables.
                     </TableCell>
                   </TableRow>
@@ -321,12 +384,16 @@ function NotificationTemplateEditor() {
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wide text-muted-foreground">
+          <label
+            className="text-xs uppercase tracking-wide text-muted-foreground"
+            htmlFor="field-4e945644-324"
+          >
             Sample variables (JSON)
           </label>
           <form.Field name="samples">
             {(field) => (
               <textarea
+                id="field-4e945644-324"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
@@ -342,14 +409,21 @@ function NotificationTemplateEditor() {
             disabled={previewing}
             className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
           >
-            {previewing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+            {previewing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Eye className="h-3.5 w-3.5" />
+            )}
             Preview
           </button>
           {previewMissing && previewMissing.length > 0 && (
             <div className="rounded-md border border-status-warning/40 bg-status-warning/10 p-3 text-xs">
-              Missing required variables:{' '}
+              Missing required variables:{" "}
               {previewMissing.map((m) => (
-                <code key={m} className="px-1 mx-0.5 rounded bg-status-warning/20">
+                <code
+                  key={m}
+                  className="px-1 mx-0.5 rounded bg-status-warning/20"
+                >
                   {m}
                 </code>
               ))}
@@ -363,17 +437,19 @@ function NotificationTemplateEditor() {
           {preview && (
             <div className="space-y-2">
               <div>
-                <label className="text-xs uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
                   Rendered subject
-                </label>
+                </p>
                 <pre className="rounded-md border border-border bg-muted/30 p-3 text-xs whitespace-pre-wrap">
-                  {preview.subject || <span className="text-muted-foreground">(empty)</span>}
+                  {preview.subject || (
+                    <span className="text-muted-foreground">(empty)</span>
+                  )}
                 </pre>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
                   Rendered body
-                </label>
+                </p>
                 <pre className="rounded-md border border-border bg-muted/30 p-3 text-xs whitespace-pre-wrap max-h-96 overflow-auto">
                   {preview.body}
                 </pre>
@@ -391,21 +467,21 @@ function NotificationTemplateEditor() {
 // variable names use dotted notation; we unflatten into a nested
 // object so the preview engine sees the same shape the dispatchers
 // produce.
-function seedSamples(detail: NotificationTemplateDetail): string {
+function seedSamples(detail: NotificationTemplateDetailView): string {
   const root: Record<string, unknown> = {};
   for (const v of detail.variables) {
-    const parts = v.name.split('.');
+    const parts = v.name.split(".");
     let cur = root;
     for (let i = 0; i < parts.length - 1; i++) {
       const p = parts[i];
-      if (typeof cur[p] !== 'object' || cur[p] === null) cur[p] = {};
+      if (typeof cur[p] !== "object" || cur[p] === null) cur[p] = {};
       cur = cur[p] as Record<string, unknown>;
     }
-    cur[parts[parts.length - 1]] = v.example || '';
+    cur[parts[parts.length - 1]] = v.example || "";
   }
   return JSON.stringify(root, null, 2);
 }
 
-export const Route = createFileRoute('/dashboard/settings/templates/$key/')({
+export const Route = createFileRoute("/dashboard/settings/templates/$key/")({
   component: NotificationTemplateEditorPage,
 });

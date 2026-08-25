@@ -44,9 +44,8 @@ func HandleRunRestore(ctx context.Context, t *asynq.Task) error {
 	if p.RestoreID == "" {
 		return fmt.Errorf("restore_id is required")
 	}
-	if runtimeDeps.Queries == nil {
-		runtimeLogger().InfoContext(ctx, "restore runtime not configured, skipping")
-		return nil
+	if runtimeDependencies(ctx).Queries == nil {
+		return fmt.Errorf("restore runtime is not configured")
 	}
 
 	restoreID, err := uuid.Parse(p.RestoreID)
@@ -54,14 +53,14 @@ func HandleRunRestore(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("invalid restore_id: %w", err)
 	}
 
-	q := runtimeDeps.Queries
+	q := runtimeDependencies(ctx).Queries
 	op, err := q.GetRestoreOperationByID(ctx, restoreID)
 	if err != nil {
 		return fmt.Errorf("loading restore operation: %w", err)
 	}
 	switch op.Status {
 	case "completed", "failed":
-		runtimeLogger().InfoContext(ctx, "restore already terminal, nothing to do",
+		runtimeLogger(ctx).InfoContext(ctx, "restore already terminal, nothing to do",
 			"restore_id", op.ID.String(), "status", op.Status)
 		return nil
 	case "running":
@@ -93,7 +92,7 @@ func HandleRunRestore(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("restore %s not claimable (already running or terminal)", op.ID)
 	}
 
-	runtimeLogger().InfoContext(ctx, "restore row marked running; server-side reconciler will drive Velero CR",
+	runtimeLogger(ctx).InfoContext(ctx, "restore row marked running; server-side reconciler will drive Velero CR",
 		"restore_id", op.ID.String(),
 		"backup_id", backup.ID.String(),
 		"velero_restore_name", op.VeleroRestoreName,

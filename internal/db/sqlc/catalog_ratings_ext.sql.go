@@ -19,6 +19,20 @@ import (
 const chartRatingSelectColumns = `
     id, chart_id, installation_id, user_id, stars, note, created_at, updated_at`
 
+// LockChartRatingMutationKey serializes state-dependent rating mutations on a
+// caller-selected natural key. It must be invoked through sqlc.New(tx):
+// transaction-scoped advisory locks are released when that transaction ends.
+// Handlers use one chart key to serialize aggregate maintenance and one
+// user/rating key to make POST's read-then-create upsert race-free.
+const lockChartRatingMutationKey = `-- name: LockChartRatingMutationKey :exec
+SELECT 1
+FROM (SELECT pg_advisory_xact_lock(hashtextextended($1, 0))) AS rating_lock`
+
+func (q *Queries) LockChartRatingMutationKey(ctx context.Context, key string) error {
+	var locked int32
+	return q.db.QueryRow(ctx, lockChartRatingMutationKey, key).Scan(&locked)
+}
+
 func scanChartRatingRow(row interface {
 	Scan(dest ...any) error
 }) (ChartRating, error) {
@@ -82,6 +96,16 @@ func (q *Queries) GetChartRatingByID(ctx context.Context, id uuid.UUID) (ChartRa
 	return scanChartRatingRow(q.db.QueryRow(ctx, getChartRatingByID, id))
 }
 
+const getChartRatingByIDForUpdate = `-- name: GetChartRatingByIDForUpdate :one
+SELECT ` + chartRatingSelectColumns + `
+FROM chart_ratings
+WHERE id = $1
+FOR UPDATE`
+
+func (q *Queries) GetChartRatingByIDForUpdate(ctx context.Context, id uuid.UUID) (ChartRating, error) {
+	return scanChartRatingRow(q.db.QueryRow(ctx, getChartRatingByIDForUpdate, id))
+}
+
 const getChartRatingByUserAndInstallation = `-- name: GetChartRatingByUserAndInstallation :one
 SELECT ` + chartRatingSelectColumns + `
 FROM chart_ratings
@@ -102,6 +126,18 @@ func (q *Queries) GetChartRatingByUserAndInstallation(ctx context.Context, arg G
 	return scanChartRatingRow(row)
 }
 
+const getChartRatingByUserAndInstallationForUpdate = `-- name: GetChartRatingByUserAndInstallationForUpdate :one
+SELECT ` + chartRatingSelectColumns + `
+FROM chart_ratings
+WHERE user_id = $1 AND installation_id = $2
+LIMIT 1
+FOR UPDATE`
+
+func (q *Queries) GetChartRatingByUserAndInstallationForUpdate(ctx context.Context, arg GetChartRatingByUserAndInstallationParams) (ChartRating, error) {
+	row := q.db.QueryRow(ctx, getChartRatingByUserAndInstallationForUpdate, arg.UserID, arg.InstallationID)
+	return scanChartRatingRow(row)
+}
+
 const getChartRatingByUserAndChartNoInstall = `-- name: GetChartRatingByUserAndChartNoInstall :one
 SELECT ` + chartRatingSelectColumns + `
 FROM chart_ratings
@@ -115,6 +151,18 @@ type GetChartRatingByUserAndChartNoInstallParams struct {
 
 func (q *Queries) GetChartRatingByUserAndChartNoInstall(ctx context.Context, arg GetChartRatingByUserAndChartNoInstallParams) (ChartRating, error) {
 	row := q.db.QueryRow(ctx, getChartRatingByUserAndChartNoInstall, arg.UserID, arg.ChartID)
+	return scanChartRatingRow(row)
+}
+
+const getChartRatingByUserAndChartNoInstallForUpdate = `-- name: GetChartRatingByUserAndChartNoInstallForUpdate :one
+SELECT ` + chartRatingSelectColumns + `
+FROM chart_ratings
+WHERE user_id = $1 AND chart_id = $2 AND installation_id IS NULL
+LIMIT 1
+FOR UPDATE`
+
+func (q *Queries) GetChartRatingByUserAndChartNoInstallForUpdate(ctx context.Context, arg GetChartRatingByUserAndChartNoInstallParams) (ChartRating, error) {
+	row := q.db.QueryRow(ctx, getChartRatingByUserAndChartNoInstallForUpdate, arg.UserID, arg.ChartID)
 	return scanChartRatingRow(row)
 }
 

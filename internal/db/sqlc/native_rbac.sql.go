@@ -90,6 +90,31 @@ func (q *Queries) GetNativeRBACRuleByID(ctx context.Context, id uuid.UUID) (Nati
 	return i, err
 }
 
+const getNativeRBACRuleForUpdate = `-- name: GetNativeRBACRuleForUpdate :one
+SELECT id, user_id, cluster_id, namespace, api_group, resource, verbs,
+       created_at, created_by_id
+FROM native_rbac_rules
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetNativeRBACRuleForUpdate(ctx context.Context, id uuid.UUID) (NativeRbacRule, error) {
+	row := q.db.QueryRow(ctx, getNativeRBACRuleForUpdate, id)
+	var i NativeRbacRule
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ClusterID,
+		&i.Namespace,
+		&i.ApiGroup,
+		&i.Resource,
+		&i.Verbs,
+		&i.CreatedAt,
+		&i.CreatedByID,
+	)
+	return i, err
+}
+
 const listNativeRBACRules = `-- name: ListNativeRBACRules :many
 SELECT id, user_id, cluster_id, namespace, api_group, resource, verbs,
        created_at, created_by_id

@@ -35,18 +35,15 @@ func NewCrdMirrorGaugePopulateTask() *asynq.Task {
 // metric handles the name lookup at query time.
 func HandleCrdMirrorGaugePopulate(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, CrdMirrorGaugePopulateType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "crd mirror gauge populate runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("CRD mirror gauge runtime is not configured")
 		}
 		// We need the concrete *Queries.CountMirroredRowsByKind method —
 		// the runtime querier interface doesn't include it (the gauge
-		// populator is the only caller). The runtime exposes *sqlc.Queries
-		// in production; in tests we fall back to a no-op.
-		q, ok := runtimeDeps.Queries.(mirrorCountQuerier)
+		// populator is the only caller).
+		q, ok := runtimeDependencies(ctx).Queries.(mirrorCountQuerier)
 		if !ok {
-			runtimeLogger().DebugContext(ctx, "runtime querier does not support CountMirroredRowsByKind, skipping gauge populate")
-			return nil
+			return fmt.Errorf("CRD mirror gauge runtime lacks CountMirroredRowsByKind")
 		}
 		rows, err := q.CountMirroredRowsByKind(ctx)
 		if err != nil {
@@ -59,7 +56,7 @@ func HandleCrdMirrorGaugePopulate(ctx context.Context, _ *asynq.Task) error {
 		for _, r := range rows {
 			crd.Rows.WithLabelValues(r.Kind, r.ClusterID.String()).Set(float64(r.Count))
 		}
-		runtimeLogger().InfoContext(ctx, "crd mirror gauge populated", "series", len(rows))
+		runtimeLogger(ctx).InfoContext(ctx, "crd mirror gauge populated", "series", len(rows))
 		return nil
 	})
 }

@@ -222,7 +222,7 @@ func (c Config) redeemHTTP(ticket string) (redeemResult, error) {
 	if err != nil {
 		return redeemResult{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
 		return redeemResult{}, fmt.Errorf("redeem status %d", resp.StatusCode)

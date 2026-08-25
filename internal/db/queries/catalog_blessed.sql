@@ -19,12 +19,3 @@ DELETE FROM catalog_blessed_charts WHERE source = $1;
 INSERT INTO catalog_blessed_charts
     (repo_url, chart_name, display_name, description, category, icon_url, mgmt_safe, version_policy, source)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
-
--- name: ListBlessedCharts :many
-SELECT * FROM catalog_blessed_charts ORDER BY category ASC, chart_name ASC;
-
--- name: GetBlessedChart :one
-SELECT * FROM catalog_blessed_charts WHERE repo_url = $1 AND chart_name = $2;
-
--- name: CountBlessedCharts :one
-SELECT count(*) FROM catalog_blessed_charts;

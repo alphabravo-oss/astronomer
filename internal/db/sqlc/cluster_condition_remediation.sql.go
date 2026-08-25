@@ -192,7 +192,7 @@ WHERE c.status = $1 AND cl.decommissioned_at IS NULL
 ORDER BY c.last_transition_time ASC
 `
 
-// Fleet-wide list of conditions in the given status, used by the
+// Estate-wide list of conditions in the given status, used by the
 // remediation reconciler to find work each tick. Skips decommissioned
 // clusters because their conditions are about to be deleted by the
 // decommission reconciler anyway.

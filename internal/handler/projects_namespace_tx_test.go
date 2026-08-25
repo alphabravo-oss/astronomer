@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -25,6 +26,8 @@ type fakeProjectTxStore struct {
 	nsRows    map[string]bool
 	upsertErr error
 	deleteErr error
+	auditErr  error
+	audits    []sqlc.AuditOutbox
 }
 
 func newFakeProjectTxStore(p sqlc.Project, namespaces ...string) *fakeProjectTxStore {
@@ -43,12 +46,14 @@ func (s *fakeProjectTxStore) runTx() projectRunTxFunc {
 		for k, v := range s.nsRows {
 			scratchRows[k] = v
 		}
-		scratch := &fakeProjectTx{store: s, project: s.project, nsRows: scratchRows}
+		scratchAudits := append([]sqlc.AuditOutbox(nil), s.audits...)
+		scratch := &fakeProjectTx{store: s, project: s.project, nsRows: scratchRows, audits: scratchAudits}
 		if err := fn(scratch); err != nil {
 			return err // rollback: discard scratch
 		}
 		s.project = scratch.project
 		s.nsRows = scratch.nsRows
+		s.audits = scratch.audits
 		return nil
 	}
 }
@@ -57,6 +62,25 @@ type fakeProjectTx struct {
 	store   *fakeProjectTxStore
 	project sqlc.Project
 	nsRows  map[string]bool
+	audits  []sqlc.AuditOutbox
+}
+
+func (t *fakeProjectTx) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	if t.store.auditErr != nil {
+		return sqlc.AuditOutbox{}, t.store.auditErr
+	}
+	for _, existing := range t.audits {
+		if existing.DedupeKey == arg.DedupeKey {
+			return existing, nil
+		}
+	}
+	row := sqlc.AuditOutbox{
+		ID: arg.ID, DedupeKey: arg.DedupeKey, EventCreatedAt: arg.EventCreatedAt,
+		Action: arg.Action, ResourceType: arg.ResourceType, ResourceID: arg.ResourceID,
+		ResourceName: arg.ResourceName, Detail: arg.Detail, Status: "pending",
+	}
+	t.audits = append(t.audits, row)
+	return row, nil
 }
 
 func (t *fakeProjectTx) GetProjectByIDForUpdate(_ context.Context, _ uuid.UUID) (sqlc.Project, error) {
@@ -180,6 +204,34 @@ func TestAddNamespace_TxCommitsBothHalves(t *testing.T) {
 	}
 	if !store.nsRows["payments"] {
 		t.Fatalf("sidecar row for payments absent, want present")
+	}
+	if len(store.audits) != 1 || store.audits[0].Action != "project.add_namespace" {
+		t.Fatalf("transactional audit rows = %#v", store.audits)
+	}
+}
+
+func TestAddNamespace_TxRollsBackWhenAuditIntentFails(t *testing.T) {
+	q := newPolicyTestQuerier()
+	callerID := uuid.New()
+	clusterID := uuid.New()
+	id, p := seedTxProject(q, clusterID, []string{})
+
+	store := newFakeProjectTxStore(p)
+	store.auditErr = errors.New("audit outbox unavailable")
+	h := NewProjectHandler(q)
+	h.SetRunTx(store.runTx())
+	grantClusterNamespaceAssignment(h, clusterID)
+
+	req := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+id.String()+"/add-namespace/", callerID, map[string]any{"namespace": "payments"})
+	req = patchURLParam(req, "id", id.String())
+	rec := httptest.NewRecorder()
+	h.AddNamespace(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), `"code":"audit_unavailable"`) {
+		t.Fatalf("status=%d body=%s, want 503 audit_unavailable", rec.Code, rec.Body.String())
+	}
+	if got := decodeNamespaceList(store.project.Namespaces); len(got) != 0 || store.nsRows["payments"] || len(store.audits) != 0 {
+		t.Fatalf("rollback state namespaces=%v sidecar=%v audits=%d", got, store.nsRows["payments"], len(store.audits))
 	}
 }
 

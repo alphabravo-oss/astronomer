@@ -1,19 +1,26 @@
-import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useLoggingPipelines, queryKeys } from '@/lib/hooks';
-import { deleteLoggingPipeline, updateLoggingPipeline } from '@/lib/api';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { formatRelativeTime, cn } from '@/lib/utils';
-import type { LoggingPipeline } from '@/types';
-import { Trash2 } from 'lucide-react';
-import { toastError, toastSuccess } from '@/lib/toast';
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useLoggingPipelines, queryKeys } from "@/lib/hooks";
+import { deleteLoggingPipeline, updateLoggingPipeline } from "@/lib/api";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { formatRelativeTime, cn } from "@/lib/utils";
+import type { LoggingPipeline } from "@/types";
+import { Trash2 } from "lucide-react";
+import { toastError, toastSuccess } from "@/lib/toast";
 
 export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
   const queryClient = useQueryClient();
-  const [deleteTarget, setDeleteTarget] = useState<LoggingPipeline | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<LoggingPipeline | null>(
+    null,
+  );
   const [deleting, setDeleting] = useState(false);
-  const { data: pipelines, isLoading, isError, refetch } = useLoggingPipelines(clusterId);
+  const {
+    data: pipelines,
+    isLoading,
+    isError,
+    refetch,
+  } = useLoggingPipelines(clusterId);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -21,10 +28,12 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
     try {
       await deleteLoggingPipeline(deleteTarget.id);
       queryClient.invalidateQueries({ queryKey: queryKeys.logging.all });
-      toastSuccess('Logging pipeline deleted');
+      toastSuccess("Logging pipeline deleted");
       setDeleteTarget(null);
     } catch (error) {
-      toastError(`Failed to delete pipeline: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toastError(
+        `Failed to delete pipeline: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     } finally {
       setDeleting(false);
     }
@@ -32,46 +41,60 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
 
   const handleToggle = async (pipeline: LoggingPipeline) => {
     try {
-      await updateLoggingPipeline(pipeline.id, { enabled: !pipeline.enabled });
+      await updateLoggingPipeline(pipeline.id, {
+        ...pipeline,
+        enabled: !pipeline.enabled,
+      });
       queryClient.invalidateQueries({ queryKey: queryKeys.logging.all });
-      toastSuccess(`Pipeline ${pipeline.enabled ? 'disabled' : 'enabled'}`);
+      toastSuccess(`Pipeline ${pipeline.enabled ? "disabled" : "enabled"}`);
     } catch (error) {
-      toastError(`Failed to update pipeline: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toastError(
+        `Failed to update pipeline: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   };
 
   const columns: Column<LoggingPipeline>[] = [
     {
-      key: 'name',
-      header: 'Pipeline',
+      key: "name",
+      header: "Pipeline",
       accessor: (row) => (
         <div>
           <p className="font-medium text-foreground">{row.name}</p>
           {row.description && (
-            <p className="text-xs text-muted-foreground truncate max-w-[300px]">{row.description}</p>
+            <p className="text-xs text-muted-foreground truncate max-w-[300px]">
+              {row.description}
+            </p>
           )}
         </div>
       ),
     },
     ...(clusterId
       ? []
-      : [{
-          key: 'cluster',
-          header: 'Cluster',
-          accessor: (row: LoggingPipeline) => (
-            <span className="text-sm text-muted-foreground">{row.clusterName || 'All'}</span>
-          ),
-        } as Column<LoggingPipeline>]),
+      : [
+          {
+            key: "cluster",
+            header: "Cluster",
+            accessor: (row: LoggingPipeline) => (
+              <span className="text-sm text-muted-foreground">
+                {row.clusterName || "All"}
+              </span>
+            ),
+          } as Column<LoggingPipeline>,
+        ]),
     {
-      key: 'namespaces',
-      header: 'Namespaces',
+      key: "namespaces",
+      header: "Namespaces",
       accessor: (row) => (
         <div className="flex flex-wrap gap-1">
           {row.namespaces.length === 0 ? (
             <span className="text-xs text-muted-foreground">All</span>
           ) : (
             row.namespaces.slice(0, 3).map((ns) => (
-              <span key={ns} className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">
+              <span
+                key={ns}
+                className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+              >
                 {ns}
               </span>
             ))
@@ -86,17 +109,17 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
       sortable: false,
     },
     {
-      key: 'outputs',
-      header: 'Outputs',
+      key: "outputs",
+      header: "Outputs",
       accessor: (row) => (
         <span className="tabular-nums text-sm">{row.outputNames.length}</span>
       ),
       sortAccessor: (row) => row.outputNames.length,
-      align: 'center',
+      align: "center",
     },
     {
-      key: 'enabled',
-      header: 'Enabled',
+      key: "enabled",
+      header: "Enabled",
       accessor: (row) => (
         <button
           onClick={(e) => {
@@ -104,14 +127,14 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
             handleToggle(row);
           }}
           className={cn(
-            'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-            row.enabled ? 'bg-primary' : 'bg-muted'
+            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+            row.enabled ? "bg-primary" : "bg-muted",
           )}
         >
           <span
             className={cn(
-              'inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform',
-              row.enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'
+              "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
+              row.enabled ? "translate-x-[18px]" : "translate-x-[3px]",
             )}
           />
         </button>
@@ -119,17 +142,19 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
       sortable: false,
     },
     {
-      key: 'created',
-      header: 'Created',
+      key: "created",
+      header: "Created",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>
+        <span className="text-xs text-muted-foreground">
+          {formatRelativeTime(row.createdAt)}
+        </span>
       ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       accessor: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
           <button
             onClick={() => setDeleteTarget(row)}
             className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"

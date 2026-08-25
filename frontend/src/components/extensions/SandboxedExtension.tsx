@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // §HostMounts / §BridgeProtocol — SandboxedExtension: the Tier-2 host component.
 //
@@ -25,10 +25,13 @@
 // `sandboxOrigin` (out of the browser's control), but advertising it on the host
 // side documents the intersection and lets a same-origin dev server honor it.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from '@/lib/navigation';
-import { requestExtensionBridgeToken, fetchExtensionData } from '@/lib/api/extensions';
-import { useExtensionTheme } from './ExtensionProvider';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "@/lib/navigation";
+import {
+  requestExtensionBridgeToken,
+  fetchExtensionData,
+} from "@/lib/api/extensions";
+import { useExtensionTheme } from "./ExtensionProvider";
 import {
   validateInbound,
   evaluateHandshake,
@@ -48,8 +51,8 @@ import {
   type ExtDataRequestPayload,
   type ExtNavigatePayload,
   type ExtResizePayload,
-} from '@/lib/extensions/bridge';
-import type { ExtensionContext, ExtensionMount } from '@/lib/api/extensions';
+} from "@/lib/extensions/bridge";
+import type { ExtensionContext, ExtensionMount } from "@/lib/api/extensions";
 
 export interface SandboxedExtensionProps {
   mount: ExtensionMount;
@@ -60,31 +63,35 @@ export interface SandboxedExtensionProps {
   manifestSha?: string;
 }
 
-type BridgeState = 'loading' | 'connected' | 'incompatible' | 'error';
+type BridgeState = "loading" | "connected" | "incompatible" | "error";
 
-const DEFAULT_THEME: BridgeTheme = { mode: 'light', tokens: {} };
+const DEFAULT_THEME: BridgeTheme = { mode: "light", tokens: {} };
 
 // Map the four host point kinds to the bridge `point` label used in host/hello.
 function pointLabel(mount: ExtensionMount): string {
   switch (mount.point) {
-    case 'sidebar':
-      return 'sidebar';
-    case 'dashboardWidget':
-      return 'dashboardWidget';
-    case 'clusterTab':
-      return 'clusterTab';
-    case 'settingsPage':
-      return 'settingsPage';
+    case "sidebar":
+      return "sidebar";
+    case "dashboardWidget":
+      return "dashboardWidget";
+    case "clusterTab":
+      return "clusterTab";
+    case "settingsPage":
+      return "settingsPage";
     default:
       return String(mount.point);
   }
 }
 
-export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExtensionProps) {
+export function SandboxedExtension({
+  mount,
+  context,
+  manifestSha,
+}: SandboxedExtensionProps) {
   const router = useRouter();
   const hostTheme = useExtensionTheme();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [state, setState] = useState<BridgeState>('loading');
+  const [state, setState] = useState<BridgeState>("loading");
   const [height, setHeight] = useState<number>(MIN_IFRAME_HEIGHT * 2);
 
   const bundle = mount.render?.bundle;
@@ -100,7 +107,7 @@ export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExt
   );
 
   // The exact origin we both load the iframe at and pin inbound messages to.
-  const sandboxOrigin = bundle?.sandboxOrigin ?? '';
+  const sandboxOrigin = bundle?.sandboxOrigin ?? "";
 
   // Stable refs the message handler reads without re-subscribing every render.
   const stateRef = useRef(state);
@@ -136,7 +143,11 @@ export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExt
     async function onMessage(event: MessageEvent) {
       const result = validateInbound(
         { source: event.source, origin: event.origin, data: event.data },
-        { expectedSource: guard.expectedSource(), expectedOrigin: guard.expectedOrigin, extensionName: guard.extensionName },
+        {
+          expectedSource: guard.expectedSource(),
+          expectedOrigin: guard.expectedOrigin,
+          extensionName: guard.extensionName,
+        },
       );
       if (!result.ok || !result.msg) {
         // Drop + (server-side) audit extension.bridge.rejected. We surface the
@@ -147,22 +158,28 @@ export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExt
       const msg = result.msg;
 
       switch (msg.type) {
-        case 'ext/ready': {
-          const handshake = evaluateHandshake(msg.payload as ExtReadyPayload | undefined, {
-            manifestSha: manifestSha ?? (msg.payload as ExtReadyPayload | undefined)?.manifestSha ?? '',
-          });
+        case "ext/ready": {
+          const handshake = evaluateHandshake(
+            msg.payload as ExtReadyPayload | undefined,
+            {
+              manifestSha:
+                manifestSha ??
+                (msg.payload as ExtReadyPayload | undefined)?.manifestSha ??
+                "",
+            },
+          );
           if (!handshake.ok) {
-            setState('incompatible');
+            setState("incompatible");
             postToIframe(buildTeardown(ext, mountId));
             return;
           }
-          setState('connected');
+          setState("connected");
           // Re-push theme on connect so a zero-config bundle themes immediately.
           postToIframe(buildTheme(ext, mountId, themeRef.current));
           return;
         }
 
-        case 'ext/token.request': {
+        case "ext/token.request": {
           const p = msg.payload as ExtTokenRequestPayload | undefined;
           if (!msg.id) return; // token requests are correlated; unsolicited -> drop
           if (!isAllowedDataSource(p?.dataSource, allowedDataSources)) {
@@ -170,7 +187,11 @@ export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExt
             return;
           }
           try {
-            const grant = await requestExtensionBridgeToken(ext, p.dataSource, contextRef.current);
+            const grant = await requestExtensionBridgeToken(
+              ext,
+              p.dataSource,
+              contextRef.current,
+            );
             postToIframe(buildTokenGrant(ext, mountId, msg.id, grant));
           } catch {
             // Backend denied (RBAC) or errored: stay silent (no ticket). The SDK
@@ -179,14 +200,17 @@ export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExt
           return;
         }
 
-        case 'ext/data.request': {
+        case "ext/data.request": {
           const p = msg.payload as ExtDataRequestPayload | undefined;
           if (!msg.id) return;
           if (!isAllowedDataSource(p?.dataSource, allowedDataSources)) {
             postToIframe(
               buildDataResponse(ext, mountId, msg.id, {
                 ok: false,
-                error: { code: 'extension_rbac_denied', message: 'dataSource not in allowlist' },
+                error: {
+                  code: "extension_rbac_denied",
+                  message: "dataSource not in allowlist",
+                },
               }),
             );
             return;
@@ -209,15 +233,20 @@ export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExt
             postToIframe(
               buildDataResponse(ext, mountId, msg.id, {
                 ok: false,
-                error: { code: 'extension_data_error', message: err instanceof Error ? err.message : undefined },
+                error: {
+                  code: "extension_data_error",
+                  message: err instanceof Error ? err.message : undefined,
+                },
               }),
             );
           }
           return;
         }
 
-        case 'ext/navigate': {
-          const nav = validateNavigation(msg.payload as ExtNavigatePayload | undefined);
+        case "ext/navigate": {
+          const nav = validateNavigation(
+            msg.payload as ExtNavigatePayload | undefined,
+          );
           if (nav.ok && nav.to) {
             // Host-side allowlist passed. Route-level RBAC is enforced by the
             // host router/route guard on push.
@@ -226,13 +255,15 @@ export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExt
           return;
         }
 
-        case 'ext/resize': {
-          const clamped = clampHeight((msg.payload as ExtResizePayload | undefined)?.height);
+        case "ext/resize": {
+          const clamped = clampHeight(
+            (msg.payload as ExtResizePayload | undefined)?.height,
+          );
           if (clamped !== null) setHeight(clamped);
           return;
         }
 
-        case 'ext/toast': {
+        case "ext/toast": {
           // Toasts are advisory + bounded; without a host toast surface we drop
           // them rather than introduce a dependency. (Hook a host toast here.)
           return;
@@ -244,8 +275,8 @@ export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExt
       }
     }
 
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
     // sandboxOrigin/ext/mountId/allowlist are stable for a given mount; theme +
     // context are read via refs so the listener need not re-subscribe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -258,9 +289,9 @@ export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExt
       buildHello({
         ext,
         mount: mountId,
-        version: '', // version is not in the mount projection; SDK reads it from manifestSha
-        manifestSha: manifestSha ?? '',
-        hostOrigin: typeof window !== 'undefined' ? window.location.origin : '',
+        version: "", // version is not in the mount projection; SDK reads it from manifestSha
+        manifestSha: manifestSha ?? "",
+        hostOrigin: typeof window !== "undefined" ? window.location.origin : "",
         point: pointLabel(mount),
         component: bundle.component || mountId,
         context: context ?? {},
@@ -272,7 +303,7 @@ export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExt
 
   // ----- theme push on host theme change -------------------------------------
   useEffect(() => {
-    if (stateRef.current !== 'connected') return;
+    if (stateRef.current !== "connected") return;
     postToIframe(buildTheme(ext, mountId, theme));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme, ext, mountId]);
@@ -288,20 +319,21 @@ export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExt
   if (!bundle) {
     return (
       <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-muted-foreground">
-        Extension <span className="font-medium text-foreground">{ext}</span> has no bundle to mount.
+        Extension <span className="font-medium text-foreground">{ext}</span> has
+        no bundle to mount.
       </div>
     );
   }
 
-  if (state === 'incompatible') {
+  if (state === "incompatible") {
     return (
       <div
         role="alert"
         className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground"
         data-bridge-state="incompatible"
       >
-        Extension <span className="font-medium text-foreground">{ext}</span> uses an incompatible SDK
-        and was not loaded.
+        Extension <span className="font-medium text-foreground">{ext}</span>{" "}
+        uses an incompatible SDK and was not loaded.
       </div>
     );
   }
@@ -310,10 +342,13 @@ export function SandboxedExtension({ mount, context, manifestSha }: SandboxedExt
   // that origin with its own CSP response header + SRI on the entry <script> —
   // both out of the host's control by design (cross-origin), which is exactly
   // what makes the origin opaque and the bundle un-tamperable from the host.
-  const src = `${sandboxOrigin.replace(/\/$/, '')}/${(bundle.entry || 'index.html').replace(/^\//, '')}`;
+  const src = `${sandboxOrigin.replace(/\/$/, "")}/${(bundle.entry || "index.html").replace(/^\//, "")}`;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card" data-bridge-state={state}>
+    <div
+      className="overflow-hidden rounded-lg border border-border bg-card"
+      data-bridge-state={state}
+    >
       <iframe
         ref={iframeRef}
         src={src}
@@ -347,15 +382,15 @@ interface CSPLike {
 // Serialize an ExtensionCSP into a single Content-Security-Policy string for the
 // data-csp hint. Exported for testing the per-extension CSP rendering logic.
 export function cspToString(csp: CSPLike | undefined): string {
-  if (!csp) return '';
+  if (!csp) return "";
   const directive = (name: string, values?: string[]) =>
-    values && values.length ? `${name} ${values.join(' ')}` : '';
+    values && values.length ? `${name} ${values.join(" ")}` : "";
   return [
-    directive('script-src', csp.scriptSrc),
-    directive('connect-src', csp.connectSrc),
-    directive('frame-src', csp.frameSrc),
-    directive('img-src', csp.imageSrc),
+    directive("script-src", csp.scriptSrc),
+    directive("connect-src", csp.connectSrc),
+    directive("frame-src", csp.frameSrc),
+    directive("img-src", csp.imageSrc),
   ]
     .filter(Boolean)
-    .join('; ');
+    .join("; ");
 }

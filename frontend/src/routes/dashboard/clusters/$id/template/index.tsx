@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * Cluster Template tab — the applied cluster-template binding and its
  * reconciliation status. A cluster carries at most one template; reapply
@@ -7,11 +7,11 @@ import { createFileRoute } from '@tanstack/react-router';
  * inspect drift without nuking the cluster).
  */
 
-import { lazy, Suspense, useMemo, useState } from 'react';
-import { useParams } from '@/lib/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import { PageHeader, PageShell } from '@/components/ui/page';
+import { lazy, Suspense, useMemo, useState } from "react";
+import { useParams } from "@/lib/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -23,26 +23,26 @@ import {
   Server,
   Unlink,
   XCircle,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { queryKeys, useCluster } from '@/lib/hooks';
-import { liveFallback } from '@/lib/live/status-store';
-import { useClustersUpdate } from '@/lib/permission-hooks';
+import { queryKeys, useCluster } from "@/lib/hooks";
+import { liveFallback } from "@/lib/live/status-store";
+import { useClustersUpdate } from "@/lib/permission-hooks";
 import {
   bindClusterTemplate,
   detachClusterTemplate,
   getClusterTemplateBinding,
   reapplyClusterTemplate,
   type ClusterTemplateStatus,
-} from '@/lib/api/cluster-detail';
-import { listClusterTemplates } from '@/lib/api/project-detail';
-import { cn } from '@/lib/utils';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+} from "@/lib/api/cluster-detail";
+import { listClusterTemplates } from "@/lib/api/project-detail";
+import { cn } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 // Monaco stays a lazy chunk (second of the 2 monaco sites; the first is
 // components/ui/yaml-editor.tsx) so the editor bundle loads only when the
 // applied-spec panel is opened.
-const MonacoEditor = lazy(() => import('@monaco-editor/react'));
+const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
 function EditorLoading() {
   return (
@@ -53,7 +53,7 @@ function EditorLoading() {
 }
 
 function fmt(iso?: string) {
-  if (!iso) return '—';
+  if (!iso) return "—";
   try {
     return new Date(iso).toLocaleString();
   } catch {
@@ -64,44 +64,54 @@ function fmt(iso?: string) {
 function TemplateStatusBadge({ status }: { status: ClusterTemplateStatus }) {
   const cfg = (() => {
     switch (status) {
-      case 'applied':
+      case "applied":
         return {
-          tone: 'bg-status-success/10 text-status-success border-status-success/20',
+          tone: "bg-status-success/10 text-status-success border-status-success/20",
           Icon: CheckCircle2,
-          label: 'Applied',
+          label: "Applied",
         };
-      case 'pending':
+      case "pending":
         return {
-          tone: 'bg-status-info/10 text-status-info border-status-info/20',
+          tone: "bg-status-info/10 text-status-info border-status-info/20",
           Icon: Loader2,
-          label: 'Pending',
+          label: "Pending",
           spin: true,
         };
-      case 'applying':
+      case "applying":
         return {
-          tone: 'bg-status-info/10 text-status-info border-status-info/20',
+          tone: "bg-status-info/10 text-status-info border-status-info/20",
           Icon: Loader2,
-          label: 'Applying',
+          label: "Applying",
           spin: true,
         };
-      case 'failed':
+      case "failed":
         return {
-          tone: 'bg-status-error/10 text-status-error border-status-error/20',
+          tone: "bg-status-error/10 text-status-error border-status-error/20",
           Icon: XCircle,
-          label: 'Failed',
+          label: "Failed",
         };
       default:
         return {
-          tone: 'bg-muted text-muted-foreground border-border',
+          tone: "bg-muted text-muted-foreground border-border",
           Icon: AlertTriangle,
-          label: status || 'Unknown',
+          label: status || "Unknown",
         };
     }
   })();
-  const { tone, Icon, label, spin } = cfg as { tone: string; Icon: typeof CheckCircle2; label: string; spin?: boolean };
+  const { tone, Icon, label, spin } = cfg as {
+    tone: string;
+    Icon: typeof CheckCircle2;
+    label: string;
+    spin?: boolean;
+  };
   return (
-    <span className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs border font-medium', tone)}>
-      <Icon className={cn('h-3 w-3', spin && 'animate-spin')} />
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs border font-medium",
+        tone,
+      )}
+    >
+      <Icon className={cn("h-3 w-3", spin && "animate-spin")} />
       {label}
     </span>
   );
@@ -131,45 +141,54 @@ function ClusterTemplatePage() {
     // during a stream drop, and stops entirely once settled.
     refetchInterval: (q) => {
       const status = q.state.data?.status;
-      return status === 'pending' || status === 'applying' ? liveFallback(5000)() : false;
+      return status === "pending" || status === "applying"
+        ? liveFallback(5000)()
+        : false;
     },
     refetchIntervalInBackground: false,
   });
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [specOpen, setSpecOpen] = useState(true);
   const [confirmReapply, setConfirmReapply] = useState(false);
   const [confirmDetach, setConfirmDetach] = useState(false);
 
   const bindMutation = useMutation({
-    mutationFn: (templateId: string) => bindClusterTemplate(clusterId, { template_id: templateId }),
+    mutationFn: (templateId: string) =>
+      bindClusterTemplate(clusterId, { template_id: templateId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.templateBinding(clusterId) });
-      toastSuccess('Template applied');
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.templateBinding(clusterId),
+      });
+      toastSuccess("Template applied");
     },
-    onError: (e: Error) => toastApiError('Apply failed', e),
+    onError: (e: Error) => toastApiError("Apply failed", e),
   });
   const reapplyMutation = useMutation({
     mutationFn: () => reapplyClusterTemplate(clusterId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.templateBinding(clusterId) });
-      toastSuccess('Reapply queued');
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.templateBinding(clusterId),
+      });
+      toastSuccess("Reapply queued");
       setConfirmReapply(false);
     },
-    onError: (e: Error) => toastApiError('Reapply failed', e),
+    onError: (e: Error) => toastApiError("Reapply failed", e),
   });
   const detachMutation = useMutation({
     mutationFn: () => detachClusterTemplate(clusterId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.templateBinding(clusterId) });
-      toastSuccess('Template detached');
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.templateBinding(clusterId),
+      });
+      toastSuccess("Template detached");
       setConfirmDetach(false);
     },
-    onError: (e: Error) => toastApiError('Detach failed', e),
+    onError: (e: Error) => toastApiError("Detach failed", e),
   });
 
   const specJson = useMemo(() => {
-    if (!binding?.spec) return '';
+    if (!binding?.spec) return "";
     try {
       return JSON.stringify(binding.spec, null, 2);
     } catch {
@@ -208,9 +227,12 @@ function ClusterTemplatePage() {
         /* Empty state */
         <div className="rounded-lg border border-border bg-card p-12 flex flex-col items-center justify-center text-muted-foreground">
           <ClipboardList className="h-10 w-10 mb-3" />
-          <p className="text-sm font-medium text-foreground">No template applied</p>
+          <p className="text-sm font-medium text-foreground">
+            No template applied
+          </p>
           <p className="text-xs mt-1 max-w-md text-center">
-            Apply a cluster template to install a curated set of tools, policies, and labels.
+            Apply a cluster template to install a curated set of tools,
+            policies, and labels.
           </p>
           <div className="mt-4 flex items-center gap-2">
             <select
@@ -229,14 +251,20 @@ function ClusterTemplatePage() {
               ))}
             </select>
             <button
-              onClick={() => selectedTemplateId && bindMutation.mutate(selectedTemplateId)}
-              disabled={!selectedTemplateId || bindMutation.isPending || !canWrite}
+              onClick={() =>
+                selectedTemplateId && bindMutation.mutate(selectedTemplateId)
+              }
+              disabled={
+                !selectedTemplateId || bindMutation.isPending || !canWrite
+              }
               title={canWrite ? undefined : reason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
                 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
                 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {bindMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {bindMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : null}
               Apply Template
             </button>
           </div>
@@ -256,11 +284,15 @@ function ClusterTemplatePage() {
                 <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
                   <div className="flex gap-2">
                     <span className="text-muted-foreground">Template:</span>
-                    <span className="font-mono text-foreground">{binding.templateName}</span>
+                    <span className="font-mono text-foreground">
+                      {binding.templateName}
+                    </span>
                   </div>
                   <div className="flex gap-2">
                     <span className="text-muted-foreground">Applied at:</span>
-                    <span className="text-foreground">{fmt(binding.appliedAt)}</span>
+                    <span className="text-foreground">
+                      {fmt(binding.appliedAt)}
+                    </span>
                   </div>
                 </div>
                 {binding.lastError && (
@@ -275,7 +307,11 @@ function ClusterTemplatePage() {
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   onClick={() => canWrite && setConfirmReapply(true)}
-                  disabled={!canWrite || binding.status === 'applying' || binding.status === 'pending'}
+                  disabled={
+                    !canWrite ||
+                    binding.status === "applying" ||
+                    binding.status === "pending"
+                  }
                   title={canWrite ? undefined : reason}
                   className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
                     border border-border text-foreground hover:bg-accent transition-colors
@@ -311,8 +347,12 @@ function ClusterTemplatePage() {
                 ) : (
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 )}
-                <span className="text-sm font-medium text-foreground">Applied spec</span>
-                <span className="text-xs text-muted-foreground">(read-only snapshot)</span>
+                <span className="text-sm font-medium text-foreground">
+                  Applied spec
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  (read-only snapshot)
+                </span>
               </div>
             </button>
             {specOpen && (
@@ -329,15 +369,17 @@ function ClusterTemplatePage() {
                           readOnly: true,
                           minimap: { enabled: false },
                           fontSize: 12,
-                          lineNumbers: 'on',
+                          lineNumbers: "on",
                           scrollBeyondLastLine: false,
-                          wordWrap: 'on',
+                          wordWrap: "on",
                         }}
                       />
                     </Suspense>
                   </div>
                 ) : (
-                  <pre className="p-4 text-xs text-muted-foreground">(no spec recorded)</pre>
+                  <pre className="p-4 text-xs text-muted-foreground">
+                    (no spec recorded)
+                  </pre>
                 )}
               </div>
             )}
@@ -369,6 +411,6 @@ function ClusterTemplatePage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id/template/')({
+export const Route = createFileRoute("/dashboard/clusters/$id/template/")({
   component: ClusterTemplatePage,
 });

@@ -59,6 +59,10 @@ func registerClusterAddonRoutes(r chi.Router, deps RouterDependencies) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbList)).Get("/", deps.ClusterTemplates.List)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbCreate)).Post("/", deps.ClusterTemplates.Create)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbRead)).Get("/{id}/", deps.ClusterTemplates.Get)
+			r.With(
+				requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbRead),
+				requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead),
+			).Get("/{id}/clusters/", deps.ClusterTemplates.ListBoundClusters)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbUpdate)).Put("/{id}/", deps.ClusterTemplates.Update)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbUpdate)).Patch("/{id}/", deps.ClusterTemplates.Update)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbDelete)).Delete("/{id}/", deps.ClusterTemplates.Delete)

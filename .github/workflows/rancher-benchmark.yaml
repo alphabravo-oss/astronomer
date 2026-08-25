@@ -1,0 +1,113 @@
+name: Rancher-relative adopted-cluster benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag: {description: "Exact v1 release tag under comparison", required: true, type: string}
+      human_study_run_id: {description: "Exact signed human-study workflow run", required: true, type: string}
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+jobs:
+  benchmark:
+    runs-on: [self-hosted, linux, x64, astronomer-benchmark]
+    environment: rancher-benchmark
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {ref: "refs/tags/${{ inputs.tag }}", persist-credentials: false}
+      - name: Enforce exact tag and pinned benchmark driver
+        env:
+          TARGET_TAG: ${{ inputs.tag }}
+          DRIVER_PATH: ${{ vars.RANCHER_BENCHMARK_DRIVER_PATH }}
+          DRIVER_SHA256: ${{ vars.RANCHER_BENCHMARK_DRIVER_SHA256 }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/tags/$TARGET_TAG"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -f "$DRIVER_PATH" && test ! -L "$DRIVER_PATH" && test -x "$DRIVER_PATH"
+          test "$(sha256sum "$DRIVER_PATH" | cut -d' ' -f1)" = "$DRIVER_SHA256"
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with: {cosign-release: v2.5.3}
+      - name: Download exact signed human study
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: rancher-human-study-${{ inputs.human_study_run_id }}
+          path: ${{ runner.temp }}/human-study
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.human_study_run_id }}
+      - name: Verify human-study workflow identity and content
+        env:
+          TARGET_TAG: ${{ inputs.tag }}
+          HUMAN_RUN_ID: ${{ inputs.human_study_run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${HUMAN_RUN_ID}")"
+          jq -e --arg sha "$GITHUB_SHA" --arg tag "$TARGET_TAG" --arg repo "$GITHUB_REPOSITORY" '.status=="completed" and .conclusion=="success" and .event=="workflow_dispatch" and .path==".github/workflows/rancher-human-study.yaml" and .head_sha==$sha and .head_branch==$tag and .head_repository.full_name==$repo' <<<"$run_json" >/dev/null
+          artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${HUMAN_RUN_ID}/artifacts?per_page=100&name=rancher-human-study-${HUMAN_RUN_ID}")"
+          jq -e --arg name "rancher-human-study-${HUMAN_RUN_ID}" '[.artifacts[]|select(.name==$name and .expired==false)]|length==1' <<<"$artifacts" >/dev/null
+          human="$RUNNER_TEMP/human-study/human-evaluation.json"
+          bundle="$RUNNER_TEMP/human-study/human-evaluation.sigstore.json"
+          test -f "$human" && test ! -L "$human" && test -f "$bundle" && test ! -L "$bundle"
+          cosign verify-blob --bundle "$bundle" \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/rancher-human-study.yaml@refs/tags/${TARGET_TAG}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com "$human"
+          node scripts/validate-rancher-human-study.mjs "$human"
+      - name: Materialize ephemeral authentication state
+        env:
+          ASTRONOMER_AUTH_STATE: ${{ secrets.ASTRONOMER_BENCHMARK_AUTH_STATE }}
+          RANCHER_AUTH_STATE: ${{ secrets.RANCHER_BENCHMARK_AUTH_STATE }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$ASTRONOMER_AUTH_STATE" && test -n "$RANCHER_AUTH_STATE"
+          printf '%s' "$ASTRONOMER_AUTH_STATE" > "$RUNNER_TEMP/astronomer-auth.json"
+          printf '%s' "$RANCHER_AUTH_STATE" > "$RUNNER_TEMP/rancher-auth.json"
+      - name: Execute pinned cold/warm paired automation
+        env:
+          DRIVER_PATH: ${{ vars.RANCHER_BENCHMARK_DRIVER_PATH }}
+          ASTRONOMER_URL: ${{ vars.ASTRONOMER_BENCHMARK_URL }}
+          RANCHER_URL: ${{ vars.RANCHER_BENCHMARK_URL }}
+          ASTRONOMER_IMAGE_DIGEST: ${{ vars.ASTRONOMER_BENCHMARK_IMAGE_DIGEST }}
+          RANCHER_IMAGE_DIGEST: ${{ vars.RANCHER_BENCHMARK_IMAGE_DIGEST }}
+        run: |
+          set -euo pipefail
+          test -n "$ASTRONOMER_URL" && test -n "$RANCHER_URL"
+          "$DRIVER_PATH" \
+            --tasks docs/assurance/rancher-benchmark/tasks-v1.json \
+            --astronomer-url "$ASTRONOMER_URL" --astronomer-auth-state "$RUNNER_TEMP/astronomer-auth.json" \
+            --rancher-url "$RANCHER_URL" --rancher-auth-state "$RUNNER_TEMP/rancher-auth.json" \
+            --astronomer-commit "$GITHUB_SHA" --astronomer-image-digest "$ASTRONOMER_IMAGE_DIGEST" \
+            --rancher-commit e870de073d56eec568516fae4bc5f76c5d409909 --rancher-image-digest "$RANCHER_IMAGE_DIGEST" \
+            --run-id "$GITHUB_RUN_ID" --repetitions 3 --cache-modes cold,warm \
+            --out "$RUNNER_TEMP/automated-benchmark.json"
+          jq -e --arg run "$GITHUB_RUN_ID" --arg commit "$GITHUB_SHA" \
+            '.run.run_id == $run and .subjects.astronomer.source_commit == $commit and .qualification == {automated:"pass",human_clarity:"pending",overall:"pending"} and (has("human_evaluation")|not)' \
+            "$RUNNER_TEMP/automated-benchmark.json" >/dev/null
+      - name: Merge and validate signed counterbalanced human study
+        env:
+          HUMAN_RUN_ID: ${{ inputs.human_study_run_id }}
+        run: |
+          set -euo pipefail
+          human="$RUNNER_TEMP/human-study/human-evaluation.json"; bundle="$RUNNER_TEMP/human-study/human-evaluation.sigstore.json"
+          human_digest="sha256:$(sha256sum "$human" | cut -d' ' -f1)"; bundle_digest="sha256:$(sha256sum "$bundle" | cut -d' ' -f1)"
+          jq --slurpfile human "$human" --arg human_digest "$human_digest" --arg bundle_digest "$bundle_digest" --arg human_run "$HUMAN_RUN_ID" --arg commit "$GITHUB_SHA" --arg ref "$GITHUB_REF" \
+            '.human_evaluation=($human[0] + {source_evidence_sha256:$human_digest,source_bundle_sha256:$bundle_digest,source_run_id:$human_run,source_workflow:".github/workflows/rancher-human-study.yaml",source_commit:$commit,source_ref:$ref,source_conclusion:"success"}) | .qualification={automated:"pass",human_clarity:"pass",overall:"pass"}' \
+            "$RUNNER_TEMP/automated-benchmark.json" > benchmark-v1.json
+          node scripts/validate-rancher-benchmark.mjs --evidence benchmark-v1.json
+          chmod 0644 benchmark-v1.json
+      - name: Sign exact validated comparison
+        run: cosign sign-blob --yes --bundle benchmark-v1.sigstore.json benchmark-v1.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rancher-benchmark-${{ github.run_id }}
+          path: |
+            benchmark-v1.json
+            benchmark-v1.sigstore.json
+          if-no-files-found: error
+          retention-days: 365

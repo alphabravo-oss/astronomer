@@ -88,10 +88,10 @@ func TestEvaluateAllowsEmptyDatabase(t *testing.T) {
 
 func TestInspectIssuesOnlySelectsAgainstAV03ShapedCatalog(t *testing.T) {
 	catalog := &recordingCatalog{
-		legacy: "argo" + "cd_applications,argo" + "cd_instances,fl" + "eet_operations",
-		hasMig: true,
-		public: 87,
-		state:  []any{int64(158), int64(159), false},
+		legacy:  "argo" + "cd_applications,argo" + "cd_instances,fl" + "eet_operations",
+		hasMig:  true,
+		public:  87,
+		state:   []any{int64(158), int64(159), false},
 		missing: "delivery_sources,delivery_targets",
 	}
 	beforeQueries := append([]string(nil), catalog.queries...)

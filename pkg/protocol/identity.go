@@ -122,6 +122,13 @@ func IsMachineSubject(s string) bool { return strings.HasPrefix(s, MachineSubjec
 // and the "flag on, every request 403s" failure.
 const FeatureImpersonation = "impersonation"
 
+// FeatureDirectKubeconfig advertises that the adopted-cluster agent was
+// installed with the dedicated, resourceName-scoped TokenRequest permission
+// required to mint a short-lived token for astronomer-direct-reader. It does
+// not imply that the management server has a workstation-reachable endpoint;
+// that is validated independently before a credential is requested.
+const FeatureDirectKubeconfig = "direct_kubeconfig.v1"
+
 // ImpersonationProbeSubject is the subject the agent's SSAR self-probe asks
 // about. It is the pinned proxy identity from design Option D, and the probe is
 // approach-independent in the safe direction: a NAMED check succeeds under an

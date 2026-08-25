@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
@@ -43,6 +44,40 @@ type ReadAuditPolicyQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 }
 
+type ReadAuditPolicyMutationTx interface {
+	ReadAuditPolicyQuerier
+	audit.OutboxQuerier
+}
+
+type readAuditPolicyRunTxFunc func(context.Context, func(ReadAuditPolicyMutationTx) error) error
+
+func executeReadAuditPolicyMutation(r *http.Request, h *ReadAuditPolicyHandler, mutate func(ReadAuditPolicyQuerier) (sqlc.ReadAuditPolicy, error), describe func(sqlc.ReadAuditPolicy) clusterAuditEvent) (sqlc.ReadAuditPolicy, error) {
+	if h.runTx != nil {
+		var row sqlc.ReadAuditPolicy
+		err := h.runTx(r.Context(), func(q ReadAuditPolicyMutationTx) error {
+			var mutationErr error
+			row, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(row)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return row, err
+	}
+	row, err := mutate(h.queries)
+	if err != nil {
+		return sqlc.ReadAuditPolicy{}, err
+	}
+	event := describe(row)
+	writer := any(h.audit)
+	if h.audit == nil {
+		writer = h.queries
+	}
+	recordAudit(r, writer, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return row, nil
+}
+
 // CacheInvalidator is the optional callback fired after every write so
 // the PolicyEvaluator's 30s TTL doesn't gate operator changes. Wire it
 // at construction time; nil is fine in tests.
@@ -53,6 +88,7 @@ type CacheInvalidator interface {
 // ReadAuditPolicyHandler owns /api/v1/admin/read-audit-policies/*.
 type ReadAuditPolicyHandler struct {
 	queries     ReadAuditPolicyQuerier
+	runTx       readAuditPolicyRunTxFunc
 	invalidator CacheInvalidator
 	audit       AuthAuditWriter
 	log         *slog.Logger
@@ -68,6 +104,14 @@ func NewReadAuditPolicyHandler(queries ReadAuditPolicyQuerier, log *slog.Logger)
 
 // SetAuditWriter attaches the audit-log writer for admin.* rows.
 func (h *ReadAuditPolicyHandler) SetAuditWriter(a AuthAuditWriter) { h.audit = a }
+
+func (h *ReadAuditPolicyHandler) SetRunTx(runTx readAuditPolicyRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *ReadAuditPolicyHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // SetCacheInvalidator attaches the PolicyEvaluator (or any
 // CacheInvalidator) so writes invalidate the in-process cache.
@@ -154,6 +198,7 @@ func (h *ReadAuditPolicyHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // readAuditPolicyCreate is the POST body.
+// openapi:request ReadAuditPolicyCreateRequest
 type readAuditPolicyCreate struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
@@ -202,34 +247,29 @@ func (h *ReadAuditPolicyHandler) Create(w http.ResponseWriter, r *http.Request) 
 	}
 
 	createdBy := currentUserPGUUID(r)
-	row, err := h.queries.CreateReadAuditPolicy(r.Context(), sqlc.CreateReadAuditPolicyParams{
-		Name:        req.Name,
-		Description: req.Description,
-		PathPattern: req.PathPattern,
-		Verbs:       req.Verbs,
-		SampleRate:  sample,
-		Enabled:     enabled,
-		CreatedBy:   createdBy,
-	})
+	row, err := executeReadAuditPolicyMutation(r, h,
+		func(q ReadAuditPolicyQuerier) (sqlc.ReadAuditPolicy, error) {
+			return q.CreateReadAuditPolicy(r.Context(), sqlc.CreateReadAuditPolicyParams{
+				Name: req.Name, Description: req.Description, PathPattern: req.PathPattern,
+				Verbs: req.Verbs, SampleRate: sample, Enabled: enabled, CreatedBy: createdBy,
+			})
+		},
+		readAuditPolicyEvent("admin.read_audit_policy.created", http.StatusCreated),
+	)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to create policy")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to create policy")
 		return
 	}
 	if h.invalidator != nil {
 		h.invalidator.Invalidate()
 	}
-	recordAudit(r, h.queries, "admin.read_audit_policy.created", "read_audit_policy", row.ID.String(), row.Name, map[string]any{
-		"path_pattern": row.PathPattern,
-		"verbs":        row.Verbs,
-		"sample_rate":  row.SampleRate,
-		"enabled":      row.Enabled,
-	})
 	w.Header().Set("Location", "/api/v1/admin/read-audit-policies/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, policyToResponse(row))
 }
 
 // readAuditPolicyUpdate is the PUT body. All fields optional; omitted
 // keys are preserved.
+// openapi:request ReadAuditPolicyUpdateRequest
 type readAuditPolicyUpdate struct {
 	Description *string  `json:"description"`
 	PathPattern *string  `json:"path_pattern"`
@@ -249,70 +289,78 @@ func (h *ReadAuditPolicyHandler) Update(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid policy id")
 		return
 	}
-	existing, err := h.queries.GetReadAuditPolicy(r.Context(), id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Policy not found")
-		return
-	}
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read policy")
-		return
-	}
 	var req readAuditPolicyUpdate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 
-	args := sqlc.UpdateReadAuditPolicyParams{
-		ID:          id,
-		Description: existing.Description,
-		PathPattern: existing.PathPattern,
-		Verbs:       existing.Verbs,
-		SampleRate:  existing.SampleRate,
-		Enabled:     existing.Enabled,
-	}
 	if req.Description != nil {
-		args.Description = *req.Description
+		trimmed := strings.TrimSpace(*req.Description)
+		req.Description = &trimmed
 	}
 	if req.PathPattern != nil {
-		args.PathPattern = strings.TrimSpace(*req.PathPattern)
-		if args.PathPattern == "" {
+		trimmed := strings.TrimSpace(*req.PathPattern)
+		if trimmed == "" {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "path_pattern cannot be empty")
 			return
 		}
+		req.PathPattern = &trimmed
 	}
 	if req.Verbs != nil {
-		args.Verbs = strings.TrimSpace(*req.Verbs)
-		if args.Verbs == "" {
-			args.Verbs = "GET"
+		trimmed := strings.TrimSpace(*req.Verbs)
+		if trimmed == "" {
+			trimmed = "GET"
 		}
+		req.Verbs = &trimmed
 	}
 	if req.SampleRate != nil {
 		if *req.SampleRate < 0 || *req.SampleRate > 1 {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "sample_rate must be between 0.0 and 1.0")
 			return
 		}
-		args.SampleRate = *req.SampleRate
-	}
-	if req.Enabled != nil {
-		args.Enabled = *req.Enabled
 	}
 
-	row, err := h.queries.UpdateReadAuditPolicy(r.Context(), args)
+	row, err := executeReadAuditPolicyMutation(r, h,
+		func(q ReadAuditPolicyQuerier) (sqlc.ReadAuditPolicy, error) {
+			existing, getErr := q.GetReadAuditPolicy(r.Context(), id)
+			if getErr != nil {
+				return sqlc.ReadAuditPolicy{}, getErr
+			}
+			args := sqlc.UpdateReadAuditPolicyParams{
+				ID: id, Description: existing.Description, PathPattern: existing.PathPattern,
+				Verbs: existing.Verbs, SampleRate: existing.SampleRate, Enabled: existing.Enabled,
+			}
+			if req.Description != nil {
+				args.Description = *req.Description
+			}
+			if req.PathPattern != nil {
+				args.PathPattern = *req.PathPattern
+			}
+			if req.Verbs != nil {
+				args.Verbs = *req.Verbs
+			}
+			if req.SampleRate != nil {
+				args.SampleRate = *req.SampleRate
+			}
+			if req.Enabled != nil {
+				args.Enabled = *req.Enabled
+			}
+			return q.UpdateReadAuditPolicy(r.Context(), args)
+		},
+		readAuditPolicyEvent("admin.read_audit_policy.updated", http.StatusOK),
+	)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to update policy")
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Policy not found")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to update policy")
 		return
 	}
 	if h.invalidator != nil {
 		h.invalidator.Invalidate()
 	}
-	recordAudit(r, h.queries, "admin.read_audit_policy.updated", "read_audit_policy", row.ID.String(), row.Name, map[string]any{
-		"path_pattern": row.PathPattern,
-		"verbs":        row.Verbs,
-		"sample_rate":  row.SampleRate,
-		"enabled":      row.Enabled,
-	})
 	RespondJSON(w, http.StatusOK, policyToResponse(row))
 }
 
@@ -327,26 +375,37 @@ func (h *ReadAuditPolicyHandler) Delete(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid policy id")
 		return
 	}
-	existing, err := h.queries.GetReadAuditPolicy(r.Context(), id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Policy not found")
-		return
-	}
+	_, err = executeReadAuditPolicyMutation(r, h,
+		func(q ReadAuditPolicyQuerier) (sqlc.ReadAuditPolicy, error) {
+			existing, getErr := q.GetReadAuditPolicy(r.Context(), id)
+			if getErr != nil {
+				return sqlc.ReadAuditPolicy{}, getErr
+			}
+			return existing, q.DeleteReadAuditPolicy(r.Context(), id)
+		},
+		readAuditPolicyEvent("admin.read_audit_policy.deleted", http.StatusNoContent),
+	)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read policy")
-		return
-	}
-	if err := h.queries.DeleteReadAuditPolicy(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to delete policy")
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Policy not found")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to delete policy")
 		return
 	}
 	if h.invalidator != nil {
 		h.invalidator.Invalidate()
 	}
-	recordAudit(r, h.queries, "admin.read_audit_policy.deleted", "read_audit_policy", existing.ID.String(), existing.Name, map[string]any{
-		"path_pattern": existing.PathPattern,
-	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func readAuditPolicyEvent(action string, status int) func(sqlc.ReadAuditPolicy) clusterAuditEvent {
+	return func(row sqlc.ReadAuditPolicy) clusterAuditEvent {
+		return clusterAuditEvent{
+			action: action, resourceType: "read_audit_policy", resourceID: row.ID.String(), resourceName: row.Name, status: status,
+			detail: map[string]any{"path_pattern": row.PathPattern, "verbs": row.Verbs, "sample_rate": row.SampleRate, "enabled": row.Enabled},
+		}
+	}
 }
 
 // currentUserPGUUID returns the authenticated user's UUID as

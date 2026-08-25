@@ -16,7 +16,7 @@ export function Section({
 }: {
   title: string;
   description?: string;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <section className="space-y-4 rounded-xl border border-border bg-card p-5">
@@ -31,7 +31,13 @@ export function Section({
   );
 }
 
-export function Unavailable({ name, retry }: { name: string; retry?: () => void }) {
+export function Unavailable({
+  name,
+  retry,
+}: {
+  name: string;
+  retry?: () => void;
+}) {
   return (
     <StatePanel
       icon={AlertTriangle}
@@ -152,7 +158,9 @@ export function GrantList({
           </div>
         ))
       ) : (
-        <p className="text-sm text-muted-foreground">No Charlie grants on this identity.</p>
+        <p className="text-sm text-muted-foreground">
+          No Charlie grants on this identity.
+        </p>
       )}
     </Section>
   );

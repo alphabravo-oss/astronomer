@@ -63,8 +63,6 @@ func makeDeferredRow(opType string, expiresAt time.Time) sqlc.DeferredOperation 
 }
 
 func TestDispatcher_FiresDeferredAtOpen(t *testing.T) {
-	resetRuntime()
-	defer resetRuntime()
 	row := makeDeferredRow("cluster.delete", time.Now().Add(time.Hour))
 	q := &fakeDeferredQuerier{pending: []sqlc.DeferredOperation{row}}
 
@@ -76,14 +74,14 @@ func TestDispatcher_FiresDeferredAtOpen(t *testing.T) {
 		}
 		return nil
 	}
-	ConfigureDeferredDispatch(DeferredDispatchDeps{
+	runtime := DeferredRuntime{Deps: DeferredDispatchDeps{
 		Queries: q,
 		Replayers: map[string]DeferredReplayer{
 			"cluster.delete": replayer,
 		},
-	})
+	}}
 
-	if err := HandleDispatchDeferred(context.Background(), nil); err != nil {
+	if err := runtime.HandleDispatchDeferred(context.Background(), nil); err != nil {
 		t.Fatalf("HandleDispatchDeferred: %v", err)
 	}
 	if !replayed {
@@ -101,14 +99,12 @@ func TestDispatcher_FiresDeferredAtOpen(t *testing.T) {
 }
 
 func TestDispatcher_ExpiresOldDeferred(t *testing.T) {
-	resetRuntime()
-	defer resetRuntime()
 	// expires_at in the past → expired without invoking the replayer.
 	row := makeDeferredRow("cluster.delete", time.Now().Add(-time.Hour))
 	q := &fakeDeferredQuerier{pending: []sqlc.DeferredOperation{row}}
 
 	replayed := false
-	ConfigureDeferredDispatch(DeferredDispatchDeps{
+	runtime := DeferredRuntime{Deps: DeferredDispatchDeps{
 		Queries: q,
 		Replayers: map[string]DeferredReplayer{
 			"cluster.delete": func(ctx context.Context, _ sqlc.DeferredOperation) error {
@@ -116,9 +112,9 @@ func TestDispatcher_ExpiresOldDeferred(t *testing.T) {
 				return nil
 			},
 		},
-	})
+	}}
 
-	if err := HandleDispatchDeferred(context.Background(), nil); err != nil {
+	if err := runtime.HandleDispatchDeferred(context.Background(), nil); err != nil {
 		t.Fatalf("HandleDispatchDeferred: %v", err)
 	}
 	if replayed {
@@ -130,21 +126,19 @@ func TestDispatcher_ExpiresOldDeferred(t *testing.T) {
 }
 
 func TestDispatcher_MarksFailedOnReplayError(t *testing.T) {
-	resetRuntime()
-	defer resetRuntime()
 	row := makeDeferredRow("cluster.delete", time.Now().Add(time.Hour))
 	q := &fakeDeferredQuerier{pending: []sqlc.DeferredOperation{row}}
 
-	ConfigureDeferredDispatch(DeferredDispatchDeps{
+	runtime := DeferredRuntime{Deps: DeferredDispatchDeps{
 		Queries: q,
 		Replayers: map[string]DeferredReplayer{
 			"cluster.delete": func(ctx context.Context, _ sqlc.DeferredOperation) error {
 				return errors.New("kaboom")
 			},
 		},
-	})
+	}}
 
-	if err := HandleDispatchDeferred(context.Background(), nil); err != nil {
+	if err := runtime.HandleDispatchDeferred(context.Background(), nil); err != nil {
 		t.Fatalf("HandleDispatchDeferred: %v", err)
 	}
 	if len(q.failed) != 1 {
@@ -156,15 +150,13 @@ func TestDispatcher_MarksFailedOnReplayError(t *testing.T) {
 }
 
 func TestDispatcher_NoReplayer_MarksFailed(t *testing.T) {
-	resetRuntime()
-	defer resetRuntime()
 	row := makeDeferredRow("unknown.op", time.Now().Add(time.Hour))
 	q := &fakeDeferredQuerier{pending: []sqlc.DeferredOperation{row}}
-	ConfigureDeferredDispatch(DeferredDispatchDeps{
+	runtime := DeferredRuntime{Deps: DeferredDispatchDeps{
 		Queries:   q,
 		Replayers: map[string]DeferredReplayer{},
-	})
-	if err := HandleDispatchDeferred(context.Background(), nil); err != nil {
+	}}
+	if err := runtime.HandleDispatchDeferred(context.Background(), nil); err != nil {
 		t.Fatalf("HandleDispatchDeferred: %v", err)
 	}
 	if len(q.failed) != 1 {
@@ -172,28 +164,18 @@ func TestDispatcher_NoReplayer_MarksFailed(t *testing.T) {
 	}
 }
 
-func TestDispatcher_NoDeps_NoOp(t *testing.T) {
-	resetRuntime()
-	defer resetRuntime()
-	// Reset to nil deps.
-	ConfigureDeferredDispatch(DeferredDispatchDeps{})
-	if err := HandleDispatchDeferred(context.Background(), nil); err != nil {
-		t.Fatalf("HandleDispatchDeferred: %v", err)
+func TestDispatcher_NoDepsFailsClosed(t *testing.T) {
+	runtime := DeferredRuntime{}
+	if err := runtime.HandleDispatchDeferred(context.Background(), nil); err == nil {
+		t.Fatal("HandleDispatchDeferred returned nil, want an unconfigured-runtime error")
 	}
 }
 
-func TestRegisterDeferredReplayer_AppendsToMap(t *testing.T) {
-	resetRuntime()
-	defer resetRuntime()
-	ConfigureDeferredDispatch(DeferredDispatchDeps{
-		Queries:   &fakeDeferredQuerier{},
-		Replayers: nil,
-	})
-	RegisterDeferredReplayer("foo.bar", func(ctx context.Context, _ sqlc.DeferredOperation) error { return nil })
-
-	deferredDispatchMu.RLock()
-	defer deferredDispatchMu.RUnlock()
-	if _, ok := deferredDispatchDeps.Replayers["foo.bar"]; !ok {
-		t.Fatalf("expected replayer to be registered")
+func TestDeferredRuntimeCopiesReplayerMap(t *testing.T) {
+	replayers := map[string]DeferredReplayer{"foo.bar": func(context.Context, sqlc.DeferredOperation) error { return nil }}
+	runtime := (DeferredRuntime{Deps: DeferredDispatchDeps{Replayers: replayers}}).normalized()
+	delete(replayers, "foo.bar")
+	if runtime.Deps.Replayers["foo.bar"] == nil {
+		t.Fatal("normalized runtime retained caller-owned replayer map")
 	}
 }

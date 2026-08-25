@@ -29,6 +29,7 @@ package tasks
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,8 +57,40 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
-// GitOpsSyncType is the asynq task type registered on the scheduler.
+// GitOpsSyncType owns both the empty-payload periodic sweep and durable,
+// source-scoped manual/webhook requests. Sharing one type preserves one worker
+// owner while the payload distinguishes operator intent from the scheduler.
 const GitOpsSyncType = "gitops:sync"
+
+type gitOpsSourceSyncPayload struct {
+	SourceID string `json:"source_id"`
+}
+
+// NewGitOpsSourceSyncTask returns a durable source-scoped sync request. The
+// source ID is the only payload field; credentials and repository metadata are
+// always loaded from PostgreSQL by the worker.
+func NewGitOpsSourceSyncTask(sourceID uuid.UUID) (*asynq.Task, error) {
+	if sourceID == uuid.Nil {
+		return nil, errors.New("gitops source ID is required")
+	}
+	payload, err := json.Marshal(gitOpsSourceSyncPayload{SourceID: sourceID.String()})
+	if err != nil {
+		return nil, fmt.Errorf("encode gitops source sync payload: %w", err)
+	}
+	return asynq.NewTask(GitOpsSyncType, payload), nil
+}
+
+func parseGitOpsSourceSyncPayload(payload []byte) (uuid.UUID, error) {
+	var message gitOpsSourceSyncPayload
+	if err := json.Unmarshal(payload, &message); err != nil {
+		return uuid.Nil, fmt.Errorf("decode gitops source sync payload: %w", err)
+	}
+	sourceID, err := uuid.Parse(message.SourceID)
+	if err != nil || sourceID == uuid.Nil {
+		return uuid.Nil, errors.New("gitops source sync payload has an invalid source_id")
+	}
+	return sourceID, nil
+}
 
 // GitOpsTombstoneGrace is the default grace window between
 // tombstone and forced decommission. Exposed as a package variable so
@@ -163,8 +196,7 @@ type GitOpsEnqueuer interface {
 	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
 }
 
-// GitOpsDeps wires the worker. Set once at server startup via
-// ConfigureGitOps; tests can supply a fake. Log is optional.
+// GitOpsDeps wires the worker and interactive API runner. Log is optional.
 type GitOpsDeps struct {
 	Queries    GitOpsQuerier
 	Enqueuer   GitOpsEnqueuer
@@ -180,25 +212,6 @@ type GitOpsDeps struct {
 	Now func() time.Time
 }
 
-var gitopsDeps GitOpsDeps
-
-// ConfigureGitOps wires the runtime deps. Called once from
-// cmd/server / cmd/worker at startup.
-func ConfigureGitOps(deps GitOpsDeps) {
-	gitopsDeps = deps
-	if gitopsDeps.Log == nil {
-		gitopsDeps.Log = slog.Default()
-	}
-	if gitopsDeps.Now == nil {
-		gitopsDeps.Now = time.Now
-	}
-}
-
-// ResetGitOps clears the runtime deps. Tests only.
-func ResetGitOps() {
-	gitopsDeps = GitOpsDeps{}
-}
-
 // NewGitOpsSyncTask returns the periodic-tick task.
 func NewGitOpsSyncTask() (*asynq.Task, error) {
 	return asynq.NewTask(GitOpsSyncType, nil), nil
@@ -207,15 +220,22 @@ func NewGitOpsSyncTask() (*asynq.Task, error) {
 // HandleGitOpsSync is the asynq handler — runs once per scheduler tick.
 // Returns nil even on per-source errors so asynq doesn't blow up the
 // whole tick; the per-source error is stamped on the row instead.
-func HandleGitOpsSync(ctx context.Context, _ *asynq.Task) error {
-	return runPeriodicTaskWithLeader(ctx, GitOpsSyncType, func() error {
-		if gitopsDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "gitops:sync runtime not configured, skipping")
-			return nil
+func (runtime GitOpsRuntime) HandleGitOpsSync(ctx context.Context, task *asynq.Task) error {
+	runtime = runtime.normalized()
+	if task != nil && len(task.Payload()) > 0 {
+		sourceID, err := parseGitOpsSourceSyncPayload(task.Payload())
+		if err != nil {
+			return err
 		}
-		now := gitopsDeps.Now()
+		return runtime.SyncSource(ctx, sourceID)
+	}
+	return runPeriodicTaskWithLeader(ctx, GitOpsSyncType, func() error {
+		if runtime.Deps.Queries == nil {
+			return fmt.Errorf("gitops sync runtime is not configured")
+		}
+		now := runtime.Deps.Now()
 
-		sources, err := gitopsDeps.Queries.ListEnabledGitOpsSources(ctx)
+		sources, err := runtime.Deps.Queries.ListEnabledGitOpsSources(ctx)
 		if err != nil {
 			return fmt.Errorf("list enabled gitops sources: %w", err)
 		}
@@ -229,8 +249,8 @@ func HandleGitOpsSync(ctx context.Context, _ *asynq.Task) error {
 					continue
 				}
 			}
-			if err := SyncSource(ctx, src.ID); err != nil {
-				gitopsDeps.Log.WarnContext(ctx, "gitops source sync failed",
+			if err := runtime.SyncSource(ctx, src.ID); err != nil {
+				runtime.Deps.Log.WarnContext(ctx, "gitops source sync failed",
 					"source", src.Name, "source_id", src.ID.String(), "error", err)
 			}
 		}
@@ -238,13 +258,13 @@ func HandleGitOpsSync(ctx context.Context, _ *asynq.Task) error {
 		// Tombstone reaper. Pull every row that's been tombstoned
 		// longer than the grace window and enqueue cluster:decommission.
 		cutoff := pgtype.Timestamptz{Time: now.Add(-GitOpsTombstoneGrace), Valid: true}
-		expired, err := gitopsDeps.Queries.ListExpiredTombstones(ctx, cutoff)
+		expired, err := runtime.Deps.Queries.ListExpiredTombstones(ctx, cutoff)
 		if err != nil {
 			return fmt.Errorf("list expired tombstones: %w", err)
 		}
 		for _, row := range expired {
-			if err := reapTombstone(ctx, row); err != nil {
-				gitopsDeps.Log.WarnContext(ctx, "gitops tombstone reap failed",
+			if err := runtime.reapTombstone(ctx, row); err != nil {
+				runtime.Deps.Log.WarnContext(ctx, "gitops tombstone reap failed",
 					"cluster_id", row.ClusterID.String(), "error", err)
 			}
 		}
@@ -259,26 +279,27 @@ func HandleGitOpsSync(ctx context.Context, _ *asynq.Task) error {
 // On any hard error the function stamps last_error on the source row and
 // returns the error to the caller. Skippable per-file errors (non-
 // ClusterRegistration YAML) are logged and continue.
-func SyncSource(ctx context.Context, sourceID uuid.UUID) error {
-	if gitopsDeps.Queries == nil {
+func (runtime GitOpsRuntime) SyncSource(ctx context.Context, sourceID uuid.UUID) error {
+	runtime = runtime.normalized()
+	if runtime.Deps.Queries == nil {
 		return fmt.Errorf("gitops runtime not configured")
 	}
-	src, err := gitopsDeps.Queries.GetGitOpsSource(ctx, sourceID)
+	src, err := runtime.Deps.Queries.GetGitOpsSource(ctx, sourceID)
 	if err != nil {
 		return fmt.Errorf("load source: %w", err)
 	}
-	headSHA, parsedDocs, walkErr := walkSource(ctx, src)
+	headSHA, parsedDocs, walkErr := runtime.walkSource(ctx, src)
 	if walkErr != nil {
-		_ = gitopsDeps.Queries.StampGitOpsSourceError(ctx, sqlc.StampGitOpsSourceErrorParams{
+		_ = runtime.Deps.Queries.StampGitOpsSourceError(ctx, sqlc.StampGitOpsSourceErrorParams{
 			ID:        src.ID,
 			LastError: walkErr.Error(),
 		})
 		gitopsSyncsTotal.WithLabelValues(observability.MetricValues(src.Name, "failed")...).Inc()
-		emitAudit(ctx, "gitops.sync.failed", src.ID.String(), src.Name, map[string]any{"error": walkErr.Error()})
+		runtime.emitAudit(ctx, "gitops.sync.failed", src.ID.String(), src.Name, map[string]any{"error": walkErr.Error()})
 		return walkErr
 	}
 
-	previousLinks, err := gitopsDeps.Queries.ListGitOpsRegisteredClustersBySource(ctx, src.ID)
+	previousLinks, err := runtime.Deps.Queries.ListGitOpsRegisteredClustersBySource(ctx, src.ID)
 	if err != nil {
 		return fmt.Errorf("list previously-registered clusters: %w", err)
 	}
@@ -299,13 +320,13 @@ func SyncSource(ctx context.Context, sourceID uuid.UUID) error {
 			}
 		}
 
-		applied, err := gitops.Apply(ctx, gitopsDeps.Queries, gitops.ApplyInput{
+		applied, err := gitops.Apply(ctx, runtime.Deps.Queries, gitops.ApplyInput{
 			Doc:        parsed.Doc,
 			SourceID:   src.ID,
 			ContentSHA: parsed.SHA,
 		})
 		if err != nil {
-			gitopsDeps.Log.WarnContext(ctx, "gitops apply failed",
+			runtime.Deps.Log.WarnContext(ctx, "gitops apply failed",
 				"source", src.Name, "path", parsed.Doc.RepoPath, "error", err)
 			continue
 		}
@@ -313,12 +334,12 @@ func SyncSource(ctx context.Context, sourceID uuid.UUID) error {
 		// Audit + metric on the action that actually occurred.
 		switch {
 		case applied.Created:
-			emitAudit(ctx, "gitops.cluster.registered", applied.ClusterID, applied.ClusterName, map[string]any{
+			runtime.emitAudit(ctx, "gitops.cluster.registered", applied.ClusterID, applied.ClusterName, map[string]any{
 				"source": src.Name,
 				"path":   parsed.Doc.RepoPath,
 			})
 		case applied.Updated:
-			emitAudit(ctx, "gitops.cluster.updated", applied.ClusterID, applied.ClusterName, map[string]any{
+			runtime.emitAudit(ctx, "gitops.cluster.updated", applied.ClusterID, applied.ClusterName, map[string]any{
 				"source": src.Name,
 				"path":   parsed.Doc.RepoPath,
 			})
@@ -328,7 +349,7 @@ func SyncSource(ctx context.Context, sourceID uuid.UUID) error {
 		// reappeared" restore. Apply already set status='active' via
 		// UpsertGitOpsRegisteredCluster.
 		if prev, ok := previousByPath[parsed.Doc.RepoPath]; ok && prev.Status == "tombstoned" {
-			emitAudit(ctx, "gitops.cluster.restored", applied.ClusterID, applied.ClusterName, map[string]any{
+			runtime.emitAudit(ctx, "gitops.cluster.restored", applied.ClusterID, applied.ClusterName, map[string]any{
 				"source": src.Name,
 				"path":   parsed.Doc.RepoPath,
 			})
@@ -342,10 +363,10 @@ func SyncSource(ctx context.Context, sourceID uuid.UUID) error {
 		// an operator never assumes a successful sync applied presets it did
 		// not. See wiring_needed for the full-reconcile follow-up.
 		if len(applied.Registries) > 0 || len(applied.ToolPresets) > 0 {
-			gitopsDeps.Log.WarnContext(ctx, "gitops declared registries/toolPresets are not yet reconciled",
+			runtime.Deps.Log.WarnContext(ctx, "gitops declared registries/toolPresets are not yet reconciled",
 				"source", src.Name, "path", parsed.Doc.RepoPath,
 				"registries", applied.Registries, "tool_presets", applied.ToolPresets)
-			emitAudit(ctx, "gitops.cluster.presets_unreconciled", applied.ClusterID, applied.ClusterName, map[string]any{
+			runtime.emitAudit(ctx, "gitops.cluster.presets_unreconciled", applied.ClusterID, applied.ClusterName, map[string]any{
 				"source":       src.Name,
 				"path":         parsed.Doc.RepoPath,
 				"registries":   applied.Registries,
@@ -373,13 +394,13 @@ func SyncSource(ctx context.Context, sourceID uuid.UUID) error {
 		if guardWouldTrip && !src.AllowMassDecommission {
 			msg := fmt.Sprintf("mass-decommission blocked: %d of %d clusters missing (parsed_docs=%d, threshold=%d); set allow_mass_decommission to override",
 				missingCount, prevCount, len(parsedDocs), threshold)
-			_ = gitopsDeps.Queries.StampGitOpsSourceError(ctx, sqlc.StampGitOpsSourceErrorParams{ID: src.ID, LastError: msg})
+			_ = runtime.Deps.Queries.StampGitOpsSourceError(ctx, sqlc.StampGitOpsSourceErrorParams{ID: src.ID, LastError: msg})
 			gitopsSyncsTotal.WithLabelValues(observability.MetricValues(src.Name, "blocked")...).Inc()
-			gitopsDeps.Log.ErrorContext(ctx, "gitops mass-decommission blocked",
+			runtime.Deps.Log.ErrorContext(ctx, "gitops mass-decommission blocked",
 				"source", src.Name, "source_id", src.ID.String(),
 				"prev_count", prevCount, "missing_count", missingCount,
 				"parsed_docs", len(parsedDocs), "threshold", threshold)
-			emitAudit(ctx, "gitops.mass_decommission_blocked", src.ID.String(), src.Name, map[string]any{
+			runtime.emitAudit(ctx, "gitops.mass_decommission_blocked", src.ID.String(), src.Name, map[string]any{
 				"source":        src.Name,
 				"prev_count":    prevCount,
 				"missing_count": missingCount,
@@ -398,7 +419,7 @@ func SyncSource(ctx context.Context, sourceID uuid.UUID) error {
 		// silently bypass a FUTURE bad sync. Only the honored case is audited.
 		if src.AllowMassDecommission {
 			if guardWouldTrip {
-				emitAudit(ctx, "gitops.mass_decommission_override", src.ID.String(), src.Name, map[string]any{
+				runtime.emitAudit(ctx, "gitops.mass_decommission_override", src.ID.String(), src.Name, map[string]any{
 					"source":        src.Name,
 					"prev_count":    prevCount,
 					"missing_count": missingCount,
@@ -407,7 +428,7 @@ func SyncSource(ctx context.Context, sourceID uuid.UUID) error {
 					"head_sha":      headSHA,
 				})
 			}
-			if err := gitopsDeps.Queries.ConsumeGitOpsMassDecommissionOverride(ctx, src.ID); err != nil {
+			if err := runtime.Deps.Queries.ConsumeGitOpsMassDecommissionOverride(ctx, src.ID); err != nil {
 				return fmt.Errorf("consume mass-decommission override: %w", err)
 			}
 		}
@@ -418,31 +439,31 @@ func SyncSource(ctx context.Context, sourceID uuid.UUID) error {
 		if _, ok := seenPaths[path]; ok {
 			continue
 		}
-		if err := applyOnDelete(ctx, src, prev); err != nil {
-			gitopsDeps.Log.WarnContext(ctx, "gitops on_delete failed",
+		if err := runtime.applyOnDelete(ctx, src, prev); err != nil {
+			runtime.Deps.Log.WarnContext(ctx, "gitops on_delete failed",
 				"source", src.Name, "path", path, "policy", src.OnDelete, "error", err)
 		}
 	}
 
-	if err := gitopsDeps.Queries.StampGitOpsSourceSync(ctx, sqlc.StampGitOpsSourceSyncParams{
+	if err := runtime.Deps.Queries.StampGitOpsSourceSync(ctx, sqlc.StampGitOpsSourceSyncParams{
 		ID:            src.ID,
-		LastSyncedAt:  pgtype.Timestamptz{Time: gitopsDeps.Now(), Valid: true},
+		LastSyncedAt:  pgtype.Timestamptz{Time: runtime.Deps.Now(), Valid: true},
 		LastSyncedSha: headSHA,
 	}); err != nil {
 		return fmt.Errorf("stamp last_synced: %w", err)
 	}
 
 	gitopsSyncsTotal.WithLabelValues(observability.MetricValues(src.Name, "succeeded")...).Inc()
-	emitAudit(ctx, "gitops.sync.succeeded", src.ID.String(), src.Name, map[string]any{
+	runtime.emitAudit(ctx, "gitops.sync.succeeded", src.ID.String(), src.Name, map[string]any{
 		"head_sha":     headSHA,
 		"docs_applied": len(parsedDocs),
 	})
-	updateSourceGauges(ctx, src)
+	runtime.updateSourceGauges(ctx, src)
 	return nil
 }
 
-func applyOnDelete(ctx context.Context, src sqlc.GitopsRegistrationSource, prev sqlc.GitopsRegisteredCluster) error {
-	cluster, err := gitopsDeps.Queries.GetClusterByID(ctx, prev.ClusterID)
+func (runtime GitOpsRuntime) applyOnDelete(ctx context.Context, src sqlc.GitopsRegistrationSource, prev sqlc.GitopsRegisteredCluster) error {
+	cluster, err := runtime.Deps.Queries.GetClusterByID(ctx, prev.ClusterID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("load cluster %s: %w", prev.ClusterID, err)
 	}
@@ -452,7 +473,7 @@ func applyOnDelete(ctx context.Context, src sqlc.GitopsRegistrationSource, prev 
 	}
 	switch src.OnDelete {
 	case "log":
-		emitAudit(ctx, "gitops.cluster.missing", prev.ClusterID.String(), clusterName, map[string]any{
+		runtime.emitAudit(ctx, "gitops.cluster.missing", prev.ClusterID.String(), clusterName, map[string]any{
 			"source": src.Name,
 			"path":   prev.RepoPath,
 		})
@@ -460,25 +481,25 @@ func applyOnDelete(ctx context.Context, src sqlc.GitopsRegistrationSource, prev 
 		if prev.Status == "tombstoned" {
 			return nil
 		}
-		if err := gitopsDeps.Queries.TombstoneGitOpsRegisteredCluster(ctx, sqlc.TombstoneGitOpsRegisteredClusterParams{
+		if err := runtime.Deps.Queries.TombstoneGitOpsRegisteredCluster(ctx, sqlc.TombstoneGitOpsRegisteredClusterParams{
 			ClusterID:    prev.ClusterID,
-			TombstonedAt: pgtype.Timestamptz{Time: gitopsDeps.Now(), Valid: true},
+			TombstonedAt: pgtype.Timestamptz{Time: runtime.Deps.Now(), Valid: true},
 		}); err != nil {
 			return fmt.Errorf("tombstone: %w", err)
 		}
-		emitAudit(ctx, "gitops.cluster.tombstoned", prev.ClusterID.String(), clusterName, map[string]any{
+		runtime.emitAudit(ctx, "gitops.cluster.tombstoned", prev.ClusterID.String(), clusterName, map[string]any{
 			"source": src.Name,
 			"path":   prev.RepoPath,
 			"grace":  GitOpsTombstoneGrace.String(),
 		})
 	case "decommission":
-		if err := enqueueDecommission(ctx, prev.ClusterID, clusterName); err != nil {
+		if err := runtime.enqueueDecommission(ctx, prev.ClusterID, clusterName); err != nil {
 			return err
 		}
-		if err := gitopsDeps.Queries.DeleteGitOpsRegisteredCluster(ctx, prev.ClusterID); err != nil {
+		if err := runtime.Deps.Queries.DeleteGitOpsRegisteredCluster(ctx, prev.ClusterID); err != nil {
 			return fmt.Errorf("clear link: %w", err)
 		}
-		emitAudit(ctx, "gitops.cluster.missing", prev.ClusterID.String(), clusterName, map[string]any{
+		runtime.emitAudit(ctx, "gitops.cluster.missing", prev.ClusterID.String(), clusterName, map[string]any{
 			"source": src.Name,
 			"path":   prev.RepoPath,
 			"action": "decommission",
@@ -487,8 +508,8 @@ func applyOnDelete(ctx context.Context, src sqlc.GitopsRegistrationSource, prev 
 	return nil
 }
 
-func reapTombstone(ctx context.Context, row sqlc.GitopsRegisteredCluster) error {
-	cluster, err := gitopsDeps.Queries.GetClusterByID(ctx, row.ClusterID)
+func (runtime GitOpsRuntime) reapTombstone(ctx context.Context, row sqlc.GitopsRegisteredCluster) error {
+	cluster, err := runtime.Deps.Queries.GetClusterByID(ctx, row.ClusterID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("load cluster: %w", err)
 	}
@@ -496,24 +517,24 @@ func reapTombstone(ctx context.Context, row sqlc.GitopsRegisteredCluster) error 
 	if clusterName == "" {
 		clusterName = row.RepoPath
 	}
-	if err := enqueueDecommission(ctx, row.ClusterID, clusterName); err != nil {
+	if err := runtime.enqueueDecommission(ctx, row.ClusterID, clusterName); err != nil {
 		return err
 	}
-	if err := gitopsDeps.Queries.DeleteGitOpsRegisteredCluster(ctx, row.ClusterID); err != nil {
+	if err := runtime.Deps.Queries.DeleteGitOpsRegisteredCluster(ctx, row.ClusterID); err != nil {
 		return fmt.Errorf("clear tombstoned link: %w", err)
 	}
-	emitAudit(ctx, "gitops.cluster.reaped", row.ClusterID.String(), clusterName, map[string]any{
+	runtime.emitAudit(ctx, "gitops.cluster.reaped", row.ClusterID.String(), clusterName, map[string]any{
 		"source_id": row.SourceID.String(),
 		"path":      row.RepoPath,
 	})
 	return nil
 }
 
-func enqueueDecommission(ctx context.Context, clusterID uuid.UUID, clusterName string) error {
+func (runtime GitOpsRuntime) enqueueDecommission(ctx context.Context, clusterID uuid.UUID, clusterName string) error {
 	if clusterID == uuid.Nil {
 		return nil
 	}
-	decom, err := gitopsDeps.Queries.CreateClusterDecommission(ctx, sqlc.CreateClusterDecommissionParams{
+	decom, err := runtime.Deps.Queries.CreateClusterDecommission(ctx, sqlc.CreateClusterDecommissionParams{
 		ClusterID:     clusterID,
 		RequestedByID: pgtype.UUID{},
 		ClusterName:   clusterName,
@@ -525,8 +546,8 @@ func enqueueDecommission(ctx context.Context, clusterID uuid.UUID, clusterName s
 	if err != nil {
 		return fmt.Errorf("build task: %w", err)
 	}
-	if gitopsDeps.TaskOutbox != nil {
-		if _, err := EnqueueTaskOutbox(ctx, gitopsDeps.TaskOutbox, task, TaskOutboxOptions{
+	if runtime.Deps.TaskOutbox != nil {
+		if _, err := EnqueueTaskOutbox(ctx, runtime.Deps.TaskOutbox, task, TaskOutboxOptions{
 			DedupeKey: fmt.Sprintf("cluster_decommission:%s", decom.ID.String()),
 			// "tunnel" queue: managed-side cleanup needs the server-pod hub.
 			QueueName:           ClusterTemplateApplyQueueName,
@@ -539,16 +560,16 @@ func enqueueDecommission(ctx context.Context, clusterID uuid.UUID, clusterName s
 			// and the fallback enqueued onto the DEFAULT queue, which has no
 			// cluster-decommission handler — so the task dead-lettered while the
 			// tracking row already existed, orphaning managed-side resources.
-			runtimeLogger().WarnContext(ctx, "gitops decommission outbox enqueue failed; falling back to direct enqueue on the tunnel queue",
+			runtimeLogger(ctx).WarnContext(ctx, "gitops decommission outbox enqueue failed; falling back to direct enqueue on the tunnel queue",
 				"cluster_id", clusterID.String(), "decommission_id", decom.ID.String(), "error", err)
 		}
 	}
-	if gitopsDeps.Enqueuer == nil {
+	if runtime.Deps.Enqueuer == nil {
 		return nil
 	}
 	// Stamp the SAME (tunnel) queue the outbox would have used — the default
 	// queue has no TypeClusterDecommission handler.
-	if _, err := gitopsDeps.Enqueuer.Enqueue(task, asynq.Queue(ClusterTemplateApplyQueueName)); err != nil {
+	if _, err := runtime.Deps.Enqueuer.Enqueue(task, asynq.Queue(ClusterTemplateApplyQueueName)); err != nil {
 		return fmt.Errorf("enqueue decommission: %w", err)
 	}
 	return nil
@@ -562,16 +583,16 @@ type ParsedDoc struct {
 
 // walkSource clones (or fetches) the repo, walks YAML, and parses each
 // file. Returns the HEAD sha + parsed docs.
-func walkSource(ctx context.Context, src sqlc.GitopsRegistrationSource) (string, []ParsedDoc, error) {
-	dir := cloneDir(src.ID)
+func (runtime GitOpsRuntime) walkSource(ctx context.Context, src sqlc.GitopsRegistrationSource) (string, []ParsedDoc, error) {
+	dir := runtime.cloneDir(src.ID)
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return "", nil, fmt.Errorf("mkdir clone parent: %w", err)
 	}
-	repo, err := openOrClone(ctx, src, dir)
+	repo, err := runtime.openOrClone(ctx, src, dir)
 	if err != nil {
 		return "", nil, err
 	}
-	if err := fetchAndCheckout(ctx, src, repo); err != nil {
+	if err := runtime.fetchAndCheckout(ctx, src, repo); err != nil {
 		return "", nil, err
 	}
 	head, err := repo.Head()
@@ -620,7 +641,7 @@ func walkSource(ctx context.Context, src sqlc.GitopsRegistrationSource) (string,
 		doc, parseErr := gitops.Parse(content, rel)
 		if parseErr != nil {
 			if gitops.IsSkippable(parseErr) {
-				gitopsDeps.Log.DebugContext(ctx, "gitops skipping non-registration file",
+				runtime.Deps.Log.DebugContext(ctx, "gitops skipping non-registration file",
 					"source", src.Name, "path", rel, "reason", parseErr.Error())
 				return nil
 			}
@@ -640,15 +661,15 @@ func isYAMLFile(p string) bool {
 	return ext == ".yaml" || ext == ".yml"
 }
 
-func cloneDir(sourceID uuid.UUID) string {
-	root := gitopsDeps.CloneRoot
+func (runtime GitOpsRuntime) cloneDir(sourceID uuid.UUID) string {
+	root := runtime.Deps.CloneRoot
 	if root == "" {
 		root = GitOpsCloneRoot
 	}
 	return filepath.Join(root, sourceID.String())
 }
 
-func openOrClone(ctx context.Context, src sqlc.GitopsRegistrationSource, dir string) (*git.Repository, error) {
+func (runtime GitOpsRuntime) openOrClone(ctx context.Context, src sqlc.GitopsRegistrationSource, dir string) (*git.Repository, error) {
 	if info, err := os.Stat(filepath.Join(dir, ".git")); err == nil && info.IsDir() {
 		repo, err := git.PlainOpen(dir)
 		if err != nil {
@@ -660,7 +681,7 @@ func openOrClone(ctx context.Context, src sqlc.GitopsRegistrationSource, dir str
 		}
 		return repo, nil
 	}
-	auth, err := buildGitAuth(src)
+	auth, err := runtime.buildGitAuth(src)
 	if err != nil {
 		return nil, err
 	}
@@ -697,8 +718,8 @@ func setRemoteURL(repo *git.Repository, url string) error {
 	return repo.SetConfig(cfg)
 }
 
-func fetchAndCheckout(ctx context.Context, src sqlc.GitopsRegistrationSource, repo *git.Repository) error {
-	auth, err := buildGitAuth(src)
+func (runtime GitOpsRuntime) fetchAndCheckout(ctx context.Context, src sqlc.GitopsRegistrationSource, repo *git.Repository) error {
+	auth, err := runtime.buildGitAuth(src)
 	if err != nil {
 		return err
 	}
@@ -758,7 +779,7 @@ func branchOrDefault(b string) string {
 // as the https_token password or the ssh_key PEM. When no decryptor is
 // wired — or the value is already plaintext (dev / pre-encryption rows) —
 // the stored value is used verbatim.
-func buildGitAuth(src sqlc.GitopsRegistrationSource) (transport.AuthMethod, error) {
+func (runtime GitOpsRuntime) buildGitAuth(src sqlc.GitopsRegistrationSource) (transport.AuthMethod, error) {
 	switch src.AuthMode {
 	case "", "none":
 		return nil, nil
@@ -766,12 +787,20 @@ func buildGitAuth(src sqlc.GitopsRegistrationSource) (transport.AuthMethod, erro
 		if src.AuthEncrypted == "" {
 			return nil, fmt.Errorf("source %q is https_token but auth_encrypted is empty", src.Name)
 		}
-		return &githttp.BasicAuth{Username: "astronomer-gitops", Password: decryptGitAuth(src.AuthEncrypted)}, nil
+		credential, err := runtime.decryptGitAuth(src.AuthEncrypted)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt source %q HTTPS credential: %w", src.Name, err)
+		}
+		return &githttp.BasicAuth{Username: "astronomer-gitops", Password: credential}, nil
 	case "ssh_key":
 		if src.AuthEncrypted == "" {
 			return nil, fmt.Errorf("source %q is ssh_key but auth_encrypted is empty", src.Name)
 		}
-		signer, err := gitssh.NewPublicKeys("git", []byte(decryptGitAuth(src.AuthEncrypted)), "")
+		credential, err := runtime.decryptGitAuth(src.AuthEncrypted)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt source %q SSH credential: %w", src.Name, err)
+		}
+		signer, err := gitssh.NewPublicKeys("git", []byte(credential), "")
 		if err != nil {
 			return nil, fmt.Errorf("parse ssh key: %w", err)
 		}
@@ -781,41 +810,48 @@ func buildGitAuth(src sqlc.GitopsRegistrationSource) (transport.AuthMethod, erro
 	}
 }
 
-// decryptGitAuth returns the plaintext git credential for a source. When a
-// Fernet decryptor is wired the stored auth_encrypted blob is unwrapped;
-// when none is configured or the blob is already plaintext (dev,
-// pre-encryption rows) the raw value is returned unchanged.
-func decryptGitAuth(blob string) string {
-	if gitopsDeps.Decryptor == nil || blob == "" {
-		return blob
+// decryptGitAuth retains the legacy-plaintext compatibility window while
+// failing loudly for a token-shaped Fernet value that no configured key can
+// decrypt. Returning ciphertext as an HTTPS password hides key loss as an
+// upstream Git authentication failure and defeats actionable operations.
+func (runtime GitOpsRuntime) decryptGitAuth(blob string) (string, error) {
+	if runtime.Deps.Decryptor == nil || blob == "" {
+		return blob, nil
 	}
-	if plaintext, err := gitopsDeps.Decryptor.Decrypt(blob); err == nil {
-		return plaintext
+	if plaintext, err := runtime.Deps.Decryptor.Decrypt(blob); err == nil {
+		return plaintext, nil
+	} else if looksLikeFernetToken(blob) {
+		return "", err
 	}
-	return blob
+	return blob, nil
 }
 
-func updateSourceGauges(ctx context.Context, src sqlc.GitopsRegistrationSource) {
-	total, err := gitopsDeps.Queries.CountGitOpsRegisteredClustersBySource(ctx, src.ID)
+func looksLikeFernetToken(value string) bool {
+	decoded, err := base64.URLEncoding.DecodeString(value)
+	return err == nil && len(decoded) >= 57 && decoded[0] == 0x80
+}
+
+func (runtime GitOpsRuntime) updateSourceGauges(ctx context.Context, src sqlc.GitopsRegistrationSource) {
+	total, err := runtime.Deps.Queries.CountGitOpsRegisteredClustersBySource(ctx, src.ID)
 	if err == nil {
 		gitopsClustersManaged.WithLabelValues(observability.MetricValues(src.Name)...).Set(float64(total))
 	}
-	tombstoned, err := gitopsDeps.Queries.CountGitOpsTombstonedBySource(ctx, src.ID)
+	tombstoned, err := runtime.Deps.Queries.CountGitOpsTombstonedBySource(ctx, src.ID)
 	if err == nil {
 		gitopsTombstonedClusters.WithLabelValues(observability.MetricValues(src.Name)...).Set(float64(tombstoned))
 	}
 }
 
 // emitAudit writes a row to the audit log. Nil-safe on Queries.
-func emitAudit(ctx context.Context, action, target, name string, payload map[string]any) {
-	if gitopsDeps.Queries == nil {
+func (runtime GitOpsRuntime) emitAudit(ctx context.Context, action, target, name string, payload map[string]any) {
+	if runtime.Deps.Queries == nil {
 		return
 	}
 	body, _ := json.Marshal(payload)
 	if body == nil {
 		body = []byte("{}")
 	}
-	err := gitopsDeps.Queries.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
+	err := runtime.Deps.Queries.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
 		Source:       "gitops-worker",
 		UserID:       pgtype.UUID{},
 		Action:       action,
@@ -825,7 +861,7 @@ func emitAudit(ctx context.Context, action, target, name string, payload map[str
 		Detail:       body,
 	})
 	if err != nil {
-		gitopsDeps.Log.DebugContext(ctx, "audit insert failed (non-fatal)", "action", action, "error", err)
+		runtime.Deps.Log.DebugContext(ctx, "audit insert failed (non-fatal)", "action", action, "error", err)
 	}
 }
 
@@ -844,20 +880,21 @@ type PreviewResult struct {
 
 // PreviewSource runs SyncSource in dry-run mode. NO DB writes, NO
 // enqueues. Returns the structured diff.
-func PreviewSource(ctx context.Context, sourceID uuid.UUID) (PreviewResult, error) {
-	if gitopsDeps.Queries == nil {
+func (runtime GitOpsRuntime) PreviewSource(ctx context.Context, sourceID uuid.UUID) (PreviewResult, error) {
+	runtime = runtime.normalized()
+	if runtime.Deps.Queries == nil {
 		return PreviewResult{}, fmt.Errorf("gitops runtime not configured")
 	}
-	src, err := gitopsDeps.Queries.GetGitOpsSource(ctx, sourceID)
+	src, err := runtime.Deps.Queries.GetGitOpsSource(ctx, sourceID)
 	if err != nil {
 		return PreviewResult{}, fmt.Errorf("load source: %w", err)
 	}
-	headSHA, parsedDocs, walkErr := walkSource(ctx, src)
+	headSHA, parsedDocs, walkErr := runtime.walkSource(ctx, src)
 	if walkErr != nil {
 		return PreviewResult{}, walkErr
 	}
 
-	previousLinks, err := gitopsDeps.Queries.ListGitOpsRegisteredClustersBySource(ctx, src.ID)
+	previousLinks, err := runtime.Deps.Queries.ListGitOpsRegisteredClustersBySource(ctx, src.ID)
 	if err != nil {
 		return PreviewResult{}, fmt.Errorf("list previously-registered: %w", err)
 	}
@@ -875,7 +912,7 @@ func PreviewSource(ctx context.Context, sourceID uuid.UUID) (PreviewResult, erro
 	seen := map[string]struct{}{}
 	for _, parsed := range parsedDocs {
 		seen[parsed.Doc.RepoPath] = struct{}{}
-		applied, err := gitops.Apply(ctx, gitopsDeps.Queries, gitops.ApplyInput{
+		applied, err := gitops.Apply(ctx, runtime.Deps.Queries, gitops.ApplyInput{
 			Doc:        parsed.Doc,
 			SourceID:   src.ID,
 			ContentSHA: parsed.SHA,

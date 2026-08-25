@@ -23,8 +23,24 @@ type fakeSIEMQuerier struct {
 	deleted         [][]int64
 	incremented     [][]int64
 	statusCalls     []sqlc.UpsertSIEMForwarderStatusParams
+	succeededTests  [][]int64
+	failedTests     [][]int64
 	oldDeleteCutoff time.Time
 	oldDeleteCount  int64
+}
+
+func (f *fakeSIEMQuerier) MarkSIEMTestOperationsSucceededByQueueIDs(_ context.Context, ids []int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.succeededTests = append(f.succeededTests, append([]int64(nil), ids...))
+	return nil
+}
+
+func (f *fakeSIEMQuerier) MarkSIEMTestOperationsFailedByQueueIDs(_ context.Context, ids []int64, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.failedTests = append(f.failedTests, append([]int64(nil), ids...))
+	return nil
 }
 
 func (f *fakeSIEMQuerier) ListEnabledSIEMForwarders(_ context.Context) ([]sqlc.SiemForwarder, error) {
@@ -178,22 +194,24 @@ func TestDispatcher_BatchSendThenDelete(t *testing.T) {
 		},
 	}
 	transport := &fakeTransport{}
-	ConfigureSIEM(SIEMDeps{
+	runtime := DispatchRuntime{SIEM: SIEMDeps{
 		Queries: q,
 		TransportFactory: func(sqlc.SiemForwarder, authBlob) (siem.Transport, error) {
 			return transport, nil
 		},
-	})
-	defer ConfigureSIEM(SIEMDeps{})
+	}}.normalized()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	dispatchForwarder(ctx, fwd)
+	runtime.dispatchSIEMForwarder(ctx, fwd)
 
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if len(q.deleted) != 1 || len(q.deleted[0]) != 3 {
 		t.Fatalf("expected one DELETE of 3 rows; got %v", q.deleted)
+	}
+	if len(q.succeededTests) != 1 || len(q.succeededTests[0]) != 3 {
+		t.Fatalf("terminal SIEM test status was not persisted before queue cleanup: %v", q.succeededTests)
 	}
 	transport.mu.Lock()
 	defer transport.mu.Unlock()
@@ -235,17 +253,16 @@ func TestDispatcher_KeepsRowsOnFailure(t *testing.T) {
 		},
 	}
 	transport := &fakeTransport{err: errors.New("connection refused")}
-	ConfigureSIEM(SIEMDeps{
+	runtime := DispatchRuntime{SIEM: SIEMDeps{
 		Queries: q,
 		TransportFactory: func(sqlc.SiemForwarder, authBlob) (siem.Transport, error) {
 			return transport, nil
 		},
-	})
-	defer ConfigureSIEM(SIEMDeps{})
+	}}.normalized()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	dispatchForwarder(ctx, fwd)
+	runtime.dispatchSIEMForwarder(ctx, fwd)
 
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -290,16 +307,15 @@ func TestDispatcher_DropsRowsPastRetryCap(t *testing.T) {
 		},
 	}
 	transport := &fakeTransport{}
-	ConfigureSIEM(SIEMDeps{
+	runtime := DispatchRuntime{SIEM: SIEMDeps{
 		Queries: q,
 		TransportFactory: func(sqlc.SiemForwarder, authBlob) (siem.Transport, error) {
 			return transport, nil
 		},
-	})
-	defer ConfigureSIEM(SIEMDeps{})
+	}}.normalized()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	dispatchForwarder(ctx, fwd)
+	runtime.dispatchSIEMForwarder(ctx, fwd)
 
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -324,10 +340,9 @@ func TestDispatcher_DropsRowsPastRetryCap(t *testing.T) {
 
 func TestDispatcher_CleanupOldUsesRetentionWindow(t *testing.T) {
 	q := &fakeSIEMQuerier{oldDeleteCount: 42}
-	ConfigureSIEM(SIEMDeps{Queries: q})
-	defer ConfigureSIEM(SIEMDeps{})
+	runtime := DispatchRuntime{SIEM: SIEMDeps{Queries: q}}
 
-	if err := HandleSIEMCleanupOld(context.Background(), nil); err != nil {
+	if err := runtime.HandleSIEMCleanupOld(context.Background(), nil); err != nil {
 		t.Fatalf("HandleSIEMCleanupOld: %v", err)
 	}
 	q.mu.Lock()
@@ -344,11 +359,12 @@ func TestDispatcher_CleanupOldUsesRetentionWindow(t *testing.T) {
 
 func TestDispatcher_PerForwarderLockSerializes(t *testing.T) {
 	fid := uuid.New()
-	l := lockForForwarder(fid)
+	runtime := DispatchRuntime{}.normalized()
+	l := runtime.lockForSIEMForwarder(fid)
 	l.Lock()
 	defer l.Unlock()
 	// Second TryLock should fail because we still hold the lock.
-	l2 := lockForForwarder(fid)
+	l2 := runtime.lockForSIEMForwarder(fid)
 	if l2.TryLock() {
 		t.Errorf("expected lock to be held; TryLock succeeded")
 		l2.Unlock()
@@ -374,14 +390,13 @@ var _ = pgtype.Timestamptz{}
 // instead of allocating a fresh *http.Transport (and a full TLS handshake) on
 // every 2s tick. The client is only rebuilt when a TLS-relevant field changes.
 func TestHTTPClientForForwarder_ReusesPooledClient(t *testing.T) {
-	// Start from a clean cache.
-	ConfigureSIEM(SIEMDeps{})
+	runtime := DispatchRuntime{}.normalized()
 
 	fid := uuid.New()
 	fwd := sqlc.SiemForwarder{ID: fid, TimeoutSeconds: 10}
 
-	c1 := httpClientForForwarder(fwd, 10*time.Second)
-	c2 := httpClientForForwarder(fwd, 10*time.Second)
+	c1 := runtime.httpClientForSIEMForwarder(fwd, 10*time.Second)
+	c2 := runtime.httpClientForSIEMForwarder(fwd, 10*time.Second)
 	if c1 != c2 {
 		t.Fatal("expected the same pooled *http.Client to be reused across drains")
 	}
@@ -389,14 +404,14 @@ func TestHTTPClientForForwarder_ReusesPooledClient(t *testing.T) {
 	// A TLS-relevant change must rebuild the client so stale config is not
 	// silently reused.
 	fwd.TlsSkipVerify = true
-	c3 := httpClientForForwarder(fwd, 10*time.Second)
+	c3 := runtime.httpClientForSIEMForwarder(fwd, 10*time.Second)
 	if c3 == c1 {
 		t.Fatal("expected a new client after tls_skip_verify changed")
 	}
 
 	// Different forwarder id => different client.
 	other := sqlc.SiemForwarder{ID: uuid.New(), TimeoutSeconds: 10}
-	if httpClientForForwarder(other, 10*time.Second) == c1 {
+	if runtime.httpClientForSIEMForwarder(other, 10*time.Second) == c1 {
 		t.Fatal("expected distinct clients per forwarder id")
 	}
 }

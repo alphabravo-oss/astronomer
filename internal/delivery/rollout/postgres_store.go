@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
@@ -87,6 +88,10 @@ func (store *PostgresPlanningStore) InTransaction(ctx context.Context, work func
 
 type postgresPlanningTransaction struct {
 	queries *sqlc.Queries
+}
+
+func (tx *postgresPlanningTransaction) RecordAuditIntent(ctx context.Context, intent audit.Intent) error {
+	return audit.RecordIntent(ctx, tx.queries, intent)
 }
 
 func (tx *postgresPlanningTransaction) FindByIdempotency(ctx context.Context, targetID uuid.UUID, key string) (FrozenRollout, bool, error) {

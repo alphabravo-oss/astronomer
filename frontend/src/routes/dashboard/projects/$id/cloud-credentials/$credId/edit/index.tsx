@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * Project · Cloud Credentials · Edit.
  *
@@ -7,19 +7,19 @@ import { createFileRoute } from '@tanstack/react-router';
  * `isEdit` set. Untouched secret fields are stripped on submit so the
  * backend keeps the existing ciphertext.
  */
-import { useMemo, useState } from 'react';
-import { Link } from '@/lib/link';
-import { useParams, useRouter } from '@/lib/navigation';
-import { ArrowLeft, Loader2 } from 'lucide-react';
-import { extractApiErrorMessage } from '@/lib/api/errors';
+import { useMemo, useState } from "react";
+import { Link } from "@/lib/link";
+import { useParams, useRouter } from "@/lib/navigation";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import {
   useCloudCredentialProviders,
   useProjectCloudCredential,
   useUpdateCloudCredential,
-} from '@/components/projects/hooks';
-import { CredentialForm } from '@/components/projects/cloud-credentials/credential-form';
-import { ProviderBadge } from '@/components/projects/cloud-credentials/provider-badge';
-import { PageHeader, PageShell } from '@/components/ui/page';
+} from "@/components/projects/hooks";
+import { CredentialForm } from "@/components/projects/cloud-credentials/credential-form";
+import { ProviderBadge } from "@/components/projects/cloud-credentials/provider-badge";
+import { PageHeader, PageShell } from "@/components/ui/page";
 
 function EditCloudCredentialPage() {
   const params = useParams();
@@ -27,7 +27,10 @@ function EditCloudCredentialPage() {
   const credId = params.credId as string;
   const router = useRouter();
   const { data: providers = [] } = useCloudCredentialProviders();
-  const { data: credential, isLoading } = useProjectCloudCredential(projectId, credId);
+  const { data: credential, isLoading } = useProjectCloudCredential(
+    projectId,
+    credId,
+  );
   const updateMutation = useUpdateCloudCredential(projectId);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -40,11 +43,12 @@ function EditCloudCredentialPage() {
   // `__<field>_set: true` flags. Strip them out of the form's initial config
   // and turn them into a fast lookup the form uses to render `<set>` hints.
   const { displayConfig, secretsSet } = useMemo(() => {
-    if (!credential) return { displayConfig: {}, secretsSet: new Set<string>() };
+    if (!credential)
+      return { displayConfig: {}, secretsSet: new Set<string>() };
     const cfg: Record<string, unknown> = {};
     const set = new Set<string>();
     for (const [k, v] of Object.entries(credential.config)) {
-      if (k.startsWith('__') && k.endsWith('_set')) {
+      if (k.startsWith("__") && k.endsWith("_set")) {
         if (v) set.add(k.slice(2, -4));
         continue;
       }
@@ -120,7 +124,8 @@ function EditCloudCredentialPage() {
               await updateMutation.mutateAsync({ credentialId: credId, body });
               router.push(backToList);
             } catch (err) {
-              const msg = extractApiErrorMessage(err) ?? 'Failed to update credential.';
+              const msg =
+                extractApiErrorMessage(err) ?? "Failed to update credential.";
               setServerError(msg);
             }
           }}
@@ -130,6 +135,8 @@ function EditCloudCredentialPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/projects/$id/cloud-credentials/$credId/edit/')({
+export const Route = createFileRoute(
+  "/dashboard/projects/$id/cloud-credentials/$credId/edit/",
+)({
   component: EditCloudCredentialPage,
 });

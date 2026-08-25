@@ -78,31 +78,31 @@ func ForwardWSToOwnerPod(hub *Hub, log *slog.Logger, w http.ResponseWriter, r *h
 	if addr == loc.Address() {
 		return false
 	}
-	// Normalise: locator stores host:port, no scheme. Build a URL so
-	// ReverseProxy.Director has something to anchor against.
+	// Normalise: locator stores host:port, no scheme. Build a URL so the
+	// ReverseProxy Rewrite hook has an explicit trusted target.
 	target := &url.URL{
 		Scheme: "http",
 		Host:   addr,
 	}
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	// Override Director so we rewrite the URL but preserve the
-	// inbound Upgrade headers. The default Director would clobber
-	// the Host header but leave Connection/Upgrade alone, which
-	// is what we want — but we also stamp our own forwarded marker.
-	origDirector := proxy.Director
+	// Go 1.26 deprecates Director because inbound forwarding headers can be
+	// reintroduced after Director returns. Rewrite receives a sanitized outbound
+	// request. SetURL selects the owner pod, SetXForwarded derives forwarding
+	// metadata from the trusted inbound request, and the loop-prevention marker
+	// is then stamped explicitly. ReverseProxy preserves the Upgrade handshake.
 	log.Info("ws cross-pod: forwarding to sibling",
 		slog.String("cluster_id", clusterID),
 		slog.String("target", target.Host),
 		slog.String("path", r.URL.Path),
 	)
-	proxy.Director = func(req *http.Request) {
-		origDirector(req)
-		req.Header.Set("X-Astronomer-Forwarded-By", loc.Address())
-		// Strip hop-by-hop / connection-related headers that nginx
-		// or chi middleware may have folded in. The Upgrade /
-		// Connection: Upgrade pair must survive — ReverseProxy
-		// preserves them for us when the request is an upgrade.
-		req.Header.Del("X-Forwarded-Host")
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(req *httputil.ProxyRequest) {
+			req.SetURL(target)
+			req.SetXForwarded()
+			req.Out.Header.Set("X-Astronomer-Forwarded-By", loc.Address())
+			// Do not forward an externally supplied X-Forwarded-Host into the
+			// sibling's trusted internal request context.
+			req.Out.Header.Del("X-Forwarded-Host")
+		},
 	}
 	proxy.ErrorHandler = func(rw http.ResponseWriter, _ *http.Request, perr error) {
 		log.Warn("ws cross-pod: proxy error",

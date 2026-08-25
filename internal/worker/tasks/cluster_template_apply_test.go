@@ -397,9 +397,8 @@ func TestClusterTemplate_DriftCheck_SmokeTest(t *testing.T) {
 		sqlc.Cluster{ID: clusterID, Name: "demo", Environment: "production", Labels: json.RawMessage(`{"tier":"prod"}`)},
 		sqlc.ClusterTemplateApplication{ClusterID: clusterID, TemplateID: tmplID, SpecSnapshot: spec, Status: "applied"},
 	)
-	ConfigureClusterTemplateApply(ClusterTemplateApplyDeps{Queries: q})
-	defer ResetClusterTemplateApply()
-	if err := HandleClusterTemplateDriftCheck(context.Background(), nil); err != nil {
+	runtime := ClusterTemplateRuntime{Deps: ClusterTemplateApplyDeps{Queries: q}}
+	if err := runtime.HandleClusterTemplateDriftCheck(context.Background(), nil); err != nil {
 		t.Errorf("drift check: %v", err)
 	}
 }
@@ -433,9 +432,8 @@ func TestClusterTemplate_DriftCheck_StuckApplyingEmitsCondition(t *testing.T) {
 			UpdatedAt: timeNowMinus(stuckApplyingThreshold + time.Minute),
 		},
 	)
-	ConfigureClusterTemplateApply(ClusterTemplateApplyDeps{Queries: q})
-	defer ResetClusterTemplateApply()
-	if err := HandleClusterTemplateDriftCheck(context.Background(), nil); err != nil {
+	runtime := ClusterTemplateRuntime{Deps: ClusterTemplateApplyDeps{Queries: q}}
+	if err := runtime.HandleClusterTemplateDriftCheck(context.Background(), nil); err != nil {
 		t.Fatalf("drift check: %v", err)
 	}
 	if got := len(q.conditions); got != 1 {
@@ -463,9 +461,8 @@ func TestClusterTemplate_DriftCheck_RecentApplyingNoCondition(t *testing.T) {
 			UpdatedAt:    timeNowMinus(stuckApplyingThreshold / 2),
 		},
 	)
-	ConfigureClusterTemplateApply(ClusterTemplateApplyDeps{Queries: q})
-	defer ResetClusterTemplateApply()
-	if err := HandleClusterTemplateDriftCheck(context.Background(), nil); err != nil {
+	runtime := ClusterTemplateRuntime{Deps: ClusterTemplateApplyDeps{Queries: q}}
+	if err := runtime.HandleClusterTemplateDriftCheck(context.Background(), nil); err != nil {
 		t.Fatalf("drift check: %v", err)
 	}
 	if got := len(q.conditions); got != 0 {

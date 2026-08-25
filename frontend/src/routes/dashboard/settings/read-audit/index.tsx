@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * /dashboard/settings/read-audit — operator UI for the read-side audit
  * policies (migration 063). Each row is a path-prefix + verbs +
@@ -10,21 +17,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  *
  * Backend: /api/v1/admin/read-audit-policies/. Superuser-gated.
  */
-import { useEffect, useState } from 'react';
-import { Link } from '@/lib/link';
-import { ArrowLeft, FileSearch, Loader2, Plus, Trash2 } from 'lucide-react';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { PageHeader, PageShell } from '@/components/ui/page';
+import { useEffect, useState } from "react";
+import { Link } from "@/lib/link";
+import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   listReadAuditPolicies,
   createReadAuditPolicy,
   updateReadAuditPolicy,
   deleteReadAuditPolicy,
-  type ReadAuditPolicy,
-} from '@/lib/api/settings';
+  type ReadAuditPolicyView,
+} from "@/lib/api/settings";
 
 function ReadAuditPoliciesPage() {
   return (
@@ -35,55 +42,57 @@ function ReadAuditPoliciesPage() {
 }
 
 function ReadAuditPoliciesList() {
-  const [items, setItems] = useState<ReadAuditPolicy[] | null>(null);
+  const [items, setItems] = useState<ReadAuditPolicyView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  async function refresh() {
+  async function refresh(signal?: AbortSignal) {
     try {
-      const data = await listReadAuditPolicies();
+      const data = await listReadAuditPolicies({ signal });
       setItems(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load');
+      if (signal?.aborted) return;
+      setError(err instanceof Error ? err.message : "Failed to load");
     }
   }
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     (async () => {
       try {
-        const data = await listReadAuditPolicies();
-        if (!cancelled) setItems(data);
+        const data = await listReadAuditPolicies({ signal: controller.signal });
+        if (!controller.signal.aborted) setItems(data);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load');
+        if (!controller.signal.aborted)
+          setError(err instanceof Error ? err.message : "Failed to load");
       }
     })();
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, []);
 
-  async function toggleEnabled(p: ReadAuditPolicy) {
+  async function toggleEnabled(p: ReadAuditPolicyView) {
     setBusyId(p.id);
     try {
       await updateReadAuditPolicy(p.id, { enabled: !p.enabled });
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Update failed');
+      setError(err instanceof Error ? err.message : "Update failed");
     } finally {
       setBusyId(null);
     }
   }
 
-  async function remove(p: ReadAuditPolicy) {
+  async function remove(p: ReadAuditPolicyView) {
     if (!confirm(`Delete read-audit policy "${p.name}"?`)) return;
     setBusyId(p.id);
     try {
       await deleteReadAuditPolicy(p.id);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Delete failed');
+      setError(err instanceof Error ? err.message : "Delete failed");
     } finally {
       setBusyId(null);
     }
@@ -101,7 +110,10 @@ function ReadAuditPoliciesList() {
         title="Read-side audit policies"
         description='Configure which GET endpoints emit an audit row. HIPAA / PCI compliance requires "who saw what credential and when" — the seeded policies cover cloud credentials, registry secrets, SSO, webhooks, SIEM auth, the audit log itself, support bundles, and admin settings.'
         actions={
-          <ActionButton icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>
+          <ActionButton
+            icon={<Plus className="h-4 w-4" />}
+            onClick={() => setShowCreate(true)}
+          >
             New policy
           </ActionButton>
         }
@@ -123,7 +135,9 @@ function ReadAuditPoliciesList() {
             <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <TableRow>
                 <TableHead className="px-4 py-2 font-medium">Name</TableHead>
-                <TableHead className="px-4 py-2 font-medium">Path pattern</TableHead>
+                <TableHead className="px-4 py-2 font-medium">
+                  Path pattern
+                </TableHead>
                 <TableHead className="px-4 py-2 font-medium">Verbs</TableHead>
                 <TableHead className="px-4 py-2 font-medium">Sample</TableHead>
                 <TableHead className="px-4 py-2 font-medium">Enabled</TableHead>
@@ -132,9 +146,16 @@ function ReadAuditPoliciesList() {
             </TableHeader>
             <TableBody>
               {(items ?? []).map((p) => (
-                <TableRow key={p.id} className="border-t border-border hover:bg-muted/30">
-                  <TableCell className="px-4 py-2 font-mono text-xs">{p.name}</TableCell>
-                  <TableCell className="px-4 py-2 font-mono text-xs">{p.path_pattern}</TableCell>
+                <TableRow
+                  key={p.id}
+                  className="border-t border-border hover:bg-muted/30"
+                >
+                  <TableCell className="px-4 py-2 font-mono text-xs">
+                    {p.name}
+                  </TableCell>
+                  <TableCell className="px-4 py-2 font-mono text-xs">
+                    {p.path_pattern}
+                  </TableCell>
                   <TableCell className="px-4 py-2 text-xs">{p.verbs}</TableCell>
                   <TableCell className="px-4 py-2 text-xs">
                     {Math.round(p.sample_rate * 100)}%
@@ -145,11 +166,11 @@ function ReadAuditPoliciesList() {
                       onClick={() => toggleEnabled(p)}
                       className={`text-xs px-2 py-0.5 rounded-md ${
                         p.enabled
-                          ? 'bg-status-success/15 text-status-success'
-                          : 'bg-status-warning/15 text-status-warning'
+                          ? "bg-status-success/15 text-status-success"
+                          : "bg-status-warning/15 text-status-warning"
                       }`}
                     >
-                      {p.enabled ? 'enabled' : 'disabled'}
+                      {p.enabled ? "enabled" : "disabled"}
                     </button>
                   </TableCell>
                   <TableCell className="px-4 py-2 text-right">
@@ -166,8 +187,12 @@ function ReadAuditPoliciesList() {
               ))}
               {items && items.length === 0 && (
                 <TableRow>
-                  <TableCell className="px-4 py-6 text-center text-muted-foreground" colSpan={6}>
-                    No policies configured. Read-side audit is currently disabled.
+                  <TableCell
+                    className="px-4 py-6 text-center text-muted-foreground"
+                    colSpan={6}
+                  >
+                    No policies configured. Read-side audit is currently
+                    disabled.
                   </TableCell>
                 </TableRow>
               )}
@@ -196,10 +221,10 @@ function CreatePolicyModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [pathPattern, setPathPattern] = useState('');
-  const [verbs, setVerbs] = useState('GET');
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [pathPattern, setPathPattern] = useState("");
+  const [verbs, setVerbs] = useState("GET");
   const [sampleRate, setSampleRate] = useState(1);
   const [enabled, setEnabled] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -219,7 +244,7 @@ function CreatePolicyModal({
       });
       onCreated();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Create failed');
+      setError(err instanceof Error ? err.message : "Create failed");
     } finally {
       setBusy(false);
     }
@@ -233,7 +258,9 @@ function CreatePolicyModal({
       footerClassName="flex items-center justify-end gap-2"
       footer={
         <>
-          <ActionButton onClick={onClose} disabled={busy}>Cancel</ActionButton>
+          <ActionButton onClick={onClose} disabled={busy}>
+            Cancel
+          </ActionButton>
           <ActionButton
             intent="primary"
             onClick={submit}
@@ -246,68 +273,70 @@ function CreatePolicyModal({
         </>
       }
     >
-        {error && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-        <Field label="Name">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </Field>
-        <Field label="Description">
-          <Input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </Field>
-        <Field label="Path pattern (e.g. /admin/sso or /projects/*/cloud-credentials)">
-          <Input
-            value={pathPattern}
-            onChange={(e) => setPathPattern(e.target.value)}
-            className="font-mono"
-          />
-        </Field>
-        <Field label="Verbs (comma-separated or *)">
-          <Input
-            value={verbs}
-            onChange={(e) => setVerbs(e.target.value)}
-          />
-        </Field>
-        <Field label={`Sample rate: ${Math.round(sampleRate * 100)}%`}>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={sampleRate}
-            onChange={(e) => setSampleRate(Number(e.target.value))}
-            className="w-full"
-          />
-        </Field>
-        <label className="flex items-center gap-2 text-sm text-foreground">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-          />
-          Enabled
-        </label>
+      {error && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+      <Field label="Name">
+        <Input value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <Field label="Description">
+        <Input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </Field>
+      <Field label="Path pattern (e.g. /admin/sso or /projects/*/cloud-credentials)">
+        <Input
+          value={pathPattern}
+          onChange={(e) => setPathPattern(e.target.value)}
+          className="font-mono"
+        />
+      </Field>
+      <Field label="Verbs (comma-separated or *)">
+        <Input value={verbs} onChange={(e) => setVerbs(e.target.value)} />
+      </Field>
+      <Field label={`Sample rate: ${Math.round(sampleRate * 100)}%`}>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={sampleRate}
+          onChange={(e) => setSampleRate(Number(e.target.value))}
+          className="w-full"
+        />
+      </Field>
+      <label className="flex items-center gap-2 text-sm text-foreground">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+        />
+        Enabled
+      </label>
     </ModalShell>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1">
-      <label className="text-xs uppercase tracking-wide text-muted-foreground">{label}</label>
+      <label className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </label>
       {children}
     </div>
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/read-audit/')({
+export const Route = createFileRoute("/dashboard/settings/read-audit/")({
   component: ReadAuditPoliciesPage,
 });

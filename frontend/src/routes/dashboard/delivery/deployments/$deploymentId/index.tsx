@@ -27,7 +27,7 @@ import {
   getClusterDeployment,
   listClusterDeploymentEvents,
   type ClusterDeploymentEvent,
-  type DeliveryCondition,
+  type DeliveryConditionView,
 } from "@/lib/api/delivery";
 import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks";
@@ -52,7 +52,8 @@ export function DeploymentDetailPage() {
   const pageSize = 20;
   const detail = useQuery({
     queryKey: queryKeys.delivery.deployment(projectId, deploymentId),
-    queryFn: () => getClusterDeployment(projectId, deploymentId),
+    queryFn: ({ signal }) =>
+      getClusterDeployment(projectId, deploymentId, signal),
     enabled: Boolean(projectId && deploymentId && allowed),
     refetchInterval: liveFallback(5_000),
   });
@@ -61,11 +62,16 @@ export function DeploymentDetailPage() {
       limit: pageSize,
       offset: eventPage * pageSize,
     }),
-    queryFn: () =>
-      listClusterDeploymentEvents(projectId, deploymentId, {
-        limit: pageSize,
-        offset: eventPage * pageSize,
-      }),
+    queryFn: ({ signal }) =>
+      listClusterDeploymentEvents(
+        projectId,
+        deploymentId,
+        {
+          limit: pageSize,
+          offset: eventPage * pageSize,
+        },
+        signal,
+      ),
     enabled: Boolean(projectId && deploymentId && allowed),
     refetchInterval: liveFallback(10_000),
   });
@@ -76,7 +82,7 @@ export function DeploymentDetailPage() {
       : queryKeys.delivery.all,
   );
   const deployment = detail.data?.data.deployment;
-  const conditionColumns: Column<DeliveryCondition>[] = [
+  const conditionColumns: Column<DeliveryConditionView>[] = [
     { key: "type", header: "Condition", accessor: (row) => row.type },
     {
       key: "status",
@@ -242,7 +248,11 @@ export function DeploymentDetailPage() {
               onRetry={() => void events.refetch()}
               emptyMessage="No deployment events recorded"
               serverSide={{
-                rowCount: deliveryPageRowCount(events.data, eventPage, pageSize),
+                rowCount: deliveryPageRowCount(
+                  events.data,
+                  eventPage,
+                  pageSize,
+                ),
                 pagination: { pageIndex: eventPage, pageSize },
                 onPaginationChange: (next) => setEventPage(next.pageIndex),
               }}

@@ -13,8 +13,8 @@
  * kicks every active query.
  */
 
-import { Throttler } from '@tanstack/react-pacer';
-import type { QueryClient, QueryKey } from '@tanstack/react-query';
+import { Throttler } from "@tanstack/react-pacer";
+import type { QueryClient, QueryKey } from "@tanstack/react-query";
 
 const WAIT_MS = 400;
 

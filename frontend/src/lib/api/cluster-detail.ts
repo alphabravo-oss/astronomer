@@ -1,27 +1,29 @@
 /**
  * Cluster-detail API client — Velero snapshots/schedules, private registries,
  * and cluster-template binding. Backend endpoints live under
- * `/api/v1/clusters/{cluster_id}/…` and are camelized by the shared axios
- * interceptor in ../api.ts, so all response types use camelCase keys.
+ * `/api/v1/clusters/{cluster_id}/…`. Generated responses retain wire casing;
+ * this module owns the explicit mappings into its camelCase view types.
  *
  * Re-exported from ../api.ts via `export * from './api/cluster-detail'`.
  */
 
-import api from '../api';
-import type { APIResponse } from '@/types';
+import * as generated from "@/lib/api/generated/client";
+import { createIdempotencyKey } from "@/lib/api/idempotency";
+import type { OperationSnapshot } from "@/lib/api/operation-polling";
+import type { OpenAPIComponents } from "@/types/openapi.generated";
 
 // ============================================================
 // Snapshots (Velero)
 // ============================================================
 
 export type SnapshotPhase =
-  | 'New'
-  | 'InProgress'
-  | 'Completed'
-  | 'PartiallyFailed'
-  | 'Failed'
-  | 'FailedValidation'
-  | 'Deleting'
+  | "New"
+  | "InProgress"
+  | "Completed"
+  | "PartiallyFailed"
+  | "Failed"
+  | "FailedValidation"
+  | "Deleting"
   | string;
 
 export interface SnapshotSpec {
@@ -32,13 +34,14 @@ export interface SnapshotSpec {
   snapshotVolumes?: boolean;
   ttl?: string;
   storageLocation?: string;
-  labelSelector?: Record<string, string>;
+  labelSelector?: string;
+  volumeSnapshotLocations?: string[];
 }
 
 export interface Snapshot {
   id: string;
   name: string;
-  source: 'adhoc' | 'schedule';
+  source: "adhoc" | "schedule";
   scheduleId?: string;
   scheduleName?: string;
   phase: SnapshotPhase;
@@ -80,26 +83,167 @@ export interface VeleroStatus {
   reason?: string;
 }
 
-export async function getVeleroStatus(clusterId: string): Promise<VeleroStatus> {
-  const res = await api.get<APIResponse<VeleroStatus>>(`/clusters/${clusterId}/velero-status`);
-  return res.data.data;
+type SnapshotWire = OpenAPIComponents["schemas"]["SnapshotResponse"];
+type SnapshotScheduleWire =
+  OpenAPIComponents["schemas"]["SnapshotScheduleResponse"];
+type SnapshotRestoreWire =
+  OpenAPIComponents["schemas"]["SnapshotRestoreResponse"];
+type VeleroStatusWire = OpenAPIComponents["schemas"]["VeleroStatusResponse"];
+
+function requiredClusterDetailData<T>(
+  envelope: { data?: T },
+  operation: string,
+): T {
+  if (envelope.data === undefined) {
+    throw new Error(`${operation} returned an empty data envelope`);
+  }
+  return envelope.data;
 }
 
-export async function listSnapshots(clusterId: string): Promise<Snapshot[]> {
-  const res = await api.get<APIResponse<Snapshot[]>>(`/clusters/${clusterId}/snapshots`);
-  return res.data.data ?? [];
+function mapSnapshotSpec(
+  wire: OpenAPIComponents["schemas"]["SnapshotSpec"] | undefined,
+): SnapshotSpec {
+  return {
+    includedNamespaces: wire?.includedNamespaces,
+    excludedNamespaces: wire?.excludedNamespaces,
+    includedResources: wire?.includedResources,
+    excludedResources: wire?.excludedResources,
+    snapshotVolumes: wire?.snapshotVolumes ?? undefined,
+    ttl: wire?.ttl,
+    storageLocation: wire?.storageLocation,
+    labelSelector: wire?.labelSelector,
+    volumeSnapshotLocations: wire?.volumeSnapshotLocations,
+  };
+}
+
+function mapSnapshot(wire: SnapshotWire): Snapshot {
+  if (!wire.id || !wire.velero_name || !wire.phase || !wire.created_at) {
+    throw new Error("Snapshot response is missing required identity fields");
+  }
+  return {
+    id: wire.id,
+    name: wire.velero_name,
+    source: wire.source === "schedule" ? "schedule" : "adhoc",
+    phase: wire.phase,
+    spec: mapSnapshotSpec(wire.spec),
+    startTimestamp: wire.start_time ?? undefined,
+    completionTimestamp: wire.completion_time ?? undefined,
+    expiration: wire.expires_at ?? undefined,
+    warnings: wire.warnings_count,
+    errors: wire.errors_count,
+    createdAt: wire.created_at,
+  };
+}
+
+function mapSnapshotSchedule(wire: SnapshotScheduleWire): SnapshotSchedule {
+  if (
+    !wire.id ||
+    !wire.name ||
+    !wire.cron_schedule ||
+    wire.enabled === undefined ||
+    !wire.created_at ||
+    !wire.updated_at
+  ) {
+    throw new Error("Snapshot schedule response is incomplete");
+  }
+  return {
+    id: wire.id,
+    name: wire.name,
+    cron: wire.cron_schedule,
+    enabled: wire.enabled,
+    spec: mapSnapshotSpec(wire.spec),
+    lastRun: wire.last_run_at ?? undefined,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
+  };
+}
+
+function mapSnapshotRestore(wire: SnapshotRestoreWire): SnapshotRestore {
+  if (
+    !wire.id ||
+    !wire.snapshot_id ||
+    !wire.target_cluster_id ||
+    !wire.velero_name ||
+    !wire.phase
+  ) {
+    throw new Error("Snapshot restore response is incomplete");
+  }
+  return {
+    id: wire.id,
+    name: wire.velero_name,
+    snapshotId: wire.snapshot_id,
+    targetClusterId: wire.target_cluster_id,
+    phase: wire.phase,
+    startTimestamp: wire.start_time ?? undefined,
+    completionTimestamp: wire.completion_time ?? undefined,
+    errors: wire.errors_count,
+    warnings: wire.warnings_count,
+  };
+}
+
+function mapVeleroStatus(wire: VeleroStatusWire): VeleroStatus {
+  return {
+    installed: wire.installed ?? false,
+    namespace: wire.namespace,
+    storageReady: wire.storage_ready ?? false,
+    storageLocations: wire.storage_locations?.map((location) => ({
+      name: location.name ?? "",
+      provider: location.provider ?? "",
+      default: location.default ?? false,
+      phase: location.phase ?? "",
+      bucket: location.bucket ?? "",
+    })),
+    reason: wire.reason,
+  };
+}
+
+export async function getVeleroStatus(
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<VeleroStatus> {
+  const wire = await generated.getClustersByClusterIdVeleroStatus({
+    path: { cluster_id: clusterId },
+    signal,
+  });
+  return mapVeleroStatus(requiredClusterDetailData(wire, "Velero status"));
+}
+
+export async function listSnapshots(
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<Snapshot[]> {
+  const wire = await generated.getClustersByClusterIdSnapshots({
+    path: { cluster_id: clusterId },
+    signal,
+  });
+  return (requiredClusterDetailData(wire, "Snapshot list").items ?? []).map(
+    mapSnapshot,
+  );
 }
 
 export async function createSnapshot(
   clusterId: string,
   body: { spec: SnapshotSpec },
+  signal?: AbortSignal,
 ): Promise<Snapshot> {
-  const res = await api.post<APIResponse<Snapshot>>(`/clusters/${clusterId}/snapshots`, body);
-  return res.data.data;
+  const wire = await generated.postClustersByClusterIdSnapshots({
+    path: { cluster_id: clusterId },
+    headerParams: { "Idempotency-Key": createIdempotencyKey() },
+    body: body.spec,
+    signal,
+  });
+  return mapSnapshot(requiredClusterDetailData(wire, "Snapshot create"));
 }
 
-export async function deleteSnapshot(clusterId: string, snapshotId: string): Promise<void> {
-  await api.delete(`/clusters/${clusterId}/snapshots/${snapshotId}`);
+export async function deleteSnapshot(
+  clusterId: string,
+  snapshotId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await generated.deleteClustersByClusterIdSnapshotsById({
+    path: { cluster_id: clusterId, id: snapshotId },
+    signal,
+  });
 }
 
 export interface RestoreSnapshotRequest {
@@ -128,52 +272,88 @@ export async function restoreSnapshot(
   clusterId: string,
   snapshotId: string,
   body: RestoreSnapshotRequest,
+  signal?: AbortSignal,
 ): Promise<SnapshotRestore> {
-  const res = await api.post<APIResponse<SnapshotRestore>>(
-    `/clusters/${clusterId}/snapshots/${snapshotId}/restore`,
+  const wire = await generated.postClustersByClusterIdSnapshotsByIdRestore({
+    path: { cluster_id: clusterId, id: snapshotId },
+    headerParams: { "Idempotency-Key": createIdempotencyKey() },
     body,
+    signal,
+  });
+  return mapSnapshotRestore(
+    requiredClusterDetailData(wire, "Snapshot restore"),
   );
-  return res.data.data;
 }
 
-export async function listSnapshotSchedules(clusterId: string): Promise<SnapshotSchedule[]> {
-  const res = await api.get<APIResponse<SnapshotSchedule[]>>(
-    `/clusters/${clusterId}/snapshot-schedules`,
-  );
-  return res.data.data ?? [];
+export async function listSnapshotSchedules(
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<SnapshotSchedule[]> {
+  const wire = await generated.getClustersByClusterIdSnapshotSchedules({
+    path: { cluster_id: clusterId },
+    signal,
+  });
+  return (
+    requiredClusterDetailData(wire, "Snapshot schedule list").items ?? []
+  ).map(mapSnapshotSchedule);
 }
 
 export async function createSnapshotSchedule(
   clusterId: string,
   body: { name: string; cron: string; enabled?: boolean; spec: SnapshotSpec },
+  signal?: AbortSignal,
 ): Promise<SnapshotSchedule> {
-  const res = await api.post<APIResponse<SnapshotSchedule>>(
-    `/clusters/${clusterId}/snapshot-schedules`,
-    body,
+  const wire = await generated.postClustersByClusterIdSnapshotSchedules({
+    path: { cluster_id: clusterId },
+    body: {
+      name: body.name,
+      cron_schedule: body.cron,
+      enabled: body.enabled,
+      spec: body.spec,
+    },
+    signal,
+  });
+  return mapSnapshotSchedule(
+    requiredClusterDetailData(wire, "Snapshot schedule create"),
   );
-  return res.data.data;
 }
 
 export async function updateSnapshotSchedule(
   clusterId: string,
   scheduleId: string,
-  body: Partial<{ name: string; cron: string; enabled: boolean; spec: SnapshotSpec }>,
+  body: Partial<{
+    name: string;
+    cron: string;
+    enabled: boolean;
+    spec: SnapshotSpec;
+  }>,
+  signal?: AbortSignal,
 ): Promise<SnapshotSchedule> {
-  const res = await api.put<APIResponse<SnapshotSchedule>>(
-    `/clusters/${clusterId}/snapshot-schedules/${scheduleId}`,
-    body,
+  const wire = await generated.putClustersByClusterIdSnapshotSchedulesById({
+    path: { cluster_id: clusterId, id: scheduleId },
+    body: {
+      name: body.name,
+      cron_schedule: body.cron,
+      enabled: body.enabled,
+      spec: body.spec,
+    },
+    signal,
+  });
+  return mapSnapshotSchedule(
+    requiredClusterDetailData(wire, "Snapshot schedule update"),
   );
-  return res.data.data;
 }
 
 export async function deleteSnapshotSchedule(
   clusterId: string,
   scheduleId: string,
+  signal?: AbortSignal,
 ): Promise<void> {
-  await api.delete(`/clusters/${clusterId}/snapshot-schedules/${scheduleId}`);
+  await generated.deleteClustersByClusterIdSnapshotSchedulesById({
+    path: { cluster_id: clusterId, id: scheduleId },
+    signal,
+  });
 }
-
-// ============================================================
 // Cluster registries (private image-pull credentials)
 // ============================================================
 
@@ -211,62 +391,113 @@ export interface UpdateRegistryRequest {
 
 export interface RegistryTestResult {
   ok: boolean;
+  statusCode?: number;
   message?: string;
+  /** Retained for view compatibility; this endpoint currently reports statusCode instead. */
   latencyMs?: number;
 }
 
-export async function listClusterRegistries(clusterId: string): Promise<ClusterRegistry[]> {
-  const res = await api.get<APIResponse<ClusterRegistry[]>>(
-    `/clusters/${clusterId}/registries`,
-  );
-  return res.data.data ?? [];
+function mapClusterRegistry(wire: Record<string, unknown>): ClusterRegistry {
+  return {
+    id: String(wire.id ?? ""),
+    registryUrl: String(wire.private_registry_url ?? ""),
+    username: String(wire.registry_username ?? ""),
+    namespaces: Array.isArray(wire.namespaces) ? (wire.namespaces as string[]) : [],
+    secretName: String(wire.secret_name ?? ""),
+    injectDefaultSa: Boolean(wire.inject_default_sa),
+    lastAppliedAt: wire.last_applied_at ? String(wire.last_applied_at) : undefined,
+    lastApplyError: wire.last_apply_error ? String(wire.last_apply_error) : undefined,
+    createdAt: String(wire.created_at ?? ""),
+    updatedAt: String(wire.updated_at ?? ""),
+  };
+}
+
+export async function listClusterRegistries(
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<ClusterRegistry[]> {
+  const wire = await generated.getClustersByClusterIdRegistries({
+    path: { cluster_id: clusterId },
+    signal,
+  });
+  return (wire.data?.items ?? []).map(mapClusterRegistry);
 }
 
 export async function createClusterRegistry(
   clusterId: string,
   body: CreateRegistryRequest,
+  signal?: AbortSignal,
 ): Promise<ClusterRegistry> {
-  const res = await api.post<APIResponse<ClusterRegistry>>(
-    `/clusters/${clusterId}/registries`,
-    body,
-  );
-  return res.data.data;
+  const wire = await generated.postClustersByClusterIdRegistries({
+    path: { cluster_id: clusterId },
+    body: {
+      private_registry_url: body.registry_url,
+      registry_username: body.username,
+      registry_password: body.password,
+      namespaces: body.namespaces,
+      secret_name: body.secret_name,
+      inject_default_sa: body.inject_default_sa,
+    },
+    signal,
+  });
+  return mapClusterRegistry(requiredClusterDetailData(wire, "Registry create"));
 }
 
 export async function updateClusterRegistry(
   clusterId: string,
   registryId: string,
   body: UpdateRegistryRequest,
+  signal?: AbortSignal,
 ): Promise<ClusterRegistry> {
-  const res = await api.put<APIResponse<ClusterRegistry>>(
-    `/clusters/${clusterId}/registries/${registryId}`,
-    body,
-  );
-  return res.data.data;
+  const wire = await generated.putClustersByClusterIdRegistriesById({
+    path: { cluster_id: clusterId, id: registryId },
+    body: {
+      private_registry_url: body.registry_url,
+      registry_username: body.username,
+      registry_password: body.password,
+      namespaces: body.namespaces,
+      secret_name: body.secret_name,
+      inject_default_sa: body.inject_default_sa,
+    },
+    signal,
+  });
+  return mapClusterRegistry(requiredClusterDetailData(wire, "Registry update"));
 }
 
 export async function deleteClusterRegistry(
   clusterId: string,
   registryId: string,
+  signal?: AbortSignal,
 ): Promise<void> {
-  await api.delete(`/clusters/${clusterId}/registries/${registryId}`);
+  await generated.deleteClustersByClusterIdRegistriesById({
+    path: { cluster_id: clusterId, id: registryId },
+    signal,
+  });
 }
 
 export async function testClusterRegistry(
   clusterId: string,
   registryId: string,
+  signal?: AbortSignal,
 ): Promise<RegistryTestResult> {
-  const res = await api.post<APIResponse<RegistryTestResult>>(
-    `/clusters/${clusterId}/registries/${registryId}/test`,
-  );
-  return res.data.data;
+  const wire = await generated.postClustersByClusterIdRegistriesByIdTest({
+    path: { cluster_id: clusterId, id: registryId },
+    signal,
+  });
+  const data = requiredClusterDetailData(wire, "Registry test");
+  return {
+    ok: Boolean(data.ok),
+    statusCode: data.status_code == null ? undefined : Number(data.status_code),
+    message: data.message == null ? undefined : String(data.message),
+  };
 }
 
 // ============================================================
 // Cluster template binding
 // ============================================================
 
-export type ClusterTemplateStatus = 'pending' | 'applying' | 'applied' | 'failed' | string;
+export type ClusterTemplateStatus =
+  "pending" | "applying" | "applied" | "failed" | string;
 
 /**
  * Shape returned by `GET /clusters/{id}/template/` — the *binding* between a
@@ -285,17 +516,34 @@ export interface ClusterTemplateBinding {
   spec: unknown;
 }
 
+function mapClusterTemplateBinding(
+  wire: Record<string, unknown>,
+): ClusterTemplateBinding {
+  return {
+    templateId: String(wire.template_id ?? ""),
+    templateName: String(wire.template_name ?? ""),
+    templateDisplayName: String(wire.template_name ?? ""),
+    status: String(wire.status ?? ""),
+    appliedAt: wire.applied_at ? String(wire.applied_at) : undefined,
+    lastError: wire.last_error ? String(wire.last_error) : undefined,
+    spec: wire.spec_snapshot,
+  };
+}
+
 export async function getClusterTemplateBinding(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ClusterTemplateBinding | null> {
   try {
-    const res = await api.get<APIResponse<ClusterTemplateBinding>>(
-      `/clusters/${clusterId}/template`,
-    );
-    return res.data.data ?? null;
+    const wire = await generated.getClustersByClusterIdTemplate({
+      path: { cluster_id: clusterId },
+      signal,
+    });
+    return wire.data ? mapClusterTemplateBinding(wire.data) : null;
   } catch (err) {
     // 404 — no template bound. Anything else surfaces to the caller.
-    const status = (err as { response?: { status?: number } })?.response?.status;
+    const status = (err as { response?: { status?: number } })?.response
+      ?.status;
     if (status === 404) return null;
     throw err;
   }
@@ -304,25 +552,37 @@ export async function getClusterTemplateBinding(
 export async function bindClusterTemplate(
   clusterId: string,
   body: { template_id: string },
+  signal?: AbortSignal,
 ): Promise<ClusterTemplateBinding> {
-  const res = await api.post<APIResponse<ClusterTemplateBinding>>(
-    `/clusters/${clusterId}/template`,
+  const wire = await generated.postClustersByClusterIdTemplate({
+    path: { cluster_id: clusterId },
+    headerParams: { "Idempotency-Key": createIdempotencyKey() },
     body,
-  );
-  return res.data.data;
+    signal,
+  });
+  return mapClusterTemplateBinding(requiredClusterDetailData(wire, "Template bind"));
 }
 
 export async function reapplyClusterTemplate(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ClusterTemplateBinding> {
-  const res = await api.post<APIResponse<ClusterTemplateBinding>>(
-    `/clusters/${clusterId}/template/reapply`,
-  );
-  return res.data.data;
+  const wire = await generated.postClustersByClusterIdTemplateReapply({
+    path: { cluster_id: clusterId },
+    headerParams: { "Idempotency-Key": createIdempotencyKey() },
+    signal,
+  });
+  return mapClusterTemplateBinding(requiredClusterDetailData(wire, "Template reapply"));
 }
 
-export async function detachClusterTemplate(clusterId: string): Promise<void> {
-  await api.delete(`/clusters/${clusterId}/template`);
+export async function detachClusterTemplate(
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await generated.deleteClustersByClusterIdTemplate({
+    path: { cluster_id: clusterId },
+    signal,
+  });
 }
 
 // ============================================================
@@ -369,7 +629,8 @@ export interface ImageVulnReport {
   updatedAt: string;
 }
 
-export type CVESeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN' | string;
+export type CVESeverity =
+  "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN" | string;
 
 export interface CVERow {
   id: string;
@@ -394,101 +655,188 @@ export interface ImageVulnReportDetail {
   offset: number;
 }
 
-export interface ImageVulnRescanResult {
-  triggered: boolean;
-  reason?: string;
-  error?: string;
-  clusterId: string;
-  requestedAt: string;
+type ImageVulnReportWire = OpenAPIComponents["schemas"]["ImageVulnerabilityReport"];
+
+function mapImageVulnReport(raw: ImageVulnReportWire): ImageVulnReport {
+  return {
+    id: raw.id,
+    clusterId: raw.cluster_id,
+    reportName: raw.report_name,
+    namespace: raw.namespace,
+    workloadKind: raw.workload_kind,
+    workloadName: raw.workload_name,
+    containerName: raw.container_name,
+    imageRegistry: raw.image_registry,
+    imageRepo: raw.image_repo,
+    imageTag: raw.image_tag,
+    imageDigest: raw.image_digest,
+    scanner: raw.scanner,
+    scannerVersion: raw.scanner_version,
+    criticalCount: raw.critical_count,
+    highCount: raw.high_count,
+    mediumCount: raw.medium_count,
+    lowCount: raw.low_count,
+    unknownCount: raw.unknown_count,
+    scannedAt: raw.scanned_at,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+  };
 }
 
-export async function getImageVulnSummary(clusterId: string): Promise<ImageVulnSummary> {
+export interface ImageVulnRescanResult extends OperationSnapshot {
+  clusterId: string;
+  requestedAt: string;
+  operationUrl: string;
+}
+
+export async function getImageVulnSummary(
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<ImageVulnSummary> {
   // The Go backend returns snake_case (report_count, last_scanned_at);
   // the TS interface uses camelCase for everywhere-else convenience.
   // Map at the boundary so a stray `summary.lastScannedAt` doesn't
   // silently read undefined → "Invalid Date" + a "0 reports" tile,
   // which is exactly the bug operators were seeing on this page.
-  const res = await api.get<{ data: Record<string, unknown> }>(
-    `/clusters/${clusterId}/vulnerabilities/summary/`,
-  );
-  const raw = res.data.data;
+  const wire = await generated.getClustersByIdVulnerabilitiesSummary({
+    path: { id: clusterId },
+    signal,
+  });
+  const raw = requiredClusterDetailData(wire, "Vulnerability summary");
   return {
     critical: Number(raw.critical ?? 0),
     high: Number(raw.high ?? 0),
     medium: Number(raw.medium ?? 0),
     low: Number(raw.low ?? 0),
     unknown: Number(raw.unknown ?? 0),
-    reportCount: Number(raw.report_count ?? raw.reportCount ?? 0),
-    lastScannedAt: (raw.last_scanned_at as string | null) ?? (raw.lastScannedAt as string | null) ?? null,
+    reportCount: Number(raw.report_count ?? 0),
+    lastScannedAt: raw.last_scanned_at ?? null,
   };
 }
 
 export async function listVulnerableImages(
   clusterId: string,
   opts: { namespace?: string; limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
 ): Promise<{ items: ImageVulnReport[]; total: number }> {
-  const q = new URLSearchParams();
-  if (opts.namespace) q.set('namespace', opts.namespace);
-  if (opts.limit != null) q.set('limit', String(opts.limit));
-  if (opts.offset != null) q.set('offset', String(opts.offset));
-  const suffix = q.toString() ? `?${q}` : '';
-  const res = await api.get<{ data: Record<string, unknown>[]; count: number }>(
-    `/clusters/${clusterId}/vulnerabilities/images/${suffix}`,
-  );
+  const wire = await generated.getClustersByIdVulnerabilitiesImages({
+    path: { id: clusterId },
+    query: {
+      namespace: opts.namespace,
+      limit: opts.limit,
+      offset: opts.offset,
+    },
+    signal,
+  });
   // Snake → camel at the boundary. The Go side returns
   // critical_count / scanned_at / image_repo etc.; the TS interface
   // calls them criticalCount / scannedAt / imageRepo. Without this
   // mapping, every property read on a row is undefined → table shows
   // 0 for every count column and "Invalid Date" for scannedAt.
-  const items: ImageVulnReport[] = (res.data.data ?? []).map((raw) => ({
-    id: String(raw.id ?? ''),
-    clusterId: String(raw.cluster_id ?? raw.clusterId ?? ''),
-    reportName: String(raw.report_name ?? raw.reportName ?? ''),
-    namespace: String(raw.namespace ?? ''),
-    workloadKind: String(raw.workload_kind ?? raw.workloadKind ?? ''),
-    workloadName: String(raw.workload_name ?? raw.workloadName ?? ''),
-    containerName: String(raw.container_name ?? raw.containerName ?? ''),
-    imageRegistry: String(raw.image_registry ?? raw.imageRegistry ?? ''),
-    imageRepo: String(raw.image_repo ?? raw.imageRepo ?? ''),
-    imageTag: String(raw.image_tag ?? raw.imageTag ?? ''),
-    imageDigest: String(raw.image_digest ?? raw.imageDigest ?? ''),
-    scanner: String(raw.scanner ?? ''),
-    scannerVersion: String(raw.scanner_version ?? raw.scannerVersion ?? ''),
-    criticalCount: Number(raw.critical_count ?? raw.criticalCount ?? 0),
-    highCount: Number(raw.high_count ?? raw.highCount ?? 0),
-    mediumCount: Number(raw.medium_count ?? raw.mediumCount ?? 0),
-    lowCount: Number(raw.low_count ?? raw.lowCount ?? 0),
-    unknownCount: Number(raw.unknown_count ?? raw.unknownCount ?? 0),
-    scannedAt: String(raw.scanned_at ?? raw.scannedAt ?? ''),
-    createdAt: String(raw.created_at ?? raw.createdAt ?? ''),
-    updatedAt: String(raw.updated_at ?? raw.updatedAt ?? ''),
+  const items = (wire.data ?? []).map((raw) => mapImageVulnReport({
+    id: raw.id ?? "",
+    cluster_id: raw.cluster_id ?? "",
+    report_name: raw.report_name ?? "",
+    namespace: raw.namespace ?? "",
+    workload_kind: raw.workload_kind ?? "",
+    workload_name: raw.workload_name ?? "",
+    container_name: raw.container_name ?? "",
+    image_registry: raw.image_registry ?? "",
+    image_repo: raw.image_repo ?? "",
+    image_tag: raw.image_tag ?? "",
+    image_digest: raw.image_digest ?? "",
+    scanner: raw.scanner ?? "",
+    scanner_version: raw.scanner_version ?? "",
+    critical_count: raw.critical_count ?? 0,
+    high_count: raw.high_count ?? 0,
+    medium_count: raw.medium_count ?? 0,
+    low_count: raw.low_count ?? 0,
+    unknown_count: raw.unknown_count ?? 0,
+    scanned_at: raw.scanned_at ?? "",
+    created_at: raw.created_at ?? "",
+    updated_at: raw.updated_at ?? "",
   }));
-  return { items, total: Number(res.data.count ?? items.length) };
+  return { items, total: Number(wire.count ?? items.length) };
 }
 
 export async function getImageVulnReport(
   clusterId: string,
   reportId: string,
   opts: { severity?: CVESeverity; limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
 ): Promise<ImageVulnReportDetail> {
-  const q = new URLSearchParams();
-  if (opts.severity) q.set('severity', opts.severity);
-  if (opts.limit != null) q.set('limit', String(opts.limit));
-  if (opts.offset != null) q.set('offset', String(opts.offset));
-  const suffix = q.toString() ? `?${q}` : '';
-  const res = await api.get<APIResponse<ImageVulnReportDetail>>(
-    `/clusters/${clusterId}/vulnerabilities/reports/${reportId}/${suffix}`,
-  );
-  return res.data.data;
+  const wire = await generated.getClustersByClusterIdVulnerabilitiesReportsById({
+    path: { cluster_id: clusterId, id: reportId },
+    query: {
+      severity: opts.severity,
+      limit: opts.limit,
+      offset: opts.offset,
+    },
+    signal,
+  });
+  const raw = wire.data;
+  return {
+    report: mapImageVulnReport(raw.report),
+    vulnerabilities: raw.vulnerabilities.map((row) => ({
+      id: row.id,
+      reportId: row.report_id,
+      vulnerabilityId: row.vulnerability_id,
+      severity: row.severity,
+      pkgName: row.pkg_name,
+      installedVersion: row.installed_version,
+      fixedVersion: row.fixed_version,
+      primaryLink: row.primary_link,
+      cvssScore: row.cvss_score,
+      title: row.title,
+      description: row.description,
+    })),
+    vulnerabilityTotal: raw.vulnerability_total,
+    severityFilter: raw.severity_filter,
+    limit: raw.limit,
+    offset: raw.offset,
+  };
 }
 
 export async function triggerImageVulnRescan(
   clusterId: string,
+  options: { idempotencyKey: string; signal?: AbortSignal },
 ): Promise<ImageVulnRescanResult> {
-  const res = await api.post<APIResponse<ImageVulnRescanResult>>(
-    `/clusters/${clusterId}/vulnerabilities/rescan/`,
+  const response = await generated.postClustersByClusterIdVulnerabilitiesRescan(
+    {
+      path: { cluster_id: clusterId },
+      headerParams: { "Idempotency-Key": options.idempotencyKey },
+      signal: options.signal,
+    },
   );
-  return res.data.data;
+  return {
+    id: response.data.operation_id,
+    status: response.data.status,
+    clusterId: response.data.cluster_id,
+    requestedAt: response.data.requested_at,
+    operationUrl: response.data.operation_url,
+  };
+}
+
+export async function getImageVulnRescanOperation(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ImageVulnRescanResult> {
+  const response = await generated.getWorkloadsOperationsById({
+    path: { id },
+    signal,
+  });
+  const operation = response.data;
+  if (!operation?.id || !operation.status) {
+    throw new Error("Vulnerability rescan operation receipt is incomplete");
+  }
+  return {
+    id: operation.id,
+    status: operation.status,
+    errorMessage: operation.errorMessage,
+    clusterId: "",
+    requestedAt: operation.createdAt ?? "",
+    operationUrl: `/api/v1/workloads/operations/${operation.id}/`,
+  };
 }
 // CRD-mirror v2 (sprint 069) — "what's installed" read-only views
 // ============================================================
@@ -499,41 +847,47 @@ export async function triggerImageVulnRescan(
 // fields are pre-resolved server-side so the UI doesn't have to
 // re-parse annotations or condition arrays per render.
 
-export interface MirroredIngressClass {
-  name: string;
-  controller: string;
-  parameters: unknown;
+export type MirroredIngressClass = Omit<
+  OpenAPIComponents["schemas"]["MirroredIngressClass"],
+  "is_default" | "last_seen_at" | "created_at" | "updated_at"
+> & {
   isDefault: boolean;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
   lastSeenAt: string;
   createdAt: string;
   updatedAt: string;
-}
+};
 
-export interface MirroredGatewayClass {
-  name: string;
+export type MirroredGatewayClass = Omit<
+  OpenAPIComponents["schemas"]["MirroredGatewayClass"],
+  | "controller_name"
+  | "accepted_status"
+  | "last_seen_at"
+  | "created_at"
+  | "updated_at"
+> & {
   controllerName: string;
-  description: string;
-  parameters: unknown;
   // "True" | "False" | "Unknown" | "" (when the Accepted condition is unset).
   acceptedStatus: string;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
   lastSeenAt: string;
   createdAt: string;
   updatedAt: string;
-}
+};
 
-export interface MirroredNetworkPolicy {
-  namespace: string;
-  name: string;
+export type MirroredNetworkPolicy = Omit<
+  OpenAPIComponents["schemas"]["MirroredNetworkPolicy"],
+  | "pod_selector"
+  | "policy_types"
+  | "ingress_rules"
+  | "egress_rules"
+  | "is_managed"
+  | "last_seen_at"
+  | "created_at"
+  | "updated_at"
+> & {
   podSelector: unknown;
   policyTypes: string[];
   ingressRules: unknown[];
   egressRules: unknown[];
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
   // True when app.kubernetes.io/managed-by=astronomer on the policy's
   // labels at ingest time. The UI surfaces this as a "managed by
   // astronomer" badge so operators can tell at a glance which
@@ -542,11 +896,12 @@ export interface MirroredNetworkPolicy {
   lastSeenAt: string;
   createdAt: string;
   updatedAt: string;
-}
+};
 
-export interface MirroredResourceQuota {
-  namespace: string;
-  name: string;
+export type MirroredResourceQuota = Omit<
+  OpenAPIComponents["schemas"]["MirroredResourceQuota"],
+  "hard" | "used" | "scopes" | "last_seen_at" | "created_at" | "updated_at"
+> & {
   // Free-form maps so future-proofed for whatever quota keys
   // upstream Kubernetes carries. Typed as `unknown` so the dashboard
   // can render any shape (`cpu`, `requests.memory`,
@@ -554,92 +909,153 @@ export interface MirroredResourceQuota {
   hard: Record<string, string> | null;
   used: Record<string, string> | null;
   scopes: string[];
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
   lastSeenAt: string;
   createdAt: string;
   updatedAt: string;
-}
+};
 
-export interface MirroredLimitRange {
-  namespace: string;
-  name: string;
+export type MirroredLimitRange = Omit<
+  OpenAPIComponents["schemas"]["MirroredLimitRange"],
+  "limits" | "last_seen_at" | "created_at" | "updated_at"
+> & {
   limits: unknown[];
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
   lastSeenAt: string;
   createdAt: string;
   updatedAt: string;
-}
+};
+
+type IngressClassWire = OpenAPIComponents["schemas"]["MirroredIngressClass"];
+type GatewayClassWire = OpenAPIComponents["schemas"]["MirroredGatewayClass"];
+type NetworkPolicyWire = OpenAPIComponents["schemas"]["MirroredNetworkPolicy"];
+type ResourceQuotaWire = OpenAPIComponents["schemas"]["MirroredResourceQuota"];
+type LimitRangeWire = OpenAPIComponents["schemas"]["MirroredLimitRange"];
+
+const mapIngressClass = (wire: IngressClassWire): MirroredIngressClass => ({
+  name: wire.name,
+  controller: wire.controller,
+  parameters: wire.parameters,
+  labels: wire.labels,
+  annotations: wire.annotations,
+  isDefault: wire.is_default,
+  lastSeenAt: wire.last_seen_at,
+  createdAt: wire.created_at,
+  updatedAt: wire.updated_at,
+});
+
+const mapGatewayClass = (wire: GatewayClassWire): MirroredGatewayClass => ({
+  name: wire.name,
+  description: wire.description,
+  parameters: wire.parameters,
+  labels: wire.labels,
+  annotations: wire.annotations,
+  controllerName: wire.controller_name,
+  acceptedStatus: wire.accepted_status,
+  lastSeenAt: wire.last_seen_at,
+  createdAt: wire.created_at,
+  updatedAt: wire.updated_at,
+});
+
+const mapNetworkPolicy = (wire: NetworkPolicyWire): MirroredNetworkPolicy => ({
+  namespace: wire.namespace,
+  name: wire.name,
+  labels: wire.labels,
+  annotations: wire.annotations,
+  podSelector: wire.pod_selector,
+  policyTypes: Array.isArray(wire.policy_types) ? (wire.policy_types as string[]) : [],
+  ingressRules: Array.isArray(wire.ingress_rules) ? wire.ingress_rules : [],
+  egressRules: Array.isArray(wire.egress_rules) ? wire.egress_rules : [],
+  isManaged: wire.is_managed,
+  lastSeenAt: wire.last_seen_at,
+  createdAt: wire.created_at,
+  updatedAt: wire.updated_at,
+});
+
+const mapResourceQuota = (wire: ResourceQuotaWire): MirroredResourceQuota => ({
+  namespace: wire.namespace,
+  name: wire.name,
+  labels: wire.labels,
+  annotations: wire.annotations,
+  hard: wire.hard && typeof wire.hard === "object" ? wire.hard as Record<string, string> : null,
+  used: wire.used && typeof wire.used === "object" ? wire.used as Record<string, string> : null,
+  scopes: Array.isArray(wire.scopes) ? wire.scopes as string[] : [],
+  lastSeenAt: wire.last_seen_at,
+  createdAt: wire.created_at,
+  updatedAt: wire.updated_at,
+});
+
+const mapLimitRange = (wire: LimitRangeWire): MirroredLimitRange => ({
+  namespace: wire.namespace,
+  name: wire.name,
+  labels: wire.labels,
+  annotations: wire.annotations,
+  limits: Array.isArray(wire.limits) ? wire.limits : [],
+  lastSeenAt: wire.last_seen_at,
+  createdAt: wire.created_at,
+  updatedAt: wire.updated_at,
+});
 
 export async function listMirroredIngressClasses(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<MirroredIngressClass[]> {
-  const res = await api.get<APIResponse<MirroredIngressClass[]>>(
-    `/clusters/${clusterId}/ingress-classes`,
-  );
-  return res.data.data ?? [];
+  const wire = await generated.getClustersByClusterIdIngressClasses({
+    path: { cluster_id: clusterId }, signal,
+  });
+  return wire.data.map(mapIngressClass);
 }
 
 export async function listMirroredGatewayClasses(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<MirroredGatewayClass[]> {
-  const res = await api.get<APIResponse<MirroredGatewayClass[]>>(
-    `/clusters/${clusterId}/gateway-classes`,
-  );
-  return res.data.data ?? [];
+  const wire = await generated.getClustersByClusterIdGatewayClasses({
+    path: { cluster_id: clusterId }, signal,
+  });
+  return wire.data.map(mapGatewayClass);
 }
 
 export async function listMirroredNetworkPolicies(
   clusterId: string,
   namespace?: string,
+  signal?: AbortSignal,
 ): Promise<MirroredNetworkPolicy[]> {
-  const url = namespace
-    ? `/clusters/${clusterId}/network-policies?namespace=${encodeURIComponent(namespace)}`
-    : `/clusters/${clusterId}/network-policies`;
-  const res = await api.get<APIResponse<MirroredNetworkPolicy[]>>(url);
-  return res.data.data ?? [];
+  const wire = await generated.getClustersByClusterIdNetworkPolicies({
+    path: { cluster_id: clusterId }, query: { namespace }, signal,
+  });
+  return wire.data.map(mapNetworkPolicy);
 }
 
 export async function listMirroredResourceQuotas(
   clusterId: string,
   namespace?: string,
+  signal?: AbortSignal,
 ): Promise<MirroredResourceQuota[]> {
-  const url = namespace
-    ? `/clusters/${clusterId}/resource-quotas?namespace=${encodeURIComponent(namespace)}`
-    : `/clusters/${clusterId}/resource-quotas`;
-  const res = await api.get<APIResponse<MirroredResourceQuota[]>>(url);
-  return res.data.data ?? [];
+  const wire = await generated.getClustersByClusterIdResourceQuotas({
+    path: { cluster_id: clusterId }, query: { namespace }, signal,
+  });
+  return wire.data.map(mapResourceQuota);
 }
 
 export async function listMirroredLimitRanges(
   clusterId: string,
   namespace?: string,
+  signal?: AbortSignal,
 ): Promise<MirroredLimitRange[]> {
-  const url = namespace
-    ? `/clusters/${clusterId}/limit-ranges?namespace=${encodeURIComponent(namespace)}`
-    : `/clusters/${clusterId}/limit-ranges`;
-  const res = await api.get<APIResponse<MirroredLimitRange[]>>(url);
-  return res.data.data ?? [];
+  const wire = await generated.getClustersByClusterIdLimitRanges({
+    path: { cluster_id: clusterId }, query: { namespace }, signal,
+  });
+  return wire.data.map(mapLimitRange);
 }
 
 // ============================================================
 // Apiserver allow-list (migration 070)
 // ============================================================
 
-export type ApiserverAllowlistMode = 'monitor' | 'enforce' | 'disabled';
+export type ApiserverAllowlistMode = "monitor" | "enforce" | "disabled";
 export type ApiserverAllowlistSyncStatus =
-  | 'synced'
-  | 'drifting'
-  | 'pending'
-  | 'failed';
+  "synced" | "drifting" | "pending" | "failed";
 export type ApiserverAllowlistProvider =
-  | 'eks'
-  | 'gke'
-  | 'aks'
-  | 'doks'
-  | 'self_managed'
-  | 'unknown';
+  "eks" | "gke" | "aks" | "doks" | "self_managed" | "unknown";
 
 export interface ApiserverAllowlistResponse {
   clusterId: string;
@@ -671,53 +1087,87 @@ export interface ApiserverAllowlistSnapshot {
   drift: boolean;
 }
 
+function mapAllowlist(raw: Record<string, unknown>): ApiserverAllowlistResponse {
+  return {
+    clusterId: String(raw.cluster_id ?? ""),
+    operatorCidrs: Array.isArray(raw.operator_cidrs) ? raw.operator_cidrs as string[] : [],
+    astronomerEgress: Array.isArray(raw.astronomer_egress) ? raw.astronomer_egress as string[] : [],
+    emergency: Array.isArray(raw.emergency) ? raw.emergency as string[] : [],
+    desired: Array.isArray(raw.desired) ? raw.desired as string[] : [],
+    effective: Array.isArray(raw.effective) ? raw.effective as string[] : [],
+    mode: String(raw.mode ?? "disabled") as ApiserverAllowlistMode,
+    detectedProvider: String(raw.detected_provider ?? "unknown") as ApiserverAllowlistProvider,
+    syncStatus: String(raw.sync_status ?? "pending") as ApiserverAllowlistSyncStatus,
+    lastError: raw.last_error ? String(raw.last_error) : undefined,
+    lastReconciledAt: raw.last_reconciled_at ? String(raw.last_reconciled_at) : undefined,
+    drift: Boolean(raw.drift),
+  };
+}
+
+function mapAllowlistSnapshot(raw: Record<string, unknown>): ApiserverAllowlistSnapshot {
+  return {
+    id: Number(raw.id ?? 0),
+    clusterId: String(raw.cluster_id ?? ""),
+    capturedAt: String(raw.captured_at ?? ""),
+    effectiveCidrs: Array.isArray(raw.effective_cidrs) ? raw.effective_cidrs as string[] : [],
+    desiredCidrs: Array.isArray(raw.desired_cidrs) ? raw.desired_cidrs as string[] : [],
+    drift: Boolean(raw.drift),
+  };
+}
+
 export async function getApiserverAllowlist(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ApiserverAllowlistResponse> {
-  const res = await api.get<APIResponse<ApiserverAllowlistResponse>>(
-    `/clusters/${clusterId}/apiserver-allowlist/`,
-  );
-  return res.data.data;
+  const wire = await generated.getClustersByClusterIdApiserverAllowlist({
+    path: { cluster_id: clusterId }, signal,
+  });
+  return mapAllowlist(requiredClusterDetailData(wire, "API server allowlist"));
 }
 
 export async function previewApiserverAllowlist(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ApiserverAllowlistResponse> {
-  const res = await api.get<APIResponse<ApiserverAllowlistResponse>>(
-    `/clusters/${clusterId}/apiserver-allowlist/preview/`,
-  );
-  return res.data.data;
+  const wire = await generated.getClustersByClusterIdApiserverAllowlistPreview({
+    path: { cluster_id: clusterId }, signal,
+  });
+  return mapAllowlist(requiredClusterDetailData(wire, "API server allowlist preview"));
 }
 
 export async function updateApiserverAllowlist(
   clusterId: string,
   body: ApiserverAllowlistUpdateRequest,
+  signal?: AbortSignal,
 ): Promise<ApiserverAllowlistResponse> {
-  const res = await api.put<APIResponse<ApiserverAllowlistResponse>>(
-    `/clusters/${clusterId}/apiserver-allowlist/`,
-    body,
-  );
-  return res.data.data;
+  const wire = await generated.putClustersByClusterIdApiserverAllowlist({
+    path: { cluster_id: clusterId },
+    body: { cidrs: body.cidrs, mode: body.mode, force_apply: body.forceApply },
+    signal,
+  });
+  return mapAllowlist(requiredClusterDetailData(wire, "API server allowlist update"));
 }
 
 export async function reconcileApiserverAllowlist(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<void> {
-  await api.post(`/clusters/${clusterId}/apiserver-allowlist/reconcile/`);
+  await generated.postClustersByClusterIdApiserverAllowlistReconcile({
+    path: { cluster_id: clusterId },
+    headerParams: { "Idempotency-Key": createIdempotencyKey() },
+    signal,
+  });
 }
 
 export async function listApiserverAllowlistSnapshots(
   clusterId: string,
   opts?: { limit?: number; offset?: number },
+  signal?: AbortSignal,
 ): Promise<ApiserverAllowlistSnapshot[]> {
-  const q = new URLSearchParams();
-  if (opts?.limit !== undefined) q.set('limit', String(opts.limit));
-  if (opts?.offset !== undefined) q.set('offset', String(opts.offset));
-  const suffix = q.toString() ? `?${q.toString()}` : '';
-  const res = await api.get<APIResponse<{ items: ApiserverAllowlistSnapshot[] }>>(
-    `/clusters/${clusterId}/apiserver-allowlist/snapshots/${suffix}`,
-  );
-  return res.data.data.items ?? [];
+  const wire = await generated.getClustersByClusterIdApiserverAllowlistSnapshots({
+    path: { cluster_id: clusterId }, query: opts, signal,
+  });
+  return (wire.data?.items ?? []).map(mapAllowlistSnapshot);
 }
 // Service Mesh tile (migration 071)
 //
@@ -727,12 +1177,7 @@ export async function listApiserverAllowlistSnapshots(
 // ============================================================
 
 export type ServiceMeshKind =
-  | 'istio'
-  | 'linkerd'
-  | 'kuma'
-  | 'cilium'
-  | 'none'
-  | 'unknown';
+  "istio" | "linkerd" | "kuma" | "cilium" | "none" | "unknown";
 
 export interface ServiceMeshDetection {
   clusterId: string;
@@ -795,7 +1240,7 @@ export interface ServiceMeshInventory {
 
 export interface ServiceMeshPolicyValidationFinding {
   field?: string;
-  severity: 'warning' | 'error' | string;
+  severity: "warning" | "error" | string;
   message: string;
 }
 
@@ -813,51 +1258,133 @@ export interface ServiceMeshPolicyValidation {
   errors: ServiceMeshPolicyValidationFinding[];
 }
 
+function mapServiceMeshDetection(raw: Record<string, unknown>): ServiceMeshDetection {
+  return {
+    clusterId: String(raw.cluster_id ?? ""),
+    detectedMesh: String(raw.detected_mesh ?? "unknown") as ServiceMeshKind,
+    detectedVersion: String(raw.detected_version ?? ""),
+    controlPlaneNamespace: String(raw.control_plane_namespace ?? ""),
+    gatewayCount: Number(raw.gateway_count ?? 0),
+    virtualServiceCount: Number(raw.virtual_service_count ?? 0),
+    destinationRuleCount: Number(raw.destination_rule_count ?? 0),
+    peerAuthenticationCount: Number(raw.peer_authentication_count ?? 0),
+    serviceProfileCount: Number(raw.service_profile_count ?? 0),
+    serverAuthCount: Number(raw.server_auth_count ?? 0),
+    mtlsCoveragePct: Number(raw.mtls_coverage_pct ?? 0),
+    lastDetectedAt: raw.last_detected_at ? String(raw.last_detected_at) : undefined,
+    lastError: raw.last_error ? String(raw.last_error) : undefined,
+  };
+}
+
+function mapServiceMeshInventory(
+  raw: OpenAPIComponents["schemas"]["ServiceMeshInventory"],
+): ServiceMeshInventory {
+  return {
+    clusterId: raw.cluster_id ?? "",
+    mesh: (raw.mesh ?? "unknown") as ServiceMeshKind,
+    totalCount: raw.total_count ?? 0,
+    notice: raw.notice,
+    resources: (raw.resources ?? []).map((resource) => ({
+      kind: resource.kind ?? "",
+      apiVersion: resource.api_version ?? "",
+      plural: resource.plural ?? "",
+      count: resource.count ?? 0,
+      notice: resource.notice,
+      items: (resource.items ?? []).map((item) => ({
+        name: item.name ?? "",
+        namespace: item.namespace,
+        managedBy: item.managed_by,
+        readOnly: item.read_only ?? false,
+        reason: item.reason,
+      })),
+    })),
+  };
+}
+
+function mapValidationFinding(raw: Record<string, unknown>): ServiceMeshPolicyValidationFinding {
+  return {
+    field: raw.field ? String(raw.field) : undefined,
+    severity: String(raw.severity ?? "warning"),
+    message: String(raw.message ?? ""),
+  };
+}
+
 export async function getServiceMeshDetection(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ServiceMeshDetection> {
-  const res = await api.get<APIResponse<ServiceMeshDetection>>(
-    `/clusters/${clusterId}/service-mesh/`,
-  );
-  return res.data.data;
+  const wire = await generated.getClustersByClusterIdServiceMesh({
+    path: { cluster_id: clusterId }, signal,
+  });
+  return mapServiceMeshDetection(requiredClusterDetailData(wire, "Service mesh detection"));
 }
 
 export async function reDetectServiceMesh(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ServiceMeshDetection> {
-  const res = await api.post<APIResponse<ServiceMeshDetection>>(
-    `/clusters/${clusterId}/service-mesh/detect/`,
-  );
-  return res.data.data;
+  const wire = await generated.postClustersByClusterIdServiceMeshDetect({
+    path: { cluster_id: clusterId }, signal,
+  });
+  return mapServiceMeshDetection(requiredClusterDetailData(wire, "Service mesh detection"));
 }
 
 export async function getServiceMeshMTLS(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<MTLSBreakdown> {
-  const res = await api.get<APIResponse<MTLSBreakdown>>(
-    `/clusters/${clusterId}/service-mesh/mtls/`,
-  );
-  return res.data.data;
+  const wire = await generated.getClustersByClusterIdServiceMeshMtls({
+    path: { cluster_id: clusterId }, signal,
+  });
+  const raw = requiredClusterDetailData(wire, "Service mesh mTLS") as Record<string, unknown>;
+  return {
+    clusterId: String(raw.cluster_id ?? ""),
+    mesh: String(raw.mesh ?? "unknown") as ServiceMeshKind,
+    mtlsCoveragePct: Number(raw.mtls_coverage_pct ?? 0),
+    totalCount: Number(raw.total_count ?? 0),
+    notice: raw.notice ? String(raw.notice) : undefined,
+    rows: (Array.isArray(raw.rows) ? raw.rows : []).map((item) => {
+      const row = item as Record<string, unknown>;
+      return { namespace: String(row.namespace ?? ""), mode: String(row.mode ?? ""), rules: Number(row.rules ?? 0) };
+    }),
+  };
 }
 
 export async function getServiceMeshInventory(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ServiceMeshInventory> {
-  const res = await api.get<APIResponse<ServiceMeshInventory>>(
-    `/clusters/${clusterId}/service-mesh/inventory/`,
-  );
-  return res.data.data;
+  const wire = await generated.getClustersByClusterIdServiceMeshInventory({
+    path: { cluster_id: clusterId }, signal,
+  });
+  return mapServiceMeshInventory(requiredClusterDetailData(wire, "Service mesh inventory"));
 }
 
 export async function validateServiceMeshPolicy(
   clusterId: string,
   body: { yaml?: string; object?: unknown },
+  signal?: AbortSignal,
 ): Promise<ServiceMeshPolicyValidation> {
-  const res = await api.post<APIResponse<ServiceMeshPolicyValidation>>(
-    `/clusters/${clusterId}/service-mesh/validate/`,
-    body,
-  );
-  return res.data.data;
+  const requestBody = body.yaml !== undefined
+    ? { yaml: body.yaml }
+    : { object: body.object as Record<string, unknown> | undefined };
+  const wire = await generated.postClustersByClusterIdServiceMeshValidate({
+    path: { cluster_id: clusterId }, body: requestBody, signal,
+  });
+  const raw = requiredClusterDetailData(wire, "Service mesh policy validation");
+  return {
+    clusterId: raw.cluster_id ?? "",
+    valid: raw.valid ?? false,
+    apiVersion: raw.api_version,
+    kind: raw.kind,
+    name: raw.name,
+    namespace: raw.namespace,
+    managedBy: raw.managed_by,
+    readOnly: raw.read_only ?? false,
+    applyAllowed: raw.apply_allowed ?? false,
+    warnings: (raw.warnings ?? []).map(mapValidationFinding),
+    errors: (raw.errors ?? []).map(mapValidationFinding),
+  };
 }
 
 // ---------------------------------------------------------------------
@@ -884,29 +1411,28 @@ export interface ImageVulnHistoryResponse {
 export async function getImageVulnHistory(
   clusterId: string,
   opts: { sinceHours?: number; limit?: number } = {},
+  signal?: AbortSignal,
 ): Promise<ImageVulnHistoryResponse> {
-  const q = new URLSearchParams();
-  if (opts.sinceHours != null) q.set('since_hours', String(opts.sinceHours));
-  if (opts.limit != null) q.set('limit', String(opts.limit));
-  const suffix = q.toString() ? `?${q}` : '';
-  const res = await api.get<{ data: Record<string, unknown> }>(
-    `/clusters/${clusterId}/vulnerabilities/history/${suffix}`,
-  );
-  const raw = res.data.data;
-  const snapshots = ((raw.snapshots as Record<string, unknown>[]) ?? []).map((s) => ({
-    scannedAt: String(s.scanned_at ?? s.scannedAt ?? ''),
-    critical: Number(s.critical ?? 0),
-    high: Number(s.high ?? 0),
-    medium: Number(s.medium ?? 0),
-    low: Number(s.low ?? 0),
-    unknown: Number(s.unknown ?? 0),
-    reportCount: Number(s.report_count ?? s.reportCount ?? 0),
+  const wire = await generated.getClustersByClusterIdVulnerabilitiesHistory({
+    path: { cluster_id: clusterId },
+    query: { since_hours: opts.sinceHours, limit: opts.limit },
+    signal,
+  });
+  const raw = wire.data;
+  const snapshots = raw.snapshots.map((s) => ({
+    scannedAt: s.scanned_at,
+    critical: s.critical,
+    high: s.high,
+    medium: s.medium,
+    low: s.low,
+    unknown: s.unknown,
+    reportCount: s.report_count,
   }));
   return {
-    clusterId: String(raw.cluster_id ?? raw.clusterId ?? ''),
-    since: String(raw.since ?? ''),
+    clusterId: raw.cluster_id,
+    since: raw.since,
     snapshots,
-    totalCount: Number(raw.total_count ?? raw.totalCount ?? snapshots.length),
+    totalCount: raw.total_count,
   };
 }
 
@@ -925,35 +1451,42 @@ export interface ImageVulnDiff {
   priorHours: number;
   latest?: ImageVulnDiffBucket;
   prior?: ImageVulnDiffBucket;
-  delta?: { critical: number; high: number; medium: number; low: number; unknown: number };
+  delta?: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    unknown: number;
+  };
 }
 
 export async function getImageVulnDiff(
   clusterId: string,
   priorHours = 24,
+  signal?: AbortSignal,
 ): Promise<ImageVulnDiff> {
-  const res = await api.get<{ data: Record<string, unknown> }>(
-    `/clusters/${clusterId}/vulnerabilities/diff/?prior_hours=${priorHours}`,
-  );
-  const raw = res.data.data;
-  const bucket = (b: Record<string, unknown> | undefined): ImageVulnDiffBucket | undefined => {
+  const wire = await generated.getClustersByClusterIdVulnerabilitiesDiff({
+    path: { cluster_id: clusterId }, query: { prior_hours: priorHours }, signal,
+  });
+  const raw = wire.data;
+  const bucket = (b: OpenAPIComponents["schemas"]["VulnerabilityDiffBucket"] | undefined): ImageVulnDiffBucket | undefined => {
     if (!b) return undefined;
     return {
-      critical: Number(b.critical ?? 0),
-      high: Number(b.high ?? 0),
-      medium: Number(b.medium ?? 0),
-      low: Number(b.low ?? 0),
-      unknown: Number(b.unknown ?? 0),
-      scannedAt: String(b.scanned_at ?? b.scannedAt ?? ''),
+      critical: b.critical,
+      high: b.high,
+      medium: b.medium,
+      low: b.low,
+      unknown: b.unknown,
+      scannedAt: b.scanned_at,
     };
   };
   return {
-    clusterId: String(raw.cluster_id ?? raw.clusterId ?? ''),
-    hasComparison: Boolean(raw.has_comparison ?? raw.hasComparison ?? false),
-    priorHours: Number(raw.prior_hours ?? raw.priorHours ?? priorHours),
-    latest: bucket(raw.latest as Record<string, unknown> | undefined),
-    prior: bucket(raw.prior as Record<string, unknown> | undefined),
-    delta: raw.delta as ImageVulnDiff['delta'],
+    clusterId: raw.cluster_id,
+    hasComparison: raw.has_comparison,
+    priorHours: raw.prior_hours,
+    latest: bucket(raw.latest),
+    prior: bucket(raw.prior),
+    delta: raw.delta,
   };
 }
 
@@ -982,26 +1515,25 @@ export async function getImageVulnReportHistory(
   clusterId: string,
   reportId: string,
   opts: { limit?: number } = {},
+  signal?: AbortSignal,
 ): Promise<ImageVulnReportHistoryResponse> {
-  const q = new URLSearchParams();
-  if (opts.limit != null) q.set('limit', String(opts.limit));
-  const suffix = q.toString() ? `?${q}` : '';
-  const res = await api.get<{ data: Record<string, unknown> }>(
-    `/clusters/${clusterId}/vulnerabilities/reports/${reportId}/history/${suffix}`,
-  );
-  const raw = res.data.data;
-  const snapshots = ((raw.snapshots as Record<string, unknown>[]) ?? []).map((s) => ({
-    scannedAt: String(s.scanned_at ?? s.scannedAt ?? ''),
-    critical: Number(s.critical ?? 0),
-    high: Number(s.high ?? 0),
-    medium: Number(s.medium ?? 0),
-    low: Number(s.low ?? 0),
-    unknown: Number(s.unknown ?? 0),
+  const wire = await generated.getClustersByClusterIdVulnerabilitiesReportsByReportIdHistory({
+    path: { cluster_id: clusterId, report_id: reportId },
+    query: { limit: opts.limit }, signal,
+  });
+  const raw = wire.data;
+  const snapshots = raw.snapshots.map((s) => ({
+    scannedAt: s.scanned_at,
+    critical: s.critical,
+    high: s.high,
+    medium: s.medium,
+    low: s.low,
+    unknown: s.unknown,
   }));
   return {
-    reportId: String(raw.report_id ?? raw.reportId ?? reportId),
+    reportId: raw.report_id,
     snapshots,
-    totalCount: Number(raw.total_count ?? raw.totalCount ?? snapshots.length),
+    totalCount: raw.total_count,
   };
 }
 
@@ -1019,32 +1551,29 @@ export interface ImageVulnProgress {
   lastScanAgeSeconds: number | null;
 }
 
-export async function getImageVulnProgress(clusterId: string): Promise<ImageVulnProgress> {
-  const res = await api.get<{ data: Record<string, unknown> }>(
-    `/clusters/${clusterId}/vulnerabilities/progress/`,
-  );
-  const raw = res.data.data ?? {};
+export async function getImageVulnProgress(
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<ImageVulnProgress> {
+  const wire = await generated.getClustersByClusterIdVulnerabilitiesProgress({
+    path: { cluster_id: clusterId }, signal,
+  });
+  const raw = wire.data;
   // Snake → camel mapping. If we leave the snake names exposed to the
   // page (`progress.trivy_operator_ready`) a typo'd accessor on the
   // camelCase form silently reads undefined and renders the wrong
   // banner state — which is exactly the "trivy not ready / 0 scans /
   // invalid date" bug operators were seeing.
   return {
-    scanning: Boolean(raw.scanning ?? false),
-    activeJobs: Number(raw.active_jobs ?? raw.activeJobs ?? 0),
-    completedJobs: Number(raw.completed_jobs ?? raw.completedJobs ?? 0),
-    failedJobs: Number(raw.failed_jobs ?? raw.failedJobs ?? 0),
-    reportsCount: Number(raw.reports_count ?? raw.reportsCount ?? 0),
-    trivyOperatorReady: Boolean(raw.trivy_operator_ready ?? raw.trivyOperatorReady ?? false),
-    lastScanAgeSeconds:
-      raw.last_scan_age_seconds != null
-        ? Number(raw.last_scan_age_seconds)
-        : raw.lastScanAgeSeconds != null
-          ? Number(raw.lastScanAgeSeconds)
-          : null,
+    scanning: raw.scanning,
+    activeJobs: raw.active_jobs,
+    completedJobs: raw.completed_jobs,
+    failedJobs: raw.failed_jobs,
+    reportsCount: raw.reports_count,
+    trivyOperatorReady: raw.trivy_operator_ready,
+    lastScanAgeSeconds: raw.last_scan_age_seconds,
   };
 }
-
 
 // ---------------------------------------------------------------------
 // Sprint 082+ — per-cluster Apps tab.
@@ -1075,7 +1604,7 @@ export interface ClusterAppRow {
   // sourceKind = 'app' for catalog-installed releases, 'tool' for
   // Platform Baseline / Tools-tab installs. Drives the "Managed by
   // Tools" pivot pill in the UI.
-  sourceKind: 'app' | 'tool';
+  sourceKind: "app" | "tool";
   displayName: string;
   chartName: string;
   chartVersion: string;
@@ -1097,40 +1626,38 @@ export interface ClusterAppsResponse {
 export async function listClusterApps(
   clusterId: string,
   opts: { limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
 ): Promise<ClusterAppsResponse> {
-  const q = new URLSearchParams();
-  if (opts.limit != null) q.set('limit', String(opts.limit));
-  if (opts.offset != null) q.set('offset', String(opts.offset));
-  const suffix = q.toString() ? `?${q}` : '';
-  const res = await api.get<{ data: Record<string, unknown>[]; count: number }>(
-    `/clusters/${clusterId}/apps/${suffix}`,
-  );
-  const items: ClusterAppRow[] = (res.data.data ?? []).map((raw) => ({
-    id: String(raw.id ?? ''),
-    clusterId: String(raw.cluster_id ?? raw.clusterId ?? ''),
-    chartId: String(raw.chart_id ?? raw.chartId ?? ''),
-    chartVersionId: String(raw.chart_version_id ?? raw.chartVersionId ?? ''),
-    releaseName: String(raw.release_name ?? raw.releaseName ?? ''),
-    namespace: String(raw.namespace ?? ''),
-    status: String(raw.status ?? ''),
-    revision: Number(raw.revision ?? 0),
-    valuesOverride: String(raw.values_override ?? raw.valuesOverride ?? ''),
-    toolSlug: String(raw.tool_slug ?? raw.toolSlug ?? ''),
-    presetUsed: String(raw.preset_used ?? raw.presetUsed ?? ''),
-    sourceKind: ((raw.source_kind ?? raw.sourceKind ?? 'app') as ClusterAppRow['sourceKind']),
-    displayName: String(raw.display_name ?? raw.displayName ?? ''),
-    chartName: String(raw.chart_name ?? raw.chartName ?? ''),
-    chartVersion: String(raw.chart_version ?? raw.chartVersion ?? ''),
-    chartAppVersion: String(raw.chart_app_version ?? raw.chartAppVersion ?? ''),
-    chartDescription: String(raw.chart_description ?? raw.chartDescription ?? ''),
-    chartIconUrl: String(raw.chart_icon_url ?? raw.chartIconUrl ?? ''),
-    chartCategory: String(raw.chart_category ?? raw.chartCategory ?? ''),
-    repoName: String(raw.repo_name ?? raw.repoName ?? ''),
-    repoType: String(raw.repo_type ?? raw.repoType ?? ''),
-    createdAt: String(raw.created_at ?? raw.createdAt ?? ''),
-    updatedAt: String(raw.updated_at ?? raw.updatedAt ?? ''),
+  const wire = await generated.getClustersByClusterIdApps({
+    path: { cluster_id: clusterId }, query: opts, signal,
+  });
+  const rows = (wire.data ?? []) as OpenAPIComponents["schemas"]["InstalledAppEnriched"][];
+  const items: ClusterAppRow[] = rows.map((raw) => ({
+    id: raw.id ?? "",
+    clusterId: raw.cluster_id ?? "",
+    chartId: raw.chart_id ?? "",
+    chartVersionId: raw.chart_version_id ?? "",
+    releaseName: raw.release_name ?? "",
+    namespace: raw.namespace ?? "",
+    status: raw.status ?? "",
+    revision: raw.revision ?? 0,
+    valuesOverride: raw.values_override ?? "",
+    toolSlug: raw.tool_slug ?? "",
+    presetUsed: raw.preset_used ?? "",
+    sourceKind: raw.source_kind ?? "app",
+    displayName: raw.display_name ?? "",
+    chartName: raw.chart_name ?? "",
+    chartVersion: raw.chart_version ?? "",
+    chartAppVersion: raw.chart_app_version ?? "",
+    chartDescription: raw.chart_description ?? "",
+    chartIconUrl: raw.chart_icon_url ?? "",
+    chartCategory: raw.chart_category ?? "",
+    repoName: raw.repo_name ?? "",
+    repoType: raw.repo_type ?? "",
+    createdAt: raw.created_at ?? "",
+    updatedAt: raw.updated_at ?? "",
   }));
-  return { items, total: Number(res.data.count ?? items.length) };
+  return { items, total: wire.count ?? items.length };
 }
 
 // Browse view: lists charts in the catalog. Wraps existing
@@ -1153,29 +1680,30 @@ export async function listCatalogCharts(params: {
   limit?: number;
   offset?: number;
   search?: string;
+  signal?: AbortSignal;
 }): Promise<{ items: CatalogChartSummary[]; total: number }> {
-  const q = new URLSearchParams();
-  q.set('project_id', params.projectId);
-  if (params.limit != null) q.set('limit', String(params.limit));
-  if (params.offset != null) q.set('offset', String(params.offset));
-  if (params.search) q.set('search', params.search);
-  const suffix = q.toString() ? `?${q}` : '';
-  const res = await api.get<{ data: Record<string, unknown>[]; count: number }>(
-    `/catalog/charts/${suffix}`,
-  );
-  const items: CatalogChartSummary[] = (res.data.data ?? []).map((raw) => ({
-    id: String(raw.id ?? ''),
-    repositoryId: String(raw.repository_id ?? raw.repositoryId ?? ''),
-    name: String(raw.name ?? ''),
-    displayName: String(raw.display_name ?? raw.displayName ?? raw.name ?? ''),
-    description: String(raw.description ?? ''),
-    iconUrl: String(raw.icon_url ?? raw.iconUrl ?? ''),
-    homeUrl: String(raw.home_url ?? raw.homeUrl ?? ''),
-    category: String(raw.category ?? ''),
-    keywords: Array.isArray(raw.keywords) ? (raw.keywords as string[]) : [],
-    deprecated: Boolean(raw.deprecated ?? false),
+  const wire = await generated.getCatalogCharts({
+    query: {
+      project_id: params.projectId,
+      limit: params.limit,
+      offset: params.offset,
+    },
+    signal: params.signal,
+  });
+  const rows = (wire.data ?? []) as OpenAPIComponents["schemas"]["HelmChart"][];
+  const items: CatalogChartSummary[] = rows.map((raw) => ({
+    id: raw.id ?? "",
+    repositoryId: raw.repository_id ?? "",
+    name: raw.name ?? "",
+    displayName: raw.display_name ?? raw.name ?? "",
+    description: raw.description ?? "",
+    iconUrl: raw.icon_url ?? "",
+    homeUrl: raw.home_url ?? "",
+    category: raw.category ?? "",
+    keywords: raw.keywords ?? [],
+    deprecated: raw.deprecated ?? false,
   }));
-  return { items, total: Number(res.data.count ?? items.length) };
+  return { items, total: wire.count ?? items.length };
 }
 
 // Recommended view: wraps /catalog/recommendations/popular which
@@ -1191,17 +1719,18 @@ export interface RecommendedChart {
 export async function listRecommendedCharts(
   projectId: string,
   limit = 10,
+  signal?: AbortSignal,
 ): Promise<RecommendedChart[]> {
-  const res = await api.get<{ data: Record<string, unknown>[] }>(
-    `/catalog/recommendations/popular/`,
-    { params: { project_id: projectId, limit } },
-  );
-  return (res.data.data ?? []).map((raw) => ({
-    chartId: String(raw.chart_id ?? raw.chartId ?? ''),
-    name: String(raw.name ?? raw.chart_name ?? raw.chartName ?? ''),
-    score: Number(raw.score ?? 0),
-    ratingAvg: Number(raw.rating_avg ?? raw.ratingAvg ?? 0),
-    installCount: Number(raw.install_count ?? raw.installCount ?? 0),
+  const wire = await generated.getCatalogRecommendationsPopular({
+    query: { project_id: projectId, limit }, signal,
+  });
+  const rows = (wire.data ?? []) as OpenAPIComponents["schemas"]["ChartRecommendation"][];
+  return rows.map((raw) => ({
+    chartId: raw.chart_id,
+    name: "",
+    score: raw.bayesian_score,
+    ratingAvg: raw.avg_stars,
+    installCount: raw.rating_count,
   }));
 }
 
@@ -1216,16 +1745,16 @@ export interface ChartVersionRow {
 export async function listChartVersions(
   projectId: string,
   chartId: string,
+  signal?: AbortSignal,
 ): Promise<ChartVersionRow[]> {
-  const res = await api.get<{ data: Record<string, unknown>[] }>(
-    `/catalog/charts/${chartId}/versions/`,
-    { params: { project_id: projectId, limit: 50 } },
-  );
-  return (res.data.data ?? []).map((raw) => ({
-    id: String(raw.id ?? ''),
-    version: String(raw.version ?? ''),
-    appVersion: String(raw.app_version ?? raw.appVersion ?? ''),
-    createdAtUpstream: String(raw.created_at_upstream ?? raw.createdAtUpstream ?? ''),
+  const wire = await generated.getCatalogChartsByIdVersions({
+    path: { id: chartId }, query: { project_id: projectId, limit: 50 }, signal,
+  });
+  return wire.data.map((raw) => ({
+    id: raw.id ?? "",
+    version: raw.version ?? "",
+    appVersion: raw.app_version ?? "",
+    createdAtUpstream: raw.created_at_upstream ?? "",
   }));
 }
 
@@ -1236,15 +1765,17 @@ export async function getChartDefaultValues(
   projectId: string,
   chartId: string,
   version?: string,
+  signal?: AbortSignal,
 ): Promise<{ chart: string; version: string; defaultValues: string }> {
-  const res = await api.get<{ data: { chart: string; version: string; default_values: string } }>(
-    `/catalog/charts/${chartId}/values/`,
-    { params: { project_id: projectId, ...(version ? { version } : {}) } },
-  );
+  const wire = await generated.getCatalogChartsByIdValues({
+    path: { id: chartId },
+    query: { project_id: projectId, version },
+    signal,
+  });
   return {
-    chart: res.data.data.chart,
-    version: res.data.data.version,
-    defaultValues: res.data.data.default_values ?? '',
+    chart: wire.chart ?? "",
+    version: wire.version ?? "",
+    defaultValues: wire.default_values ?? "",
   };
 }
 
@@ -1258,26 +1789,44 @@ export async function installChartOnCluster(req: {
   releaseName: string;
   namespace: string;
   valuesOverride: string;
+  idempotencyKey?: string;
+  signal?: AbortSignal;
 }): Promise<{ id: string }> {
-  const res = await api.post<{ data: { id: string } }>(`/catalog/installed/`, {
-    project_id: req.projectId,
-    cluster_id: req.clusterId,
-    chart_version_id: req.chartVersionId,
-    release_name: req.releaseName,
-    namespace: req.namespace,
-    values_override: req.valuesOverride,
+  const wire = await generated.postCatalogInstalled({
+    headerParams: { "Idempotency-Key": req.idempotencyKey ?? createIdempotencyKey() },
+    body: {
+      project_id: req.projectId,
+      cluster_id: req.clusterId,
+      chart_version_id: req.chartVersionId,
+      release_name: req.releaseName,
+      namespace: req.namespace,
+      values_override: req.valuesOverride,
+    },
+    signal: req.signal,
   });
-  return { id: res.data.data.id };
+  return { id: wire.data.installation.id ?? "" };
 }
 
-export async function uninstallCatalogRelease(installedChartId: string): Promise<void> {
-  await api.delete(`/catalog/installed/${installedChartId}/`);
+export async function uninstallCatalogRelease(
+  installedChartId: string,
+  options: { idempotencyKey?: string; signal?: AbortSignal } = {},
+): Promise<void> {
+  await generated.deleteCatalogInstalledById({
+    path: { id: installedChartId },
+    headerParams: { "Idempotency-Key": options.idempotencyKey ?? createIdempotencyKey() },
+    signal: options.signal,
+  });
 }
 
 // Rancher-style bulk-delete of stuck releases. Backend hard-deletes any
 // installed_charts rows in failed_install / failed_uninstall on this
 // cluster and returns the affected row count.
-export async function deleteFailedClusterApps(clusterId: string): Promise<{ deleted: number }> {
-  const res = await api.delete<{ deleted: number }>(`/clusters/${clusterId}/apps/failed/`);
-  return res.data ?? { deleted: 0 };
+export async function deleteFailedClusterApps(
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<{ deleted: number }> {
+  const wire = await generated.deleteClustersByClusterIdAppsFailed({
+    path: { cluster_id: clusterId }, signal,
+  });
+  return { deleted: wire.deleted ?? 0 };
 }

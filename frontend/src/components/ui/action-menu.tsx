@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { MoreHorizontal } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useState, useRef, useEffect, useLayoutEffect, useId } from "react";
+import { createPortal } from "react-dom";
+import { MoreHorizontal } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface ActionMenuItem {
   label: string;
   icon?: React.ReactNode;
   onClick: () => void;
-  variant?: 'default' | 'destructive';
+  variant?: "default" | "destructive";
   disabled?: boolean;
   disabledReason?: string;
   separator?: boolean;
@@ -17,6 +17,7 @@ export interface ActionMenuItem {
 
 interface ActionMenuProps {
   items: ActionMenuItem[];
+  ariaLabel?: string;
 }
 
 // 208px (w-52) gives multi-word labels like "Registration Command" room to sit
@@ -31,9 +32,15 @@ const MENU_MIN_HEIGHT = 120;
 // dashboard main pane, etc.) clipped. We now portal the menu to <body> and
 // position it with `position: fixed` from the trigger button's bounding rect,
 // which dodges every parent overflow boundary cleanly.
-export function ActionMenu({ items }: ActionMenuProps) {
+export function ActionMenu({
+  items,
+  ariaLabel = "Open actions menu",
+}: ActionMenuProps) {
   const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const menuId = useId();
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(
+    null,
+  );
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -41,21 +48,25 @@ export function ActionMenu({ items }: ActionMenuProps) {
     if (!open) return;
     function handleClick(e: MouseEvent) {
       const target = e.target as Node;
-      if (menuRef.current?.contains(target) || buttonRef.current?.contains(target)) return;
+      if (
+        menuRef.current?.contains(target) ||
+        buttonRef.current?.contains(target)
+      )
+        return;
       setOpen(false);
     }
     function handleClose() {
       setOpen(false);
     }
-    document.addEventListener('mousedown', handleClick);
+    document.addEventListener("mousedown", handleClick);
     // Close when the page scrolls or resizes so the menu doesn't drift away
     // from its trigger; cheaper than recomputing coords on every scroll tick.
-    window.addEventListener('scroll', handleClose, true);
-    window.addEventListener('resize', handleClose);
+    window.addEventListener("scroll", handleClose, true);
+    window.addEventListener("resize", handleClose);
     return () => {
-      document.removeEventListener('mousedown', handleClick);
-      window.removeEventListener('scroll', handleClose, true);
-      window.removeEventListener('resize', handleClose);
+      document.removeEventListener("mousedown", handleClick);
+      window.removeEventListener("scroll", handleClose, true);
+      window.removeEventListener("resize", handleClose);
     };
   }, [open]);
 
@@ -71,7 +82,8 @@ export function ActionMenu({ items }: ActionMenuProps) {
     // on narrow widths.
     let left = rect.right - MENU_WIDTH;
     if (left < 8) left = 8;
-    if (left + MENU_WIDTH > window.innerWidth - 8) left = window.innerWidth - MENU_WIDTH - 8;
+    if (left + MENU_WIDTH > window.innerWidth - 8)
+      left = window.innerWidth - MENU_WIDTH - 8;
     setCoords({ top, left });
   }, [open]);
 
@@ -83,59 +95,75 @@ export function ActionMenu({ items }: ActionMenuProps) {
   return (
     <>
       <button
+        type="button"
         ref={buttonRef}
         onClick={handleToggle}
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls={open ? menuId : undefined}
         className="inline-flex items-center justify-center h-7 w-7 rounded
           text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
 
-      {open && coords && typeof document !== 'undefined' && createPortal(
-        <div
-          ref={menuRef}
-          style={{
-            position: 'fixed',
-            top: coords.top,
-            left: coords.left,
-            width: MENU_WIDTH,
-            transform: coords.top < (buttonRef.current?.getBoundingClientRect().top ?? 0)
-              ? 'translateY(-100%)'
-              : undefined,
-          }}
-          className="rounded-md border border-border bg-popover p-1 shadow-lg z-popover"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {items.map((item, i) => (
-            <div key={i}>
-              {item.separator && i > 0 && (
-                <div className="my-1 h-px bg-border" />
-              )}
-              <button
-                onClick={() => {
-                  if (!item.disabled) {
-                    item.onClick();
-                    setOpen(false);
-                  }
-                }}
-                disabled={item.disabled}
-                title={item.disabledReason}
-                className={cn(
-                  'w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-colors whitespace-nowrap',
-                  item.disabled && 'opacity-50 cursor-not-allowed',
-                  item.variant === 'destructive'
-                    ? 'text-status-error hover:bg-status-error/10'
-                    : 'text-popover-foreground hover:bg-accent',
+      {open &&
+        coords &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            id={menuId}
+            ref={menuRef}
+            role="menu"
+            style={{
+              position: "fixed",
+              top: coords.top,
+              left: coords.left,
+              width: MENU_WIDTH,
+              transform:
+                coords.top <
+                (buttonRef.current?.getBoundingClientRect().top ?? 0)
+                  ? "translateY(-100%)"
+                  : undefined,
+            }}
+            className="rounded-md border border-border bg-popover p-1 shadow-lg z-popover"
+          >
+            {items.map((item, i) => (
+              <div key={i}>
+                {item.separator && i > 0 && (
+                  <div className="my-1 h-px bg-border" />
                 )}
-              >
-                {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
-                {item.label}
-              </button>
-            </div>
-          ))}
-        </div>,
-        document.body,
-      )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (!item.disabled) {
+                      item.onClick();
+                      setOpen(false);
+                    }
+                  }}
+                  disabled={item.disabled}
+                  title={item.disabledReason}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-colors whitespace-nowrap",
+                    item.disabled && "opacity-50 cursor-not-allowed",
+                    item.variant === "destructive"
+                      ? "text-status-error hover:bg-status-error/10"
+                      : "text-popover-foreground hover:bg-accent",
+                  )}
+                >
+                  {item.icon && (
+                    <span className="flex-shrink-0">{item.icon}</span>
+                  )}
+                  {item.label}
+                </button>
+              </div>
+            ))}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

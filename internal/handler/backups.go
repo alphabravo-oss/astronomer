@@ -15,12 +15,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -69,6 +71,22 @@ type BackupQuerier interface {
 	CountRestoreOperations(ctx context.Context) (int64, error)
 }
 
+type BackupMutationTx interface {
+	audit.OutboxQuerier
+	CreateBackupStorageConfig(context.Context, sqlc.CreateBackupStorageConfigParams) (sqlc.BackupStorageConfig, error)
+	UpdateBackupStorageConfig(context.Context, sqlc.UpdateBackupStorageConfigParams) (sqlc.BackupStorageConfig, error)
+	DeleteBackupStorageConfig(context.Context, uuid.UUID) error
+	CreateBackup(context.Context, sqlc.CreateBackupParams) (sqlc.Backup, error)
+	DeleteBackup(context.Context, uuid.UUID) error
+	CreateBackupSchedule(context.Context, sqlc.CreateBackupScheduleParams) (sqlc.BackupSchedule, error)
+	UpdateBackupSchedule(context.Context, sqlc.UpdateBackupScheduleParams) (sqlc.BackupSchedule, error)
+	DeleteBackupSchedule(context.Context, uuid.UUID) error
+	CreateRestoreOperation(context.Context, sqlc.CreateRestoreOperationParams) (sqlc.RestoreOperation, error)
+	CreateRestoreOperationIdempotent(context.Context, sqlc.CreateRestoreOperationIdempotentParams) (sqlc.RestoreOperation, error)
+}
+
+type backupRunTxFunc func(context.Context, func(BackupMutationTx) error) error
+
 // BackupHandler handles backup endpoints (storage configs, backups, schedules, restores).
 //
 // Phase B2 wires Velero as the engine: the row in our DB is the source of
@@ -83,6 +101,42 @@ type BackupHandler struct {
 	log        *slog.Logger
 	authz      authorizationSupport
 	bus        *events.Bus
+	runTx      backupRunTxFunc
+}
+
+func (h *BackupHandler) SetRunTx(runTx backupRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *BackupHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
+
+func executeBackupMutation[T any](r *http.Request, h *BackupHandler, mutate func(BackupMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, fmt.Errorf("backup handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q BackupMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 // NewBackupHandler creates a new backup handler.
@@ -137,9 +191,9 @@ func (h *BackupHandler) authorizeBackup(w http.ResponseWriter, r *http.Request, 
 }
 
 // SetEncryptor wires the Fernet encryptor used to round-trip cloud credentials
-// into the BackupStorageConfig.encrypted_credentials column. When nil, raw
-// access_key/secret_key (legacy plaintext) are used as a fallback so dev
-// environments without ASTRONOMER_ENCRYPTION_KEY still function.
+// into BackupStorageConfig.encrypted_credentials. New credential-bearing
+// writes fail closed when it is absent; legacy plaintext columns are read-only
+// compatibility data and are never populated by this handler.
 func (h *BackupHandler) SetEncryptor(e *auth.Encryptor) {
 	if h == nil {
 		return
@@ -356,8 +410,11 @@ func (h *BackupHandler) CreateStorageConfig(w http.ResponseWriter, r *http.Reque
 		veleroNS = defaultVeleroNamespace
 	}
 	bslName := strings.TrimSpace(req.BSLName)
+	if bslName == "" {
+		bslName = veleroBSLNameFor(sqlc.BackupStorageConfig{Name: req.Name})
+	}
 
-	config, err := h.queries.CreateBackupStorageConfig(r.Context(), sqlc.CreateBackupStorageConfigParams{
+	params := sqlc.CreateBackupStorageConfigParams{
 		Name:                 req.Name,
 		StorageType:          req.StorageType,
 		Bucket:               req.Bucket,
@@ -372,31 +429,29 @@ func (h *BackupHandler) CreateStorageConfig(w http.ResponseWriter, r *http.Reque
 		VeleroNamespace:      veleroNS,
 		BslName:              bslName,
 		EncryptedCredentials: encrypted,
-	})
+	}
+	config, err := executeBackupMutation(r, h,
+		func(q BackupMutationTx) (sqlc.BackupStorageConfig, error) {
+			return q.CreateBackupStorageConfig(r.Context(), params)
+		},
+		func() (sqlc.BackupStorageConfig, error) {
+			return h.queries.CreateBackupStorageConfig(r.Context(), params)
+		},
+		func(config sqlc.BackupStorageConfig) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "backup.storage.create", resourceType: "backup_storage_config", resourceID: config.ID.String(), resourceName: config.Name,
+				status: http.StatusCreated, detail: map[string]any{
+					"storage_type": config.StorageType, "bucket": config.Bucket, "region": config.Region, "is_default": config.IsDefault,
+				},
+			}
+		})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create storage config")
 		return
 	}
-	if config.BslName == "" {
-		// Fill in a stable, slug-derived name now we know the row's UUID.
-		config.BslName = veleroBSLNameFor(config)
-		// Persist by re-issuing an update with all columns. Best-effort; failures
-		// here only affect the next round-trip and are logged.
-		if _, uerr := h.queries.UpdateBackupStorageConfig(r.Context(), buildStorageUpdateParams(config)); uerr != nil && h.log != nil {
-			h.log.Warn("failed to persist BSL name", "config_id", config.ID.String(), "error", uerr)
-		}
-	}
-
 	if err := h.applyVeleroBSL(r.Context(), config, req.AccessKey, req.SecretKey); err != nil && h.log != nil {
 		h.log.Warn("failed to apply velero BSL", "config_id", config.ID.String(), "error", err)
 	}
-
-	recordAudit(r, h.queries, "backup.storage.create", "backup_storage_config", config.ID.String(), config.Name, map[string]any{
-		"storage_type": config.StorageType,
-		"bucket":       config.Bucket,
-		"region":       config.Region,
-		"is_default":   config.IsDefault,
-	})
 
 	w.Header().Set("Location", "/api/v1/backups/storage/"+config.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, h.storageResponse(config))
@@ -441,12 +496,20 @@ func (h *BackupHandler) DeleteStorageConfig(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	configName := existing.Name
-	if err := h.queries.DeleteBackupStorageConfig(r.Context(), id); err != nil {
+	_, err = executeBackupMutation(r, h,
+		func(q BackupMutationTx) (sqlc.BackupStorageConfig, error) {
+			return existing, q.DeleteBackupStorageConfig(r.Context(), id)
+		},
+		func() (sqlc.BackupStorageConfig, error) {
+			return existing, h.queries.DeleteBackupStorageConfig(r.Context(), id)
+		},
+		func(config sqlc.BackupStorageConfig) clusterAuditEvent {
+			return clusterAuditEvent{action: "backup.storage.delete", resourceType: "backup_storage_config", resourceID: config.ID.String(), resourceName: configName, status: http.StatusNoContent}
+		})
+	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete storage config")
 		return
 	}
-
-	recordAudit(r, h.queries, "backup.storage.delete", "backup_storage_config", id.String(), configName, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -498,8 +561,11 @@ func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Reque
 		veleroNS = defaultVeleroNamespace
 	}
 	bslName := strings.TrimSpace(req.BSLName)
+	if bslName == "" {
+		bslName = veleroBSLNameFor(sqlc.BackupStorageConfig{Name: req.Name})
+	}
 
-	config, err := h.queries.UpdateBackupStorageConfig(r.Context(), sqlc.UpdateBackupStorageConfigParams{
+	params := sqlc.UpdateBackupStorageConfigParams{
 		ID:                   id,
 		Name:                 req.Name,
 		StorageType:          req.StorageType,
@@ -514,7 +580,22 @@ func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Reque
 		VeleroNamespace:      veleroNS,
 		BslName:              bslName,
 		EncryptedCredentials: encrypted,
-	})
+	}
+	config, err := executeBackupMutation(r, h,
+		func(q BackupMutationTx) (sqlc.BackupStorageConfig, error) {
+			return q.UpdateBackupStorageConfig(r.Context(), params)
+		},
+		func() (sqlc.BackupStorageConfig, error) {
+			return h.queries.UpdateBackupStorageConfig(r.Context(), params)
+		},
+		func(config sqlc.BackupStorageConfig) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "backup.storage.update", resourceType: "backup_storage_config", resourceID: config.ID.String(), resourceName: config.Name,
+				status: http.StatusOK, detail: map[string]any{
+					"storage_type": config.StorageType, "bucket": config.Bucket, "region": config.Region, "is_default": config.IsDefault,
+				},
+			}
+		})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update storage config")
 		return
@@ -523,13 +604,6 @@ func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Reque
 	if err := h.applyVeleroBSL(r.Context(), config, req.AccessKey, req.SecretKey); err != nil && h.log != nil {
 		h.log.Warn("failed to apply velero BSL", "config_id", config.ID.String(), "error", err)
 	}
-
-	recordAudit(r, h.queries, "backup.storage.update", "backup_storage_config", config.ID.String(), config.Name, map[string]any{
-		"storage_type": config.StorageType,
-		"bucket":       config.Bucket,
-		"region":       config.Region,
-		"is_default":   config.IsDefault,
-	})
 
 	RespondJSON(w, http.StatusOK, h.storageResponse(config))
 }
@@ -560,21 +634,37 @@ func (h *BackupHandler) TestStorageConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.probeS3Bucket(r.Context(), cfg, access, secret); err != nil {
-		recordAudit(r, h.queries, "backup.storage.test", "backup_storage_config", cfg.ID.String(), cfg.Name, map[string]any{
-			"success": false,
-			"reason":  err.Error(),
-		})
+		safeReason := redaction.String(err.Error())
+		if auditErr := h.persistStorageTestAudit(r, cfg, false, safeReason); auditErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+			return
+		}
 		RespondJSON(w, http.StatusOK, map[string]any{
 			"success": false,
-			"message": err.Error(),
+			"message": safeReason,
 		})
 		return
 	}
-	recordAudit(r, h.queries, "backup.storage.test", "backup_storage_config", cfg.ID.String(), cfg.Name, map[string]any{"success": true})
+	if err := h.persistStorageTestAudit(r, cfg, true, ""); err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+		return
+	}
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Backup storage configuration is reachable and credentials are valid",
 	})
+}
+
+func (h *BackupHandler) persistStorageTestAudit(r *http.Request, cfg sqlc.BackupStorageConfig, success bool, reason string) error {
+	detail := map[string]any{"success": success}
+	if reason != "" {
+		detail["reason"] = reason
+	}
+	if h != nil && h.runTx != nil {
+		return recordMandatoryAudit(r, h.queries, "backup.storage.test", "backup_storage_config", cfg.ID.String(), cfg.Name, detail)
+	}
+	recordAudit(r, h.queries, "backup.storage.test", "backup_storage_config", cfg.ID.String(), cfg.Name, detail)
+	return nil
 }
 
 // --- Backups ---
@@ -662,7 +752,7 @@ func (h *BackupHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 	included, _ := json.Marshal(req.IncludedNamespaces)
 	excluded, _ := json.Marshal(req.ExcludedNamespaces)
 
-	backup, err := h.queries.CreateBackup(r.Context(), sqlc.CreateBackupParams{
+	params := sqlc.CreateBackupParams{
 		Name:               req.Name,
 		StorageID:          storageID,
 		BackupType:         req.BackupType,
@@ -674,7 +764,18 @@ func (h *BackupHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 		VeleroNamespace:    veleroNS,
 		IncludedNamespaces: included,
 		ExcludedNamespaces: excluded,
-	})
+	}
+	backup, err := executeBackupMutation(r, h,
+		func(q BackupMutationTx) (sqlc.Backup, error) { return q.CreateBackup(r.Context(), params) },
+		func() (sqlc.Backup, error) { return h.queries.CreateBackup(r.Context(), params) },
+		func(backup sqlc.Backup) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "backup.create", resourceType: "backup", resourceID: backup.ID.String(), resourceName: backup.Name,
+				status: http.StatusCreated, detail: map[string]any{
+					"storage_id": storage.ID.String(), "backup_type": backup.BackupType, "on_demand": true,
+				},
+			}
+		})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create backup")
 		return
@@ -688,11 +789,6 @@ func (h *BackupHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.publishBackupChanged(backup.ClusterID, backup.ID, "backup")
-	recordAudit(r, h.queries, "backup.create", "backup", backup.ID.String(), backup.Name, map[string]any{
-		"storage_id":  storage.ID.String(),
-		"backup_type": backup.BackupType,
-		"on_demand":   true,
-	})
 
 	w.Header().Set("Location", "/api/v1/backups/"+backup.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, backupToResponse(backup))
@@ -734,12 +830,17 @@ func (h *BackupHandler) DeleteBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	backupName := existing.Name
-	if err := h.queries.DeleteBackup(r.Context(), id); err != nil {
+	_, err = executeBackupMutation(r, h,
+		func(q BackupMutationTx) (sqlc.Backup, error) { return existing, q.DeleteBackup(r.Context(), id) },
+		func() (sqlc.Backup, error) { return existing, h.queries.DeleteBackup(r.Context(), id) },
+		func(backup sqlc.Backup) clusterAuditEvent {
+			return clusterAuditEvent{action: "backup.delete", resourceType: "backup", resourceID: backup.ID.String(), resourceName: backupName, status: http.StatusNoContent}
+		})
+	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete backup")
 		return
 	}
 	h.publishBackupChanged(existing.ClusterID, id, "backup")
-	recordAudit(r, h.queries, "backup.delete", "backup", id.String(), backupName, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -840,7 +941,7 @@ func (h *BackupHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 	includedRaw, _ := json.Marshal(req.IncludedNamespaces)
 	excludedRaw, _ := json.Marshal(req.ExcludedNamespaces)
 
-	schedule, err := h.queries.CreateBackupSchedule(r.Context(), sqlc.CreateBackupScheduleParams{
+	params := sqlc.CreateBackupScheduleParams{
 		Name:               req.Name,
 		StorageID:          storageID,
 		BackupType:         req.BackupType,
@@ -854,7 +955,21 @@ func (h *BackupHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 		IncludedNamespaces: includedRaw,
 		ExcludedNamespaces: excludedRaw,
 		Ttl:                req.TTL,
-	})
+	}
+	schedule, err := executeBackupMutation(r, h,
+		func(q BackupMutationTx) (sqlc.BackupSchedule, error) {
+			return q.CreateBackupSchedule(r.Context(), params)
+		},
+		func() (sqlc.BackupSchedule, error) { return h.queries.CreateBackupSchedule(r.Context(), params) },
+		func(schedule sqlc.BackupSchedule) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "backup.schedule.create", resourceType: "backup_schedule", resourceID: schedule.ID.String(), resourceName: schedule.Name,
+				status: http.StatusCreated, detail: map[string]any{
+					"storage_id": storage.ID.String(), "cron_expression": schedule.CronExpression,
+					"backup_type": schedule.BackupType, "enabled": schedule.Enabled, "retention_count": schedule.RetentionCount,
+				},
+			}
+		})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create schedule")
 		return
@@ -865,13 +980,6 @@ func (h *BackupHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.publishBackupChanged(schedule.ClusterID, schedule.ID, "schedule")
-	recordAudit(r, h.queries, "backup.schedule.create", "backup_schedule", schedule.ID.String(), schedule.Name, map[string]any{
-		"storage_id":      storage.ID.String(),
-		"cron_expression": schedule.CronExpression,
-		"backup_type":     schedule.BackupType,
-		"enabled":         schedule.Enabled,
-		"retention_count": schedule.RetentionCount,
-	})
 
 	w.Header().Set("Location", "/api/v1/backups/schedules/"+schedule.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, backupScheduleToResponse(schedule))
@@ -912,13 +1020,20 @@ func (h *BackupHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	scheduleName := existing.Name
-	if err := h.queries.DeleteBackupSchedule(r.Context(), id); err != nil {
+	_, err = executeBackupMutation(r, h,
+		func(q BackupMutationTx) (sqlc.BackupSchedule, error) {
+			return existing, q.DeleteBackupSchedule(r.Context(), id)
+		},
+		func() (sqlc.BackupSchedule, error) { return existing, h.queries.DeleteBackupSchedule(r.Context(), id) },
+		func(schedule sqlc.BackupSchedule) clusterAuditEvent {
+			return clusterAuditEvent{action: "backup.schedule.delete", resourceType: "backup_schedule", resourceID: schedule.ID.String(), resourceName: scheduleName, status: http.StatusNoContent}
+		})
+	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete schedule")
 		return
 	}
 
 	h.publishBackupChanged(existing.ClusterID, id, "schedule")
-	recordAudit(r, h.queries, "backup.schedule.delete", "backup_schedule", id.String(), scheduleName, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -983,7 +1098,7 @@ func (h *BackupHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 	includedRaw, _ := json.Marshal(req.IncludedNamespaces)
 	excludedRaw, _ := json.Marshal(req.ExcludedNamespaces)
 
-	schedule, err := h.queries.UpdateBackupSchedule(r.Context(), sqlc.UpdateBackupScheduleParams{
+	params := sqlc.UpdateBackupScheduleParams{
 		ID:                 id,
 		Name:               req.Name,
 		StorageID:          storageID,
@@ -997,7 +1112,21 @@ func (h *BackupHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 		IncludedNamespaces: includedRaw,
 		ExcludedNamespaces: excludedRaw,
 		Ttl:                req.TTL,
-	})
+	}
+	schedule, err := executeBackupMutation(r, h,
+		func(q BackupMutationTx) (sqlc.BackupSchedule, error) {
+			return q.UpdateBackupSchedule(r.Context(), params)
+		},
+		func() (sqlc.BackupSchedule, error) { return h.queries.UpdateBackupSchedule(r.Context(), params) },
+		func(schedule sqlc.BackupSchedule) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "backup.schedule.update", resourceType: "backup_schedule", resourceID: schedule.ID.String(), resourceName: schedule.Name,
+				status: http.StatusOK, detail: map[string]any{
+					"storage_id": storage.ID.String(), "cron_expression": schedule.CronExpression,
+					"backup_type": schedule.BackupType, "enabled": schedule.Enabled,
+				},
+			}
+		})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update schedule")
 		return
@@ -1008,12 +1137,6 @@ func (h *BackupHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.publishBackupChanged(schedule.ClusterID, schedule.ID, "schedule")
-	recordAudit(r, h.queries, "backup.schedule.update", "backup_schedule", schedule.ID.String(), schedule.Name, map[string]any{
-		"storage_id":      storage.ID.String(),
-		"cron_expression": schedule.CronExpression,
-		"backup_type":     schedule.BackupType,
-		"enabled":         schedule.Enabled,
-	})
 
 	RespondJSON(w, http.StatusOK, backupScheduleToResponse(schedule))
 }
@@ -1057,7 +1180,7 @@ func (h *BackupHandler) TriggerSchedule(w http.ResponseWriter, r *http.Request) 
 		veleroNS = defaultVeleroNamespace
 	}
 
-	backup, err := h.queries.CreateBackup(r.Context(), sqlc.CreateBackupParams{
+	params := sqlc.CreateBackupParams{
 		Name:               schedule.Name + " (manual trigger)",
 		StorageID:          schedule.StorageID,
 		BackupType:         schedule.BackupType,
@@ -1069,7 +1192,16 @@ func (h *BackupHandler) TriggerSchedule(w http.ResponseWriter, r *http.Request) 
 		VeleroNamespace:    veleroNS,
 		IncludedNamespaces: schedule.IncludedNamespaces,
 		ExcludedNamespaces: schedule.ExcludedNamespaces,
-	})
+	}
+	backup, err := executeBackupMutation(r, h,
+		func(q BackupMutationTx) (sqlc.Backup, error) { return q.CreateBackup(r.Context(), params) },
+		func() (sqlc.Backup, error) { return h.queries.CreateBackup(r.Context(), params) },
+		func(backup sqlc.Backup) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "backup.schedule.trigger", resourceType: "backup_schedule", resourceID: schedule.ID.String(), resourceName: schedule.Name,
+				status: http.StatusCreated, detail: map[string]any{"backup_id": backup.ID.String(), "backup_name": backup.Name},
+			}
+		})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to trigger backup")
 		return
@@ -1080,10 +1212,6 @@ func (h *BackupHandler) TriggerSchedule(w http.ResponseWriter, r *http.Request) 
 	}
 
 	h.publishBackupChanged(backup.ClusterID, backup.ID, "backup")
-	recordAudit(r, h.queries, "backup.schedule.trigger", "backup_schedule", schedule.ID.String(), schedule.Name, map[string]any{
-		"backup_id":   backup.ID.String(),
-		"backup_name": backup.Name,
-	})
 
 	w.Header().Set("Location", "/api/v1/backups/"+backup.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, backupToResponse(backup))
@@ -1149,18 +1277,27 @@ func (h *BackupHandler) CreateRestore(w http.ResponseWriter, r *http.Request) {
 		IncludedNamespaces: includedRaw,
 		NamespaceMapping:   mappingRaw,
 	}
-	restore, err := h.createRestoreOperation(withOperationIdempotency(r, "restore"), params)
+	ctx := withOperationIdempotency(r, "restore")
+	restore, err := executeBackupMutation(r, h,
+		func(q BackupMutationTx) (sqlc.RestoreOperation, error) {
+			return createRestoreOperationWith(ctx, q, params)
+		},
+		func() (sqlc.RestoreOperation, error) { return createRestoreOperationWith(ctx, h.queries, params) },
+		func(restore sqlc.RestoreOperation) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "backup.restore.create", resourceType: "restore_operation", resourceID: restore.ID.String(), resourceName: backup.Name,
+				status: http.StatusCreated, detail: map[string]any{
+					"backup_id": backup.ID.String(), "velero_restore_name": veleroRestoreName,
+					"included_namespaces": req.IncludedNamespaces,
+				},
+			}
+		})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create restore operation")
 		return
 	}
 
 	h.publishBackupChanged(restore.ClusterID, restore.ID, "restore")
-	recordAudit(r, h.queries, "backup.restore.create", "restore_operation", restore.ID.String(), backup.Name, map[string]any{
-		"backup_id":           backup.ID.String(),
-		"velero_restore_name": veleroRestoreName,
-		"included_namespaces": req.IncludedNamespaces,
-	})
 
 	w.Header().Set("Location", "/api/v1/backups/restores/"+restore.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, restoreOperationToResponse(restore))
@@ -1172,8 +1309,12 @@ func (h *BackupHandler) CreateRestoreByBackup(w http.ResponseWriter, r *http.Req
 }
 
 func (h *BackupHandler) createRestoreOperation(ctx context.Context, params sqlc.CreateRestoreOperationParams) (sqlc.RestoreOperation, error) {
+	return createRestoreOperationWith(ctx, h.queries, params)
+}
+
+func createRestoreOperationWith(ctx context.Context, q any, params sqlc.CreateRestoreOperationParams) (sqlc.RestoreOperation, error) {
 	if idem, ok := operationIdempotencyFromContext(ctx); ok {
-		if creator, ok := h.queries.(interface {
+		if creator, ok := q.(interface {
 			CreateRestoreOperationIdempotent(context.Context, sqlc.CreateRestoreOperationIdempotentParams) (sqlc.RestoreOperation, error)
 		}); ok {
 			return creator.CreateRestoreOperationIdempotent(ctx, sqlc.CreateRestoreOperationIdempotentParams{
@@ -1190,7 +1331,13 @@ func (h *BackupHandler) createRestoreOperation(ctx context.Context, params sqlc.
 			})
 		}
 	}
-	return h.queries.CreateRestoreOperation(ctx, params)
+	creator, ok := q.(interface {
+		CreateRestoreOperation(context.Context, sqlc.CreateRestoreOperationParams) (sqlc.RestoreOperation, error)
+	})
+	if !ok {
+		return sqlc.RestoreOperation{}, fmt.Errorf("restore persistence is unavailable")
+	}
+	return creator.CreateRestoreOperation(ctx, params)
 }
 
 // ListRestores handles GET /api/v1/backups/restores/.
@@ -1230,6 +1377,29 @@ func (h *BackupHandler) ListRestores(w http.ResponseWriter, r *http.Request) {
 	RespondPaginated(w, r, items, total)
 }
 
+// GetRestore handles GET /api/v1/backups/restores/{id}/. Restore creation has
+// always returned this URL in Location; keeping an object endpoint here makes
+// that header dereferenceable and lets clients poll one operation without
+// repeatedly scanning a fleet-wide list.
+func (h *BackupHandler) GetRestore(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid restore ID")
+		return
+	}
+
+	restore, err := h.queries.GetRestoreOperationByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Restore operation not found")
+		return
+	}
+	if !h.authorizeBackup(w, r, restore.ClusterID, rbac.VerbRead) {
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, restoreOperationToResponse(restore))
+}
+
 // --- helpers ---
 
 // optionalClusterID parses an optional UUID string into a pgtype.UUID. Empty
@@ -1247,13 +1417,15 @@ func (h *BackupHandler) optionalClusterID(s string) (pgtype.UUID, error) {
 }
 
 // encryptCredentials encrypts an aws-style access/secret pair using the
-// configured Fernet encryptor. When no encryptor is set it returns "".
+// configured Fernet encryptor. Credential-bearing writes fail closed when the
+// encryptor is unavailable so new plaintext secrets can never enter the legacy
+// columns.
 func (h *BackupHandler) encryptCredentials(access, secret string) (string, error) {
-	if h == nil || h.encryptor == nil {
-		return "", nil
-	}
 	if access == "" && secret == "" {
 		return "", nil
+	}
+	if h == nil || h.encryptor == nil {
+		return "", fmt.Errorf("backup credential encryption is not configured")
 	}
 	payload, err := json.Marshal(map[string]string{
 		"access_key": access,
@@ -1265,11 +1437,8 @@ func (h *BackupHandler) encryptCredentials(access, secret string) (string, error
 	return h.encryptor.Encrypt(string(payload))
 }
 
-func legacyBackupCredentialColumns(access, secret, encrypted string) (string, string) {
-	if encrypted != "" {
-		return "", ""
-	}
-	return access, secret
+func legacyBackupCredentialColumns(_, _, _ string) (string, string) {
+	return "", ""
 }
 
 // decryptCredentials returns the access/secret pair for a storage config,
@@ -1483,28 +1652,6 @@ func veleroResourceName(kind, label string) string {
 		out = out[:63]
 	}
 	return strings.Trim(out, "-.")
-}
-
-// buildStorageUpdateParams constructs an UpdateBackupStorageConfigParams that
-// preserves every column from the given row. Useful when we only need to
-// nudge a single field without re-deriving the entire request body.
-func buildStorageUpdateParams(c sqlc.BackupStorageConfig) sqlc.UpdateBackupStorageConfigParams {
-	return sqlc.UpdateBackupStorageConfigParams{
-		ID:                   c.ID,
-		Name:                 c.Name,
-		StorageType:          c.StorageType,
-		Bucket:               c.Bucket,
-		Prefix:               c.Prefix,
-		Region:               c.Region,
-		EndpointUrl:          c.EndpointUrl,
-		AccessKey:            c.AccessKey,
-		SecretKey:            c.SecretKey,
-		IsDefault:            c.IsDefault,
-		ClusterID:            c.ClusterID,
-		VeleroNamespace:      c.VeleroNamespace,
-		BslName:              c.BslName,
-		EncryptedCredentials: c.EncryptedCredentials,
-	}
 }
 
 // probeS3Bucket issues an authenticated AWS Sig-V4 GET against the bucket's

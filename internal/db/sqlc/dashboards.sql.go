@@ -490,10 +490,11 @@ func (q *Queries) UpdateDashboardWidget(ctx context.Context, arg UpdateDashboard
 
 const updatePrometheusDatasource = `-- name: UpdatePrometheusDatasource :one
 UPDATE prometheus_datasources
-SET url             = $2,
-    auth_encrypted  = $3,
-    tls_skip_verify = $4,
-    enabled         = $5,
+SET name            = $2,
+    url             = $3,
+    auth_encrypted  = $4,
+    tls_skip_verify = $5,
+    enabled         = $6,
     updated_at      = now()
 WHERE id = $1
 RETURNING id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at
@@ -501,6 +502,7 @@ RETURNING id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, u
 
 type UpdatePrometheusDatasourceParams struct {
 	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
 	Url           string    `json:"url"`
 	AuthEncrypted string    `json:"auth_encrypted"`
 	TlsSkipVerify bool      `json:"tls_skip_verify"`
@@ -510,6 +512,7 @@ type UpdatePrometheusDatasourceParams struct {
 func (q *Queries) UpdatePrometheusDatasource(ctx context.Context, arg UpdatePrometheusDatasourceParams) (PrometheusDatasource, error) {
 	row := q.db.QueryRow(ctx, updatePrometheusDatasource,
 		arg.ID,
+		arg.Name,
 		arg.Url,
 		arg.AuthEncrypted,
 		arg.TlsSkipVerify,

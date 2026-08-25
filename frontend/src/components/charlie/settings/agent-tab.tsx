@@ -18,7 +18,7 @@ import { Meta, Section, Unavailable } from "./shared";
 export function AgentTab() {
   const q = useQuery({
     queryKey: queryKeys.charlie.adminAgent,
-    queryFn: getCharlieAgent,
+    queryFn: ({ signal }) => getCharlieAgent(signal),
     retry: false,
     refetchInterval: 15000,
   });
@@ -87,35 +87,54 @@ export function AgentTab() {
           </caption>
           <TableHeader className="border-b border-border text-xs text-muted-foreground">
             <TableRow>
-              <TableHead scope="col" className="p-3">Ordinal</TableHead>
-              <TableHead scope="col" className="p-3">Instance</TableHead>
-              <TableHead scope="col" className="p-3">Role</TableHead>
-              <TableHead scope="col" className="p-3">State</TableHead>
-              <TableHead scope="col" className="p-3">Last heartbeat</TableHead>
-              <TableHead scope="col" className="p-3">Version</TableHead>
+              <TableHead scope="col" className="p-3">
+                Ordinal
+              </TableHead>
+              <TableHead scope="col" className="p-3">
+                Instance
+              </TableHead>
+              <TableHead scope="col" className="p-3">
+                Role
+              </TableHead>
+              <TableHead scope="col" className="p-3">
+                State
+              </TableHead>
+              <TableHead scope="col" className="p-3">
+                Last heartbeat
+              </TableHead>
+              <TableHead scope="col" className="p-3">
+                Version
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y divide-border">
-            {a.replicas.length ? a.replicas.map((replica) => (
-              <TableRow key={replica.ordinal}>
-                <TableCell className="p-3">{replica.ordinal}</TableCell>
-                <TableCell className="break-all p-3 font-mono text-xs">
-                  {replica.instanceId || "Not reported"}
-                </TableCell>
-                <TableCell className="p-3">{replica.role}</TableCell>
-                <TableCell className="p-3">
-                  <StatusBadge status={replica.state} />
-                </TableCell>
-                <TableCell className="p-3">
-                  {replica.lastHeartbeatAt
-                    ? formatRelativeTime(replica.lastHeartbeatAt)
-                    : "Not reported"}
-                </TableCell>
-                <TableCell className="p-3">{replica.version || "Not reported"}</TableCell>
-              </TableRow>
-            )) : (
+            {a.replicas.length ? (
+              a.replicas.map((replica) => (
+                <TableRow key={replica.ordinal}>
+                  <TableCell className="p-3">{replica.ordinal}</TableCell>
+                  <TableCell className="break-all p-3 font-mono text-xs">
+                    {replica.instanceId || "Not reported"}
+                  </TableCell>
+                  <TableCell className="p-3">{replica.role}</TableCell>
+                  <TableCell className="p-3">
+                    <StatusBadge status={replica.state} />
+                  </TableCell>
+                  <TableCell className="p-3">
+                    {replica.lastHeartbeatAt
+                      ? formatRelativeTime(replica.lastHeartbeatAt)
+                      : "Not reported"}
+                  </TableCell>
+                  <TableCell className="p-3">
+                    {replica.version || "Not reported"}
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
               <TableRow>
-                <TableCell colSpan={6} className="p-4 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={6}
+                  className="p-4 text-center text-muted-foreground"
+                >
                   No product-observed replica status is available.
                 </TableCell>
               </TableRow>
@@ -124,9 +143,9 @@ export function AgentTab() {
         </Table>
       </div>
       <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-        The generic Charlie agent is installed from Charlie when you connect, and
-        removed when you disconnect. Charlie publishes a new digest and Astronomer
-        upgrades the same StatefulSet.
+        The generic Charlie agent is installed from Charlie when you connect,
+        and removed when you disconnect. Charlie publishes a new digest and
+        Astronomer upgrades the same StatefulSet.
       </div>
     </Section>
   );

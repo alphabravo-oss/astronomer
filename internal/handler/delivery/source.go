@@ -17,7 +17,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
@@ -43,6 +45,17 @@ type SourceQueries interface {
 	CreateDeliverySourceResolutionAndOutbox(context.Context, sqlc.CreateDeliverySourceResolutionAndOutboxParams) (sqlc.CreateDeliverySourceResolutionAndOutboxRow, error)
 }
 
+type SourceMutationTx interface {
+	audit.OutboxQuerier
+	CreateDeliverySource(context.Context, sqlc.CreateDeliverySourceParams) (sqlc.CreateDeliverySourceRow, error)
+	DeleteDeliverySource(context.Context, sqlc.DeleteDeliverySourceParams) (int64, error)
+	UpdateDeliverySource(context.Context, sqlc.UpdateDeliverySourceParams) (sqlc.UpdateDeliverySourceRow, error)
+	RotateDeliverySourceCredential(context.Context, sqlc.RotateDeliverySourceCredentialParams) (sqlc.RotateDeliverySourceCredentialRow, error)
+	CreateDeliverySourceResolutionAndOutbox(context.Context, sqlc.CreateDeliverySourceResolutionAndOutboxParams) (sqlc.CreateDeliverySourceResolutionAndOutboxRow, error)
+}
+
+type sourceRunTxFunc func(context.Context, func(SourceMutationTx) error) error
+
 // SourceHandler serves the project-scoped delivery source API. Route wiring is
 // intentionally external; methods expect a chi path parameter named "id" or
 // "sourceID" where a source identifier is needed.
@@ -50,6 +63,41 @@ type SourceHandler struct {
 	queries              SourceQueries
 	encryptor            CredentialEncryptor
 	credentialKeyVersion int32
+	runTx                sourceRunTxFunc
+}
+
+func (h *SourceHandler) SetRunTx(runTx sourceRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *SourceHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
+
+func executeSourceMutation[T any](r *http.Request, h *SourceHandler, mutate func(SourceMutationTx) (T, error), fallback func() (T, error), describe func(T) deliveryAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("delivery source handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q SourceMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			return recordAuditOutbox(r, q, describe(result))
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 // NewSourceHandler creates a source handler. credentialKeyVersion identifies
@@ -300,13 +348,30 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor := middleware.AuthenticatedUserUUID(r.Context())
-	created, err := h.queries.CreateDeliverySource(r.Context(), sqlc.CreateDeliverySourceParams{
+	params := sqlc.CreateDeliverySourceParams{
 		ProjectID: projectID, Name: request.Name, Description: request.Description,
 		SourceType: string(request.Type), Url: request.URL, AuthMode: string(request.AuthMode),
 		CredentialEncrypted: credentialEncrypted, CredentialKeyVersion: keyVersion, CredentialEpoch: epoch,
 		CaBundleEncrypted: caEncrypted, ProxyRef: request.ProxyRef, TrustPolicy: trust,
 		CreatedBy: actor, UpdatedBy: actor,
-	})
+	}
+	created, err := executeSourceMutation(r, h,
+		func(q SourceMutationTx) (sqlc.CreateDeliverySourceRow, error) {
+			return q.CreateDeliverySource(r.Context(), params)
+		},
+		func() (sqlc.CreateDeliverySourceRow, error) {
+			return h.queries.CreateDeliverySource(r.Context(), params)
+		},
+		func(row sqlc.CreateDeliverySourceRow) deliveryAuditEvent {
+			return deliveryAuditEvent{
+				action: "delivery.source.created", resourceType: "delivery_source", resourceID: row.ID.String(), resourceName: row.Name,
+				status: http.StatusCreated, detail: map[string]any{
+					"project_id": projectID.String(), "source_type": row.SourceType, "auth_mode": row.AuthMode,
+					"credential_configured": row.CredentialKeyVersion > 0, "ca_configured": request.CABundle != "",
+					"proxy_configured": request.ProxyRef != "", "key_version": row.CredentialKeyVersion,
+				},
+			}
+		})
 	if err != nil {
 		respondDatabaseError(w, err)
 		return
@@ -316,15 +381,6 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source metadata is invalid")
 		return
 	}
-	recordAudit(r, h.queries, "delivery.source.created", "delivery_source", response.ID.String(), response.Name, map[string]any{
-		"project_id":            projectID.String(),
-		"source_type":           string(response.Type),
-		"auth_mode":             string(response.AuthMode),
-		"credential_configured": response.Credential.Configured,
-		"ca_configured":         request.CABundle != "",
-		"proxy_configured":      request.ProxyRef != "",
-		"key_version":           response.Credential.KeyVersion,
-	})
 	respondData(w, http.StatusCreated, response)
 }
 
@@ -443,11 +499,27 @@ func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		caEncrypted = sealed
 	}
-	updated, err := h.queries.UpdateDeliverySource(r.Context(), sqlc.UpdateDeliverySourceParams{
+	params := sqlc.UpdateDeliverySourceParams{
 		Description: description, Url: sourceURL, ProxyRef: proxyRef, TrustPolicy: trustJSON,
 		ReplaceCaBundle: replaceCA, CaBundleEncrypted: caEncrypted,
 		UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()), ID: sourceID, ProjectID: projectID,
-	})
+	}
+	updated, err := executeSourceMutation(r, h,
+		func(q SourceMutationTx) (sqlc.UpdateDeliverySourceRow, error) {
+			return q.UpdateDeliverySource(r.Context(), params)
+		},
+		func() (sqlc.UpdateDeliverySourceRow, error) {
+			return h.queries.UpdateDeliverySource(r.Context(), params)
+		},
+		func(row sqlc.UpdateDeliverySourceRow) deliveryAuditEvent {
+			return deliveryAuditEvent{
+				action: "delivery.source.updated", resourceType: "delivery_source", resourceID: row.ID.String(), resourceName: row.Name,
+				status: http.StatusOK, detail: map[string]any{
+					"project_id": projectID.String(), "source_type": row.SourceType,
+					"ca_replaced": replaceCA, "proxy_configured": row.ProxyRef != "",
+				},
+			}
+		})
 	if err != nil {
 		respondDatabaseError(w, err)
 		return
@@ -457,12 +529,6 @@ func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source metadata is invalid")
 		return
 	}
-	recordAudit(r, h.queries, "delivery.source.updated", "delivery_source", response.ID.String(), response.Name, map[string]any{
-		"project_id":       projectID.String(),
-		"source_type":      string(response.Type),
-		"ca_replaced":      replaceCA,
-		"proxy_configured": response.ProxyRef != "",
-	})
 	respondData(w, http.StatusOK, response)
 }
 
@@ -481,25 +547,37 @@ func (h *SourceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery source persistence is unavailable")
 		return
 	}
-	deleted, err := h.queries.DeleteDeliverySource(r.Context(), sqlc.DeleteDeliverySourceParams{ID: sourceID, ProjectID: projectID})
+	params := sqlc.DeleteDeliverySourceParams{ID: sourceID, ProjectID: projectID}
+	deleteSource := func(q interface {
+		DeleteDeliverySource(context.Context, sqlc.DeleteDeliverySourceParams) (int64, error)
+	}) (int64, error) {
+		deleted, deleteErr := q.DeleteDeliverySource(r.Context(), params)
+		if deleteErr == nil && deleted == 0 {
+			deleteErr = pgx.ErrNoRows
+		}
+		return deleted, deleteErr
+	}
+	_, err := executeSourceMutation(r, h,
+		func(q SourceMutationTx) (int64, error) { return deleteSource(q) },
+		func() (int64, error) { return deleteSource(h.queries) },
+		func(int64) deliveryAuditEvent {
+			return deliveryAuditEvent{
+				action: "delivery.source.deleted", resourceType: "delivery_source", resourceID: sourceID.String(),
+				status: http.StatusNoContent, detail: map[string]any{"project_id": projectID.String()},
+			}
+		})
 	if err != nil {
 		respondDatabaseError(w, err)
 		return
 	}
-	if deleted == 0 {
-		respondDatabaseError(w, pgx.ErrNoRows)
-		return
-	}
-	recordAudit(r, h.queries, "delivery.source.deleted", "delivery_source", sourceID.String(), "", map[string]any{
-		"project_id": projectID.String(),
-	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // Verify schedules a durable, fenced source resolution. Credentials are loaded
 // by the worker from encrypted storage and never enter the task or response.
 func (h *SourceHandler) Verify(w http.ResponseWriter, r *http.Request) {
-	if err := validateIdempotencyKey(r); err != nil {
+	key, err := requiredIdempotencyKey(r)
+	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
 		return
 	}
@@ -518,7 +596,7 @@ func (h *SourceHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
 		return
 	}
-	if h == nil || h.queries == nil {
+	if h == nil || h.queries == nil || h.runTx == nil {
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery source persistence is unavailable")
 		return
 	}
@@ -552,24 +630,66 @@ func (h *SourceHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source type is invalid")
 		return
 	}
-	resolution, err := h.queries.CreateDeliverySourceResolutionAndOutbox(r.Context(), sqlc.CreateDeliverySourceResolutionAndOutboxParams{
+	params := sqlc.CreateDeliverySourceResolutionAndOutboxParams{
 		SourceID: sourceID, BundleVersionID: pgtype.UUID{}, RequestedRevision: revision, ChartName: chart,
-	})
+	}
+	actor := middleware.AuthenticatedUserUUID(r.Context())
+	if !actor.Valid || uuid.UUID(actor.Bytes) == uuid.Nil {
+		respondError(w, http.StatusUnauthorized, "authentication_required", "authenticated actor is required")
+		return
+	}
+	digest, err := asyncop.Digest(struct {
+		ProjectID uuid.UUID `json:"project_id"`
+		SourceID  uuid.UUID `json:"source_id"`
+		Revision  string    `json:"requested_revision"`
+		Chart     string    `json:"chart"`
+	}{projectID, sourceID, revision, chart})
 	if err != nil {
 		respondDatabaseError(w, err)
 		return
 	}
-	recordAudit(r, h.queries, "delivery.source.verification_requested", "delivery_source", sourceID.String(), source.Name, map[string]any{
-		"project_id":    projectID.String(),
-		"resolution_id": resolution.ID.String(),
-		"source_type":   source.SourceType,
-		"status":        resolution.Status,
+	var receipt asyncop.Receipt
+	err = h.runTx(r.Context(), func(q SourceMutationTx) error {
+		store, ok := q.(asyncop.Store)
+		if !ok {
+			return asyncop.ErrCorrupt
+		}
+		claim, claimErr := asyncop.ClaimKey(r.Context(), store, asyncop.ClaimRequest{
+			ActorID: uuid.UUID(actor.Bytes), ProjectID: projectID, Operation: "source.verify", Resource: "delivery_source", TargetID: sourceID,
+			IdempotencyKey: key, RequestDigest: digest, OperationTable: "delivery_source_resolutions",
+		})
+		if claimErr != nil {
+			return claimErr
+		}
+		if claim.Replay {
+			receipt = claim.Receipt
+			return nil
+		}
+		resolution, mutationErr := q.CreateDeliverySourceResolutionAndOutbox(r.Context(), params)
+		if mutationErr != nil {
+			return mutationErr
+		}
+		receipt = asyncop.NewReceipt(resolution.ID, "source.verify", "delivery_source", sourceID, projectID,
+			"/api/v1/delivery/sources/"+sourceID.String()+"/?project_id="+projectID.String(), time.Now())
+		if attachErr := asyncop.Attach(r.Context(), store, claim, receipt); attachErr != nil {
+			return attachErr
+		}
+		return recordAuditOutbox(r, q, deliveryAuditEvent{
+			action: "delivery.source.verification_requested", resourceType: "delivery_source", resourceID: sourceID.String(), resourceName: source.Name,
+			status: http.StatusAccepted, detail: map[string]any{
+				"project_id": projectID.String(), "resolution_id": resolution.ID.String(), "source_type": source.SourceType, "status": resolution.Status,
+			},
+		})
 	})
-	respondData(w, http.StatusAccepted, struct {
-		ID       uuid.UUID `json:"id"`
-		SourceID uuid.UUID `json:"source_id"`
-		Status   string    `json:"status"`
-	}{resolution.ID, resolution.SourceID, resolution.Status})
+	if err != nil {
+		if errors.Is(err, asyncop.ErrConflict) {
+			respondError(w, http.StatusConflict, "idempotency_conflict", err.Error())
+			return
+		}
+		respondDatabaseError(w, err)
+		return
+	}
+	respondAcceptedOperation(w, receipt.StatusURL, receipt)
 }
 
 // RotateCredential replaces write-only source credentials and increments the
@@ -630,10 +750,26 @@ func (h *SourceHandler) RotateCredential(w http.ResponseWriter, r *http.Request)
 		respondError(w, http.StatusServiceUnavailable, "credential_encryption_unavailable", "source credential encryption failed")
 		return
 	}
-	rotated, err := h.queries.RotateDeliverySourceCredential(r.Context(), sqlc.RotateDeliverySourceCredentialParams{
+	params := sqlc.RotateDeliverySourceCredentialParams{
 		AuthMode: string(request.AuthMode), CredentialEncrypted: ciphertext, CredentialKeyVersion: keyVersion,
 		UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()), ID: sourceID, ProjectID: projectID,
-	})
+	}
+	rotated, err := executeSourceMutation(r, h,
+		func(q SourceMutationTx) (sqlc.RotateDeliverySourceCredentialRow, error) {
+			return q.RotateDeliverySourceCredential(r.Context(), params)
+		},
+		func() (sqlc.RotateDeliverySourceCredentialRow, error) {
+			return h.queries.RotateDeliverySourceCredential(r.Context(), params)
+		},
+		func(row sqlc.RotateDeliverySourceCredentialRow) deliveryAuditEvent {
+			return deliveryAuditEvent{
+				action: "delivery.source.credential_rotated", resourceType: "delivery_source", resourceID: sourceID.String(), resourceName: row.Name,
+				status: http.StatusOK, detail: map[string]any{
+					"project_id": projectID.String(), "auth_mode": row.AuthMode,
+					"credential_epoch": row.CredentialEpoch, "key_version": row.CredentialKeyVersion,
+				},
+			}
+		})
 	if err != nil {
 		respondDatabaseError(w, err)
 		return
@@ -643,12 +779,6 @@ func (h *SourceHandler) RotateCredential(w http.ResponseWriter, r *http.Request)
 		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source metadata is invalid")
 		return
 	}
-	recordAudit(r, h.queries, "delivery.source.credential_rotated", "delivery_source", sourceID.String(), response.Name, map[string]any{
-		"project_id":       projectID.String(),
-		"auth_mode":        string(response.AuthMode),
-		"credential_epoch": response.Credential.Epoch,
-		"key_version":      response.Credential.KeyVersion,
-	})
 	respondData(w, http.StatusOK, response)
 }
 

@@ -39,7 +39,7 @@ cancel route additionally requires the caller's user row to have
 | GET    | `/events/`                        | Server-Sent Events filtered by cluster_id                     |
 | PUT    | `/options/`                       | `{"install_baseline": bool}` - records operator's step-1 pick  |
 | POST   | `/confirm/`                       | Advances `created` to `awaiting_agent`                         |
-| POST   | `/retry/{step_id}/`               | Re-queues the apply task for a failed step                    |
+| POST   | `/retry/{step_id}/`               | Requests a new immutable delivery attempt after a failed step |
 | POST   | `/cancel/`                        | Superuser-only abort                                          |
 
 ### Status response shape
@@ -101,8 +101,10 @@ curl -fsSL -X PUT .../clusters/$cluster_id/registration/options/ \
 # 3. Fetch the agent install manifest and apply it on the target.
 curl -fsSL .../clusters/$cluster_id/manifest/ | kubectl apply --server-side --field-manager=astronomer-bootstrap -f -
 
-# 4. Confirm - moves to awaiting_agent. The first heartbeat from the
-#    agent advances it to connected.
+# 4. Confirm - moves to awaiting_agent. The first authenticated agent
+#    connection advances it to connected. With install_baseline=true,
+#    delivery waits for a Ready, compatible local Flux inventory and then
+#    creates normal immutable rollouts for the signed built-in catalog.
 curl -fsSL -X POST .../clusters/$cluster_id/registration/confirm/
 
 # 5. Poll status or subscribe to the SSE stream.

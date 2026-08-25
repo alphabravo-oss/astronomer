@@ -1,7 +1,14 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DrawerShell } from '@/components/ui/drawer-shell';
-import { OverlayShell } from '@/components/ui/overlay-shell';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { DrawerShell } from "@/components/ui/drawer-shell";
+import { OverlayShell } from "@/components/ui/overlay-shell";
 /**
  * /dashboard/settings/compliance/baselines — sprint 17, migration 064.
  *
@@ -9,11 +16,18 @@ import { OverlayShell } from '@/components/ui/overlay-shell';
  * / SOC 2). Each card renders the controls the baseline encodes and a
  * "View diff" drawer + Apply / Revert action. Active card is badged.
  */
-import { useEffect, useState } from 'react';
-import { Link } from '@/lib/link';
-import { ArrowLeft, CheckCircle2, History, Loader2, Shield, Undo2 } from 'lucide-react';
-import { toastError, toastSuccess } from '@/lib/toast';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { useEffect, useState } from "react";
+import { Link } from "@/lib/link";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  History,
+  Loader2,
+  Shield,
+  Undo2,
+} from "lucide-react";
+import { toastError, toastSuccess } from "@/lib/toast";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import {
   applyComplianceBaseline,
   getActiveComplianceBaseline,
@@ -21,10 +35,10 @@ import {
   listComplianceBaselineApplications,
   listComplianceBaselines,
   revertComplianceBaselineApplication,
-  type ComplianceBaseline,
-  type ComplianceBaselineApplication,
-  type ComplianceBaselineDiff,
-} from '@/lib/api/settings';
+  type ComplianceBaselineView,
+  type ComplianceBaselineApplicationView,
+  type ComplianceBaselineDiffView,
+} from "@/lib/api/settings";
 
 function ActiveBadge() {
   return (
@@ -41,9 +55,9 @@ function BaselineCard({
   onRevert,
   latestApplicationId,
 }: {
-  b: ComplianceBaseline;
-  onViewDiff: (b: ComplianceBaseline) => void;
-  onApply: (b: ComplianceBaseline) => void;
+  b: ComplianceBaselineView;
+  onViewDiff: (b: ComplianceBaselineView) => void;
+  onApply: (b: ComplianceBaselineView) => void;
   onRevert: (id: string) => void;
   latestApplicationId: string | null;
 }) {
@@ -67,16 +81,18 @@ function BaselineCard({
           <dd>{b.spec.audit_retention_days} days</dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">Pod Security Standard</dt>
-          <dd>{b.spec.pss_profile ?? '—'}</dd>
+          <dt className="text-xs text-muted-foreground">
+            Pod Security Standard
+          </dt>
+          <dd>{b.spec.pss_profile ?? "—"}</dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">TOTP required</dt>
-          <dd>{b.spec.totp_required ? 'Yes' : 'No'}</dd>
+          <dd>{b.spec.required_totp ? "Yes" : "No"}</dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">SMTP required</dt>
-          <dd>{b.spec.required_smtp ? 'Yes' : 'No'}</dd>
+          <dd>{b.spec.required_smtp ? "Yes" : "No"}</dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Quota plans</dt>
@@ -121,50 +137,56 @@ function DiffDrawer({
   diff,
   onClose,
 }: {
-  diff: ComplianceBaselineDiff | null;
+  diff: ComplianceBaselineDiffView | null;
   onClose: () => void;
 }) {
   if (!diff) return null;
   return (
     <DrawerShell
-      title={`${diff.baseline_name} - change preview`}
+      title={`${diff.baselineName} - change preview`}
       onClose={onClose}
       panelClassName="sm:max-w-lg bg-card"
     >
-        {diff.changes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No changes — baseline already matches current state.</p>
-        ) : (
-          <Table className="text-sm w-full">
-            <TableHeader className="text-xs text-muted-foreground">
-              <TableRow>
-                <TableHead className="text-left py-1">Field</TableHead>
-                <TableHead className="text-left py-1">Current</TableHead>
-                <TableHead className="text-left py-1">Target</TableHead>
+      {diff.changes.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No changes — baseline already matches current state.
+        </p>
+      ) : (
+        <Table className="text-sm w-full">
+          <TableHeader className="text-xs text-muted-foreground">
+            <TableRow>
+              <TableHead className="text-left py-1">Field</TableHead>
+              <TableHead className="text-left py-1">Current</TableHead>
+              <TableHead className="text-left py-1">Target</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {diff.changes.map((key) => (
+              <TableRow key={key} className="border-t">
+                <TableCell className="py-1 pr-2 font-mono text-xs">
+                  {key}
+                </TableCell>
+                <TableCell className="py-1 pr-2 font-mono text-xs text-muted-foreground break-all">
+                  {JSON.stringify(diff.current[key] ?? null)}
+                </TableCell>
+                <TableCell className="py-1 font-mono text-xs break-all">
+                  {JSON.stringify(diff.target[key] ?? null)}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {diff.changes.map((key) => (
-                <TableRow key={key} className="border-t">
-                  <TableCell className="py-1 pr-2 font-mono text-xs">{key}</TableCell>
-                  <TableCell className="py-1 pr-2 font-mono text-xs text-muted-foreground break-all">
-                    {JSON.stringify(diff.current[key] ?? null)}
-                  </TableCell>
-                  <TableCell className="py-1 font-mono text-xs break-all">
-                    {JSON.stringify(diff.target[key] ?? null)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+            ))}
+          </TableBody>
+        </Table>
+      )}
     </DrawerShell>
   );
 }
 
 function ComplianceBaselinesPage() {
-  const [baselines, setBaselines] = useState<ComplianceBaseline[]>([]);
-  const [history, setHistory] = useState<ComplianceBaselineApplication[]>([]);
-  const [diff, setDiff] = useState<ComplianceBaselineDiff | null>(null);
+  const [baselines, setBaselines] = useState<ComplianceBaselineView[]>([]);
+  const [history, setHistory] = useState<ComplianceBaselineApplicationView[]>(
+    [],
+  );
+  const [diff, setDiff] = useState<ComplianceBaselineDiffView | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -175,12 +197,14 @@ function ComplianceBaselinesPage() {
     try {
       const [bs, hist] = await Promise.all([
         listComplianceBaselines(),
-        listComplianceBaselineApplications().catch(() => [] as ComplianceBaselineApplication[]),
+        listComplianceBaselineApplications().catch(
+          () => [] as ComplianceBaselineApplicationView[],
+        ),
       ]);
       // Active = highest-priority match from /active.
       try {
         const active = await getActiveComplianceBaseline();
-        const slug = active.active?.baseline_slug;
+        const slug = active.active?.baselineSlug;
         if (slug) {
           bs.forEach((b) => {
             b.active = b.slug === slug;
@@ -192,7 +216,7 @@ function ComplianceBaselinesPage() {
       setBaselines(bs);
       setHistory(hist);
     } catch {
-      toastError('Failed to load compliance baselines');
+      toastError("Failed to load compliance baselines");
     } finally {
       setLoading(false);
     }
@@ -202,7 +226,7 @@ function ComplianceBaselinesPage() {
     reload();
   }, []);
 
-  const handleViewDiff = async (b: ComplianceBaseline) => {
+  const handleViewDiff = async (b: ComplianceBaselineView) => {
     try {
       const d = await getComplianceBaselineDiff(b.id);
       setDiff(d);
@@ -211,20 +235,29 @@ function ComplianceBaselinesPage() {
     }
   };
 
-  const handleApply = async (b: ComplianceBaseline) => {
-    if (!confirm(`Apply ${b.name}? Current state will be snapshotted for revert.`)) return;
+  const handleApply = async (b: ComplianceBaselineView) => {
+    if (
+      !confirm(`Apply ${b.name}? Current state will be snapshotted for revert.`)
+    )
+      return;
     setBusy(true);
     try {
       await applyComplianceBaseline(b.id);
       toastSuccess(`Applied ${b.name}`);
       await reload();
     } catch (err) {
-      const status = (err as { response?: { status?: number; data?: { error?: string } } })?.response?.status;
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      const status = (
+        err as { response?: { status?: number; data?: { error?: string } } }
+      )?.response?.status;
+      const msg = (err as { response?: { data?: { error?: string } } })
+        ?.response?.data?.error;
       if (status === 409) {
-        toastError(msg ?? 'Apply refused — guardrail triggered (audit retention downgrade?)');
+        toastError(
+          msg ??
+            "Apply refused — guardrail triggered (audit retention downgrade?)",
+        );
       } else {
-        toastError('Apply failed');
+        toastError("Apply failed");
       }
     } finally {
       setBusy(false);
@@ -232,18 +265,21 @@ function ComplianceBaselinesPage() {
   };
 
   const handleRevert = async (id: string) => {
-    if (!confirm('Revert the most-recent baseline application?')) return;
+    if (!confirm("Revert the most-recent baseline application?")) return;
     setBusy(true);
     try {
       await revertComplianceBaselineApplication(id);
-      toastSuccess('Reverted');
+      toastSuccess("Reverted");
       await reload();
     } catch (err) {
-      const status = (err as { response?: { status?: number } })?.response?.status;
+      const status = (err as { response?: { status?: number } })?.response
+        ?.status;
       if (status === 409) {
-        toastError('Cannot revert — a newer application exists. Revert the latest first.');
+        toastError(
+          "Cannot revert — a newer application exists. Revert the latest first.",
+        );
       } else {
-        toastError('Revert failed');
+        toastError("Revert failed");
       }
     } finally {
       setBusy(false);
@@ -254,15 +290,19 @@ function ComplianceBaselinesPage() {
     <SettingsAuthGate>
       <div className="space-y-6">
         <div className="flex items-center gap-2">
-          <Link href="/dashboard/settings/compliance" className="text-sm text-muted-foreground inline-flex items-center gap-1">
+          <Link
+            href="/dashboard/settings/compliance"
+            className="text-sm text-muted-foreground inline-flex items-center gap-1"
+          >
             <ArrowLeft className="w-4 h-4" /> Compliance
           </Link>
         </div>
         <div>
           <h1 className="text-2xl font-semibold">Compliance baselines</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            One-click preset profiles for PCI-DSS, HIPAA, FedRAMP-Moderate, and SOC 2.
-            Each baseline snapshots prior state on apply so a revert restores it.
+            One-click preset profiles for PCI-DSS, HIPAA, FedRAMP-Moderate, and
+            SOC 2. Each baseline snapshots prior state on apply so a revert
+            restores it.
           </p>
         </div>
 
@@ -290,14 +330,21 @@ function ComplianceBaselinesPage() {
             <History className="w-4 h-4" /> Application history
           </h2>
           {history.length === 0 ? (
-            <p className="text-sm text-muted-foreground mt-2">No baseline has been applied yet.</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              No baseline has been applied yet.
+            </p>
           ) : (
             <ul className="mt-2 text-sm divide-y border rounded">
               {history.map((h) => (
-                <li key={h.id} className="px-3 py-2 flex items-center justify-between gap-3">
-                  <span className="font-medium">{h.baseline_name}</span>
+                <li
+                  key={h.id}
+                  className="px-3 py-2 flex items-center justify-between gap-3"
+                >
+                  <span className="font-medium">{h.baselineName}</span>
                   <span className="text-muted-foreground">{h.status}</span>
-                  <span className="text-xs text-muted-foreground">{h.applied_at}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {h.appliedAt}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -315,6 +362,8 @@ function ComplianceBaselinesPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/compliance/baselines/')({
+export const Route = createFileRoute(
+  "/dashboard/settings/compliance/baselines/",
+)({
   component: ComplianceBaselinesPage,
 });

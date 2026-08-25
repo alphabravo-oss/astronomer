@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
@@ -24,10 +25,29 @@ type AdminTaskOutboxQuerier interface {
 	RetryTaskOutbox(ctx context.Context, arg sqlc.RetryTaskOutboxParams) (sqlc.TaskOutbox, error)
 }
 
+type AdminTaskOutboxMutationTx interface {
+	AdminTaskOutboxQuerier
+	GetTaskOutboxForUpdate(context.Context, uuid.UUID) (sqlc.TaskOutbox, error)
+	audit.OutboxQuerier
+}
+
+type adminTaskOutboxRunTxFunc func(context.Context, func(AdminTaskOutboxMutationTx) error) error
+
+var errTaskOutboxAlreadyDelivered = errors.New("task outbox row already delivered")
+
 type AdminTaskOutboxHandler struct {
 	queries AdminTaskOutboxQuerier
 	now     func() time.Time
+	runTx   adminTaskOutboxRunTxFunc
 }
+
+func (h *AdminTaskOutboxHandler) SetRunTx(runTx adminTaskOutboxRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *AdminTaskOutboxHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 func NewAdminTaskOutboxHandler(queries AdminTaskOutboxQuerier) *AdminTaskOutboxHandler {
 	return &AdminTaskOutboxHandler{queries: queries, now: time.Now}
@@ -114,6 +134,28 @@ func (h *AdminTaskOutboxHandler) ListDead(w http.ResponseWriter, r *http.Request
 	RespondPaginated(w, r, out, total)
 }
 
+// Get returns the exact durable row referenced by retry receipts.
+func (h *AdminTaskOutboxHandler) Get(w http.ResponseWriter, r *http.Request) {
+	if !h.gate(w, r) {
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid task outbox ID")
+		return
+	}
+	row, err := h.queries.GetTaskOutbox(r.Context(), id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Task outbox row not found")
+		return
+	}
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load task outbox row")
+		return
+	}
+	RespondJSON(w, http.StatusOK, taskOutboxToWire(row))
+}
+
 // Retry handles POST /api/v1/admin/task-outbox/{id}/retry/.
 func (h *AdminTaskOutboxHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	if !h.gate(w, r) {
@@ -124,41 +166,79 @@ func (h *AdminTaskOutboxHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid task outbox ID")
 		return
 	}
-	existing, err := h.queries.GetTaskOutbox(r.Context(), id)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Task outbox row not found")
-			return
-		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
-	if existing.Status == "delivered" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.AlreadyDelivered, "Delivered task outbox rows cannot be retried")
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "task outbox transaction runner is not configured")
+		return
+	}
+	r = r.WithContext(withOperationIdempotency(r, "admin_task_outbox_retry"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		Action string `json:"action"`
+		ID     string `json:"id"`
+	}{Action: "retry", ID: id.String()})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode task outbox retry request")
 		return
 	}
 	now := h.now
 	if now == nil {
 		now = time.Now
 	}
-	row, err := h.queries.RetryTaskOutbox(r.Context(), sqlc.RetryTaskOutboxParams{
-		ID:            id,
-		NextAttemptAt: pgtype.Timestamptz{Time: now().UTC(), Valid: true},
+	params := sqlc.RetryTaskOutboxParams{ID: id, NextAttemptAt: pgtype.Timestamptz{Time: now().UTC(), Valid: true}}
+	var existing, row sqlc.TaskOutbox
+	var receipt TaskOutboxResponse
+	err = h.runTx(r.Context(), func(q AdminTaskOutboxMutationTx) error {
+		idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+		if !ok {
+			return errors.New("task outbox idempotency store is not configured")
+		}
+		_, stored, replay, claimErr := claimOperationReceipt[TaskOutboxResponse](r.Context(), idemQ, "task_outbox_retries", digest)
+		if claimErr != nil {
+			return claimErr
+		}
+		if replay {
+			receipt = stored
+			return nil
+		}
+		var getErr error
+		existing, getErr = q.GetTaskOutboxForUpdate(r.Context(), id)
+		if getErr != nil {
+			return getErr
+		}
+		if existing.Status == "delivered" {
+			return errTaskOutboxAlreadyDelivered
+		}
+		row, getErr = q.RetryTaskOutbox(r.Context(), params)
+		if getErr != nil {
+			return getErr
+		}
+		receipt = taskOutboxToWire(row)
+		if auditErr := recordAuditOutbox(r, q, "admin.task_outbox.retry", "task_outbox", id.String(), existing.TaskType, http.StatusAccepted, map[string]any{
+			"previous_status": existing.Status, "task_type": existing.TaskType, "queue_name": existing.QueueName,
+		}); auditErr != nil {
+			return auditErr
+		}
+		return attachOperationReceipt(r.Context(), idemQ, "task_outbox_retries", row.ID, digest, receipt)
 	})
 	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different task outbox retry")
+			return
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Task outbox row not found")
+			return
+		}
+		if errors.Is(err, errTaskOutboxAlreadyDelivered) {
 			RespondRequestError(w, r, http.StatusConflict, apierror.AlreadyDelivered, "Delivered task outbox rows cannot be retried")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, err.Error())
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.RetryError, "Failed to retry task outbox row")
 		return
 	}
-	recordAudit(r, h.queries, "admin.task_outbox.retry", "task_outbox", id.String(), existing.TaskType, map[string]any{
-		"previous_status": existing.Status,
-		"task_type":       existing.TaskType,
-		"queue_name":      existing.QueueName,
-	})
-	RespondJSON(w, http.StatusAccepted, taskOutboxToWire(row))
+	RespondAcceptedOperation(w, "/api/v1/admin/task-outbox/"+receipt.ID+"/", receipt)
 }
 
 func (h *AdminTaskOutboxHandler) gate(w http.ResponseWriter, r *http.Request) bool {

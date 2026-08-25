@@ -1,7 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
-import { useAppForm, useStore } from '@/lib/form';
-import { useTabParam } from '@/lib/use-tab-param';
+import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { useAppForm, useStore } from "@/lib/form";
+import { useTabParam } from "@/lib/use-tab-param";
 import {
   usePodSecurityTemplates,
   useCreatePodSecurityTemplate,
@@ -11,23 +11,23 @@ import {
   useAssignSecurityPolicy,
   useApplySecurityPolicy,
   useRemoveSecurityPolicy,
-  useClusters,
-  useCISScans,
-} from '@/lib/hooks';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { CISScansTab } from '@/components/security/cis-scans-tab';
-import { formatRelativeTime, cn } from '@/lib/utils';
+} from "@/lib/hooks/security";
+import { useClusters } from "@/lib/hooks";
+import { useCISScans } from "@/components/security/hooks";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { CISScansTab } from "@/components/security/cis-scans-tab";
+import { formatRelativeTime, cn } from "@/lib/utils";
 import type {
   PodSecurityTemplate,
   PodSecurityLevel,
   ClusterSecurityPolicy,
-} from '@/types';
+} from "@/types";
 import {
   Shield,
   Plus,
@@ -38,7 +38,7 @@ import {
   ShieldCheck,
   Info,
   Lock,
-} from 'lucide-react';
+} from "lucide-react";
 
 /**
  * Phase B5 — Security overview.
@@ -53,22 +53,30 @@ import {
  * customers while making the new feature the first thing scan-using
  * customers see.
  */
-type TabKey = 'cis' | 'templates' | 'policies';
+type TabKey = "cis" | "templates" | "policies";
 
-const TAB_KEYS = ['cis', 'templates', 'policies'] as const;
+type SecurityPolicyRow = ClusterSecurityPolicy & {
+  clusterName: string;
+  templateName: string;
+  enforceLevel: PodSecurityLevel;
+  auditLevel: PodSecurityLevel;
+  warnLevel: PodSecurityLevel;
+};
+
+const TAB_KEYS = ["cis", "templates", "policies"] as const;
 
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
-  { key: 'cis', label: 'CIS Scans', icon: ScanSearch },
-  { key: 'templates', label: 'PSA Templates', icon: Shield },
-  { key: 'policies', label: 'Security Policies', icon: ShieldCheck },
+  { key: "cis", label: "CIS Scans", icon: ScanSearch },
+  { key: "templates", label: "PSA Templates", icon: Shield },
+  { key: "policies", label: "Security Policies", icon: ShieldCheck },
 ];
 
-const psaLevels: PodSecurityLevel[] = ['privileged', 'baseline', 'restricted'];
+const psaLevels: PodSecurityLevel[] = ["privileged", "baseline", "restricted"];
 
 const psaLevelColors: Record<PodSecurityLevel, string> = {
-  privileged: 'bg-status-error/10 text-status-error',
-  baseline: 'bg-status-warning/10 text-status-warning',
-  restricted: 'bg-status-success/10 text-status-success',
+  privileged: "bg-status-error/10 text-status-error",
+  baseline: "bg-status-warning/10 text-status-warning",
+  restricted: "bg-status-success/10 text-status-success",
 };
 
 // On-page reference copy for the three Pod Security Standards and the three
@@ -76,23 +84,35 @@ const psaLevelColors: Record<PodSecurityLevel, string> = {
 // table badges stay in lockstep.
 const psaLevelDefs: { level: PodSecurityLevel; summary: string }[] = [
   {
-    level: 'privileged',
-    summary: 'Unrestricted — no policy applied. For trusted/system namespaces or to opt out of PSA.',
+    level: "privileged",
+    summary:
+      "Unrestricted — no policy applied. For trusted/system namespaces or to opt out of PSA.",
   },
   {
-    level: 'baseline',
-    summary: 'Minimally restrictive — blocks known privilege escalations while staying broadly compatible.',
+    level: "baseline",
+    summary:
+      "Minimally restrictive — blocks known privilege escalations while staying broadly compatible.",
   },
   {
-    level: 'restricted',
-    summary: 'Heavily restricted — follows current pod-hardening best practices. Recommended for production.',
+    level: "restricted",
+    summary:
+      "Heavily restricted — follows current pod-hardening best practices. Recommended for production.",
   },
 ];
 
 const psaModeDefs: { mode: string; summary: string }[] = [
-  { mode: 'enforce', summary: 'Rejects pods that violate the standard at admission time.' },
-  { mode: 'audit', summary: 'Allows the pod but records a violation in the audit log.' },
-  { mode: 'warn', summary: 'Allows the pod but returns a user-facing warning to the client.' },
+  {
+    mode: "enforce",
+    summary: "Rejects pods that violate the standard at admission time.",
+  },
+  {
+    mode: "audit",
+    summary: "Allows the pod but records a violation in the audit log.",
+  },
+  {
+    mode: "warn",
+    summary: "Allows the pod but returns a user-facing warning to the client.",
+  },
 ];
 
 /**
@@ -107,12 +127,15 @@ function PSAExplainer() {
       <div className="flex items-start gap-2">
         <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
         <div className="space-y-1">
-          <p className="text-sm font-medium text-foreground">What is Pod Security Admission (PSA)?</p>
+          <p className="text-sm font-medium text-foreground">
+            What is Pod Security Admission (PSA)?
+          </p>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            PSA is the built-in Kubernetes admission controller (the successor to PodSecurityPolicy)
-            that enforces the three Pod Security Standards on a per-namespace basis. A template defines
-            which standard applies in each of three modes; it only takes effect once you assign and apply
-            it to a cluster from the Security Policies tab.
+            PSA is the built-in Kubernetes admission controller (the successor
+            to PodSecurityPolicy) that enforces the three Pod Security Standards
+            on a per-namespace basis. A template defines which standard applies
+            in each of three modes; it only takes effect once you assign and
+            apply it to a cluster from the Security Policies tab.
           </p>
         </div>
       </div>
@@ -127,27 +150,33 @@ function PSAExplainer() {
               <li key={d.level} className="flex items-start gap-2">
                 <span
                   className={cn(
-                    'text-2xs px-1.5 py-0.5 rounded font-medium capitalize flex-shrink-0',
+                    "text-2xs px-1.5 py-0.5 rounded font-medium capitalize flex-shrink-0",
                     psaLevelColors[d.level],
                   )}
                 >
                   {d.level}
                 </span>
-                <span className="text-xs text-muted-foreground leading-relaxed">{d.summary}</span>
+                <span className="text-xs text-muted-foreground leading-relaxed">
+                  {d.summary}
+                </span>
               </li>
             ))}
           </ul>
         </div>
 
         <div className="space-y-2">
-          <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">Modes</p>
+          <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Modes
+          </p>
           <ul className="space-y-1.5">
             {psaModeDefs.map((d) => (
               <li key={d.mode} className="flex items-start gap-2">
                 <span className="text-2xs px-1.5 py-0.5 rounded font-medium capitalize flex-shrink-0 bg-accent text-foreground">
                   {d.mode}
                 </span>
-                <span className="text-xs text-muted-foreground leading-relaxed">{d.summary}</span>
+                <span className="text-xs text-muted-foreground leading-relaxed">
+                  {d.summary}
+                </span>
               </li>
             ))}
           </ul>
@@ -165,82 +194,131 @@ function SecurityPage() {
   // once we know there are no scans. An explicit `?tab=` in the URL always
   // wins over this heuristic.
   const { data: scansPage } = useCISScans({ pageSize: 1 });
-  const defaultTab: TabKey = scansPage && (scansPage.total ?? 0) === 0 ? 'templates' : 'cis';
+  const defaultTab: TabKey =
+    scansPage && (scansPage.total ?? 0) === 0 ? "templates" : "cis";
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, defaultTab);
 
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<PodSecurityTemplate | null>(null);
+  const [editingTemplate, setEditingTemplate] =
+    useState<PodSecurityTemplate | null>(null);
 
-  const { data: policies, isLoading: policiesLoading } = useClusterSecurityPolicies();
-  const { data: templates, isLoading: templatesLoading } = usePodSecurityTemplates();
+  const { data: policies, isLoading: policiesLoading } =
+    useClusterSecurityPolicies();
+  const { data: templates, isLoading: templatesLoading } =
+    usePodSecurityTemplates();
+  const { data: clustersData } = useClusters({ pageSize: 200 });
+
+  const policyRows = useMemo<SecurityPolicyRow[]>(() => {
+    const clusters = new Map(
+      (clustersData?.data ?? []).map((cluster) => [
+        cluster.id,
+        cluster.displayName || cluster.name,
+      ]),
+    );
+    const templateById = new Map(
+      (templates ?? []).map((template) => [template.id, template]),
+    );
+    return (policies ?? []).map((policy) => {
+      const template = templateById.get(policy.templateId);
+      return {
+        ...policy,
+        clusterName:
+          clusters.get(policy.clusterId) || `Unknown (${policy.clusterId})`,
+        templateName:
+          template?.name || `Unknown (${policy.templateId})`,
+        enforceLevel: template?.enforceLevel || "privileged",
+        auditLevel: template?.auditLevel || "privileged",
+        warnLevel: template?.warnLevel || "privileged",
+      };
+    });
+  }, [clustersData?.data, policies, templates]);
 
   const applyPolicy = useApplySecurityPolicy();
   const removePolicy = useRemoveSecurityPolicy();
   const deleteTemplate = useDeletePodSecurityTemplate();
 
   // --- Security Policies Table ---
-  const policyColumns: Column<ClusterSecurityPolicy>[] = [
+  const policyColumns: Column<SecurityPolicyRow>[] = [
     {
-      key: 'cluster',
-      header: 'Cluster',
+      key: "cluster",
+      header: "Cluster",
       accessor: (row) => (
-        <span className="font-medium text-foreground text-sm">{row.clusterName}</span>
+        <span className="font-medium text-foreground text-sm">
+          {row.clusterName}
+        </span>
       ),
     },
     {
-      key: 'template',
-      header: 'Template',
+      key: "template",
+      header: "Template",
       accessor: (row) => (
-        <span className="text-sm text-muted-foreground">{row.templateName}</span>
+        <span className="text-sm text-muted-foreground">
+          {row.templateName}
+        </span>
       ),
     },
     {
-      key: 'enforce',
-      header: 'Enforce',
+      key: "enforce",
+      header: "Enforce",
       accessor: (row) => (
-        <span className={cn('text-xs px-2 py-0.5 rounded font-medium capitalize', psaLevelColors[row.enforceLevel])}>
+        <span
+          className={cn(
+            "text-xs px-2 py-0.5 rounded font-medium capitalize",
+            psaLevelColors[row.enforceLevel],
+          )}
+        >
           {row.enforceLevel}
         </span>
       ),
     },
     {
-      key: 'audit',
-      header: 'Audit',
+      key: "audit",
+      header: "Audit",
       accessor: (row) => (
-        <span className={cn('text-xs px-2 py-0.5 rounded font-medium capitalize', psaLevelColors[row.auditLevel])}>
+        <span
+          className={cn(
+            "text-xs px-2 py-0.5 rounded font-medium capitalize",
+            psaLevelColors[row.auditLevel],
+          )}
+        >
           {row.auditLevel}
         </span>
       ),
     },
     {
-      key: 'warn',
-      header: 'Warn',
+      key: "warn",
+      header: "Warn",
       accessor: (row) => (
-        <span className={cn('text-xs px-2 py-0.5 rounded font-medium capitalize', psaLevelColors[row.warnLevel])}>
+        <span
+          className={cn(
+            "text-xs px-2 py-0.5 rounded font-medium capitalize",
+            psaLevelColors[row.warnLevel],
+          )}
+        >
           {row.warnLevel}
         </span>
       ),
     },
     {
-      key: 'syncStatus',
-      header: 'Sync Status',
+      key: "syncStatus",
+      header: "Sync Status",
       accessor: (row) => <StatusBadge status={row.syncStatus} />,
     },
     {
-      key: 'appliedAt',
-      header: 'Applied',
+      key: "appliedAt",
+      header: "Applied",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {row.appliedAt ? formatRelativeTime(row.appliedAt) : 'Not applied'}
+          {row.appliedAt ? formatRelativeTime(row.appliedAt) : "Not applied"}
         </span>
       ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       accessor: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
           <button
             onClick={() => applyPolicy.mutate(row.id)}
             disabled={applyPolicy.isPending}
@@ -253,7 +331,9 @@ function SecurityPage() {
           </button>
           <button
             onClick={() => {
-              if (confirm(`Remove security policy from "${row.clusterName}"?`)) {
+              if (
+                confirm(`Remove security policy from "${row.clusterName}"?`)
+              ) {
                 removePolicy.mutate(row.id);
               }
             }}
@@ -271,14 +351,16 @@ function SecurityPage() {
   // --- PSA Templates Table ---
   const templateColumns: Column<PodSecurityTemplate>[] = [
     {
-      key: 'name',
-      header: 'Name',
+      key: "name",
+      header: "Name",
       accessor: (row) => (
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium text-foreground">{row.name}</span>
           {row.isDefault && (
-            <span className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Default</span>
+            <span className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+              Default
+            </span>
           )}
           {row.isBuiltin && (
             <span className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded bg-accent text-muted-foreground font-medium">
@@ -290,47 +372,62 @@ function SecurityPage() {
       ),
     },
     {
-      key: 'enforce',
-      header: 'Enforce',
+      key: "enforce",
+      header: "Enforce",
       accessor: (row) => (
-        <span className={cn('text-xs px-2 py-0.5 rounded font-medium capitalize', psaLevelColors[row.enforceLevel])}>
+        <span
+          className={cn(
+            "text-xs px-2 py-0.5 rounded font-medium capitalize",
+            psaLevelColors[row.enforceLevel],
+          )}
+        >
           {row.enforceLevel}
         </span>
       ),
     },
     {
-      key: 'audit',
-      header: 'Audit',
+      key: "audit",
+      header: "Audit",
       accessor: (row) => (
-        <span className={cn('text-xs px-2 py-0.5 rounded font-medium capitalize', psaLevelColors[row.auditLevel])}>
+        <span
+          className={cn(
+            "text-xs px-2 py-0.5 rounded font-medium capitalize",
+            psaLevelColors[row.auditLevel],
+          )}
+        >
           {row.auditLevel}
         </span>
       ),
     },
     {
-      key: 'warn',
-      header: 'Warn',
+      key: "warn",
+      header: "Warn",
       accessor: (row) => (
-        <span className={cn('text-xs px-2 py-0.5 rounded font-medium capitalize', psaLevelColors[row.warnLevel])}>
+        <span
+          className={cn(
+            "text-xs px-2 py-0.5 rounded font-medium capitalize",
+            psaLevelColors[row.warnLevel],
+          )}
+        >
           {row.warnLevel}
         </span>
       ),
     },
     {
-      key: 'description',
-      header: 'Description',
+      key: "description",
+      header: "Description",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground truncate max-w-[200px] block">
-          {row.description || '--'}
+          {row.description || "--"}
         </span>
       ),
       sortable: false,
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       accessor: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
           <button
             onClick={() => {
               setEditingTemplate(row);
@@ -339,7 +436,11 @@ function SecurityPage() {
             disabled={row.isBuiltin}
             className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent
               transition-colors disabled:opacity-30 disabled:pointer-events-none"
-            title={row.isBuiltin ? 'Built-in templates cannot be edited' : 'Edit template'}
+            title={
+              row.isBuiltin
+                ? "Built-in templates cannot be edited"
+                : "Edit template"
+            }
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
@@ -352,7 +453,11 @@ function SecurityPage() {
             disabled={row.isDefault || row.isBuiltin}
             className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10
               transition-colors disabled:opacity-30 disabled:pointer-events-none"
-            title={row.isBuiltin ? 'Built-in templates cannot be deleted' : 'Delete template'}
+            title={
+              row.isBuiltin
+                ? "Built-in templates cannot be deleted"
+                : "Delete template"
+            }
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -369,12 +474,16 @@ function SecurityPage() {
         description="CIS benchmarks, Pod Security Admission policies, and compliance."
         actions={
           <>
-            {activeTab === 'policies' && (
-              <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setShowAssignModal(true)}>
+            {activeTab === "policies" && (
+              <ActionButton
+                intent="primary"
+                icon={<Plus className="h-4 w-4" />}
+                onClick={() => setShowAssignModal(true)}
+              >
                 Assign Template
               </ActionButton>
             )}
-            {activeTab === 'templates' && (
+            {activeTab === "templates" && (
               <ActionButton
                 intent="primary"
                 icon={<Plus className="h-4 w-4" />}
@@ -400,10 +509,10 @@ function SecurityPage() {
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={cn(
-                  'flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors',
+                  "flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors",
                   activeTab === tab.key
-                    ? 'border-foreground text-foreground'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                    ? "border-foreground text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -416,20 +525,21 @@ function SecurityPage() {
 
       {/* Content */}
       <div className="animate-fade-in">
-        {activeTab === 'cis' && <CISScansTab />}
+        {activeTab === "cis" && <CISScansTab />}
 
-        {activeTab === 'policies' && (
+        {activeTab === "policies" && (
           <div className="space-y-4">
             <div className="rounded-lg border border-border bg-muted/30 p-4 flex items-start gap-2">
               <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
               <p className="text-xs text-muted-foreground leading-relaxed">
-                A security policy binds a PSA template to a cluster. Until you assign and apply a
-                template here, Pod Security Admission is not enforced — defining or seeding a template
-                alone changes nothing on your clusters.
+                A security policy binds a PSA template to a cluster. Until you
+                assign and apply a template here, Pod Security Admission is not
+                enforced — defining or seeding a template alone changes nothing
+                on your clusters.
               </p>
             </div>
             <DataTable
-              data={policies || []}
+              data={policyRows}
               columns={policyColumns}
               keyExtractor={(row) => row.id}
               searchPlaceholder="Search cluster policies..."
@@ -439,7 +549,7 @@ function SecurityPage() {
           </div>
         )}
 
-        {activeTab === 'templates' && (
+        {activeTab === "templates" && (
           <div className="space-y-4">
             <PSAExplainer />
             <DataTable
@@ -490,8 +600,9 @@ function AssignTemplateModal({
   const clusters = clustersData?.data || [];
 
   const [form, setForm] = useState({
-    clusterId: '',
-    templateId: templates.find((t) => t.isDefault)?.id || templates[0]?.id || '',
+    clusterId: "",
+    templateId:
+      templates.find((t) => t.isDefault)?.id || templates[0]?.id || "",
   });
 
   const selectedTemplate = useMemo(
@@ -523,7 +634,9 @@ function AssignTemplateModal({
           <ActionButton
             intent="primary"
             onClick={handleSave}
-            disabled={assignPolicy.isPending || !form.clusterId || !form.templateId}
+            disabled={
+              assignPolicy.isPending || !form.clusterId || !form.templateId
+            }
             loading={assignPolicy.isPending}
           >
             Assign Template
@@ -531,63 +644,98 @@ function AssignTemplateModal({
         </>
       }
     >
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Cluster</label>
-            <Select
-              value={form.clusterId}
-              onChange={(e) => setForm((f) => ({ ...f, clusterId: e.target.value }))}
-            >
-              <option value="">Select a cluster...</option>
-              {clusters.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.displayName} ({c.name})
-                </option>
-              ))}
-            </Select>
-          </div>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-7db9bce2-535"
+        >
+          Cluster
+        </label>
+        <Select
+          id="field-7db9bce2-535"
+          value={form.clusterId}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, clusterId: e.target.value }))
+          }
+        >
+          <option value="">Select a cluster...</option>
+          {clusters.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.displayName} ({c.name})
+            </option>
+          ))}
+        </Select>
+      </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Template</label>
-            <Select
-              value={form.templateId}
-              onChange={(e) => setForm((f) => ({ ...f, templateId: e.target.value }))}
-            >
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} {t.isDefault ? '(Default)' : ''}
-                </option>
-              ))}
-            </Select>
-          </div>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-7db9bce2-550"
+        >
+          Template
+        </label>
+        <Select
+          id="field-7db9bce2-550"
+          value={form.templateId}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, templateId: e.target.value }))
+          }
+        >
+          {templates.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name} {t.isDefault ? "(Default)" : ""}
+            </option>
+          ))}
+        </Select>
+      </div>
 
-          {selectedTemplate && (
-            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Template Preview</p>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <p className="text-2xs text-muted-foreground">Enforce</p>
-                  <span className={cn('text-xs px-2 py-0.5 rounded font-medium capitalize', psaLevelColors[selectedTemplate.enforceLevel])}>
-                    {selectedTemplate.enforceLevel}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-2xs text-muted-foreground">Audit</p>
-                  <span className={cn('text-xs px-2 py-0.5 rounded font-medium capitalize', psaLevelColors[selectedTemplate.auditLevel])}>
-                    {selectedTemplate.auditLevel}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-2xs text-muted-foreground">Warn</p>
-                  <span className={cn('text-xs px-2 py-0.5 rounded font-medium capitalize', psaLevelColors[selectedTemplate.warnLevel])}>
-                    {selectedTemplate.warnLevel}
-                  </span>
-                </div>
-              </div>
-              {selectedTemplate.description && (
-                <p className="text-xs text-muted-foreground">{selectedTemplate.description}</p>
-              )}
+      {selectedTemplate && (
+        <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">
+            Template Preview
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-2xs text-muted-foreground">Enforce</p>
+              <span
+                className={cn(
+                  "text-xs px-2 py-0.5 rounded font-medium capitalize",
+                  psaLevelColors[selectedTemplate.enforceLevel],
+                )}
+              >
+                {selectedTemplate.enforceLevel}
+              </span>
             </div>
+            <div>
+              <p className="text-2xs text-muted-foreground">Audit</p>
+              <span
+                className={cn(
+                  "text-xs px-2 py-0.5 rounded font-medium capitalize",
+                  psaLevelColors[selectedTemplate.auditLevel],
+                )}
+              >
+                {selectedTemplate.auditLevel}
+              </span>
+            </div>
+            <div>
+              <p className="text-2xs text-muted-foreground">Warn</p>
+              <span
+                className={cn(
+                  "text-xs px-2 py-0.5 rounded font-medium capitalize",
+                  psaLevelColors[selectedTemplate.warnLevel],
+                )}
+              >
+                {selectedTemplate.warnLevel}
+              </span>
+            </div>
+          </div>
+          {selectedTemplate.description && (
+            <p className="text-xs text-muted-foreground">
+              {selectedTemplate.description}
+            </p>
           )}
+        </div>
+      )}
     </ModalShell>
   );
 }
@@ -608,23 +756,23 @@ function PSATemplateModal({
 
   const parseCSV = (val: string): string[] =>
     val
-      .split(',')
+      .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
 
   const form = useAppForm({
     defaultValues: {
-      name: template?.name || '',
-      description: template?.description || '',
-      enforceLevel: template?.enforceLevel || ('baseline' as PodSecurityLevel),
-      enforceVersion: template?.enforceVersion || 'latest',
-      auditLevel: template?.auditLevel || ('restricted' as PodSecurityLevel),
-      auditVersion: template?.auditVersion || 'latest',
-      warnLevel: template?.warnLevel || ('restricted' as PodSecurityLevel),
-      warnVersion: template?.warnVersion || 'latest',
-      exemptNamespaces: template?.exemptNamespaces?.join(', ') || '',
-      exemptRuntimeClasses: template?.exemptRuntimeClasses?.join(', ') || '',
-      exemptUsernames: template?.exemptUsernames?.join(', ') || '',
+      name: template?.name || "",
+      description: template?.description || "",
+      enforceLevel: template?.enforceLevel || ("baseline" as PodSecurityLevel),
+      enforceVersion: template?.enforceVersion || "latest",
+      auditLevel: template?.auditLevel || ("restricted" as PodSecurityLevel),
+      auditVersion: template?.auditVersion || "latest",
+      warnLevel: template?.warnLevel || ("restricted" as PodSecurityLevel),
+      warnVersion: template?.warnVersion || "latest",
+      exemptNamespaces: template?.exemptNamespaces?.join(", ") || "",
+      exemptRuntimeClasses: template?.exemptRuntimeClasses?.join(", ") || "",
+      exemptUsernames: template?.exemptUsernames?.join(", ") || "",
     },
     onSubmit: async ({ value }) => {
       const data = {
@@ -660,7 +808,7 @@ function PSATemplateModal({
 
   return (
     <ModalShell
-      title={template ? 'Edit PSA Template' : 'Create PSA Template'}
+      title={template ? "Edit PSA Template" : "Create PSA Template"}
       onClose={onClose}
       size="md"
       footerClassName="flex items-center justify-end gap-2"
@@ -673,208 +821,275 @@ function PSATemplateModal({
             disabled={isPending || !templateName}
             loading={isPending}
           >
-            {template ? 'Update Template' : 'Create Template'}
+            {template ? "Update Template" : "Create Template"}
           </ActionButton>
         </>
       }
     >
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Name</label>
-            <form.Field name="name">
-              {(field) => (
-                <Input
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  placeholder="restricted-production"
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-7db9bce2-682"
+        >
+          Name
+        </label>
+        <form.Field name="name">
+          {(field) => (
+            <Input
+              id="field-7db9bce2-682"
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="restricted-production"
+            />
+          )}
+        </form.Field>
+      </div>
 
-                />
-              )}
-            </form.Field>
-          </div>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-7db9bce2-698"
+        >
+          Description
+        </label>
+        <form.Field name="description">
+          {(field) => (
+            <Input
+              id="field-7db9bce2-698"
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="Restricted policy for production clusters"
+            />
+          )}
+        </form.Field>
+      </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Description</label>
-            <form.Field name="description">
-              {(field) => (
-                <Input
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  placeholder="Restricted policy for production clusters"
+      <div className="grid grid-cols-3 gap-4">
+        <div className="space-y-1.5">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-7db9bce2-715"
+          >
+            Enforce
+          </label>
+          <form.Field name="enforceLevel">
+            {(field) => (
+              <Select
+                id="field-7db9bce2-715"
+                value={field.state.value}
+                onChange={(e) =>
+                  field.handleChange(e.target.value as PodSecurityLevel)
+                }
+                onBlur={field.handleBlur}
+                className="capitalize"
+              >
+                {psaLevels.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </form.Field>
+        </div>
+        <div className="space-y-1.5">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-7db9bce2-734"
+          >
+            Audit
+          </label>
+          <form.Field name="auditLevel">
+            {(field) => (
+              <Select
+                id="field-7db9bce2-734"
+                value={field.state.value}
+                onChange={(e) =>
+                  field.handleChange(e.target.value as PodSecurityLevel)
+                }
+                onBlur={field.handleBlur}
+                className="capitalize"
+              >
+                {psaLevels.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </form.Field>
+        </div>
+        <div className="space-y-1.5">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-7db9bce2-753"
+          >
+            Warn
+          </label>
+          <form.Field name="warnLevel">
+            {(field) => (
+              <Select
+                id="field-7db9bce2-753"
+                value={field.state.value}
+                onChange={(e) =>
+                  field.handleChange(e.target.value as PodSecurityLevel)
+                }
+                onBlur={field.handleBlur}
+                className="capitalize"
+              >
+                {psaLevels.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </form.Field>
+        </div>
+      </div>
 
-                />
-              )}
-            </form.Field>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Enforce</label>
-              <form.Field name="enforceLevel">
-                {(field) => (
-                  <Select
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value as PodSecurityLevel)}
-                    onBlur={field.handleBlur}
-                    className="capitalize"
-                  >
-                    {psaLevels.map((level) => (
-                      <option key={level} value={level}>
-                        {level}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </form.Field>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Audit</label>
-              <form.Field name="auditLevel">
-                {(field) => (
-                  <Select
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value as PodSecurityLevel)}
-                    onBlur={field.handleBlur}
-                    className="capitalize"
-                  >
-                    {psaLevels.map((level) => (
-                      <option key={level} value={level}>
-                        {level}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </form.Field>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Warn</label>
-              <form.Field name="warnLevel">
-                {(field) => (
-                  <Select
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value as PodSecurityLevel)}
-                    onBlur={field.handleBlur}
-                    className="capitalize"
-                  >
-                    {psaLevels.map((level) => (
-                      <option key={level} value={level}>
-                        {level}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </form.Field>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Enforce Version</label>
-              <form.Field name="enforceVersion">
-                {(field) => (
-                  <Input
-                    type="text"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    placeholder="latest"
-                    className="w-full h-8 px-2.5 rounded border border-border bg-background text-xs
+      <div className="grid grid-cols-3 gap-4">
+        <div className="space-y-1.5">
+          <label
+            className="text-xs text-muted-foreground"
+            htmlFor="field-7db9bce2-775"
+          >
+            Enforce Version
+          </label>
+          <form.Field name="enforceVersion">
+            {(field) => (
+              <Input
+                id="field-7db9bce2-775"
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="latest"
+                className="w-full h-8 px-2.5 rounded border border-border bg-background text-xs
                       placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
-                )}
-              </form.Field>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Audit Version</label>
-              <form.Field name="auditVersion">
-                {(field) => (
-                  <Input
-                    type="text"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    placeholder="latest"
-                    className="h-8 text-xs"
-                  />
-                )}
-              </form.Field>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Warn Version</label>
-              <form.Field name="warnVersion">
-                {(field) => (
-                  <Input
-                    type="text"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    placeholder="latest"
-                    className="h-8 text-xs"
-                  />
-                )}
-              </form.Field>
-            </div>
-          </div>
+              />
+            )}
+          </form.Field>
+        </div>
+        <div className="space-y-1.5">
+          <label
+            className="text-xs text-muted-foreground"
+            htmlFor="field-7db9bce2-791"
+          >
+            Audit Version
+          </label>
+          <form.Field name="auditVersion">
+            {(field) => (
+              <Input
+                id="field-7db9bce2-791"
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="latest"
+                className="h-8 text-xs"
+              />
+            )}
+          </form.Field>
+        </div>
+        <div className="space-y-1.5">
+          <label
+            className="text-xs text-muted-foreground"
+            htmlFor="field-7db9bce2-806"
+          >
+            Warn Version
+          </label>
+          <form.Field name="warnVersion">
+            {(field) => (
+              <Input
+                id="field-7db9bce2-806"
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="latest"
+                className="h-8 text-xs"
+              />
+            )}
+          </form.Field>
+        </div>
+      </div>
 
-          <div className="space-y-3 pt-2">
-            <p className="text-sm font-medium text-foreground">Exemptions</p>
+      <div className="space-y-3 pt-2">
+        <p className="text-sm font-medium text-foreground">Exemptions</p>
 
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Namespaces (comma-separated)</label>
-              <form.Field name="exemptNamespaces">
-                {(field) => (
-                  <input
-                    type="text"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    placeholder="kube-system, kube-public, kube-node-lease"
+        <div className="space-y-1.5">
+          <label
+            className="text-xs text-muted-foreground"
+            htmlFor="field-7db9bce2-826"
+          >
+            Namespaces (comma-separated)
+          </label>
+          <form.Field name="exemptNamespaces">
+            {(field) => (
+              <input
+                id="field-7db9bce2-826"
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="kube-system, kube-public, kube-node-lease"
+              />
+            )}
+          </form.Field>
+        </div>
 
-                  />
-                )}
-              </form.Field>
-            </div>
+        <div className="space-y-1.5">
+          <label
+            className="text-xs text-muted-foreground"
+            htmlFor="field-7db9bce2-842"
+          >
+            Runtime Classes (comma-separated)
+          </label>
+          <form.Field name="exemptRuntimeClasses">
+            {(field) => (
+              <Input
+                id="field-7db9bce2-842"
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="gvisor, kata"
+              />
+            )}
+          </form.Field>
+        </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Runtime Classes (comma-separated)</label>
-              <form.Field name="exemptRuntimeClasses">
-                {(field) => (
-                  <Input
-                    type="text"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    placeholder="gvisor, kata"
-
-                  />
-                )}
-              </form.Field>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Usernames (comma-separated)</label>
-              <form.Field name="exemptUsernames">
-                {(field) => (
-                  <Input
-                    type="text"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    placeholder="system:serviceaccount:kube-system:default"
-
-                  />
-                )}
-              </form.Field>
-            </div>
-          </div>
+        <div className="space-y-1.5">
+          <label
+            className="text-xs text-muted-foreground"
+            htmlFor="field-7db9bce2-858"
+          >
+            Usernames (comma-separated)
+          </label>
+          <form.Field name="exemptUsernames">
+            {(field) => (
+              <Input
+                id="field-7db9bce2-858"
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="system:serviceaccount:kube-system:default"
+              />
+            )}
+          </form.Field>
+        </div>
+      </div>
     </ModalShell>
   );
 }
 
-export const Route = createFileRoute('/dashboard/security/')({
+export const Route = createFileRoute("/dashboard/security/")({
   // ?tab= deep-link (P2.4): typed passthrough — useTabParam's allowlist stays the real validator.
   validateSearch: (search: Record<string, unknown>) =>
     search as { tab?: string } & Record<string, unknown>,

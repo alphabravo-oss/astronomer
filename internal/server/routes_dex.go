@@ -41,6 +41,7 @@ func registerDexRoutes(r chi.Router, deps RouterDependencies) {
 			r.Put("/settings/", deps.DexConfig.UpdateSettings)
 			r.Post("/apply/", deps.DexConfig.Apply)
 			r.Post("/register-as-sso/", deps.DexConfig.RegisterAsSSO)
+			r.Get("/operations/{operation_id}/", deps.DexConfig.GetOperation)
 		})
 	}
 

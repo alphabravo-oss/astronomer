@@ -9,9 +9,10 @@ import "net/http"
 // The "data" key still carries the array verbatim, so consumers that only read
 // data[] remain backward compatible; "pagination" is purely additive metadata.
 type Pagination struct {
-	// Total is the total number of items across all pages. When a COUNT query
-	// is unavailable, callers set this to the length of the current page.
-	Total int `json:"total"`
+	// Total is present only when it is the exact count of the full authorized,
+	// filtered result. Omitting an unknown total prevents page length from being
+	// mistaken for fleet cardinality by clients or operators.
+	Total *int `json:"total,omitempty"`
 	// Limit is the page size that was applied.
 	Limit int `json:"limit"`
 	// Offset is the zero-based index of the first item on this page.
@@ -28,7 +29,7 @@ type Pagination struct {
 // returned on this page.
 func NewPagination(total, limit, offset, pageLen int) Pagination {
 	p := Pagination{
-		Total:  total,
+		Total:  &total,
 		Limit:  limit,
 		Offset: offset,
 	}
@@ -41,14 +42,13 @@ func NewPagination(total, limit, offset, pageLen int) Pagination {
 }
 
 // NewPaginationFromPage builds a Pagination for endpoints that run a real
-// LIMIT/OFFSET query but have no COUNT available for the total. Total is left
-// as the running count seen so far (offset+pageLen), and HasMore is inferred
+// LIMIT/OFFSET query but have no COUNT available for the total. Total is
+// omitted, and HasMore is inferred
 // from the page being full: when the DB returns exactly `limit` rows, more rows
 // may exist beyond this page, so NextOffset advances by the page length. This
 // avoids the always-false HasMore that results from passing pageLen as Total.
 func NewPaginationFromPage(limit, offset, pageLen int) Pagination {
 	p := Pagination{
-		Total:  offset + pageLen,
 		Limit:  limit,
 		Offset: offset,
 	}

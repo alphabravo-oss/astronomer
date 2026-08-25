@@ -104,12 +104,17 @@
     "auth": "bearer/session auth",
     "rbac": "clusters:read for safe methods; clusters:update for mutating methods; pods:exec for pod exec, attach, and portforward; secrets:read/list/watch for Secret reads",
     "csrf": "required for browser cookie mutating methods by RequireAuthWithQueries",
-    "audit": "cluster.k8s_proxy.forwarded for mutating methods; cluster.secret.read for authorized Secret reads/lists/watches",
+    "audit": "mutating methods fail closed unless cluster.k8s_proxy.intent is durably persisted, then synchronously attempt cluster.k8s_proxy.outcome without changing the upstream response; a missing outcome leaves the intent explicitly unknown/reconcile-required; neither row stores request bodies, raw paths, headers, YAML/JSON, or query strings; cluster.secret.read covers authorized Secret reads/lists/watches",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
       "TestK8sProxyRequiresAuth",
       "TestK8sProxyMutationsRequireClusterUpdate",
       "TestK8sProxyMutationsAreAudited",
+      "TestK8sProxyAuditMethodClassificationCoversRouteMethods",
+      "TestK8sProxyAuditIntentFailureStopsRemoteEffect",
+      "TestK8sProxyAuditOutcomeFailurePreservesSynchronousResponse",
+      "TestK8sProxyAuditEvidenceExcludesBodyHeadersAndQuery",
+      "TestK8sProxyMandatoryAuditIsWiredAtProductionRouteEntry",
       "TestK8sProxySecretReadsRequireSecretsRBACAndAudit",
       "TestK8sProxyPodExecRequiresPodExecPermission",
       "TestHandleK8sProxy_ForwardsNamedK8sOperations",
@@ -2013,6 +2018,22 @@
     "audit": "cluster.registration_token.create",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-direct-kubeconfig-generate",
+    "route": "/api/v1/clusters/{id}/generate-direct-kubeconfig/",
+    "sample_path": "/api/v1/clusters/00000000-0000-0000-0000-000000000001/generate-direct-kubeconfig/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "portable short-lived member-cluster credential issuance",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.direct_kubeconfig.issued (mandatory before response; fails closed when audit storage is unavailable)",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMutatingRoutesHaveSecurityClassification"
     ]
   },
   {
@@ -3987,5 +4008,240 @@
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
       "TestGrafanaTicketRedeemOneUse"
     ]
+  },
+  {
+    "id": "cluster-security-scan-cancel",
+    "route": "/api/v1/clusters/{cluster_id}/security/scans/{id}/cancel/",
+    "sample_path": "/api/v1/clusters/11111111-1111-4111-8111-111111111111/security/scans/22222222-2222-4222-8222-222222222222/cancel/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cancel an in-flight cluster CIS benchmark scan",
+    "auth": "bearer/session auth with write-clusters token scope",
+    "rbac": "clusters:read and security:update on the cluster-qualified scan",
+    "csrf": "required for browser cookie mutation",
+    "audit": "security.scan.cancel",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ]
+  },
+  {
+    "id": "admin-group-mapping-create",
+    "route": "/api/v1/admin/group-mappings/",
+    "sample_path": "/api/v1/admin/group-mappings/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "create an SSO identity-group to RBAC-role mapping",
+    "auth": "bearer/session auth with admin API token scope",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie mutation by requireAuth",
+    "audit": "admin.group_mapping.created is committed transactionally with the mapping",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMutatingRoutesHaveSecurityClassification",
+      "TestGroupMappingsHandler_CRUD"
+    ]
+  },
+  {
+    "id": "admin-group-mapping-delete",
+    "route": "/api/v1/admin/group-mappings/{id}/",
+    "sample_path": "/api/v1/admin/group-mappings/11111111-1111-4111-8111-111111111111/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "delete an SSO identity-group to RBAC-role mapping",
+    "auth": "bearer/session auth with admin API token scope",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie mutation by requireAuth",
+    "audit": "admin.group_mapping.deleted is committed transactionally with the deletion",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMutatingRoutesHaveSecurityClassification",
+      "TestGroupMappingsHandler_CRUD"
+    ]
+  },
+  {
+    "id": "admin-user-resync-groups",
+    "route": "/api/v1/admin/users/{id}/resync-groups/",
+    "sample_path": "/api/v1/admin/users/11111111-1111-4111-8111-111111111111/resync-groups/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "reconcile one user's SSO group-derived role bindings",
+    "auth": "bearer/session auth with admin API token scope",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie mutation by requireAuth",
+    "audit": "binding add/remove events and admin.group_mapping.user_resynced are committed transactionally with the reconciliation",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMutatingRoutesHaveSecurityClassification",
+      "TestGroupMappingsHandler_ResyncUser"
+    ]
+  },
+  {
+    "id": "admin-queue-dlq-retry",
+    "route": "/api/v1/admin/queues/{queue}/dlq/{id}/retry/",
+    "sample_path": "/api/v1/admin/queues/critical/dlq/11111111-1111-4111-8111-111111111111/retry/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "durable retry of an archived administrative queue task",
+    "auth": "bearer/session auth",
+    "rbac": "superuser-only handler gate",
+    "csrf": "required for browser cookie mutation",
+    "audit": "admin.queue.dlq_retry_accepted is committed with the durable operation and task outbox",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMutatingRoutesHaveSecurityClassification",
+      "TestAdminQueueRetryCommitsReceiptTaskAndAuditBefore202"
+    ]
+  },
+  {
+    "id": "admin-queue-dlq-discard",
+    "route": "/api/v1/admin/queues/{queue}/dlq/{id}/",
+    "sample_path": "/api/v1/admin/queues/critical/dlq/11111111-1111-4111-8111-111111111111/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "durable discard of an archived administrative queue task",
+    "auth": "bearer/session auth",
+    "rbac": "superuser-only handler gate",
+    "csrf": "required for browser cookie mutation",
+    "audit": "admin.queue.dlq_discard_accepted is committed with the durable operation and task outbox",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMutatingRoutesHaveSecurityClassification",
+      "TestAdminQueueRetryVsDiscardConflictReturns409WithoutTaskOrAudit"
+    ]
+  },
+  {
+    "id": "admin-task-outbox-retry",
+    "route": "/api/v1/admin/task-outbox/{id}/retry/",
+    "sample_path": "/api/v1/admin/task-outbox/11111111-1111-4111-8111-111111111111/retry/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "durable retry of a committed task-outbox intent",
+    "auth": "bearer/session auth",
+    "rbac": "superuser-only handler gate",
+    "csrf": "required for browser cookie mutation",
+    "audit": "admin.task_outbox.retry is committed transactionally with the retry",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMutatingRoutesHaveSecurityClassification",
+      "TestAdminTaskOutboxRetryCommitsStateAndMandatoryAudit"
+    ]
+  },
+  {
+    "id": "management-backup-destination-create",
+    "route": "/api/v1/admin/management-backup/destinations/",
+    "sample_path": "/api/v1/admin/management-backup/destinations/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "create an encrypted management-backup destination",
+    "auth": "bearer/session auth with admin API token scope",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie mutation by requireAuth",
+    "audit": "admin.management_backup.destination.created is committed transactionally with the destination",
+    "tests": ["TestHighRiskRoutesDenyUnauthenticatedRequests", "TestMutatingRoutesHaveSecurityClassification", "TestManagementBackupCreateDestinationFailsClosedWithoutEncryptor"]
+  },
+  {
+    "id": "management-backup-destination-update",
+    "route": "/api/v1/admin/management-backup/destinations/{id}/",
+    "sample_path": "/api/v1/admin/management-backup/destinations/11111111-1111-4111-8111-111111111111/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "update an encrypted management-backup destination",
+    "auth": "bearer/session auth with admin API token scope",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie mutation by requireAuth",
+    "audit": "admin.management_backup.destination.updated is committed transactionally with the destination",
+    "tests": ["TestHighRiskRoutesDenyUnauthenticatedRequests", "TestMutatingRoutesHaveSecurityClassification", "TestManagementBackupSecretUpdatePreservesResourceVersionAndGeneration"]
+  },
+  {
+    "id": "management-backup-destination-delete",
+    "route": "/api/v1/admin/management-backup/destinations/{id}/",
+    "sample_path": "/api/v1/admin/management-backup/destinations/11111111-1111-4111-8111-111111111111/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "durably reconcile deletion of a management-backup destination",
+    "auth": "bearer/session auth with admin API token scope",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie mutation by requireAuth",
+    "audit": "admin.management_backup.destination.delete_accepted is committed with the durable receipt",
+    "tests": ["TestHighRiskRoutesDenyUnauthenticatedRequests", "TestMutatingRoutesHaveSecurityClassification", "TestManagementBackupDeleteReplaysExactReceiptOnceUnderRace"]
+  },
+  {
+    "id": "management-backup-destination-test",
+    "route": "/api/v1/admin/management-backup/destinations/{id}/test/",
+    "sample_path": "/api/v1/admin/management-backup/destinations/11111111-1111-4111-8111-111111111111/test/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "durable management-backup destination connectivity probe",
+    "auth": "bearer/session auth with admin API token scope",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie mutation by requireAuth",
+    "audit": "admin.management_backup_test.accepted is committed with the operation",
+    "tests": ["TestHighRiskRoutesDenyUnauthenticatedRequests", "TestMutatingRoutesHaveSecurityClassification", "TestManagementBackupOperationReceiptHasPollingHeadersAndRetryTruth"]
+  },
+  {
+    "id": "management-backup-destination-run",
+    "route": "/api/v1/admin/management-backup/destinations/{id}/run/",
+    "sample_path": "/api/v1/admin/management-backup/destinations/11111111-1111-4111-8111-111111111111/run/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "durable on-demand management-backup run",
+    "auth": "bearer/session auth with admin API token scope",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie mutation by requireAuth",
+    "audit": "admin.management_backup_run.accepted is committed with the operation",
+    "tests": ["TestHighRiskRoutesDenyUnauthenticatedRequests", "TestMutatingRoutesHaveSecurityClassification", "TestManagementBackupManualRunDefersToAnyActiveDestinationJob"]
+  },
+  {
+    "id": "siem-forwarder-create",
+    "route": "/api/v1/admin/siem-forwarders/",
+    "sample_path": "/api/v1/admin/siem-forwarders/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "create an encrypted external SIEM forwarder",
+    "auth": "bearer/session auth with admin API token scope",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie mutation by requireAuth",
+    "audit": "admin.siem_forwarder.created is committed transactionally with the forwarder",
+    "tests": ["TestHighRiskRoutesDenyUnauthenticatedRequests", "TestMutatingRoutesHaveSecurityClassification", "TestSIEMHandler_CRUD"]
+  },
+  {
+    "id": "siem-forwarder-update",
+    "route": "/api/v1/admin/siem-forwarders/{id}/",
+    "sample_path": "/api/v1/admin/siem-forwarders/11111111-1111-4111-8111-111111111111/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "update an encrypted external SIEM forwarder",
+    "auth": "bearer/session auth with admin API token scope",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie mutation by requireAuth",
+    "audit": "admin.siem_forwarder.updated is committed transactionally with the forwarder",
+    "tests": ["TestHighRiskRoutesDenyUnauthenticatedRequests", "TestMutatingRoutesHaveSecurityClassification", "TestSIEMHandler_CRUD"]
+  },
+  {
+    "id": "siem-forwarder-delete",
+    "route": "/api/v1/admin/siem-forwarders/{id}/",
+    "sample_path": "/api/v1/admin/siem-forwarders/11111111-1111-4111-8111-111111111111/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "delete an external SIEM forwarder and queued delivery state",
+    "auth": "bearer/session auth with admin API token scope",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie mutation by requireAuth",
+    "audit": "admin.siem_forwarder.deleted is committed transactionally with deletion",
+    "tests": ["TestHighRiskRoutesDenyUnauthenticatedRequests", "TestMutatingRoutesHaveSecurityClassification", "TestSIEMHandler_CRUD"]
+  },
+  {
+    "id": "siem-forwarder-test",
+    "route": "/api/v1/admin/siem-forwarders/{id}/test/",
+    "sample_path": "/api/v1/admin/siem-forwarders/11111111-1111-4111-8111-111111111111/test/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "durable external SIEM forwarder test delivery",
+    "auth": "bearer/session auth with admin API token scope",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie mutation by requireAuth",
+    "audit": "admin.siem_forwarder.test_queued is committed with the test operation",
+    "tests": ["TestHighRiskRoutesDenyUnauthenticatedRequests", "TestMutatingRoutesHaveSecurityClassification", "TestSIEMHandler_TestEndpoint"]
   }
 ]

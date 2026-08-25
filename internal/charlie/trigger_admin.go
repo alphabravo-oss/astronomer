@@ -15,6 +15,7 @@ const MaxAdminTriggerEvents = 100
 type triggerAdminQueries interface {
 	GetLatestCharlieConnection(context.Context) (sqlc.CharlieConnection, error)
 	ListCharlieTriggerEventsForAdmin(context.Context, sqlc.ListCharlieTriggerEventsForAdminParams) ([]sqlc.CharlieTriggerEvent, error)
+	GetCharlieTriggerEventForAdmin(context.Context, sqlc.GetCharlieTriggerEventForAdminParams) (sqlc.CharlieTriggerEvent, error)
 	RetryDeadCharlieTriggerEventWithOutbox(context.Context, sqlc.RetryDeadCharlieTriggerEventWithOutboxParams) (sqlc.RetryDeadCharlieTriggerEventWithOutboxRow, error)
 }
 
@@ -98,6 +99,45 @@ func (s *TriggerAdminService) Retry(ctx context.Context, eventID, requestID uuid
 		return AdminTriggerEventView{}, fmt.Errorf("%w: dead-letter retry was not created", ErrAdminConflict)
 	}
 	return safeAdminRetriedTriggerEvent(row), nil
+}
+
+// RetryDurable persists the actor-bound retry operation, its worker task, and
+// its mandatory audit intent in one database statement. requestID is a stable
+// digest-derived UUID, so a replica-safe replay returns the same event.
+func (s *TriggerAdminService) RetryDurable(ctx context.Context, eventID, requestID, actorID uuid.UUID) (AdminTriggerEventView, error) {
+	if s == nil || eventID == uuid.Nil || requestID == uuid.Nil || actorID == uuid.Nil {
+		return AdminTriggerEventView{}, ErrAdminConflict
+	}
+	connection, err := s.queries.GetLatestCharlieConnection(ctx)
+	if err != nil {
+		return AdminTriggerEventView{}, ErrAdminNotConfigured
+	}
+	if !connection.Active || connection.EmergencyDisabled || EffectiveMode(Mode(connection.RequestedMode), Mode(connection.VerifiedMode), connection.EmergencyDisabled) == ModeDisabled {
+		return AdminTriggerEventView{}, fmt.Errorf("%w: Charlie must be active before retrying trigger work", ErrAdminConflict)
+	}
+	row, err := s.queries.RetryDeadCharlieTriggerEventWithOutbox(ctx, sqlc.RetryDeadCharlieTriggerEventWithOutboxParams{
+		RetryOfEventID: eventID, ConnectionID: connection.ID, RequestID: requestID,
+		ActorID: pgtype.UUID{Bytes: actorID, Valid: true},
+	})
+	if err != nil {
+		return AdminTriggerEventView{}, fmt.Errorf("%w: dead-letter retry was not created", ErrAdminConflict)
+	}
+	return safeAdminRetriedTriggerEvent(row), nil
+}
+
+func (s *TriggerAdminService) Get(ctx context.Context, eventID uuid.UUID) (AdminTriggerEventView, error) {
+	if s == nil || eventID == uuid.Nil {
+		return AdminTriggerEventView{}, ErrAdminConflict
+	}
+	connection, err := s.queries.GetLatestCharlieConnection(ctx)
+	if err != nil {
+		return AdminTriggerEventView{}, ErrAdminNotConfigured
+	}
+	row, err := s.queries.GetCharlieTriggerEventForAdmin(ctx, sqlc.GetCharlieTriggerEventForAdminParams{ID: eventID, ConnectionID: connection.ID})
+	if err != nil {
+		return AdminTriggerEventView{}, ErrAdminConflict
+	}
+	return safeAdminTriggerEvent(row), nil
 }
 
 func validAdminTriggerEventState(state string) bool {

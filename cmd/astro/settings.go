@@ -73,7 +73,7 @@ func newSettingsGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1SettingsWithResponse(cmd.Context())
+			resp, err := client.GetSettingsWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -108,7 +108,7 @@ func newSettingsGeneralGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1SettingsGeneralWithResponse(cmd.Context())
+			resp, err := client.GetSettingsGeneralWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -141,7 +141,7 @@ left untouched server-side.`,
 				return err
 			}
 
-			var body astroclient.PutApiV1SettingsGeneralJSONRequestBody
+			var body astroclient.PutSettingsGeneralJSONRequestBody
 			changed := false
 			if cmd.Flags().Changed("platform-name") {
 				v := platformName
@@ -172,7 +172,7 @@ left untouched server-side.`,
 				return fmt.Errorf("nothing to update: pass at least one of --platform-name, --agent-heartbeat-interval, --default-session-timeout, --enable-audit-logging, --metrics-collection")
 			}
 
-			resp, err := client.PutApiV1SettingsGeneralWithResponse(cmd.Context(), body)
+			resp, err := client.PutSettingsGeneralWithResponse(cmd.Context(), body)
 			if err != nil {
 				return err
 			}
@@ -204,7 +204,7 @@ func newSettingsFeaturesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1SettingsFeaturesWithResponse(cmd.Context())
+			resp, err := client.GetSettingsFeaturesWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -247,14 +247,14 @@ func newSettingsTokensListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1SettingsTokensParams{}
+			params := &astroclient.GetSettingsTokensParams{}
 			if cmd.Flags().Changed("limit") {
 				params.Limit = &limit
 			}
 			if cmd.Flags().Changed("offset") {
 				params.Offset = &offset
 			}
-			resp, err := client.GetApiV1SettingsTokensWithResponse(cmd.Context(), params)
+			resp, err := client.GetSettingsTokensWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -284,7 +284,7 @@ func newSettingsTokensCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1SettingsTokensJSONRequestBody{
+			body := astroclient.PostSettingsTokensJSONRequestBody{
 				Name: args[0],
 			}
 			if cmd.Flags().Changed("expires-in-days") {
@@ -299,7 +299,7 @@ func newSettingsTokensCreateCmd() *cobra.Command {
 				s := scopes
 				body.Scopes = &s
 			}
-			resp, err := client.PostApiV1SettingsTokensWithResponse(cmd.Context(), body)
+			resp, err := client.PostSettingsTokensWithResponse(cmd.Context(), body)
 			if err != nil {
 				return err
 			}
@@ -337,7 +337,7 @@ func newSettingsTokensDeleteCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("invalid token id %q: %w", args[0], err)
 			}
-			resp, err := client.DeleteApiV1SettingsTokensIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteSettingsTokensByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -380,7 +380,7 @@ func newSettingsSsoListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1SettingsSsoWithResponse(cmd.Context())
+			resp, err := client.GetSettingsSsoWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -415,18 +415,18 @@ the API. For oidc providers, pass --metadata-url.`,
 				return err
 			}
 
-			switch astroclient.PostApiV1SettingsSsoJSONBodyType(providerType) {
-			case astroclient.PostApiV1SettingsSsoJSONBodyTypeGithub,
-				astroclient.PostApiV1SettingsSsoJSONBodyTypeGoogle,
-				astroclient.PostApiV1SettingsSsoJSONBodyTypeOidc:
+			switch astroclient.PostSettingsSsoJSONBodyType(providerType) {
+			case astroclient.PostSettingsSsoJSONBodyTypeGithub,
+				astroclient.PostSettingsSsoJSONBodyTypeGoogle,
+				astroclient.PostSettingsSsoJSONBodyTypeOidc:
 				// ok
 			default:
 				return fmt.Errorf("invalid --type %q: want one of github, google, oidc", providerType)
 			}
 
-			var body astroclient.PostApiV1SettingsSsoJSONRequestBody
+			var body astroclient.PostSettingsSsoJSONRequestBody
 			body.Name = args[0]
-			body.Type = astroclient.PostApiV1SettingsSsoJSONBodyType(providerType)
+			body.Type = astroclient.PostSettingsSsoJSONBodyType(providerType)
 			body.Config.ClientId = clientID
 			body.Config.ClientSecret = clientSecret
 			if cmd.Flags().Changed("metadata-url") {
@@ -446,7 +446,7 @@ the API. For oidc providers, pass --metadata-url.`,
 				body.Enabled = &v
 			}
 
-			resp, err := client.PostApiV1SettingsSsoWithResponse(cmd.Context(), body)
+			resp, err := client.PostSettingsSsoWithResponse(cmd.Context(), body)
 			if err != nil {
 				return err
 			}
@@ -491,7 +491,7 @@ func newSettingsSsoDeleteCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("invalid sso provider id %q: %w", args[0], err)
 			}
-			resp, err := client.DeleteApiV1SettingsSsoIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteSettingsSsoByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -525,14 +525,14 @@ func newSettingsAuditLogsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1SettingsAuditLogsParams{}
+			params := &astroclient.GetSettingsAuditLogsParams{}
 			if cmd.Flags().Changed("limit") {
 				params.Limit = &limit
 			}
 			if cmd.Flags().Changed("offset") {
 				params.Offset = &offset
 			}
-			resp, err := client.GetApiV1SettingsAuditLogsWithResponse(cmd.Context(), params)
+			resp, err := client.GetSettingsAuditLogsWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}

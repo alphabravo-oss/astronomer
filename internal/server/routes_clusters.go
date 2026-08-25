@@ -62,11 +62,18 @@ func registerClusterRoutes(r chi.Router, deps RouterDependencies) {
 			// escalation. Read-only callers that only want to preview the manifest
 			// shape use the placeholder paths, which persist no usable token.
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Get("/{id}/manifest/", deps.Clusters.GetManifest)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/kubeconfig/", deps.Clusters.GetKubeconfig)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Post("/{id}/generate-kubeconfig/", deps.Clusters.GenerateKubeconfig)
+			// A portable member-cluster credential bypasses the Astronomer proxy
+			// after download. Require cluster update authority and the write/CSRF
+			// gate even though the issued Kubernetes identity is read-only.
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/generate-direct-kubeconfig/", deps.Clusters.GenerateDirectKubeconfig)
 			// Underscore alias the Next.js frontend currently calls. Both shapes
 			// route to the same handler so older callers keep working.
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Post("/{id}/generate_kubeconfig/", deps.Clusters.GenerateKubeconfig)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead), deprecatedAPIAlias("/api/v1/clusters/{id}/generate-kubeconfig")).Post("/{id}/generate_kubeconfig/", deps.Clusters.GenerateKubeconfig)
+			// The original direct-credential endpoint is preserved as a response-
+			// compatible alias, but now returns the safe proxy preview. It never
+			// reintroduces portable member-cluster credentials.
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead), deprecatedAPIAlias("/api/v1/clusters/{id}/kubeconfig-preview")).Get("/{id}/kubeconfig", deps.Clusters.PreviewKubeconfig)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/kubeconfig-preview/", deps.Clusters.PreviewKubeconfig)
 			// Serve the cluster-detail metrics charts from the Monitoring handler,
 			// which returns real Prometheus time-series (with a synthetic-series

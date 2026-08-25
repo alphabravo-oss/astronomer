@@ -37,11 +37,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/dexconfig"
@@ -80,9 +80,26 @@ type DexQuerier interface {
 	EnableDexSSOForGeneration(ctx context.Context, arg sqlc.EnableDexSSOForGenerationParams) (sqlc.EnableDexSSOForGenerationRow, error)
 }
 
+// DexMutationTx is the transaction-bound identity-provider configuration
+// surface. Connector/settings stages may also disable live Dex SSO; that
+// security-relevant state change and its audit evidence must share one commit.
+type DexMutationTx interface {
+	audit.OutboxQuerier
+	StageCreateDexConnector(context.Context, sqlc.StageCreateDexConnectorParams) (sqlc.StageCreateDexConnectorRow, error)
+	StageUpdateDexConnector(context.Context, sqlc.StageUpdateDexConnectorParams) (sqlc.StageUpdateDexConnectorRow, error)
+	StageDeleteDexConnector(context.Context, uuid.UUID) (int64, error)
+	StageDexSettingsAndDisableSSO(context.Context, sqlc.StageDexSettingsAndDisableSSOParams) (int64, error)
+	GetDexSettingsForGeneration(context.Context, sqlc.GetDexSettingsForGenerationParams) (sqlc.DexSetting, error)
+	RestoreDexSSOForGeneration(context.Context, sqlc.RestoreDexSSOForGenerationParams) (sqlc.RestoreDexSSOForGenerationRow, error)
+	EnableDexSSOForGeneration(context.Context, sqlc.EnableDexSSOForGenerationParams) (sqlc.EnableDexSSOForGenerationRow, error)
+}
+
+type dexRunTxFunc func(context.Context, func(DexMutationTx) error) error
+
 // DexHandler exposes /api/v1/auth/dex/* endpoints.
 type DexHandler struct {
 	queries             DexQuerier
+	runTx               dexRunTxFunc
 	encryptor           *auth.Encryptor
 	k8s                 K8sRequester
 	log                 *slog.Logger
@@ -118,6 +135,49 @@ func NewDexHandler(queries DexQuerier) *DexHandler {
 		}
 	}
 	return handler
+}
+
+func (h *DexHandler) SetRunTx(runTx dexRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *DexHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
+}
+
+func executeDexMutation[T any](
+	r *http.Request,
+	h *DexHandler,
+	mutate func(DexMutationTx) (T, error),
+	fallback func() (T, error),
+	describe func(T) clusterAuditEvent,
+) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, fmt.Errorf("Dex handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q DexMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 // SetEncryptor wires the Fernet encryptor used to encrypt secret connector
@@ -522,26 +582,35 @@ func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	staged, err := h.queries.StageCreateDexConnector(r.Context(), sqlc.StageCreateDexConnectorParams{
+	params := sqlc.StageCreateDexConnectorParams{
 		Name:        req.Name,
 		Type:        req.Type,
 		DisplayName: req.DisplayName,
 		Config:      cfgBytes,
 		Enabled:     enabled,
-	})
+	}
+	staged, err := executeDexMutation(r, h,
+		func(q DexMutationTx) (sqlc.StageCreateDexConnectorRow, error) {
+			return q.StageCreateDexConnector(r.Context(), params)
+		},
+		func() (sqlc.StageCreateDexConnectorRow, error) {
+			return h.queries.StageCreateDexConnector(r.Context(), params)
+		},
+		func(row sqlc.StageCreateDexConnectorRow) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "dex.connector.create", resourceType: "dex_connector", resourceID: row.ID.String(), resourceName: row.Name,
+				status: http.StatusCreated, detail: map[string]any{"type": row.Type, "enabled": row.Enabled, "runtime_generation": row.RuntimeGeneration},
+			}
+		})
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "unique") {
 			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A connector with that name already exists")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create connector")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create connector")
 		return
 	}
 	row := sqlc.DexConnector{ID: staged.ID, Name: staged.Name, Type: staged.Type, DisplayName: staged.DisplayName, Config: staged.Config, Enabled: staged.Enabled, CreatedAt: staged.CreatedAt, UpdatedAt: staged.UpdatedAt}
-	recordAudit(r, h.queries, "dex.connector.create", "dex_connector", row.ID.String(), row.Name, map[string]any{
-		"type":    row.Type,
-		"enabled": row.Enabled,
-	})
 	w.Header().Set("Location", "/api/v1/auth/dex/connectors/"+row.ID.String()+"/")
 	response, err := h.connectorResponse(row)
 	if err != nil {
@@ -612,22 +681,31 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 		}
 		cfgBytes = raw
 	}
-	staged, err := h.queries.StageUpdateDexConnector(r.Context(), sqlc.StageUpdateDexConnectorParams{
+	params := sqlc.StageUpdateDexConnectorParams{
 		ConnectorID: id,
 		Type:        connectorType,
 		DisplayName: displayName,
 		Config:      cfgBytes,
 		Enabled:     enabled,
-	})
+	}
+	staged, err := executeDexMutation(r, h,
+		func(q DexMutationTx) (sqlc.StageUpdateDexConnectorRow, error) {
+			return q.StageUpdateDexConnector(r.Context(), params)
+		},
+		func() (sqlc.StageUpdateDexConnectorRow, error) {
+			return h.queries.StageUpdateDexConnector(r.Context(), params)
+		},
+		func(row sqlc.StageUpdateDexConnectorRow) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "dex.connector.update", resourceType: "dex_connector", resourceID: row.ID.String(), resourceName: row.Name,
+				status: http.StatusOK, detail: map[string]any{"type": row.Type, "enabled": row.Enabled, "runtime_generation": row.RuntimeGeneration},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update connector")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update connector")
 		return
 	}
 	row := sqlc.DexConnector{ID: staged.ID, Name: staged.Name, Type: staged.Type, DisplayName: staged.DisplayName, Config: staged.Config, Enabled: staged.Enabled, CreatedAt: staged.CreatedAt, UpdatedAt: staged.UpdatedAt}
-	recordAudit(r, h.queries, "dex.connector.update", "dex_connector", row.ID.String(), row.Name, map[string]any{
-		"type":    row.Type,
-		"enabled": row.Enabled,
-	})
 	response, err := h.connectorResponse(row)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SettingsError, "Saved Dex connector failed validation")
@@ -648,13 +726,19 @@ func (h *DexHandler) DeleteConnector(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Connector not found")
 		return
 	}
-	if _, err := h.queries.StageDeleteDexConnector(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete connector")
+	_, err = executeDexMutation(r, h,
+		func(q DexMutationTx) (int64, error) { return q.StageDeleteDexConnector(r.Context(), id) },
+		func() (int64, error) { return h.queries.StageDeleteDexConnector(r.Context(), id) },
+		func(generation int64) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "dex.connector.delete", resourceType: "dex_connector", resourceID: id.String(), resourceName: existing.Name,
+				status: http.StatusOK, detail: map[string]any{"type": existing.Type, "runtime_generation": generation},
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete connector")
 		return
 	}
-	recordAudit(r, h.queries, "dex.connector.delete", "dex_connector", id.String(), existing.Name, map[string]any{
-		"type": existing.Type,
-	})
 	RespondJSON(w, http.StatusOK, map[string]any{"deleted": id.String()})
 }
 
@@ -828,7 +912,7 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	if len(extraBytes) == 0 || string(extraBytes) == "null" {
 		extraBytes = []byte("{}")
 	}
-	generation, err := h.queries.StageDexSettingsAndDisableSSO(r.Context(), sqlc.StageDexSettingsAndDisableSSOParams{
+	params := sqlc.StageDexSettingsAndDisableSSOParams{
 		ID:                     dexSettingsSingletonID,
 		IssuerUrl:              strings.TrimRight(req.IssuerURL, "/"),
 		ClusterID:              clusterUUID,
@@ -844,111 +928,42 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		DeploymentName:         req.DeploymentName,
 		ServiceName:            req.ServiceName,
 		RuntimePhase:           runtimePhase,
-	})
+	}
+	row, err := executeDexMutation(r, h,
+		func(q DexMutationTx) (sqlc.DexSetting, error) {
+			generation, mutationErr := q.StageDexSettingsAndDisableSSO(r.Context(), params)
+			if mutationErr != nil {
+				return sqlc.DexSetting{}, mutationErr
+			}
+			return q.GetDexSettingsForGeneration(r.Context(), sqlc.GetDexSettingsForGenerationParams{ID: dexSettingsSingletonID, RuntimeGeneration: generation})
+		},
+		func() (sqlc.DexSetting, error) {
+			generation, mutationErr := h.queries.StageDexSettingsAndDisableSSO(r.Context(), params)
+			if mutationErr != nil {
+				return sqlc.DexSetting{}, mutationErr
+			}
+			return h.queries.GetDexSettingsForGeneration(r.Context(), sqlc.GetDexSettingsForGenerationParams{ID: dexSettingsSingletonID, RuntimeGeneration: generation})
+		},
+		func(row sqlc.DexSetting) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "dex.settings.update", resourceType: "dex_settings", resourceID: row.ID.String(), resourceName: row.ReleaseName,
+				status: http.StatusOK,
+				detail: map[string]any{
+					"issuer_url": row.IssuerUrl, "namespace": row.Namespace,
+					"runtime_secret_name": row.RuntimeSecretName, "runtime_generation": row.RuntimeGeneration,
+				},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to save Dex settings")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SaveError, "Failed to save Dex settings")
 		return
 	}
-	row, err := h.queries.GetDexSettingsForGeneration(r.Context(), sqlc.GetDexSettingsForGenerationParams{ID: dexSettingsSingletonID, RuntimeGeneration: generation})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.SaveError, "Dex settings were superseded by a newer mutation")
-		return
-	}
-	recordAudit(r, h.queries, "dex.settings.update", "dex_settings", row.ID.String(), row.ReleaseName, map[string]any{
-		"issuer_url":          row.IssuerUrl,
-		"namespace":           row.Namespace,
-		"runtime_secret_name": row.RuntimeSecretName,
-	})
 	response, err := settingsResponse(row, clients)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SettingsError, "Saved Dex settings failed validation")
 		return
 	}
 	RespondJSON(w, http.StatusOK, response)
-}
-
-// Apply renders the full Dex config from settings + connectors, patches the
-// management cluster's retained runtime Secret, then rolls the Deployment only
-// when content changed. Returns 503 when the K8s
-// requester is not configured (e.g. before the tunnel is up).
-//
-// POST /api/v1/auth/dex/apply/
-func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
-	if h.k8s == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnavailable, "Kubernetes requester is not configured")
-		return
-	}
-	settings, err := h.queries.GetDexSettings(r.Context(), dexSettingsSingletonID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.NoSettings, "Dex settings have not been configured yet; PUT /settings first")
-		return
-	}
-	if settings.IssuerUrl == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.MissingIssuer, "Dex settings have no issuer_url; PUT /settings first")
-		return
-	}
-	if !settings.ClusterID.Valid {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.MissingCluster, "Dex settings have no cluster_id; PUT /settings first")
-		return
-	}
-	settings, err = h.normalizeRuntimeIdentity(settings)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.SettingsError, "Dex runtime identity does not match the installed chart")
-		return
-	}
-	connectors, err := h.queries.ListEnabledDexConnectors(r.Context())
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list Dex connectors")
-		return
-	}
-	clients, settings, err := h.loadPublicClients(r.Context(), settings)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Dex static-client secrets are unavailable")
-		return
-	}
-	clusterID := uuid.UUID(settings.ClusterID.Bytes).String()
-	result, err := h.reconcileDexRuntime(r.Context(), settings, clients, connectors)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ApplyError, redaction.String(err.Error()))
-		return
-	}
-	if result.Applied {
-		if _, restoreErr := h.queries.RestoreDexSSOForGeneration(r.Context(), sqlc.RestoreDexSSOForGenerationParams{ID: settings.ID, RuntimeGeneration: settings.RuntimeGeneration}); restoreErr != nil && !errors.Is(restoreErr, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Dex runtime applied but prior SSO state could not be restored")
-			return
-		}
-	}
-	recordAudit(r, h.queries, "dex.config.apply", "dex_settings", settings.ID.String(), settings.ReleaseName, map[string]any{
-		"cluster_id":          clusterID,
-		"namespace":           settings.Namespace,
-		"runtime_secret_name": settings.RuntimeSecretName,
-		"configmap_name":      settings.RuntimeSecretName,
-		"deployment_name":     settings.DeploymentName,
-		"connector_count":     len(connectors),
-		"changed":             result.Changed,
-		"runtime_state":       result.State,
-		"staged":              result.Staged,
-		"applied":             result.Applied,
-	})
-	status := http.StatusOK
-	if result.Staged && !result.Applied {
-		status = http.StatusAccepted
-	}
-	RespondJSON(w, status, map[string]any{
-		"applied":                 result.Applied,
-		"staged":                  result.Staged,
-		"runtime_state":           result.State,
-		"cluster_id":              clusterID,
-		"namespace":               settings.Namespace,
-		"runtime_secret_name":     settings.RuntimeSecretName,
-		"configmap_name":          settings.RuntimeSecretName,
-		"deployment_name":         settings.DeploymentName,
-		"runtime_generation":      settings.RuntimeGeneration,
-		"connector_count":         len(connectors),
-		"changed":                 result.Changed,
-		"secret_resource_version": result.SecretVersion,
-		"applied_at":              time.Now().UTC().Format(time.RFC3339),
-	})
 }
 
 type dexReconcileResult struct {
@@ -1056,184 +1071,6 @@ func (h *DexHandler) dexDeploymentReadyOnce(ctx context.Context, clusterID, name
 //	  "client_secret": "...plaintext... (will be encrypted)",
 //	  "display_name":  "Sign in with Dex"
 //	}
-func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ClientID     string `json:"client_id"`
-		ClientSecret string `json:"client_secret"`
-		DisplayName  string `json:"display_name"`
-	}
-	if r.Body != http.NoBody {
-		if err := decodeDexRequest(r.Body, &req, true); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-			return
-		}
-	}
-	if h.k8s == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnavailable, "Kubernetes requester is not configured")
-		return
-	}
-	settings, err := h.queries.GetDexSettings(r.Context(), dexSettingsSingletonID)
-	if err != nil || settings.IssuerUrl == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.NoSettings, "Dex settings have not been configured yet")
-		return
-	}
-	if !settings.ClusterID.Valid {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.MissingCluster, "Dex settings require a target cluster before SSO registration")
-		return
-	}
-	settings, err = h.normalizeRuntimeIdentity(settings)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.SettingsError, "Dex runtime identity does not match the installed chart")
-		return
-	}
-	connectors, err := h.queries.ListEnabledDexConnectors(r.Context())
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list enabled Dex connectors")
-		return
-	}
-	if len(connectors) == 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "At least one enabled Dex connector is required before SSO registration")
-		return
-	}
-	clusterID := uuid.UUID(settings.ClusterID.Bytes).String()
-	if err := h.verifyDexRuntimeIdentity(r.Context(), clusterID, settings.Namespace, settings.RuntimeSecretName); err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ApplyError, "Dex runtime Secret is not prepared and owned by the bundled deployment")
-		return
-	}
-	if req.ClientID == "" {
-		req.ClientID = "astronomer"
-	}
-	if req.DisplayName == "" {
-		req.DisplayName = "Sign in with Dex"
-	}
-	encryptedSecret := ""
-	if req.ClientSecret != "" {
-		if h.encryptor == nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Encryptor is not configured; cannot store client_secret")
-			return
-		}
-		ct, err := h.encryptor.Encrypt(req.ClientSecret)
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt client secret")
-			return
-		}
-		encryptedSecret = ct
-	}
-	existing, getErr := h.queries.GetSSOConfigurationByProvider(r.Context(), "dex")
-	created := getErr != nil
-	staticSecret := req.ClientSecret
-	secretValue := encryptedSecret
-	existingPlainSecret := ""
-	if !created {
-		if existing.ClientSecretEncrypted != "" {
-			if h.encryptor == nil {
-				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Encryptor is not configured; cannot synchronize client_secret")
-				return
-			}
-			existingPlainSecret, err = h.encryptor.Decrypt(existing.ClientSecretEncrypted)
-			if err != nil {
-				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Existing Dex client secret is unavailable")
-				return
-			}
-		}
-		if secretValue == "" {
-			secretValue = existing.ClientSecretEncrypted
-			staticSecret = existingPlainSecret
-		}
-	} else if staticSecret == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "client_secret is required when registering Dex SSO")
-		return
-	}
-	clients, settings, err := h.astronomerPublicClients(r.Context(), settings, req.ClientID, staticSecret)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SettingsError, "Failed to build Dex public client settings")
-		return
-	}
-	if err := validatePublicClients(clients); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Dex SSO static client is invalid")
-		return
-	}
-	encryptedClients, err := h.encryptPublicClients(clients)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Failed to encrypt Dex public clients")
-		return
-	}
-	candidate := settings
-	candidate.PublicClients = mustDexJSON(clients, []byte("[]"))
-	candidate.PublicClientsEncrypted = encryptedClients
-	if _, err := h.renderDexConfig(candidate, clients, connectors); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.RenderError, "Dex runtime candidate is invalid")
-		return
-	}
-	generation, err := h.queries.StageDexSettingsAndDisableSSO(r.Context(), sqlc.StageDexSettingsAndDisableSSOParams{
-		ID: settings.ID, IssuerUrl: settings.IssuerUrl, ClusterID: settings.ClusterID,
-		Namespace: settings.Namespace, ReleaseName: settings.ReleaseName,
-		ConfigmapName: settings.RuntimeSecretName, RuntimeSecretName: settings.RuntimeSecretName,
-		PublicClients: candidate.PublicClients, PublicClientsEncrypted: encryptedClients,
-		Expiry: settings.Expiry, Extra: settings.Extra,
-		ChartReleaseName: settings.ChartReleaseName, DeploymentName: settings.DeploymentName, ServiceName: settings.ServiceName,
-		RuntimePhase: settings.RuntimePhase,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to stage Dex static-client settings")
-		return
-	}
-	staged, err := h.queries.GetDexSettingsForGeneration(r.Context(), sqlc.GetDexSettingsForGenerationParams{ID: settings.ID, RuntimeGeneration: generation})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.SaveError, "Dex registration was superseded by a newer mutation")
-		return
-	}
-	result, err := h.reconcileDexRuntime(r.Context(), staged, clients, connectors)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ApplyError, "Dex SSO remains disabled because the verified runtime rollout did not complete")
-		return
-	}
-	if !result.Applied {
-		recordAudit(r, h.queries, "dex.register_sso.staged", "dex_settings", staged.ID.String(), "dex", map[string]any{"runtime_generation": staged.RuntimeGeneration, "runtime_state": result.State, "secret_resource_version": result.SecretVersion})
-		RespondJSON(w, http.StatusAccepted, map[string]any{"provider": "dex", "is_enabled": false, "verified": false, "staged": true, "applied": false, "runtime_state": result.State, "runtime_generation": staged.RuntimeGeneration, "secret_resource_version": result.SecretVersion, "runtime_changed": result.Changed})
-		return
-	}
-	cfgBytes, _ := json.Marshal(map[string]any{"issuer_url": settings.IssuerUrl})
-	row, err := h.queries.EnableDexSSOForGeneration(r.Context(), sqlc.EnableDexSSOForGenerationParams{
-		DisplayName: req.DisplayName, Config: cfgBytes, ClientID: req.ClientID,
-		ClientSecretEncrypted: secretValue, RuntimeGeneration: staged.RuntimeGeneration,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Dex runtime is healthy but server SSO remains disabled; retry registration")
-		return
-	}
-	action := "updated"
-	status := http.StatusOK
-	if created {
-		action = "created"
-		status = http.StatusCreated
-	}
-	recordAudit(r, h.queries, "dex.register_sso", "sso_configuration", row.ID.String(), row.Provider, map[string]any{
-		"client_id":               row.ClientID,
-		"issuer_url":              settings.IssuerUrl,
-		"secret_resource_version": result.SecretVersion,
-		"runtime_changed":         result.Changed,
-		"runtime_state":           result.State,
-		"runtime_generation":      staged.RuntimeGeneration,
-		action:                    true,
-	})
-	RespondJSON(w, status, map[string]any{
-		"provider":                row.Provider,
-		"id":                      row.ID.String(),
-		"is_enabled":              row.IsEnabled,
-		"client_id":               row.ClientID,
-		"issuer_url":              settings.IssuerUrl,
-		"display_name":            row.DisplayName,
-		"verified":                true,
-		"secret_resource_version": result.SecretVersion,
-		"runtime_changed":         result.Changed,
-		"runtime_state":           result.State,
-		"staged":                  result.Staged,
-		"applied":                 result.Applied,
-		action:                    true,
-	})
-}
-
 func (h *DexHandler) astronomerPublicClients(ctx context.Context, settings sqlc.DexSetting, clientID, clientSecret string) ([]map[string]any, sqlc.DexSetting, error) {
 	if h == nil || h.queries == nil {
 		return nil, settings, nil
@@ -1951,28 +1788,6 @@ func (h *DexHandler) verifyDexRuntimeSecret(ctx context.Context, clusterID, name
 	}
 	if secret.Data["config.yaml"] != base64.StdEncoding.EncodeToString(configYAML) {
 		return fmt.Errorf("Dex runtime Secret content changed before rollout")
-	}
-	return nil
-}
-
-func (h *DexHandler) verifyDexRuntimeIdentity(ctx context.Context, clusterID, namespace, name string) error {
-	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("Dex runtime Secret name is empty")
-	}
-	path := fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, name)
-	resp, err := h.k8s.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
-	if err != nil {
-		return err
-	}
-	if err := ensureSuccess(resp); err != nil {
-		return err
-	}
-	var secret dexRuntimeSecret
-	if err := parseJSONResponse(resp, &secret); err != nil {
-		return fmt.Errorf("decode Dex runtime Secret identity")
-	}
-	if secret.Metadata.Labels[dexRuntimeManagedByLabel] != "dex-handler" || secret.Metadata.Labels[dexRuntimePurposeLabel] != "dex-runtime" || secret.Type != "Opaque" {
-		return fmt.Errorf("Dex runtime Secret does not have the required ownership identity")
 	}
 	return nil
 }

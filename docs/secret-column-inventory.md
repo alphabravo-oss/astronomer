@@ -1,6 +1,6 @@
 # Secret Column Inventory
 
-Date: 2026-08-17
+Date: 2026-08-24
 
 The greenfield database is defined only by `001_initial.up.sql`. Every
 secret-looking text, JSON, UUID, or byte column in that file is classified by
@@ -22,6 +22,7 @@ unclassified column fails CI.
 | `cluster_registry_configs.registry_password_encrypted` | Fernet ciphertext | Complete cluster registry password. |
 | `project_registry_credentials.registry_credential_encrypted` | Fernet ciphertext | Complete project registry credential. |
 | `delivery_sources.credential_encrypted` | Fernet ciphertext | Complete write-only delivery-source credential map. |
+| `dex_operations.payload_encrypted` | Fernet ciphertext | Durable, bounded Dex SSO-finalization input; never returned or logged. |
 | `api_tokens.token_hash` | Password-style token hash | Plaintext is returned once. |
 | `cluster_registration_tokens.token_hash` | Token hash | Registration authentication uses only the hash. |
 | `cluster_agent_tokens.token_hash` | Token hash | Active agent authentication uses only the hash. |
@@ -48,6 +49,12 @@ unclassified column fails CI.
 | `credential_state` | Bounded lifecycle enum. |
 | `delivery_sources.credential_key_version`, `delivery_sources.credential_epoch` | Encryption-key and rotation generation metadata. |
 | `delivery_assignment_receipts.credential_content_digest` | SHA-256 over deployment IDs and credential epochs; no secret or ciphertext input. |
+
+The migration classifier also sees the function-local variable `token` in
+`017_durable_audit_siem_fanout.up.sql`. It is not a database column: it holds
+one character from a bounded SIEM/webhook glob pattern while
+`astronomer_event_glob_match` evaluates `*` and `?`. It never contains or
+persists authentication material.
 
 ## Deprecated blank-only compatibility fields
 

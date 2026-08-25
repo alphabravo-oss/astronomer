@@ -987,7 +987,7 @@ func TestSchemaFloorIsFreshV1(t *testing.T) {
 	floor, _ := strconv.Atoi(fm[1])
 
 	if floor != 1 {
-		t.Fatalf("expectedMinSchemaVersion=%d, want the single fresh-v1 schema version 1", floor)
+		t.Fatalf("expectedMinSchemaVersion=%d, want the minimum supported upgrade schema 1", floor)
 	}
 }
 

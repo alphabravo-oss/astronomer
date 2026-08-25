@@ -124,6 +124,7 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{AGENT_RBAC_BINDING_NAMESPACE}}", RBACBindingNamespaceLine(profile),
 		"{{AGENT_SELF_MANAGEMENT_NAMESPACED_RULES}}", SelfManagementNamespacedRulesYAML(),
 		"{{AGENT_SELF_MANAGEMENT_DEPLOYMENT_RULES}}", SelfManagementOwnDeploymentRulesYAML(),
+		"{{DIRECT_KUBECONFIG_RBAC_RULES}}", viewerRBACRulesYAML,
 	).Replace(installTemplate)
 	return fluxdistribution.InstallYAML() + "\n" + agentManifest + renderSystemBootstrap(data)
 }

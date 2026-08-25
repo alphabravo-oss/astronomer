@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -45,6 +47,49 @@ func TestEventStream_UnauthedWhenNoJWT(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "connected") {
 		t.Fatalf("body=%q", rec.Body.String())
+	}
+}
+
+type publishOnFirstFlushRecorder struct {
+	*httptest.ResponseRecorder
+	once    sync.Once
+	publish func()
+}
+
+func (r *publishOnFirstFlushRecorder) Flush() {
+	r.ResponseRecorder.Flush()
+	r.once.Do(r.publish)
+}
+
+// The initial flush is the browser-visible readiness boundary. Publishing at
+// that exact boundary must not fall into a subscribe-after-acknowledge gap.
+func TestEventStream_SubscribesBeforeAcknowledgingConnection(t *testing.T) {
+	bus := events.NewBus()
+	h := NewEventStreamHandler(bus)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/stream/", nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	req = req.WithContext(ctx)
+	rec := &publishOnFirstFlushRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		publish: func() {
+			bus.Publish(events.TypeClusterCreated, map[string]any{"cluster_id": uuid.New().String()})
+		},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		h.Stream(rec, req)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream did not exit")
+	}
+
+	if body := rec.Body.String(); !strings.Contains(body, `"type":"cluster.created"`) {
+		t.Fatalf("event published at readiness boundary was lost: %q", body)
 	}
 }
 
@@ -143,10 +188,56 @@ func TestEventStream_HeartbeatPingFrame(t *testing.T) {
 
 type stubStreamRBACQuerier struct {
 	bindings []rbac.RoleBinding
+	err      error
 }
 
 func (s stubStreamRBACQuerier) GetUserBindings(context.Context, string) ([]rbac.RoleBinding, error) {
-	return s.bindings, nil
+	return s.bindings, s.err
+}
+
+type stubStreamTokenUserQuerier struct {
+	user sqlc.User
+	err  error
+}
+
+func (s stubStreamTokenUserQuerier) GetTokenByHash(context.Context, string) (sqlc.ApiToken, error) {
+	return sqlc.ApiToken{}, s.err
+}
+
+func (s stubStreamTokenUserQuerier) GetUserByID(context.Context, uuid.UUID) (sqlc.User, error) {
+	return s.user, s.err
+}
+
+func (s stubStreamTokenUserQuerier) UpdateAPITokenLastUsed(context.Context, uuid.UUID) error {
+	return s.err
+}
+
+func TestEventStreamBindingSnapshotHonorsSuperuserAndFailsClosed(t *testing.T) {
+	userID := uuid.New()
+	newHandler := func(user sqlc.User, userErr, bindingErr error) *EventStreamHandler {
+		h := NewEventStreamHandler(events.NewBus())
+		h.queries = stubStreamTokenUserQuerier{user: user, err: userErr}
+		h.SetAuthorization(rbac.NewEngine(), stubStreamRBACQuerier{err: bindingErr})
+		return h
+	}
+
+	_, restricted := newHandler(sqlc.User{ID: userID, IsActive: true, IsSuperuser: true}, nil, nil).
+		snapshotStreamBindings(context.Background(), userID)
+	if restricted {
+		t.Fatal("verified superuser was incorrectly reduced to an empty role-binding set")
+	}
+
+	_, restricted = newHandler(sqlc.User{ID: userID, IsActive: true}, nil, errors.New("bindings unavailable")).
+		snapshotStreamBindings(context.Background(), userID)
+	if !restricted {
+		t.Fatal("binding lookup failure opened the unscoped event stream")
+	}
+
+	_, restricted = newHandler(sqlc.User{}, errors.New("user unavailable"), nil).
+		snapshotStreamBindings(context.Background(), userID)
+	if !restricted {
+		t.Fatal("user lookup failure opened the unscoped event stream")
+	}
 }
 
 // P4.1: restricted users keep receiving sys.* frames (no cluster_id — exempt

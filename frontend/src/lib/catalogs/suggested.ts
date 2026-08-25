@@ -7,7 +7,7 @@
 //   - Bitnami: Broadcom deprecated; charts now pull stale unpatched images.
 //   - rancher/charts: most entries hard-require Rancher Manager.
 
-import type { HelmRepoType } from '@/types';
+import type { HelmRepoType } from "@/types";
 
 export interface SuggestedCatalog {
   /** Canonical helm_repositories.name we want to register as. */
@@ -27,71 +27,71 @@ export interface SuggestedCatalog {
 
 export const SUGGESTED_CATALOGS: SuggestedCatalog[] = [
   {
-    name: 'prometheus-community',
-    displayName: 'Prometheus Community',
-    url: 'https://prometheus-community.github.io/helm-charts',
-    repoType: 'helm',
-    description: 'kube-prometheus-stack, prometheus, alertmanager, exporters',
+    name: "prometheus-community",
+    displayName: "Prometheus Community",
+    url: "https://prometheus-community.github.io/helm-charts",
+    repoType: "helm",
+    description: "kube-prometheus-stack, prometheus, alertmanager, exporters",
     seeded: true,
   },
   {
-    name: 'grafana',
-    displayName: 'Grafana',
-    url: 'https://grafana.github.io/helm-charts',
-    repoType: 'helm',
-    description: 'loki-stack, tempo, grafana, mimir',
+    name: "grafana",
+    displayName: "Grafana",
+    url: "https://grafana.github.io/helm-charts",
+    repoType: "helm",
+    description: "loki-stack, tempo, grafana, mimir",
     seeded: true,
   },
   {
-    name: 'jetstack',
-    displayName: 'Jetstack',
-    url: 'https://charts.jetstack.io',
-    repoType: 'helm',
-    description: 'cert-manager',
+    name: "jetstack",
+    displayName: "Jetstack",
+    url: "https://charts.jetstack.io",
+    repoType: "helm",
+    description: "cert-manager",
     seeded: true,
   },
   {
-    name: 'aqua',
-    displayName: 'Aqua Security',
-    url: 'https://aquasecurity.github.io/helm-charts',
-    repoType: 'helm',
-    description: 'trivy-operator',
+    name: "aqua",
+    displayName: "Aqua Security",
+    url: "https://aquasecurity.github.io/helm-charts",
+    repoType: "helm",
+    description: "trivy-operator",
     seeded: true,
   },
   {
-    name: 'fluent',
-    displayName: 'Fluent',
-    url: 'https://fluent.github.io/helm-charts',
-    repoType: 'helm',
-    description: 'fluent-bit, fluentd',
+    name: "fluent",
+    displayName: "Fluent",
+    url: "https://fluent.github.io/helm-charts",
+    repoType: "helm",
+    description: "fluent-bit, fluentd",
     seeded: true,
   },
   {
-    name: 'longhorn',
-    displayName: 'Longhorn',
-    url: 'https://charts.longhorn.io',
-    repoType: 'helm',
-    description: 'distributed block storage',
+    name: "longhorn",
+    displayName: "Longhorn",
+    url: "https://charts.longhorn.io",
+    repoType: "helm",
+    description: "distributed block storage",
   },
   {
-    name: 'neuvector',
-    displayName: 'NeuVector',
-    url: 'https://neuvector.github.io/neuvector-helm',
-    repoType: 'helm',
-    description: 'runtime container security',
+    name: "neuvector",
+    displayName: "NeuVector",
+    url: "https://neuvector.github.io/neuvector-helm",
+    repoType: "helm",
+    description: "runtime container security",
   },
   {
-    name: 'gatekeeper',
-    displayName: 'OPA Gatekeeper',
-    url: 'https://open-policy-agent.github.io/gatekeeper/charts',
-    repoType: 'helm',
-    description: 'policy enforcement',
+    name: "gatekeeper",
+    displayName: "OPA Gatekeeper",
+    url: "https://open-policy-agent.github.io/gatekeeper/charts",
+    repoType: "helm",
+    description: "policy enforcement",
   },
   {
-    name: 'dhi',
-    displayName: 'Docker Hardened Images',
-    url: 'oci://dhi.io',
-    repoType: 'oci',
+    name: "dhi",
+    displayName: "Docker Hardened Images",
+    url: "oci://dhi.io",
+    repoType: "oci",
     description: "Docker's hardened image catalog (paid tier)",
     subscriptionRequired: true,
   },
@@ -103,5 +103,5 @@ export const SUGGESTED_CATALOGS: SuggestedCatalog[] = [
  * spurious "not added" states because of a trailing slash.
  */
 export function normalizeRepoUrl(url: string): string {
-  return url.trim().replace(/\/+$/, '').toLowerCase();
+  return url.trim().replace(/\/+$/, "").toLowerCase();
 }

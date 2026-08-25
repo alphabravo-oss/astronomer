@@ -1,12 +1,16 @@
-import { useAppForm, useStore } from '@/lib/form';
-import { useCreateAlertRule, useUpdateAlertRule } from '@/lib/hooks';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { cn, statusBgColor } from '@/lib/utils';
-import type { AlertRule, AlertSeverity } from '@/types';
+import { useAppForm, useStore } from "@/lib/form";
+import {
+  useCreateAlertRule,
+  useUpdateAlertRule,
+} from "@/lib/hooks/alerting";
+import type { AlertRuleWrite } from "@/lib/api/alerting";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn, statusBgColor } from "@/lib/utils";
+import type { AlertRule, AlertSeverity } from "@/types";
 
 export function AlertRuleModal({
   rule,
@@ -21,33 +25,27 @@ export function AlertRuleModal({
   const updateRule = useUpdateAlertRule();
   const form = useAppForm({
     defaultValues: {
-      name: rule?.name || '',
-      description: rule?.description || '',
-      type: rule?.type || 'threshold' as AlertRule['type'],
-      severity: rule?.severity || 'warning' as AlertSeverity,
-      query: rule?.query || '',
-      threshold: rule?.threshold?.toString() || '',
-      duration: rule?.duration || '5m',
+      name: rule?.name || "",
+      description: rule?.description || "",
+      type: rule?.type || ("threshold" as AlertRule["type"]),
+      severity: rule?.severity || ("warning" as AlertSeverity),
+      query: rule?.query || "",
+      threshold: rule?.threshold?.toString() || "",
+      duration: rule?.duration || "5m",
       enabled: rule?.enabled ?? true,
       // Sprint 072 — anomaly knobs. The anomaly evaluator is driven off the
       // single `type` field (type === 'anomaly'); there is no separate rule-kind
       // toggle, so the Type select and the payload can never disagree.
-      metric: rule?.metric || 'cluster_cpu_percent',
-      anomalyStddev: rule?.anomalyStddev?.toString() || '3',
-      anomalyWindowSeconds: rule?.anomalyWindowSeconds?.toString() || '86400',
-      anomalyMinSamples: rule?.anomalyMinSamples?.toString() || '50',
-      anomalyDirection: (rule?.anomalyDirection || 'above') as 'above' | 'below' | 'either',
+      metric: rule?.metric || "cluster_cpu_percent",
+      anomalyStddev: rule?.anomalyStddev?.toString() || "3",
+      anomalyWindowSeconds: rule?.anomalyWindowSeconds?.toString() || "86400",
+      anomalyMinSamples: rule?.anomalyMinSamples?.toString() || "50",
+      anomalyDirection: (rule?.anomalyDirection || "above") as
+        "above" | "below" | "either",
     },
     onSubmit: async ({ value }) => {
-      const isAnomaly = value.type === 'anomaly';
-      const data: Partial<AlertRule> & {
-        rule_kind?: string;
-        cluster_id?: string;
-        anomaly_stddev?: number;
-        anomaly_window_seconds?: number;
-        anomaly_min_samples?: number;
-        anomaly_direction?: string;
-      } = {
+      const isAnomaly = value.type === "anomaly";
+      const data: AlertRuleWrite = {
         name: value.name,
         description: value.description || undefined,
         type: value.type,
@@ -60,12 +58,16 @@ export function AlertRuleModal({
         // CreateAlertRuleRequest expects. The handler also reads camelCase
         // via Type/RuleType aliases, but the snake_case path is
         // canonical. rule_kind is derived from `type` so the two stay in sync.
-        rule_kind: isAnomaly ? 'anomaly' : 'threshold',
+        rule_kind: isAnomaly ? "anomaly" : "threshold",
         cluster_id: clusterId || rule?.clusterId,
         metric: isAnomaly ? value.metric : undefined,
         anomaly_stddev: isAnomaly ? parseFloat(value.anomalyStddev) : undefined,
-        anomaly_window_seconds: isAnomaly ? parseInt(value.anomalyWindowSeconds, 10) : undefined,
-        anomaly_min_samples: isAnomaly ? parseInt(value.anomalyMinSamples, 10) : undefined,
+        anomaly_window_seconds: isAnomaly
+          ? parseInt(value.anomalyWindowSeconds, 10)
+          : undefined,
+        anomaly_min_samples: isAnomaly
+          ? parseInt(value.anomalyMinSamples, 10)
+          : undefined,
         anomaly_direction: isAnomaly ? value.anomalyDirection : undefined,
       };
 
@@ -90,7 +92,7 @@ export function AlertRuleModal({
 
   return (
     <ModalShell
-      title={rule ? 'Edit Alert Rule' : 'Create Alert Rule'}
+      title={rule ? "Edit Alert Rule" : "Create Alert Rule"}
       onClose={onClose}
       size="md"
       footer={
@@ -102,17 +104,23 @@ export function AlertRuleModal({
             disabled={!ruleName}
             loading={isPending}
           >
-            {rule ? 'Update Rule' : 'Create Rule'}
+            {rule ? "Update Rule" : "Create Rule"}
           </ActionButton>
         </>
       }
       footerClassName="flex items-center justify-end gap-2"
     >
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Name</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-419a263c-112"
+        >
+          Name
+        </label>
         <form.Field name="name">
           {(field) => (
             <Input
+              id="field-419a263c-112"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -123,10 +131,16 @@ export function AlertRuleModal({
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Description</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-419a263c-126"
+        >
+          Description
+        </label>
         <form.Field name="description">
           {(field) => (
             <Input
+              id="field-419a263c-126"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -138,12 +152,20 @@ export function AlertRuleModal({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Type</label>
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-419a263c-141"
+          >
+            Type
+          </label>
           <form.Field name="type">
             {(field) => (
               <Select
+                id="field-419a263c-141"
                 value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value as AlertRule['type'])}
+                onChange={(e) =>
+                  field.handleChange(e.target.value as AlertRule["type"])
+                }
                 onBlur={field.handleBlur}
               >
                 <option value="threshold">Threshold</option>
@@ -155,18 +177,27 @@ export function AlertRuleModal({
           </form.Field>
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Severity</label>
-          <div className="flex gap-1.5">
-            {(['critical', 'warning', 'info'] as const).map((sev) => (
+          <span
+            id="alert-rule-severity-label"
+            className="text-sm font-medium text-foreground"
+          >
+            Severity
+          </span>
+          <div
+            role="group"
+            aria-labelledby="alert-rule-severity-label"
+            className="flex gap-1.5"
+          >
+            {(["critical", "warning", "info"] as const).map((sev) => (
               <button
                 key={sev}
                 type="button"
-                onClick={() => form.setFieldValue('severity', sev)}
+                onClick={() => form.setFieldValue("severity", sev)}
                 className={cn(
-                  'flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors capitalize',
+                  "flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors capitalize",
                   severity === sev
                     ? statusBgColor(sev)
-                    : 'bg-muted text-muted-foreground hover:text-foreground',
+                    : "bg-muted text-muted-foreground hover:text-foreground",
                 )}
               >
                 {sev}
@@ -177,10 +208,16 @@ export function AlertRuleModal({
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">PromQL Query</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-419a263c-180"
+        >
+          PromQL Query
+        </label>
         <form.Field name="query">
           {(field) => (
             <Textarea
+              id="field-419a263c-180"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -192,25 +229,37 @@ export function AlertRuleModal({
         </form.Field>
       </div>
 
-      {ruleType === 'anomaly' && (
+      {ruleType === "anomaly" && (
         <div className="space-y-3 p-3 rounded-md border border-border bg-muted/30">
           <div className="text-xs text-muted-foreground">
-            Anomaly rules fire when the current value of <b>metric</b> deviates from the
-            rolling baseline by more than <b>stddev</b> standard deviations in the chosen
-            <b> direction</b>. Newly-created rules short-circuit to no-fire until
+            Anomaly rules fire when the current value of <b>metric</b> deviates
+            from the rolling baseline by more than <b>stddev</b> standard
+            deviations in the chosen
+            <b> direction</b>. Newly-created rules short-circuit to no-fire
+            until
             <b> min samples</b> datapoints accumulate.
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Metric</label>
+            <label
+              className="text-sm font-medium text-foreground"
+              htmlFor="field-419a263c-204"
+            >
+              Metric
+            </label>
             <form.Field name="metric">
               {(field) => (
                 <Select
+                  id="field-419a263c-204"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                 >
-                  <option value="cluster_cpu_percent">cluster_cpu_percent</option>
-                  <option value="cluster_memory_percent">cluster_memory_percent</option>
+                  <option value="cluster_cpu_percent">
+                    cluster_cpu_percent
+                  </option>
+                  <option value="cluster_memory_percent">
+                    cluster_memory_percent
+                  </option>
                   <option value="pod_count">pod_count</option>
                   <option value="node_count">node_count</option>
                   <option value="pod_restart_rate">pod_restart_rate</option>
@@ -220,10 +269,16 @@ export function AlertRuleModal({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Stddev (σ)</label>
+              <label
+                className="text-sm font-medium text-foreground"
+                htmlFor="field-419a263c-223"
+              >
+                Stddev (σ)
+              </label>
               <form.Field name="anomalyStddev">
                 {(field) => (
                   <Input
+                    id="field-419a263c-223"
                     type="number"
                     step="0.1"
                     value={field.state.value}
@@ -235,10 +290,16 @@ export function AlertRuleModal({
               </form.Field>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Window</label>
+              <label
+                className="text-sm font-medium text-foreground"
+                htmlFor="field-419a263c-238"
+              >
+                Window
+              </label>
               <form.Field name="anomalyWindowSeconds">
                 {(field) => (
                   <Select
+                    id="field-419a263c-238"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
@@ -254,13 +315,21 @@ export function AlertRuleModal({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Direction</label>
+              <label
+                className="text-sm font-medium text-foreground"
+                htmlFor="field-419a263c-257"
+              >
+                Direction
+              </label>
               <form.Field name="anomalyDirection">
                 {(field) => (
                   <Select
+                    id="field-419a263c-257"
                     value={field.state.value}
                     onChange={(e) =>
-                      field.handleChange(e.target.value as 'above' | 'below' | 'either')
+                      field.handleChange(
+                        e.target.value as "above" | "below" | "either",
+                      )
                     }
                     onBlur={field.handleBlur}
                   >
@@ -272,10 +341,16 @@ export function AlertRuleModal({
               </form.Field>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Min samples</label>
+              <label
+                className="text-sm font-medium text-foreground"
+                htmlFor="field-419a263c-275"
+              >
+                Min samples
+              </label>
               <form.Field name="anomalyMinSamples">
                 {(field) => (
                   <Input
+                    id="field-419a263c-275"
                     type="number"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
@@ -291,10 +366,16 @@ export function AlertRuleModal({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Threshold</label>
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-419a263c-294"
+          >
+            Threshold
+          </label>
           <form.Field name="threshold">
             {(field) => (
               <Input
+                id="field-419a263c-294"
                 type="number"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -305,10 +386,16 @@ export function AlertRuleModal({
           </form.Field>
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Duration</label>
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-419a263c-308"
+          >
+            Duration
+          </label>
           <form.Field name="duration">
             {(field) => (
               <Input
+                id="field-419a263c-308"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}

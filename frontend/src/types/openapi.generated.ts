@@ -3,90 +3,181 @@
 
 export interface OpenAPIComponents {
   schemas: {
+    AdminQueueDLQEntryWire: {
+          "id": string;
+          "type": string;
+          "retried": number;
+          "last_err": string;
+          "last_failed_at": string;
+        };
+    AdminQueueDLQWire: {
+          "queue": string;
+          "dlq": OpenAPIComponents['schemas']['AdminQueueDLQEntryWire'][];
+          "count": number;
+        };
+    AdminQueueOperation: {
+          "id": string;
+          "action": "retry" | "discard";
+          "queue": string;
+          "task_id": string;
+          "status": "pending" | "running" | "retrying" | "failed" | "succeeded";
+          "attempt_count": number;
+          "last_error"?: string;
+          "completed_at"?: string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    AdminQueueOperationEnvelope: {
+          "data": OpenAPIComponents['schemas']['AdminQueueOperation'];
+        };
+    AdminQueueSummaryWire: {
+          "name": string;
+          "size": number;
+          "active": number;
+          "pending": number;
+          "scheduled": number;
+          "retry": number;
+          "archived": number;
+          "completed": number;
+          "paused": boolean;
+          "as_of": string;
+        };
+    AgentClusterConditionDiagnostic: {
+          "type": string;
+          "status": string;
+          "reason"?: string;
+          "message"?: string;
+          "last_transition_time": string;
+          "last_probe_time"?: string | null;
+        };
+    AgentConnectionDiagnostic: {
+          "id": string;
+          "agent_id": string;
+          "session_id": string;
+          "status": string;
+          "agent_version"?: string;
+          "connected_at": string;
+          "last_ping"?: string | null;
+          "disconnected_at"?: string | null;
+          "pod_name"?: string;
+          "node_name"?: string;
+          "channel_name"?: string;
+        };
     AgentDiagnostics: {
-          "generated_at"?: string;
-          "agent"?: OpenAPIComponents['schemas']['ClusterAgentItem'];
-          "recent_connections"?: Record<string, unknown>[];
-          "conditions"?: Record<string, unknown>[];
-          "live"?: Record<string, unknown>;
-          "recommendations"?: string[];
-          "redactions"?: string[];
-          "upgrade_recommendation"?: Record<string, unknown>;
+          "generated_at": string;
+          "agent": OpenAPIComponents['schemas']['ClusterAgentItem'];
+          "recent_connections": OpenAPIComponents['schemas']['AgentConnectionDiagnostic'][];
+          "conditions": OpenAPIComponents['schemas']['AgentClusterConditionDiagnostic'][];
+          "live"?: OpenAPIComponents['schemas']['AgentLiveDiagnostics'];
+          "recommendations": string[];
+          "redactions": string[];
+          "upgrade_recommendation": OpenAPIComponents['schemas']['AgentUpgradeRecommendation'];
         };
     AgentDiagnosticsBundle: {
-          "version"?: string;
-          "generated_at"?: string;
-          "cluster_id"?: string;
-          "cluster_name"?: string;
-          "diagnostics"?: OpenAPIComponents['schemas']['AgentDiagnostics'];
-          "notes"?: string[];
+          "version": string;
+          "generated_at": string;
+          "cluster_id": string;
+          "cluster_name": string;
+          "diagnostics": OpenAPIComponents['schemas']['AgentDiagnostics'];
+          "notes": string[];
         };
     AgentLifecycleOperation: {
-          "id"?: string;
-          "cluster_id"?: string;
-          "operation_type"?: "agent_upgrade";
-          "status"?: "pending" | "running" | "succeeded" | "failed" | "cancelled";
-          "target_version"?: string;
-          "target_image"?: string;
+          "id": string;
+          "cluster_id": string;
+          "operation_type": "agent_upgrade";
+          "status": "pending" | "running" | "succeeded" | "failed" | "cancelled";
+          "target_version": string;
+          "target_image": string;
           "current_version"?: string;
-          "strategy"?: string;
+          "strategy": string;
           "operation_spec"?: Record<string, unknown>;
           "requested_by"?: string | null;
           "started_at"?: string | null;
           "completed_at"?: string | null;
           "last_error"?: string;
-          "created_at"?: string;
-          "updated_at"?: string;
+          "created_at": string;
+          "updated_at": string;
         };
     AgentLifecycleOperationsResponse: {
-          "items"?: OpenAPIComponents['schemas']['AgentLifecycleOperation'][];
-          "limit"?: number;
-          "offset"?: number;
+          "items": OpenAPIComponents['schemas']['AgentLifecycleOperation'][];
+          "limit": number;
+          "offset": number;
+        };
+    AgentLiveDiagnostics: {
+          "collected_at": string;
+          "deployment"?: Record<string, unknown>;
+          "pods"?: OpenAPIComponents['schemas']['AgentLivePodDiagnostic'][];
+          "events"?: OpenAPIComponents['schemas']['AgentLiveEventDiagnostic'][];
+          "logs"?: OpenAPIComponents['schemas']['AgentLiveLogDiagnostic'][];
+          "discovery"?: Record<string, unknown>;
+          "checks"?: OpenAPIComponents['schemas']['AgentSelfTestCheck'][];
+          "errors"?: string[];
+        };
+    AgentLiveEventDiagnostic: {
+          "type"?: string;
+          "reason"?: string;
+          "message"?: string;
+          "time"?: string;
+        };
+    AgentLiveLogDiagnostic: {
+          "pod_name": string;
+          "lines": string[];
+          "truncated": boolean;
+        };
+    AgentLivePodDiagnostic: {
+          "name": string;
+          "namespace": string;
+          "phase": string;
+          "node_name"?: string;
+          "ready": boolean;
+          "restart_count": number;
+          "container_images"?: string[];
         };
     AgentOfflineBehavior: {
-          "state"?: string;
+          "state": string;
           "last_known_at"?: string | null;
-          "stale"?: boolean;
-          "message"?: string;
-          "permitted_queued_operations"?: string[];
-          "blocked_operations"?: string[];
+          "stale": boolean;
+          "message": string;
+          "permitted_queued_operations": string[];
+          "blocked_operations": string[];
         };
     AgentSelfTest: {
-          "generated_at"?: string;
-          "cluster_id"?: string;
-          "cluster_name"?: string;
-          "status"?: "passed" | "warning" | "failed";
-          "checks"?: Array<{
-            "name"?: string;
-            "status"?: "passed" | "warning" | "failed";
-            "message"?: string;
-          }>;
+          "generated_at": string;
+          "cluster_id": string;
+          "cluster_name": string;
+          "status": "passed" | "warning" | "failed";
+          "checks": OpenAPIComponents['schemas']['AgentSelfTestCheck'][];
           "recommendations"?: string[];
         };
+    AgentSelfTestCheck: {
+          "name": string;
+          "status": "passed" | "warning" | "failed";
+          "message": string;
+        };
     AgentUpgradeOperationResponse: {
-          "operation"?: OpenAPIComponents['schemas']['AgentLifecycleOperation'];
-          "plan"?: OpenAPIComponents['schemas']['AgentUpgradePlan'];
+          "operation": OpenAPIComponents['schemas']['AgentLifecycleOperation'];
+          "plan": OpenAPIComponents['schemas']['AgentUpgradePlan'];
         };
     AgentUpgradePlan: {
-          "cluster_id"?: string;
-          "cluster_name"?: string;
+          "cluster_id": string;
+          "cluster_name": string;
           "current_version"?: string;
-          "target_version"?: string;
+          "target_version": string;
           "current_image"?: string;
-          "target_image"?: string;
+          "target_image": string;
           "rollback_image"?: string;
-          "privilege_profile"?: string;
-          "strategy"?: string;
+          "privilege_profile": string;
+          "strategy": string;
           "canary_cluster_ids"?: string[];
-          "batch_size"?: number;
-          "max_unavailable"?: number;
-          "ready"?: boolean;
+          "batch_size": number;
+          "max_unavailable": number;
+          "ready": boolean;
           "blockers"?: string[];
-          "preflight_checks"?: string[];
-          "steps"?: string[];
-          "post_upgrade_health_checks"?: string[];
-          "validation"?: string[];
-          "rollback"?: string[];
+          "preflight_checks": string[];
+          "steps": string[];
+          "post_upgrade_health_checks": string[];
+          "validation": string[];
+          "rollback": string[];
         };
     AgentUpgradePlanRequest: {
           "target_version"?: string;
@@ -97,9 +188,185 @@ export interface OpenAPIComponents {
           "max_unavailable"?: number;
           "rollback_image"?: string;
         };
-    AllowlistResponse: Record<string, unknown>;
-    AllowlistSnapshotResponse: Record<string, unknown>;
-    AllowlistUpdateRequest: Record<string, unknown>;
+    AgentUpgradeRecommendation: {
+          "current_version"?: string;
+          "status": string;
+          "message": string;
+        };
+    AlertChannelRequest: {
+          "name"?: string;
+          "channel_type"?: string;
+          "type"?: string;
+          "configuration"?: Record<string, unknown>;
+          "config"?: Record<string, unknown>;
+          "enabled"?: boolean;
+        };
+    AlertEvent: {
+          "id": string;
+          "ruleId": string;
+          "ruleName": string;
+          "severity": "critical" | "warning" | "info";
+          "status": "firing" | "acknowledged" | "resolved" | "silenced";
+          "message": string;
+          "clusterId": string | null;
+          "clusterName": string | null;
+          "namespace": string;
+          "resource": string;
+          "labels": Record<string, string>;
+          "firedAt": string;
+          "acknowledgedAt": string | null;
+          "acknowledgedBy": string | null;
+          "resolvedAt": string | null;
+          "resolvedBy": string | null;
+        };
+    AlertEventEnvelope: {
+          "data": OpenAPIComponents['schemas']['AlertEvent'];
+        };
+    AlertEventPage: {
+          "data": OpenAPIComponents['schemas']['AlertEvent'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    AlertRule: {
+          "id": string;
+          "name": string;
+          "description": string;
+          "type": string;
+          "severity": "critical" | "warning" | "info";
+          "clusterId": string | null;
+          "clusterName": string | null;
+          "namespace": string;
+          "enabled": boolean;
+          "query": string;
+          "threshold": number | null;
+          "duration": string;
+          "activeAlerts": number;
+          "labels": Record<string, string>;
+          "annotations": Record<string, string>;
+          "notificationChannelIds": string[];
+          "ruleKind": "threshold" | "anomaly";
+          "metric": string;
+          "anomalyStddev": number | null;
+          "anomalyWindowSeconds": number | null;
+          "anomalyMinSamples": number | null;
+          "anomalyDirection": "" | "above" | "below" | "either";
+          "createdAt": string;
+          "updatedAt": string;
+        };
+    AlertRuleEnvelope: {
+          "data": OpenAPIComponents['schemas']['AlertRule'];
+        };
+    AlertRulePage: {
+          "data": OpenAPIComponents['schemas']['AlertRule'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    AlertRuleRequest: {
+          "name"?: string;
+          "description"?: string;
+          "cluster_id"?: string | null;
+          "rule_type"?: string;
+          "type"?: string;
+          "configuration"?: Record<string, unknown>;
+          "query"?: string;
+          "threshold"?: number | null;
+          "duration"?: string;
+          "labels"?: Record<string, string>;
+          "annotations"?: Record<string, string>;
+          "notificationChannelIds"?: string[];
+          "severity"?: string;
+          "enabled"?: boolean;
+          "cooldown_minutes"?: number;
+          "rule_kind"?: "threshold" | "anomaly";
+          "metric"?: string;
+          "anomaly_stddev"?: number | null;
+          "anomaly_window_seconds"?: number | null;
+          "anomaly_min_samples"?: number | null;
+          "anomaly_direction"?: "above" | "below" | "either";
+        };
+    AlertSilence: {
+          "id": string;
+          "reason": string;
+          "matchers": Record<string, string>;
+          "startsAt": string;
+          "endsAt": string;
+          "duration": string;
+          "createdBy": string | null;
+          "createdAt": string;
+        };
+    AlertSilenceEnvelope: {
+          "data": OpenAPIComponents['schemas']['AlertSilence'];
+        };
+    AlertSilencePage: {
+          "data": OpenAPIComponents['schemas']['AlertSilence'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    AlertSilenceRequest: {
+          "rule_id"?: string | null;
+          "cluster_id"?: string | null;
+          "reason": string;
+          "starts_at"?: string;
+          "ends_at"?: string;
+          "duration"?: string;
+          "matchers"?: Record<string, string>;
+        };
+    AllowlistResponse: {
+          "cluster_id": string;
+          "operator_cidrs": string[];
+          "astronomer_egress": string[];
+          "emergency": string[];
+          "desired": string[];
+          "effective": string[];
+          "mode": "monitor" | "enforce" | "disabled";
+          "detected_provider": string;
+          "sync_status": string;
+          "last_error"?: string;
+          "last_reconciled_at"?: string;
+          "drift": boolean;
+          "capability": {
+            "provider": string;
+            "can_monitor": boolean;
+            "can_enforce": boolean;
+            "reason"?: string;
+            "required_metadata"?: string[];
+          };
+        };
+    AllowlistSnapshotResponse: {
+          "id": number;
+          "cluster_id": string;
+          "captured_at": string;
+          "effective_cidrs": string[];
+          "desired_cidrs": string[];
+          "drift": boolean;
+        };
+    AllowlistUpdateRequest: {
+          "cidrs": string[];
+          "mode": "monitor" | "enforce" | "disabled";
+          "force_apply"?: boolean;
+        };
+    AnomalyBaseline: {
+          "id": string;
+          "clusterId": string;
+          "metric": string;
+          "windowSeconds": number;
+          "sampleCount": number;
+          "mean": number;
+          "stddev": number;
+          "min": number;
+          "max": number;
+          "p50": number;
+          "p95": number;
+          "p99": number;
+          "lastValue": number;
+          "lastValueAt": string | null;
+          "updatedAt": string;
+          "recentSampleBytes": number;
+        };
+    AnomalyBaselineEnvelope: {
+          "data": OpenAPIComponents['schemas']['AnomalyBaseline'];
+        };
+    AnomalyBaselinePage: {
+          "data": OpenAPIComponents['schemas']['AnomalyBaseline'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
     ApiTokenCreated: {
           "id"?: string;
           "name"?: string;
@@ -122,8 +389,14 @@ export interface OpenAPIComponents {
           "allowed_cidrs"?: string;
           "last_seen_remote_ip"?: string;
         };
-    ApplyClusterTemplateRequest: Record<string, unknown>;
-    ApplyNetworkPolicyRequest: Record<string, unknown>;
+    ApplyClusterTemplateRequest: {
+          "template_id": string;
+        };
+    ApplyNetworkPolicyRequest: {
+          "template_id": string;
+          "namespace"?: string;
+          "namespaces"?: string[];
+        };
     AuditLogEntry: {
           "id"?: string;
           "user_id"?: string | null;
@@ -150,6 +423,20 @@ export interface OpenAPIComponents {
           "timestamp"?: string;
           "created_at"?: string;
           "updated_at"?: string;
+        };
+    AuthUserRoleBinding: {
+          "id": string;
+          "role_id": string;
+          "role_name": string;
+          "role_rules": OpenAPIComponents['schemas']['RBACRule'][];
+          "group": string;
+          "cluster_id"?: string;
+          "project_id"?: string;
+        };
+    AuthUserRoles: {
+          "global": OpenAPIComponents['schemas']['AuthUserRoleBinding'][];
+          "cluster": OpenAPIComponents['schemas']['AuthUserRoleBinding'][];
+          "project": OpenAPIComponents['schemas']['AuthUserRoleBinding'][];
         };
     BackupControllerStatus: {
           "reconciler"?: {
@@ -184,6 +471,21 @@ export interface OpenAPIComponents {
           "database_tables"?: unknown;
           "included_namespaces"?: string[];
           "excluded_namespaces"?: string[];
+        };
+    BackupDrillLatestResponse: {
+          "latest": OpenAPIComponents['schemas']['BackupDrillResult'] | null;
+          "latest_success": OpenAPIComponents['schemas']['BackupDrillResult'] | null;
+          "latest_success_age_seconds": number | null;
+        };
+    BackupDrillResult: {
+          "id": string;
+          "started_at": string;
+          "finished_at": string | null;
+          "status": "success" | "failure" | "partial" | "running";
+          "backup_key": string;
+          "schema_version": number | null;
+          "error_message": string;
+          "created_at": string;
         };
     BackupResponse: {
           "id"?: string;
@@ -274,6 +576,60 @@ export interface OpenAPIComponents {
           "has_credentials"?: boolean;
           "cluster_id"?: string;
         };
+    CISFinding: {
+          "test_id": string;
+          "severity": "critical" | "high" | "medium" | "low" | "info";
+          "status": "pass" | "fail" | "warn" | "skip" | "info";
+          "description": string;
+          "remediation": string;
+        };
+    CISProfile: {
+          "name": string;
+          "benchmarkVersion": string;
+        };
+    CISProfilesResponse: {
+          "items": OpenAPIComponents['schemas']['CISProfile'][];
+          "source": "cluster" | "fallback";
+          "error"?: string;
+        };
+    CISScan: {
+          "id": string;
+          "cluster_id": string;
+          "scan_type": string;
+          "status": "pending" | "running" | "completed" | "failed" | "cancelled";
+          "passed": number;
+          "failed": number;
+          "warned": number;
+          "skipped": number;
+          "started_at": string;
+          "completed_at"?: string | null;
+          "cluster_scan_name"?: string;
+          "initiated_by_id"?: string | null;
+          "terminal_reason"?: string;
+          "poll_attempt"?: number;
+          "summary"?: unknown;
+          "results"?: unknown;
+          "findings"?: OpenAPIComponents['schemas']['CISFinding'][];
+          "created_at": string;
+          "updated_at": string;
+        } & Record<string, unknown>;
+    CISScanCreateRequest: {
+          "cluster_id": string;
+          "profile"?: string;
+          "scan_type"?: string;
+        };
+    CISScanEnvelope: {
+          "data": OpenAPIComponents['schemas']['CISScan'];
+        };
+    CISScanListEnvelope: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+          "data"?: OpenAPIComponents['schemas']['CISScan'][];
+        };
+    CatalogInstallationAcceptedEnvelope: {
+          "data": {
+            "installation": OpenAPIComponents['schemas']['InstalledChart'];
+            "operation": OpenAPIComponents['schemas']['CatalogOperation'];
+          };
+        };
     CatalogOperation: {
           "id"?: string;
           "targetType"?: string;
@@ -287,6 +643,9 @@ export interface OpenAPIComponents {
           "createdAt"?: string;
           "updatedAt"?: string;
         };
+    CatalogOperationEnvelope: {
+          "data": OpenAPIComponents['schemas']['CatalogOperation'];
+        };
     CatalogOperationEvent: {
           "id"?: string;
           "level"?: string;
@@ -294,6 +653,14 @@ export interface OpenAPIComponents {
           "message"?: string;
           "detail"?: Record<string, unknown>;
           "createdAt"?: string;
+        };
+    CatalogRepositorySyncReceipt: {
+          "repository_id": string;
+          "task_id": string;
+          "status": "pending" | "delivering" | "delivered" | "failed" | "dead";
+        };
+    CatalogRepositorySyncReceiptEnvelope: {
+          "data": OpenAPIComponents['schemas']['CatalogRepositorySyncReceipt'];
         };
     CharlieAbortRequest: {
           "request_id": string;
@@ -445,6 +812,7 @@ export interface OpenAPIComponents {
           "label": string;
           "state": "healthy" | "degraded" | "unavailable" | "inactive" | "ready" | "unknown";
           "summary": string;
+          "next_action": string;
           "checked_at"?: string;
           "expires_at"?: string;
         };
@@ -513,6 +881,7 @@ export interface OpenAPIComponents {
           "grace_period_seconds": number;
           "flap_window_seconds": number;
           "flap_count": number;
+          "estate_threshold_percent"?: number;
           "fleet_threshold_percent": number;
           "minimum_agent_version"?: string;
           "suppressed": boolean;
@@ -762,8 +1131,35 @@ export interface OpenAPIComponents {
           "updated_at": string;
           "archived_at"?: string | null;
         };
+    CharlieTriggerRetryReceipt: {
+          "operation_id": string;
+          "event_id": string;
+          "status": "pending" | "dispatching" | "dispatched" | "retry" | "dead" | "completed" | "suppressed";
+          "status_url": string;
+        };
     CharlieTriggerRetryRequest: {
-          "request_id": string;
+          "request_id"?: string;
+        };
+    ChartRating: {
+          "id": string;
+          "chart_id": string;
+          "installation_id"?: string | null;
+          "user_id": string;
+          "stars": number;
+          "note": string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    ChartRatingAggregate: {
+          "rating_count": number;
+          "avg_stars": number;
+          "bayesian_score": number;
+          "histogram": number[];
+        };
+    ChartRatingWriteRequest: {
+          "stars": number;
+          "installation_id"?: string;
+          "note"?: string;
         };
     ChartRecommendation: {
           "chart_id": string;
@@ -792,46 +1188,61 @@ export interface OpenAPIComponents {
         };
     CloudProviderSpec: Record<string, unknown>;
     Cluster: {
-          "id"?: string;
-          "name"?: string;
-          "display_name"?: string;
-          "description"?: string;
-          "status"?: "pending" | "active" | "disconnected" | "error";
-          "environment"?: "production" | "staging" | "development" | "dev";
-          "region"?: string;
-          "provider"?: string;
-          "distribution"?: string;
-          "labels"?: Record<string, string>;
-          "annotations"?: Record<string, string>;
-          "registration_phase"?: "created" | "awaiting_agent" | "connected" | "provisioning" | "ready" | "failed";
+          "id": string;
+          "name": string;
+          "display_name": string;
+          "description": string;
+          "status": "pending" | "active" | "disconnected" | "error";
+          "api_server_url": string;
+          "ca_certificate": string;
+          "environment": "production" | "staging" | "development" | "dev";
+          "region": string;
+          "provider": string;
+          "distribution": string;
+          "labels": Record<string, string>;
+          "annotations": Record<string, string>;
+          "registration_phase": "created" | "awaiting_agent" | "connected" | "provisioning" | "ready" | "failed";
           "install_baseline"?: boolean | null;
-          "agent_version"?: string;
-          "kubernetes_version"?: string;
-          "node_count"?: number;
+          "agent_version": string;
+          "kubernetes_version": string;
+          "node_count": number;
           "last_heartbeat"?: string | null;
-          "is_local"?: boolean;
+          "is_local": boolean;
           "decommissioned_at"?: string | null;
-          "agent_privilege_profile"?: "viewer" | "operator" | "namespace-viewer" | "namespace-operator" | "custom" | "admin";
-          "downstream_impersonation"?: "off" | "attribute" | "enforce";
-          "cpu_percentage"?: number;
-          "memory_percentage"?: number;
-          "pod_count"?: number;
-          "created_at"?: string;
-          "updated_at"?: string;
+          "created_by_id"?: string | null;
+          "cluster_uid": string;
+          "group_id"?: string | null;
+          "registration_started_at"?: string | null;
+          "registration_completed_at"?: string | null;
+          "managed_by": "api" | "ui" | "crd" | "system";
+          "external_ref_api_version": string;
+          "external_ref_kind": string;
+          "external_ref_namespace": string;
+          "external_ref_name": string;
+          "observed_generation": number;
+          "agent_privilege_profile": "viewer" | "operator" | "namespace-viewer" | "namespace-operator" | "custom" | "admin";
+          "downstream_impersonation": "off" | "attribute" | "enforce";
+          "cpu_percentage": number;
+          "memory_percentage": number;
+          "pod_count": number;
+          "metrics_server_present": boolean;
+          "decommissioning": boolean;
+          "created_at": string;
+          "updated_at": string;
         };
     ClusterAgentItem: {
-          "cluster_id"?: string;
-          "cluster_name"?: string;
-          "cluster_display_name"?: string;
-          "cluster_status"?: string;
-          "is_local"?: boolean;
-          "agent_status"?: "connected" | "degraded" | "disconnected";
+          "cluster_id": string;
+          "cluster_name": string;
+          "cluster_display_name": string;
+          "cluster_status": string;
+          "is_local": boolean;
+          "agent_status": "connected" | "degraded" | "disconnected";
           "agent_id"?: string;
           "session_id"?: string;
           "agent_version"?: string;
           "kubernetes_version"?: string;
           "distribution"?: string;
-          "node_count"?: number;
+          "node_count": number;
           "connected_at"?: string | null;
           "last_ping"?: string | null;
           "last_heartbeat"?: string | null;
@@ -839,34 +1250,68 @@ export interface OpenAPIComponents {
           "pod_name"?: string;
           "node_name"?: string;
           "channel_name"?: string;
-          "privilege_profile"?: "viewer" | "operator" | "namespace-viewer" | "namespace-operator" | "custom" | "admin";
-          "capabilities"?: Record<string, boolean>;
-          "compatibility_status"?: "supported" | "deprecated" | "blocked" | "unknown";
+          "privilege_profile": "viewer" | "operator" | "namespace-viewer" | "namespace-operator" | "custom" | "admin";
+          "capabilities": Record<string, boolean>;
+          "compatibility_status": "supported" | "deprecated" | "blocked" | "unknown";
           "compatibility_message"?: string;
           "degraded_reasons"?: string[];
           "recommended_action"?: string;
           "offline_behavior"?: OpenAPIComponents['schemas']['AgentOfflineBehavior'];
         };
     ClusterAgentResponse: {
-          "summary"?: {
-            "total_clusters"?: number;
-            "connected"?: number;
-            "degraded"?: number;
-            "disconnected"?: number;
-            "versions"?: Record<string, number>;
-            "profiles"?: Record<string, number>;
-            "statuses"?: Record<string, number>;
-            "compatibility"?: Record<string, number>;
-            "server_version"?: string;
-            "minimum_supported_agent_version"?: string;
-            "minimum_compatible_agent_version"?: string;
-            "generated_at"?: string;
+          "summary": {
+            "total_clusters": number;
+            "connected": number;
+            "degraded": number;
+            "disconnected": number;
+            "versions": Record<string, number>;
+            "profiles": Record<string, number>;
+            "statuses": Record<string, number>;
+            "compatibility": Record<string, number>;
+            "server_version": string;
+            "minimum_supported_agent_version": string;
+            "minimum_compatible_agent_version": string;
+            "maximum_supported_agent_version_exclusive"?: string;
+            "generated_at": string;
           };
-          "items"?: OpenAPIComponents['schemas']['ClusterAgentItem'][];
-          "limit"?: number;
-          "offset"?: number;
+          "items": OpenAPIComponents['schemas']['ClusterAgentItem'][];
+          "limit": number;
+          "offset": number;
         };
-    ClusterConditionResponse: Record<string, unknown>;
+    ClusterCompliancePosture: {
+          "cluster_id": string;
+          "cluster_name": string;
+          "overall_score": number;
+          "cis_score": number;
+          "vulns_score": number;
+          "netpol_score": number;
+        };
+    ClusterConditionListEnvelope: {
+          "data": OpenAPIComponents['schemas']['ClusterConditionResponse'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    ClusterConditionRemediationAttempt: {
+          "id": string;
+          "cluster_id": string;
+          "condition_type": string;
+          "action": string;
+          "outcome": "success" | "failed" | "skipped";
+          "error": string;
+          "detail": Record<string, unknown> | null;
+          "attempted_at": string;
+        };
+    ClusterConditionRemediationListEnvelope: {
+          "data": OpenAPIComponents['schemas']['ClusterConditionRemediationAttempt'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    ClusterConditionResponse: {
+          "type": string;
+          "status": "True" | "False" | "Unknown";
+          "reason": string;
+          "message": string;
+          "last_transition_time": string;
+          "last_probe_time": string;
+        };
     ClusterDeployment: {
           "id": string;
           "target_id": string;
@@ -882,7 +1327,7 @@ export interface OpenAPIComponents {
           "observed_revision": string;
           "action": "apply" | "delete" | "suspend";
           "phase": "pending" | "blocked" | "applying" | "ready" | "degraded" | "failed" | "suspended" | "deleting" | "removed" | "unknown";
-          "conditions": Record<string, unknown>[];
+          "conditions": OpenAPIComponents['schemas']['DeliveryCondition'][];
           "source_kind": string;
           "source_name": string;
           "reconciler_kind": string;
@@ -952,25 +1397,406 @@ export interface OpenAPIComponents {
           "firstTimestamp"?: string;
           "lastTimestamp"?: string;
         } & Record<string, unknown>;
-    ClusterGroupResponse: Record<string, unknown>;
+    ClusterGroupResponse: {
+          "id": string;
+          "name": string;
+          "slug": string;
+          "description": string;
+          "parent_id"?: string;
+          "color": string;
+          "icon": string;
+          "enabled": boolean;
+          "created_by"?: string;
+          "created_at": string;
+          "updated_at": string;
+          "cluster_count": number;
+          "cluster_count_tree": number;
+          "depth"?: number;
+        };
+    ClusterMonitoringConfig: {
+          "id": string;
+          "clusterId": string;
+          "backendId": string;
+          "clusterLabel": string;
+          "clusterLabelValue": string;
+          "scrapeIntervalSeconds": number;
+          "retention": string;
+          "stackNamespace": string;
+          "prometheusReleaseName": string;
+          "thanosSidecarEnabled": boolean;
+          "storageConfigId"?: string | null;
+          "objectStorageSecretName": string;
+          "storageClass": string;
+          "storageSize": string;
+          "lastAppliedSpecHash": string;
+          "lastObservedStatus": string;
+          "lastObservedRevision": number;
+          "lastObservedAt"?: string | null;
+          "lastDriftDetectedAt"?: string | null;
+          "status": string;
+          "lastHealthyAt"?: string | null;
+        };
+    ClusterMonitoringConfigEnvelope: {
+          "data": OpenAPIComponents['schemas']['ClusterMonitoringConfig'] | Record<string, never>;
+        };
     ClusterRegistryConfigLegacy: Record<string, unknown>;
-    ClusterRegistryRequest: Record<string, unknown>;
-    ClusterRegistryResponse: Record<string, unknown>;
-    ClusterRegistryTestResponse: Record<string, unknown>;
-    ClusterResponse: Record<string, unknown>;
-    ClusterTemplateApplicationResponse: Record<string, unknown>;
+    ClusterRegistryRequest: {
+          "private_registry_url"?: string;
+          "registry_username"?: string;
+          "registry_password"?: string;
+          "insecure"?: boolean;
+          "ca_bundle"?: string;
+          "namespaces"?: string[];
+          "inject_default_sa"?: boolean;
+          "secret_name"?: string;
+        };
+    ClusterRegistryResponse: {
+          "id": string;
+          "cluster_id": string;
+          "private_registry_url": string;
+          "registry_username": string;
+          "registry_password": string;
+          "insecure": boolean;
+          "ca_bundle": string;
+          "namespaces": string[];
+          "inject_default_sa": boolean;
+          "secret_name": string;
+          "last_applied_at"?: string;
+          "last_apply_error": string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    ClusterRegistryTestResponse: {
+          "ok": boolean;
+          "status_code": number;
+          "message": string;
+        };
+    ClusterResponse: OpenAPIComponents['schemas']['Cluster'];
+    ClusterSecurityPolicy: {
+          "id": string;
+          "cluster_id": string;
+          "template_id": string;
+          "applied_at"?: string | null;
+          "sync_status": "synced" | "pending" | "failed" | "unknown";
+          "error_message": string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    ClusterSecurityPolicyCreateRequest: {
+          "cluster_id": string;
+          "template_id": string;
+        };
+    ClusterSecurityPolicyEnvelope: {
+          "data": OpenAPIComponents['schemas']['ClusterSecurityPolicy'];
+        };
+    ClusterTemplateApplicationResponse: {
+          "cluster_id": string;
+          "template_id": string;
+          "template_name"?: string;
+          "status": string;
+          "spec_snapshot": unknown;
+          "last_error"?: string;
+          "applied_at"?: string;
+          "created_at": string;
+          "updated_at": string;
+          "drift"?: "synced" | "drift" | "";
+        };
     ClusterTemplateResponse: Record<string, unknown>;
+    ClusterTool: {
+          "id": string;
+          "slug": string;
+          "name": string;
+          "description": string;
+          "icon": string;
+          "category": string;
+          "charts": OpenAPIComponents['schemas']['ToolChart'][];
+          "version_constraint": string;
+          "default_namespace": string;
+          "is_builtin": boolean;
+          "is_enabled": boolean;
+          "helm_chart_id"?: string | null;
+          "presets": Record<string, Record<string, unknown>>;
+          "service_name": string;
+          "service_port": number | null;
+          "service_path": string;
+          "sub_services": Array<{
+            "name": string;
+            "service": string;
+            "port": number;
+          }>;
+          "form_schema"?: OpenAPIComponents['schemas']['ToolFormSchema'] | null;
+          "created_at": string;
+          "updated_at": string;
+        };
+    ClusterToolPage: {
+          "data": OpenAPIComponents['schemas']['ClusterTool'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+        };
+    ClusterToolStatus: {
+          "slug": string;
+          "name": string;
+          "status": "not_installed" | "installed" | "installed_unmanaged" | "installing" | "upgrading" | "failed" | "uninstalling" | "unknown";
+          "release_name": string | null;
+          "namespace": string | null;
+          "preset_used": string | null;
+          "error": string | null;
+          "operation"?: OpenAPIComponents['schemas']['ToolOperation'];
+        };
+    ComplianceAlertRuleSpec: {
+          "name": string;
+          "rule_type": string;
+          "severity": string;
+          "cooldown_minutes"?: number;
+          "configuration": Record<string, unknown>;
+        };
+    ComplianceBaseline: {
+          "id": string;
+          "slug": "pci_dss_4_0" | "hipaa" | "fedramp_moderate" | "soc2";
+          "name": string;
+          "description": string;
+          "version": string;
+          "enabled": boolean;
+          "spec": OpenAPIComponents['schemas']['ComplianceBaselineSpec'];
+          "active": boolean;
+        };
+    ComplianceBaselineApplication: {
+          "id": string;
+          "baseline_id": string;
+          "baseline_slug": string;
+          "baseline_name": string;
+          "applied_by"?: string | null;
+          "applied_at": string;
+          "status": "applied" | "reverted";
+          "reverted_at"?: string | null;
+          "reverted_by"?: string | null;
+          "notes": string;
+          "previous_state"?: unknown;
+        };
+    ComplianceBaselineApplyReceipt: {
+          "application_id": string;
+          "baseline_id": string;
+          "slug": string;
+        };
+    ComplianceBaselineApplyRequest: {
+          "notes"?: string;
+        };
+    ComplianceBaselineDiff: {
+          "baseline_id": string;
+          "baseline_slug": string;
+          "baseline_name": string;
+          "current": Record<string, unknown>;
+          "target": Record<string, unknown>;
+          "changes": string[];
+        };
+    ComplianceBaselineRevertReceipt: {
+          "application_id": string;
+          "status": "reverted";
+        };
+    ComplianceBaselineSpec: {
+          "audit_retention_days": number;
+          "quota_plans"?: OpenAPIComponents['schemas']['ComplianceQuotaPlanSpec'][];
+          "pss_profile"?: string;
+          "maintenance_window_template"?: OpenAPIComponents['schemas']['ComplianceMaintenanceWindowSpec'];
+          "alert_rules"?: OpenAPIComponents['schemas']['ComplianceAlertRuleSpec'][];
+          "platform_settings"?: Record<string, string>;
+          "required_webhooks"?: string[];
+          "required_smtp"?: boolean;
+          "required_totp"?: boolean;
+          "read_audit_policies"?: string[];
+        };
+    ComplianceMaintenanceWindowSpec: {
+          "name": string;
+          "description"?: string;
+          "days_of_week"?: number[];
+          "start_hour": number;
+          "start_minute": number;
+          "duration_min": number;
+        };
+    CompliancePosture: {
+          "overall_score": number;
+          "cis_score": number;
+          "vulns_score": number;
+          "netpol_score": number;
+          "audit_score": number;
+          "cluster_count": number;
+          "clusters": OpenAPIComponents['schemas']['ClusterCompliancePosture'][];
+          "top_issues": OpenAPIComponents['schemas']['CompliancePostureIssue'][];
+          "computed_at": string;
+          "audit_retention_months": number;
+        };
+    CompliancePostureEnvelope: {
+          "data": OpenAPIComponents['schemas']['CompliancePosture'];
+        };
+    CompliancePostureIssue: {
+          "cluster_id": string;
+          "cluster_name": string;
+          "severity": string;
+          "category": string;
+          "message": string;
+        };
+    ComplianceQuotaPlanSpec: {
+          "name": string;
+          "enforcement": "soft" | "hard";
+          "description"?: string;
+          "max_clusters_per_project"?: number;
+          "max_namespaces_per_project"?: number;
+          "max_members_per_project"?: number;
+          "max_projects_per_user"?: number;
+          "max_tokens_per_user"?: number;
+          "max_streams_per_user"?: number;
+          "max_total_clusters"?: number;
+          "max_total_users"?: number;
+        };
+    ConstraintValidationEnvelope: {
+          "data": OpenAPIComponents['schemas']['ConstraintValidationResponse'];
+        };
     ConstraintValidationResponse: {
-          "valid"?: boolean;
-          "errors"?: string[];
-          "applied"?: boolean;
+          "valid": boolean;
+          "errors": string[];
+          "applied": boolean;
           "name"?: string;
           "kind"?: string;
+          "status"?: "pending" | "synced" | "failed";
+          "task_id"?: string;
         };
     ConstraintYAMLRequest: {
           "yaml": string;
         };
-    CreateClusterGroupRequest: Record<string, unknown>;
+    ControlPlaneAlert: {
+          "id": string;
+          "controller": string;
+          "conditionType": string;
+          "status": string;
+          "message": string;
+          "detail": Record<string, unknown>;
+          "firedAt": string;
+          "resolvedAt"?: string | null;
+          "acknowledgedAt"?: string | null;
+          "acknowledgedBy"?: string | null;
+          "createdAt": string;
+          "updatedAt": string;
+        };
+    ControlPlaneAlertEnvelope: {
+          "data": OpenAPIComponents['schemas']['ControlPlaneAlert'];
+        };
+    ControlPlaneAlertPage: {
+          "data": OpenAPIComponents['schemas']['ControlPlaneAlert'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    ControlPlanePolicy: {
+          "monitoringQueueDepthThreshold": number;
+          "deliveryQueueDepthThreshold": number;
+          "toolsQueueDepthThreshold": number;
+          "catalogQueueDepthThreshold": number;
+          "monitoringStaleRunningThreshold": number;
+          "deliveryStaleRunningThreshold": number;
+          "toolsStaleRunningThreshold": number;
+          "catalogStaleRunningThreshold": number;
+          "monitoringRecentFailureThreshold": number;
+          "deliveryRecentFailureThreshold": number;
+          "toolsRecentFailureThreshold": number;
+          "catalogRecentFailureThreshold": number;
+          "recentFailureWindowMinutes": number;
+        };
+    ControlPlanePolicyEnvelope: {
+          "data": OpenAPIComponents['schemas']['ControlPlanePolicy'];
+        };
+    ControlPlanePolicyRequest: {
+          "monitoringQueueDepthThreshold"?: number;
+          "deliveryQueueDepthThreshold"?: number;
+          "toolsQueueDepthThreshold"?: number;
+          "catalogQueueDepthThreshold"?: number;
+          "monitoringStaleRunningThreshold"?: number;
+          "deliveryStaleRunningThreshold"?: number;
+          "toolsStaleRunningThreshold"?: number;
+          "catalogStaleRunningThreshold"?: number;
+          "monitoringRecentFailureThreshold"?: number;
+          "deliveryRecentFailureThreshold"?: number;
+          "toolsRecentFailureThreshold"?: number;
+          "catalogRecentFailureThreshold"?: number;
+          "recentFailureWindowMinutes"?: number;
+        };
+    ControlPlaneRestoreRunbookWire: {
+          "automated": false;
+          "distribution": string;
+          "snapshot_name": string;
+          "summary": string;
+          "steps": string[];
+          "warning": string;
+          "docs_url": string;
+        };
+    ControlPlaneSilence: {
+          "id": string;
+          "controller": string;
+          "conditionType": string;
+          "reason": string;
+          "startsAt": string;
+          "endsAt": string;
+          "createdBy"?: string | null;
+          "createdAt": string;
+        };
+    ControlPlaneSilenceEnvelope: {
+          "data": OpenAPIComponents['schemas']['ControlPlaneSilence'];
+        };
+    ControlPlaneSilencePage: {
+          "data": OpenAPIComponents['schemas']['ControlPlaneSilence'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    ControlPlaneSilenceRequest: {
+          "controller": string;
+          "conditionType"?: string;
+          "reason": string;
+          "duration"?: string;
+        };
+    ControlPlaneSnapshotWire: {
+          "id": string;
+          "cluster_id": string;
+          "name": string;
+          "status": "pending" | "running" | "completed" | "failed";
+          "location": string;
+          "size_bytes"?: number;
+          "requested_by_id"?: string;
+          "error"?: string;
+          "created_at": string;
+          "completed_at"?: string;
+        };
+    ControlPlaneStatus: {
+          "monitoring"?: Record<string, unknown>;
+          "tools"?: Record<string, unknown>;
+          "catalog"?: Record<string, unknown>;
+          "backups"?: Record<string, unknown>;
+          "logging"?: Record<string, unknown>;
+          "security"?: Record<string, unknown>;
+          "policy": OpenAPIComponents['schemas']['ControlPlanePolicy'];
+          "summary": OpenAPIComponents['schemas']['ControlPlaneSummary'];
+        };
+    ControlPlaneStatusEnvelope: {
+          "data": OpenAPIComponents['schemas']['ControlPlaneStatus'];
+        };
+    ControlPlaneSummary: {
+          "controllers": number;
+          "queueDepth": number;
+          "staleRunningCount": number;
+          "controllersWithFailures": number;
+          "degradedControllers": number;
+          "health": "healthy" | "degraded";
+        };
+    ControllerReconcilerStatus: {
+          "enabled": boolean;
+          "queueDepth"?: number;
+          "staleRunningCount"?: number;
+          "staleThresholdSecond"?: number;
+        };
+    CreateClusterGroupRequest: {
+          "name": string;
+          "slug"?: string;
+          "description"?: string;
+          "parent_id"?: string;
+          "color"?: string;
+          "icon"?: string;
+        };
     CreateClusterRequest: {
           "name": string;
           "display_name"?: string;
@@ -979,27 +1805,128 @@ export interface OpenAPIComponents {
           "region"?: string;
           "provider"?: string;
           "distribution"?: string;
+          "labels"?: Record<string, string>;
+          "annotations"?: Record<string, string>;
+          "api_server_url"?: string;
+          "ca_certificate"?: string;
         };
-    CreateClusterTemplateRequest: Record<string, unknown>;
-    CreateNetworkPolicyTemplateRequest: Record<string, unknown>;
+    CreateClusterTemplateRequest: {
+          "name": string;
+          "description"?: string;
+          "spec"?: Record<string, unknown>;
+        };
+    CreateControlPlaneSnapshotRequestWire: {
+          "name"?: string;
+          "location"?: "local" | "s3";
+        };
+    CreateLoggingSavedSearchRequest: {
+          "output_id": string;
+          "name": string;
+          "query"?: string;
+          "namespaces"?: string[];
+          "limit"?: number;
+          "direction"?: "forward" | "backward";
+          "live_tail"?: boolean;
+        };
+    CreateNetworkPolicyTemplateRequest: {
+          "slug"?: string;
+          "name": string;
+          "description"?: string;
+          "spec_template": string;
+          "enabled"?: boolean;
+          "clone_from"?: string;
+        };
     CreateProjectCatalogRequest: {
           "name": string;
           "url": string;
           "description"?: string;
+          "repo_type"?: string;
           "auth_type"?: string;
           "auth_config"?: Record<string, unknown>;
+          "enabled"?: boolean;
         };
     CreateProjectRequest: {
           "name": string;
+          "display_name"?: string;
           "cluster_id": string;
           "description"?: string;
           "namespaces"?: string[];
           "pod_security_profile"?: string;
+          "resource_quota"?: Record<string, unknown>;
+          "limit_range"?: Record<string, unknown>;
+          "network_policy_mode"?: string;
+          "resource_quota_cpu_limit"?: string;
+          "resource_quota_memory_limit"?: string;
+          "resource_quota_pod_count"?: number;
+        };
+    DashboardWidget: {
+          "id": string;
+          "name": string;
+          "description": string;
+          "widget_type": "grafana_panel" | "prom_sparkline" | "prom_stat" | "url_iframe";
+          "spec": Record<string, unknown>;
+          "scope": "global" | "cluster" | "project";
+          "scope_ids": string[];
+          "grid": OpenAPIComponents['schemas']['DashboardWidgetGrid'];
+          "refresh_seconds": number;
+          "enabled": boolean;
+          "created_at": string;
+          "updated_at": string;
+        };
+    DashboardWidgetEnvelope: {
+          "data": OpenAPIComponents['schemas']['DashboardWidget'];
+        };
+    DashboardWidgetGrid: {
+          "x": number;
+          "y": number;
+          "w": number;
+          "h": number;
+        };
+    DashboardWidgetPage: {
+          "data": OpenAPIComponents['schemas']['DashboardWidget'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    DashboardWidgetRequest: {
+          "name": string;
+          "description"?: string;
+          "widget_type": "grafana_panel" | "prom_sparkline" | "prom_stat" | "url_iframe";
+          "spec"?: Record<string, unknown>;
+          "scope": "global" | "cluster" | "project";
+          "scope_ids"?: string[];
+          "grid"?: {
+            "x"?: number;
+            "y"?: number;
+            "w"?: number;
+            "h"?: number;
+          };
+          "refresh_seconds"?: number;
+          "enabled"?: boolean;
         };
     DataEnvelope: {
           "data": unknown;
         };
     DecommissionStatusResponse: Record<string, unknown>;
+    DeliveryAmount: {
+          "type": "count" | "percent";
+          "value": number;
+        };
+    DeliveryApprovalBinding: {
+          "required": boolean;
+          "digest": string;
+        };
+    DeliveryAsyncOperationReceipt: {
+          "operation_id": string;
+          "operation": string;
+          "resource": string;
+          "resource_id": string;
+          "project_id": string;
+          "status": "accepted";
+          "status_url": string;
+          "accepted_at": string;
+        };
+    DeliveryAsyncOperationReceiptEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryAsyncOperationReceipt'];
+        };
     DeliveryBundle: {
           "id": string;
           "project_id": string;
@@ -1028,9 +1955,9 @@ export interface OpenAPIComponents {
           "requested_revision": string;
           "resolved_revision"?: string;
           "artifact_digest"?: string;
-          "renderer_spec": Record<string, unknown>;
-          "reconciliation_policy": Record<string, unknown>;
-          "required_capabilities": Record<string, unknown>[];
+          "renderer_spec": OpenAPIComponents['schemas']['DeliveryRendererSpec'];
+          "reconciliation_policy": OpenAPIComponents['schemas']['DeliveryReconciliationPolicy'];
+          "required_capabilities": OpenAPIComponents['schemas']['DeliveryCapabilityRequirement'][];
           "dependency_bundle_ids": string[];
           "spec_digest": string;
           "verification_status": "pending" | "verified" | "failed" | "unsigned";
@@ -1038,6 +1965,14 @@ export interface OpenAPIComponents {
           "state": "resolving" | "ready" | "failed" | "revoked";
           "last_error_code"?: string;
           "created_at": string;
+        };
+    DeliveryBundleVersionDraft: {
+          "source_id"?: string;
+          "requested_revision"?: string;
+          "renderer"?: OpenAPIComponents['schemas']['DeliveryRendererSpec'];
+          "scope"?: "namespace" | "platform";
+          "reconciliation_policy"?: OpenAPIComponents['schemas']['DeliveryReconciliationPolicy'];
+          "required_capabilities"?: OpenAPIComponents['schemas']['DeliveryCapabilityRequirement'][];
         };
     DeliveryBundleVersionEnvelope: {
           "data": OpenAPIComponents['schemas']['DeliveryBundleVersion'];
@@ -1052,13 +1987,23 @@ export interface OpenAPIComponents {
     DeliveryBundleVersionWrite: {
           "project_id"?: string;
           "version": string;
-          "spec": Record<string, unknown>;
+          "spec": OpenAPIComponents['schemas']['DeliveryBundleVersionDraft'];
           "dependency_bundle_ids"?: string[];
         };
     DeliveryBundleWrite: {
           "project_id"?: string;
           "name": string;
           "description"?: string;
+        };
+    DeliveryCanaryStrategy: {
+          "size": OpenAPIComponents['schemas']['DeliveryAmount'];
+          "cluster_ids"?: string[];
+          "approval_after_canary": boolean;
+          "soak": string;
+        };
+    DeliveryCapabilityRequirement: {
+          "name": string;
+          "constraint"?: string;
         };
     DeliveryClusterInventory: {
           "controller_inventory": OpenAPIComponents['schemas']['DeliveryControllerInventory'];
@@ -1082,6 +2027,14 @@ export interface OpenAPIComponents {
           "compatibility_status": string;
           "cluster_count": number;
         };
+    DeliveryCondition: {
+          "type": "Ready" | "Reconciling" | "Stalled" | "Drifted";
+          "status": "True" | "False" | "Unknown";
+          "reason"?: string;
+          "message"?: string;
+          "observed_generation": number;
+          "last_transition_time": string;
+        };
     DeliveryControllerInventory: {
           "cluster_id": string;
           "agent_version": string;
@@ -1096,20 +2049,20 @@ export interface OpenAPIComponents {
           "observed_at"?: string | null;
           "updated_at": string;
         };
-    DeliveryFleet: {
-          "summary": OpenAPIComponents['schemas']['DeliveryFleetSummary'];
-          "clusters": OpenAPIComponents['schemas']['DeliveryFleetCluster'][];
-          "attention": OpenAPIComponents['schemas']['DeliveryFleetAttention'][];
-          "distributions": OpenAPIComponents['schemas']['DeliveryFleetDistributions'];
+    DeliveryEstate: {
+          "summary": OpenAPIComponents['schemas']['DeliveryEstateSummary'];
+          "clusters": OpenAPIComponents['schemas']['DeliveryEstateCluster'][];
+          "attention": OpenAPIComponents['schemas']['DeliveryEstateAttention'][];
+          "distributions": OpenAPIComponents['schemas']['DeliveryEstateDistributions'];
         };
-    DeliveryFleetAttention: {
+    DeliveryEstateAttention: {
           "cluster_id": string;
           "cluster_name": string;
           "severity": "error" | "warning";
           "reason": string;
           "detail": string;
         };
-    DeliveryFleetCluster: {
+    DeliveryEstateCluster: {
           "id": string;
           "name": string;
           "display_name": string;
@@ -1132,19 +2085,19 @@ export interface OpenAPIComponents {
           "inventory_observed_at": string | null;
           "last_observed_at": string | null;
         };
-    DeliveryFleetCount: {
+    DeliveryEstateCount: {
           "key": string;
           "count": number;
         };
-    DeliveryFleetDistributions: {
-          "compatibility": OpenAPIComponents['schemas']['DeliveryFleetCount'][];
-          "privilege": OpenAPIComponents['schemas']['DeliveryFleetCount'][];
-          "assignment_phases": OpenAPIComponents['schemas']['DeliveryFleetCount'][];
+    DeliveryEstateDistributions: {
+          "compatibility": OpenAPIComponents['schemas']['DeliveryEstateCount'][];
+          "privilege": OpenAPIComponents['schemas']['DeliveryEstateCount'][];
+          "assignment_phases": OpenAPIComponents['schemas']['DeliveryEstateCount'][];
         };
-    DeliveryFleetEnvelope: {
-          "data": OpenAPIComponents['schemas']['DeliveryFleet'];
+    DeliveryEstateEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryEstate'];
         };
-    DeliveryFleetSummary: {
+    DeliveryEstateSummary: {
           "adopted_clusters": number;
           "flux_ready": number;
           "incompatible": number;
@@ -1161,22 +2114,71 @@ export interface OpenAPIComponents {
           "target_id": string;
           "project_id": string;
           "target_generation": number;
-          "desired": Record<string, unknown>;
+          "desired": OpenAPIComponents['schemas']['DeliveryVersionIdentity'];
           "placement_digest": string;
-          "strategy": Record<string, unknown>;
+          "strategy": OpenAPIComponents['schemas']['DeliveryRolloutStrategy'];
           "strategy_digest": string;
-          "approval": Record<string, unknown>;
+          "approval": OpenAPIComponents['schemas']['DeliveryApprovalBinding'];
           "actor": string;
           "idempotency_key": string;
           "request_digest": string;
           "created_at": string;
           "deadline": string;
-          "cohorts": Record<string, unknown>[];
-          "clusters": Record<string, unknown>[];
+          "cohorts": OpenAPIComponents['schemas']['DeliveryRolloutCohort'][];
+          "clusters": OpenAPIComponents['schemas']['DeliveryPlannedCluster'][];
           "plan_digest": string;
         };
     DeliveryFrozenRolloutEnvelope: {
           "data": OpenAPIComponents['schemas']['DeliveryFrozenRollout'];
+        };
+    DeliveryHelmRenderer: {
+          "chart": string;
+          "chart_version": string;
+          "release_name": string;
+          "target_namespace": string;
+          "values"?: Record<string, unknown>;
+          "install_retries": number;
+          "upgrade_retries": number;
+          "test": boolean;
+        };
+    DeliveryImmutableRevision: {
+          "kind": "git_commit" | "oci_digest" | "helm_chart";
+          "value": string;
+          "artifact_digest": string;
+        };
+    DeliveryKustomizeRenderer: {
+          "path": string;
+          "target_namespace": string;
+          "patches"?: string[];
+        };
+    DeliveryLabelExpression: {
+          "key": string;
+          "operator": "In" | "NotIn" | "Exists" | "DoesNotExist";
+          "values"?: string[];
+        };
+    DeliveryPlacement: {
+          "project_ids"?: string[];
+          "cluster_ids"?: string[];
+          "cluster_group_ids"?: string[];
+          "match_labels"?: Record<string, string>;
+          "match_expressions"?: OpenAPIComponents['schemas']['DeliveryLabelExpression'][];
+          "exclude_cluster_ids"?: string[];
+          "all_clusters": boolean;
+        };
+    DeliveryPlacementInput: {
+          "project_ids"?: string[];
+          "cluster_ids"?: string[];
+          "cluster_group_ids"?: string[];
+          "match_labels"?: Record<string, string>;
+          "match_expressions"?: OpenAPIComponents['schemas']['DeliveryLabelExpression'][];
+          "exclude_cluster_ids"?: string[];
+          "all_clusters"?: boolean;
+        };
+    DeliveryPlannedCluster: {
+          "cluster_id": string;
+          "cohort": number;
+          "order": number;
+          "previous"?: OpenAPIComponents['schemas']['DeliveryPreviousDeployment'];
         };
     DeliveryPreviewDecision: {
           "cluster_id": string;
@@ -1188,6 +2190,39 @@ export interface OpenAPIComponents {
           "missing_capabilities"?: string[];
           "compatibility_reason"?: string;
         };
+    DeliveryPreviousDeployment: {
+          "version": OpenAPIComponents['schemas']['DeliveryVersionIdentity'];
+          "generation": number;
+        };
+    DeliveryReconciliationPolicy: {
+          "interval": string;
+          "retry_interval": string;
+          "timeout": string;
+          "prune": boolean;
+          "wait": boolean;
+          "drift": "ignore" | "detect" | "repair";
+        };
+    DeliveryReconciliationPolicyInput: {
+          "interval"?: string;
+          "retry_interval"?: string;
+          "timeout"?: string;
+          "prune"?: boolean;
+          "wait"?: boolean;
+          "drift"?: "ignore" | "detect" | "repair";
+        };
+    DeliveryRendererSpec: {
+          "kind": "kustomize" | "helm";
+          "kustomize"?: OpenAPIComponents['schemas']['DeliveryKustomizeRenderer'];
+          "helm"?: OpenAPIComponents['schemas']['DeliveryHelmRenderer'];
+        };
+    DeliveryResolvedSource: {
+          "source_id": string;
+          "type": "git" | "oci_artifact" | "helm_http" | "helm_oci";
+          "url": string;
+          "auth_mode": "none" | "basic" | "bearer" | "ssh" | "workload_identity";
+          "trust_policy": OpenAPIComponents['schemas']['DeliveryTrustPolicy'];
+          "revision": OpenAPIComponents['schemas']['DeliveryImmutableRevision'];
+        };
     DeliveryRollout: {
           "id": string;
           "target_id": string;
@@ -1196,7 +2231,7 @@ export interface OpenAPIComponents {
           "to_bundle_version_id": string;
           "placement_digest": string;
           "placement_snapshot"?: Record<string, unknown>;
-          "strategy": Record<string, unknown>;
+          "strategy": OpenAPIComponents['schemas']['DeliveryRolloutStrategy'];
           "strategy_digest"?: string;
           "approval_policy"?: Record<string, unknown>;
           "request_digest"?: string;
@@ -1267,6 +2302,14 @@ export interface OpenAPIComponents {
           "previous": string | null;
           "total_known": boolean;
         };
+    DeliveryRolloutCohort: {
+          "index": number;
+          "name": string;
+          "cluster_ids": string[];
+          "approval_required": boolean;
+          "approval_digest"?: string;
+          "soak_after": string;
+        };
     DeliveryRolloutControl: {
           "rollout": OpenAPIComponents['schemas']['DeliveryRollout'];
           "event": OpenAPIComponents['schemas']['DeliveryRolloutEvent'];
@@ -1277,7 +2320,7 @@ export interface OpenAPIComponents {
         };
     DeliveryRolloutDetail: {
           "rollout": OpenAPIComponents['schemas']['DeliveryRollout'];
-          "frozen_plan": Record<string, unknown>;
+          "frozen_plan": OpenAPIComponents['schemas']['DeliveryFrozenRollout'];
           "approvals": OpenAPIComponents['schemas']['DeliveryRolloutApprovalRecord'][];
           "timeline": OpenAPIComponents['schemas']['DeliveryRolloutEvent'][];
         };
@@ -1311,11 +2354,49 @@ export interface OpenAPIComponents {
           "previous": string | null;
           "total_known": boolean;
         };
+    DeliveryRolloutPartition: {
+          "name": string;
+          "selector": OpenAPIComponents['schemas']['DeliveryPlacement'];
+          "approval_required": boolean;
+          "soak": string;
+        };
+    DeliveryRolloutPolicy: {
+          "approval_required": boolean;
+        };
+    DeliveryRolloutPolicyInput: {
+          "approval_required"?: boolean;
+        };
     DeliveryRolloutStart: {
           "project_id"?: string;
           "preview_digest": string;
           "confirm_all_clusters": boolean;
-          "strategy": Record<string, unknown>;
+          "strategy": OpenAPIComponents['schemas']['DeliveryRolloutStrategyInput'];
+        };
+    DeliveryRolloutStrategy: {
+          "type": "all_at_once" | "rolling" | "canary" | "partitioned";
+          "max_concurrent": number;
+          "max_unavailable": OpenAPIComponents['schemas']['DeliveryAmount'];
+          "min_ready": string;
+          "progress_deadline": string;
+          "failure_threshold": OpenAPIComponents['schemas']['DeliveryAmount'];
+          "on_failure": "pause" | "abort" | "rollback";
+          "respect_maintenance_windows": boolean;
+          "shuffle_seed"?: string;
+          "canary"?: OpenAPIComponents['schemas']['DeliveryCanaryStrategy'];
+          "partitions"?: OpenAPIComponents['schemas']['DeliveryRolloutPartition'][];
+        };
+    DeliveryRolloutStrategyInput: {
+          "type"?: "all_at_once" | "rolling" | "canary" | "partitioned";
+          "max_concurrent"?: number;
+          "max_unavailable"?: OpenAPIComponents['schemas']['DeliveryAmount'];
+          "min_ready"?: string;
+          "progress_deadline"?: string;
+          "failure_threshold"?: OpenAPIComponents['schemas']['DeliveryAmount'];
+          "on_failure"?: "pause" | "abort" | "rollback";
+          "respect_maintenance_windows"?: boolean;
+          "shuffle_seed"?: string;
+          "canary"?: OpenAPIComponents['schemas']['DeliveryCanaryStrategy'];
+          "partitions"?: OpenAPIComponents['schemas']['DeliveryRolloutPartition'][];
         };
     DeliverySource: {
           "id": string;
@@ -1368,6 +2449,14 @@ export interface OpenAPIComponents {
           "proxy_ref"?: string;
           "trust_policy"?: OpenAPIComponents['schemas']['DeliveryTrustPolicy'];
           "ca_bundle"?: string;
+        };
+    DeliverySourceVerification: {
+          "id": string;
+          "source_id": string;
+          "status": "pending" | "running" | "ready" | "failed";
+        };
+    DeliverySourceVerificationEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliverySourceVerification'];
         };
     DeliverySourceVerify: {
           "project_id"?: string;
@@ -1445,9 +2534,9 @@ export interface OpenAPIComponents {
           "name": string;
           "description"?: string;
           "bundle_version_id": string;
-          "placement": Record<string, unknown>;
-          "rollout_policy": Record<string, unknown>;
-          "reconciliation_policy": Record<string, unknown>;
+          "placement": OpenAPIComponents['schemas']['DeliveryPlacement'];
+          "rollout_policy": OpenAPIComponents['schemas']['DeliveryRolloutPolicy'];
+          "reconciliation_policy": OpenAPIComponents['schemas']['DeliveryReconciliationPolicy'];
           "maintenance_window_policy": Record<string, unknown>;
           "suspended": boolean;
           "generation": number;
@@ -1479,11 +2568,9 @@ export interface OpenAPIComponents {
           "project_id"?: string;
           "description"?: string;
           "bundle_version_id"?: string;
-          "placement"?: Record<string, unknown>;
-          "rollout_policy"?: {
-            "approval_required"?: boolean;
-          };
-          "reconciliation_policy"?: Record<string, unknown>;
+          "placement"?: OpenAPIComponents['schemas']['DeliveryPlacementInput'];
+          "rollout_policy"?: OpenAPIComponents['schemas']['DeliveryRolloutPolicyInput'];
+          "reconciliation_policy"?: OpenAPIComponents['schemas']['DeliveryReconciliationPolicyInput'];
           "maintenance_window_policy"?: Record<string, unknown>;
           "suspended"?: boolean;
         };
@@ -1511,11 +2598,9 @@ export interface OpenAPIComponents {
           "name": string;
           "description"?: string;
           "bundle_version_id": string;
-          "placement": Record<string, unknown>;
-          "rollout_policy": {
-            "approval_required"?: boolean;
-          };
-          "reconciliation_policy": Record<string, unknown>;
+          "placement": OpenAPIComponents['schemas']['DeliveryPlacementInput'];
+          "rollout_policy": OpenAPIComponents['schemas']['DeliveryRolloutPolicyInput'];
+          "reconciliation_policy": OpenAPIComponents['schemas']['DeliveryReconciliationPolicyInput'];
           "maintenance_window_policy"?: Record<string, unknown>;
           "suspended"?: boolean;
         };
@@ -1526,14 +2611,20 @@ export interface OpenAPIComponents {
           "issuer"?: string;
           "key_ref"?: string;
         };
+    DeliveryVersionIdentity: {
+          "bundle_version_id": string;
+          "spec_digest": string;
+          "source": OpenAPIComponents['schemas']['DeliveryResolvedSource'];
+        };
     DexConnector: {
-          "id"?: string;
-          "name"?: string;
-          "type"?: string;
-          "config"?: Record<string, unknown>;
-          "enabled"?: boolean;
-          "created_at"?: string;
-          "updated_at"?: string;
+          "id": string;
+          "name": string;
+          "type": string;
+          "display_name": string;
+          "config": Record<string, unknown>;
+          "enabled": boolean;
+          "created_at": string;
+          "updated_at": string;
         } & Record<string, unknown>;
     DexConnectorRequest: {
           "name"?: string;
@@ -1543,12 +2634,16 @@ export interface OpenAPIComponents {
           "enabled"?: boolean;
         };
     DexConnectorType: {
-          "type"?: string;
-          "display_name"?: string;
-          "required_fields"?: string[];
-          "optional_fields"?: string[];
-          "secret_fields"?: string[];
-        } & Record<string, unknown>;
+          "type": string;
+          "display_hint": string;
+          "required": string[];
+          "optional": string[];
+          "secret": string[];
+          "nested": Array<{
+            "parent": string;
+            "keys": string[];
+          }>;
+        };
     DexExpiry: {
           "idTokens"?: string;
           "signingKeys"?: string;
@@ -1575,6 +2670,20 @@ export interface OpenAPIComponents {
           "telemetry"?: {
             "http"?: string;
           };
+        };
+    DexOperation: {
+          "operation_id": string;
+          "action": "apply" | "register_sso";
+          "target_id": string;
+          "runtime_generation": number;
+          "status": "pending" | "running" | "retrying" | "failed" | "succeeded";
+          "phase": "queued" | "reconciling" | "finalizing" | "completed";
+          "attempt_count": number;
+          "error_code"?: string;
+          "status_url": string;
+          "created_at": string;
+          "updated_at": string;
+          "completed_at"?: string;
         };
     DexRegisterSSOResult: {
           "id"?: string;
@@ -1657,6 +2766,12 @@ export interface OpenAPIComponents {
             "request_id"?: string;
           };
         };
+    ExtensionCSP: {
+          "scriptSrc"?: string[];
+          "connectSrc"?: string[];
+          "frameSrc"?: string[];
+          "imageSrc"?: string[];
+        };
     ExtensionManifest: {
           "apiVersion": "extensions.astronomer.io/v1alpha1";
           "name": string;
@@ -1665,6 +2780,8 @@ export interface OpenAPIComponents {
           "compatibleAstronomer": string;
           "entry": string;
           "permissions": string[];
+          "backendApiScopes"?: string[];
+          "csp"?: OpenAPIComponents['schemas']['ExtensionCSP'];
           "extensionPoints": Record<string, unknown>;
         };
     ExtensionMount: {
@@ -1711,12 +2828,191 @@ export interface OpenAPIComponents {
           "feature.catalog"?: boolean;
           "feature.projects"?: boolean;
           "feature.monitoring"?: boolean;
+          "feature.shared_grafana"?: boolean;
           "feature.fleet_grafana"?: boolean;
           "feature.hosted_loki"?: boolean;
           "feature.security"?: boolean;
           "feature.backups"?: boolean;
           "feature.charlie"?: boolean;
           "feature.extensions"?: boolean;
+        };
+    FleetVulnerabilityAggregate: {
+          "critical": number;
+          "high": number;
+          "medium": number;
+          "low": number;
+          "unknown": number;
+          "report_count": number;
+          "cluster_count": number;
+          "last_scanned_at": string | null;
+        };
+    FleetVulnerabilityAggregateEnvelope: {
+          "data": OpenAPIComponents['schemas']['FleetVulnerabilityAggregate'];
+        };
+    GatekeeperConstraintList: {
+          "bundle": OpenAPIComponents['schemas']['GatekeeperConstraintSummary'][];
+          "custom": OpenAPIComponents['schemas']['GatekeeperConstraintSummary'][];
+        };
+    GatekeeperConstraintMutationEnvelope: {
+          "data": OpenAPIComponents['schemas']['GatekeeperConstraintMutationResponse'];
+        };
+    GatekeeperConstraintMutationResponse: {
+          "name": string;
+          "status": "pending" | "synced" | "failed";
+          "task_id"?: string;
+        };
+    GatekeeperConstraintSummary: {
+          "name": string;
+          "kind": string;
+          "api_version": string;
+          "enforcement_action"?: string;
+          "violation_count"?: number;
+          "yaml"?: string;
+          "created_by"?: string | null;
+          "created_at"?: string;
+          "updated_at"?: string;
+          "desired_state"?: "present" | "absent";
+          "sync_status"?: "pending" | "synced" | "failed";
+          "generation"?: number;
+          "observed_generation"?: number;
+          "last_error"?: string;
+          "last_reconciled_at"?: string | null;
+        };
+    GitOpsApplyPreview: {
+          "cluster_name": string;
+          "cluster_id"?: string;
+          "repo_path": string;
+          "created": boolean;
+          "updated": boolean;
+          "no_op": boolean;
+          "template_bound": boolean;
+          "registries": string[];
+          "tool_presets": string[];
+          "project"?: string;
+          "restored_active": boolean;
+        };
+    GitOpsManagedCluster: {
+          "cluster_id": string;
+          "cluster_name"?: string;
+          "display_name"?: string;
+          "repo_path": string;
+          "last_yaml_sha": string;
+          "last_applied_at": string;
+          "status": "active" | "tombstoned";
+          "tombstoned_at"?: string;
+        };
+    GitOpsManagedClusterPage: {
+          "data": OpenAPIComponents['schemas']['GitOpsManagedCluster'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    GitOpsPreviewResult: {
+          "head_sha": string;
+          "source_id": string;
+          "source_name": string;
+          "applies": OpenAPIComponents['schemas']['GitOpsApplyPreview'][];
+          "would_miss": string[];
+          "would_restore": string[];
+          "on_delete_policy": "log" | "tombstone" | "decommission";
+        };
+    GitOpsPreviewResultEnvelope: {
+          "data": OpenAPIComponents['schemas']['GitOpsPreviewResult'];
+        };
+    GitOpsSource: {
+          "id": string;
+          "name": string;
+          "repo_url": string;
+          "branch": string;
+          "path_prefix": string;
+          "auth_mode": "none" | "https_token" | "ssh_key";
+          "auth": string;
+          "auth_configured": boolean;
+          "sync_mode": "manual" | "interval";
+          "sync_interval_seconds": number;
+          "on_delete": "log" | "tombstone" | "decommission";
+          "last_synced_at"?: string;
+          "last_synced_sha"?: string;
+          "last_error"?: string;
+          "enabled": boolean;
+          "allow_mass_decommission": boolean;
+          "created_at": string;
+          "updated_at": string;
+        };
+    GitOpsSourceEnvelope: {
+          "data": OpenAPIComponents['schemas']['GitOpsSource'];
+        };
+    GitOpsSourcePage: {
+          "data": OpenAPIComponents['schemas']['GitOpsSource'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    GitOpsSourceRequest: {
+          "name"?: string;
+          "repo_url"?: string;
+          "branch"?: string;
+          "path_prefix"?: string;
+          "auth_mode"?: "none" | "https_token" | "ssh_key";
+          "auth"?: string;
+          "sync_mode"?: "manual" | "interval";
+          "sync_interval_seconds"?: number;
+          "on_delete"?: "log" | "tombstone" | "decommission";
+          "enabled"?: boolean;
+          "allow_mass_decommission"?: boolean;
+        };
+    GitOpsSyncReceipt: {
+          "source_id": string;
+          "task_id": string;
+          "status": "queued";
+        };
+    GitOpsSyncReceiptEnvelope: {
+          "data": OpenAPIComponents['schemas']['GitOpsSyncReceipt'];
+        };
+    GitOpsSyncResult: {
+          "status": "queued";
+          "task_id": string;
+        };
+    GitOpsSyncResultEnvelope: {
+          "data": OpenAPIComponents['schemas']['GitOpsSyncResult'];
+        };
+    GrafanaTicketIdentity: {
+          "email": string;
+          "role": "Admin" | "Editor" | "Viewer";
+          "ttl": number;
+          "explore": boolean;
+          "admin": boolean;
+          "clusterIds": string[] | null;
+        };
+    GrafanaTicketIdentityEnvelope: {
+          "data": OpenAPIComponents['schemas']['GrafanaTicketIdentity'];
+        };
+    GrafanaTicketRedeemRequest: {
+          "ticket": string;
+        };
+    GroupMapping: {
+          "id": string;
+          "connector_id": string;
+          "group_name": string;
+          "scope": "global" | "cluster" | "project";
+          "role_id": string;
+          "cluster_id": string;
+          "project_id": string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    GroupMappingEnvelope: {
+          "data": OpenAPIComponents['schemas']['GroupMapping'];
+        };
+    GroupMappingListEnvelope: {
+          "data": OpenAPIComponents['schemas']['GroupMapping'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+        };
+    GroupMappingWriteRequest: {
+          "connector_id"?: string;
+          "group_name": string;
+          "scope": "global" | "cluster" | "project";
+          "role_id": string;
+          "cluster_id"?: string;
+          "project_id"?: string;
         };
     HelmChart: {
           "id"?: string;
@@ -1747,6 +3043,26 @@ export interface OpenAPIComponents {
           "created_at"?: string;
           "updated_at"?: string;
         };
+    HelmChartVersionPage: {
+          "data": OpenAPIComponents['schemas']['HelmChartVersion'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    HelmReleaseHistory: {
+          "release_name": string;
+          "namespace": string;
+          "revisions": OpenAPIComponents['schemas']['HelmReleaseRevision'][];
+        };
+    HelmReleaseHistoryEnvelope: {
+          "data": OpenAPIComponents['schemas']['HelmReleaseHistory'];
+        };
+    HelmReleaseRevision: {
+          "revision": number;
+          "updated"?: string;
+          "status"?: string;
+          "chart"?: string;
+          "app_version"?: string;
+          "description"?: string;
+        };
     HelmRepository: {
           "id"?: string;
           "name"?: string;
@@ -1772,10 +3088,70 @@ export interface OpenAPIComponents {
           "token"?: string;
           "charts"?: string[];
         } & Record<string, unknown>;
+    ImageVulnerability: {
+          "id": string;
+          "report_id": string;
+          "vulnerability_id": string;
+          "severity": string;
+          "pkg_name": string;
+          "installed_version": string;
+          "fixed_version": string;
+          "primary_link": string;
+          "cvss_score": number | null;
+          "title": string;
+          "description": string;
+          "created_at": string;
+        };
+    ImageVulnerabilityReport: {
+          "id": string;
+          "cluster_id": string;
+          "report_name": string;
+          "namespace": string;
+          "workload_kind": string;
+          "workload_name": string;
+          "container_name": string;
+          "image_registry": string;
+          "image_repo": string;
+          "image_tag": string;
+          "image_digest": string;
+          "scanner": string;
+          "scanner_version": string;
+          "critical_count": number;
+          "high_count": number;
+          "medium_count": number;
+          "low_count": number;
+          "unknown_count": number;
+          "scanned_at": string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    ImageVulnerabilityReportDetail: {
+          "report": OpenAPIComponents['schemas']['ImageVulnerabilityReport'];
+          "vulnerabilities": OpenAPIComponents['schemas']['ImageVulnerability'][];
+          "vulnerability_total": number;
+          "severity_filter": string;
+          "limit": number;
+          "offset": number;
+        };
+    ImageVulnerabilityReportDetailEnvelope: {
+          "data": OpenAPIComponents['schemas']['ImageVulnerabilityReportDetail'];
+        };
+    InhibitionEnvelope: {
+          "data": OpenAPIComponents['schemas']['InhibitionResponse'];
+        };
     InhibitionMatcher: {
           "label": string;
           "value": string;
           "is_regex"?: boolean;
+        };
+    InhibitionMatcherResponse: {
+          "label": string;
+          "value": string;
+          "is_regex": boolean;
+        };
+    InhibitionPage: {
+          "data": OpenAPIComponents['schemas']['InhibitionResponse'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
         };
     InhibitionRequest: {
           "name": string;
@@ -1783,6 +3159,16 @@ export interface OpenAPIComponents {
           "target_matchers"?: OpenAPIComponents['schemas']['InhibitionMatcher'][];
           "equal_labels"?: string[];
           "enabled"?: boolean;
+        };
+    InhibitionResponse: {
+          "id": string;
+          "name": string;
+          "source_matchers": OpenAPIComponents['schemas']['InhibitionMatcherResponse'][];
+          "target_matchers": OpenAPIComponents['schemas']['InhibitionMatcherResponse'][];
+          "equal_labels": string[];
+          "enabled": boolean;
+          "created_at": string;
+          "updated_at": string;
         };
     InstalledAppEnriched: {
           "id"?: string;
@@ -1826,18 +3212,261 @@ export interface OpenAPIComponents {
           "created_at"?: string;
           "updated_at"?: string;
         };
+    KubectlCloseEnvelope: {
+          "data": OpenAPIComponents['schemas']['KubectlCloseReceipt'];
+        };
+    KubectlCloseReceipt: {
+          "status": "closed";
+        };
+    KubectlRecordedCommand: {
+          "command_at": string;
+          "command_line": string;
+        };
+    KubectlRecordedCommandPage: {
+          "data": OpenAPIComponents['schemas']['KubectlRecordedCommand'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+        };
     KubectlSession: {
-          "id"?: string;
+          "id": string;
+          "cluster_id": string;
+          "user_id": string;
+          "status": "starting" | "active" | "closed" | "expired" | "failed";
+          "pod_name": string;
+          "pod_namespace": string;
+          "container": string;
+          "started_at": string;
+          "last_input_at": string;
+          "expires_at": string;
+          "idle_timeout_seconds": number;
+          "command_count"?: number;
+        };
+    KubectlSessionEnvelope: {
+          "data": OpenAPIComponents['schemas']['KubectlSession'];
+        };
+    KubectlSessionListEnvelope: {
+          "data": OpenAPIComponents['schemas']['KubectlSession'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    KubernetesProxyResponse: Record<string, unknown>;
+    LegacyMonitoringMetricsEnvelope: {
+          "data": OpenAPIComponents['schemas']['LegacyMonitoringMetricsResult'];
+        };
+    LegacyMonitoringMetricsResult: {
+          "status": "success" | "error";
+          "data"?: Record<string, unknown>;
+          "error"?: string;
+        };
+    ListEnvelope: {
+          "data": unknown[];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    LoggingAttachMutationReceipt: {
+          "output": OpenAPIComponents['schemas']['LoggingAttachResult'];
+          "operation": OpenAPIComponents['schemas']['LoggingOperation'];
+        };
+    LoggingAttachMutationReceiptEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingAttachMutationReceipt'];
+        };
+    LoggingAttachResult: OpenAPIComponents['schemas']['LoggingOutput'] & {
+          "token"?: string;
+        };
+    LoggingAttachResultEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingAttachResult'];
+        };
+    LoggingAttachStatus: {
+          "clusterId": string;
+          "ingestPublic": boolean;
+          "status": string;
+          "host": string;
+          "attached": boolean;
+        };
+    LoggingAttachStatusEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingAttachStatus'];
+        };
+    LoggingControllerStatusEnvelope: {
+          "data": {
+            "reconciler": Record<string, unknown>;
+            "health": string;
+            "healthReasons": string[];
+            "outputs": Record<string, unknown>;
+            "pipelines": Record<string, unknown>;
+            "operations": Record<string, number>;
+            "recentFailureCount": number;
+            "recentOperations": OpenAPIComponents['schemas']['LoggingOperation'][];
+            "latestFailure"?: unknown | null;
+          };
+        };
+    LoggingFluentBitConfig: {
+          "cluster_id": string;
+          "config": string;
+        };
+    LoggingFluentBitConfigEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingFluentBitConfig'];
+        };
+    LoggingOperation: {
+          "id": string;
+          "targetType": "output" | "pipeline";
+          "targetKey": string;
+          "operationType": string;
+          "status": "pending" | "running" | "completed" | "failed" | "superseded";
+          "attemptCount": number;
+          "startedAt"?: string | null;
+          "completedAt"?: string | null;
+          "errorMessage": string;
+          "createdAt": string;
+          "updatedAt": string;
+          "events"?: OpenAPIComponents['schemas']['LoggingOperationEvent'][];
+        };
+    LoggingOperationEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingOperation'];
+        };
+    LoggingOperationEvent: {
+          "id": string;
+          "level": string;
+          "stage": string;
+          "message": string;
+          "detail": Record<string, unknown>;
+          "createdAt": string;
+        };
+    LoggingOperationListEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingOperation'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    LoggingOutput: {
+          "id": string;
+          "name": string;
+          "output_type": string;
+          "configuration": Record<string, unknown>;
+          "cluster_id": string | null;
+          "enabled": boolean;
+          "created_by_id"?: string | null;
+          "created_at": string;
+          "updated_at": string;
+          "is_system": boolean;
+          "capabilities": OpenAPIComponents['schemas']['LoggingOutputCapabilities'];
+        };
+    LoggingOutputCapabilities: {
+          "ship": boolean;
+          "test": boolean;
+          "query": boolean;
+          "tail": boolean;
+          "aggregate": boolean;
+          "link_out": boolean;
+          "link_out_url"?: string;
+          "retention_visibility": boolean;
+          "query_mode": "native" | "link_out" | "shipping_only";
+        };
+    LoggingOutputEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingOutput'];
+        };
+    LoggingOutputMutationReceipt: {
+          "output": OpenAPIComponents['schemas']['LoggingOutput'];
+          "operation": OpenAPIComponents['schemas']['LoggingOperation'];
+        };
+    LoggingOutputMutationReceiptEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingOutputMutationReceipt'];
+        };
+    LoggingOutputPage: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+          "data"?: OpenAPIComponents['schemas']['LoggingOutput'][];
+        };
+    LoggingOutputWriteRequest: {
+          "name": string;
+          "output_type": "elasticsearch" | "opensearch" | "loki" | "splunk" | "cloudwatch" | "datadog" | "s3" | "syslog";
+          "configuration"?: Record<string, unknown>;
           "cluster_id"?: string;
-          "user_id"?: string;
-          "status"?: "starting" | "active" | "closed" | "expired" | "failed";
-          "pod_name"?: string;
-          "pod_namespace"?: string;
-          "container"?: string;
-          "started_at"?: string;
-          "last_input_at"?: string;
-          "expires_at"?: string;
-          "idle_timeout_seconds"?: number;
+          "enabled"?: boolean;
+        };
+    LoggingPipeline: {
+          "id": string;
+          "name": string;
+          "cluster_id": string;
+          "namespaces": string[];
+          "labels": Record<string, string>;
+          "filters": unknown;
+          "output_ids": string[];
+          "output_names": string[];
+          "enabled": boolean;
+          "created_by_id"?: string | null;
+          "created_at": string;
+          "updated_at": string;
+        };
+    LoggingPipelineEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingPipeline'];
+        };
+    LoggingPipelineMutationReceipt: {
+          "pipeline": OpenAPIComponents['schemas']['LoggingPipeline'];
+          "operation": OpenAPIComponents['schemas']['LoggingOperation'];
+        };
+    LoggingPipelineMutationReceiptEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingPipelineMutationReceipt'];
+        };
+    LoggingPipelinePage: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+          "data"?: OpenAPIComponents['schemas']['LoggingPipeline'][];
+        };
+    LoggingPipelineWriteRequest: {
+          "name": string;
+          "cluster_id"?: string;
+          "namespaces"?: string[];
+          "labels"?: Record<string, string>;
+          "filters"?: unknown;
+          "output_ids": string[];
+          "enabled"?: boolean;
+        };
+    LoggingQueryEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingQueryResult'];
+        };
+    LoggingQueryRequest: {
+          "query"?: string;
+          "limit"?: number;
+          "start"?: string;
+          "end"?: string;
+          "direction"?: "forward" | "backward";
+          "namespaces"?: string[];
+        };
+    LoggingQueryResult: {
+          "backend": string;
+          "query": string;
+          "limit": number;
+          "start": string;
+          "end": string;
+          "data": unknown;
+        };
+    LoggingSavedSearch: {
+          "id": string;
+          "output_id": string;
+          "name": string;
+          "query": string;
+          "namespaces": string[];
+          "limit": number;
+          "direction": "forward" | "backward";
+          "live_tail": boolean;
+          "created_at": string;
+          "updated_at": string;
+        };
+    LoggingSavedSearchEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingSavedSearch'];
+        };
+    LoggingSavedSearchListEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingSavedSearch'][];
+        };
+    LoggingTestEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingTestResult'];
+        };
+    LoggingTestResult: {
+          "success": boolean;
+          "message": string;
+          "operation": OpenAPIComponents['schemas']['LoggingOperation'];
+        };
+    LoggingTokenRotation: {
+          "clusterId": string;
+          "token": string;
+          "rotatedAt": string;
+          "operation": OpenAPIComponents['schemas']['LoggingOperation'];
+        };
+    LoggingTokenRotationEnvelope: {
+          "data": OpenAPIComponents['schemas']['LoggingTokenRotation'];
         };
     LoginRequest: {
           "email": string;
@@ -1850,8 +3479,393 @@ export interface OpenAPIComponents {
             "user"?: OpenAPIComponents['schemas']['User'];
           };
         };
-    MTLSBreakdownResponse: Record<string, unknown>;
-    MoveClustersRequest: Record<string, unknown>;
+    MTLSBreakdownResponse: {
+          "cluster_id": string;
+          "mesh": string;
+          "mtls_coverage_pct": number;
+          "total_count": number;
+          "notice"?: string;
+          "rows": Array<{
+            "namespace": string;
+            "mode": string;
+            "rules": number;
+          }>;
+        };
+    ManagementBackupDeleteReceipt: {
+          "destination_id": string;
+          "generation": number;
+          "desired_state": "deleted";
+          "status": string;
+        };
+    ManagementBackupDeleteReceiptEnvelope: {
+          "data": OpenAPIComponents['schemas']['ManagementBackupDeleteReceipt'];
+        };
+    ManagementBackupDestination: {
+          "id": string;
+          "name": string;
+          "source": "ui" | "helm";
+          "bucket": string;
+          "prefix": string;
+          "region": string;
+          "endpoint"?: string;
+          "schedule": string;
+          "enabled": boolean;
+          "keep_daily": number;
+          "keep_weekly": number;
+          "keep_monthly": number;
+          "has_credentials": boolean;
+          "access_key"?: string;
+          "secret_key"?: string;
+          "cronjob"?: OpenAPIComponents['schemas']['ManagementCronJobStatus'];
+          "last_job"?: OpenAPIComponents['schemas']['ManagementBackupJob'];
+          "read_only": boolean;
+          "desired_generation"?: number;
+          "applied_generation"?: number;
+          "desired_state"?: string;
+          "reconcile_status"?: string;
+          "last_error"?: string;
+        };
+    ManagementBackupDestinationEnvelope: {
+          "data": OpenAPIComponents['schemas']['ManagementBackupDestination'];
+        };
+    ManagementBackupDestinationWriteRequest: {
+          "name": string;
+          "bucket": string;
+          "prefix"?: string;
+          "region"?: string;
+          "endpoint_url"?: string;
+          "access_key"?: string;
+          "secret_key"?: string;
+          "schedule"?: string;
+          "enabled"?: boolean;
+          "keep_daily"?: number;
+          "keep_weekly"?: number;
+          "keep_monthly"?: number;
+        };
+    ManagementBackupEndpoint: {
+          "bucket": string;
+          "prefix": string;
+          "region": string;
+          "endpoint"?: string;
+        };
+    ManagementBackupJob: {
+          "name": string;
+          "start_time"?: string;
+          "completion_time"?: string;
+          "succeeded": number;
+          "failed": number;
+          "active": number;
+          "duration_seconds"?: number;
+        };
+    ManagementBackupOperation: {
+          "id": string;
+          "destination_id": string;
+          "operation_type": "management_backup_test" | "management_backup_run";
+          "status": string;
+          "operation_url"?: string;
+          "attempt_count"?: number;
+          "error_message"?: string;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    ManagementBackupRetention: {
+          "daily"?: string;
+          "weekly"?: string;
+          "monthly"?: string;
+        };
+    ManagementBackupStatusResponse: {
+          "enabled": boolean;
+          "reason"?: string;
+          "destinations": OpenAPIComponents['schemas']['ManagementBackupDestination'][] | null;
+          "encryption_key_backup": {
+            "wrapping_configured": boolean;
+          };
+          "drill"?: OpenAPIComponents['schemas']['ManagementCronJobStatus'];
+          "cronjob"?: OpenAPIComponents['schemas']['ManagementCronJobStatus'];
+          "destination"?: OpenAPIComponents['schemas']['ManagementBackupEndpoint'];
+          "retention"?: OpenAPIComponents['schemas']['ManagementBackupRetention'];
+          "last_job"?: OpenAPIComponents['schemas']['ManagementBackupJob'];
+        };
+    ManagementCronJobStatus: {
+          "name": string;
+          "schedule": string;
+          "suspended": boolean;
+          "last_schedule_time"?: string;
+          "last_successful_time"?: string;
+        };
+    MirroredGatewayClass: {
+          "name": string;
+          "controller_name": string;
+          "description": string;
+          "parameters": unknown;
+          "accepted_status": string;
+          "labels": OpenAPIComponents['schemas']['MirroredResourceMetadata'];
+          "annotations": OpenAPIComponents['schemas']['MirroredResourceMetadata'];
+          "last_seen_at": string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    MirroredGatewayClassPage: {
+          "data": OpenAPIComponents['schemas']['MirroredGatewayClass'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+        };
+    MirroredIngressClass: {
+          "name": string;
+          "controller": string;
+          "parameters": unknown;
+          "is_default": boolean;
+          "labels": OpenAPIComponents['schemas']['MirroredResourceMetadata'];
+          "annotations": OpenAPIComponents['schemas']['MirroredResourceMetadata'];
+          "last_seen_at": string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    MirroredIngressClassPage: {
+          "data": OpenAPIComponents['schemas']['MirroredIngressClass'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+        };
+    MirroredLimitRange: {
+          "namespace": string;
+          "name": string;
+          "limits": unknown;
+          "labels": OpenAPIComponents['schemas']['MirroredResourceMetadata'];
+          "annotations": OpenAPIComponents['schemas']['MirroredResourceMetadata'];
+          "last_seen_at": string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    MirroredLimitRangePage: {
+          "data": OpenAPIComponents['schemas']['MirroredLimitRange'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+        };
+    MirroredNetworkPolicy: {
+          "namespace": string;
+          "name": string;
+          "pod_selector": unknown;
+          "policy_types": unknown;
+          "ingress_rules": unknown;
+          "egress_rules": unknown;
+          "labels": OpenAPIComponents['schemas']['MirroredResourceMetadata'];
+          "annotations": OpenAPIComponents['schemas']['MirroredResourceMetadata'];
+          "is_managed": boolean;
+          "last_seen_at": string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    MirroredNetworkPolicyPage: {
+          "data": OpenAPIComponents['schemas']['MirroredNetworkPolicy'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+        };
+    MirroredResourceMetadata: Record<string, string>;
+    MirroredResourceQuota: {
+          "namespace": string;
+          "name": string;
+          "hard": unknown;
+          "used": unknown;
+          "scopes": unknown;
+          "labels": OpenAPIComponents['schemas']['MirroredResourceMetadata'];
+          "annotations": OpenAPIComponents['schemas']['MirroredResourceMetadata'];
+          "last_seen_at": string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    MirroredResourceQuotaPage: {
+          "data": OpenAPIComponents['schemas']['MirroredResourceQuota'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+        };
+    MonitoringBackend: {
+          "id": string;
+          "name": string;
+          "backendType": string;
+          "queryUrl": string;
+          "alertmanagerUrl": string;
+          "tenantId": string;
+          "authType": string;
+          "authConfig": Record<string, unknown>;
+          "authConfigKeys": string[];
+          "operationPolicies": Record<string, unknown>;
+          "defaultStepSeconds": number;
+          "timeoutSeconds": number;
+          "isDefault": boolean;
+        };
+    MonitoringBackendEnvelope: {
+          "data": OpenAPIComponents['schemas']['MonitoringBackend'] | Record<string, never>;
+        };
+    MonitoringBackendPage: {
+          "data": OpenAPIComponents['schemas']['MonitoringBackend'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+        };
+    MonitoringMetricsEnvelope: {
+          "data": Record<string, unknown>;
+        };
+    MonitoringObservedRelease: {
+          "clusterId": string;
+          "namespace": string;
+          "releaseName": string;
+          "observedAt": string;
+          "status": string;
+          "revision"?: number;
+          "error"?: string;
+        };
+    MonitoringOperation: {
+          "id": string;
+          "targetType": "cluster_stack" | "shared_thanos" | "shared_alertmanager" | "shared_grafana" | "shared_loki";
+          "targetKey": string;
+          "operationType": "install" | "upgrade" | "replace" | "uninstall";
+          "status": "pending" | "running" | "completed" | "failed" | "superseded";
+          "attemptCount": number;
+          "startedAt"?: string | null;
+          "completedAt"?: string | null;
+          "errorMessage": string;
+          "createdAt": string;
+          "updatedAt": string;
+          "events"?: OpenAPIComponents['schemas']['MonitoringOperationEvent'][];
+        };
+    MonitoringOperationEnvelope: {
+          "data": OpenAPIComponents['schemas']['MonitoringOperation'];
+        };
+    MonitoringOperationEvent: {
+          "id": string;
+          "level": string;
+          "stage": string;
+          "message": string;
+          "detail": Record<string, unknown>;
+          "createdAt": string;
+        };
+    MonitoringOperationPage: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+          "data"?: OpenAPIComponents['schemas']['MonitoringOperation'][];
+        };
+    MonitoringSizerEnvelope: {
+          "data": OpenAPIComponents['schemas']['MonitoringSizerResponse'];
+        };
+    MonitoringSizerObjectStorage: {
+          "configured": boolean;
+          "storageConfigId": string;
+          "computedLokiPrefix": string;
+        };
+    MonitoringSizerResponse: {
+          "managementClusterId": string;
+          "isLocal": boolean;
+          "kubernetesVersion": string;
+          "nodes": Record<string, unknown>;
+          "requestsInUse": Record<string, unknown>;
+          "podListTruncated": boolean;
+          "leftover": Record<string, unknown>;
+          "reserve": Record<string, unknown>;
+          "usable": Record<string, unknown>;
+          "storageClass": Record<string, unknown>;
+          "objectStorage": OpenAPIComponents['schemas']['MonitoringSizerObjectStorage'];
+          "connectedClusters": number;
+          "thanos": Record<string, unknown>;
+          "estimates": Record<string, unknown>;
+          "skipDiskCheck": boolean;
+          "verdicts": {
+            "grafana": OpenAPIComponents['schemas']['MonitoringSizerVerdict'];
+            "loki": OpenAPIComponents['schemas']['MonitoringSizerVerdict'];
+            "thanosReceive": OpenAPIComponents['schemas']['MonitoringSizerVerdict'];
+          } & Record<string, unknown>;
+          "caps": Record<string, unknown>;
+        };
+    MonitoringSizerVerdict: {
+          "result": string;
+          "mode"?: string | null;
+          "reasons": string[];
+          "warnings"?: string[];
+        };
+    MonitoringStackPreview: {
+          "clusterId": string;
+          "chart": {
+            "repoUrl": string;
+            "chartName": string;
+          };
+          "values": Record<string, unknown>;
+          "desiredSpecHash": string;
+          "requiresReplace": boolean;
+          "replaceReasons": string[] | null;
+        };
+    MonitoringStackPreviewEnvelope: {
+          "data": OpenAPIComponents['schemas']['MonitoringStackPreview'];
+        };
+    MonitoringStackRequest: {
+          "releaseName"?: string;
+          "namespace"?: string;
+          "retention"?: string;
+          "storageClass"?: string;
+          "storageSize"?: string;
+          "scrapeInterval"?: string;
+          "clusterLabel"?: string;
+          "clusterLabelValue"?: string;
+          "prometheusVersion"?: string;
+          "chartVersion"?: string;
+          "storageConfigId"?: string;
+          "objectStorageSecretName"?: string;
+          "enableGrafana"?: boolean;
+          "enableAlertmanager"?: boolean;
+          "thanosSidecarEnabled"?: boolean;
+          "autoRollbackOnFailure"?: boolean;
+        };
+    MonitoringStackStatus: {
+          "status": string;
+          "managementClusterId"?: string;
+          "namespace"?: string;
+          "releaseName"?: string;
+          "chartVersion"?: string;
+          "desiredSpecHash"?: string;
+          "observedRelease"?: OpenAPIComponents['schemas']['MonitoringObservedRelease'];
+          "drifted"?: boolean;
+          "driftReasons"?: string[];
+          "pods"?: number;
+          "operation"?: OpenAPIComponents['schemas']['MonitoringOperation'];
+          "retention"?: string;
+          "thanosSidecarEnabled"?: boolean;
+          "storageConfigId"?: string | null;
+          "objectStorageSecretName"?: string;
+          "storageClass"?: string;
+          "storageSize"?: string;
+          "lastObservedStatus"?: string;
+          "lastObservedRevision"?: number;
+          "lastObservedAt"?: string | null;
+          "lastDriftDetectedAt"?: string | null;
+          "lastHealthyAt"?: string | null;
+          "queryReplicas"?: number;
+          "storeGatewayReplicas"?: number;
+          "compactorReplicas"?: number;
+          "replicas"?: number;
+          "ingressHost"?: string;
+          "logDatasourceUrl"?: string;
+          "grafanaHost"?: string;
+          "authMode"?: string;
+          "autoRollbackOnFailure"?: boolean;
+          "managedAssetHashes"?: Record<string, unknown>;
+          "alertingAssetHashes"?: Record<string, unknown>;
+          "ingestHostname"?: string;
+          "ingestPublic"?: boolean;
+          "walStorageSize"?: string;
+          "mode"?: string;
+          "skipDiskCheck"?: boolean;
+          "computedLokiPrefix"?: string;
+          "lastSizerVerdict"?: Record<string, unknown>;
+          "queryUrl"?: string;
+          "authUrl"?: string;
+        };
+    MonitoringStackStatusEnvelope: {
+          "data": OpenAPIComponents['schemas']['MonitoringStackStatus'];
+        };
+    MoveClustersRequest: {
+          "cluster_ids": string[];
+        };
     Namespace: {
           "name"?: string;
           "clusterId"?: string;
@@ -1865,6 +3879,31 @@ export interface OpenAPIComponents {
           "memoryLimit"?: number;
           "createdAt"?: string;
         } & Record<string, unknown>;
+    NativeRBACRule: {
+          "id": string;
+          "userId": string;
+          "clusterId"?: string;
+          "namespace": string;
+          "apiGroup": string;
+          "resource": string;
+          "verbs": Array<"read" | "list" | "watch" | "create" | "update" | "delete" | "*">;
+          "createdAt": string;
+          "createdBy"?: string;
+        };
+    NativeRBACRuleEnvelope: {
+          "data": OpenAPIComponents['schemas']['NativeRBACRule'];
+        };
+    NativeRBACRuleListEnvelope: {
+          "data": OpenAPIComponents['schemas']['NativeRBACRule'][];
+        };
+    NativeRBACRuleRequest: {
+          "userId": string;
+          "clusterId"?: string;
+          "namespace"?: string;
+          "apiGroup"?: string;
+          "resource": string;
+          "verbs": Array<"read" | "list" | "watch" | "create" | "update" | "delete" | "*">;
+        };
     NetworkPolicyApplicationResponse: Record<string, unknown>;
     NetworkPolicyTemplateResponse: Record<string, unknown>;
     NodeActionResponse: {
@@ -1928,6 +3967,24 @@ export interface OpenAPIComponents {
           "key": string;
           "value"?: string;
         };
+    NodeOperation: {
+          "id": string;
+          "cluster_id": string;
+          "node_name": string;
+          "action": "cordon" | "uncordon" | "set_label" | "remove_label" | "set_annotation" | "remove_annotation" | "add_taint" | "remove_taint" | "drain";
+          "status": "pending" | "running" | "retrying" | "blocked" | "failed" | "succeeded";
+          "generation": number;
+          "observed_generation": number;
+          "attempt_count": number;
+          "error_code"?: string;
+          "progress": Record<string, unknown>;
+          "completed_at"?: string | null;
+          "created_at": string;
+          "updated_at": string;
+        };
+    NodeOperationEnvelope: {
+          "data": OpenAPIComponents['schemas']['NodeOperation'];
+        };
     NodeSummary: {
           "name"?: string;
           "status"?: string;
@@ -1945,6 +4002,10 @@ export interface OpenAPIComponents {
           "conditions"?: Record<string, unknown>[];
           "createdAt"?: string;
         } & Record<string, unknown>;
+    NodeSummaryListEnvelope: {
+          "data": OpenAPIComponents['schemas']['NodeSummary'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
     NodeTaintActionResponse: {
           "node"?: string;
           "status"?: string;
@@ -1959,22 +4020,120 @@ export interface OpenAPIComponents {
           "value"?: string;
           "effect": "NoSchedule" | "PreferNoSchedule" | "NoExecute";
         };
+    NotificationChannel: {
+          "id": string;
+          "name": string;
+          "type": "slack" | "pagerduty" | "msteams" | "webhook" | "email";
+          "enabled": boolean;
+          "config": Record<string, unknown>;
+          "createdAt": string;
+          "updatedAt": string;
+        };
+    NotificationChannelEnvelope: {
+          "data": OpenAPIComponents['schemas']['NotificationChannel'];
+        };
+    NotificationChannelPage: {
+          "data": OpenAPIComponents['schemas']['NotificationChannel'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    NotificationChannelTestResult: {
+          "success": boolean;
+          "message": string;
+        };
+    NotificationChannelTestResultEnvelope: {
+          "data": OpenAPIComponents['schemas']['NotificationChannelTestResult'];
+        };
+    NotificationTemplateDetail: {
+          "key": string;
+          "channel": "email" | "webhook";
+          "description": string;
+          "body_format": "text" | "markdown" | "html" | "json";
+          "default_subject": string;
+          "default_body": string;
+          "subject": string;
+          "body": string;
+          "has_override": boolean;
+          "enabled": boolean;
+          "updated_at"?: string;
+          "updated_by"?: string;
+          "variables": OpenAPIComponents['schemas']['NotificationTemplateVariable'][];
+        };
+    NotificationTemplateListItem: {
+          "key": string;
+          "channel": "email" | "webhook";
+          "description": string;
+          "body_format": "text" | "markdown" | "html" | "json";
+          "has_override": boolean;
+          "enabled": boolean;
+          "updated_at"?: string;
+        };
+    NotificationTemplatePreviewRequest: {
+          "subject"?: string;
+          "body"?: string;
+          "body_format"?: "text" | "markdown" | "html" | "json";
+          "variables": Record<string, unknown>;
+        };
+    NotificationTemplatePreviewResponse: {
+          "subject": string;
+          "body": string;
+        };
+    NotificationTemplateUpsertRequest: {
+          "subject"?: string;
+          "body": string;
+          "body_format"?: "text" | "markdown" | "html" | "json";
+          "enabled"?: boolean;
+        };
+    NotificationTemplateVariable: {
+          "name": string;
+          "description": string;
+          "required": boolean;
+          "example": string;
+        };
     OwnershipTransferResponse: {
-          "id"?: string;
-          "managed_by"?: "api" | "ui" | "crd" | "system";
-          "transferred"?: boolean;
+          "id": string;
+          "managed_by": "api" | "ui" | "crd" | "system";
+          "transferred": boolean;
         };
     PaginatedClusters: {
-          "data"?: OpenAPIComponents['schemas']['Cluster'][];
-          "count"?: number;
-          "next"?: string | null;
-          "previous"?: string | null;
+          "data": OpenAPIComponents['schemas']['Cluster'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
         };
     PaginatedEnvelope: {
           "data": unknown[];
           "count": number;
           "next": string | null;
           "previous": string | null;
+        };
+    PaginationMetadata: {
+          "total"?: number;
+          "limit": number;
+          "offset": number;
+          "has_more": boolean;
+          "next_offset": number | null;
+        };
+    PlatformSetting: {
+          "key": string;
+          "value": unknown;
+          "description": string;
+          "type": "string" | "bool" | "int" | "enum";
+          "default": unknown;
+          "updated_by"?: string;
+          "updated_at"?: string;
+          "is_default": boolean;
+        };
+    PlatformSettingEnvelope: {
+          "data": OpenAPIComponents['schemas']['PlatformSetting'];
+        };
+    PlatformSettingListEnvelope: {
+          "data": OpenAPIComponents['schemas']['PlatformSetting'][];
+        };
+    PlatformSettingUpdateRequest: {
+          "value": unknown;
+        };
+    PlatformSettingsBatchUpdateRequest: {
+          "updates": Record<string, unknown>;
         };
     Pod: {
           "name"?: string;
@@ -1997,19 +4156,57 @@ export interface OpenAPIComponents {
           "message"?: string;
           "container"?: string;
         };
-    Project: {
-          "id"?: string;
-          "name"?: string;
-          "cluster_id"?: string;
+    PodSecurityTemplate: {
+          "id": string;
+          "name": string;
+          "description": string;
+          "is_default": boolean;
+          "is_builtin": boolean;
+          "enforce_level": "privileged" | "baseline" | "restricted";
+          "enforce_version": string;
+          "audit_level": "privileged" | "baseline" | "restricted";
+          "audit_version": string;
+          "warn_level": "privileged" | "baseline" | "restricted";
+          "warn_version": string;
+          "exempt_usernames": string[];
+          "exempt_runtime_classes": string[];
+          "exempt_namespaces": string[];
+          "created_by_id"?: string | null;
+          "created_at": string;
+          "updated_at": string;
+        };
+    PodSecurityTemplateWriteRequest: {
+          "name": string;
           "description"?: string;
-          "namespaces"?: string[];
-          "pod_security_profile"?: string;
-          "resource_quota_cpu"?: string;
-          "resource_quota_memory"?: string;
-          "resource_quota_pods"?: number;
-          "created_at"?: string;
-          "updated_at"?: string;
-        } & Record<string, unknown>;
+          "is_default"?: boolean;
+          "enforce_level"?: "privileged" | "baseline" | "restricted";
+          "enforce_version"?: string;
+          "audit_level"?: "privileged" | "baseline" | "restricted";
+          "audit_version"?: string;
+          "warn_level"?: "privileged" | "baseline" | "restricted";
+          "warn_version"?: string;
+          "exempt_usernames"?: string[];
+          "exempt_runtime_classes"?: string[];
+          "exempt_namespaces"?: string[];
+        };
+    Project: {
+          "id": string;
+          "name": string;
+          "display_name": string;
+          "cluster_id": string;
+          "description": string;
+          "namespaces": string[];
+          "resource_quota": Record<string, unknown>;
+          "limit_range": Record<string, unknown>;
+          "pod_security_profile": string;
+          "network_policy_mode": "isolated" | "allow-same-project" | "none";
+          "resource_quota_cpu_limit": string;
+          "resource_quota_memory_limit": string;
+          "resource_quota_pod_count": number;
+          "created_by_id": string | null;
+          "created_at": string;
+          "updated_at": string;
+        };
     ProjectCatalog: {
           "id"?: string;
           "name"?: string;
@@ -2024,6 +4221,142 @@ export interface OpenAPIComponents {
         };
     ProjectNamespaceRequest: {
           "namespace": string;
+        };
+    ProjectQuotaDimensions: {
+          "max_clusters_per_project": number;
+          "max_namespaces_per_project": number;
+          "max_members_per_project": number;
+        };
+    ProjectQuotaOffender: {
+          "project_id": string;
+          "project_name": string;
+          "quota_plan": string;
+          "limit": "max_clusters_per_project" | "max_namespaces_per_project" | "max_members_per_project";
+          "current": number;
+          "maximum": number;
+          "usage_pct": number;
+        };
+    ProjectQuotaPercentages: {
+          "max_clusters_per_project": number;
+          "max_namespaces_per_project": number;
+          "max_members_per_project": number;
+        };
+    ProjectQuotaSnapshot: {
+          "project_id": string;
+          "quota_plan": string;
+          "enforcement": "soft" | "hard";
+          "limits": OpenAPIComponents['schemas']['ProjectQuotaDimensions'];
+          "usage": OpenAPIComponents['schemas']['ProjectQuotaDimensions'];
+          "usage_pct": OpenAPIComponents['schemas']['ProjectQuotaPercentages'];
+          "overrides": Record<string, unknown>;
+        };
+    ProjectQuotaSnapshotEnvelope: {
+          "data": OpenAPIComponents['schemas']['ProjectQuotaSnapshot'];
+        };
+    PrometheusDatasource: {
+          "id": string;
+          "name": string;
+          "url": string;
+          "has_auth": boolean;
+          "tls_skip_verify": boolean;
+          "enabled": boolean;
+          "created_at": string;
+          "updated_at": string;
+        };
+    PrometheusDatasourceEnvelope: {
+          "data": OpenAPIComponents['schemas']['PrometheusDatasource'];
+        };
+    PrometheusDatasourcePage: {
+          "data": OpenAPIComponents['schemas']['PrometheusDatasource'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    PrometheusDatasourceRequest: {
+          "name": string;
+          "url": string;
+          "basic_auth_user"?: string;
+          "basic_auth_pass"?: string;
+          "bearer_token"?: string;
+          "tls_skip_verify"?: boolean;
+          "enabled"?: boolean;
+        };
+    PrometheusDatasourceTestResult: {
+          "ok": boolean;
+          "message": string;
+        };
+    PrometheusDatasourceTestResultEnvelope: {
+          "data": OpenAPIComponents['schemas']['PrometheusDatasourceTestResult'];
+        };
+    PublicBannerSettings: {
+          "banner.login_text": string;
+          "banner.global_text": string;
+          "banner.global_color": "info" | "warning" | "critical";
+        };
+    PublicBannerSettingsEnvelope: {
+          "data": OpenAPIComponents['schemas']['PublicBannerSettings'];
+        };
+    PublicBrandingSettings: {
+          "branding.product_name": string;
+          "branding.logo_url": string;
+          "branding.primary_color": string;
+          "branding.support_url": string;
+          "branding.copyright": string;
+        };
+    PublicBrandingSettingsEnvelope: {
+          "data": OpenAPIComponents['schemas']['PublicBrandingSettings'];
+        };
+    PublicRegistrationSettings: {
+          "registration.tls_mode": "public_ca" | "private_ca" | "insecure";
+          "registration.ca_bundle": string;
+        };
+    PublicRegistrationSettingsEnvelope: {
+          "data": OpenAPIComponents['schemas']['PublicRegistrationSettings'];
+        };
+    QuotaPlan: {
+          "name": string;
+          "enforcement": "soft" | "hard";
+          "description": string;
+          "max_clusters_per_project": number;
+          "max_namespaces_per_project": number;
+          "max_members_per_project": number;
+          "max_projects_per_user": number;
+          "max_tokens_per_user": number;
+          "max_streams_per_user": number;
+          "max_total_clusters": number;
+          "max_total_users": number;
+        };
+    QuotaPlanEnvelope: {
+          "data": OpenAPIComponents['schemas']['QuotaPlan'];
+        };
+    QuotaPlanPage: {
+          "data": OpenAPIComponents['schemas']['QuotaPlan'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+        };
+    QuotaPlanRequest: {
+          "name"?: string;
+          "enforcement"?: "soft" | "hard";
+          "description"?: string;
+          "max_clusters_per_project"?: number;
+          "max_namespaces_per_project"?: number;
+          "max_members_per_project"?: number;
+          "max_projects_per_user"?: number;
+          "max_tokens_per_user"?: number;
+          "max_streams_per_user"?: number;
+          "max_total_clusters"?: number;
+          "max_total_users"?: number;
+        };
+    QuotaUsageGlobal: {
+          "total_clusters": number;
+          "max_total_clusters": number;
+          "total_users": number;
+          "max_total_users": number;
+        };
+    QuotaUsageSnapshot: {
+          "global": OpenAPIComponents['schemas']['QuotaUsageGlobal'];
+          "project_offenders": OpenAPIComponents['schemas']['ProjectQuotaOffender'][];
+          "user_offenders": OpenAPIComponents['schemas']['UserQuotaOffender'][];
+        };
+    QuotaUsageSnapshotEnvelope: {
+          "data": OpenAPIComponents['schemas']['QuotaUsageSnapshot'];
         };
     RBACBindingRequest: {
           "role_id": string;
@@ -2046,14 +4379,56 @@ export interface OpenAPIComponents {
           "group"?: string;
           "created_at"?: string;
         } & Record<string, unknown>;
+    RBACEffectivePermissionBinding: {
+          "scope": string;
+          "binding_id"?: string;
+          "role_id"?: string;
+          "role_name"?: string;
+          "group"?: string;
+          "cluster_id"?: string;
+          "project_id"?: string;
+          "namespace"?: string;
+          "superuser"?: boolean;
+          "rules": OpenAPIComponents['schemas']['RBACRule'][];
+        };
+    RBACEffectivePermissionContext: {
+          "cluster_id"?: string;
+          "project_id"?: string;
+          "namespace"?: string;
+          "namespace_scoped_bindings_supported": boolean;
+          "warnings"?: string[];
+        };
+    RBACEffectivePermissionGrant: {
+          "resource": string;
+          "verb": string;
+          "applies_to_context": boolean;
+          "inherited"?: boolean;
+          "inherited_from"?: string;
+          "sources": OpenAPIComponents['schemas']['RBACEffectivePermissionSource'][];
+        };
+    RBACEffectivePermissionSource: {
+          "scope": string;
+          "binding_id"?: string;
+          "role_id"?: string;
+          "role_name"?: string;
+          "cluster_id"?: string;
+          "project_id"?: string;
+          "namespace"?: string;
+        };
+    RBACEffectivePermissionSubject: {
+          "user_id": string;
+          "self": boolean;
+        };
     RBACEffectivePermissions: {
-          "user_id"?: string;
-          "bindings"?: Record<string, unknown>[];
-          "grants"?: Array<{
-            "resource"?: string;
-            "verbs"?: string[];
-          }>;
-        } & Record<string, unknown>;
+          "subject": OpenAPIComponents['schemas']['RBACEffectivePermissionSubject'];
+          "superuser": boolean;
+          "context": OpenAPIComponents['schemas']['RBACEffectivePermissionContext'];
+          "bindings": OpenAPIComponents['schemas']['RBACEffectivePermissionBinding'][];
+          "permissions": OpenAPIComponents['schemas']['RBACEffectivePermissionGrant'][];
+        };
+    RBACEffectivePermissionsEnvelope: {
+          "data": OpenAPIComponents['schemas']['RBACEffectivePermissions'];
+        };
     RBACGlobalRoleBinding: {
           "id"?: string;
           "role_id"?: string;
@@ -2062,22 +4437,35 @@ export interface OpenAPIComponents {
           "created_at"?: string;
         } & Record<string, unknown>;
     RBACPermissionPreview: {
-          "grants"?: Array<{
-            "resource"?: string;
-            "verbs"?: string[];
-          }>;
-          "risk_level"?: string;
-          "sensitive"?: boolean;
+          "scope": string;
+          "role_id"?: string;
+          "role_name"?: string;
+          "template_name"?: string;
+          "risk_level": string;
           "warnings"?: string[];
-        } & Record<string, unknown>;
+          "permissions": OpenAPIComponents['schemas']['RBACEffectivePermissionGrant'][];
+          "sensitive_flags": OpenAPIComponents['schemas']['RBACPermissionSensitiveFlags'];
+        };
+    RBACPermissionPreviewEnvelope: {
+          "data": OpenAPIComponents['schemas']['RBACPermissionPreview'];
+        };
     RBACPermissionPreviewRequest: {
           "template_name"?: string;
           "role_id"?: string;
           "scope"?: "global" | "cluster" | "project";
-          "rules"?: Array<{
-            "resource"?: string;
-            "verbs"?: string[];
-          }>;
+          "cluster_id"?: string;
+          "project_id"?: string;
+          "rules"?: OpenAPIComponents['schemas']['RBACRule'][];
+        };
+    RBACPermissionSensitiveFlags: {
+          "wildcard": boolean;
+          "can_mutate": boolean;
+          "can_delete": boolean;
+          "can_exec": boolean;
+          "can_proxy": boolean;
+          "can_read_secrets": boolean;
+          "can_manage_rbac": boolean;
+          "can_restore": boolean;
         };
     RBACProjectBindingRequest: {
           "role_id": string;
@@ -2097,23 +4485,27 @@ export interface OpenAPIComponents {
           "id"?: string;
           "name"?: string;
           "display_name"?: string;
+          "description"?: string;
           "scope"?: "global" | "cluster" | "project";
           "is_builtin"?: boolean;
-          "rules"?: Array<{
-            "resource"?: string;
-            "verbs"?: string[];
-          }>;
+          "rules"?: OpenAPIComponents['schemas']['RBACRule'][];
           "created_at"?: string;
           "updated_at"?: string;
         } & Record<string, unknown>;
     RBACRoleRequest: {
           "name": string;
           "display_name"?: string;
+          "displayName"?: string;
+          "description"?: string;
+          "permissions"?: Record<string, unknown>;
+          "rules"?: OpenAPIComponents['schemas']['RBACRule'][];
           "scope"?: "global" | "cluster" | "project";
-          "rules"?: Array<{
-            "resource"?: string;
-            "verbs"?: string[];
-          }>;
+        };
+    RBACRule: {
+          "resource"?: string;
+          "resources"?: string[];
+          "verbs": string[];
+          "api_groups"?: string[];
         };
     RBACTemplate: {
           "name"?: string;
@@ -2125,26 +4517,128 @@ export interface OpenAPIComponents {
             "verbs"?: string[];
           }>;
         } & Record<string, unknown>;
+    ReadAuditPolicyCreateRequest: {
+          "name": string;
+          "description"?: string;
+          "path_pattern": string;
+          "verbs"?: string;
+          "sample_rate"?: number;
+          "enabled"?: boolean;
+        };
+    ReadAuditPolicyListResponse: {
+          "items": OpenAPIComponents['schemas']['ReadAuditPolicyResponse'][];
+          "total": number;
+        };
+    ReadAuditPolicyResponse: {
+          "id": string;
+          "name": string;
+          "description": string;
+          "path_pattern": string;
+          "verbs": string;
+          "sample_rate": number;
+          "enabled": boolean;
+          "created_by"?: string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    ReadAuditPolicyUpdateRequest: {
+          "description"?: string;
+          "path_pattern"?: string;
+          "verbs"?: string;
+          "sample_rate"?: number;
+          "enabled"?: boolean;
+        };
     RegistrationStatus: {
-          "cluster_id"?: string;
-          "phase"?: "created" | "awaiting_agent" | "connected" | "provisioning" | "ready" | "failed";
+          "cluster_id": string;
+          "phase": "created" | "awaiting_agent" | "connected" | "provisioning" | "ready" | "failed";
           "install_baseline"?: boolean | null;
           "started_at"?: string | null;
           "completed_at"?: string | null;
-          "steps"?: OpenAPIComponents['schemas']['RegistrationStep'][];
+          "steps": OpenAPIComponents['schemas']['RegistrationStep'][];
         };
     RegistrationStep: {
-          "id"?: string;
-          "step_name"?: string;
-          "label"?: string;
-          "status"?: "pending" | "running" | "success" | "failed" | "skipped";
-          "progress_pct"?: number;
+          "id": string;
+          "step_name": string;
+          "label": string;
+          "status": "pending" | "running" | "success" | "failed" | "skipped";
+          "progress_pct": number;
           "detail"?: Record<string, unknown>;
           "started_at"?: string | null;
           "completed_at"?: string | null;
           "error_message"?: string;
-          "step_order"?: number;
-          "created_at"?: string;
+          "step_order": number;
+          "created_at": string;
+        };
+    RenderedDashboardWidget: {
+          "id": string;
+          "name": string;
+          "widget_type": "grafana_panel" | "prom_sparkline" | "prom_stat" | "url_iframe";
+          "spec_resolved": Record<string, unknown>;
+          "grid": OpenAPIComponents['schemas']['DashboardWidgetGrid'];
+          "refresh_seconds": number;
+          "data"?: OpenAPIComponents['schemas']['RenderedDashboardWidgetData'];
+        };
+    RenderedDashboardWidgetData: {
+          "sparkline_svg"?: string;
+          "stat_value"?: number;
+          "stat_unit"?: string;
+          "stat_format"?: string;
+          "stat_ok"?: boolean;
+          "error"?: string;
+        };
+    RenderedDashboardWidgetListEnvelope: {
+          "data": OpenAPIComponents['schemas']['RenderedDashboardWidget'][];
+        };
+    ResourceDiscoveryEntry: {
+          "resource_type": string;
+          "api_base": string;
+          "api_group"?: string;
+          "api_version": string;
+          "kind": string;
+          "plural": string;
+          "namespaced": boolean;
+          "verbs": string[];
+          "short_names"?: string[];
+          "categories"?: string[];
+          "policy": OpenAPIComponents['schemas']['ResourcePolicyMetadata'];
+          "source": "kubernetes_discovery" | "astronomer_fallback";
+        };
+    ResourceDiscoveryEnvelope: {
+          "data": OpenAPIComponents['schemas']['ResourceDiscoveryResponse'];
+        };
+    ResourceDiscoveryResponse: {
+          "cluster_id": string;
+          "resources": OpenAPIComponents['schemas']['ResourceDiscoveryEntry'][];
+          "crds": Record<string, unknown>[];
+          "partial": boolean;
+          "errors": Record<string, string>;
+        };
+    ResourceOperation: {
+          "id": string;
+          "cluster_id": string;
+          "resource_type": string;
+          "namespace"?: string;
+          "resource_name": string;
+          "action": "apply" | "delete";
+          "status": "pending" | "running" | "retrying" | "failed" | "succeeded";
+          "generation": number;
+          "observed_generation": number;
+          "attempt_count": number;
+          "error_code"?: string;
+          "observed_status_code"?: number;
+          "observed_resource_version"?: string;
+          "completed_at"?: string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    ResourceOperationEnvelope: {
+          "data": OpenAPIComponents['schemas']['ResourceOperation'];
+        };
+    ResourcePolicyMetadata: {
+          "secret": boolean;
+          "privilege_escalating": boolean;
+          "destructive_delete": boolean;
+          "force_conflict_permission": boolean;
         };
     ResourceRow: {
           "name"?: string;
@@ -2154,6 +4648,17 @@ export interface OpenAPIComponents {
           "annotations"?: Record<string, string>;
           "createdAt"?: string;
         } & Record<string, unknown>;
+    ResourceSchemaEnvelope: {
+          "data": OpenAPIComponents['schemas']['ResourceSchemaResponse'];
+        };
+    ResourceSchemaResponse: {
+          "resource": OpenAPIComponents['schemas']['ResourceDiscoveryEntry'];
+          "schema": Record<string, unknown>;
+          "schema_name"?: string;
+          "schema_available": boolean;
+          "definitions"?: Record<string, Record<string, unknown>>;
+          "definitions_truncated"?: boolean;
+        };
     ResourceSearchResult: {
           "results": Array<OpenAPIComponents['schemas']['ResourceRow'] & {
             "cluster_id"?: string;
@@ -2188,7 +4693,244 @@ export interface OpenAPIComponents {
           "poll_attempts"?: number;
           "last_polled_at"?: string | null;
         };
-    ServiceMeshDetectionResponse: Record<string, unknown>;
+    RouteResponseEnvelope: Record<string, unknown>;
+    SCIMAuthenticationScheme: {
+          "type": string;
+          "name": string;
+          "description": string;
+          "primary": boolean;
+        };
+    SCIMEmail: {
+          "value": string;
+          "primary"?: boolean;
+        };
+    SCIMGroup: {
+          "schemas": string[];
+          "id": string;
+          "displayName": string;
+          "members"?: OpenAPIComponents['schemas']['SCIMGroupMember'][];
+          "meta": OpenAPIComponents['schemas']['SCIMMeta'];
+        };
+    SCIMGroupCreateRequest: {
+          "displayName": string;
+          "members"?: OpenAPIComponents['schemas']['SCIMGroupMember'][];
+          "roleId"?: string;
+        };
+    SCIMGroupMember: {
+          "value": string;
+          "display"?: string;
+        };
+    SCIMGroupPatchOperation: {
+          "op": "add" | "remove" | "replace";
+          "path"?: string;
+          "value"?: unknown;
+        };
+    SCIMGroupPatchRequest: {
+          "schemas"?: string[];
+          "Operations": OpenAPIComponents['schemas']['SCIMGroupPatchOperation'][];
+        };
+    SCIMListResponse: {
+          "schemas": string[];
+          "totalResults": number;
+          "startIndex": number;
+          "itemsPerPage": number;
+          "Resources": Array<OpenAPIComponents['schemas']['SCIMUser'] | OpenAPIComponents['schemas']['SCIMGroup'] | OpenAPIComponents['schemas']['SCIMResourceType'] | OpenAPIComponents['schemas']['SCIMSchema']>;
+        };
+    SCIMMeta: {
+          "resourceType": string;
+        };
+    SCIMName: {
+          "givenName"?: string;
+          "familyName"?: string;
+        };
+    SCIMResourceType: {
+          "schemas": string[];
+          "id": string;
+          "name": string;
+          "endpoint": string;
+          "description"?: string;
+          "schema": string;
+          "meta": OpenAPIComponents['schemas']['SCIMMeta'];
+        };
+    SCIMSchema: {
+          "id": string;
+          "name": string;
+          "description": string;
+          "attributes": OpenAPIComponents['schemas']['SCIMSchemaAttribute'][];
+        };
+    SCIMSchemaAttribute: {
+          "name": string;
+          "type": string;
+          "multiValued": boolean;
+          "required": boolean;
+          "mutability": string;
+          "returned": string;
+          "uniqueness": string;
+        };
+    SCIMServiceProviderConfig: {
+          "schemas": string[];
+          "documentationUri": string;
+          "patch": OpenAPIComponents['schemas']['SCIMSupportedFeature'];
+          "bulk": OpenAPIComponents['schemas']['SCIMSupportedFeature'];
+          "filter": OpenAPIComponents['schemas']['SCIMSupportedFeature'];
+          "changePassword": OpenAPIComponents['schemas']['SCIMSupportedFeature'];
+          "sort": OpenAPIComponents['schemas']['SCIMSupportedFeature'];
+          "etag": OpenAPIComponents['schemas']['SCIMSupportedFeature'];
+          "authenticationSchemes": OpenAPIComponents['schemas']['SCIMAuthenticationScheme'][];
+          "meta": OpenAPIComponents['schemas']['SCIMMeta'];
+        };
+    SCIMSupportedFeature: {
+          "supported": boolean;
+          "maxOperations"?: number;
+          "maxPayloadSize"?: number;
+          "maxResults"?: number;
+        } & Record<string, unknown>;
+    SCIMToken: {
+          "id": string;
+          "name": string;
+          "prefix": string;
+          "last_used_at": string | null;
+          "created_at": string;
+        };
+    SCIMTokenCreated: {
+          "id": string;
+          "name": string;
+          "prefix": string;
+          "last_used_at": string | null;
+          "created_at": string;
+          "token": string;
+        };
+    SCIMTokenCreatedEnvelope: {
+          "data": OpenAPIComponents['schemas']['SCIMTokenCreated'];
+        };
+    SCIMTokenList: {
+          "tokens": OpenAPIComponents['schemas']['SCIMToken'][];
+        };
+    SCIMTokenListEnvelope: {
+          "data": OpenAPIComponents['schemas']['SCIMTokenList'];
+        };
+    SCIMUser: {
+          "schemas": string[];
+          "id": string;
+          "userName": string;
+          "name": OpenAPIComponents['schemas']['SCIMName'];
+          "emails"?: OpenAPIComponents['schemas']['SCIMEmail'][];
+          "active": boolean;
+          "meta": OpenAPIComponents['schemas']['SCIMMeta'];
+        };
+    SIEMForwarderList: {
+          "items": OpenAPIComponents['schemas']['SIEMForwarderResponse'][];
+          "total": number;
+        };
+    SIEMForwarderRequest: {
+          "name"?: string;
+          "transport"?: "syslog_udp" | "syslog_tcp" | "syslog_tls" | "splunk_hec" | "ndjson_https";
+          "endpoint"?: string;
+          "auth"?: string;
+          "event_filters"?: string[];
+          "format"?: "" | "rfc5424" | "rfc3164" | "cef" | "ndjson";
+          "tls_skip_verify"?: boolean;
+          "ca_cert_pem"?: string;
+          "batch_size"?: number;
+          "flush_interval_ms"?: number;
+          "timeout_seconds"?: number;
+          "enabled"?: boolean;
+        };
+    SIEMForwarderResponse: {
+          "id": string;
+          "name": string;
+          "transport": string;
+          "endpoint": string;
+          "auth": string;
+          "auth_configured": boolean;
+          "event_filters": string[];
+          "format": string;
+          "tls_skip_verify": boolean;
+          "ca_cert_configured": boolean;
+          "batch_size": number;
+          "flush_interval_ms": number;
+          "timeout_seconds": number;
+          "enabled": boolean;
+          "created_by"?: string;
+          "created_at": string;
+          "updated_at": string;
+        };
+    SIEMForwarderStatusResponse: {
+          "forwarder_id": string;
+          "last_sent_at": string | null;
+          "last_error": string;
+          "queue_depth": number;
+          "dropped_total": number;
+          "dispatched_total": number;
+          "updated_at": string;
+        };
+    SIEMForwarderTestReceipt: {
+          "operation_id": string;
+          "forwarder_id": string;
+          "status": "pending" | "succeeded" | "failed";
+          "status_url": string;
+          "error_code"?: string;
+          "created_at": string;
+          "completed_at"?: string;
+        };
+    SSOPreset: {
+          "key": "github" | "google" | "azure-ad" | "gitlab" | "okta";
+          "display_name": string;
+          "type": "oauth2" | "oidc";
+          "issuer_url_template"?: string;
+          "default_scopes": string[];
+          "callback_path_hint": string;
+          "required_fields": OpenAPIComponents['schemas']['SSOPresetField'][];
+          "docs_url"?: string;
+          "logo_slug": string;
+        };
+    SSOPresetField: {
+          "name": string;
+          "label": string;
+          "placeholder": string;
+          "kind": "text" | "url" | "tenant";
+          "required": boolean;
+        };
+    SSOPresetListEnvelope: {
+          "data": OpenAPIComponents['schemas']['SSOPreset'][];
+        };
+    SecurityControllerStatus: {
+          "reconciler": OpenAPIComponents['schemas']['ControllerReconcilerStatus'];
+          "health": "healthy" | "degraded";
+          "healthReasons": string[];
+          "templates": {
+            "total": number;
+          };
+          "policies": {
+            "total": number;
+            "failedCount": number;
+            "statuses": Record<string, number>;
+          };
+          "scans": {
+            "total": number;
+            "runningCount": number;
+            "failedCount": number;
+            "statuses": Record<string, number>;
+          };
+        };
+    SecurityControllerStatusEnvelope: {
+          "data": OpenAPIComponents['schemas']['SecurityControllerStatus'];
+        };
+    ServiceMeshDetectionResponse: {
+          "cluster_id": string;
+          "detected_mesh": string;
+          "detected_version": string;
+          "control_plane_namespace": string;
+          "gateway_count": number;
+          "virtual_service_count": number;
+          "destination_rule_count": number;
+          "peer_authentication_count": number;
+          "service_profile_count": number;
+          "server_auth_count": number;
+          "mtls_coverage_pct": number;
+          "last_detected_at"?: string;
+          "last_error"?: string;
+        };
     ServiceMeshInventory: {
           "cluster_id"?: string;
           "mesh"?: string;
@@ -2222,8 +4964,58 @@ export interface OpenAPIComponents {
           "warnings"?: Record<string, unknown>[];
           "errors"?: Record<string, unknown>[];
         };
+    ServiceProxyResponse: string;
     SetOptionsRequest: {
           "install_baseline": boolean;
+        };
+    SharedAlertmanagerStackRequest: {
+          "managementClusterId"?: string;
+          "namespace"?: string;
+          "releaseName"?: string;
+          "chartVersion"?: string;
+          "replicas"?: number;
+          "storageClass"?: string;
+          "storageSize"?: string;
+          "autoRollbackOnFailure"?: boolean;
+        };
+    SharedGrafanaStackRequest: {
+          "managementClusterId"?: string;
+          "namespace"?: string;
+          "releaseName"?: string;
+          "chartVersion"?: string;
+          "replicas"?: number;
+          "storageClass"?: string;
+          "storageSize"?: string;
+          "ingressHost"?: string;
+          "logDatasourceUrl"?: string;
+          "autoRollbackOnFailure"?: boolean;
+        };
+    SharedLokiStackRequest: {
+          "managementClusterId"?: string;
+          "namespace"?: string;
+          "releaseName"?: string;
+          "chartVersion"?: string;
+          "storageConfigId": string;
+          "objectStorageSecretName"?: string;
+          "ingestHostname": string;
+          "storageClass"?: string;
+          "walStorageSize"?: string;
+          "mode"?: "singleBinary" | "simpleScalable";
+          "retention"?: string;
+          "skipDiskCheck"?: boolean;
+          "autoRollbackOnFailure"?: boolean;
+        };
+    SharedThanosStackRequest: {
+          "managementClusterId"?: string;
+          "namespace"?: string;
+          "releaseName"?: string;
+          "chartVersion"?: string;
+          "storageConfigId": string;
+          "objectStorageSecretName"?: string;
+          "queryReplicas"?: number;
+          "storeGatewayReplicas"?: number;
+          "compactorReplicas"?: number;
+          "autoRollbackOnFailure"?: boolean;
         };
     ShellSession: {
           "id"?: string;
@@ -2323,6 +5115,12 @@ export interface OpenAPIComponents {
           "created_at"?: string;
           "updated_at"?: string;
         };
+    SnapshotScheduleUpdateRequest: {
+          "name"?: string;
+          "cron_schedule"?: string;
+          "spec"?: OpenAPIComponents['schemas']['SnapshotSpec'];
+          "enabled"?: boolean | null;
+        };
     SnapshotSpec: {
           "includedNamespaces"?: string[];
           "excludedNamespaces"?: string[];
@@ -2338,24 +5136,196 @@ export interface OpenAPIComponents {
           "success"?: boolean;
           "message"?: string;
         };
-    UpdateClusterGroupRequest: Record<string, unknown>;
-    UpdateClusterRequest: Record<string, unknown>;
+    StreamTicketRequest: {
+          "stream_type": "events" | "registration" | "logs" | "exec" | "shell";
+          "cluster_id"?: string;
+        };
+    StreamTicketResponse: {
+          "ticket": string;
+          "expires_at": string;
+        };
+    TaskOutboxEntryEnvelope: {
+          "data": OpenAPIComponents['schemas']['TaskOutboxEntryWire'];
+        };
+    TaskOutboxEntryWire: {
+          "id": string;
+          "dedupe_key"?: string;
+          "task_type": string;
+          "queue_name": string;
+          "max_retry": number;
+          "timeout_seconds": number;
+          "unique_seconds": number;
+          "max_delivery_attempts": number;
+          "status": "pending" | "delivering" | "failed" | "delivered" | "dead";
+          "attempt_count": number;
+          "next_attempt_at"?: string;
+          "locked_until"?: string;
+          "delivered_at"?: string;
+          "last_error"?: string;
+          "payload_size": number;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    ToolActionRequest: {
+          "cluster_id": string;
+          "preset"?: string;
+          "values_override"?: string;
+          "release_name"?: string;
+        };
+    ToolChart: {
+          "chart_name": string;
+          "repo_url": string;
+          "namespace": string;
+          "order": number;
+        };
+    ToolControllerStatus: {
+          "reconciler": OpenAPIComponents['schemas']['ControllerReconcilerStatus'];
+          "tools": {
+            "catalogCount": number;
+            "installedCount": number | null;
+          };
+          "operations": Record<string, number>;
+          "recentFailureCount": number;
+          "recentOperations": Record<string, unknown>[];
+          "latestFailure": Record<string, unknown> | null;
+        };
+    ToolControllerStatusEnvelope: {
+          "data": OpenAPIComponents['schemas']['ToolControllerStatus'];
+        };
+    ToolFormField: {
+          "path": string;
+          "label": string;
+          "type": "string" | "number" | "boolean" | "select" | "storage";
+          "group": string;
+          "default"?: string;
+          "options"?: string[];
+          "help"?: string;
+          "placeholder"?: string;
+          "storage_class_path"?: string;
+        };
+    ToolFormSchema: {
+          "fields": OpenAPIComponents['schemas']['ToolFormField'][];
+        };
+    ToolOperation: {
+          "id": string;
+          "targetType": string;
+          "targetKey": string;
+          "operationType": "install" | "upgrade" | "uninstall" | "adopt";
+          "status": "pending" | "running" | "completed" | "failed" | "superseded";
+          "attemptCount": number;
+          "startedAt"?: string | null;
+          "completedAt"?: string | null;
+          "errorMessage": string;
+          "createdAt": string;
+          "updatedAt": string;
+          "events"?: OpenAPIComponents['schemas']['ToolOperationEvent'][];
+        };
+    ToolOperationEvent: {
+          "id": string;
+          "level": "info" | "warn" | "error";
+          "stage": string;
+          "message": string;
+          "detail"?: Record<string, unknown> | null;
+          "createdAt": string;
+        };
+    ToolPreview: {
+          "charts": Array<{
+            "chart_name": string;
+            "chart_version": string;
+            "namespace": string;
+            "values_yaml": string;
+          }>;
+          "preset": string;
+        };
+    ToolUninstallRequest: {
+          "cluster_id": string;
+        };
+    UpdateClusterGroupRequest: {
+          "name": string;
+          "slug"?: string;
+          "description"?: string;
+          "parent_id"?: string;
+          "color"?: string;
+          "icon"?: string;
+        };
+    UpdateClusterMonitoringConfigRequest: {
+          "backendId"?: string;
+          "clusterLabel"?: string;
+          "clusterLabelValue"?: string;
+          "scrapeIntervalSeconds"?: number;
+          "retention"?: string;
+          "stackNamespace"?: string;
+          "prometheusReleaseName"?: string;
+          "thanosSidecarEnabled"?: boolean;
+          "storageConfigId"?: string;
+          "objectStorageSecretName"?: string;
+          "storageClass"?: string;
+          "storageSize"?: string;
+          "status"?: string;
+        };
+    UpdateClusterRequest: {
+          "display_name"?: string;
+          "description"?: string;
+          "environment"?: string;
+          "region"?: string;
+          "labels"?: Record<string, string>;
+          "annotations"?: Record<string, string>;
+          "api_server_url"?: string;
+          "ca_certificate"?: string;
+        };
+    UpdateLoggingSavedSearchRequest: {
+          "name": string;
+          "query"?: string;
+          "namespaces"?: string[];
+          "limit"?: number;
+          "direction"?: "forward" | "backward";
+          "live_tail"?: boolean;
+        };
+    UpdateMonitoringBackendRequest: {
+          "backendType"?: string;
+          "queryUrl": string;
+          "alertmanagerUrl"?: string;
+          "tenantId"?: string;
+          "authType"?: string;
+          "authConfig"?: Record<string, unknown>;
+          "defaultStepSeconds"?: number;
+          "timeoutSeconds"?: number;
+          "defaultAutoRollbackOnFailure"?: boolean;
+          "maxRetryAttempts"?: number;
+        };
     UpdateProjectPolicyRequest: {
           "pod_security_profile"?: string;
+          "network_policy_mode"?: "isolated" | "allow-same-project" | "none";
+          "resource_quota_cpu_limit"?: string;
+          "resource_quota_memory_limit"?: string;
+          "resource_quota_pod_count"?: number;
           "resource_quota_cpu"?: string;
           "resource_quota_memory"?: string;
           "resource_quota_pods"?: number;
         };
     UpdateProjectRequest: {
           "name"?: string;
+          "display_name"?: string;
           "description"?: string;
           "namespaces"?: string[];
           "pod_security_profile"?: string;
+          "resource_quota"?: Record<string, unknown>;
+          "limit_range"?: Record<string, unknown>;
+          "network_policy_mode"?: string;
+          "resource_quota_cpu_limit"?: string;
+          "resource_quota_memory_limit"?: string;
+          "resource_quota_pod_count"?: number;
           "resource_quota_cpu"?: string;
           "resource_quota_memory"?: string;
           "resource_quota_pods"?: number;
         };
-    UpdateRegistryConfigRequest: Record<string, unknown>;
+    UpdateRegistryConfigRequest: {
+          "private_registry_url"?: string;
+          "registry_username"?: string;
+          "registry_password"?: string;
+          "insecure"?: boolean;
+          "ca_bundle"?: string;
+        };
     User: {
           "id"?: string;
           "username"?: string;
@@ -2368,6 +5338,38 @@ export interface OpenAPIComponents {
           "date_joined"?: string;
           "last_login"?: string | null;
           "must_change_password"?: boolean;
+          "roles"?: OpenAPIComponents['schemas']['AuthUserRoles'];
+        };
+    UserQuotaDimensions: {
+          "max_projects_per_user": number;
+          "max_tokens_per_user": number;
+          "max_streams_per_user": number;
+        };
+    UserQuotaOffender: {
+          "user_id": string;
+          "username": string;
+          "quota_plan": string;
+          "limit": "max_projects_per_user" | "max_tokens_per_user";
+          "current": number;
+          "maximum": number;
+          "usage_pct": number;
+        };
+    UserQuotaPercentages: {
+          "max_projects_per_user": number;
+          "max_tokens_per_user": number;
+          "max_streams_per_user": number;
+        };
+    UserQuotaSnapshot: {
+          "user_id": string;
+          "quota_plan": string;
+          "enforcement": "soft" | "hard";
+          "limits": OpenAPIComponents['schemas']['UserQuotaDimensions'];
+          "usage": OpenAPIComponents['schemas']['UserQuotaDimensions'];
+          "usage_pct": OpenAPIComponents['schemas']['UserQuotaPercentages'];
+          "overrides": Record<string, unknown>;
+        };
+    UserQuotaSnapshotEnvelope: {
+          "data": OpenAPIComponents['schemas']['UserQuotaSnapshot'];
         };
     UsersSettingsAuditLogEntry: {
           "id"?: string;
@@ -2434,6 +5436,7 @@ export interface OpenAPIComponents {
           "displayName"?: string;
           "provider"?: string;
           "globalRoles"?: string[];
+          "is_superuser"?: boolean;
           "enabled"?: boolean;
           "lastLogin"?: string;
           "createdAt"?: string;
@@ -2521,35 +5524,148 @@ export interface OpenAPIComponents {
           "report_count"?: number;
           "last_scanned_at"?: string | null;
         };
+    VulnerabilityAggregate: {
+          "critical": number;
+          "high": number;
+          "medium": number;
+          "low": number;
+          "unknown": number;
+          "report_count": number;
+          "last_scanned_at": string | null;
+        };
+    VulnerabilityAggregateEnvelope: {
+          "data": OpenAPIComponents['schemas']['VulnerabilityAggregate'];
+        };
+    VulnerabilityDiff: {
+          "cluster_id": string;
+          "has_comparison": boolean;
+          "prior_hours": number;
+          "latest"?: OpenAPIComponents['schemas']['VulnerabilityDiffBucket'];
+          "prior"?: OpenAPIComponents['schemas']['VulnerabilityDiffBucket'];
+          "delta"?: OpenAPIComponents['schemas']['VulnerabilityDiffDelta'];
+        };
+    VulnerabilityDiffBucket: {
+          "critical": number;
+          "high": number;
+          "medium": number;
+          "low": number;
+          "unknown": number;
+          "scanned_at": string;
+        };
+    VulnerabilityDiffDelta: {
+          "critical": number;
+          "high": number;
+          "medium": number;
+          "low": number;
+          "unknown": number;
+        };
+    VulnerabilityDiffEnvelope: {
+          "data": OpenAPIComponents['schemas']['VulnerabilityDiff'];
+        };
+    VulnerabilityHistory: {
+          "cluster_id": string;
+          "since": string;
+          "snapshots": OpenAPIComponents['schemas']['VulnerabilityHistoryPoint'][];
+          "total_count": number;
+        };
+    VulnerabilityHistoryEnvelope: {
+          "data": OpenAPIComponents['schemas']['VulnerabilityHistory'];
+        };
+    VulnerabilityHistoryPoint: {
+          "scanned_at": string;
+          "critical": number;
+          "high": number;
+          "medium": number;
+          "low": number;
+          "unknown": number;
+          "report_count": number;
+        };
+    VulnerabilityReportHistory: {
+          "report_id": string;
+          "snapshots": OpenAPIComponents['schemas']['VulnerabilityReportHistoryPoint'][];
+          "total_count": number;
+        };
+    VulnerabilityReportHistoryEnvelope: {
+          "data": OpenAPIComponents['schemas']['VulnerabilityReportHistory'];
+        };
+    VulnerabilityReportHistoryPoint: {
+          "scanned_at": string;
+          "critical": number;
+          "high": number;
+          "medium": number;
+          "low": number;
+          "unknown": number;
+        };
+    VulnerabilityRescanResult: {
+          "operation_id": string;
+          "operation_url": string;
+          "cluster_id": string;
+          "status": "pending" | "running" | "completed" | "failed";
+          "requested_at": string;
+        };
+    VulnerabilityRescanResultEnvelope: {
+          "data": OpenAPIComponents['schemas']['VulnerabilityRescanResult'];
+        };
+    VulnerabilityScanProgress: {
+          "scanning": boolean;
+          "active_jobs": number;
+          "completed_jobs": number;
+          "failed_jobs": number;
+          "reports_count": number;
+          "trivy_operator_ready": boolean;
+          "last_scan_age_seconds": number | null;
+        };
+    VulnerabilityScanProgressEnvelope: {
+          "data": OpenAPIComponents['schemas']['VulnerabilityScanProgress'];
+        };
+    VulnerabilitySeverityCounts: {
+          "critical": number;
+          "high": number;
+          "medium": number;
+          "low": number;
+          "unknown": number;
+        };
+    VulnerableClusterSummary: {
+          "cluster_id": string;
+          "critical": number;
+          "high": number;
+          "medium": number;
+          "low": number;
+          "report_count": number;
+          "last_scanned_at": string | null;
+        };
+    VulnerableClusterSummaryListEnvelope: {
+          "data": OpenAPIComponents['schemas']['VulnerableClusterSummary'][];
+        };
     WebhookDelivery: {
-          "id"?: string;
-          "event_name"?: string;
-          "event_id"?: string;
-          "status"?: string;
-          "attempts"?: number;
-          "payload_size"?: number;
-          "response_status"?: number;
-          "response_body"?: string;
-          "last_error"?: string;
-          "delivered_at"?: string | null;
-          "next_attempt_at"?: string | null;
-          "created_at"?: string;
+          "id": string;
+          "event_name": string;
+          "event_id": string;
+          "status": string;
+          "attempts": number;
+          "payload_size": number;
+          "response_status": number;
+          "response_body": string;
+          "last_error": string;
+          "delivered_at": string | null;
+          "next_attempt_at": string | null;
+          "created_at": string;
         };
     WebhookSubscription: {
-          "id"?: string;
-          "name"?: string;
-          "url"?: string;
-          "secret"?: string;
-          "secret_configured"?: boolean;
-          "event_filters"?: string[];
-          "payload_template"?: string;
-          "extra_headers"?: Record<string, string>;
-          "enabled"?: boolean;
-          "max_retries"?: number;
-          "timeout_seconds"?: number;
+          "id": string;
+          "name": string;
+          "url": string;
+          "secret": string;
+          "secret_configured": boolean;
+          "event_filters": string[];
+          "payload_template": string;
+          "extra_headers": Record<string, string>;
+          "enabled": boolean;
+          "max_retries": number;
+          "timeout_seconds": number;
           "created_by"?: string;
-          "created_at"?: string;
-          "updated_at"?: string;
+          "created_at": string;
+          "updated_at": string;
         };
     WebhookSubscriptionRequest: {
           "name"?: string;
@@ -2604,35 +5720,9795 @@ export interface OpenAPIComponents {
   };
 }
 
+export interface OpenAPIOperations {
+  "getAdminTaskOutboxDead": {
+    method: "GET";
+    path: "/api/v1/admin/task-outbox/dead";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "getAdminGroupMappings": {
+    method: "GET";
+    path: "/api/v1/admin/group-mappings";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['GroupMappingListEnvelope'];
+  };
+  "postAdminGroupMappings": {
+    method: "POST";
+    path: "/api/v1/admin/group-mappings";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['GroupMappingWriteRequest'];
+      };
+    response: OpenAPIComponents['schemas']['GroupMappingEnvelope'];
+  };
+  "deleteAdminGroupMappingsById": {
+    method: "DELETE";
+    path: "/api/v1/admin/group-mappings/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getAdminGroupMappingsById": {
+    method: "GET";
+    path: "/api/v1/admin/group-mappings/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['GroupMappingEnvelope'];
+  };
+  "getResourceOperation": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/resources/operations/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ResourceOperationEnvelope'];
+  };
+  "getAdminQueues": {
+    method: "GET";
+    path: "/api/v1/admin/queues";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['AdminQueueSummaryWire'][];
+      };
+  };
+  "getAdminQueuesByQueueDlq": {
+    method: "GET";
+    path: "/api/v1/admin/queues/{queue}/dlq";
+    arguments: {
+        "path": {
+          "queue": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['AdminQueueDLQWire'];
+      };
+  };
+  "deleteAdminQueuesByQueueDlqById": {
+    method: "DELETE";
+    path: "/api/v1/admin/queues/{queue}/dlq/{id}";
+    arguments: {
+        "path": {
+          "queue": string;
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AdminQueueOperationEnvelope'];
+  };
+  "postAdminQueuesByQueueDlqByIdRetry": {
+    method: "POST";
+    path: "/api/v1/admin/queues/{queue}/dlq/{id}/retry";
+    arguments: {
+        "path": {
+          "queue": string;
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AdminQueueOperationEnvelope'];
+  };
+  "getAdminQueuesOperationsById": {
+    method: "GET";
+    path: "/api/v1/admin/queues/operations/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AdminQueueOperationEnvelope'];
+  };
+  "getAdminTaskOutbox": {
+    method: "GET";
+    path: "/api/v1/admin/task-outbox/";
+    arguments: {
+        "query"?: {
+          "status"?: "pending" | "delivering" | "failed" | "delivered" | "dead";
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['TaskOutboxEntryWire'][];
+      };
+  };
+  "getAdminTaskOutboxById": {
+    method: "GET";
+    path: "/api/v1/admin/task-outbox/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['TaskOutboxEntryEnvelope'];
+  };
+  "postAdminTaskOutboxByIdRetry": {
+    method: "POST";
+    path: "/api/v1/admin/task-outbox/{id}/retry/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['TaskOutboxEntryEnvelope'];
+  };
+  "listControlPlaneSnapshots": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/control-plane-snapshots/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "items": OpenAPIComponents['schemas']['ControlPlaneSnapshotWire'][];
+          "total": number;
+          "limit": number;
+          "offset": number;
+        };
+      };
+  };
+  "createControlPlaneSnapshot": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/control-plane-snapshots/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['CreateControlPlaneSnapshotRequestWire'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ControlPlaneSnapshotWire'];
+      };
+  };
+  "getControlPlaneSnapshot": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/control-plane-snapshots/{id}/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ControlPlaneSnapshotWire'];
+      };
+  };
+  "getControlPlaneSnapshotRestoreGuidance": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/control-plane-snapshots/{id}/restore-guidance/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ControlPlaneRestoreRunbookWire'];
+      };
+  };
+  "getBackupsRestoresById": {
+    method: "GET";
+    path: "/api/v1/backups/restores/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RestoreOperationResponse'];
+      };
+  };
+  "getLoggingSavedSearches": {
+    method: "GET";
+    path: "/api/v1/logging/saved-searches";
+    arguments: {
+        "query": {
+          "output_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingSavedSearchListEnvelope'];
+  };
+  "postLoggingSavedSearches": {
+    method: "POST";
+    path: "/api/v1/logging/saved-searches";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CreateLoggingSavedSearchRequest'];
+      };
+    response: OpenAPIComponents['schemas']['LoggingSavedSearchEnvelope'];
+  };
+  "deleteLoggingSavedSearchesById": {
+    method: "DELETE";
+    path: "/api/v1/logging/saved-searches/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "putLoggingSavedSearchesById": {
+    method: "PUT";
+    path: "/api/v1/logging/saved-searches/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UpdateLoggingSavedSearchRequest'];
+      };
+    response: OpenAPIComponents['schemas']['LoggingSavedSearchEnvelope'];
+  };
+  "getClustersByClusterIdResourcesDiscovery": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/resources/discovery";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ResourceDiscoveryEnvelope'];
+  };
+  "getClustersByClusterIdResourcesSchema": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/resources/schema";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query": {
+          "resource_type": "deployments" | "statefulsets" | "daemonsets" | "jobs" | "cronjobs" | "services" | "ingresses" | "gateways" | "configmaps" | "secrets" | "persistentvolumeclaims" | "namespaces" | "serviceaccounts" | "k8s-roles" | "k8s-rolebindings" | "networkpolicies" | "hpa" | "poddisruptionbudgets";
+        };
+      };
+    response: OpenAPIComponents['schemas']['ResourceSchemaEnvelope'];
+  };
+  "getAdminComplianceExport": {
+    method: "GET";
+    path: "/api/v1/admin/compliance/export";
+    arguments: {
+        "query": {
+          "from": string;
+          "to": string;
+        };
+      };
+    response: string;
+  };
+  "getAdminComplianceExportsById": {
+    method: "GET";
+    path: "/api/v1/admin/compliance/exports/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: string;
+  };
+  "getAdminDashboardWidgets": {
+    method: "GET";
+    path: "/api/v1/admin/dashboard-widgets";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DashboardWidgetPage'];
+  };
+  "postAdminDashboardWidgets": {
+    method: "POST";
+    path: "/api/v1/admin/dashboard-widgets";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['DashboardWidgetRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DashboardWidgetEnvelope'];
+  };
+  "deleteAdminDashboardWidgetsById": {
+    method: "DELETE";
+    path: "/api/v1/admin/dashboard-widgets/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getAdminDashboardWidgetsById": {
+    method: "GET";
+    path: "/api/v1/admin/dashboard-widgets/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DashboardWidgetEnvelope'];
+  };
+  "putAdminDashboardWidgetsById": {
+    method: "PUT";
+    path: "/api/v1/admin/dashboard-widgets/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['DashboardWidgetRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DashboardWidgetEnvelope'];
+  };
+  "getAdminGitopsSources": {
+    method: "GET";
+    path: "/api/v1/admin/gitops-sources";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['GitOpsSourcePage'];
+  };
+  "postAdminGitopsSources": {
+    method: "POST";
+    path: "/api/v1/admin/gitops-sources";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['GitOpsSourceRequest'];
+      };
+    response: OpenAPIComponents['schemas']['GitOpsSourceEnvelope'];
+  };
+  "deleteAdminGitopsSourcesById": {
+    method: "DELETE";
+    path: "/api/v1/admin/gitops-sources/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getAdminGitopsSourcesById": {
+    method: "GET";
+    path: "/api/v1/admin/gitops-sources/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['GitOpsSourceEnvelope'];
+  };
+  "putAdminGitopsSourcesById": {
+    method: "PUT";
+    path: "/api/v1/admin/gitops-sources/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['GitOpsSourceRequest'];
+      };
+    response: OpenAPIComponents['schemas']['GitOpsSourceEnvelope'];
+  };
+  "getAdminGitopsSourcesByIdClusters": {
+    method: "GET";
+    path: "/api/v1/admin/gitops-sources/{id}/clusters";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['GitOpsManagedClusterPage'];
+  };
+  "getAdminGitopsSourcesByIdPreview": {
+    method: "GET";
+    path: "/api/v1/admin/gitops-sources/{id}/preview";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['GitOpsPreviewResultEnvelope'];
+  };
+  "postAdminGitopsSourcesByIdSync": {
+    method: "POST";
+    path: "/api/v1/admin/gitops-sources/{id}/sync";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['GitOpsSyncReceiptEnvelope'];
+  };
+  "getAdminPrometheusDatasources": {
+    method: "GET";
+    path: "/api/v1/admin/prometheus-datasources";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PrometheusDatasourcePage'];
+  };
+  "postAdminPrometheusDatasources": {
+    method: "POST";
+    path: "/api/v1/admin/prometheus-datasources";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['PrometheusDatasourceRequest'];
+      };
+    response: OpenAPIComponents['schemas']['PrometheusDatasourceEnvelope'];
+  };
+  "deleteAdminPrometheusDatasourcesById": {
+    method: "DELETE";
+    path: "/api/v1/admin/prometheus-datasources/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "putAdminPrometheusDatasourcesById": {
+    method: "PUT";
+    path: "/api/v1/admin/prometheus-datasources/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['PrometheusDatasourceRequest'];
+      };
+    response: OpenAPIComponents['schemas']['PrometheusDatasourceEnvelope'];
+  };
+  "postAdminPrometheusDatasourcesByIdTest": {
+    method: "POST";
+    path: "/api/v1/admin/prometheus-datasources/{id}/test";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PrometheusDatasourceTestResultEnvelope'];
+  };
+  "getAdminQuotaPlans": {
+    method: "GET";
+    path: "/api/v1/admin/quota-plans";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['QuotaPlanPage'];
+  };
+  "postAdminQuotaPlans": {
+    method: "POST";
+    path: "/api/v1/admin/quota-plans";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['QuotaPlanRequest'];
+      };
+    response: OpenAPIComponents['schemas']['QuotaPlanEnvelope'];
+  };
+  "deleteAdminQuotaPlansByName": {
+    method: "DELETE";
+    path: "/api/v1/admin/quota-plans/{name}";
+    arguments: {
+        "path": {
+          "name": string;
+        };
+      };
+    response: void;
+  };
+  "getAdminQuotaPlansByName": {
+    method: "GET";
+    path: "/api/v1/admin/quota-plans/{name}";
+    arguments: {
+        "path": {
+          "name": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['QuotaPlanEnvelope'];
+  };
+  "putAdminQuotaPlansByName": {
+    method: "PUT";
+    path: "/api/v1/admin/quota-plans/{name}";
+    arguments: {
+        "path": {
+          "name": string;
+        };
+        "body": OpenAPIComponents['schemas']['QuotaPlanRequest'];
+      };
+    response: OpenAPIComponents['schemas']['QuotaPlanEnvelope'];
+  };
+  "getAdminQuotaUsage": {
+    method: "GET";
+    path: "/api/v1/admin/quota-usage";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['QuotaUsageSnapshotEnvelope'];
+  };
+  "getAdminSettings": {
+    method: "GET";
+    path: "/api/v1/admin/settings";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['PlatformSettingListEnvelope'];
+  };
+  "putAdminSettings": {
+    method: "PUT";
+    path: "/api/v1/admin/settings";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['PlatformSettingsBatchUpdateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['PlatformSettingListEnvelope'];
+  };
+  "deleteAdminSettingsByKey": {
+    method: "DELETE";
+    path: "/api/v1/admin/settings/{key}";
+    arguments: {
+        "path": {
+          "key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PlatformSettingEnvelope'];
+  };
+  "getAdminSettingsByKey": {
+    method: "GET";
+    path: "/api/v1/admin/settings/{key}";
+    arguments: {
+        "path": {
+          "key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PlatformSettingEnvelope'];
+  };
+  "putAdminSettingsByKey": {
+    method: "PUT";
+    path: "/api/v1/admin/settings/{key}";
+    arguments: {
+        "path": {
+          "key": string;
+        };
+        "body": OpenAPIComponents['schemas']['PlatformSettingUpdateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['PlatformSettingEnvelope'];
+  };
+  "deleteAlertingChannelsById": {
+    method: "DELETE";
+    path: "/api/v1/alerting/channels/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getAlertingChannelsById": {
+    method: "GET";
+    path: "/api/v1/alerting/channels/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['NotificationChannelEnvelope'];
+  };
+  "putAlertingChannelsById": {
+    method: "PUT";
+    path: "/api/v1/alerting/channels/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['AlertChannelRequest'];
+      };
+    response: OpenAPIComponents['schemas']['NotificationChannelEnvelope'];
+  };
+  "postAlertingChannelsByIdTest": {
+    method: "POST";
+    path: "/api/v1/alerting/channels/{id}/test";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['NotificationChannelTestResultEnvelope'];
+  };
+  "getAlertingEventsById": {
+    method: "GET";
+    path: "/api/v1/alerting/events/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertEventEnvelope'];
+  };
+  "postAlertingEventsByIdAcknowledge": {
+    method: "POST";
+    path: "/api/v1/alerting/events/{id}/acknowledge";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertEventEnvelope'];
+  };
+  "postAlertingEventsByIdResolve": {
+    method: "POST";
+    path: "/api/v1/alerting/events/{id}/resolve";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertEventEnvelope'];
+  };
+  "getAlertingRules": {
+    method: "GET";
+    path: "/api/v1/alerting/rules";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertRulePage'];
+  };
+  "postAlertingRules": {
+    method: "POST";
+    path: "/api/v1/alerting/rules";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['AlertRuleRequest'];
+      };
+    response: OpenAPIComponents['schemas']['AlertRuleEnvelope'];
+  };
+  "deleteAlertingRulesById": {
+    method: "DELETE";
+    path: "/api/v1/alerting/rules/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getAlertingRulesById": {
+    method: "GET";
+    path: "/api/v1/alerting/rules/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertRuleEnvelope'];
+  };
+  "putAlertingRulesById": {
+    method: "PUT";
+    path: "/api/v1/alerting/rules/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['AlertRuleRequest'];
+      };
+    response: OpenAPIComponents['schemas']['AlertRuleEnvelope'];
+  };
+  "postAlertingRulesByIdDisable": {
+    method: "POST";
+    path: "/api/v1/alerting/rules/{id}/disable";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertRuleEnvelope'];
+  };
+  "postAlertingRulesByIdEnable": {
+    method: "POST";
+    path: "/api/v1/alerting/rules/{id}/enable";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertRuleEnvelope'];
+  };
+  "getAlertingSilences": {
+    method: "GET";
+    path: "/api/v1/alerting/silences";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertSilencePage'];
+  };
+  "postAlertingSilences": {
+    method: "POST";
+    path: "/api/v1/alerting/silences";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['AlertSilenceRequest'];
+      };
+    response: OpenAPIComponents['schemas']['AlertSilenceEnvelope'];
+  };
+  "deleteAlertingSilencesById": {
+    method: "DELETE";
+    path: "/api/v1/alerting/silences/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postAlertingSilencesByIdExpire": {
+    method: "POST";
+    path: "/api/v1/alerting/silences/{id}/expire";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertSilenceEnvelope'];
+  };
+  "postAlertsRulesByIdDisable": {
+    method: "POST";
+    path: "/api/v1/alerts/rules/{id}/disable";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertRuleEnvelope'];
+  };
+  "postAlertsRulesByIdEnable": {
+    method: "POST";
+    path: "/api/v1/alerts/rules/{id}/enable";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertRuleEnvelope'];
+  };
+  "postAlertsSilencesByIdExpire": {
+    method: "POST";
+    path: "/api/v1/alerts/silences/{id}/expire";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertSilenceEnvelope'];
+  };
+  "getAnomalyBaselines": {
+    method: "GET";
+    path: "/api/v1/anomaly-baselines";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AnomalyBaselinePage'];
+  };
+  "getAnomalyBaselinesById": {
+    method: "GET";
+    path: "/api/v1/anomaly-baselines/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AnomalyBaselineEnvelope'];
+  };
+  "getAuthMeQuota": {
+    method: "GET";
+    path: "/api/v1/auth/me/quota";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['UserQuotaSnapshotEnvelope'];
+  };
+  "getCatalogInstalledByIdRevisions": {
+    method: "GET";
+    path: "/api/v1/catalog/installed/{id}/revisions";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['HelmReleaseHistoryEnvelope'];
+  };
+  "getChartsByChartIdRatings": {
+    method: "GET";
+    path: "/api/v1/charts/{chart_id}/ratings";
+    arguments: {
+        "path": {
+          "chart_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ChartRating'][];
+      };
+  };
+  "postChartsByChartIdRatings": {
+    method: "POST";
+    path: "/api/v1/charts/{chart_id}/ratings";
+    arguments: {
+        "path": {
+          "chart_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['ChartRatingWriteRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ChartRating'];
+      };
+  };
+  "deleteChartsByChartIdRatingsByRatingId": {
+    method: "DELETE";
+    path: "/api/v1/charts/{chart_id}/ratings/{rating_id}";
+    arguments: {
+        "path": {
+          "chart_id": string;
+          "rating_id": string;
+        };
+      };
+    response: void;
+  };
+  "putChartsByChartIdRatingsByRatingId": {
+    method: "PUT";
+    path: "/api/v1/charts/{chart_id}/ratings/{rating_id}";
+    arguments: {
+        "path": {
+          "chart_id": string;
+          "rating_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['ChartRatingWriteRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ChartRating'];
+      };
+  };
+  "getChartsByChartIdRatingsAggregate": {
+    method: "GET";
+    path: "/api/v1/charts/{chart_id}/ratings/aggregate";
+    arguments: {
+        "path": {
+          "chart_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ChartRatingAggregate'];
+      };
+  };
+  "getChartsByChartIdRatingsMine": {
+    method: "GET";
+    path: "/api/v1/charts/{chart_id}/ratings/mine";
+    arguments: {
+        "path": {
+          "chart_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ChartRating'];
+      };
+  };
+  "getClustersByClusterIdGatewayClasses": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/gateway-classes";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MirroredGatewayClassPage'];
+  };
+  "getClustersByClusterIdIngressClasses": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/ingress-classes";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MirroredIngressClassPage'];
+  };
+  "deleteClustersByClusterIdK8sProxy": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/k8s/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: void;
+  };
+  "getClustersByClusterIdK8sProxy": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/k8s/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['KubernetesProxyResponse'];
+  };
+  "headClustersByClusterIdK8sProxy": {
+    method: "HEAD";
+    path: "/api/v1/clusters/{cluster_id}/k8s/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['KubernetesProxyResponse'];
+  };
+  "optionsClustersByClusterIdK8sProxy": {
+    method: "OPTIONS";
+    path: "/api/v1/clusters/{cluster_id}/k8s/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['KubernetesProxyResponse'];
+  };
+  "patchClustersByClusterIdK8sProxy": {
+    method: "PATCH";
+    path: "/api/v1/clusters/{cluster_id}/k8s/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "body": unknown;
+      };
+    response: OpenAPIComponents['schemas']['KubernetesProxyResponse'];
+  };
+  "postClustersByClusterIdK8sProxy": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/k8s/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "body"?: unknown;
+      };
+    response: OpenAPIComponents['schemas']['KubernetesProxyResponse'];
+  };
+  "putClustersByClusterIdK8sProxy": {
+    method: "PUT";
+    path: "/api/v1/clusters/{cluster_id}/k8s/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "body": unknown;
+      };
+    response: OpenAPIComponents['schemas']['KubernetesProxyResponse'];
+  };
+  "traceClustersByClusterIdK8sProxy": {
+    method: "TRACE";
+    path: "/api/v1/clusters/{cluster_id}/k8s/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['KubernetesProxyResponse'];
+  };
+  "getClustersByClusterIdLimitRanges": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/limit-ranges";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "namespace"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MirroredLimitRangePage'];
+  };
+  "getClustersByClusterIdNetworkPolicies": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/network-policies";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "namespace"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MirroredNetworkPolicyPage'];
+  };
+  "deleteClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+      };
+    response: void;
+  };
+  "getClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+  };
+  "headClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
+    method: "HEAD";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+  };
+  "optionsClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
+    method: "OPTIONS";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+  };
+  "patchClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
+    method: "PATCH";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+        "body": unknown;
+      };
+    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+  };
+  "postClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+        "body"?: unknown;
+      };
+    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+  };
+  "putClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
+    method: "PUT";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+        "body": unknown;
+      };
+    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+  };
+  "traceClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
+    method: "TRACE";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+  };
+  "getClustersByClusterIdResourceQuotas": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/resource-quotas";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "namespace"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MirroredResourceQuotaPage'];
+  };
+  "getClustersByClusterIdSecurityPolicy": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/security/policy";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ClusterSecurityPolicyEnvelope'];
+  };
+  "getClustersByClusterIdSecurityScans": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/security/scans";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CISScanListEnvelope'];
+  };
+  "getClustersByClusterIdSecurityScansById": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/security/scans/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CISScanEnvelope'];
+  };
+  "postClustersByClusterIdSecurityScansByIdCancel": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/security/scans/{id}/cancel";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CISScanEnvelope'];
+  };
+  "getClustersByClusterIdToolsStatus": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/tools/status";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ListEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterToolStatus'][];
+      };
+  };
+  "getClustersByClusterIdVulnerabilitiesDiff": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/vulnerabilities/diff";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "prior_hours"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['VulnerabilityDiffEnvelope'];
+  };
+  "getClustersByClusterIdVulnerabilitiesExportCsv": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/vulnerabilities/export.csv";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: string;
+  };
+  "getClustersByClusterIdVulnerabilitiesHistory": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/vulnerabilities/history";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "since_hours"?: number;
+          "limit"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['VulnerabilityHistoryEnvelope'];
+  };
+  "getClustersByClusterIdVulnerabilitiesProgress": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/vulnerabilities/progress";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['VulnerabilityScanProgressEnvelope'];
+  };
+  "getClustersByClusterIdVulnerabilitiesReportsById": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+        "query"?: {
+          "severity"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ImageVulnerabilityReportDetailEnvelope'];
+  };
+  "getClustersByClusterIdVulnerabilitiesReportsByReportIdHistory": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/vulnerabilities/reports/{report_id}/history";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "report_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['VulnerabilityReportHistoryEnvelope'];
+  };
+  "postClustersByClusterIdVulnerabilitiesRescan": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/vulnerabilities/rescan";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['VulnerabilityRescanResultEnvelope'];
+  };
+  "getClustersByClusterIdWorkloadsByKindByNamespaceByNameMetrics": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/metrics";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "kind": string;
+          "namespace": string;
+          "name": string;
+        };
+        "query"?: {
+          "range"?: "1h" | "6h" | "24h" | "7d";
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringMetricsEnvelope'];
+  };
+  "postClustersByIdLoggingOutputsByOutputIdRotateToken": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/logging/outputs/{output_id}/rotate-token";
+    arguments: {
+        "path": {
+          "id": string;
+          "output_id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingTokenRotationEnvelope'];
+  };
+  "getClustersByIdLoggingOutputsAttachAstronomer": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/logging/outputs/attach-astronomer";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingAttachStatusEnvelope'];
+  };
+  "postClustersByIdLoggingOutputsAttachAstronomer": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/logging/outputs/attach-astronomer";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query"?: {
+          "rotate"?: boolean;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingAttachResultEnvelope'] | OpenAPIComponents['schemas']['LoggingAttachMutationReceiptEnvelope'];
+  };
+  "getClustersByIdMonitoringConfig": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/monitoring/config";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ClusterMonitoringConfigEnvelope'];
+  };
+  "putClustersByIdMonitoringConfig": {
+    method: "PUT";
+    path: "/api/v1/clusters/{id}/monitoring/config";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UpdateClusterMonitoringConfigRequest'];
+      };
+    response: OpenAPIComponents['schemas']['ClusterMonitoringConfigEnvelope'];
+  };
+  "postClustersByIdMonitoringStackInstall": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/monitoring/stack/install";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['MonitoringStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "postClustersByIdMonitoringStackPreview": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/monitoring/stack/preview";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['MonitoringStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringStackPreviewEnvelope'];
+  };
+  "postClustersByIdMonitoringStackReplace": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/monitoring/stack/replace";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['MonitoringStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "getClustersByIdMonitoringStackStatus": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/monitoring/stack/status";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringStackStatusEnvelope'];
+  };
+  "deleteClustersByIdMonitoringStackUninstall": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{id}/monitoring/stack/uninstall";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "putClustersByIdMonitoringStackUpgrade": {
+    method: "PUT";
+    path: "/api/v1/clusters/{id}/monitoring/stack/upgrade";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['MonitoringStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "getCompliancePosture": {
+    method: "GET";
+    path: "/api/v1/compliance/posture";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['CompliancePostureEnvelope'];
+  };
+  "getControllersAlerts": {
+    method: "GET";
+    path: "/api/v1/controllers/alerts";
+    arguments: {
+        "query"?: {
+          "status"?: string;
+          "controller"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ControlPlaneAlertPage'];
+  };
+  "postControllersAlertsByIdAcknowledge": {
+    method: "POST";
+    path: "/api/v1/controllers/alerts/{id}/acknowledge";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ControlPlaneAlertEnvelope'];
+  };
+  "getControllersPolicy": {
+    method: "GET";
+    path: "/api/v1/controllers/policy";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['ControlPlanePolicyEnvelope'];
+  };
+  "putControllersPolicy": {
+    method: "PUT";
+    path: "/api/v1/controllers/policy";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['ControlPlanePolicyRequest'];
+      };
+    response: OpenAPIComponents['schemas']['ControlPlanePolicyEnvelope'];
+  };
+  "getControllersSilences": {
+    method: "GET";
+    path: "/api/v1/controllers/silences";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ControlPlaneSilencePage'];
+  };
+  "postControllersSilences": {
+    method: "POST";
+    path: "/api/v1/controllers/silences";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['ControlPlaneSilenceRequest'];
+      };
+    response: OpenAPIComponents['schemas']['ControlPlaneSilenceEnvelope'];
+  };
+  "deleteControllersSilencesById": {
+    method: "DELETE";
+    path: "/api/v1/controllers/silences/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getControllersStatus": {
+    method: "GET";
+    path: "/api/v1/controllers/status";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['ControlPlaneStatusEnvelope'];
+  };
+  "getDashboardsClustersById": {
+    method: "GET";
+    path: "/api/v1/dashboards/clusters/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['RenderedDashboardWidgetListEnvelope'];
+  };
+  "getDashboardsGlobal": {
+    method: "GET";
+    path: "/api/v1/dashboards/global";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['RenderedDashboardWidgetListEnvelope'];
+  };
+  "getDashboardsProjectsById": {
+    method: "GET";
+    path: "/api/v1/dashboards/projects/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['RenderedDashboardWidgetListEnvelope'];
+  };
+  "postGitopsSourcesByIdWebhook": {
+    method: "POST";
+    path: "/api/v1/gitops/sources/{id}/webhook";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['GitOpsSyncResultEnvelope'];
+  };
+  "getLoggingControllerStatus": {
+    method: "GET";
+    path: "/api/v1/logging/controller/status";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['LoggingControllerStatusEnvelope'];
+  };
+  "getLoggingOperations": {
+    method: "GET";
+    path: "/api/v1/logging/operations";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+          "targetType"?: "output" | "pipeline";
+          "targetKey"?: string;
+          "status"?: "pending" | "running" | "completed" | "failed" | "superseded";
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingOperationListEnvelope'];
+  };
+  "getLoggingOperationsById": {
+    method: "GET";
+    path: "/api/v1/logging/operations/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingOperationEnvelope'];
+  };
+  "postLoggingOperationsByIdRetry": {
+    method: "POST";
+    path: "/api/v1/logging/operations/{id}/retry";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingOperationEnvelope'];
+  };
+  "getLoggingOutputs": {
+    method: "GET";
+    path: "/api/v1/logging/outputs";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+          "cluster_id"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingOutputPage'];
+  };
+  "postLoggingOutputs": {
+    method: "POST";
+    path: "/api/v1/logging/outputs";
+    arguments: {
+        "query"?: {
+          "cluster_id"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['LoggingOutputWriteRequest'];
+      };
+    response: OpenAPIComponents['schemas']['LoggingOutputMutationReceiptEnvelope'];
+  };
+  "deleteLoggingOutputsById": {
+    method: "DELETE";
+    path: "/api/v1/logging/outputs/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingOutputMutationReceiptEnvelope'];
+  };
+  "putLoggingOutputsById": {
+    method: "PUT";
+    path: "/api/v1/logging/outputs/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['LoggingOutputWriteRequest'];
+      };
+    response: OpenAPIComponents['schemas']['LoggingOutputMutationReceiptEnvelope'];
+  };
+  "postLoggingOutputsByIdDisable": {
+    method: "POST";
+    path: "/api/v1/logging/outputs/{id}/disable";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingOutputMutationReceiptEnvelope'];
+  };
+  "postLoggingOutputsByIdEnable": {
+    method: "POST";
+    path: "/api/v1/logging/outputs/{id}/enable";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingOutputMutationReceiptEnvelope'];
+  };
+  "postLoggingOutputsByIdQuery": {
+    method: "POST";
+    path: "/api/v1/logging/outputs/{id}/query";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['LoggingQueryRequest'];
+      };
+    response: OpenAPIComponents['schemas']['LoggingQueryEnvelope'];
+  };
+  "postLoggingOutputsByIdRotateToken": {
+    method: "POST";
+    path: "/api/v1/logging/outputs/{id}/rotate-token";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingTokenRotationEnvelope'];
+  };
+  "postLoggingOutputsByIdTest": {
+    method: "POST";
+    path: "/api/v1/logging/outputs/{id}/test";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingTestEnvelope'];
+  };
+  "getLoggingPipelines": {
+    method: "GET";
+    path: "/api/v1/logging/pipelines";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+          "cluster_id"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingPipelinePage'];
+  };
+  "postLoggingPipelines": {
+    method: "POST";
+    path: "/api/v1/logging/pipelines";
+    arguments: {
+        "query"?: {
+          "cluster_id"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['LoggingPipelineWriteRequest'];
+      };
+    response: OpenAPIComponents['schemas']['LoggingPipelineMutationReceiptEnvelope'];
+  };
+  "deleteLoggingPipelinesById": {
+    method: "DELETE";
+    path: "/api/v1/logging/pipelines/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingPipelineMutationReceiptEnvelope'];
+  };
+  "putLoggingPipelinesById": {
+    method: "PUT";
+    path: "/api/v1/logging/pipelines/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['LoggingPipelineWriteRequest'];
+      };
+    response: OpenAPIComponents['schemas']['LoggingPipelineMutationReceiptEnvelope'];
+  };
+  "postLoggingPipelinesByIdDisable": {
+    method: "POST";
+    path: "/api/v1/logging/pipelines/{id}/disable";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingPipelineMutationReceiptEnvelope'];
+  };
+  "postLoggingPipelinesByIdEnable": {
+    method: "POST";
+    path: "/api/v1/logging/pipelines/{id}/enable";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingPipelineMutationReceiptEnvelope'];
+  };
+  "getLoggingPipelinesByIdFluentbitConfig": {
+    method: "GET";
+    path: "/api/v1/logging/pipelines/{id}/fluentbit-config";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoggingFluentBitConfigEnvelope'];
+  };
+  "getMonitoringEndpoints": {
+    method: "GET";
+    path: "/api/v1/monitoring/endpoints";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringBackendPage'];
+  };
+  "postMonitoringEndpoints": {
+    method: "POST";
+    path: "/api/v1/monitoring/endpoints";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['UpdateMonitoringBackendRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringBackendEnvelope'];
+  };
+  "deleteMonitoringEndpointsById": {
+    method: "DELETE";
+    path: "/api/v1/monitoring/endpoints/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getMonitoringEndpointsById": {
+    method: "GET";
+    path: "/api/v1/monitoring/endpoints/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringBackendEnvelope'];
+  };
+  "putMonitoringEndpointsById": {
+    method: "PUT";
+    path: "/api/v1/monitoring/endpoints/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UpdateMonitoringBackendRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringBackendEnvelope'];
+  };
+  "getMonitoringMetricsClusterOverviewByClusterId": {
+    method: "GET";
+    path: "/api/v1/monitoring/metrics/cluster-overview/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LegacyMonitoringMetricsEnvelope'];
+  };
+  "getMonitoringMetricsNodeByClusterIdByNode": {
+    method: "GET";
+    path: "/api/v1/monitoring/metrics/node/{cluster_id}/{node}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "node": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LegacyMonitoringMetricsEnvelope'];
+  };
+  "postMonitoringMetricsQueryByClusterId": {
+    method: "POST";
+    path: "/api/v1/monitoring/metrics/query/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringMetricsEnvelope'];
+  };
+  "getMonitoringMetricsWorkloadByClusterIdByNamespaceByWorkload": {
+    method: "GET";
+    path: "/api/v1/monitoring/metrics/workload/{cluster_id}/{namespace}/{workload}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "workload": string;
+        };
+        "query"?: {
+          "range"?: "1h" | "6h" | "24h" | "7d";
+        };
+      };
+    response: OpenAPIComponents['schemas']['LegacyMonitoringMetricsEnvelope'];
+  };
+  "getNativeRbacRules": {
+    method: "GET";
+    path: "/api/v1/native-rbac-rules";
+    arguments: {
+        "query"?: {
+          "userId"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['NativeRBACRuleListEnvelope'];
+  };
+  "postNativeRbacRules": {
+    method: "POST";
+    path: "/api/v1/native-rbac-rules";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['NativeRBACRuleRequest'];
+      };
+    response: OpenAPIComponents['schemas']['NativeRBACRuleEnvelope'];
+  };
+  "deleteNativeRbacRulesById": {
+    method: "DELETE";
+    path: "/api/v1/native-rbac-rules/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getObservabilityGrafanaTicket": {
+    method: "GET";
+    path: "/api/v1/observability/grafana-ticket";
+    arguments: {
+        "query"?: {
+          "return"?: string;
+        };
+      };
+    response: string;
+  };
+  "postObservabilityGrafanaTicketRedeem": {
+    method: "POST";
+    path: "/api/v1/observability/grafana-ticket/redeem";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['GrafanaTicketRedeemRequest'];
+      };
+    response: OpenAPIComponents['schemas']['GrafanaTicketIdentityEnvelope'];
+  };
+  "getProjectsByIdQuota": {
+    method: "GET";
+    path: "/api/v1/projects/{id}/quota";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ProjectQuotaSnapshotEnvelope'];
+  };
+  "getSecurityControllerStatus": {
+    method: "GET";
+    path: "/api/v1/security/controller/status";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['SecurityControllerStatusEnvelope'];
+  };
+  "getSecurityPolicies": {
+    method: "GET";
+    path: "/api/v1/security/policies";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterSecurityPolicy'][];
+      };
+  };
+  "postSecurityPolicies": {
+    method: "POST";
+    path: "/api/v1/security/policies";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['ClusterSecurityPolicyCreateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterSecurityPolicy'];
+      };
+  };
+  "deleteSecurityPoliciesById": {
+    method: "DELETE";
+    path: "/api/v1/security/policies/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postSecurityPoliciesByIdApply": {
+    method: "POST";
+    path: "/api/v1/security/policies/{id}/apply";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterSecurityPolicy'];
+      };
+  };
+  "getSecurityProfiles": {
+    method: "GET";
+    path: "/api/v1/security/profiles";
+    arguments: {
+        "query": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['CISProfilesResponse'];
+      };
+  };
+  "getSecurityScans": {
+    method: "GET";
+    path: "/api/v1/security/scans";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CISScanListEnvelope'];
+  };
+  "postSecurityScans": {
+    method: "POST";
+    path: "/api/v1/security/scans";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CISScanCreateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['CISScanEnvelope'];
+  };
+  "getSecurityScansById": {
+    method: "GET";
+    path: "/api/v1/security/scans/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CISScanEnvelope'];
+  };
+  "getSecurityScansByIdReportCsv": {
+    method: "GET";
+    path: "/api/v1/security/scans/{id}/report.csv";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: string;
+  };
+  "getSecurityTemplates": {
+    method: "GET";
+    path: "/api/v1/security/templates";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['PodSecurityTemplate'][];
+      };
+  };
+  "postSecurityTemplates": {
+    method: "POST";
+    path: "/api/v1/security/templates";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['PodSecurityTemplateWriteRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['PodSecurityTemplate'];
+      };
+  };
+  "deleteSecurityTemplatesById": {
+    method: "DELETE";
+    path: "/api/v1/security/templates/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getSecurityTemplatesById": {
+    method: "GET";
+    path: "/api/v1/security/templates/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['PodSecurityTemplate'];
+      };
+  };
+  "putSecurityTemplatesById": {
+    method: "PUT";
+    path: "/api/v1/security/templates/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['PodSecurityTemplateWriteRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['PodSecurityTemplate'];
+      };
+  };
+  "getSecurityVulnerabilitiesSummary": {
+    method: "GET";
+    path: "/api/v1/security/vulnerabilities/summary";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['FleetVulnerabilityAggregateEnvelope'];
+  };
+  "getSecurityVulnerabilitiesTopClusters": {
+    method: "GET";
+    path: "/api/v1/security/vulnerabilities/top-clusters";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['VulnerableClusterSummaryListEnvelope'];
+  };
+  "getSettingsBanner": {
+    method: "GET";
+    path: "/api/v1/settings/banner";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['PublicBannerSettingsEnvelope'];
+  };
+  "getSettingsBranding": {
+    method: "GET";
+    path: "/api/v1/settings/branding";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['PublicBrandingSettingsEnvelope'];
+  };
+  "postSettingsMonitoringAlertmanagerInstall": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/alertmanager/install";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['SharedAlertmanagerStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "postSettingsMonitoringAlertmanagerPreview": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/alertmanager/preview";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "body"?: OpenAPIComponents['schemas']['SharedAlertmanagerStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringStackPreviewEnvelope'];
+  };
+  "postSettingsMonitoringAlertmanagerReplace": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/alertmanager/replace";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['SharedAlertmanagerStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "getSettingsMonitoringAlertmanagerStatus": {
+    method: "GET";
+    path: "/api/v1/settings/monitoring/alertmanager/status";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['MonitoringStackStatusEnvelope'];
+  };
+  "deleteSettingsMonitoringAlertmanagerUninstall": {
+    method: "DELETE";
+    path: "/api/v1/settings/monitoring/alertmanager/uninstall";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "putSettingsMonitoringAlertmanagerUpgrade": {
+    method: "PUT";
+    path: "/api/v1/settings/monitoring/alertmanager/upgrade";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['SharedAlertmanagerStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "getSettingsMonitoringBackend": {
+    method: "GET";
+    path: "/api/v1/settings/monitoring/backend";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['MonitoringBackendEnvelope'];
+  };
+  "putSettingsMonitoringBackend": {
+    method: "PUT";
+    path: "/api/v1/settings/monitoring/backend";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['UpdateMonitoringBackendRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringBackendEnvelope'];
+  };
+  "postSettingsMonitoringGrafanaInstall": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/grafana/install";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['SharedGrafanaStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "postSettingsMonitoringGrafanaPreview": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/grafana/preview";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "body"?: OpenAPIComponents['schemas']['SharedGrafanaStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringStackPreviewEnvelope'];
+  };
+  "postSettingsMonitoringGrafanaReplace": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/grafana/replace";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['SharedGrafanaStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "getSettingsMonitoringGrafanaStatus": {
+    method: "GET";
+    path: "/api/v1/settings/monitoring/grafana/status";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['MonitoringStackStatusEnvelope'];
+  };
+  "deleteSettingsMonitoringGrafanaUninstall": {
+    method: "DELETE";
+    path: "/api/v1/settings/monitoring/grafana/uninstall";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "putSettingsMonitoringGrafanaUpgrade": {
+    method: "PUT";
+    path: "/api/v1/settings/monitoring/grafana/upgrade";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['SharedGrafanaStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "postSettingsMonitoringLokiInstall": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/loki/install";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['SharedLokiStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "postSettingsMonitoringLokiPreview": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/loki/preview";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['SharedLokiStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringStackPreviewEnvelope'];
+  };
+  "postSettingsMonitoringLokiReplace": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/loki/replace";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['SharedLokiStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "getSettingsMonitoringLokiStatus": {
+    method: "GET";
+    path: "/api/v1/settings/monitoring/loki/status";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['MonitoringStackStatusEnvelope'];
+  };
+  "deleteSettingsMonitoringLokiUninstall": {
+    method: "DELETE";
+    path: "/api/v1/settings/monitoring/loki/uninstall";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "putSettingsMonitoringLokiUpgrade": {
+    method: "PUT";
+    path: "/api/v1/settings/monitoring/loki/upgrade";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['SharedLokiStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "getSettingsMonitoringOperations": {
+    method: "GET";
+    path: "/api/v1/settings/monitoring/operations";
+    arguments: {
+        "query"?: {
+          "targetType"?: "cluster_stack" | "shared_thanos" | "shared_alertmanager" | "shared_grafana" | "shared_loki";
+          "targetKey"?: string;
+          "status"?: "pending" | "running" | "completed" | "failed" | "superseded";
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationPage'];
+  };
+  "getSettingsMonitoringOperationsById": {
+    method: "GET";
+    path: "/api/v1/settings/monitoring/operations/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "postSettingsMonitoringOperationsByIdRetry": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/operations/{id}/retry";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "getSettingsMonitoringSizer": {
+    method: "GET";
+    path: "/api/v1/settings/monitoring/sizer";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['MonitoringSizerEnvelope'];
+  };
+  "postSettingsMonitoringThanosInstall": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/thanos/install";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['SharedThanosStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "postSettingsMonitoringThanosPreview": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/thanos/preview";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['SharedThanosStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringStackPreviewEnvelope'];
+  };
+  "postSettingsMonitoringThanosReplace": {
+    method: "POST";
+    path: "/api/v1/settings/monitoring/thanos/replace";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['SharedThanosStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "getSettingsMonitoringThanosStatus": {
+    method: "GET";
+    path: "/api/v1/settings/monitoring/thanos/status";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['MonitoringStackStatusEnvelope'];
+  };
+  "deleteSettingsMonitoringThanosUninstall": {
+    method: "DELETE";
+    path: "/api/v1/settings/monitoring/thanos/uninstall";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "putSettingsMonitoringThanosUpgrade": {
+    method: "PUT";
+    path: "/api/v1/settings/monitoring/thanos/upgrade";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['SharedThanosStackRequest'];
+      };
+    response: OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+  };
+  "getSettingsRegistration": {
+    method: "GET";
+    path: "/api/v1/settings/registration";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['PublicRegistrationSettingsEnvelope'];
+  };
+  "getSettingsSsoPresets": {
+    method: "GET";
+    path: "/api/v1/settings/sso/presets";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['SSOPresetListEnvelope'];
+  };
+  "postStreamsTickets": {
+    method: "POST";
+    path: "/api/v1/streams/tickets";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['StreamTicketRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['StreamTicketResponse'];
+      };
+  };
+  "getSupportBundle": {
+    method: "GET";
+    path: "/api/v1/support-bundle";
+    arguments: Record<string, never>;
+    response: string;
+  };
+  "getToolsBySlug": {
+    method: "GET";
+    path: "/api/v1/tools/{slug}";
+    arguments: {
+        "path": {
+          "slug": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterTool'];
+      };
+  };
+  "postToolsBySlugAdopt": {
+    method: "POST";
+    path: "/api/v1/tools/{slug}/adopt";
+    arguments: {
+        "path": {
+          "slug": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['ToolActionRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ToolOperation'];
+      };
+  };
+  "postToolsBySlugInstall": {
+    method: "POST";
+    path: "/api/v1/tools/{slug}/install";
+    arguments: {
+        "path": {
+          "slug": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['ToolActionRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ToolOperation'];
+      };
+  };
+  "postToolsBySlugPreview": {
+    method: "POST";
+    path: "/api/v1/tools/{slug}/preview";
+    arguments: {
+        "path": {
+          "slug": string;
+        };
+        "body": OpenAPIComponents['schemas']['ToolActionRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ToolPreview'];
+      };
+  };
+  "deleteToolsBySlugUninstall": {
+    method: "DELETE";
+    path: "/api/v1/tools/{slug}/uninstall";
+    arguments: {
+        "path": {
+          "slug": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['ToolUninstallRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ToolOperation'];
+      };
+  };
+  "putToolsBySlugUpgrade": {
+    method: "PUT";
+    path: "/api/v1/tools/{slug}/upgrade";
+    arguments: {
+        "path": {
+          "slug": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['ToolActionRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ToolOperation'];
+      };
+  };
+  "getToolsControllerStatus": {
+    method: "GET";
+    path: "/api/v1/tools/controller/status";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['ToolControllerStatusEnvelope'];
+  };
+  "getToolsOperations": {
+    method: "GET";
+    path: "/api/v1/tools/operations";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+          "targetType"?: string;
+          "targetKey"?: string;
+          "status"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ListEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ToolOperation'][];
+      };
+  };
+  "getToolsOperationsById": {
+    method: "GET";
+    path: "/api/v1/tools/operations/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ToolOperation'];
+      };
+  };
+  "postToolsOperationsByIdRetry": {
+    method: "POST";
+    path: "/api/v1/tools/operations/{id}/retry";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ToolOperation'];
+      };
+  };
+  "getToolsSlugBySlug": {
+    method: "GET";
+    path: "/api/v1/tools/slug/{slug}";
+    arguments: {
+        "path": {
+          "slug": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterTool'];
+      };
+  };
+  "getDeliverySources": {
+    method: "GET";
+    path: "/api/v1/delivery/sources/";
+    arguments: {
+        "query": {
+          "project_id": string;
+          "status"?: "pending" | "ready" | "degraded" | "revoked";
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliverySourcePage'];
+  };
+  "postDeliverySources": {
+    method: "POST";
+    path: "/api/v1/delivery/sources/";
+    arguments: {
+        "headerParams"?: {
+          "Idempotency-Key"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliverySourceWrite'];
+      };
+    response: OpenAPIComponents['schemas']['DeliverySourceEnvelope'];
+  };
+  "getDeliverySourcesById": {
+    method: "GET";
+    path: "/api/v1/delivery/sources/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliverySourceEnvelope'];
+  };
+  "patchDeliverySourcesById": {
+    method: "PATCH";
+    path: "/api/v1/delivery/sources/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+        "headerParams"?: {
+          "Idempotency-Key"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliverySourcePatch'];
+      };
+    response: OpenAPIComponents['schemas']['DeliverySourceEnvelope'];
+  };
+  "deleteDeliverySourcesById": {
+    method: "DELETE";
+    path: "/api/v1/delivery/sources/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+      };
+    response: void;
+  };
+  "postDeliverySourcesByIdRotateCredential": {
+    method: "POST";
+    path: "/api/v1/delivery/sources/{id}/rotate-credential/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams"?: {
+          "Idempotency-Key"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliverySourceCredentialRotate'];
+      };
+    response: OpenAPIComponents['schemas']['DeliverySourceEnvelope'];
+  };
+  "postDeliverySourcesByIdVerify": {
+    method: "POST";
+    path: "/api/v1/delivery/sources/{id}/verify/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliverySourceVerify'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryAsyncOperationReceiptEnvelope'];
+  };
+  "getDeliveryBundles": {
+    method: "GET";
+    path: "/api/v1/delivery/bundles/";
+    arguments: {
+        "query": {
+          "project_id": string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryBundlePage'];
+  };
+  "postDeliveryBundles": {
+    method: "POST";
+    path: "/api/v1/delivery/bundles/";
+    arguments: {
+        "headerParams"?: {
+          "Idempotency-Key"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliveryBundleWrite'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryBundleEnvelope'];
+  };
+  "getDeliveryBundlesById": {
+    method: "GET";
+    path: "/api/v1/delivery/bundles/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryBundleEnvelope'];
+  };
+  "patchDeliveryBundlesById": {
+    method: "PATCH";
+    path: "/api/v1/delivery/bundles/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+        "headerParams"?: {
+          "Idempotency-Key"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliveryBundleWrite'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryBundleEnvelope'];
+  };
+  "deleteDeliveryBundlesById": {
+    method: "DELETE";
+    path: "/api/v1/delivery/bundles/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+      };
+    response: void;
+  };
+  "getDeliveryBundlesByIdVersions": {
+    method: "GET";
+    path: "/api/v1/delivery/bundles/{id}/versions/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryBundleVersionPage'];
+  };
+  "postDeliveryBundlesByIdVersions": {
+    method: "POST";
+    path: "/api/v1/delivery/bundles/{id}/versions/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+        "headerParams"?: {
+          "Idempotency-Key"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliveryBundleVersionWrite'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryBundleVersionEnvelope'];
+  };
+  "getDeliveryBundlesByIdVersionsByVersionId": {
+    method: "GET";
+    path: "/api/v1/delivery/bundles/{id}/versions/{versionId}/";
+    arguments: {
+        "path": {
+          "id": string;
+          "versionId": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryBundleVersionEnvelope'];
+  };
+  "getDeliveryTargets": {
+    method: "GET";
+    path: "/api/v1/delivery/targets/";
+    arguments: {
+        "query": {
+          "project_id": string;
+          "name"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryTargetPage'];
+  };
+  "postDeliveryTargets": {
+    method: "POST";
+    path: "/api/v1/delivery/targets/";
+    arguments: {
+        "headerParams"?: {
+          "Idempotency-Key"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliveryTargetWrite'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryTargetEnvelope'];
+  };
+  "getDeliveryTargetsById": {
+    method: "GET";
+    path: "/api/v1/delivery/targets/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryTargetEnvelope'];
+  };
+  "patchDeliveryTargetsById": {
+    method: "PATCH";
+    path: "/api/v1/delivery/targets/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliveryTargetPatch'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryTargetEnvelope'];
+  };
+  "deleteDeliveryTargetsById": {
+    method: "DELETE";
+    path: "/api/v1/delivery/targets/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryAsyncOperationReceiptEnvelope'];
+  };
+  "postDeliveryTargetsByIdPreview": {
+    method: "POST";
+    path: "/api/v1/delivery/targets/{id}/preview/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+          "page_size"?: number;
+          "cursor"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryTargetPreviewEnvelope'];
+  };
+  "postDeliveryTargetsByIdRollouts": {
+    method: "POST";
+    path: "/api/v1/delivery/targets/{id}/rollouts/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliveryRolloutStart'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryFrozenRolloutEnvelope'];
+  };
+  "postDeliveryTargetsByIdOrphan": {
+    method: "POST";
+    path: "/api/v1/delivery/targets/{id}/orphan/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryTargetDeletionEnvelope'];
+  };
+  "getDeliveryRollouts": {
+    method: "GET";
+    path: "/api/v1/delivery/rollouts/";
+    arguments: {
+        "query": {
+          "project_id": string;
+          "state"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryRolloutPage'];
+  };
+  "getDeliveryRolloutsById": {
+    method: "GET";
+    path: "/api/v1/delivery/rollouts/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryRolloutDetailEnvelope'];
+  };
+  "getDeliveryRolloutsByIdClusters": {
+    method: "GET";
+    path: "/api/v1/delivery/rollouts/{id}/clusters/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "limit"?: number;
+          "offset"?: number;
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryRolloutClusterPage'];
+  };
+  "getDeliveryRolloutsByIdEvents": {
+    method: "GET";
+    path: "/api/v1/delivery/rollouts/{id}/events/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "limit"?: number;
+          "offset"?: number;
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryRolloutEventPage'];
+  };
+  "postDeliveryRolloutsByIdPause": {
+    method: "POST";
+    path: "/api/v1/delivery/rollouts/{id}/pause/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['DeliveryRolloutAction'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryAsyncOperationReceiptEnvelope'];
+  };
+  "postDeliveryRolloutsByIdResume": {
+    method: "POST";
+    path: "/api/v1/delivery/rollouts/{id}/resume/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['DeliveryRolloutAction'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryAsyncOperationReceiptEnvelope'];
+  };
+  "postDeliveryRolloutsByIdAbort": {
+    method: "POST";
+    path: "/api/v1/delivery/rollouts/{id}/abort/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['DeliveryRolloutAction'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryAsyncOperationReceiptEnvelope'];
+  };
+  "postDeliveryRolloutsByIdRetry": {
+    method: "POST";
+    path: "/api/v1/delivery/rollouts/{id}/retry/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['DeliveryRolloutAction'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryAsyncOperationReceiptEnvelope'];
+  };
+  "postDeliveryRolloutsByIdRollback": {
+    method: "POST";
+    path: "/api/v1/delivery/rollouts/{id}/rollback/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['DeliveryRolloutAction'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryAsyncOperationReceiptEnvelope'];
+  };
+  "postDeliveryRolloutsByIdApprove": {
+    method: "POST";
+    path: "/api/v1/delivery/rollouts/{id}/approve/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliveryRolloutApproval'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryAsyncOperationReceiptEnvelope'];
+  };
+  "getDeliveryDeployments": {
+    method: "GET";
+    path: "/api/v1/delivery/deployments/";
+    arguments: {
+        "query": {
+          "limit"?: number;
+          "offset"?: number;
+          "project_id": string;
+          "cluster_id"?: string;
+          "phase"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ClusterDeploymentPage'];
+  };
+  "getDeliveryDeploymentsById": {
+    method: "GET";
+    path: "/api/v1/delivery/deployments/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ClusterDeploymentDetailEnvelope'];
+  };
+  "getDeliveryDeploymentsByIdEvents": {
+    method: "GET";
+    path: "/api/v1/delivery/deployments/{id}/events/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "limit"?: number;
+          "offset"?: number;
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ClusterDeploymentEventPage'];
+  };
+  "postDeliveryDeploymentsByIdReconcile": {
+    method: "POST";
+    path: "/api/v1/delivery/deployments/{id}/reconcile/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['DeliveryRolloutAction'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryAsyncOperationReceiptEnvelope'];
+  };
+  "postDeliveryDeploymentsByIdSuspend": {
+    method: "POST";
+    path: "/api/v1/delivery/deployments/{id}/suspend/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['DeliveryRolloutAction'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryAsyncOperationReceiptEnvelope'];
+  };
+  "postDeliveryDeploymentsByIdResume": {
+    method: "POST";
+    path: "/api/v1/delivery/deployments/{id}/resume/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['DeliveryRolloutAction'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryAsyncOperationReceiptEnvelope'];
+  };
+  "getDeliveryClustersByClusterIdInventory": {
+    method: "GET";
+    path: "/api/v1/delivery/clusters/{clusterId}/inventory/";
+    arguments: {
+        "path": {
+          "clusterId": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryClusterInventoryEnvelope'];
+  };
+  "getDeliverySystemCompatibility": {
+    method: "GET";
+    path: "/api/v1/delivery/system/compatibility/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DeliverySystemCompatibilityEnvelope'];
+  };
+  "getDeliveryFleetLegacy": {
+    method: "GET";
+    path: "/api/v1/delivery/fleet/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DeliveryEstateEnvelope'];
+  };
+  "getDeliveryEstate": {
+    method: "GET";
+    path: "/api/v1/delivery/estate/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DeliveryEstateEnvelope'];
+  };
+  "postScimUsers": {
+    method: "POST";
+    path: "/scim/v2/Users";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['SCIMUser'];
+  };
+  "getScimUsers": {
+    method: "GET";
+    path: "/scim/v2/Users";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['SCIMListResponse'];
+  };
+  "getScimUsersById": {
+    method: "GET";
+    path: "/scim/v2/Users/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['SCIMUser'];
+  };
+  "putScimUsersById": {
+    method: "PUT";
+    path: "/scim/v2/Users/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['SCIMUser'];
+  };
+  "patchScimUsersById": {
+    method: "PATCH";
+    path: "/scim/v2/Users/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body"?: {
+          "schemas"?: string[];
+          "Operations"?: Array<{
+            "op"?: string;
+            "path"?: string;
+            "value"?: unknown;
+          }>;
+        };
+      };
+    response: OpenAPIComponents['schemas']['SCIMUser'];
+  };
+  "deleteScimUsersById": {
+    method: "DELETE";
+    path: "/scim/v2/Users/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getScimGroups": {
+    method: "GET";
+    path: "/scim/v2/Groups";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['SCIMListResponse'];
+  };
+  "postScimGroups": {
+    method: "POST";
+    path: "/scim/v2/Groups";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['SCIMGroupCreateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['SCIMGroup'];
+  };
+  "getScimGroupsById": {
+    method: "GET";
+    path: "/scim/v2/Groups/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['SCIMGroup'];
+  };
+  "deleteScimGroupsById": {
+    method: "DELETE";
+    path: "/scim/v2/Groups/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "patchScimGroupsById": {
+    method: "PATCH";
+    path: "/scim/v2/Groups/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['SCIMGroupPatchRequest'];
+      };
+    response: OpenAPIComponents['schemas']['SCIMGroup'];
+  };
+  "getScimServiceProviderConfig": {
+    method: "GET";
+    path: "/scim/v2/ServiceProviderConfig";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['SCIMServiceProviderConfig'];
+  };
+  "getScimResourceTypes": {
+    method: "GET";
+    path: "/scim/v2/ResourceTypes";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['SCIMListResponse'];
+  };
+  "getScimSchemas": {
+    method: "GET";
+    path: "/scim/v2/Schemas";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['SCIMListResponse'];
+  };
+  "postAuthLogin": {
+    method: "POST";
+    path: "/api/v1/auth/login/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['LoginRequest'];
+      };
+    response: OpenAPIComponents['schemas']['LoginResponse'];
+  };
+  "getAuthMe": {
+    method: "GET";
+    path: "/api/v1/auth/me/";
+    arguments: Record<string, never>;
+    response: {
+        "data"?: OpenAPIComponents['schemas']['User'];
+      };
+  };
+  "postAuthLogout": {
+    method: "POST";
+    path: "/api/v1/auth/logout/";
+    arguments: Record<string, never>;
+    response: Record<string, unknown>;
+  };
+  "getSettingsFeatures": {
+    method: "GET";
+    path: "/api/v1/settings/features/";
+    arguments: Record<string, never>;
+    response: {
+        "data"?: OpenAPIComponents['schemas']['FeatureFlags'];
+      };
+  };
+  "adminReadAuditPoliciesList": {
+    method: "GET";
+    path: "/api/v1/admin/read-audit-policies/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ReadAuditPolicyListResponse'];
+      };
+  };
+  "adminReadAuditPolicyCreate": {
+    method: "POST";
+    path: "/api/v1/admin/read-audit-policies/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['ReadAuditPolicyCreateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ReadAuditPolicyResponse'];
+      };
+  };
+  "adminReadAuditPolicyGet": {
+    method: "GET";
+    path: "/api/v1/admin/read-audit-policies/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ReadAuditPolicyResponse'];
+      };
+  };
+  "adminReadAuditPolicyUpdate": {
+    method: "PUT";
+    path: "/api/v1/admin/read-audit-policies/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['ReadAuditPolicyUpdateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ReadAuditPolicyResponse'];
+      };
+  };
+  "adminReadAuditPolicyDelete": {
+    method: "DELETE";
+    path: "/api/v1/admin/read-audit-policies/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getAdminBackupDrill": {
+    method: "GET";
+    path: "/api/v1/admin/backup-drill/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupDrillLatestResponse'];
+      };
+  };
+  "getAdminBackupDrillHistory": {
+    method: "GET";
+    path: "/api/v1/admin/backup-drill/history/";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupDrillResult'][];
+      };
+  };
+  "getAdminManagementBackup": {
+    method: "GET";
+    path: "/api/v1/admin/management-backup/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ManagementBackupStatusResponse'];
+      };
+  };
+  "postAdminManagementBackupDestinations": {
+    method: "POST";
+    path: "/api/v1/admin/management-backup/destinations/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['ManagementBackupDestinationWriteRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ManagementBackupDestination'];
+      };
+  };
+  "getAdminManagementBackupDestinationsById": {
+    method: "GET";
+    path: "/api/v1/admin/management-backup/destinations/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ManagementBackupDestinationEnvelope'];
+  };
+  "putAdminManagementBackupDestinationsById": {
+    method: "PUT";
+    path: "/api/v1/admin/management-backup/destinations/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['ManagementBackupDestinationWriteRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ManagementBackupDestination'];
+      };
+  };
+  "deleteAdminManagementBackupDestinationsById": {
+    method: "DELETE";
+    path: "/api/v1/admin/management-backup/destinations/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ManagementBackupDeleteReceiptEnvelope'];
+  };
+  "postAdminManagementBackupDestinationsByIdTest": {
+    method: "POST";
+    path: "/api/v1/admin/management-backup/destinations/{id}/test/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ManagementBackupOperation'];
+      };
+  };
+  "postAdminManagementBackupDestinationsByIdRun": {
+    method: "POST";
+    path: "/api/v1/admin/management-backup/destinations/{id}/run/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ManagementBackupOperation'];
+      };
+  };
+  "getAdminManagementBackupOperationById": {
+    method: "GET";
+    path: "/api/v1/admin/management-backup/operations/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ManagementBackupOperation'];
+      };
+  };
+  "getExtensions": {
+    method: "GET";
+    path: "/api/v1/extensions/";
+    arguments: Record<string, never>;
+    response: {
+        "data"?: {
+          "items"?: OpenAPIComponents['schemas']['ExtensionRecord'][];
+          "sample_manifest"?: OpenAPIComponents['schemas']['ExtensionManifest'];
+        };
+      };
+  };
+  "postExtensions": {
+    method: "POST";
+    path: "/api/v1/extensions/";
+    arguments: {
+        "body": {
+          "manifest": OpenAPIComponents['schemas']['ExtensionManifest'];
+          "source"?: string;
+          "enable"?: boolean;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['ExtensionRecord'];
+      };
+  };
+  "postExtensionsValidate": {
+    method: "POST";
+    path: "/api/v1/extensions/validate/";
+    arguments: {
+        "body": {
+          "manifest"?: OpenAPIComponents['schemas']['ExtensionManifest'];
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['ExtensionValidation'];
+      };
+  };
+  "getExtensionsSampleManifest": {
+    method: "GET";
+    path: "/api/v1/extensions/sample-manifest/";
+    arguments: Record<string, never>;
+    response: {
+        "data"?: OpenAPIComponents['schemas']['ExtensionManifest'];
+      };
+  };
+  "getExtensionsMounts": {
+    method: "GET";
+    path: "/api/v1/extensions/mounts/";
+    arguments: Record<string, never>;
+    response: {
+        "data"?: OpenAPIComponents['schemas']['ExtensionMountsResponse'];
+      };
+  };
+  "postExtensionsByNameDataByDataSourceId": {
+    method: "POST";
+    path: "/api/v1/extensions/{name}/data/{dataSourceId}/";
+    arguments: {
+        "path": {
+          "name": string;
+          "dataSourceId": string;
+        };
+        "headerParams"?: {
+          "X-Extension-Ticket"?: string;
+        };
+        "body"?: {
+          "context"?: {
+            "clusterId"?: string;
+            "projectId"?: string;
+            "namespace"?: string;
+          };
+          "pathParams"?: Record<string, string>;
+          "query"?: Record<string, string>;
+          "body"?: Record<string, unknown>;
+        };
+      };
+    response: {
+        "data"?: {
+          "data"?: Record<string, unknown>;
+          "shape"?: "list" | "object" | "series";
+          "meta"?: Record<string, unknown>;
+        };
+      };
+  };
+  "postExtensionsByNameToken": {
+    method: "POST";
+    path: "/api/v1/extensions/{name}/token/";
+    arguments: {
+        "path": {
+          "name": string;
+        };
+        "body": {
+          "dataSource": string;
+          "context"?: {
+            "clusterId"?: string;
+            "projectId"?: string;
+            "namespace"?: string;
+          };
+        };
+      };
+    response: {
+        "data"?: {
+          "token"?: string;
+          "dataSource"?: string;
+          "expiresAt"?: string;
+          "scope"?: string;
+        };
+      };
+  };
+  "postExtensionsVerifyBundle": {
+    method: "POST";
+    path: "/api/v1/extensions/verify-bundle/";
+    arguments: {
+        "body": {
+          "bundle": string;
+          "signature": string;
+          "checksum"?: string;
+          "name"?: string;
+        };
+      };
+    response: {
+        "data"?: {
+          "verified"?: boolean;
+          "checksum"?: string;
+          "gated"?: boolean;
+        };
+      };
+  };
+  "postExtensionsByNameEnable": {
+    method: "POST";
+    path: "/api/v1/extensions/{name}/enable/";
+    arguments: {
+        "path": {
+          "name": string;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['ExtensionRecord'];
+      };
+  };
+  "postExtensionsByNameDisable": {
+    method: "POST";
+    path: "/api/v1/extensions/{name}/disable/";
+    arguments: {
+        "path": {
+          "name": string;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['ExtensionRecord'];
+      };
+  };
+  "getClustersByClusterIdServiceMeshInventory": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/service-mesh/inventory/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['ServiceMeshInventory'];
+      };
+  };
+  "postClustersByClusterIdServiceMeshValidate": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/service-mesh/validate/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "body": {
+          "yaml"?: string;
+        } | {
+          "object"?: Record<string, unknown>;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['ServiceMeshPolicyValidation'];
+      };
+  };
+  "postClustersByClusterIdApiserverAudit": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/apiserver-audit/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "body": {
+          "events"?: Record<string, unknown>[];
+        };
+      };
+    response: {
+        "accepted"?: number;
+        "skipped"?: number;
+      };
+  };
+  "getClustersByClusterIdApiserverAudit": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/apiserver-audit/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: {
+        "data"?: Record<string, unknown>[];
+        "total"?: number;
+      };
+  };
+  "getClusterAgents": {
+    method: "GET";
+    path: "/api/v1/cluster-agents/";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['ClusterAgentResponse'];
+      };
+  };
+  "getClusterAgentsByClusterId": {
+    method: "GET";
+    path: "/api/v1/cluster-agents/{cluster_id}/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: {
+        "data": OpenAPIComponents['schemas']['ClusterAgentItem'];
+      };
+  };
+  "getClusterAgentsByClusterIdDiagnostics": {
+    method: "GET";
+    path: "/api/v1/cluster-agents/{cluster_id}/diagnostics/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['AgentDiagnostics'];
+      };
+  };
+  "getClusterAgentsByClusterIdDiagnosticsBundle": {
+    method: "GET";
+    path: "/api/v1/cluster-agents/{cluster_id}/diagnostics/bundle/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AgentDiagnosticsBundle'];
+  };
+  "getClusterAgentsByClusterIdOperations": {
+    method: "GET";
+    path: "/api/v1/cluster-agents/{cluster_id}/operations/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['AgentLifecycleOperationsResponse'];
+      };
+  };
+  "postClusterAgentsByClusterIdSelfTest": {
+    method: "POST";
+    path: "/api/v1/cluster-agents/{cluster_id}/self-test/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['AgentSelfTest'];
+      };
+  };
+  "postClusterAgentsByClusterIdUpgradePlan": {
+    method: "POST";
+    path: "/api/v1/cluster-agents/{cluster_id}/upgrade-plan/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['AgentUpgradePlanRequest'];
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['AgentUpgradePlan'];
+      };
+  };
+  "postClusterAgentsByClusterIdUpgrade": {
+    method: "POST";
+    path: "/api/v1/cluster-agents/{cluster_id}/upgrade/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['AgentUpgradePlanRequest'];
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['AgentUpgradeOperationResponse'];
+      };
+  };
+  "getActivityLegacy": {
+    method: "GET";
+    path: "/api/v1/activity/";
+    arguments: Record<string, never>;
+    response: Record<string, unknown>;
+  };
+  "getTools": {
+    method: "GET";
+    path: "/api/v1/tools/";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ClusterToolPage'];
+  };
+  "getAlertingEvents": {
+    method: "GET";
+    path: "/api/v1/alerting/events/";
+    arguments: {
+        "query"?: {
+          "status"?: "firing" | "acknowledged" | "resolved" | "silenced";
+          "severity"?: "critical" | "warning" | "info";
+          "clusterId"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertEventPage'];
+  };
+  "getClusters": {
+    method: "GET";
+    path: "/api/v1/clusters/";
+    arguments: {
+        "query"?: {
+          "search"?: string;
+          "environment"?: string;
+          "status"?: string;
+          "provider"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedClusters'];
+  };
+  "postClusters": {
+    method: "POST";
+    path: "/api/v1/clusters/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CreateClusterRequest'];
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['Cluster'];
+      };
+  };
+  "getClustersById": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['Cluster'];
+      };
+  };
+  "deleteClustersById": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query"?: {
+          "force"?: boolean;
+        };
+      };
+    response: void;
+  };
+  "postClustersByIdOwnershipTakeover": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/ownership/takeover/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['OwnershipTransferResponse'];
+      };
+  };
+  "postProjectsByIdOwnershipTakeover": {
+    method: "POST";
+    path: "/api/v1/projects/{id}/ownership/takeover/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['OwnershipTransferResponse'];
+      };
+  };
+  "getClustersByIdManifest": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/manifest/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: string;
+  };
+  "postNodesByClusterIdByNodeNameCordon": {
+    method: "POST";
+    path: "/api/v1/nodes/{cluster_id}/{node_name}/cordon/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "node_name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['NodeOperationEnvelope'];
+  };
+  "postNodesByClusterIdByNodeNameUncordon": {
+    method: "POST";
+    path: "/api/v1/nodes/{cluster_id}/{node_name}/uncordon/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "node_name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['NodeOperationEnvelope'];
+  };
+  "postNodesByClusterIdByNodeNameDrain": {
+    method: "POST";
+    path: "/api/v1/nodes/{cluster_id}/{node_name}/drain/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "node_name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['NodeDrainRequest'];
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['NodeDrainResponse'];
+      } | OpenAPIComponents['schemas']['NodeOperationEnvelope'];
+  };
+  "postNodesByClusterIdByNodeNameLabels": {
+    method: "POST";
+    path: "/api/v1/nodes/{cluster_id}/{node_name}/labels/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "node_name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['NodeKeyValueRequest'];
+      };
+    response: OpenAPIComponents['schemas']['NodeOperationEnvelope'];
+  };
+  "postNodesByClusterIdByNodeNameLabelsRemove": {
+    method: "POST";
+    path: "/api/v1/nodes/{cluster_id}/{node_name}/labels/remove/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "node_name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['NodeKeyRequest'];
+      };
+    response: OpenAPIComponents['schemas']['NodeOperationEnvelope'];
+  };
+  "postNodesByClusterIdByNodeNameAnnotations": {
+    method: "POST";
+    path: "/api/v1/nodes/{cluster_id}/{node_name}/annotations/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "node_name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['NodeKeyValueRequest'];
+      };
+    response: OpenAPIComponents['schemas']['NodeOperationEnvelope'];
+  };
+  "postNodesByClusterIdByNodeNameAnnotationsRemove": {
+    method: "POST";
+    path: "/api/v1/nodes/{cluster_id}/{node_name}/annotations/remove/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "node_name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['NodeKeyRequest'];
+      };
+    response: OpenAPIComponents['schemas']['NodeOperationEnvelope'];
+  };
+  "postNodesByClusterIdByNodeNameTaints": {
+    method: "POST";
+    path: "/api/v1/nodes/{cluster_id}/{node_name}/taints/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "node_name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['NodeTaintRequest'];
+      };
+    response: OpenAPIComponents['schemas']['NodeOperationEnvelope'];
+  };
+  "postNodesByClusterIdByNodeNameTaintsRemove": {
+    method: "POST";
+    path: "/api/v1/nodes/{cluster_id}/{node_name}/taints/remove/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "node_name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['NodeTaintRemoveRequest'];
+      };
+    response: OpenAPIComponents['schemas']['NodeOperationEnvelope'];
+  };
+  "getNodeOperation": {
+    method: "GET";
+    path: "/api/v1/nodes/{cluster_id}/{node_name}/operations/{id}/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "node_name": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['NodeOperationEnvelope'];
+  };
+  "getClustersByIdRegistrationStatus": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/registration/status/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['RegistrationStatus'];
+      };
+  };
+  "putClustersByIdRegistrationOptions": {
+    method: "PUT";
+    path: "/api/v1/clusters/{id}/registration/options/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['SetOptionsRequest'];
+      };
+    response: {
+        "data": OpenAPIComponents['schemas']['RegistrationStatus'];
+      };
+  };
+  "postClustersByIdRegistrationConfirm": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/registration/confirm/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['RegistrationStatus'];
+      };
+  };
+  "postClustersByIdRegistrationRetryByStepId": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/registration/retry/{step_id}/";
+    arguments: {
+        "path": {
+          "id": string;
+          "step_id": string;
+        };
+      };
+    response: {
+        "data": OpenAPIComponents['schemas']['RegistrationStatus'];
+      };
+  };
+  "getClustersByIdVulnerabilitiesSummary": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/vulnerabilities/summary/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['VulnSummary'];
+      };
+  };
+  "getClustersByIdVulnerabilitiesImages": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/vulnerabilities/images/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query"?: {
+          "namespace"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['VulnImage'][];
+        "count"?: number;
+      };
+  };
+  "getClustersByIdShellSessions": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/shell/sessions/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['KubectlSessionListEnvelope'];
+  };
+  "postClustersByIdShellSessions": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/shell/sessions/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['KubectlSessionEnvelope'];
+  };
+  "postClustersByIdShellSessionsBySessionIdClose": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/shell/sessions/{session_id}/close/";
+    arguments: {
+        "path": {
+          "id": string;
+          "session_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['KubectlCloseEnvelope'];
+  };
+  "getClustersByClusterIdShellSessionsById": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/shell/sessions/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['KubectlSessionEnvelope'];
+  };
+  "getClustersByClusterIdShellSessionsByIdCommands": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/shell/sessions/{id}/commands";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['KubectlRecordedCommandPage'];
+  };
+  "getAlertingChannels": {
+    method: "GET";
+    path: "/api/v1/alerting/channels/";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['NotificationChannelPage'];
+  };
+  "postAlertingChannels": {
+    method: "POST";
+    path: "/api/v1/alerting/channels/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['AlertChannelRequest'];
+      };
+    response: OpenAPIComponents['schemas']['NotificationChannelEnvelope'];
+  };
+  "getAdminAlertingInhibitions": {
+    method: "GET";
+    path: "/api/v1/admin/alerting/inhibitions/";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['InhibitionPage'];
+  };
+  "postAdminAlertingInhibitions": {
+    method: "POST";
+    path: "/api/v1/admin/alerting/inhibitions/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['InhibitionRequest'];
+      };
+    response: OpenAPIComponents['schemas']['InhibitionEnvelope'];
+  };
+  "getAdminAlertingInhibitionsById": {
+    method: "GET";
+    path: "/api/v1/admin/alerting/inhibitions/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['InhibitionEnvelope'];
+  };
+  "putAdminAlertingInhibitionsById": {
+    method: "PUT";
+    path: "/api/v1/admin/alerting/inhibitions/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['InhibitionRequest'];
+      };
+    response: OpenAPIComponents['schemas']['InhibitionEnvelope'];
+  };
+  "deleteAdminAlertingInhibitionsById": {
+    method: "DELETE";
+    path: "/api/v1/admin/alerting/inhibitions/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "patchClustersById": {
+    method: "PATCH";
+    path: "/api/v1/clusters/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UpdateClusterRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterResponse'];
+      };
+  };
+  "putClustersById": {
+    method: "PUT";
+    path: "/api/v1/clusters/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UpdateClusterRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterResponse'];
+      };
+  };
+  "getClustersByIdConditionRemediation": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/condition-remediation";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ClusterConditionRemediationListEnvelope'];
+  };
+  "getClustersByIdConditions": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/conditions";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ClusterConditionListEnvelope'];
+  };
+  "getClustersByIdDecommission": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/decommission";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['DecommissionStatusResponse'];
+      };
+  };
+  "postClustersByIdAgentTokenRotate": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/agent-token/rotate/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'];
+  };
+  "postClustersByIdAgentTokenRevoke": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/agent-token/revoke/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'];
+  };
+  "postClustersByIdGenerateKubeconfigLegacy": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/generate_kubeconfig";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: string;
+  };
+  "postClustersByIdGenerateDirectKubeconfig": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/generate-direct-kubeconfig";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: string;
+  };
+  "postClustersByIdGenerateKubeconfig": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/generate-kubeconfig";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: string;
+  };
+  "getClustersByIdHealth": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/health";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: Record<string, unknown>;
+      };
+  };
+  "getClustersByIdKubeconfigLegacy": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/kubeconfig";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: Record<string, unknown>;
+      };
+  };
+  "getClustersByIdKubeconfigPreview": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/kubeconfig-preview";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: Record<string, unknown>;
+      };
+  };
+  "getClustersByIdMetrics": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/metrics";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query"?: {
+          "range"?: "1h" | "6h" | "24h" | "7d";
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: Record<string, unknown>;
+      };
+  };
+  "postClustersByIdMetrics": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/metrics";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['MonitoringMetricsEnvelope'];
+  };
+  "getClustersByIdMetricsSummary": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/metrics/summary";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: Record<string, unknown>;
+      };
+  };
+  "postClustersByIdRegister": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/register";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "id"?: string;
+          "cluster_id"?: string;
+          "token"?: string;
+          "expires_at"?: string;
+        };
+      };
+  };
+  "postClustersByIdRegistrationCancel": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/registration/cancel";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RegistrationStatus'];
+      };
+  };
+  "getClustersByIdRegistry": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/registry";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterRegistryConfigLegacy'];
+      };
+  };
+  "putClustersByIdRegistry": {
+    method: "PUT";
+    path: "/api/v1/clusters/{id}/registry";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UpdateRegistryConfigRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterRegistryConfigLegacy'];
+      };
+  };
+  "deleteClustersByIdRegistry": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{id}/registry";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "remoteV2ListPods": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/v2/pods";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query"?: {
+          "namespace"?: string;
+        };
+      };
+    response: {
+        "cluster_id": string;
+        "namespace": string;
+        "count": number;
+        "pods": Array<{
+          "name"?: string;
+          "namespace"?: string;
+          "phase"?: string;
+          "node"?: string;
+        }>;
+      };
+  };
+  "getRegisterByToken": {
+    method: "GET";
+    path: "/api/v1/register/{token}";
+    arguments: {
+        "path": {
+          "token": string;
+        };
+      };
+    response: string;
+  };
+  "getRegisterSignedByClusterId": {
+    method: "GET";
+    path: "/api/v1/register/signed/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query": {
+          "expires": number;
+          "sig": string;
+        };
+      };
+    response: string;
+  };
+  "getRegisterCaCrt": {
+    method: "GET";
+    path: "/api/v1/register/ca.crt";
+    arguments: Record<string, never>;
+    response: string;
+  };
+  "getClusterTemplates": {
+    method: "GET";
+    path: "/api/v1/cluster-templates";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterTemplateResponse'][];
+      };
+  };
+  "postClusterTemplates": {
+    method: "POST";
+    path: "/api/v1/cluster-templates";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CreateClusterTemplateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterTemplateResponse'];
+      };
+  };
+  "getClusterTemplatesById": {
+    method: "GET";
+    path: "/api/v1/cluster-templates/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterTemplateResponse'];
+      };
+  };
+  "patchClusterTemplatesById": {
+    method: "PATCH";
+    path: "/api/v1/cluster-templates/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CreateClusterTemplateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterTemplateResponse'];
+      };
+  };
+  "putClusterTemplatesById": {
+    method: "PUT";
+    path: "/api/v1/cluster-templates/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CreateClusterTemplateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterTemplateResponse'];
+      };
+  };
+  "deleteClusterTemplatesById": {
+    method: "DELETE";
+    path: "/api/v1/cluster-templates/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getClusterTemplatesByIdClusters": {
+    method: "GET";
+    path: "/api/v1/cluster-templates/{id}/clusters";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: Array<{
+          "cluster_id": string;
+          "cluster_name": string;
+          "status": "pending" | "applying" | "applied" | "failed";
+          "last_applied_at"?: string;
+          "message"?: string;
+        }>;
+      };
+  };
+  "getClustersByClusterIdTemplate": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/template";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterTemplateApplicationResponse'];
+      };
+  };
+  "postClustersByClusterIdTemplate": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/template";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['ApplyClusterTemplateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterTemplateApplicationResponse'];
+      };
+  };
+  "deleteClustersByClusterIdTemplate": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/template";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: void;
+  };
+  "postClustersByClusterIdTemplateReapply": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/template/reapply";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterTemplateApplicationResponse'];
+      };
+  };
+  "getClusterGroups": {
+    method: "GET";
+    path: "/api/v1/cluster-groups";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: {
+        "data": OpenAPIComponents['schemas']['ClusterGroupResponse'][];
+        "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+      };
+  };
+  "postClusterGroups": {
+    method: "POST";
+    path: "/api/v1/cluster-groups";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CreateClusterGroupRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterGroupResponse'];
+      };
+  };
+  "getClusterGroupsById": {
+    method: "GET";
+    path: "/api/v1/cluster-groups/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterGroupResponse'];
+      };
+  };
+  "patchClusterGroupsById": {
+    method: "PATCH";
+    path: "/api/v1/cluster-groups/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UpdateClusterGroupRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterGroupResponse'];
+      };
+  };
+  "putClusterGroupsById": {
+    method: "PUT";
+    path: "/api/v1/cluster-groups/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UpdateClusterGroupRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterGroupResponse'];
+      };
+  };
+  "deleteClusterGroupsById": {
+    method: "DELETE";
+    path: "/api/v1/cluster-groups/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getClusterGroupsByIdClusters": {
+    method: "GET";
+    path: "/api/v1/cluster-groups/{id}/clusters";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: Array<{
+          "id"?: string;
+          "name"?: string;
+        }>;
+      };
+  };
+  "postClusterGroupsByIdMove": {
+    method: "POST";
+    path: "/api/v1/cluster-groups/{id}/move";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['MoveClustersRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "moved"?: number;
+          "skipped"?: string[];
+        };
+      };
+  };
+  "getClustersByClusterIdRegistries": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/registries";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "items"?: OpenAPIComponents['schemas']['ClusterRegistryResponse'][];
+        };
+      };
+  };
+  "postClustersByClusterIdRegistries": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/registries";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['ClusterRegistryRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterRegistryResponse'];
+      };
+  };
+  "getClustersByClusterIdRegistriesById": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/registries/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterRegistryResponse'];
+      };
+  };
+  "putClustersByClusterIdRegistriesById": {
+    method: "PUT";
+    path: "/api/v1/clusters/{cluster_id}/registries/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['ClusterRegistryRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterRegistryResponse'];
+      };
+  };
+  "deleteClustersByClusterIdRegistriesById": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/registries/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postClustersByClusterIdRegistriesByIdTest": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/registries/{id}/test";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterRegistryTestResponse'];
+      };
+  };
+  "getClustersByClusterIdApiserverAllowlist": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/apiserver-allowlist";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['AllowlistResponse'];
+      };
+  };
+  "putClustersByClusterIdApiserverAllowlist": {
+    method: "PUT";
+    path: "/api/v1/clusters/{cluster_id}/apiserver-allowlist";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['AllowlistUpdateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['AllowlistResponse'];
+      };
+  };
+  "getClustersByClusterIdApiserverAllowlistPreview": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/apiserver-allowlist/preview";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['AllowlistResponse'];
+      };
+  };
+  "postClustersByClusterIdApiserverAllowlistReconcile": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/apiserver-allowlist/reconcile";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: {
+        "status"?: string;
+      };
+  };
+  "getClustersByClusterIdApiserverAllowlistSnapshots": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/apiserver-allowlist/snapshots";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "items"?: OpenAPIComponents['schemas']['AllowlistSnapshotResponse'][];
+        };
+      };
+  };
+  "getClustersByClusterIdServiceMesh": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/service-mesh";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ServiceMeshDetectionResponse'];
+      };
+  };
+  "postClustersByClusterIdServiceMeshDetect": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/service-mesh/detect";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ServiceMeshDetectionResponse'];
+      };
+  };
+  "getClustersByClusterIdServiceMeshMtls": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/service-mesh/mtls";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['MTLSBreakdownResponse'];
+      };
+  };
+  "getAdminNetworkPolicyTemplates": {
+    method: "GET";
+    path: "/api/v1/admin/network-policy-templates";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['NetworkPolicyTemplateResponse'][];
+      };
+  };
+  "postAdminNetworkPolicyTemplates": {
+    method: "POST";
+    path: "/api/v1/admin/network-policy-templates";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CreateNetworkPolicyTemplateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['NetworkPolicyTemplateResponse'];
+      };
+  };
+  "getAdminNetworkPolicyTemplatesById": {
+    method: "GET";
+    path: "/api/v1/admin/network-policy-templates/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['NetworkPolicyTemplateResponse'];
+      };
+  };
+  "putAdminNetworkPolicyTemplatesById": {
+    method: "PUT";
+    path: "/api/v1/admin/network-policy-templates/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CreateNetworkPolicyTemplateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['NetworkPolicyTemplateResponse'];
+      };
+  };
+  "deleteAdminNetworkPolicyTemplatesById": {
+    method: "DELETE";
+    path: "/api/v1/admin/network-policy-templates/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getClustersByClusterIdNetworkPoliciesApplications": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/network-policies/applications";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['NetworkPolicyApplicationResponse'][];
+      };
+  };
+  "postClustersByClusterIdNetworkPoliciesApplications": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/network-policies/applications";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['ApplyNetworkPolicyRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['NetworkPolicyApplicationResponse'][];
+      };
+  };
+  "deleteClustersByClusterIdNetworkPoliciesApplicationsById": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/network-policies/applications/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postClustersByClusterIdNetworkPoliciesApplicationsByIdReapply": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/network-policies/applications/{id}/reapply";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['NetworkPolicyApplicationResponse'];
+      };
+  };
+  "getClustersByIdGatekeeperConstraints": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/gatekeeper/constraints/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "data": OpenAPIComponents['schemas']['GatekeeperConstraintList'];
+      };
+  };
+  "postClustersByIdGatekeeperConstraints": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/gatekeeper/constraints/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['ConstraintYAMLRequest'];
+      };
+    response: OpenAPIComponents['schemas']['ConstraintValidationEnvelope'];
+  };
+  "postClustersByIdGatekeeperConstraintsValidate": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/gatekeeper/constraints/validate/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['ConstraintYAMLRequest'];
+      };
+    response: OpenAPIComponents['schemas']['ConstraintValidationEnvelope'];
+  };
+  "deleteClustersByIdGatekeeperConstraintsByName": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{id}/gatekeeper/constraints/{name}/";
+    arguments: {
+        "path": {
+          "id": string;
+          "name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['GatekeeperConstraintMutationEnvelope'];
+  };
+  "getCloudCredentialsProviders": {
+    method: "GET";
+    path: "/api/v1/cloud-credentials/providers";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "items"?: OpenAPIComponents['schemas']['CloudProviderSpec'][];
+        };
+      };
+  };
+  "getClustersByClusterIdSnapshotSchedules": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/snapshot-schedules";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "items"?: OpenAPIComponents['schemas']['SnapshotScheduleResponse'][];
+        };
+      };
+  };
+  "postClustersByClusterIdSnapshotSchedules": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/snapshot-schedules";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['SnapshotScheduleRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SnapshotScheduleResponse'];
+      };
+  };
+  "getClustersByClusterIdSnapshotSchedulesById": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/snapshot-schedules/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SnapshotScheduleResponse'];
+      };
+  };
+  "putClustersByClusterIdSnapshotSchedulesById": {
+    method: "PUT";
+    path: "/api/v1/clusters/{cluster_id}/snapshot-schedules/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['SnapshotScheduleUpdateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SnapshotScheduleResponse'];
+      };
+  };
+  "deleteClustersByClusterIdSnapshotSchedulesById": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/snapshot-schedules/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getClustersByClusterIdSnapshots": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/snapshots";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "items"?: OpenAPIComponents['schemas']['SnapshotResponse'][];
+        };
+      };
+  };
+  "postClustersByClusterIdSnapshots": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/snapshots";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['SnapshotCreateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SnapshotResponse'];
+      };
+  };
+  "getClustersByClusterIdSnapshotsById": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/snapshots/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SnapshotResponse'];
+      };
+  };
+  "deleteClustersByClusterIdSnapshotsById": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/snapshots/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postClustersByClusterIdSnapshotsByIdRestore": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/snapshots/{id}/restore";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['SnapshotRestoreRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SnapshotRestoreResponse'];
+      };
+  };
+  "getClustersByClusterIdVeleroStatus": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/velero-status";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['VeleroStatusResponse'];
+      };
+  };
+  "getBackups": {
+    method: "GET";
+    path: "/api/v1/backups";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupResponse'][];
+      };
+  };
+  "postBackups": {
+    method: "POST";
+    path: "/api/v1/backups";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['BackupCreateRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupResponse'];
+      };
+  };
+  "getBackupsById": {
+    method: "GET";
+    path: "/api/v1/backups/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupResponse'];
+      };
+  };
+  "deleteBackupsById": {
+    method: "DELETE";
+    path: "/api/v1/backups/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postBackupsByIdRestore": {
+    method: "POST";
+    path: "/api/v1/backups/{id}/restore";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['BackupRestoreRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RestoreOperationResponse'];
+      };
+  };
+  "getBackupsControllerStatus": {
+    method: "GET";
+    path: "/api/v1/backups/controller/status";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupControllerStatus'];
+      };
+  };
+  "getBackupsRestores": {
+    method: "GET";
+    path: "/api/v1/backups/restores";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RestoreOperationResponse'][];
+      };
+  };
+  "getBackupsRuns": {
+    method: "GET";
+    path: "/api/v1/backups/runs";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupResponse'][];
+      };
+  };
+  "getBackupsSchedules": {
+    method: "GET";
+    path: "/api/v1/backups/schedules";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupScheduleResponse'][];
+      };
+  };
+  "postBackupsSchedules": {
+    method: "POST";
+    path: "/api/v1/backups/schedules";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['BackupScheduleRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupScheduleResponse'];
+      };
+  };
+  "getBackupsSchedulesById": {
+    method: "GET";
+    path: "/api/v1/backups/schedules/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupScheduleResponse'];
+      };
+  };
+  "putBackupsSchedulesById": {
+    method: "PUT";
+    path: "/api/v1/backups/schedules/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['BackupScheduleRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupScheduleResponse'];
+      };
+  };
+  "deleteBackupsSchedulesById": {
+    method: "DELETE";
+    path: "/api/v1/backups/schedules/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postBackupsSchedulesByIdTriggerNow": {
+    method: "POST";
+    path: "/api/v1/backups/schedules/{id}/trigger-now";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupResponse'];
+      };
+  };
+  "getBackupsStorage": {
+    method: "GET";
+    path: "/api/v1/backups/storage";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupStorageConfigResponse'][];
+      };
+  };
+  "postBackupsStorage": {
+    method: "POST";
+    path: "/api/v1/backups/storage";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['BackupStorageConfigRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupStorageConfigResponse'];
+      };
+  };
+  "getBackupsStorageById": {
+    method: "GET";
+    path: "/api/v1/backups/storage/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupStorageConfigResponse'];
+      };
+  };
+  "putBackupsStorageById": {
+    method: "PUT";
+    path: "/api/v1/backups/storage/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['BackupStorageConfigRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupStorageConfigResponse'];
+      };
+  };
+  "deleteBackupsStorageById": {
+    method: "DELETE";
+    path: "/api/v1/backups/storage/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postBackupsStorageByIdTest": {
+    method: "POST";
+    path: "/api/v1/backups/storage/{id}/test";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['StorageTestResult'];
+      };
+  };
+  "postBackupsStorageByIdTestConnection": {
+    method: "POST";
+    path: "/api/v1/backups/storage/{id}/test-connection";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['StorageTestResult'];
+      };
+  };
+  "getBackupsStorageConfigs": {
+    method: "GET";
+    path: "/api/v1/backups/storage-configs";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupStorageConfigResponse'][];
+      };
+  };
+  "postBackupsStorageConfigs": {
+    method: "POST";
+    path: "/api/v1/backups/storage-configs";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['BackupStorageConfigRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupStorageConfigResponse'];
+      };
+  };
+  "getBackupsStorageConfigsById": {
+    method: "GET";
+    path: "/api/v1/backups/storage-configs/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupStorageConfigResponse'];
+      };
+  };
+  "putBackupsStorageConfigsById": {
+    method: "PUT";
+    path: "/api/v1/backups/storage-configs/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['BackupStorageConfigRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['BackupStorageConfigResponse'];
+      };
+  };
+  "deleteBackupsStorageConfigsById": {
+    method: "DELETE";
+    path: "/api/v1/backups/storage-configs/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postBackupsStorageConfigsByIdTestConnection": {
+    method: "POST";
+    path: "/api/v1/backups/storage-configs/{id}/test-connection";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['StorageTestResult'];
+      };
+  };
+  "getCatalogCharts": {
+    method: "GET";
+    path: "/api/v1/catalog/charts/";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+          "tag"?: string;
+          "project_id"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['HelmChart'][];
+      };
+  };
+  "getCatalogChartsById": {
+    method: "GET";
+    path: "/api/v1/catalog/charts/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query"?: {
+          "project_id"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['HelmChart'];
+      };
+  };
+  "getCatalogChartsByIdReadme": {
+    method: "GET";
+    path: "/api/v1/catalog/charts/{id}/readme/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query"?: {
+          "project_id"?: string;
+          "version"?: string;
+        };
+      };
+    response: {
+        "chart"?: string;
+        "version"?: string;
+        "readme"?: string;
+      };
+  };
+  "getCatalogChartsByIdValues": {
+    method: "GET";
+    path: "/api/v1/catalog/charts/{id}/values/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query"?: {
+          "project_id"?: string;
+          "version"?: string;
+        };
+      };
+    response: {
+        "chart"?: string;
+        "version"?: string;
+        "default_values"?: string;
+        "values_schema"?: Record<string, unknown>;
+      };
+  };
+  "getCatalogChartsByIdVersions": {
+    method: "GET";
+    path: "/api/v1/catalog/charts/{id}/versions/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query"?: {
+          "project_id"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['HelmChartVersionPage'];
+  };
+  "getCatalogRecommendationsPopular": {
+    method: "GET";
+    path: "/api/v1/catalog/recommendations/popular/";
+    arguments: {
+        "query"?: {
+          "project_id"?: string;
+          "limit"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ChartRecommendation'][];
+      };
+  };
+  "getCatalogRecommendationsSimilarByChartId": {
+    method: "GET";
+    path: "/api/v1/catalog/recommendations/similar/{chart_id}/";
+    arguments: {
+        "path": {
+          "chart_id": string;
+        };
+        "query"?: {
+          "project_id"?: string;
+          "limit"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ChartRecommendation'][];
+      };
+  };
+  "getCatalogControllerStatus": {
+    method: "GET";
+    path: "/api/v1/catalog/controller/status/";
+    arguments: Record<string, never>;
+    response: {
+        "reconciler"?: Record<string, unknown>;
+        "catalog"?: {
+          "chartCount"?: number;
+          "installedCount"?: number | null;
+        };
+        "operations"?: Record<string, number>;
+        "recentFailureCount"?: number;
+        "recentOperations"?: Record<string, unknown>[];
+        "latestFailure"?: Record<string, unknown> | null;
+      };
+  };
+  "getCatalogInstalled": {
+    method: "GET";
+    path: "/api/v1/catalog/installed/";
+    arguments: {
+        "query"?: {
+          "cluster_id"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['InstalledChart'][];
+      };
+  };
+  "postCatalogInstalled": {
+    method: "POST";
+    path: "/api/v1/catalog/installed/";
+    arguments: {
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": {
+          "cluster_id": string;
+          "project_id": string;
+          "chart_version_id": string;
+          "release_name": string;
+          "namespace": string;
+          "values_override"?: string;
+          "notes"?: string;
+          "tool_slug"?: string;
+          "preset_used"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CatalogInstallationAcceptedEnvelope'];
+  };
+  "deleteCatalogInstalledById": {
+    method: "DELETE";
+    path: "/api/v1/catalog/installed/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CatalogOperationEnvelope'];
+  };
+  "postCatalogInstalledByIdRollback": {
+    method: "POST";
+    path: "/api/v1/catalog/installed/{id}/rollback/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: {
+          "revision"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CatalogOperationEnvelope'];
+  };
+  "putCatalogInstalledByIdUpgrade": {
+    method: "PUT";
+    path: "/api/v1/catalog/installed/{id}/upgrade/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: {
+          "chart_version_id"?: string;
+          "values_override"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CatalogInstallationAcceptedEnvelope'];
+  };
+  "getCatalogInstalledByIdValues": {
+    method: "GET";
+    path: "/api/v1/catalog/installed/{id}/values/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "release_name"?: string;
+        "namespace"?: string;
+        "values_override"?: string;
+      };
+  };
+  "getCatalogOperations": {
+    method: "GET";
+    path: "/api/v1/catalog/operations/";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+          "targetType"?: string;
+          "targetKey"?: string;
+          "status"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ListEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['CatalogOperation'][];
+      };
+  };
+  "getCatalogOperationsById": {
+    method: "GET";
+    path: "/api/v1/catalog/operations/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CatalogOperation'] & {
+        "events"?: OpenAPIComponents['schemas']['CatalogOperationEvent'][];
+      };
+  };
+  "postCatalogOperationsByIdRetry": {
+    method: "POST";
+    path: "/api/v1/catalog/operations/{id}/retry/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CatalogOperation'];
+  };
+  "getCatalogRepositories": {
+    method: "GET";
+    path: "/api/v1/catalog/repositories/";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+          "include_project_owned"?: boolean;
+          "project_id"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['HelmRepository'][];
+      } | OpenAPIComponents['schemas']['HelmRepository'][];
+  };
+  "postCatalogRepositories": {
+    method: "POST";
+    path: "/api/v1/catalog/repositories/";
+    arguments: {
+        "body": {
+          "name": string;
+          "url": string;
+          "repo_type"?: string;
+          "description"?: string;
+          "is_default"?: boolean;
+          "auth_type"?: string;
+          "auth_config"?: OpenAPIComponents['schemas']['HelmRepositoryAuthConfig'];
+          "enabled"?: boolean;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['HelmRepository'];
+      };
+  };
+  "getCatalogRepositoriesById": {
+    method: "GET";
+    path: "/api/v1/catalog/repositories/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['HelmRepository'];
+      };
+  };
+  "putCatalogRepositoriesById": {
+    method: "PUT";
+    path: "/api/v1/catalog/repositories/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": {
+          "name"?: string;
+          "url"?: string;
+          "repo_type"?: string;
+          "description"?: string;
+          "is_default"?: boolean;
+          "auth_type"?: string;
+          "auth_config"?: OpenAPIComponents['schemas']['HelmRepositoryAuthConfig'];
+          "enabled"?: boolean;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['HelmRepository'];
+      };
+  };
+  "deleteCatalogRepositoriesById": {
+    method: "DELETE";
+    path: "/api/v1/catalog/repositories/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postCatalogRepositoriesByIdSync": {
+    method: "POST";
+    path: "/api/v1/catalog/repositories/{id}/sync/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CatalogRepositorySyncReceiptEnvelope'];
+  };
+  "postCatalogRepositoriesByIdTestConnection": {
+    method: "POST";
+    path: "/api/v1/catalog/repositories/{id}/test-connection/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "success"?: boolean;
+        "message"?: string;
+      };
+  };
+  "getClustersByClusterIdApps": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/apps/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['InstalledAppEnriched'][];
+      };
+  };
+  "deleteClustersByClusterIdAppsFailed": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/apps/failed/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: {
+        "deleted"?: number;
+      };
+  };
+  "getProjects": {
+    method: "GET";
+    path: "/api/v1/projects/";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Project'][];
+      };
+  };
+  "postProjects": {
+    method: "POST";
+    path: "/api/v1/projects/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CreateProjectRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Project'];
+      };
+  };
+  "getProjectsById": {
+    method: "GET";
+    path: "/api/v1/projects/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Project'];
+      };
+  };
+  "putProjectsById": {
+    method: "PUT";
+    path: "/api/v1/projects/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UpdateProjectRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Project'];
+      };
+  };
+  "patchProjectsById": {
+    method: "PATCH";
+    path: "/api/v1/projects/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UpdateProjectRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Project'];
+      };
+  };
+  "deleteProjectsById": {
+    method: "DELETE";
+    path: "/api/v1/projects/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postProjectsByIdAddNamespace": {
+    method: "POST";
+    path: "/api/v1/projects/{id}/add-namespace/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['ProjectNamespaceRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Project'];
+      };
+  };
+  "postProjectsByIdRemoveNamespace": {
+    method: "POST";
+    path: "/api/v1/projects/{id}/remove-namespace/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['ProjectNamespaceRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Project'];
+      };
+  };
+  "patchProjectsByIdPolicy": {
+    method: "PATCH";
+    path: "/api/v1/projects/{id}/policy/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UpdateProjectPolicyRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Project'];
+      };
+  };
+  "getProjectsByIdQuotaUsage": {
+    method: "GET";
+    path: "/api/v1/projects/{id}/quota-usage/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "results"?: Array<{
+            "cluster_id"?: string;
+            "cluster_name"?: string;
+            "namespace"?: string;
+            "used"?: Record<string, unknown>;
+            "hard"?: Record<string, unknown>;
+          }>;
+          "errors"?: Array<{
+            "cluster_id"?: string;
+            "cluster_name"?: string;
+            "namespace"?: string;
+            "error"?: string;
+          }>;
+        };
+      };
+  };
+  "getProjectsByIdRbac": {
+    method: "GET";
+    path: "/api/v1/projects/{id}/rbac/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "project_id"?: string;
+          "bindings"?: Array<{
+            "id"?: string;
+            "principal_kind"?: "user" | "group";
+            "principal_id"?: string;
+            "principal_name"?: string;
+            "role_id"?: string;
+            "role_name"?: string;
+            "role_display"?: string;
+            "is_builtin"?: boolean;
+            "created_at"?: string;
+          }>;
+          "summary"?: {
+            "user_count"?: number;
+            "group_count"?: number;
+            "role_counts"?: Record<string, number>;
+          };
+        };
+      };
+  };
+  "getProjectsByIdClusters": {
+    method: "GET";
+    path: "/api/v1/projects/{id}/clusters/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "project_id"?: string;
+          "count"?: number;
+          "clusters"?: Array<{
+            "cluster_id"?: string;
+            "cluster_name"?: string;
+            "namespace_count"?: number;
+          }>;
+        };
+      };
+  };
+  "getClustersByClusterIdProjects": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/projects/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Project'][];
+      };
+  };
+  "getProjectsByIdDefaultVaultConnection": {
+    method: "GET";
+    path: "/api/v1/projects/{id}/default-vault-connection/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "connection_id"?: string | null;
+          "connection"?: OpenAPIComponents['schemas']['VaultConnection'] | null;
+        };
+      };
+  };
+  "putProjectsByIdDefaultVaultConnection": {
+    method: "PUT";
+    path: "/api/v1/projects/{id}/default-vault-connection/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": {
+          "connection_id"?: string | null;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "connection_id"?: string | null;
+        };
+      };
+  };
+  "getProjectsByProjectIdCatalogs": {
+    method: "GET";
+    path: "/api/v1/projects/{project_id}/catalogs/";
+    arguments: {
+        "path": {
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ProjectCatalog'][];
+      };
+  };
+  "postProjectsByProjectIdCatalogs": {
+    method: "POST";
+    path: "/api/v1/projects/{project_id}/catalogs/";
+    arguments: {
+        "path": {
+          "project_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CreateProjectCatalogRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ProjectCatalog'];
+      };
+  };
+  "deleteProjectsByProjectIdCatalogsByCatalogId": {
+    method: "DELETE";
+    path: "/api/v1/projects/{project_id}/catalogs/{catalog_id}/";
+    arguments: {
+        "path": {
+          "project_id": string;
+          "catalog_id": string;
+        };
+      };
+    response: void;
+  };
+  "getProjectsByProjectIdCatalogsByCatalogIdCharts": {
+    method: "GET";
+    path: "/api/v1/projects/{project_id}/catalogs/{catalog_id}/charts/";
+    arguments: {
+        "path": {
+          "project_id": string;
+          "catalog_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['HelmChart'][];
+      };
+  };
+  "postProjectsByProjectIdCatalogsByCatalogIdSubscribe": {
+    method: "POST";
+    path: "/api/v1/projects/{project_id}/catalogs/{catalog_id}/subscribe/";
+    arguments: {
+        "path": {
+          "project_id": string;
+          "catalog_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ProjectCatalogSubscription'];
+      };
+  };
+  "getProjectsByProjectIdCloudCredentials": {
+    method: "GET";
+    path: "/api/v1/projects/{project_id}/cloud-credentials/";
+    arguments: {
+        "path": {
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "items"?: OpenAPIComponents['schemas']['CloudCredential'][];
+        };
+      };
+  };
+  "postProjectsByProjectIdCloudCredentials": {
+    method: "POST";
+    path: "/api/v1/projects/{project_id}/cloud-credentials/";
+    arguments: {
+        "path": {
+          "project_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CloudCredentialRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['CloudCredential'];
+      };
+  };
+  "getProjectsByProjectIdCloudCredentialsById": {
+    method: "GET";
+    path: "/api/v1/projects/{project_id}/cloud-credentials/{id}/";
+    arguments: {
+        "path": {
+          "project_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['CloudCredential'];
+      };
+  };
+  "putProjectsByProjectIdCloudCredentialsById": {
+    method: "PUT";
+    path: "/api/v1/projects/{project_id}/cloud-credentials/{id}/";
+    arguments: {
+        "path": {
+          "project_id": string;
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CloudCredentialRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['CloudCredential'];
+      };
+  };
+  "patchProjectsByProjectIdCloudCredentialsById": {
+    method: "PATCH";
+    path: "/api/v1/projects/{project_id}/cloud-credentials/{id}/";
+    arguments: {
+        "path": {
+          "project_id": string;
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CloudCredentialRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['CloudCredential'];
+      };
+  };
+  "deleteProjectsByProjectIdCloudCredentialsById": {
+    method: "DELETE";
+    path: "/api/v1/projects/{project_id}/cloud-credentials/{id}/";
+    arguments: {
+        "path": {
+          "project_id": string;
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postProjectsByProjectIdCloudCredentialsByIdTest": {
+    method: "POST";
+    path: "/api/v1/projects/{project_id}/cloud-credentials/{id}/test/";
+    arguments: {
+        "path": {
+          "project_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "ok"?: boolean;
+          "message"?: string;
+        };
+      };
+  };
+  "getRbacGlobalRoles": {
+    method: "GET";
+    path: "/api/v1/rbac/global-roles";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACRole'][];
+      };
+  };
+  "postRbacGlobalRoles": {
+    method: "POST";
+    path: "/api/v1/rbac/global-roles";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RBACRoleRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACRole'];
+      };
+  };
+  "getRbacGlobalRolesById": {
+    method: "GET";
+    path: "/api/v1/rbac/global-roles/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACRole'];
+      };
+  };
+  "putRbacGlobalRolesById": {
+    method: "PUT";
+    path: "/api/v1/rbac/global-roles/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['RBACRoleRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACRole'];
+      };
+  };
+  "deleteRbacGlobalRolesById": {
+    method: "DELETE";
+    path: "/api/v1/rbac/global-roles/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getRbacClusterRoles": {
+    method: "GET";
+    path: "/api/v1/rbac/cluster-roles";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACRole'][];
+      };
+  };
+  "postRbacClusterRoles": {
+    method: "POST";
+    path: "/api/v1/rbac/cluster-roles";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RBACRoleRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACRole'];
+      };
+  };
+  "getRbacClusterRolesById": {
+    method: "GET";
+    path: "/api/v1/rbac/cluster-roles/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACRole'];
+      };
+  };
+  "putRbacClusterRolesById": {
+    method: "PUT";
+    path: "/api/v1/rbac/cluster-roles/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['RBACRoleRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACRole'];
+      };
+  };
+  "deleteRbacClusterRolesById": {
+    method: "DELETE";
+    path: "/api/v1/rbac/cluster-roles/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getRbacProjectRoles": {
+    method: "GET";
+    path: "/api/v1/rbac/project-roles";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACRole'][];
+      };
+  };
+  "postRbacProjectRoles": {
+    method: "POST";
+    path: "/api/v1/rbac/project-roles";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RBACRoleRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACRole'];
+      };
+  };
+  "getRbacProjectRolesById": {
+    method: "GET";
+    path: "/api/v1/rbac/project-roles/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACRole'];
+      };
+  };
+  "putRbacProjectRolesById": {
+    method: "PUT";
+    path: "/api/v1/rbac/project-roles/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['RBACRoleRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACRole'];
+      };
+  };
+  "deleteRbacProjectRolesById": {
+    method: "DELETE";
+    path: "/api/v1/rbac/project-roles/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getRbacGlobalBindings": {
+    method: "GET";
+    path: "/api/v1/rbac/global-bindings";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACGlobalRoleBinding'][];
+      };
+  };
+  "postRbacGlobalBindings": {
+    method: "POST";
+    path: "/api/v1/rbac/global-bindings";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RBACBindingRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACGlobalRoleBinding'];
+      };
+  };
+  "deleteRbacGlobalBindingsById": {
+    method: "DELETE";
+    path: "/api/v1/rbac/global-bindings/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getRbacGlobalRoleBindings": {
+    method: "GET";
+    path: "/api/v1/rbac/global-role-bindings";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACGlobalRoleBinding'][];
+      };
+  };
+  "postRbacGlobalRoleBindings": {
+    method: "POST";
+    path: "/api/v1/rbac/global-role-bindings";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RBACBindingRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACGlobalRoleBinding'];
+      };
+  };
+  "deleteRbacGlobalRoleBindingsById": {
+    method: "DELETE";
+    path: "/api/v1/rbac/global-role-bindings/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getRbacClusterBindings": {
+    method: "GET";
+    path: "/api/v1/rbac/cluster-bindings";
+    arguments: {
+        "query"?: {
+          "cluster_id"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACClusterRoleBinding'][];
+      };
+  };
+  "postRbacClusterBindings": {
+    method: "POST";
+    path: "/api/v1/rbac/cluster-bindings";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RBACClusterBindingRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACClusterRoleBinding'];
+      };
+  };
+  "deleteRbacClusterBindingsById": {
+    method: "DELETE";
+    path: "/api/v1/rbac/cluster-bindings/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getRbacClusterRoleBindings": {
+    method: "GET";
+    path: "/api/v1/rbac/cluster-role-bindings";
+    arguments: {
+        "query"?: {
+          "cluster_id"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACClusterRoleBinding'][];
+      };
+  };
+  "postRbacClusterRoleBindings": {
+    method: "POST";
+    path: "/api/v1/rbac/cluster-role-bindings";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RBACClusterBindingRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACClusterRoleBinding'];
+      };
+  };
+  "deleteRbacClusterRoleBindingsById": {
+    method: "DELETE";
+    path: "/api/v1/rbac/cluster-role-bindings/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getRbacProjectBindings": {
+    method: "GET";
+    path: "/api/v1/rbac/project-bindings";
+    arguments: {
+        "query"?: {
+          "project_id"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACProjectRoleBinding'][];
+      };
+  };
+  "postRbacProjectBindings": {
+    method: "POST";
+    path: "/api/v1/rbac/project-bindings";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RBACProjectBindingRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACProjectRoleBinding'];
+      };
+  };
+  "deleteRbacProjectBindingsById": {
+    method: "DELETE";
+    path: "/api/v1/rbac/project-bindings/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getRbacProjectRoleBindings": {
+    method: "GET";
+    path: "/api/v1/rbac/project-role-bindings";
+    arguments: {
+        "query"?: {
+          "project_id"?: string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACProjectRoleBinding'][];
+      };
+  };
+  "postRbacProjectRoleBindings": {
+    method: "POST";
+    path: "/api/v1/rbac/project-role-bindings";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RBACProjectBindingRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACProjectRoleBinding'];
+      };
+  };
+  "deleteRbacProjectRoleBindingsById": {
+    method: "DELETE";
+    path: "/api/v1/rbac/project-role-bindings/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getRbacMyRoles": {
+    method: "GET";
+    path: "/api/v1/rbac/my-roles";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "user_id"?: string;
+          "bindings"?: Array<{
+            "user_id"?: string;
+            "group"?: string;
+            "cluster_id"?: string | null;
+            "project_id"?: string | null;
+            "rules"?: Array<{
+              "resource"?: string;
+              "verbs"?: string[];
+            }>;
+          }>;
+        };
+      };
+  };
+  "getRbacMyRolesCheck": {
+    method: "GET";
+    path: "/api/v1/rbac/my-roles/check";
+    arguments: {
+        "query": {
+          "resource": string;
+          "verb": string;
+          "cluster_id"?: string;
+          "project_id"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "allowed"?: boolean;
+          "resource"?: string;
+          "verb"?: string;
+          "cluster_id"?: string;
+          "project_id"?: string;
+        };
+      };
+  };
+  "getRbacMyPermissions": {
+    method: "GET";
+    path: "/api/v1/rbac/my-permissions";
+    arguments: {
+        "query"?: {
+          "cluster_id"?: string;
+          "project_id"?: string;
+          "namespace"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['RBACEffectivePermissionsEnvelope'];
+  };
+  "getRbacEffectivePermissionsByUserId": {
+    method: "GET";
+    path: "/api/v1/rbac/effective-permissions/{user_id}";
+    arguments: {
+        "path": {
+          "user_id": string;
+        };
+        "query"?: {
+          "cluster_id"?: string;
+          "project_id"?: string;
+          "namespace"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['RBACEffectivePermissionsEnvelope'];
+  };
+  "postRbacPermissionPreview": {
+    method: "POST";
+    path: "/api/v1/rbac/permission-preview";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RBACPermissionPreviewRequest'];
+      };
+    response: OpenAPIComponents['schemas']['RBACPermissionPreviewEnvelope'];
+  };
+  "getRbacTemplates": {
+    method: "GET";
+    path: "/api/v1/rbac/templates";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "templates"?: OpenAPIComponents['schemas']['RBACTemplate'][];
+          "count"?: number;
+        };
+      };
+  };
+  "getRbacTemplatesByName": {
+    method: "GET";
+    path: "/api/v1/rbac/templates/{name}";
+    arguments: {
+        "path": {
+          "name": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['RBACTemplate'];
+      };
+  };
+  "postAuthChangePassword": {
+    method: "POST";
+    path: "/api/v1/auth/change-password/";
+    arguments: {
+        "body": {
+          "current_password": string;
+          "new_password": string;
+        };
+      };
+    response: {
+        "detail"?: string;
+        "must_change_password"?: boolean;
+      };
+  };
+  "postAuthRefresh": {
+    method: "POST";
+    path: "/api/v1/auth/refresh/";
+    arguments: {
+        "body"?: {
+          "refresh"?: string;
+        };
+      };
+    response: {
+        "token"?: string;
+        "refresh"?: string;
+      };
+  };
+  "getAuthLogoutDone": {
+    method: "GET";
+    path: "/api/v1/auth/logout-done/";
+    arguments: Record<string, never>;
+    response: void;
+  };
+  "postAuthPasswordResetRequest": {
+    method: "POST";
+    path: "/api/v1/auth/password-reset/request/";
+    arguments: {
+        "body": {
+          "email"?: string;
+        };
+      };
+    response: void;
+  };
+  "postAuthPasswordResetComplete": {
+    method: "POST";
+    path: "/api/v1/auth/password-reset/complete/";
+    arguments: {
+        "body": {
+          "token": string;
+          "new_password": string;
+        };
+      };
+    response: {
+        "success"?: boolean;
+        "message"?: string;
+      };
+  };
+  "getAuthTokens": {
+    method: "GET";
+    path: "/api/v1/auth/tokens/";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ApiTokenListItem'][];
+      };
+  };
+  "postAuthTokens": {
+    method: "POST";
+    path: "/api/v1/auth/tokens/";
+    arguments: {
+        "body": {
+          "name": string;
+          "expires_in_days"?: number;
+          "scopes"?: string[];
+          "allowed_cidrs"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ApiTokenCreated'];
+      };
+  };
+  "deleteAuthTokensById": {
+    method: "DELETE";
+    path: "/api/v1/auth/tokens/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postAuthTotpVerify": {
+    method: "POST";
+    path: "/api/v1/auth/totp/verify/";
+    arguments: {
+        "body": {
+          "challenge_token": string;
+          "code": string;
+          "use_recovery"?: boolean;
+        };
+      };
+    response: OpenAPIComponents['schemas']['LoginResponse'];
+  };
+  "postAuthTotpEnrollStart": {
+    method: "POST";
+    path: "/api/v1/auth/totp/enroll/start/";
+    arguments: Record<string, never>;
+    response: {
+        "otpauth_url"?: string;
+        "qr_data_url"?: string;
+        "challenge_token"?: string;
+        "challenge"?: string;
+        "issuer"?: string;
+      };
+  };
+  "postAuthTotpEnrollConfirm": {
+    method: "POST";
+    path: "/api/v1/auth/totp/enroll/confirm/";
+    arguments: {
+        "body": {
+          "challenge_token": string;
+          "challenge": string;
+          "code": string;
+        };
+      };
+    response: {
+        "recovery_codes"?: string[];
+        "enrolled"?: boolean;
+      };
+  };
+  "postAuthTotpDisable": {
+    method: "POST";
+    path: "/api/v1/auth/totp/disable/";
+    arguments: {
+        "body": {
+          "password": string;
+          "code": string;
+        };
+      };
+    response: {
+        "detail"?: string;
+      };
+  };
+  "postAuthTotpRecoveryCodesRegenerate": {
+    method: "POST";
+    path: "/api/v1/auth/totp/recovery-codes/regenerate/";
+    arguments: {
+        "body": {
+          "code": string;
+        };
+      };
+    response: {
+        "recovery_codes"?: string[];
+      };
+  };
+  "getAuthTotpStatus": {
+    method: "GET";
+    path: "/api/v1/auth/totp/status/";
+    arguments: Record<string, never>;
+    response: {
+        "enrolled"?: boolean;
+        "last_used_at"?: string | null;
+        "recovery_codes_remaining"?: number;
+      };
+  };
+  "postAdminUsersByIdDisableTotp": {
+    method: "POST";
+    path: "/api/v1/admin/users/{id}/disable-totp/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "detail"?: string;
+      };
+  };
+  "getAuthDexConnectorTypes": {
+    method: "GET";
+    path: "/api/v1/auth/dex/connector-types/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['DexConnectorType'][];
+      };
+  };
+  "getAuthDexConnectors": {
+    method: "GET";
+    path: "/api/v1/auth/dex/connectors/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['DexConnector'][];
+      };
+  };
+  "postAuthDexConnectors": {
+    method: "POST";
+    path: "/api/v1/auth/dex/connectors/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['DexConnectorRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['DexConnector'];
+      };
+  };
+  "getAuthDexConnectorsById": {
+    method: "GET";
+    path: "/api/v1/auth/dex/connectors/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['DexConnector'];
+      };
+  };
+  "patchAuthDexConnectorsById": {
+    method: "PATCH";
+    path: "/api/v1/auth/dex/connectors/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['DexConnectorRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['DexConnector'];
+      };
+  };
+  "deleteAuthDexConnectorsById": {
+    method: "DELETE";
+    path: "/api/v1/auth/dex/connectors/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "deleted"?: string;
+        };
+      };
+  };
+  "getAuthDexSettings": {
+    method: "GET";
+    path: "/api/v1/auth/dex/settings/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['DexSettings'];
+      };
+  };
+  "putAuthDexSettings": {
+    method: "PUT";
+    path: "/api/v1/auth/dex/settings/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['DexSettingsRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['DexSettings'];
+      };
+  };
+  "postAuthDexApply": {
+    method: "POST";
+    path: "/api/v1/auth/dex/apply/";
+    arguments: {
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['DexOperation'];
+      };
+  };
+  "postAuthDexRegisterAsSso": {
+    method: "POST";
+    path: "/api/v1/auth/dex/register-as-sso/";
+    arguments: {
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body"?: {
+          "client_id"?: string;
+          "client_secret"?: string;
+          "display_name"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['DexOperation'];
+      };
+  };
+  "getAuthDexOperation": {
+    method: "GET";
+    path: "/api/v1/auth/dex/operations/{operation_id}/";
+    arguments: {
+        "path": {
+          "operation_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['DexOperation'];
+      };
+  };
+  "getUsers": {
+    method: "GET";
+    path: "/api/v1/users";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['UsersSettingsUserListItem'][];
+      };
+  };
+  "postUsers": {
+    method: "POST";
+    path: "/api/v1/users";
+    arguments: {
+        "body": {
+          "email": string;
+          "username"?: string;
+          "first_name"?: string;
+          "last_name"?: string;
+          "password": string;
+          "is_active"?: boolean | null;
+          "is_staff"?: boolean;
+          "is_superuser"?: boolean;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['UsersSettingsUserListItem'];
+      };
+  };
+  "getUsersById": {
+    method: "GET";
+    path: "/api/v1/users/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['UsersSettingsUserListItem'];
+      };
+  };
+  "putUsersById": {
+    method: "PUT";
+    path: "/api/v1/users/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UsersSettingsUpdateUserRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['UsersSettingsUserListItem'];
+      };
+  };
+  "patchUsersById": {
+    method: "PATCH";
+    path: "/api/v1/users/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['UsersSettingsUpdateUserRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['UsersSettingsUserListItem'];
+      };
+  };
+  "deleteUsersById": {
+    method: "DELETE";
+    path: "/api/v1/users/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "postUsersByIdResetPassword": {
+    method: "POST";
+    path: "/api/v1/users/{id}/reset-password";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body"?: {
+          "password"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "success"?: boolean;
+          "message"?: string;
+          "temporary_password"?: string;
+        };
+      };
+  };
+  "postAdminUsersByIdForceLogout": {
+    method: "POST";
+    path: "/api/v1/admin/users/{id}/force-logout";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "success"?: boolean;
+        "message"?: string;
+        "tokens_invalidated_at"?: string;
+        "sso_sessions_cleared"?: number;
+        "sso_backchannel_ok"?: number;
+        "sso_backchannel_failed"?: number;
+      };
+  };
+  "postAdminUsersByIdUnlock": {
+    method: "POST";
+    path: "/api/v1/admin/users/{id}/unlock";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "success"?: boolean;
+        "message"?: string;
+      };
+  };
+  "postAdminUsersByIdResyncGroups": {
+    method: "POST";
+    path: "/api/v1/admin/users/{id}/resync-groups/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "success": boolean;
+        "user_id": string;
+        "added_count": number;
+        "removed_count": number;
+        "groups": string[];
+      };
+  };
+  "postAdminScimTokens": {
+    method: "POST";
+    path: "/api/v1/admin/scim-tokens/";
+    arguments: {
+        "body": {
+          "name": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['SCIMTokenCreatedEnvelope'];
+  };
+  "getAdminScimTokens": {
+    method: "GET";
+    path: "/api/v1/admin/scim-tokens/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['SCIMTokenListEnvelope'];
+  };
+  "deleteAdminScimTokensById": {
+    method: "DELETE";
+    path: "/api/v1/admin/scim-tokens/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getSettings": {
+    method: "GET";
+    path: "/api/v1/settings";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['UsersSettingsGeneral'];
+      };
+  };
+  "getSettingsGeneral": {
+    method: "GET";
+    path: "/api/v1/settings/general";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['UsersSettingsGeneral'];
+      };
+  };
+  "putSettingsGeneral": {
+    method: "PUT";
+    path: "/api/v1/settings/general";
+    arguments: {
+        "body": {
+          "platformName"?: string | null;
+          "platform_name"?: string | null;
+          "agentHeartbeatInterval"?: number | null;
+          "defaultSessionTimeout"?: number | null;
+          "enableAuditLogging"?: boolean | null;
+          "metricsCollection"?: boolean | null;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['UsersSettingsGeneral'];
+      };
+  };
+  "getSettingsAuditLogs": {
+    method: "GET";
+    path: "/api/v1/settings/audit-logs";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['UsersSettingsAuditLogEntry'][];
+      };
+  };
+  "getSettingsSso": {
+    method: "GET";
+    path: "/api/v1/settings/sso";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['UsersSettingsSSOProvider'][];
+  };
+  "postSettingsSso": {
+    method: "POST";
+    path: "/api/v1/settings/sso";
+    arguments: {
+        "body": {
+          "type": "github" | "google" | "oidc";
+          "name": string;
+          "enabled"?: boolean | null;
+          "config": {
+            "client_id": string;
+            "client_secret": string;
+            "metadata_url"?: string;
+            "allowed_organizations"?: string;
+            "auto_create_users"?: boolean | null;
+          };
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['UsersSettingsSSOProvider'];
+      };
+  };
+  "deleteSettingsSsoById": {
+    method: "DELETE";
+    path: "/api/v1/settings/sso/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getSettingsTokens": {
+    method: "GET";
+    path: "/api/v1/settings/tokens";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['UsersSettingsTokenListItem'][];
+      };
+  };
+  "postSettingsTokens": {
+    method: "POST";
+    path: "/api/v1/settings/tokens";
+    arguments: {
+        "body": {
+          "name": string;
+          "expires_in_days"?: number;
+          "scopes"?: string[];
+          "allowed_cidrs"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['UsersSettingsCreatedToken'];
+      };
+  };
+  "deleteSettingsTokensById": {
+    method: "DELETE";
+    path: "/api/v1/settings/tokens/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: Record<string, unknown>;
+      };
+  };
+  "getActivity": {
+    method: "GET";
+    path: "/api/v1/activity";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+        };
+      };
+    response: Array<{
+        "id"?: string;
+        "type"?: string;
+        "action"?: string;
+        "message"?: string;
+        "resource"?: string;
+        "timestamp"?: string;
+      }>;
+  };
+  "adminAgentsClusterAdminPosture": {
+    method: "GET";
+    path: "/api/v1/admin/agents/cluster-admin-posture";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "admin_profile_clusters": number;
+          "total_clusters": number;
+          "items": Array<{
+            "cluster_id": string;
+            "cluster_name": string;
+            "cluster_status": string;
+            "is_local": boolean;
+            "privilege_profile": string;
+          }>;
+        };
+      };
+  };
+  "listCharlieCommands": {
+    method: "GET";
+    path: "/api/v1/charlie/commands/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['CharlieCommandCatalog'];
+  };
+  "listCharlieThreads": {
+    method: "GET";
+    path: "/api/v1/charlie/threads/";
+    arguments: Record<string, never>;
+    response: {
+        "threads": OpenAPIComponents['schemas']['CharlieThreadMetadata'][];
+      };
+  };
+  "getActiveCharlieThread": {
+    method: "GET";
+    path: "/api/v1/charlie/threads/active/";
+    arguments: Record<string, never>;
+    response: Record<string, unknown>;
+  };
+  "createCharlieThread": {
+    method: "POST";
+    path: "/api/v1/charlie/threads/new/";
+    arguments: Record<string, never>;
+    response: Record<string, unknown>;
+  };
+  "createCharlieThreadMessage": {
+    method: "POST";
+    path: "/api/v1/charlie/threads/messages/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CharlieThreadMessageRequest'];
+      };
+    response: Record<string, unknown>;
+  };
+  "getCharlieThreadHistory": {
+    method: "GET";
+    path: "/api/v1/charlie/threads/{thread_id}/history/";
+    arguments: {
+        "path": {
+          "thread_id": string;
+        };
+      };
+    response: Record<string, unknown>;
+  };
+  "listCharlieSessions": {
+    method: "GET";
+    path: "/api/v1/charlie/sessions/";
+    arguments: {
+        "query"?: {
+          "offset"?: number;
+          "limit"?: number;
+        };
+      };
+    response: {
+        "sessions": OpenAPIComponents['schemas']['CharlieSessionMetadata'][];
+        "mode": "disabled" | "read_only" | "approval" | "auto";
+      };
+  };
+  "createCharlieSession": {
+    method: "POST";
+    path: "/api/v1/charlie/sessions/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CharlieSessionCreateRequest'];
+      };
+    response: {
+        "session": OpenAPIComponents['schemas']['CharlieSessionMetadata'];
+        "replayed": boolean;
+      };
+  };
+  "getCharlieSession": {
+    method: "GET";
+    path: "/api/v1/charlie/sessions/{session_id}/";
+    arguments: {
+        "path": {
+          "session_id": string;
+        };
+      };
+    response: {
+        "session": OpenAPIComponents['schemas']['CharlieSessionMetadata'];
+        "remote": Record<string, unknown>;
+      };
+  };
+  "getCharlieSessionHistory": {
+    method: "GET";
+    path: "/api/v1/charlie/sessions/{session_id}/history/";
+    arguments: {
+        "path": {
+          "session_id": string;
+        };
+        "query"?: {
+          "cursor"?: string;
+          "limit"?: number;
+        };
+      };
+    response: Record<string, unknown>[];
+  };
+  "streamCharlieSessionEvents": {
+    method: "GET";
+    path: "/api/v1/charlie/sessions/{session_id}/events/";
+    arguments: {
+        "path": {
+          "session_id": string;
+        };
+      };
+    response: string;
+  };
+  "createCharlieSessionMessage": {
+    method: "POST";
+    path: "/api/v1/charlie/sessions/{session_id}/messages/";
+    arguments: {
+        "path": {
+          "session_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CharlieMessageRequest'];
+      };
+    response: Record<string, unknown>;
+  };
+  "abortCharlieSession": {
+    method: "POST";
+    path: "/api/v1/charlie/sessions/{session_id}/abort/";
+    arguments: {
+        "path": {
+          "session_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CharlieAbortRequest'];
+      };
+    response: void;
+  };
+  "searchCharlieContext": {
+    method: "GET";
+    path: "/api/v1/charlie/context/search/";
+    arguments: {
+        "query": {
+          "q": string;
+          "limit"?: number;
+        };
+      };
+    response: {
+        "items": OpenAPIComponents['schemas']['CharlieContextSearchResult'][];
+      };
+  };
+  "getCharlieOperationStatus": {
+    method: "GET";
+    path: "/api/v1/charlie/operations/{operation_id}";
+    arguments: {
+        "path": {
+          "operation_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CharlieOperationStatus'];
+  };
+  "listCharlieApprovals": {
+    method: "GET";
+    path: "/api/v1/charlie/approvals/";
+    arguments: Record<string, never>;
+    response: {
+        "items": OpenAPIComponents['schemas']['CharlieApprovalSummary'][];
+      };
+  };
+  "decideCharlieApproval": {
+    method: "POST";
+    path: "/api/v1/charlie/approvals/{approval_id}/decision/";
+    arguments: {
+        "path": {
+          "approval_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CharlieApprovalDecisionRequest'];
+      };
+    response: {
+        "approval": OpenAPIComponents['schemas']['CharlieApprovalSummary'];
+      };
+  };
+  "listCharlieFindings": {
+    method: "GET";
+    path: "/api/v1/charlie/findings/";
+    arguments: {
+        "query"?: {
+          "status"?: "open" | "acknowledged" | "dismissed" | "resolved";
+          "offset"?: number;
+          "limit"?: number;
+        };
+      };
+    response: {
+        "items": OpenAPIComponents['schemas']['CharlieFindingSummary'][];
+      };
+  };
+  "getCharlieFinding": {
+    method: "GET";
+    path: "/api/v1/charlie/findings/{finding_id}/";
+    arguments: {
+        "path": {
+          "finding_id": string;
+        };
+      };
+    response: {
+        "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+      };
+  };
+  "acknowledgeCharlieFinding": {
+    method: "POST";
+    path: "/api/v1/charlie/findings/{finding_id}/acknowledge/";
+    arguments: {
+        "path": {
+          "finding_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
+      };
+    response: {
+        "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+      };
+  };
+  "dismissCharlieFinding": {
+    method: "POST";
+    path: "/api/v1/charlie/findings/{finding_id}/dismiss/";
+    arguments: {
+        "path": {
+          "finding_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
+      };
+    response: {
+        "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+      };
+  };
+  "startCharlieFindingRemediation": {
+    method: "POST";
+    path: "/api/v1/charlie/findings/{finding_id}/start-remediation/";
+    arguments: {
+        "path": {
+          "finding_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
+      };
+    response: {
+        "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+      };
+  };
+  "requestCharlieFindingVerification": {
+    method: "POST";
+    path: "/api/v1/charlie/findings/{finding_id}/request-verification/";
+    arguments: {
+        "path": {
+          "finding_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
+      };
+    response: {
+        "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+      };
+  };
+  "resolveCharlieFinding": {
+    method: "POST";
+    path: "/api/v1/charlie/findings/{finding_id}/resolve/";
+    arguments: {
+        "path": {
+          "finding_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
+      };
+    response: {
+        "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+      };
+  };
+  "adminCharlieOnboardingValidate": {
+    method: "POST";
+    path: "/api/v1/admin/charlie/onboarding/validate/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CharlieOnboardingRequest'];
+      };
+    response: OpenAPIComponents['schemas']['CharlieOnboardingStatus'];
+  };
+  "adminCharlieOnboardingConsume": {
+    method: "POST";
+    path: "/api/v1/admin/charlie/onboarding/consume/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CharlieOnboardingRequest'];
+      };
+    response: OpenAPIComponents['schemas']['CharlieOnboardingStatus'];
+  };
+  "charlieActivation": {
+    method: "GET";
+    path: "/api/v1/charlie/activation/";
+    arguments: Record<string, never>;
+    response: {
+        "activated": boolean;
+        "endpoint"?: string;
+      };
+  };
+  "adminCharlieStatus": {
+    method: "GET";
+    path: "/api/v1/admin/charlie/status/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['CharlieAdminStatus'];
+  };
+  "adminCharlieDisconnect": {
+    method: "POST";
+    path: "/api/v1/admin/charlie/disconnect/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CharlieAdminActionRequest'];
+      };
+    response: OpenAPIComponents['schemas']['CharlieAdminStatus'];
+  };
+  "adminCharlieModeUpdate": {
+    method: "PATCH";
+    path: "/api/v1/admin/charlie/mode/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CharlieModeRequest'];
+      };
+    response: OpenAPIComponents['schemas']['CharlieAdminMode'];
+  };
+  "adminCharlieKubernetesVisibilityGet": {
+    method: "GET";
+    path: "/api/v1/admin/charlie/kubernetes-visibility/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['CharlieKubernetesVisibility'];
+  };
+  "adminCharlieKubernetesVisibilityUpdate": {
+    method: "PUT";
+    path: "/api/v1/admin/charlie/kubernetes-visibility/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CharlieKubernetesVisibilityRequest'];
+      };
+    response: OpenAPIComponents['schemas']['CharlieKubernetesVisibility'];
+  };
+  "adminCharlieTriggerRulesList": {
+    method: "GET";
+    path: "/api/v1/admin/charlie/trigger-rules/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['CharlieAdminAutomation'];
+  };
+  "adminCharlieTriggerRuleCreate": {
+    method: "POST";
+    path: "/api/v1/admin/charlie/trigger-rules/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CharlieAdminTriggerRule'];
+      };
+    response: OpenAPIComponents['schemas']['CharlieAdminTriggerRule'];
+  };
+  "adminCharlieAlertPolicyGet": {
+    method: "GET";
+    path: "/api/v1/admin/charlie/alert-policy/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['CharlieAdminAlertPolicy'];
+  };
+  "adminCharlieAlertPolicyUpdate": {
+    method: "PUT";
+    path: "/api/v1/admin/charlie/alert-policy/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CharlieAdminAlertPolicyInput'];
+      };
+    response: OpenAPIComponents['schemas']['CharlieAdminAlertPolicy'];
+  };
+  "adminCharlieAlertDeliveryProofs": {
+    method: "GET";
+    path: "/api/v1/admin/charlie/alert-deliveries/";
+    arguments: {
+        "query": {
+          "finding_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CharlieAdminAlertDeliveryProofView'];
+  };
+  "adminCharlieDiscoveryQualification": {
+    method: "POST";
+    path: "/api/v1/admin/charlie/qualification/discovery/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CharlieDiscoveryQualificationRequest'];
+      };
+    response: OpenAPIComponents['schemas']['CharlieAdminDiscoveryQualification'];
+  };
+  "adminCharlieTriggerRuleUpdate": {
+    method: "PATCH";
+    path: "/api/v1/admin/charlie/trigger-rules/{rule_id}/";
+    arguments: {
+        "path": {
+          "rule_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CharlieAdminTriggerRule'];
+      };
+    response: OpenAPIComponents['schemas']['CharlieAdminTriggerRule'];
+  };
+  "adminCharlieTriggerRuleDelete": {
+    method: "DELETE";
+    path: "/api/v1/admin/charlie/trigger-rules/{rule_id}/";
+    arguments: {
+        "path": {
+          "rule_id": string;
+        };
+        "body": OpenAPIComponents['schemas']['CharlieAdminActionRequest'];
+      };
+    response: void;
+  };
+  "adminCharlieActionPolicyUpdate": {
+    method: "PUT";
+    path: "/api/v1/admin/charlie/action-policies/{capability}/";
+    arguments: {
+        "path": {
+          "capability": string;
+        };
+        "body": OpenAPIComponents['schemas']['CharlieAdminActionPolicyInput'];
+      };
+    response: OpenAPIComponents['schemas']['CharlieAdminActionPolicy'];
+  };
+  "adminCharlieTriggerEventsList": {
+    method: "GET";
+    path: "/api/v1/admin/charlie/trigger-events/";
+    arguments: {
+        "query"?: {
+          "state"?: "pending" | "dispatching" | "dispatched" | "retry" | "dead" | "completed" | "suppressed";
+          "offset"?: number;
+          "limit"?: number;
+        };
+      };
+    response: {
+        "items": OpenAPIComponents['schemas']['CharlieAdminTriggerEvent'][];
+      };
+  };
+  "adminCharlieTriggerEventRetry": {
+    method: "POST";
+    path: "/api/v1/admin/charlie/trigger-events/{event_id}/retry/";
+    arguments: {
+        "path": {
+          "event_id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": OpenAPIComponents['schemas']['CharlieTriggerRetryRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['CharlieTriggerRetryReceipt'];
+      };
+  };
+  "adminCharlieTriggerEventGet": {
+    method: "GET";
+    path: "/api/v1/admin/charlie/trigger-events/{event_id}/";
+    arguments: {
+        "path": {
+          "event_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['CharlieAdminTriggerEvent'];
+      };
+  };
+  "adminCharlieAccessGet": {
+    method: "GET";
+    path: "/api/v1/admin/charlie/access/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['CharlieAdminAccess'];
+  };
+  "adminCharlieAccessUpdate": {
+    method: "PUT";
+    path: "/api/v1/admin/charlie/access/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['CharlieAccessRequest'];
+      };
+    response: OpenAPIComponents['schemas']['CharlieAdminAccess'];
+  };
+  "adminCharlieDiagnosticsRun": {
+    method: "POST";
+    path: "/api/v1/admin/charlie/diagnostics/run/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['CharlieAdminDiagnostics'];
+  };
+  "adminKeyStatus": {
+    method: "GET";
+    path: "/api/v1/admin/key-status";
+    arguments: Record<string, never>;
+    response: {
+        "encryption_keys": number;
+        "jwt_keys": number;
+        "insecure_dev_keys": string[];
+        "as_of": string;
+      };
+  };
+  "adminEmailsList": {
+    method: "GET";
+    path: "/api/v1/admin/emails";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "items"?: Array<{
+            "id"?: string;
+            "to_address"?: string;
+            "subject"?: string;
+            "template"?: string;
+            "status"?: string;
+            "attempts"?: number;
+            "last_error"?: string;
+            "sent_at"?: string | null;
+            "created_at"?: string;
+            "user_id"?: string | null;
+          }>;
+          "total"?: number;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+  };
+  "adminSmtpGet": {
+    method: "GET";
+    path: "/api/v1/admin/smtp";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SmtpSettings'];
+      };
+  };
+  "adminSmtpUpdate": {
+    method: "PUT";
+    path: "/api/v1/admin/smtp";
+    arguments: {
+        "body": {
+          "enabled"?: boolean;
+          "host"?: string;
+          "port"?: number;
+          "username"?: string;
+          "password"?: string;
+          "from_address"?: string;
+          "from_name"?: string;
+          "auth_mechanism"?: "plain" | "login" | "cram-md5" | "none";
+          "encryption"?: "starttls" | "tls" | "none";
+          "require_tls"?: boolean;
+          "timeout_seconds"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SmtpSettings'];
+      };
+  };
+  "adminSmtpTest": {
+    method: "POST";
+    path: "/api/v1/admin/smtp/test";
+    arguments: {
+        "body": {
+          "recipient": string;
+        };
+      };
+    response: {
+        "success"?: boolean;
+        "recipient"?: string;
+      };
+  };
+  "adminVaultConnectionsList": {
+    method: "GET";
+    path: "/api/v1/admin/vault-connections";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "items"?: OpenAPIComponents['schemas']['VaultConnection'][];
+        };
+      };
+  };
+  "adminVaultConnectionsCreate": {
+    method: "POST";
+    path: "/api/v1/admin/vault-connections";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['VaultConnectionRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['VaultConnection'];
+      };
+  };
+  "adminVaultConnectionGet": {
+    method: "GET";
+    path: "/api/v1/admin/vault-connections/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['VaultConnection'];
+      };
+  };
+  "adminVaultConnectionUpdate": {
+    method: "PUT";
+    path: "/api/v1/admin/vault-connections/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['VaultConnectionRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['VaultConnection'];
+      };
+  };
+  "adminVaultConnectionDelete": {
+    method: "DELETE";
+    path: "/api/v1/admin/vault-connections/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "adminVaultConnectionHealth": {
+    method: "POST";
+    path: "/api/v1/admin/vault-connections/{id}/health";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "ok"?: boolean;
+          "latency_ms"?: number;
+          "message"?: string;
+        };
+      };
+  };
+  "adminVaultConnectionTest": {
+    method: "POST";
+    path: "/api/v1/admin/vault-connections/{id}/test";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body"?: {
+          "probe_path"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['VaultTestResult'];
+      };
+  };
+  "adminShellSessionsList": {
+    method: "GET";
+    path: "/api/v1/admin/shell-sessions";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ShellSession'][];
+      };
+  };
+  "adminShellSessionCommands": {
+    method: "GET";
+    path: "/api/v1/admin/shell-sessions/{id}/commands";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: Array<{
+          "command_at"?: string;
+          "command_line"?: string;
+        }>;
+      };
+  };
+  "adminComplianceBaselinesList": {
+    method: "GET";
+    path: "/api/v1/admin/compliance-baselines/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ComplianceBaseline'][];
+      };
+  };
+  "adminComplianceBaselineActive": {
+    method: "GET";
+    path: "/api/v1/admin/compliance-baselines/active/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "active": OpenAPIComponents['schemas']['ComplianceBaselineApplication'] | null;
+        };
+      };
+  };
+  "adminComplianceBaselineGet": {
+    method: "GET";
+    path: "/api/v1/admin/compliance-baselines/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ComplianceBaseline'];
+      };
+  };
+  "adminComplianceBaselineDiff": {
+    method: "GET";
+    path: "/api/v1/admin/compliance-baselines/{id}/diff/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ComplianceBaselineDiff'];
+      };
+  };
+  "adminComplianceBaselineApply": {
+    method: "POST";
+    path: "/api/v1/admin/compliance-baselines/{id}/apply/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body"?: OpenAPIComponents['schemas']['ComplianceBaselineApplyRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ComplianceBaselineApplyReceipt'];
+      };
+  };
+  "adminComplianceBaselineApplicationsList": {
+    method: "GET";
+    path: "/api/v1/admin/compliance-baseline-applications/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ComplianceBaselineApplication'][];
+      };
+  };
+  "adminComplianceBaselineApplicationRevert": {
+    method: "POST";
+    path: "/api/v1/admin/compliance-baseline-applications/{id}/revert/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ComplianceBaselineRevertReceipt'];
+      };
+  };
+  "adminSIEMForwardersList": {
+    method: "GET";
+    path: "/api/v1/admin/siem-forwarders/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SIEMForwarderList'];
+      };
+  };
+  "adminSIEMForwardersCreate": {
+    method: "POST";
+    path: "/api/v1/admin/siem-forwarders/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['SIEMForwarderRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SIEMForwarderResponse'];
+      };
+  };
+  "adminSIEMForwarderGet": {
+    method: "GET";
+    path: "/api/v1/admin/siem-forwarders/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SIEMForwarderResponse'];
+      };
+  };
+  "adminSIEMForwarderUpdate": {
+    method: "PUT";
+    path: "/api/v1/admin/siem-forwarders/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['SIEMForwarderRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SIEMForwarderResponse'];
+      };
+  };
+  "adminSIEMForwarderDelete": {
+    method: "DELETE";
+    path: "/api/v1/admin/siem-forwarders/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "adminSIEMForwarderTest": {
+    method: "POST";
+    path: "/api/v1/admin/siem-forwarders/{id}/test/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SIEMForwarderTestReceipt'];
+      };
+  };
+  "adminSIEMForwarderTestOperationGet": {
+    method: "GET";
+    path: "/api/v1/admin/siem-forwarders/{id}/test-operations/{operation_id}/";
+    arguments: {
+        "path": {
+          "id": string;
+          "operation_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SIEMForwarderTestReceipt'];
+      };
+  };
+  "adminSIEMForwarderStatus": {
+    method: "GET";
+    path: "/api/v1/admin/siem-forwarders/{id}/status/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['SIEMForwarderStatusResponse'];
+  };
+  "adminNotificationTemplatesList": {
+    method: "GET";
+    path: "/api/v1/admin/notification-templates/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "items": OpenAPIComponents['schemas']['NotificationTemplateListItem'][];
+          "total": number;
+        };
+      };
+  };
+  "adminNotificationTemplateGet": {
+    method: "GET";
+    path: "/api/v1/admin/notification-templates/{key}/";
+    arguments: {
+        "path": {
+          "key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['NotificationTemplateDetail'];
+      };
+  };
+  "adminNotificationTemplateUpdate": {
+    method: "PUT";
+    path: "/api/v1/admin/notification-templates/{key}/";
+    arguments: {
+        "path": {
+          "key": string;
+        };
+        "body": OpenAPIComponents['schemas']['NotificationTemplateUpsertRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['NotificationTemplateDetail'];
+      };
+  };
+  "adminNotificationTemplateReset": {
+    method: "DELETE";
+    path: "/api/v1/admin/notification-templates/{key}/";
+    arguments: {
+        "path": {
+          "key": string;
+        };
+      };
+    response: void;
+  };
+  "adminNotificationTemplatePreview": {
+    method: "POST";
+    path: "/api/v1/admin/notification-templates/{key}/preview/";
+    arguments: {
+        "path": {
+          "key": string;
+        };
+        "body": OpenAPIComponents['schemas']['NotificationTemplatePreviewRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['NotificationTemplatePreviewResponse'];
+      };
+  };
+  "adminNotificationTemplateVariables": {
+    method: "GET";
+    path: "/api/v1/admin/notification-templates/{key}/variables/";
+    arguments: {
+        "path": {
+          "key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "key": string;
+          "variables": OpenAPIComponents['schemas']['NotificationTemplateVariable'][];
+        };
+      };
+  };
+  "adminWebhooksList": {
+    method: "GET";
+    path: "/api/v1/admin/webhooks";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "items"?: OpenAPIComponents['schemas']['WebhookSubscription'][];
+          "total"?: number;
+        };
+      };
+  };
+  "adminWebhooksCreate": {
+    method: "POST";
+    path: "/api/v1/admin/webhooks";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['WebhookSubscriptionRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WebhookSubscription'];
+      };
+  };
+  "adminWebhookGet": {
+    method: "GET";
+    path: "/api/v1/admin/webhooks/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WebhookSubscription'];
+      };
+  };
+  "adminWebhookUpdate": {
+    method: "PUT";
+    path: "/api/v1/admin/webhooks/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['WebhookSubscriptionRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WebhookSubscription'];
+      };
+  };
+  "adminWebhookDelete": {
+    method: "DELETE";
+    path: "/api/v1/admin/webhooks/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "adminWebhookDeliveries": {
+    method: "GET";
+    path: "/api/v1/admin/webhooks/{id}/deliveries";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "items"?: OpenAPIComponents['schemas']['WebhookDelivery'][];
+          "total"?: number;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+  };
+  "adminWebhookGetDelivery": {
+    method: "GET";
+    path: "/api/v1/admin/webhooks/{id}/deliveries/{delivery_id}";
+    arguments: {
+        "path": {
+          "id": string;
+          "delivery_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WebhookDelivery'];
+      };
+  };
+  "adminWebhookRetryDelivery": {
+    method: "POST";
+    path: "/api/v1/admin/webhooks/{id}/deliveries/{delivery_id}/retry";
+    arguments: {
+        "path": {
+          "id": string;
+          "delivery_id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WebhookDelivery'];
+      };
+  };
+  "adminWebhookTest": {
+    method: "POST";
+    path: "/api/v1/admin/webhooks/{id}/test";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WebhookDelivery'];
+      };
+  };
+  "listAuditLogs": {
+    method: "GET";
+    path: "/api/v1/audit/";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+          "user_id"?: string;
+          "actor"?: string;
+          "q"?: string;
+          "audience"?: "people" | "system" | "all";
+          "resource_type"?: string;
+          "resource_id"?: string;
+          "resource_name"?: string;
+          "target"?: string;
+          "action"?: string;
+          "action_class"?: string;
+          "result"?: "success" | "failure" | "error";
+          "source"?: string;
+          "correlation_id"?: string;
+          "request_id"?: string;
+          "cluster_id"?: string;
+          "project_id"?: string;
+          "status_code"?: number;
+          "from"?: string;
+          "to"?: string;
+          "since"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['AuditLogEntry'][];
+      };
+  };
+  "exportAuditLogs": {
+    method: "GET";
+    path: "/api/v1/audit/export/";
+    arguments: {
+        "query"?: {
+          "format"?: "csv";
+          "user_id"?: string;
+          "actor"?: string;
+          "q"?: string;
+          "audience"?: "people" | "system" | "all";
+          "resource_type"?: string;
+          "resource_id"?: string;
+          "resource_name"?: string;
+          "target"?: string;
+          "action"?: string;
+          "action_class"?: string;
+          "result"?: "success" | "failure" | "error";
+          "source"?: string;
+          "correlation_id"?: string;
+          "request_id"?: string;
+          "cluster_id"?: string;
+          "project_id"?: string;
+          "status_code"?: number;
+          "from"?: string;
+          "to"?: string;
+        };
+      };
+    response: string;
+  };
+  "getAuditLog": {
+    method: "GET";
+    path: "/api/v1/audit/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['AuditLogEntry'];
+      };
+  };
+  "getClustersByClusterIdNodes": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/nodes/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['NodeSummaryListEnvelope'];
+  };
+  "getClustersByClusterIdNodesByNodeName": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/nodes/{node_name}/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "node_name": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['NodeDetail'];
+      };
+  };
+  "getClustersByClusterIdPods": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/pods/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "namespace"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Pod'][];
+      };
+  };
+  "getClustersByClusterIdPodsWatch": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/pods/watch/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "namespace"?: string;
+          "ticket"?: string;
+        };
+      };
+    response: string;
+  };
+  "getClustersByClusterIdNamespaces": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/namespaces/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Namespace'][];
+      };
+  };
+  "getClustersByClusterIdEvents": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/events/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ClusterEvent'][];
+      };
+  };
+  "getClustersByClusterIdWorkloads": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/workloads/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+          "namespace"?: string;
+          "kind"?: string;
+          "search"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Workload'][];
+      };
+  };
+  "getClustersByClusterIdWorkloadsByKindByNamespaceByName": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "kind": string;
+          "namespace": string;
+          "name": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Workload'];
+      };
+  };
+  "deleteClustersByClusterIdWorkloadsByKindByNamespaceByName": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "kind": string;
+          "namespace": string;
+          "name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WorkloadOperation'];
+      };
+  };
+  "getClustersByClusterIdWorkloadsByKindByNamespaceByNamePods": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/pods/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "kind": string;
+          "namespace": string;
+          "name": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['Pod'][];
+      };
+  };
+  "postClustersByClusterIdWorkloadsByKindByNamespaceByNameRestart": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/restart/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "kind": string;
+          "namespace": string;
+          "name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WorkloadOperation'];
+      };
+  };
+  "patchClustersByClusterIdWorkloadsByKindByNamespaceByNameScale": {
+    method: "PATCH";
+    path: "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/scale/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "kind": string;
+          "namespace": string;
+          "name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": {
+          "replicas": number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WorkloadOperation'];
+      };
+  };
+  "getWorkloadsControllerStatus": {
+    method: "GET";
+    path: "/api/v1/workloads/controller/status/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "reconciler"?: Record<string, unknown>;
+          "operations"?: Record<string, number>;
+        };
+      };
+  };
+  "getWorkloadsOperations": {
+    method: "GET";
+    path: "/api/v1/workloads/operations/";
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+          "targetType"?: string;
+          "targetKey"?: string;
+          "status"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WorkloadOperation'][];
+      };
+  };
+  "getWorkloadsOperationsById": {
+    method: "GET";
+    path: "/api/v1/workloads/operations/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WorkloadOperation'] & {
+          "events"?: OpenAPIComponents['schemas']['WorkloadOperationEvent'][];
+        };
+      };
+  };
+  "postWorkloadsOperationsByIdRetry": {
+    method: "POST";
+    path: "/api/v1/workloads/operations/{id}/retry/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WorkloadOperation'];
+      };
+  };
+  "deleteWorkloadsPodsByClusterIdByNamespaceByPod": {
+    method: "DELETE";
+    path: "/api/v1/workloads/pods/{cluster_id}/{namespace}/{pod}/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "pod": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['WorkloadOperation'];
+      };
+  };
+  "getWorkloadsPodsByClusterIdByNamespaceByPodLogs": {
+    method: "GET";
+    path: "/api/v1/workloads/pods/{cluster_id}/{namespace}/{pod}/logs/";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "pod": string;
+        };
+        "query"?: {
+          "container"?: string;
+          "tailLines"?: number;
+          "sinceSeconds"?: number;
+          "follow"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['PodLogEntry'][];
+      };
+  };
+  "listNamedClusterResources": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/resources/{resource_type}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "resource_type": "services" | "ingresses" | "networkpolicies" | "persistentvolumes" | "persistentvolumeclaims" | "storageclasses" | "gateways" | "httproutes" | "gatewayclasses" | "grpcroutes" | "tcproutes" | "udproutes" | "tlsroutes" | "referencegrants";
+        };
+        "query"?: {
+          "namespace"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ResourceRow'][];
+      };
+  };
+  "createNamedClusterResource": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/resources/{resource_type}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "resource_type": "services" | "ingresses" | "networkpolicies" | "persistentvolumeclaims";
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": {
+          "apiVersion"?: string;
+          "kind"?: string;
+          "metadata"?: {
+            "name"?: string;
+            "namespace"?: string;
+          } & Record<string, unknown>;
+          "spec"?: Record<string, unknown>;
+        } & Record<string, unknown>;
+      };
+    response: OpenAPIComponents['schemas']['ResourceOperationEnvelope'];
+  };
+  "deleteNamedClusterResource": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/resources/{resource_type}/{namespace}/{name}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "resource_type": "services" | "ingresses" | "networkpolicies" | "persistentvolumeclaims";
+          "namespace": string;
+          "name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ResourceOperationEnvelope'];
+  };
+  "listGenericClusterResources": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/resources/generic/{resource_type}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "resource_type": string;
+        };
+        "query"?: {
+          "namespace"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ResourceRow'][];
+      };
+  };
+  "deletePersistentVolume": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/resources/persistentvolumes/{name}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ResourceOperationEnvelope'];
+  };
+  "getNamedResource": {
+    method: "GET";
+    path: "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "type": string;
+          "namespace": string;
+          "name": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'];
+  };
+  "updateNamedResource": {
+    method: "PUT";
+    path: "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "type": string;
+          "namespace": string;
+          "name": string;
+        };
+        "query"?: {
+          "dry_run"?: boolean;
+          "force"?: boolean;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+        "body": Record<string, unknown>;
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] | OpenAPIComponents['schemas']['ResourceOperationEnvelope'];
+  };
+  "deleteNamedResourceREST": {
+    method: "DELETE";
+    path: "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "type": string;
+          "namespace": string;
+          "name": string;
+        };
+        "headerParams": {
+          "Idempotency-Key": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ResourceOperationEnvelope'];
+  };
+  "searchResourcesAcrossClusters": {
+    method: "GET";
+    path: "/api/v1/resources/search";
+    arguments: {
+        "query": {
+          "type": "pods" | "events" | "endpoints" | "services" | "configmaps" | "secrets" | "namespaces" | "nodes" | "persistentvolumes" | "persistentvolumeclaims" | "storageclasses" | "deployments" | "statefulsets" | "daemonsets" | "replicasets" | "jobs" | "cronjobs" | "ingresses" | "networkpolicies" | "gateways" | "httproutes";
+          "namespace"?: string;
+          "label"?: string;
+          "field"?: string;
+          "name"?: string;
+          "limit"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ResourceSearchResult'];
+      };
+  };
+  "tunnelHealthCheck": {
+    method: "GET";
+    path: "/health";
+    arguments: Record<string, never>;
+    response: {
+        "status": string;
+        "version": string;
+        "time": string;
+      };
+  };
+  "k8sProxyGet": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/k8s/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "k8sProxyHead": {
+    method: "HEAD";
+    path: "/api/v1/clusters/{cluster_id}/k8s/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "k8sProxyOptions": {
+    method: "OPTIONS";
+    path: "/api/v1/clusters/{cluster_id}/k8s/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "k8sProxyPost": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/k8s/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "k8sProxyPut": {
+    method: "PUT";
+    path: "/api/v1/clusters/{cluster_id}/k8s/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "k8sProxyPatch": {
+    method: "PATCH";
+    path: "/api/v1/clusters/{cluster_id}/k8s/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "k8sProxyDelete": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/k8s/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "k8sProxyTrace": {
+    method: "TRACE";
+    path: "/api/v1/clusters/{cluster_id}/k8s/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxyGet": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxyHead": {
+    method: "HEAD";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxyOptions": {
+    method: "OPTIONS";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxyPost": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxyPut": {
+    method: "PUT";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxyPatch": {
+    method: "PATCH";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxyDelete": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxyTrace": {
+    method: "TRACE";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxySubGet": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxySubHead": {
+    method: "HEAD";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxySubOptions": {
+    method: "OPTIONS";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxySubPost": {
+    method: "POST";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxySubPut": {
+    method: "PUT";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxySubPatch": {
+    method: "PATCH";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxySubDelete": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "serviceProxySubTrace": {
+    method: "TRACE";
+    path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "service_port": string;
+          "path": string;
+        };
+        "body"?: unknown;
+      };
+    response: unknown | string;
+  };
+  "tunnelConnectGet": {
+    method: "GET";
+    path: "/api/v1/connect/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: void;
+  };
+  "tunnelConnectHead": {
+    method: "HEAD";
+    path: "/api/v1/connect/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: void;
+  };
+  "tunnelConnectOptions": {
+    method: "OPTIONS";
+    path: "/api/v1/connect/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: void;
+  };
+  "tunnelConnectPost": {
+    method: "POST";
+    path: "/api/v1/connect/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: void;
+  };
+  "tunnelConnectPut": {
+    method: "PUT";
+    path: "/api/v1/connect/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: void;
+  };
+  "tunnelConnectPatch": {
+    method: "PATCH";
+    path: "/api/v1/connect/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: void;
+  };
+  "tunnelConnectDelete": {
+    method: "DELETE";
+    path: "/api/v1/connect/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: void;
+  };
+  "tunnelConnectTrace": {
+    method: "TRACE";
+    path: "/api/v1/connect/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+      };
+    response: void;
+  };
+  "kubectlShellWebSocket": {
+    method: "GET";
+    path: "/api/v1/ws/clusters/{cluster_id}/shell/sessions/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+        "query"?: {
+          "ticket"?: string;
+        };
+      };
+    response: void;
+  };
+  "podExecWebSocket": {
+    method: "GET";
+    path: "/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "pod": string;
+          "container": string;
+        };
+        "query"?: {
+          "ticket"?: string;
+        };
+      };
+    response: void;
+  };
+  "podLogsWebSocket": {
+    method: "GET";
+    path: "/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "namespace": string;
+          "pod": string;
+          "container": string;
+        };
+        "query"?: {
+          "follow"?: "true" | "false";
+          "tail_lines"?: number;
+          "since_seconds"?: number;
+          "ticket"?: string;
+        };
+      };
+    response: void;
+  };
+  "internalTunnelK8s": {
+    method: "POST";
+    path: "/internal/tunnel/k8s/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "headerParams": {
+          "X-Astronomer-Internal-PSK": string;
+          "X-Astronomer-Internal-Source": "sibling-server-pod";
+          "X-Astronomer-Forwarded-User"?: string;
+        };
+        "body": {
+          "method": string;
+          "path": string;
+          "headers"?: Record<string, string>;
+          "body"?: string;
+          "caller_user"?: string;
+          "caller_groups"?: string[];
+          "caller_request_id"?: string;
+          "caller_origin"?: "user" | "machine";
+        };
+      };
+    response: {
+        "status_code": number;
+        "headers"?: Record<string, string>;
+        "body"?: string;
+      };
+  };
+  "internalTunnelHelm": {
+    method: "POST";
+    path: "/internal/tunnel/helm/{cluster_id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "headerParams": {
+          "X-Astronomer-Internal-PSK": string;
+          "X-Astronomer-Internal-Source": "sibling-server-pod";
+          "X-Astronomer-Forwarded-User"?: string;
+        };
+        "body": {
+          "msg_type": string;
+          "payload": {
+            "release_name": string;
+            "namespace": string;
+            "chart_url"?: string;
+            "chart_name"?: string;
+            "repo_url"?: string;
+            "version"?: string;
+            "values"?: Record<string, unknown>;
+            "revision"?: number;
+            "timeout"?: number;
+          };
+        };
+      };
+    response: {
+        "success": boolean;
+        "release_name"?: string;
+        "namespace"?: string;
+        "status"?: string;
+        "revision"?: number;
+        "error"?: string;
+      };
+  };
+}
+
+export type OpenAPIOperationId = keyof OpenAPIOperations;
+
 export type OpenAPISchemaName = keyof OpenAPIComponents['schemas'];
 
+export type AdminQueueDLQEntryWire = OpenAPIComponents['schemas']['AdminQueueDLQEntryWire'];
+export type AdminQueueDLQWire = OpenAPIComponents['schemas']['AdminQueueDLQWire'];
+export type AdminQueueOperation = OpenAPIComponents['schemas']['AdminQueueOperation'];
+export type AdminQueueOperationEnvelope = OpenAPIComponents['schemas']['AdminQueueOperationEnvelope'];
+export type AdminQueueSummaryWire = OpenAPIComponents['schemas']['AdminQueueSummaryWire'];
+export type AgentClusterConditionDiagnostic = OpenAPIComponents['schemas']['AgentClusterConditionDiagnostic'];
+export type AgentConnectionDiagnostic = OpenAPIComponents['schemas']['AgentConnectionDiagnostic'];
 export type AgentDiagnostics = OpenAPIComponents['schemas']['AgentDiagnostics'];
 export type AgentDiagnosticsBundle = OpenAPIComponents['schemas']['AgentDiagnosticsBundle'];
 export type AgentLifecycleOperation = OpenAPIComponents['schemas']['AgentLifecycleOperation'];
 export type AgentLifecycleOperationsResponse = OpenAPIComponents['schemas']['AgentLifecycleOperationsResponse'];
+export type AgentLiveDiagnostics = OpenAPIComponents['schemas']['AgentLiveDiagnostics'];
+export type AgentLiveEventDiagnostic = OpenAPIComponents['schemas']['AgentLiveEventDiagnostic'];
+export type AgentLiveLogDiagnostic = OpenAPIComponents['schemas']['AgentLiveLogDiagnostic'];
+export type AgentLivePodDiagnostic = OpenAPIComponents['schemas']['AgentLivePodDiagnostic'];
 export type AgentOfflineBehavior = OpenAPIComponents['schemas']['AgentOfflineBehavior'];
 export type AgentSelfTest = OpenAPIComponents['schemas']['AgentSelfTest'];
+export type AgentSelfTestCheck = OpenAPIComponents['schemas']['AgentSelfTestCheck'];
 export type AgentUpgradeOperationResponse = OpenAPIComponents['schemas']['AgentUpgradeOperationResponse'];
 export type AgentUpgradePlan = OpenAPIComponents['schemas']['AgentUpgradePlan'];
 export type AgentUpgradePlanRequest = OpenAPIComponents['schemas']['AgentUpgradePlanRequest'];
+export type AgentUpgradeRecommendation = OpenAPIComponents['schemas']['AgentUpgradeRecommendation'];
+export type AlertChannelRequest = OpenAPIComponents['schemas']['AlertChannelRequest'];
+export type AlertEvent = OpenAPIComponents['schemas']['AlertEvent'];
+export type AlertEventEnvelope = OpenAPIComponents['schemas']['AlertEventEnvelope'];
+export type AlertEventPage = OpenAPIComponents['schemas']['AlertEventPage'];
+export type AlertRule = OpenAPIComponents['schemas']['AlertRule'];
+export type AlertRuleEnvelope = OpenAPIComponents['schemas']['AlertRuleEnvelope'];
+export type AlertRulePage = OpenAPIComponents['schemas']['AlertRulePage'];
+export type AlertRuleRequest = OpenAPIComponents['schemas']['AlertRuleRequest'];
+export type AlertSilence = OpenAPIComponents['schemas']['AlertSilence'];
+export type AlertSilenceEnvelope = OpenAPIComponents['schemas']['AlertSilenceEnvelope'];
+export type AlertSilencePage = OpenAPIComponents['schemas']['AlertSilencePage'];
+export type AlertSilenceRequest = OpenAPIComponents['schemas']['AlertSilenceRequest'];
 export type AllowlistResponse = OpenAPIComponents['schemas']['AllowlistResponse'];
 export type AllowlistSnapshotResponse = OpenAPIComponents['schemas']['AllowlistSnapshotResponse'];
 export type AllowlistUpdateRequest = OpenAPIComponents['schemas']['AllowlistUpdateRequest'];
+export type AnomalyBaseline = OpenAPIComponents['schemas']['AnomalyBaseline'];
+export type AnomalyBaselineEnvelope = OpenAPIComponents['schemas']['AnomalyBaselineEnvelope'];
+export type AnomalyBaselinePage = OpenAPIComponents['schemas']['AnomalyBaselinePage'];
 export type ApiTokenCreated = OpenAPIComponents['schemas']['ApiTokenCreated'];
 export type ApiTokenListItem = OpenAPIComponents['schemas']['ApiTokenListItem'];
 export type ApplyClusterTemplateRequest = OpenAPIComponents['schemas']['ApplyClusterTemplateRequest'];
 export type ApplyNetworkPolicyRequest = OpenAPIComponents['schemas']['ApplyNetworkPolicyRequest'];
 export type AuditLogEntry = OpenAPIComponents['schemas']['AuditLogEntry'];
+export type AuthUserRoleBinding = OpenAPIComponents['schemas']['AuthUserRoleBinding'];
+export type AuthUserRoles = OpenAPIComponents['schemas']['AuthUserRoles'];
 export type BackupControllerStatus = OpenAPIComponents['schemas']['BackupControllerStatus'];
 export type BackupCreateRequest = OpenAPIComponents['schemas']['BackupCreateRequest'];
+export type BackupDrillLatestResponse = OpenAPIComponents['schemas']['BackupDrillLatestResponse'];
+export type BackupDrillResult = OpenAPIComponents['schemas']['BackupDrillResult'];
 export type BackupResponse = OpenAPIComponents['schemas']['BackupResponse'];
 export type BackupRestoreRequest = OpenAPIComponents['schemas']['BackupRestoreRequest'];
 export type BackupScheduleRequest = OpenAPIComponents['schemas']['BackupScheduleRequest'];
 export type BackupScheduleResponse = OpenAPIComponents['schemas']['BackupScheduleResponse'];
 export type BackupStorageConfigRequest = OpenAPIComponents['schemas']['BackupStorageConfigRequest'];
 export type BackupStorageConfigResponse = OpenAPIComponents['schemas']['BackupStorageConfigResponse'];
+export type CISFinding = OpenAPIComponents['schemas']['CISFinding'];
+export type CISProfile = OpenAPIComponents['schemas']['CISProfile'];
+export type CISProfilesResponse = OpenAPIComponents['schemas']['CISProfilesResponse'];
+export type CISScan = OpenAPIComponents['schemas']['CISScan'];
+export type CISScanCreateRequest = OpenAPIComponents['schemas']['CISScanCreateRequest'];
+export type CISScanEnvelope = OpenAPIComponents['schemas']['CISScanEnvelope'];
+export type CISScanListEnvelope = OpenAPIComponents['schemas']['CISScanListEnvelope'];
+export type CatalogInstallationAcceptedEnvelope = OpenAPIComponents['schemas']['CatalogInstallationAcceptedEnvelope'];
 export type CatalogOperation = OpenAPIComponents['schemas']['CatalogOperation'];
+export type CatalogOperationEnvelope = OpenAPIComponents['schemas']['CatalogOperationEnvelope'];
 export type CatalogOperationEvent = OpenAPIComponents['schemas']['CatalogOperationEvent'];
+export type CatalogRepositorySyncReceipt = OpenAPIComponents['schemas']['CatalogRepositorySyncReceipt'];
+export type CatalogRepositorySyncReceiptEnvelope = OpenAPIComponents['schemas']['CatalogRepositorySyncReceiptEnvelope'];
 export type CharlieAbortRequest = OpenAPIComponents['schemas']['CharlieAbortRequest'];
 export type CharlieAccessRequest = OpenAPIComponents['schemas']['CharlieAccessRequest'];
 export type CharlieAdminAccess = OpenAPIComponents['schemas']['CharlieAdminAccess'];
@@ -2684,7 +15560,11 @@ export type CharlieSessionMetadata = OpenAPIComponents['schemas']['CharlieSessio
 export type CharlieSessionResource = OpenAPIComponents['schemas']['CharlieSessionResource'];
 export type CharlieThreadMessageRequest = OpenAPIComponents['schemas']['CharlieThreadMessageRequest'];
 export type CharlieThreadMetadata = OpenAPIComponents['schemas']['CharlieThreadMetadata'];
+export type CharlieTriggerRetryReceipt = OpenAPIComponents['schemas']['CharlieTriggerRetryReceipt'];
 export type CharlieTriggerRetryRequest = OpenAPIComponents['schemas']['CharlieTriggerRetryRequest'];
+export type ChartRating = OpenAPIComponents['schemas']['ChartRating'];
+export type ChartRatingAggregate = OpenAPIComponents['schemas']['ChartRatingAggregate'];
+export type ChartRatingWriteRequest = OpenAPIComponents['schemas']['ChartRatingWriteRequest'];
 export type ChartRecommendation = OpenAPIComponents['schemas']['ChartRecommendation'];
 export type CloudCredential = OpenAPIComponents['schemas']['CloudCredential'];
 export type CloudCredentialRequest = OpenAPIComponents['schemas']['CloudCredentialRequest'];
@@ -2692,6 +15572,10 @@ export type CloudProviderSpec = OpenAPIComponents['schemas']['CloudProviderSpec'
 export type Cluster = OpenAPIComponents['schemas']['Cluster'];
 export type ClusterAgentItem = OpenAPIComponents['schemas']['ClusterAgentItem'];
 export type ClusterAgentResponse = OpenAPIComponents['schemas']['ClusterAgentResponse'];
+export type ClusterCompliancePosture = OpenAPIComponents['schemas']['ClusterCompliancePosture'];
+export type ClusterConditionListEnvelope = OpenAPIComponents['schemas']['ClusterConditionListEnvelope'];
+export type ClusterConditionRemediationAttempt = OpenAPIComponents['schemas']['ClusterConditionRemediationAttempt'];
+export type ClusterConditionRemediationListEnvelope = OpenAPIComponents['schemas']['ClusterConditionRemediationListEnvelope'];
 export type ClusterConditionResponse = OpenAPIComponents['schemas']['ClusterConditionResponse'];
 export type ClusterDeployment = OpenAPIComponents['schemas']['ClusterDeployment'];
 export type ClusterDeploymentControl = OpenAPIComponents['schemas']['ClusterDeploymentControl'];
@@ -2703,52 +15587,118 @@ export type ClusterDeploymentEventPage = OpenAPIComponents['schemas']['ClusterDe
 export type ClusterDeploymentPage = OpenAPIComponents['schemas']['ClusterDeploymentPage'];
 export type ClusterEvent = OpenAPIComponents['schemas']['ClusterEvent'];
 export type ClusterGroupResponse = OpenAPIComponents['schemas']['ClusterGroupResponse'];
+export type ClusterMonitoringConfig = OpenAPIComponents['schemas']['ClusterMonitoringConfig'];
+export type ClusterMonitoringConfigEnvelope = OpenAPIComponents['schemas']['ClusterMonitoringConfigEnvelope'];
 export type ClusterRegistryConfigLegacy = OpenAPIComponents['schemas']['ClusterRegistryConfigLegacy'];
 export type ClusterRegistryRequest = OpenAPIComponents['schemas']['ClusterRegistryRequest'];
 export type ClusterRegistryResponse = OpenAPIComponents['schemas']['ClusterRegistryResponse'];
 export type ClusterRegistryTestResponse = OpenAPIComponents['schemas']['ClusterRegistryTestResponse'];
 export type ClusterResponse = OpenAPIComponents['schemas']['ClusterResponse'];
+export type ClusterSecurityPolicy = OpenAPIComponents['schemas']['ClusterSecurityPolicy'];
+export type ClusterSecurityPolicyCreateRequest = OpenAPIComponents['schemas']['ClusterSecurityPolicyCreateRequest'];
+export type ClusterSecurityPolicyEnvelope = OpenAPIComponents['schemas']['ClusterSecurityPolicyEnvelope'];
 export type ClusterTemplateApplicationResponse = OpenAPIComponents['schemas']['ClusterTemplateApplicationResponse'];
 export type ClusterTemplateResponse = OpenAPIComponents['schemas']['ClusterTemplateResponse'];
+export type ClusterTool = OpenAPIComponents['schemas']['ClusterTool'];
+export type ClusterToolPage = OpenAPIComponents['schemas']['ClusterToolPage'];
+export type ClusterToolStatus = OpenAPIComponents['schemas']['ClusterToolStatus'];
+export type ComplianceAlertRuleSpec = OpenAPIComponents['schemas']['ComplianceAlertRuleSpec'];
+export type ComplianceBaseline = OpenAPIComponents['schemas']['ComplianceBaseline'];
+export type ComplianceBaselineApplication = OpenAPIComponents['schemas']['ComplianceBaselineApplication'];
+export type ComplianceBaselineApplyReceipt = OpenAPIComponents['schemas']['ComplianceBaselineApplyReceipt'];
+export type ComplianceBaselineApplyRequest = OpenAPIComponents['schemas']['ComplianceBaselineApplyRequest'];
+export type ComplianceBaselineDiff = OpenAPIComponents['schemas']['ComplianceBaselineDiff'];
+export type ComplianceBaselineRevertReceipt = OpenAPIComponents['schemas']['ComplianceBaselineRevertReceipt'];
+export type ComplianceBaselineSpec = OpenAPIComponents['schemas']['ComplianceBaselineSpec'];
+export type ComplianceMaintenanceWindowSpec = OpenAPIComponents['schemas']['ComplianceMaintenanceWindowSpec'];
+export type CompliancePosture = OpenAPIComponents['schemas']['CompliancePosture'];
+export type CompliancePostureEnvelope = OpenAPIComponents['schemas']['CompliancePostureEnvelope'];
+export type CompliancePostureIssue = OpenAPIComponents['schemas']['CompliancePostureIssue'];
+export type ComplianceQuotaPlanSpec = OpenAPIComponents['schemas']['ComplianceQuotaPlanSpec'];
+export type ConstraintValidationEnvelope = OpenAPIComponents['schemas']['ConstraintValidationEnvelope'];
 export type ConstraintValidationResponse = OpenAPIComponents['schemas']['ConstraintValidationResponse'];
 export type ConstraintYAMLRequest = OpenAPIComponents['schemas']['ConstraintYAMLRequest'];
+export type ControlPlaneAlert = OpenAPIComponents['schemas']['ControlPlaneAlert'];
+export type ControlPlaneAlertEnvelope = OpenAPIComponents['schemas']['ControlPlaneAlertEnvelope'];
+export type ControlPlaneAlertPage = OpenAPIComponents['schemas']['ControlPlaneAlertPage'];
+export type ControlPlanePolicy = OpenAPIComponents['schemas']['ControlPlanePolicy'];
+export type ControlPlanePolicyEnvelope = OpenAPIComponents['schemas']['ControlPlanePolicyEnvelope'];
+export type ControlPlanePolicyRequest = OpenAPIComponents['schemas']['ControlPlanePolicyRequest'];
+export type ControlPlaneRestoreRunbookWire = OpenAPIComponents['schemas']['ControlPlaneRestoreRunbookWire'];
+export type ControlPlaneSilence = OpenAPIComponents['schemas']['ControlPlaneSilence'];
+export type ControlPlaneSilenceEnvelope = OpenAPIComponents['schemas']['ControlPlaneSilenceEnvelope'];
+export type ControlPlaneSilencePage = OpenAPIComponents['schemas']['ControlPlaneSilencePage'];
+export type ControlPlaneSilenceRequest = OpenAPIComponents['schemas']['ControlPlaneSilenceRequest'];
+export type ControlPlaneSnapshotWire = OpenAPIComponents['schemas']['ControlPlaneSnapshotWire'];
+export type ControlPlaneStatus = OpenAPIComponents['schemas']['ControlPlaneStatus'];
+export type ControlPlaneStatusEnvelope = OpenAPIComponents['schemas']['ControlPlaneStatusEnvelope'];
+export type ControlPlaneSummary = OpenAPIComponents['schemas']['ControlPlaneSummary'];
+export type ControllerReconcilerStatus = OpenAPIComponents['schemas']['ControllerReconcilerStatus'];
 export type CreateClusterGroupRequest = OpenAPIComponents['schemas']['CreateClusterGroupRequest'];
 export type CreateClusterRequest = OpenAPIComponents['schemas']['CreateClusterRequest'];
 export type CreateClusterTemplateRequest = OpenAPIComponents['schemas']['CreateClusterTemplateRequest'];
+export type CreateControlPlaneSnapshotRequestWire = OpenAPIComponents['schemas']['CreateControlPlaneSnapshotRequestWire'];
+export type CreateLoggingSavedSearchRequest = OpenAPIComponents['schemas']['CreateLoggingSavedSearchRequest'];
 export type CreateNetworkPolicyTemplateRequest = OpenAPIComponents['schemas']['CreateNetworkPolicyTemplateRequest'];
 export type CreateProjectCatalogRequest = OpenAPIComponents['schemas']['CreateProjectCatalogRequest'];
 export type CreateProjectRequest = OpenAPIComponents['schemas']['CreateProjectRequest'];
+export type DashboardWidget = OpenAPIComponents['schemas']['DashboardWidget'];
+export type DashboardWidgetEnvelope = OpenAPIComponents['schemas']['DashboardWidgetEnvelope'];
+export type DashboardWidgetGrid = OpenAPIComponents['schemas']['DashboardWidgetGrid'];
+export type DashboardWidgetPage = OpenAPIComponents['schemas']['DashboardWidgetPage'];
+export type DashboardWidgetRequest = OpenAPIComponents['schemas']['DashboardWidgetRequest'];
 export type DataEnvelope = OpenAPIComponents['schemas']['DataEnvelope'];
 export type DecommissionStatusResponse = OpenAPIComponents['schemas']['DecommissionStatusResponse'];
+export type DeliveryAmount = OpenAPIComponents['schemas']['DeliveryAmount'];
+export type DeliveryApprovalBinding = OpenAPIComponents['schemas']['DeliveryApprovalBinding'];
+export type DeliveryAsyncOperationReceipt = OpenAPIComponents['schemas']['DeliveryAsyncOperationReceipt'];
+export type DeliveryAsyncOperationReceiptEnvelope = OpenAPIComponents['schemas']['DeliveryAsyncOperationReceiptEnvelope'];
 export type DeliveryBundle = OpenAPIComponents['schemas']['DeliveryBundle'];
 export type DeliveryBundleEnvelope = OpenAPIComponents['schemas']['DeliveryBundleEnvelope'];
 export type DeliveryBundlePage = OpenAPIComponents['schemas']['DeliveryBundlePage'];
 export type DeliveryBundleVersion = OpenAPIComponents['schemas']['DeliveryBundleVersion'];
+export type DeliveryBundleVersionDraft = OpenAPIComponents['schemas']['DeliveryBundleVersionDraft'];
 export type DeliveryBundleVersionEnvelope = OpenAPIComponents['schemas']['DeliveryBundleVersionEnvelope'];
 export type DeliveryBundleVersionPage = OpenAPIComponents['schemas']['DeliveryBundleVersionPage'];
 export type DeliveryBundleVersionWrite = OpenAPIComponents['schemas']['DeliveryBundleVersionWrite'];
 export type DeliveryBundleWrite = OpenAPIComponents['schemas']['DeliveryBundleWrite'];
+export type DeliveryCanaryStrategy = OpenAPIComponents['schemas']['DeliveryCanaryStrategy'];
+export type DeliveryCapabilityRequirement = OpenAPIComponents['schemas']['DeliveryCapabilityRequirement'];
 export type DeliveryClusterInventory = OpenAPIComponents['schemas']['DeliveryClusterInventory'];
 export type DeliveryClusterInventoryEnvelope = OpenAPIComponents['schemas']['DeliveryClusterInventoryEnvelope'];
 export type DeliveryCompatibilityContract = OpenAPIComponents['schemas']['DeliveryCompatibilityContract'];
 export type DeliveryCompatibilityCount = OpenAPIComponents['schemas']['DeliveryCompatibilityCount'];
+export type DeliveryCondition = OpenAPIComponents['schemas']['DeliveryCondition'];
 export type DeliveryControllerInventory = OpenAPIComponents['schemas']['DeliveryControllerInventory'];
-export type DeliveryFleet = OpenAPIComponents['schemas']['DeliveryFleet'];
-export type DeliveryFleetAttention = OpenAPIComponents['schemas']['DeliveryFleetAttention'];
-export type DeliveryFleetCluster = OpenAPIComponents['schemas']['DeliveryFleetCluster'];
-export type DeliveryFleetCount = OpenAPIComponents['schemas']['DeliveryFleetCount'];
-export type DeliveryFleetDistributions = OpenAPIComponents['schemas']['DeliveryFleetDistributions'];
-export type DeliveryFleetEnvelope = OpenAPIComponents['schemas']['DeliveryFleetEnvelope'];
-export type DeliveryFleetSummary = OpenAPIComponents['schemas']['DeliveryFleetSummary'];
+export type DeliveryEstate = OpenAPIComponents['schemas']['DeliveryEstate'];
+export type DeliveryEstateAttention = OpenAPIComponents['schemas']['DeliveryEstateAttention'];
+export type DeliveryEstateCluster = OpenAPIComponents['schemas']['DeliveryEstateCluster'];
+export type DeliveryEstateCount = OpenAPIComponents['schemas']['DeliveryEstateCount'];
+export type DeliveryEstateDistributions = OpenAPIComponents['schemas']['DeliveryEstateDistributions'];
+export type DeliveryEstateEnvelope = OpenAPIComponents['schemas']['DeliveryEstateEnvelope'];
+export type DeliveryEstateSummary = OpenAPIComponents['schemas']['DeliveryEstateSummary'];
 export type DeliveryFrozenRollout = OpenAPIComponents['schemas']['DeliveryFrozenRollout'];
 export type DeliveryFrozenRolloutEnvelope = OpenAPIComponents['schemas']['DeliveryFrozenRolloutEnvelope'];
+export type DeliveryHelmRenderer = OpenAPIComponents['schemas']['DeliveryHelmRenderer'];
+export type DeliveryImmutableRevision = OpenAPIComponents['schemas']['DeliveryImmutableRevision'];
+export type DeliveryKustomizeRenderer = OpenAPIComponents['schemas']['DeliveryKustomizeRenderer'];
+export type DeliveryLabelExpression = OpenAPIComponents['schemas']['DeliveryLabelExpression'];
+export type DeliveryPlacement = OpenAPIComponents['schemas']['DeliveryPlacement'];
+export type DeliveryPlacementInput = OpenAPIComponents['schemas']['DeliveryPlacementInput'];
+export type DeliveryPlannedCluster = OpenAPIComponents['schemas']['DeliveryPlannedCluster'];
 export type DeliveryPreviewDecision = OpenAPIComponents['schemas']['DeliveryPreviewDecision'];
+export type DeliveryPreviousDeployment = OpenAPIComponents['schemas']['DeliveryPreviousDeployment'];
+export type DeliveryReconciliationPolicy = OpenAPIComponents['schemas']['DeliveryReconciliationPolicy'];
+export type DeliveryReconciliationPolicyInput = OpenAPIComponents['schemas']['DeliveryReconciliationPolicyInput'];
+export type DeliveryRendererSpec = OpenAPIComponents['schemas']['DeliveryRendererSpec'];
+export type DeliveryResolvedSource = OpenAPIComponents['schemas']['DeliveryResolvedSource'];
 export type DeliveryRollout = OpenAPIComponents['schemas']['DeliveryRollout'];
 export type DeliveryRolloutAction = OpenAPIComponents['schemas']['DeliveryRolloutAction'];
 export type DeliveryRolloutApproval = OpenAPIComponents['schemas']['DeliveryRolloutApproval'];
 export type DeliveryRolloutApprovalRecord = OpenAPIComponents['schemas']['DeliveryRolloutApprovalRecord'];
 export type DeliveryRolloutCluster = OpenAPIComponents['schemas']['DeliveryRolloutCluster'];
 export type DeliveryRolloutClusterPage = OpenAPIComponents['schemas']['DeliveryRolloutClusterPage'];
+export type DeliveryRolloutCohort = OpenAPIComponents['schemas']['DeliveryRolloutCohort'];
 export type DeliveryRolloutControl = OpenAPIComponents['schemas']['DeliveryRolloutControl'];
 export type DeliveryRolloutControlEnvelope = OpenAPIComponents['schemas']['DeliveryRolloutControlEnvelope'];
 export type DeliveryRolloutDetail = OpenAPIComponents['schemas']['DeliveryRolloutDetail'];
@@ -2756,13 +15706,20 @@ export type DeliveryRolloutDetailEnvelope = OpenAPIComponents['schemas']['Delive
 export type DeliveryRolloutEvent = OpenAPIComponents['schemas']['DeliveryRolloutEvent'];
 export type DeliveryRolloutEventPage = OpenAPIComponents['schemas']['DeliveryRolloutEventPage'];
 export type DeliveryRolloutPage = OpenAPIComponents['schemas']['DeliveryRolloutPage'];
+export type DeliveryRolloutPartition = OpenAPIComponents['schemas']['DeliveryRolloutPartition'];
+export type DeliveryRolloutPolicy = OpenAPIComponents['schemas']['DeliveryRolloutPolicy'];
+export type DeliveryRolloutPolicyInput = OpenAPIComponents['schemas']['DeliveryRolloutPolicyInput'];
 export type DeliveryRolloutStart = OpenAPIComponents['schemas']['DeliveryRolloutStart'];
+export type DeliveryRolloutStrategy = OpenAPIComponents['schemas']['DeliveryRolloutStrategy'];
+export type DeliveryRolloutStrategyInput = OpenAPIComponents['schemas']['DeliveryRolloutStrategyInput'];
 export type DeliverySource = OpenAPIComponents['schemas']['DeliverySource'];
 export type DeliverySourceCredentialInput = OpenAPIComponents['schemas']['DeliverySourceCredentialInput'];
 export type DeliverySourceCredentialRotate = OpenAPIComponents['schemas']['DeliverySourceCredentialRotate'];
 export type DeliverySourceEnvelope = OpenAPIComponents['schemas']['DeliverySourceEnvelope'];
 export type DeliverySourcePage = OpenAPIComponents['schemas']['DeliverySourcePage'];
 export type DeliverySourcePatch = OpenAPIComponents['schemas']['DeliverySourcePatch'];
+export type DeliverySourceVerification = OpenAPIComponents['schemas']['DeliverySourceVerification'];
+export type DeliverySourceVerificationEnvelope = OpenAPIComponents['schemas']['DeliverySourceVerificationEnvelope'];
 export type DeliverySourceVerify = OpenAPIComponents['schemas']['DeliverySourceVerify'];
 export type DeliverySourceWrite = OpenAPIComponents['schemas']['DeliverySourceWrite'];
 export type DeliverySystemCompatibility = OpenAPIComponents['schemas']['DeliverySystemCompatibility'];
@@ -2779,36 +15736,167 @@ export type DeliveryTargetPreview = OpenAPIComponents['schemas']['DeliveryTarget
 export type DeliveryTargetPreviewEnvelope = OpenAPIComponents['schemas']['DeliveryTargetPreviewEnvelope'];
 export type DeliveryTargetWrite = OpenAPIComponents['schemas']['DeliveryTargetWrite'];
 export type DeliveryTrustPolicy = OpenAPIComponents['schemas']['DeliveryTrustPolicy'];
+export type DeliveryVersionIdentity = OpenAPIComponents['schemas']['DeliveryVersionIdentity'];
 export type DexConnector = OpenAPIComponents['schemas']['DexConnector'];
 export type DexConnectorRequest = OpenAPIComponents['schemas']['DexConnectorRequest'];
 export type DexConnectorType = OpenAPIComponents['schemas']['DexConnectorType'];
 export type DexExpiry = OpenAPIComponents['schemas']['DexExpiry'];
 export type DexExtra = OpenAPIComponents['schemas']['DexExtra'];
+export type DexOperation = OpenAPIComponents['schemas']['DexOperation'];
 export type DexRegisterSSOResult = OpenAPIComponents['schemas']['DexRegisterSSOResult'];
 export type DexSettings = OpenAPIComponents['schemas']['DexSettings'];
 export type DexSettingsRequest = OpenAPIComponents['schemas']['DexSettingsRequest'];
 export type Error = OpenAPIComponents['schemas']['Error'];
 export type ErrorEnvelope = OpenAPIComponents['schemas']['ErrorEnvelope'];
+export type ExtensionCSP = OpenAPIComponents['schemas']['ExtensionCSP'];
 export type ExtensionManifest = OpenAPIComponents['schemas']['ExtensionManifest'];
 export type ExtensionMount = OpenAPIComponents['schemas']['ExtensionMount'];
 export type ExtensionMountsResponse = OpenAPIComponents['schemas']['ExtensionMountsResponse'];
 export type ExtensionRecord = OpenAPIComponents['schemas']['ExtensionRecord'];
 export type ExtensionValidation = OpenAPIComponents['schemas']['ExtensionValidation'];
 export type FeatureFlags = OpenAPIComponents['schemas']['FeatureFlags'];
+export type FleetVulnerabilityAggregate = OpenAPIComponents['schemas']['FleetVulnerabilityAggregate'];
+export type FleetVulnerabilityAggregateEnvelope = OpenAPIComponents['schemas']['FleetVulnerabilityAggregateEnvelope'];
+export type GatekeeperConstraintList = OpenAPIComponents['schemas']['GatekeeperConstraintList'];
+export type GatekeeperConstraintMutationEnvelope = OpenAPIComponents['schemas']['GatekeeperConstraintMutationEnvelope'];
+export type GatekeeperConstraintMutationResponse = OpenAPIComponents['schemas']['GatekeeperConstraintMutationResponse'];
+export type GatekeeperConstraintSummary = OpenAPIComponents['schemas']['GatekeeperConstraintSummary'];
+export type GitOpsApplyPreview = OpenAPIComponents['schemas']['GitOpsApplyPreview'];
+export type GitOpsManagedCluster = OpenAPIComponents['schemas']['GitOpsManagedCluster'];
+export type GitOpsManagedClusterPage = OpenAPIComponents['schemas']['GitOpsManagedClusterPage'];
+export type GitOpsPreviewResult = OpenAPIComponents['schemas']['GitOpsPreviewResult'];
+export type GitOpsPreviewResultEnvelope = OpenAPIComponents['schemas']['GitOpsPreviewResultEnvelope'];
+export type GitOpsSource = OpenAPIComponents['schemas']['GitOpsSource'];
+export type GitOpsSourceEnvelope = OpenAPIComponents['schemas']['GitOpsSourceEnvelope'];
+export type GitOpsSourcePage = OpenAPIComponents['schemas']['GitOpsSourcePage'];
+export type GitOpsSourceRequest = OpenAPIComponents['schemas']['GitOpsSourceRequest'];
+export type GitOpsSyncReceipt = OpenAPIComponents['schemas']['GitOpsSyncReceipt'];
+export type GitOpsSyncReceiptEnvelope = OpenAPIComponents['schemas']['GitOpsSyncReceiptEnvelope'];
+export type GitOpsSyncResult = OpenAPIComponents['schemas']['GitOpsSyncResult'];
+export type GitOpsSyncResultEnvelope = OpenAPIComponents['schemas']['GitOpsSyncResultEnvelope'];
+export type GrafanaTicketIdentity = OpenAPIComponents['schemas']['GrafanaTicketIdentity'];
+export type GrafanaTicketIdentityEnvelope = OpenAPIComponents['schemas']['GrafanaTicketIdentityEnvelope'];
+export type GrafanaTicketRedeemRequest = OpenAPIComponents['schemas']['GrafanaTicketRedeemRequest'];
+export type GroupMapping = OpenAPIComponents['schemas']['GroupMapping'];
+export type GroupMappingEnvelope = OpenAPIComponents['schemas']['GroupMappingEnvelope'];
+export type GroupMappingListEnvelope = OpenAPIComponents['schemas']['GroupMappingListEnvelope'];
+export type GroupMappingWriteRequest = OpenAPIComponents['schemas']['GroupMappingWriteRequest'];
 export type HelmChart = OpenAPIComponents['schemas']['HelmChart'];
 export type HelmChartVersion = OpenAPIComponents['schemas']['HelmChartVersion'];
+export type HelmChartVersionPage = OpenAPIComponents['schemas']['HelmChartVersionPage'];
+export type HelmReleaseHistory = OpenAPIComponents['schemas']['HelmReleaseHistory'];
+export type HelmReleaseHistoryEnvelope = OpenAPIComponents['schemas']['HelmReleaseHistoryEnvelope'];
+export type HelmReleaseRevision = OpenAPIComponents['schemas']['HelmReleaseRevision'];
 export type HelmRepository = OpenAPIComponents['schemas']['HelmRepository'];
 export type HelmRepositoryAuthConfig = OpenAPIComponents['schemas']['HelmRepositoryAuthConfig'];
+export type ImageVulnerability = OpenAPIComponents['schemas']['ImageVulnerability'];
+export type ImageVulnerabilityReport = OpenAPIComponents['schemas']['ImageVulnerabilityReport'];
+export type ImageVulnerabilityReportDetail = OpenAPIComponents['schemas']['ImageVulnerabilityReportDetail'];
+export type ImageVulnerabilityReportDetailEnvelope = OpenAPIComponents['schemas']['ImageVulnerabilityReportDetailEnvelope'];
+export type InhibitionEnvelope = OpenAPIComponents['schemas']['InhibitionEnvelope'];
 export type InhibitionMatcher = OpenAPIComponents['schemas']['InhibitionMatcher'];
+export type InhibitionMatcherResponse = OpenAPIComponents['schemas']['InhibitionMatcherResponse'];
+export type InhibitionPage = OpenAPIComponents['schemas']['InhibitionPage'];
 export type InhibitionRequest = OpenAPIComponents['schemas']['InhibitionRequest'];
+export type InhibitionResponse = OpenAPIComponents['schemas']['InhibitionResponse'];
 export type InstalledAppEnriched = OpenAPIComponents['schemas']['InstalledAppEnriched'];
 export type InstalledChart = OpenAPIComponents['schemas']['InstalledChart'];
+export type KubectlCloseEnvelope = OpenAPIComponents['schemas']['KubectlCloseEnvelope'];
+export type KubectlCloseReceipt = OpenAPIComponents['schemas']['KubectlCloseReceipt'];
+export type KubectlRecordedCommand = OpenAPIComponents['schemas']['KubectlRecordedCommand'];
+export type KubectlRecordedCommandPage = OpenAPIComponents['schemas']['KubectlRecordedCommandPage'];
 export type KubectlSession = OpenAPIComponents['schemas']['KubectlSession'];
+export type KubectlSessionEnvelope = OpenAPIComponents['schemas']['KubectlSessionEnvelope'];
+export type KubectlSessionListEnvelope = OpenAPIComponents['schemas']['KubectlSessionListEnvelope'];
+export type KubernetesProxyResponse = OpenAPIComponents['schemas']['KubernetesProxyResponse'];
+export type LegacyMonitoringMetricsEnvelope = OpenAPIComponents['schemas']['LegacyMonitoringMetricsEnvelope'];
+export type LegacyMonitoringMetricsResult = OpenAPIComponents['schemas']['LegacyMonitoringMetricsResult'];
+export type ListEnvelope = OpenAPIComponents['schemas']['ListEnvelope'];
+export type LoggingAttachMutationReceipt = OpenAPIComponents['schemas']['LoggingAttachMutationReceipt'];
+export type LoggingAttachMutationReceiptEnvelope = OpenAPIComponents['schemas']['LoggingAttachMutationReceiptEnvelope'];
+export type LoggingAttachResult = OpenAPIComponents['schemas']['LoggingAttachResult'];
+export type LoggingAttachResultEnvelope = OpenAPIComponents['schemas']['LoggingAttachResultEnvelope'];
+export type LoggingAttachStatus = OpenAPIComponents['schemas']['LoggingAttachStatus'];
+export type LoggingAttachStatusEnvelope = OpenAPIComponents['schemas']['LoggingAttachStatusEnvelope'];
+export type LoggingControllerStatusEnvelope = OpenAPIComponents['schemas']['LoggingControllerStatusEnvelope'];
+export type LoggingFluentBitConfig = OpenAPIComponents['schemas']['LoggingFluentBitConfig'];
+export type LoggingFluentBitConfigEnvelope = OpenAPIComponents['schemas']['LoggingFluentBitConfigEnvelope'];
+export type LoggingOperation = OpenAPIComponents['schemas']['LoggingOperation'];
+export type LoggingOperationEnvelope = OpenAPIComponents['schemas']['LoggingOperationEnvelope'];
+export type LoggingOperationEvent = OpenAPIComponents['schemas']['LoggingOperationEvent'];
+export type LoggingOperationListEnvelope = OpenAPIComponents['schemas']['LoggingOperationListEnvelope'];
+export type LoggingOutput = OpenAPIComponents['schemas']['LoggingOutput'];
+export type LoggingOutputCapabilities = OpenAPIComponents['schemas']['LoggingOutputCapabilities'];
+export type LoggingOutputEnvelope = OpenAPIComponents['schemas']['LoggingOutputEnvelope'];
+export type LoggingOutputMutationReceipt = OpenAPIComponents['schemas']['LoggingOutputMutationReceipt'];
+export type LoggingOutputMutationReceiptEnvelope = OpenAPIComponents['schemas']['LoggingOutputMutationReceiptEnvelope'];
+export type LoggingOutputPage = OpenAPIComponents['schemas']['LoggingOutputPage'];
+export type LoggingOutputWriteRequest = OpenAPIComponents['schemas']['LoggingOutputWriteRequest'];
+export type LoggingPipeline = OpenAPIComponents['schemas']['LoggingPipeline'];
+export type LoggingPipelineEnvelope = OpenAPIComponents['schemas']['LoggingPipelineEnvelope'];
+export type LoggingPipelineMutationReceipt = OpenAPIComponents['schemas']['LoggingPipelineMutationReceipt'];
+export type LoggingPipelineMutationReceiptEnvelope = OpenAPIComponents['schemas']['LoggingPipelineMutationReceiptEnvelope'];
+export type LoggingPipelinePage = OpenAPIComponents['schemas']['LoggingPipelinePage'];
+export type LoggingPipelineWriteRequest = OpenAPIComponents['schemas']['LoggingPipelineWriteRequest'];
+export type LoggingQueryEnvelope = OpenAPIComponents['schemas']['LoggingQueryEnvelope'];
+export type LoggingQueryRequest = OpenAPIComponents['schemas']['LoggingQueryRequest'];
+export type LoggingQueryResult = OpenAPIComponents['schemas']['LoggingQueryResult'];
+export type LoggingSavedSearch = OpenAPIComponents['schemas']['LoggingSavedSearch'];
+export type LoggingSavedSearchEnvelope = OpenAPIComponents['schemas']['LoggingSavedSearchEnvelope'];
+export type LoggingSavedSearchListEnvelope = OpenAPIComponents['schemas']['LoggingSavedSearchListEnvelope'];
+export type LoggingTestEnvelope = OpenAPIComponents['schemas']['LoggingTestEnvelope'];
+export type LoggingTestResult = OpenAPIComponents['schemas']['LoggingTestResult'];
+export type LoggingTokenRotation = OpenAPIComponents['schemas']['LoggingTokenRotation'];
+export type LoggingTokenRotationEnvelope = OpenAPIComponents['schemas']['LoggingTokenRotationEnvelope'];
 export type LoginRequest = OpenAPIComponents['schemas']['LoginRequest'];
 export type LoginResponse = OpenAPIComponents['schemas']['LoginResponse'];
 export type MTLSBreakdownResponse = OpenAPIComponents['schemas']['MTLSBreakdownResponse'];
+export type ManagementBackupDeleteReceipt = OpenAPIComponents['schemas']['ManagementBackupDeleteReceipt'];
+export type ManagementBackupDeleteReceiptEnvelope = OpenAPIComponents['schemas']['ManagementBackupDeleteReceiptEnvelope'];
+export type ManagementBackupDestination = OpenAPIComponents['schemas']['ManagementBackupDestination'];
+export type ManagementBackupDestinationEnvelope = OpenAPIComponents['schemas']['ManagementBackupDestinationEnvelope'];
+export type ManagementBackupDestinationWriteRequest = OpenAPIComponents['schemas']['ManagementBackupDestinationWriteRequest'];
+export type ManagementBackupEndpoint = OpenAPIComponents['schemas']['ManagementBackupEndpoint'];
+export type ManagementBackupJob = OpenAPIComponents['schemas']['ManagementBackupJob'];
+export type ManagementBackupOperation = OpenAPIComponents['schemas']['ManagementBackupOperation'];
+export type ManagementBackupRetention = OpenAPIComponents['schemas']['ManagementBackupRetention'];
+export type ManagementBackupStatusResponse = OpenAPIComponents['schemas']['ManagementBackupStatusResponse'];
+export type ManagementCronJobStatus = OpenAPIComponents['schemas']['ManagementCronJobStatus'];
+export type MirroredGatewayClass = OpenAPIComponents['schemas']['MirroredGatewayClass'];
+export type MirroredGatewayClassPage = OpenAPIComponents['schemas']['MirroredGatewayClassPage'];
+export type MirroredIngressClass = OpenAPIComponents['schemas']['MirroredIngressClass'];
+export type MirroredIngressClassPage = OpenAPIComponents['schemas']['MirroredIngressClassPage'];
+export type MirroredLimitRange = OpenAPIComponents['schemas']['MirroredLimitRange'];
+export type MirroredLimitRangePage = OpenAPIComponents['schemas']['MirroredLimitRangePage'];
+export type MirroredNetworkPolicy = OpenAPIComponents['schemas']['MirroredNetworkPolicy'];
+export type MirroredNetworkPolicyPage = OpenAPIComponents['schemas']['MirroredNetworkPolicyPage'];
+export type MirroredResourceMetadata = OpenAPIComponents['schemas']['MirroredResourceMetadata'];
+export type MirroredResourceQuota = OpenAPIComponents['schemas']['MirroredResourceQuota'];
+export type MirroredResourceQuotaPage = OpenAPIComponents['schemas']['MirroredResourceQuotaPage'];
+export type MonitoringBackend = OpenAPIComponents['schemas']['MonitoringBackend'];
+export type MonitoringBackendEnvelope = OpenAPIComponents['schemas']['MonitoringBackendEnvelope'];
+export type MonitoringBackendPage = OpenAPIComponents['schemas']['MonitoringBackendPage'];
+export type MonitoringMetricsEnvelope = OpenAPIComponents['schemas']['MonitoringMetricsEnvelope'];
+export type MonitoringObservedRelease = OpenAPIComponents['schemas']['MonitoringObservedRelease'];
+export type MonitoringOperation = OpenAPIComponents['schemas']['MonitoringOperation'];
+export type MonitoringOperationEnvelope = OpenAPIComponents['schemas']['MonitoringOperationEnvelope'];
+export type MonitoringOperationEvent = OpenAPIComponents['schemas']['MonitoringOperationEvent'];
+export type MonitoringOperationPage = OpenAPIComponents['schemas']['MonitoringOperationPage'];
+export type MonitoringSizerEnvelope = OpenAPIComponents['schemas']['MonitoringSizerEnvelope'];
+export type MonitoringSizerObjectStorage = OpenAPIComponents['schemas']['MonitoringSizerObjectStorage'];
+export type MonitoringSizerResponse = OpenAPIComponents['schemas']['MonitoringSizerResponse'];
+export type MonitoringSizerVerdict = OpenAPIComponents['schemas']['MonitoringSizerVerdict'];
+export type MonitoringStackPreview = OpenAPIComponents['schemas']['MonitoringStackPreview'];
+export type MonitoringStackPreviewEnvelope = OpenAPIComponents['schemas']['MonitoringStackPreviewEnvelope'];
+export type MonitoringStackRequest = OpenAPIComponents['schemas']['MonitoringStackRequest'];
+export type MonitoringStackStatus = OpenAPIComponents['schemas']['MonitoringStackStatus'];
+export type MonitoringStackStatusEnvelope = OpenAPIComponents['schemas']['MonitoringStackStatusEnvelope'];
 export type MoveClustersRequest = OpenAPIComponents['schemas']['MoveClustersRequest'];
 export type Namespace = OpenAPIComponents['schemas']['Namespace'];
+export type NativeRBACRule = OpenAPIComponents['schemas']['NativeRBACRule'];
+export type NativeRBACRuleEnvelope = OpenAPIComponents['schemas']['NativeRBACRuleEnvelope'];
+export type NativeRBACRuleListEnvelope = OpenAPIComponents['schemas']['NativeRBACRuleListEnvelope'];
+export type NativeRBACRuleRequest = OpenAPIComponents['schemas']['NativeRBACRuleRequest'];
 export type NetworkPolicyApplicationResponse = OpenAPIComponents['schemas']['NetworkPolicyApplicationResponse'];
 export type NetworkPolicyTemplateResponse = OpenAPIComponents['schemas']['NetworkPolicyTemplateResponse'];
 export type NodeActionResponse = OpenAPIComponents['schemas']['NodeActionResponse'];
@@ -2818,40 +15906,147 @@ export type NodeDrainRequest = OpenAPIComponents['schemas']['NodeDrainRequest'];
 export type NodeDrainResponse = OpenAPIComponents['schemas']['NodeDrainResponse'];
 export type NodeKeyRequest = OpenAPIComponents['schemas']['NodeKeyRequest'];
 export type NodeKeyValueRequest = OpenAPIComponents['schemas']['NodeKeyValueRequest'];
+export type NodeOperation = OpenAPIComponents['schemas']['NodeOperation'];
+export type NodeOperationEnvelope = OpenAPIComponents['schemas']['NodeOperationEnvelope'];
 export type NodeSummary = OpenAPIComponents['schemas']['NodeSummary'];
+export type NodeSummaryListEnvelope = OpenAPIComponents['schemas']['NodeSummaryListEnvelope'];
 export type NodeTaintActionResponse = OpenAPIComponents['schemas']['NodeTaintActionResponse'];
 export type NodeTaintRemoveRequest = OpenAPIComponents['schemas']['NodeTaintRemoveRequest'];
 export type NodeTaintRequest = OpenAPIComponents['schemas']['NodeTaintRequest'];
+export type NotificationChannel = OpenAPIComponents['schemas']['NotificationChannel'];
+export type NotificationChannelEnvelope = OpenAPIComponents['schemas']['NotificationChannelEnvelope'];
+export type NotificationChannelPage = OpenAPIComponents['schemas']['NotificationChannelPage'];
+export type NotificationChannelTestResult = OpenAPIComponents['schemas']['NotificationChannelTestResult'];
+export type NotificationChannelTestResultEnvelope = OpenAPIComponents['schemas']['NotificationChannelTestResultEnvelope'];
+export type NotificationTemplateDetail = OpenAPIComponents['schemas']['NotificationTemplateDetail'];
+export type NotificationTemplateListItem = OpenAPIComponents['schemas']['NotificationTemplateListItem'];
+export type NotificationTemplatePreviewRequest = OpenAPIComponents['schemas']['NotificationTemplatePreviewRequest'];
+export type NotificationTemplatePreviewResponse = OpenAPIComponents['schemas']['NotificationTemplatePreviewResponse'];
+export type NotificationTemplateUpsertRequest = OpenAPIComponents['schemas']['NotificationTemplateUpsertRequest'];
+export type NotificationTemplateVariable = OpenAPIComponents['schemas']['NotificationTemplateVariable'];
 export type OwnershipTransferResponse = OpenAPIComponents['schemas']['OwnershipTransferResponse'];
 export type PaginatedClusters = OpenAPIComponents['schemas']['PaginatedClusters'];
 export type PaginatedEnvelope = OpenAPIComponents['schemas']['PaginatedEnvelope'];
+export type PaginationMetadata = OpenAPIComponents['schemas']['PaginationMetadata'];
+export type PlatformSetting = OpenAPIComponents['schemas']['PlatformSetting'];
+export type PlatformSettingEnvelope = OpenAPIComponents['schemas']['PlatformSettingEnvelope'];
+export type PlatformSettingListEnvelope = OpenAPIComponents['schemas']['PlatformSettingListEnvelope'];
+export type PlatformSettingUpdateRequest = OpenAPIComponents['schemas']['PlatformSettingUpdateRequest'];
+export type PlatformSettingsBatchUpdateRequest = OpenAPIComponents['schemas']['PlatformSettingsBatchUpdateRequest'];
 export type Pod = OpenAPIComponents['schemas']['Pod'];
 export type PodLogEntry = OpenAPIComponents['schemas']['PodLogEntry'];
+export type PodSecurityTemplate = OpenAPIComponents['schemas']['PodSecurityTemplate'];
+export type PodSecurityTemplateWriteRequest = OpenAPIComponents['schemas']['PodSecurityTemplateWriteRequest'];
 export type Project = OpenAPIComponents['schemas']['Project'];
 export type ProjectCatalog = OpenAPIComponents['schemas']['ProjectCatalog'];
 export type ProjectCatalogSubscription = OpenAPIComponents['schemas']['ProjectCatalogSubscription'];
 export type ProjectNamespaceRequest = OpenAPIComponents['schemas']['ProjectNamespaceRequest'];
+export type ProjectQuotaDimensions = OpenAPIComponents['schemas']['ProjectQuotaDimensions'];
+export type ProjectQuotaOffender = OpenAPIComponents['schemas']['ProjectQuotaOffender'];
+export type ProjectQuotaPercentages = OpenAPIComponents['schemas']['ProjectQuotaPercentages'];
+export type ProjectQuotaSnapshot = OpenAPIComponents['schemas']['ProjectQuotaSnapshot'];
+export type ProjectQuotaSnapshotEnvelope = OpenAPIComponents['schemas']['ProjectQuotaSnapshotEnvelope'];
+export type PrometheusDatasource = OpenAPIComponents['schemas']['PrometheusDatasource'];
+export type PrometheusDatasourceEnvelope = OpenAPIComponents['schemas']['PrometheusDatasourceEnvelope'];
+export type PrometheusDatasourcePage = OpenAPIComponents['schemas']['PrometheusDatasourcePage'];
+export type PrometheusDatasourceRequest = OpenAPIComponents['schemas']['PrometheusDatasourceRequest'];
+export type PrometheusDatasourceTestResult = OpenAPIComponents['schemas']['PrometheusDatasourceTestResult'];
+export type PrometheusDatasourceTestResultEnvelope = OpenAPIComponents['schemas']['PrometheusDatasourceTestResultEnvelope'];
+export type PublicBannerSettings = OpenAPIComponents['schemas']['PublicBannerSettings'];
+export type PublicBannerSettingsEnvelope = OpenAPIComponents['schemas']['PublicBannerSettingsEnvelope'];
+export type PublicBrandingSettings = OpenAPIComponents['schemas']['PublicBrandingSettings'];
+export type PublicBrandingSettingsEnvelope = OpenAPIComponents['schemas']['PublicBrandingSettingsEnvelope'];
+export type PublicRegistrationSettings = OpenAPIComponents['schemas']['PublicRegistrationSettings'];
+export type PublicRegistrationSettingsEnvelope = OpenAPIComponents['schemas']['PublicRegistrationSettingsEnvelope'];
+export type QuotaPlan = OpenAPIComponents['schemas']['QuotaPlan'];
+export type QuotaPlanEnvelope = OpenAPIComponents['schemas']['QuotaPlanEnvelope'];
+export type QuotaPlanPage = OpenAPIComponents['schemas']['QuotaPlanPage'];
+export type QuotaPlanRequest = OpenAPIComponents['schemas']['QuotaPlanRequest'];
+export type QuotaUsageGlobal = OpenAPIComponents['schemas']['QuotaUsageGlobal'];
+export type QuotaUsageSnapshot = OpenAPIComponents['schemas']['QuotaUsageSnapshot'];
+export type QuotaUsageSnapshotEnvelope = OpenAPIComponents['schemas']['QuotaUsageSnapshotEnvelope'];
 export type RBACBindingRequest = OpenAPIComponents['schemas']['RBACBindingRequest'];
 export type RBACClusterBindingRequest = OpenAPIComponents['schemas']['RBACClusterBindingRequest'];
 export type RBACClusterRoleBinding = OpenAPIComponents['schemas']['RBACClusterRoleBinding'];
+export type RBACEffectivePermissionBinding = OpenAPIComponents['schemas']['RBACEffectivePermissionBinding'];
+export type RBACEffectivePermissionContext = OpenAPIComponents['schemas']['RBACEffectivePermissionContext'];
+export type RBACEffectivePermissionGrant = OpenAPIComponents['schemas']['RBACEffectivePermissionGrant'];
+export type RBACEffectivePermissionSource = OpenAPIComponents['schemas']['RBACEffectivePermissionSource'];
+export type RBACEffectivePermissionSubject = OpenAPIComponents['schemas']['RBACEffectivePermissionSubject'];
 export type RBACEffectivePermissions = OpenAPIComponents['schemas']['RBACEffectivePermissions'];
+export type RBACEffectivePermissionsEnvelope = OpenAPIComponents['schemas']['RBACEffectivePermissionsEnvelope'];
 export type RBACGlobalRoleBinding = OpenAPIComponents['schemas']['RBACGlobalRoleBinding'];
 export type RBACPermissionPreview = OpenAPIComponents['schemas']['RBACPermissionPreview'];
+export type RBACPermissionPreviewEnvelope = OpenAPIComponents['schemas']['RBACPermissionPreviewEnvelope'];
 export type RBACPermissionPreviewRequest = OpenAPIComponents['schemas']['RBACPermissionPreviewRequest'];
+export type RBACPermissionSensitiveFlags = OpenAPIComponents['schemas']['RBACPermissionSensitiveFlags'];
 export type RBACProjectBindingRequest = OpenAPIComponents['schemas']['RBACProjectBindingRequest'];
 export type RBACProjectRoleBinding = OpenAPIComponents['schemas']['RBACProjectRoleBinding'];
 export type RBACRole = OpenAPIComponents['schemas']['RBACRole'];
 export type RBACRoleRequest = OpenAPIComponents['schemas']['RBACRoleRequest'];
+export type RBACRule = OpenAPIComponents['schemas']['RBACRule'];
 export type RBACTemplate = OpenAPIComponents['schemas']['RBACTemplate'];
+export type ReadAuditPolicyCreateRequest = OpenAPIComponents['schemas']['ReadAuditPolicyCreateRequest'];
+export type ReadAuditPolicyListResponse = OpenAPIComponents['schemas']['ReadAuditPolicyListResponse'];
+export type ReadAuditPolicyResponse = OpenAPIComponents['schemas']['ReadAuditPolicyResponse'];
+export type ReadAuditPolicyUpdateRequest = OpenAPIComponents['schemas']['ReadAuditPolicyUpdateRequest'];
 export type RegistrationStatus = OpenAPIComponents['schemas']['RegistrationStatus'];
 export type RegistrationStep = OpenAPIComponents['schemas']['RegistrationStep'];
+export type RenderedDashboardWidget = OpenAPIComponents['schemas']['RenderedDashboardWidget'];
+export type RenderedDashboardWidgetData = OpenAPIComponents['schemas']['RenderedDashboardWidgetData'];
+export type RenderedDashboardWidgetListEnvelope = OpenAPIComponents['schemas']['RenderedDashboardWidgetListEnvelope'];
+export type ResourceDiscoveryEntry = OpenAPIComponents['schemas']['ResourceDiscoveryEntry'];
+export type ResourceDiscoveryEnvelope = OpenAPIComponents['schemas']['ResourceDiscoveryEnvelope'];
+export type ResourceDiscoveryResponse = OpenAPIComponents['schemas']['ResourceDiscoveryResponse'];
+export type ResourceOperation = OpenAPIComponents['schemas']['ResourceOperation'];
+export type ResourceOperationEnvelope = OpenAPIComponents['schemas']['ResourceOperationEnvelope'];
+export type ResourcePolicyMetadata = OpenAPIComponents['schemas']['ResourcePolicyMetadata'];
 export type ResourceRow = OpenAPIComponents['schemas']['ResourceRow'];
+export type ResourceSchemaEnvelope = OpenAPIComponents['schemas']['ResourceSchemaEnvelope'];
+export type ResourceSchemaResponse = OpenAPIComponents['schemas']['ResourceSchemaResponse'];
 export type ResourceSearchResult = OpenAPIComponents['schemas']['ResourceSearchResult'];
 export type RestoreOperationResponse = OpenAPIComponents['schemas']['RestoreOperationResponse'];
+export type RouteResponseEnvelope = OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+export type SCIMAuthenticationScheme = OpenAPIComponents['schemas']['SCIMAuthenticationScheme'];
+export type SCIMEmail = OpenAPIComponents['schemas']['SCIMEmail'];
+export type SCIMGroup = OpenAPIComponents['schemas']['SCIMGroup'];
+export type SCIMGroupCreateRequest = OpenAPIComponents['schemas']['SCIMGroupCreateRequest'];
+export type SCIMGroupMember = OpenAPIComponents['schemas']['SCIMGroupMember'];
+export type SCIMGroupPatchOperation = OpenAPIComponents['schemas']['SCIMGroupPatchOperation'];
+export type SCIMGroupPatchRequest = OpenAPIComponents['schemas']['SCIMGroupPatchRequest'];
+export type SCIMListResponse = OpenAPIComponents['schemas']['SCIMListResponse'];
+export type SCIMMeta = OpenAPIComponents['schemas']['SCIMMeta'];
+export type SCIMName = OpenAPIComponents['schemas']['SCIMName'];
+export type SCIMResourceType = OpenAPIComponents['schemas']['SCIMResourceType'];
+export type SCIMSchema = OpenAPIComponents['schemas']['SCIMSchema'];
+export type SCIMSchemaAttribute = OpenAPIComponents['schemas']['SCIMSchemaAttribute'];
+export type SCIMServiceProviderConfig = OpenAPIComponents['schemas']['SCIMServiceProviderConfig'];
+export type SCIMSupportedFeature = OpenAPIComponents['schemas']['SCIMSupportedFeature'];
+export type SCIMToken = OpenAPIComponents['schemas']['SCIMToken'];
+export type SCIMTokenCreated = OpenAPIComponents['schemas']['SCIMTokenCreated'];
+export type SCIMTokenCreatedEnvelope = OpenAPIComponents['schemas']['SCIMTokenCreatedEnvelope'];
+export type SCIMTokenList = OpenAPIComponents['schemas']['SCIMTokenList'];
+export type SCIMTokenListEnvelope = OpenAPIComponents['schemas']['SCIMTokenListEnvelope'];
+export type SCIMUser = OpenAPIComponents['schemas']['SCIMUser'];
+export type SIEMForwarderList = OpenAPIComponents['schemas']['SIEMForwarderList'];
+export type SIEMForwarderRequest = OpenAPIComponents['schemas']['SIEMForwarderRequest'];
+export type SIEMForwarderResponse = OpenAPIComponents['schemas']['SIEMForwarderResponse'];
+export type SIEMForwarderStatusResponse = OpenAPIComponents['schemas']['SIEMForwarderStatusResponse'];
+export type SIEMForwarderTestReceipt = OpenAPIComponents['schemas']['SIEMForwarderTestReceipt'];
+export type SSOPreset = OpenAPIComponents['schemas']['SSOPreset'];
+export type SSOPresetField = OpenAPIComponents['schemas']['SSOPresetField'];
+export type SSOPresetListEnvelope = OpenAPIComponents['schemas']['SSOPresetListEnvelope'];
+export type SecurityControllerStatus = OpenAPIComponents['schemas']['SecurityControllerStatus'];
+export type SecurityControllerStatusEnvelope = OpenAPIComponents['schemas']['SecurityControllerStatusEnvelope'];
 export type ServiceMeshDetectionResponse = OpenAPIComponents['schemas']['ServiceMeshDetectionResponse'];
 export type ServiceMeshInventory = OpenAPIComponents['schemas']['ServiceMeshInventory'];
 export type ServiceMeshPolicyValidation = OpenAPIComponents['schemas']['ServiceMeshPolicyValidation'];
+export type ServiceProxyResponse = OpenAPIComponents['schemas']['ServiceProxyResponse'];
 export type SetOptionsRequest = OpenAPIComponents['schemas']['SetOptionsRequest'];
+export type SharedAlertmanagerStackRequest = OpenAPIComponents['schemas']['SharedAlertmanagerStackRequest'];
+export type SharedGrafanaStackRequest = OpenAPIComponents['schemas']['SharedGrafanaStackRequest'];
+export type SharedLokiStackRequest = OpenAPIComponents['schemas']['SharedLokiStackRequest'];
+export type SharedThanosStackRequest = OpenAPIComponents['schemas']['SharedThanosStackRequest'];
 export type ShellSession = OpenAPIComponents['schemas']['ShellSession'];
 export type SmtpSettings = OpenAPIComponents['schemas']['SmtpSettings'];
 export type SnapshotCreateRequest = OpenAPIComponents['schemas']['SnapshotCreateRequest'];
@@ -2860,14 +16055,37 @@ export type SnapshotRestoreRequest = OpenAPIComponents['schemas']['SnapshotResto
 export type SnapshotRestoreResponse = OpenAPIComponents['schemas']['SnapshotRestoreResponse'];
 export type SnapshotScheduleRequest = OpenAPIComponents['schemas']['SnapshotScheduleRequest'];
 export type SnapshotScheduleResponse = OpenAPIComponents['schemas']['SnapshotScheduleResponse'];
+export type SnapshotScheduleUpdateRequest = OpenAPIComponents['schemas']['SnapshotScheduleUpdateRequest'];
 export type SnapshotSpec = OpenAPIComponents['schemas']['SnapshotSpec'];
 export type StorageTestResult = OpenAPIComponents['schemas']['StorageTestResult'];
+export type StreamTicketRequest = OpenAPIComponents['schemas']['StreamTicketRequest'];
+export type StreamTicketResponse = OpenAPIComponents['schemas']['StreamTicketResponse'];
+export type TaskOutboxEntryEnvelope = OpenAPIComponents['schemas']['TaskOutboxEntryEnvelope'];
+export type TaskOutboxEntryWire = OpenAPIComponents['schemas']['TaskOutboxEntryWire'];
+export type ToolActionRequest = OpenAPIComponents['schemas']['ToolActionRequest'];
+export type ToolChart = OpenAPIComponents['schemas']['ToolChart'];
+export type ToolControllerStatus = OpenAPIComponents['schemas']['ToolControllerStatus'];
+export type ToolControllerStatusEnvelope = OpenAPIComponents['schemas']['ToolControllerStatusEnvelope'];
+export type ToolFormField = OpenAPIComponents['schemas']['ToolFormField'];
+export type ToolFormSchema = OpenAPIComponents['schemas']['ToolFormSchema'];
+export type ToolOperation = OpenAPIComponents['schemas']['ToolOperation'];
+export type ToolOperationEvent = OpenAPIComponents['schemas']['ToolOperationEvent'];
+export type ToolPreview = OpenAPIComponents['schemas']['ToolPreview'];
+export type ToolUninstallRequest = OpenAPIComponents['schemas']['ToolUninstallRequest'];
 export type UpdateClusterGroupRequest = OpenAPIComponents['schemas']['UpdateClusterGroupRequest'];
+export type UpdateClusterMonitoringConfigRequest = OpenAPIComponents['schemas']['UpdateClusterMonitoringConfigRequest'];
 export type UpdateClusterRequest = OpenAPIComponents['schemas']['UpdateClusterRequest'];
+export type UpdateLoggingSavedSearchRequest = OpenAPIComponents['schemas']['UpdateLoggingSavedSearchRequest'];
+export type UpdateMonitoringBackendRequest = OpenAPIComponents['schemas']['UpdateMonitoringBackendRequest'];
 export type UpdateProjectPolicyRequest = OpenAPIComponents['schemas']['UpdateProjectPolicyRequest'];
 export type UpdateProjectRequest = OpenAPIComponents['schemas']['UpdateProjectRequest'];
 export type UpdateRegistryConfigRequest = OpenAPIComponents['schemas']['UpdateRegistryConfigRequest'];
 export type User = OpenAPIComponents['schemas']['User'];
+export type UserQuotaDimensions = OpenAPIComponents['schemas']['UserQuotaDimensions'];
+export type UserQuotaOffender = OpenAPIComponents['schemas']['UserQuotaOffender'];
+export type UserQuotaPercentages = OpenAPIComponents['schemas']['UserQuotaPercentages'];
+export type UserQuotaSnapshot = OpenAPIComponents['schemas']['UserQuotaSnapshot'];
+export type UserQuotaSnapshotEnvelope = OpenAPIComponents['schemas']['UserQuotaSnapshotEnvelope'];
 export type UsersSettingsAuditLogEntry = OpenAPIComponents['schemas']['UsersSettingsAuditLogEntry'];
 export type UsersSettingsCreatedToken = OpenAPIComponents['schemas']['UsersSettingsCreatedToken'];
 export type UsersSettingsGeneral = OpenAPIComponents['schemas']['UsersSettingsGeneral'];
@@ -2881,6 +16099,25 @@ export type VaultTestResult = OpenAPIComponents['schemas']['VaultTestResult'];
 export type VeleroStatusResponse = OpenAPIComponents['schemas']['VeleroStatusResponse'];
 export type VulnImage = OpenAPIComponents['schemas']['VulnImage'];
 export type VulnSummary = OpenAPIComponents['schemas']['VulnSummary'];
+export type VulnerabilityAggregate = OpenAPIComponents['schemas']['VulnerabilityAggregate'];
+export type VulnerabilityAggregateEnvelope = OpenAPIComponents['schemas']['VulnerabilityAggregateEnvelope'];
+export type VulnerabilityDiff = OpenAPIComponents['schemas']['VulnerabilityDiff'];
+export type VulnerabilityDiffBucket = OpenAPIComponents['schemas']['VulnerabilityDiffBucket'];
+export type VulnerabilityDiffDelta = OpenAPIComponents['schemas']['VulnerabilityDiffDelta'];
+export type VulnerabilityDiffEnvelope = OpenAPIComponents['schemas']['VulnerabilityDiffEnvelope'];
+export type VulnerabilityHistory = OpenAPIComponents['schemas']['VulnerabilityHistory'];
+export type VulnerabilityHistoryEnvelope = OpenAPIComponents['schemas']['VulnerabilityHistoryEnvelope'];
+export type VulnerabilityHistoryPoint = OpenAPIComponents['schemas']['VulnerabilityHistoryPoint'];
+export type VulnerabilityReportHistory = OpenAPIComponents['schemas']['VulnerabilityReportHistory'];
+export type VulnerabilityReportHistoryEnvelope = OpenAPIComponents['schemas']['VulnerabilityReportHistoryEnvelope'];
+export type VulnerabilityReportHistoryPoint = OpenAPIComponents['schemas']['VulnerabilityReportHistoryPoint'];
+export type VulnerabilityRescanResult = OpenAPIComponents['schemas']['VulnerabilityRescanResult'];
+export type VulnerabilityRescanResultEnvelope = OpenAPIComponents['schemas']['VulnerabilityRescanResultEnvelope'];
+export type VulnerabilityScanProgress = OpenAPIComponents['schemas']['VulnerabilityScanProgress'];
+export type VulnerabilityScanProgressEnvelope = OpenAPIComponents['schemas']['VulnerabilityScanProgressEnvelope'];
+export type VulnerabilitySeverityCounts = OpenAPIComponents['schemas']['VulnerabilitySeverityCounts'];
+export type VulnerableClusterSummary = OpenAPIComponents['schemas']['VulnerableClusterSummary'];
+export type VulnerableClusterSummaryListEnvelope = OpenAPIComponents['schemas']['VulnerableClusterSummaryListEnvelope'];
 export type WebhookDelivery = OpenAPIComponents['schemas']['WebhookDelivery'];
 export type WebhookSubscription = OpenAPIComponents['schemas']['WebhookSubscription'];
 export type WebhookSubscriptionRequest = OpenAPIComponents['schemas']['WebhookSubscriptionRequest'];

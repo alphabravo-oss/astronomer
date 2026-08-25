@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * Project · Cloud Credentials · New — three-step wizard.
  *
@@ -11,20 +11,20 @@ import { createFileRoute } from '@tanstack/react-router';
  * don't depend on the provider — the form already groups them visually
  * at the bottom.
  */
-import { useMemo, useState } from 'react';
-import { Link } from '@/lib/link';
-import { useParams, useRouter } from '@/lib/navigation';
-import { ArrowLeft, Loader2, Search, Cloud } from 'lucide-react';
+import { useMemo, useState } from "react";
+import { Link } from "@/lib/link";
+import { useParams, useRouter } from "@/lib/navigation";
+import { ArrowLeft, Loader2, Search, Cloud } from "lucide-react";
 import {
   useCloudCredentialProviders,
   useCreateCloudCredential,
-} from '@/components/projects/hooks';
-import { CredentialForm } from '@/components/projects/cloud-credentials/credential-form';
-import { ProviderBadge } from '@/components/projects/cloud-credentials/provider-badge';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { extractApiErrorMessage } from '@/lib/api/errors';
-import type { CloudCredentialProviderSpec } from '@/lib/api/project-detail';
-import { cn } from '@/lib/utils';
+} from "@/components/projects/hooks";
+import { CredentialForm } from "@/components/projects/cloud-credentials/credential-form";
+import { ProviderBadge } from "@/components/projects/cloud-credentials/provider-badge";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { extractApiErrorMessage } from "@/lib/api/errors";
+import type { CloudCredentialProviderSpec } from "@/lib/api/project-detail";
+import { cn } from "@/lib/utils";
 
 function NewCloudCredentialPage() {
   const params = useParams();
@@ -33,9 +33,11 @@ function NewCloudCredentialPage() {
   const { data: providers = [], isLoading } = useCloudCredentialProviders();
   const createMutation = useCreateCloudCredential(projectId);
 
-  const [step, setStep] = useState<'pick' | 'configure'>('pick');
-  const [selected, setSelected] = useState<CloudCredentialProviderSpec | null>(null);
-  const [search, setSearch] = useState('');
+  const [step, setStep] = useState<"pick" | "configure">("pick");
+  const [selected, setSelected] = useState<CloudCredentialProviderSpec | null>(
+    null,
+  );
+  const [search, setSearch] = useState("");
   const [serverError, setServerError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -64,13 +66,13 @@ function NewCloudCredentialPage() {
       <PageHeader
         eyebrow="Cloud Credentials · New"
         title={
-          step === 'pick'
-            ? 'Choose a provider'
+          step === "pick"
+            ? "Choose a provider"
             : `Configure ${selected?.displayName || selected?.provider}`
         }
       />
 
-      {step === 'pick' && (
+      {step === "pick" && (
         <>
           <div className="flex items-center gap-2 px-3 rounded-lg border border-border bg-background">
             <Search className="h-4 w-4 text-muted-foreground" />
@@ -95,11 +97,11 @@ function NewCloudCredentialPage() {
                   key={p.provider}
                   onClick={() => {
                     setSelected(p);
-                    setStep('configure');
+                    setStep("configure");
                   }}
                   className={cn(
-                    'flex flex-col gap-2 p-4 rounded-lg border border-border bg-card text-left',
-                    'hover:bg-card/80 hover:border-foreground/20 transition-colors',
+                    "flex flex-col gap-2 p-4 rounded-lg border border-border bg-card text-left",
+                    "hover:bg-card/80 hover:border-foreground/20 transition-colors",
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -114,11 +116,13 @@ function NewCloudCredentialPage() {
                     </div>
                   </div>
                   {p.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2">{p.description}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                      {p.description}
+                    </p>
                   )}
                   <p className="text-2xs text-muted-foreground mt-auto pt-1">
                     {p.fields.filter((f) => f.required).length} required field
-                    {p.fields.filter((f) => f.required).length === 1 ? '' : 's'}
+                    {p.fields.filter((f) => f.required).length === 1 ? "" : "s"}
                   </p>
                 </button>
               ))}
@@ -132,7 +136,7 @@ function NewCloudCredentialPage() {
         </>
       )}
 
-      {step === 'configure' && selected && (
+      {step === "configure" && selected && (
         <div className="rounded-xl border border-border bg-card p-6">
           <CredentialForm
             provider={selected.provider}
@@ -142,7 +146,7 @@ function NewCloudCredentialPage() {
             onCancel={() => {
               setSelected(null);
               setServerError(null);
-              setStep('pick');
+              setStep("pick");
             }}
             onSubmit={async (body) => {
               setServerError(null);
@@ -150,7 +154,8 @@ function NewCloudCredentialPage() {
                 await createMutation.mutateAsync(body);
                 router.push(backToList);
               } catch (err) {
-                const msg = extractApiErrorMessage(err) ?? 'Failed to create credential.';
+                const msg =
+                  extractApiErrorMessage(err) ?? "Failed to create credential.";
                 setServerError(msg);
               }
             }}
@@ -161,6 +166,8 @@ function NewCloudCredentialPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/projects/$id/cloud-credentials/new/')({
+export const Route = createFileRoute(
+  "/dashboard/projects/$id/cloud-credentials/new/",
+)({
   component: NewCloudCredentialPage,
 });

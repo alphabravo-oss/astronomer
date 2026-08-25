@@ -41,8 +41,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
@@ -68,10 +70,23 @@ type PlatformDefaultTemplateQuerier interface {
 	UpsertClusterTemplateApplication(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error)
 }
 
+// PlatformDefaultTemplateMutationTx is the transaction-bound platform
+// configuration, template-application task, and mandatory-audit surface.
+type PlatformDefaultTemplateMutationTx interface {
+	PlatformDefaultTemplateQuerier
+	GetPlatformConfigForUpdate(ctx context.Context) (sqlc.PlatformConfiguration, error)
+	clusterTemplateApplicationTaskOutboxQuerier
+	tasks.TaskOutboxWriter
+	audit.OutboxQuerier
+}
+
+type platformDefaultTemplateRunTxFunc func(context.Context, func(PlatformDefaultTemplateMutationTx) error) error
+
 // PlatformDefaultTemplateHandler owns
 // /api/v1/admin/platform-settings/default-cluster-template/*.
 type PlatformDefaultTemplateHandler struct {
 	queries PlatformDefaultTemplateQuerier
+	runTx   platformDefaultTemplateRunTxFunc
 	// queue schedules the cluster_template:apply task on reapply.
 	// Nil-safe — drift_check sweep is the fallback.
 	queue      ClusterDecommissionEnqueuer
@@ -83,6 +98,19 @@ type PlatformDefaultTemplateHandler struct {
 // case.
 func NewPlatformDefaultTemplateHandler(queries PlatformDefaultTemplateQuerier) *PlatformDefaultTemplateHandler {
 	return &PlatformDefaultTemplateHandler{queries: queries}
+}
+
+// SetRunTx wires the production transaction used by default changes and
+// reapply intents.
+func (h *PlatformDefaultTemplateHandler) SetRunTx(runTx platformDefaultTemplateRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+// TransactionalAuditWired is a production wiring probe.
+func (h *PlatformDefaultTemplateHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
 }
 
 // SetApplyQueue wires the asynq client used by Reapply to enqueue the
@@ -124,6 +152,19 @@ type clusterTemplateLiteForm struct {
 	Spec        json.RawMessage `json:"spec"`
 }
 
+func defaultTemplateResponseFor(cfg sqlc.PlatformConfiguration, tmpl *sqlc.ClusterTemplate) defaultTemplateResponse {
+	resp := defaultTemplateResponse{}
+	if !cfg.DefaultClusterTemplateID.Valid {
+		return resp
+	}
+	id := uuid.UUID(cfg.DefaultClusterTemplateID.Bytes).String()
+	resp.TemplateID = &id
+	if tmpl != nil {
+		resp.Template = &clusterTemplateLiteForm{ID: tmpl.ID.String(), Name: tmpl.Name, Description: tmpl.Description, Spec: tmpl.Spec}
+	}
+	return resp
+}
+
 // Get handles GET /api/v1/admin/platform-settings/default-cluster-template/.
 func (h *PlatformDefaultTemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if !h.gate(w, r) {
@@ -138,7 +179,7 @@ func (h *PlatformDefaultTemplateHandler) Get(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
-	resp := defaultTemplateResponse{}
+	resp := defaultTemplateResponseFor(cfg, nil)
 	if !cfg.DefaultClusterTemplateID.Valid {
 		// No default configured — auto-attach is off. The frontend
 		// renders this as "Auto-attach disabled" with a picker to
@@ -162,14 +203,7 @@ func (h *PlatformDefaultTemplateHandler) Get(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
-	id := tmpl.ID.String()
-	resp.TemplateID = &id
-	resp.Template = &clusterTemplateLiteForm{
-		ID:          tmpl.ID.String(),
-		Name:        tmpl.Name,
-		Description: tmpl.Description,
-		Spec:        tmpl.Spec,
-	}
+	resp = defaultTemplateResponseFor(cfg, &tmpl)
 	RespondJSON(w, http.StatusOK, resp)
 }
 
@@ -205,61 +239,93 @@ func (h *PlatformDefaultTemplateHandler) Update(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Capture the previous value for the audit trail. Best-effort: a
-	// fetch failure shouldn't block the write — we'll just log a less
-	// detailed audit row.
-	var oldValue any
-	if prev, err := h.queries.GetPlatformConfig(r.Context()); err == nil {
-		if prev.DefaultClusterTemplateID.Valid {
-			oldValue = uuid.UUID(prev.DefaultClusterTemplateID.Bytes).String()
-		}
-	}
-
 	var target pgtype.UUID
+	var parsedTarget uuid.UUID
 	if req.TemplateID != nil && *req.TemplateID != "" {
 		parsed, err := uuid.Parse(*req.TemplateID)
 		if err != nil {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "template_id must be a UUID or null")
 			return
 		}
-		// Validate the template exists BEFORE writing so we return a
-		// clean 400 instead of a Postgres FK violation surfaced as a
-		// 500. The platform_configuration FK is the second-line guard
-		// (it'll catch a row that disappears between the check and
-		// the write — that's a 500 path which is correct given the
-		// rare race).
-		if _, err := h.queries.GetClusterTemplateByID(r.Context(), parsed); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "template_id does not reference an existing cluster_templates row")
-				return
-			}
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
-			return
-		}
+		parsedTarget = parsed
 		target = pgtype.UUID{Bytes: parsed, Valid: true}
 	} else {
 		// Either {"template_id": null} or {} — both mean "clear".
 		target = pgtype.UUID{Valid: false}
 	}
 
-	updated, err := h.queries.SetPlatformDefaultClusterTemplate(r.Context(), target)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+	type updateResult struct {
+		config   sqlc.PlatformConfiguration
+		template *sqlc.ClusterTemplate
+	}
+	errTemplateNotFound := errors.New("platform default template not found")
+	mutate := func(q PlatformDefaultTemplateQuerier) (updateResult, error) {
+		var tmpl *sqlc.ClusterTemplate
+		if target.Valid {
+			row, err := q.GetClusterTemplateByID(r.Context(), parsedTarget)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return updateResult{}, errTemplateNotFound
+			}
+			if err != nil {
+				return updateResult{}, err
+			}
+			tmpl = &row
+		}
+		updated, err := q.SetPlatformDefaultClusterTemplate(r.Context(), target)
+		return updateResult{config: updated, template: tmpl}, err
+	}
+	var result updateResult
+	var err error
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q PlatformDefaultTemplateMutationTx) error {
+			previous, lockErr := q.GetPlatformConfigForUpdate(r.Context())
+			if lockErr != nil {
+				return lockErr
+			}
+			result, lockErr = mutate(q)
+			if lockErr != nil {
+				return lockErr
+			}
+			var oldValue, newValue any
+			if previous.DefaultClusterTemplateID.Valid {
+				oldValue = uuid.UUID(previous.DefaultClusterTemplateID.Bytes).String()
+			}
+			if result.config.DefaultClusterTemplateID.Valid {
+				newValue = uuid.UUID(result.config.DefaultClusterTemplateID.Bytes).String()
+			}
+			return recordAuditOutbox(r, q, "admin.platform_default_template.updated", "platform_configuration", "1", "", http.StatusOK, map[string]any{
+				"old_template_id": oldValue, "new_template_id": newValue,
+			})
+		})
+	} else {
+		previous, getErr := h.queries.GetPlatformConfig(r.Context())
+		if getErr != nil {
+			err = getErr
+		} else {
+			result, err = mutate(h.queries)
+		}
+		if err == nil {
+			var oldValue, newValue any
+			if previous.DefaultClusterTemplateID.Valid {
+				oldValue = uuid.UUID(previous.DefaultClusterTemplateID.Bytes).String()
+			}
+			if result.config.DefaultClusterTemplateID.Valid {
+				newValue = uuid.UUID(result.config.DefaultClusterTemplateID.Bytes).String()
+			}
+			recordAudit(r, h.queries, "admin.platform_default_template.updated", "platform_configuration", "1", "", map[string]any{
+				"old_template_id": oldValue, "new_template_id": newValue,
+			})
+		}
+	}
+	if errors.Is(err, errTemplateNotFound) {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "template_id does not reference an existing cluster_templates row")
 		return
 	}
-
-	var newValue any
-	if updated.DefaultClusterTemplateID.Valid {
-		newValue = uuid.UUID(updated.DefaultClusterTemplateID.Bytes).String()
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to update platform default cluster template")
+		return
 	}
-	recordAudit(r, h.queries, "admin.platform_default_template.updated", "platform_configuration", "1", "", map[string]any{
-		"old_template_id": oldValue,
-		"new_template_id": newValue,
-	})
-
-	// Re-render via GET semantics so the response is consistent with
-	// the read endpoint (operator UI uses the same parser).
-	h.Get(w, r)
+	RespondJSON(w, http.StatusOK, defaultTemplateResponseFor(result.config, result.template))
 }
 
 // Reapply handles POST /admin/platform-settings/default-cluster-template/reapply/{cluster_id}/.
@@ -281,62 +347,103 @@ func (h *PlatformDefaultTemplateHandler) Reapply(w http.ResponseWriter, r *http.
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
-	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
-			return
+	var cluster sqlc.Cluster
+	var tmpl sqlc.ClusterTemplate
+	var app sqlc.ClusterTemplateApplication
+	var errNoDefault = errors.New("no platform default")
+	var errStaleDefault = errors.New("stale platform default")
+	var errClusterNotFound = errors.New("cluster not found")
+	buildTask := func(clusterID uuid.UUID) (*asynq.Task, error) {
+		task, err := tasks.NewClusterTemplateApplyTask(clusterID)
+		if err != nil {
+			return nil, err
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+		return asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3)), nil
+	}
+	load := func(q PlatformDefaultTemplateQuerier, cfg sqlc.PlatformConfiguration) error {
+		var loadErr error
+		cluster, loadErr = q.GetClusterByID(r.Context(), clusterID)
+		if errors.Is(loadErr, pgx.ErrNoRows) {
+			return errClusterNotFound
+		}
+		if loadErr != nil {
+			return loadErr
+		}
+		if !cfg.DefaultClusterTemplateID.Valid {
+			return errNoDefault
+		}
+		tmpl, loadErr = q.GetClusterTemplateByID(r.Context(), uuid.UUID(cfg.DefaultClusterTemplateID.Bytes))
+		if errors.Is(loadErr, pgx.ErrNoRows) {
+			return errStaleDefault
+		}
+		return loadErr
+	}
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q PlatformDefaultTemplateMutationTx) error {
+			cfg, txErr := q.GetPlatformConfigForUpdate(r.Context())
+			if txErr != nil {
+				return txErr
+			}
+			if txErr = load(q, cfg); txErr != nil {
+				return txErr
+			}
+			task, txErr := buildTask(cluster.ID)
+			if txErr != nil {
+				return txErr
+			}
+			var persisted bool
+			app, persisted, txErr = upsertClusterTemplateApplicationWithTaskOutbox(r.Context(), q, q, sqlc.UpsertClusterTemplateApplicationParams{
+				ClusterID: cluster.ID, TemplateID: tmpl.ID, SpecSnapshot: tmpl.Spec,
+			}, task, tasks.TaskOutboxOptions{
+				DedupeKey: clusterTemplateApplyDedupeKey(cluster.ID), QueueName: tasks.ClusterTemplateApplyQueueName,
+				MaxRetry: 3, MaxDeliveryAttempts: 20,
+			})
+			if txErr != nil {
+				return txErr
+			}
+			if !persisted {
+				return fmt.Errorf("cluster template application task outbox is not transactionally available")
+			}
+			return recordAuditOutbox(r, q, "cluster.template.reapplied", "cluster", cluster.ID.String(), cluster.Name, http.StatusAccepted, map[string]any{
+				"template_id": tmpl.ID.String(), "template_name": tmpl.Name, "source": "platform_default_reapply",
+			})
+		})
+	} else {
+		cfg, cfgErr := h.queries.GetPlatformConfig(r.Context())
+		if cfgErr != nil {
+			err = cfgErr
+		} else if err = load(h.queries, cfg); err == nil {
+			app, err = h.queries.UpsertClusterTemplateApplication(r.Context(), sqlc.UpsertClusterTemplateApplicationParams{
+				ClusterID: cluster.ID, TemplateID: tmpl.ID, SpecSnapshot: tmpl.Spec,
+			})
+			if err == nil {
+				recordAudit(r, h.queries, "cluster.template.reapplied", "cluster", cluster.ID.String(), cluster.Name, map[string]any{
+					"template_id": tmpl.ID.String(), "template_name": tmpl.Name, "source": "platform_default_reapply",
+				})
+				if task, taskErr := buildTask(cluster.ID); taskErr == nil {
+					if !enqueueClusterTemplateApplyOutbox(r.Context(), h.taskOutbox, task, cluster.ID) && h.queue != nil {
+						_, _ = h.queue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
+					}
+				}
+			}
+		}
+	}
+	if errors.Is(err, errClusterNotFound) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
-	cfg, err := h.queries.GetPlatformConfig(r.Context())
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
-		return
-	}
-	if !cfg.DefaultClusterTemplateID.Valid {
-		// No default configured — reapply has nothing to reapply.
-		// We could 404 here, but a 409-Conflict ("no platform default
-		// is set; configure one first") is the better operator UX —
-		// it's a state error, not a missing resource. The frontend
-		// renders it as a banner pointing back at the PUT endpoint.
+	if errors.Is(err, errNoDefault) {
 		RespondRequestError(w, r, http.StatusConflict, apierror.NoDefault, "No platform default cluster template is configured. Set one via PUT /admin/platform-settings/default-cluster-template/ first.")
 		return
 	}
-	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), uuid.UUID(cfg.DefaultClusterTemplateID.Bytes))
-	if err != nil {
-		// Stale FK target — surface as 409 so the operator sees a
-		// recoverable state error (pick a new default) rather than a
-		// generic 500.
+	if errors.Is(err, errStaleDefault) {
 		RespondRequestError(w, r, http.StatusConflict, apierror.StaleDefault, "Platform default cluster template no longer exists. Pick a new one.")
 		return
 	}
-	app, err := h.queries.UpsertClusterTemplateApplication(r.Context(), sqlc.UpsertClusterTemplateApplicationParams{
-		ClusterID:    cluster.ID,
-		TemplateID:   tmpl.ID,
-		SpecSnapshot: tmpl.Spec,
-	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to reapply platform default cluster template")
 		return
-	}
-	recordAudit(r, h.queries, "cluster.template.reapplied", "cluster", cluster.ID.String(), cluster.Name, map[string]any{
-		"template_id":   tmpl.ID.String(),
-		"template_name": tmpl.Name,
-		"source":        "platform_default_reapply",
-	})
-
-	// Enqueue the apply task so the operator sees progress without
-	// waiting for the drift_check sweep. Best-effort.
-	if h.queue != nil || h.taskOutbox != nil {
-		if task, err := tasks.NewClusterTemplateApplyTask(cluster.ID); err == nil {
-			payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
-			t := asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
-			if !enqueueClusterTemplateApplyOutbox(r.Context(), h.taskOutbox, t, cluster.ID) && h.queue != nil {
-				_, _ = h.queue.Enqueue(t, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
-			}
-		}
 	}
 
 	RespondJSON(w, http.StatusAccepted, map[string]any{

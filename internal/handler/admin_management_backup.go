@@ -81,24 +81,29 @@ type ManagementBackupEndpoint struct {
 
 // ManagementBackupDestinationView is one named dump target on the settings page.
 type ManagementBackupDestinationView struct {
-	ID             string                   `json:"id"`
-	Name           string                   `json:"name"`
-	Source         string                   `json:"source"`
-	Bucket         string                   `json:"bucket"`
-	Prefix         string                   `json:"prefix"`
-	Region         string                   `json:"region"`
-	Endpoint       string                   `json:"endpoint,omitempty"`
-	Schedule       string                   `json:"schedule"`
-	Enabled        bool                     `json:"enabled"`
-	KeepDaily      int32                    `json:"keep_daily"`
-	KeepWeekly     int32                    `json:"keep_weekly"`
-	KeepMonthly    int32                    `json:"keep_monthly"`
-	HasCredentials bool                     `json:"has_credentials"`
-	AccessKey      string                   `json:"access_key,omitempty"`
-	SecretKey      string                   `json:"secret_key,omitempty"`
-	CronJob        *ManagementCronJobStatus `json:"cronjob,omitempty"`
-	LastJob        *ManagementBackupJob     `json:"last_job,omitempty"`
-	ReadOnly       bool                     `json:"read_only"`
+	ID                string                   `json:"id"`
+	Name              string                   `json:"name"`
+	Source            string                   `json:"source"`
+	Bucket            string                   `json:"bucket"`
+	Prefix            string                   `json:"prefix"`
+	Region            string                   `json:"region"`
+	Endpoint          string                   `json:"endpoint,omitempty"`
+	Schedule          string                   `json:"schedule"`
+	Enabled           bool                     `json:"enabled"`
+	KeepDaily         int32                    `json:"keep_daily"`
+	KeepWeekly        int32                    `json:"keep_weekly"`
+	KeepMonthly       int32                    `json:"keep_monthly"`
+	HasCredentials    bool                     `json:"has_credentials"`
+	AccessKey         string                   `json:"access_key,omitempty"`
+	SecretKey         string                   `json:"secret_key,omitempty"`
+	CronJob           *ManagementCronJobStatus `json:"cronjob,omitempty"`
+	LastJob           *ManagementBackupJob     `json:"last_job,omitempty"`
+	ReadOnly          bool                     `json:"read_only"`
+	DesiredGeneration int64                    `json:"desired_generation,omitempty"`
+	AppliedGeneration int64                    `json:"applied_generation,omitempty"`
+	DesiredState      string                   `json:"desired_state,omitempty"`
+	ReconcileStatus   string                   `json:"reconcile_status,omitempty"`
+	LastError         string                   `json:"last_error,omitempty"`
 }
 
 // ManagementBackupRetention is the per-tier keep count from CronJob env.
@@ -292,19 +297,24 @@ const destinationIDLabel = "astronomer.io/destination-id"
 
 func destinationView(row sqlc.ManagementBackupDestination) ManagementBackupDestinationView {
 	view := ManagementBackupDestinationView{
-		ID:             row.ID.String(),
-		Name:           row.Name,
-		Source:         "ui",
-		Bucket:         row.Bucket,
-		Prefix:         row.Prefix,
-		Region:         row.Region,
-		Endpoint:       row.EndpointUrl,
-		Schedule:       row.Schedule,
-		Enabled:        row.Enabled,
-		KeepDaily:      row.KeepDaily,
-		KeepWeekly:     row.KeepWeekly,
-		KeepMonthly:    row.KeepMonthly,
-		HasCredentials: row.EncryptedCredentials != "",
+		ID:                row.ID.String(),
+		Name:              row.Name,
+		Source:            "ui",
+		Bucket:            row.Bucket,
+		Prefix:            row.Prefix,
+		Region:            row.Region,
+		Endpoint:          row.EndpointUrl,
+		Schedule:          row.Schedule,
+		Enabled:           row.Enabled,
+		KeepDaily:         row.KeepDaily,
+		KeepWeekly:        row.KeepWeekly,
+		KeepMonthly:       row.KeepMonthly,
+		HasCredentials:    row.EncryptedCredentials != "",
+		DesiredGeneration: row.DesiredGeneration,
+		AppliedGeneration: row.AppliedGeneration,
+		DesiredState:      row.DesiredState,
+		ReconcileStatus:   row.ReconcileStatus,
+		LastError:         row.LastError,
 	}
 	if view.HasCredentials {
 		view.AccessKey = PasswordSentinelEncrypted

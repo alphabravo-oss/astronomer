@@ -10,6 +10,29 @@ const (
 	ClassSystem   = "system"
 )
 
+// Persistence classes separate compliance evidence that must survive a
+// process crash from sampled observability reads that may use bounded async
+// batching. Mutation/auth/system events and credential/evidence reads are
+// always synchronous.
+const (
+	PersistenceMandatoryMutation = "mandatory_mutation"
+	PersistenceMandatoryRead     = "mandatory_sensitive_read"
+	PersistenceSampledRead       = "sampled_read"
+)
+
+func ClassifyPersistence(action, actionClass string) string {
+	if actionClass != ClassRead {
+		return PersistenceMandatoryMutation
+	}
+	action = strings.ToLower(strings.TrimSpace(action))
+	for _, marker := range []string{"secret", "credential", "token", "kubeconfig", "export", "download", "audit", "compliance", "support_bundle"} {
+		if strings.Contains(action, marker) {
+			return PersistenceMandatoryRead
+		}
+	}
+	return PersistenceSampledRead
+}
+
 // ClassifyActionClass maps an action name and source onto the audit class
 // vocabulary. Explicit stored classes (read/auth/system) win; otherwise the
 // action prefix and source decide. Worker jobs, agent heartbeats, and

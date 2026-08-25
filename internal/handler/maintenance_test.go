@@ -3,10 +3,12 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +37,9 @@ type fakeMaintenanceQuerier struct {
 	updateErr    error
 	deleteErr    error
 	nameExists   bool
+	createCalled int
+	updateCalled int
+	deleteCalled int
 
 	deferred       []sqlc.DeferredOperation
 	deferredCount  int64
@@ -43,6 +48,7 @@ type fakeMaintenanceQuerier struct {
 	cancelCalled   int
 
 	auditCalls int
+	outboxErr  error
 }
 
 func (f *fakeMaintenanceQuerier) GetUserByID(_ context.Context, _ uuid.UUID) (sqlc.User, error) {
@@ -62,6 +68,9 @@ func (f *fakeMaintenanceQuerier) GetMaintenanceWindow(_ context.Context, id uuid
 	}
 	return sqlc.MaintenanceWindow{}, pgx.ErrNoRows
 }
+func (f *fakeMaintenanceQuerier) GetMaintenanceWindowForUpdate(ctx context.Context, id uuid.UUID) (sqlc.MaintenanceWindow, error) {
+	return f.GetMaintenanceWindow(ctx, id)
+}
 func (f *fakeMaintenanceQuerier) GetMaintenanceWindowByName(_ context.Context, name string) (sqlc.MaintenanceWindow, error) {
 	if f.nameExists {
 		return sqlc.MaintenanceWindow{Name: name, ID: uuid.New()}, nil
@@ -69,18 +78,21 @@ func (f *fakeMaintenanceQuerier) GetMaintenanceWindowByName(_ context.Context, n
 	return sqlc.MaintenanceWindow{}, pgx.ErrNoRows
 }
 func (f *fakeMaintenanceQuerier) CreateMaintenanceWindow(_ context.Context, _ sqlc.CreateMaintenanceWindowParams) (sqlc.MaintenanceWindow, error) {
+	f.createCalled++
 	if f.createErr != nil {
 		return sqlc.MaintenanceWindow{}, f.createErr
 	}
 	return f.createdRow, nil
 }
 func (f *fakeMaintenanceQuerier) UpdateMaintenanceWindow(_ context.Context, _ sqlc.UpdateMaintenanceWindowParams) (sqlc.MaintenanceWindow, error) {
+	f.updateCalled++
 	if f.updateErr != nil {
 		return sqlc.MaintenanceWindow{}, f.updateErr
 	}
 	return f.updatedRow, nil
 }
 func (f *fakeMaintenanceQuerier) DeleteMaintenanceWindow(_ context.Context, _ uuid.UUID) error {
+	f.deleteCalled++
 	return f.deleteErr
 }
 func (f *fakeMaintenanceQuerier) ListDeferredOperations(_ context.Context, _ sqlc.ListDeferredOperationsParams) ([]sqlc.DeferredOperation, error) {
@@ -92,6 +104,9 @@ func (f *fakeMaintenanceQuerier) GetDeferredOperation(_ context.Context, _ uuid.
 	}
 	return f.getDeferredRow, nil
 }
+func (f *fakeMaintenanceQuerier) GetDeferredOperationForUpdate(ctx context.Context, id uuid.UUID) (sqlc.DeferredOperation, error) {
+	return f.GetDeferredOperation(ctx, id)
+}
 func (f *fakeMaintenanceQuerier) MarkDeferredCancelled(_ context.Context, _ sqlc.MarkDeferredCancelledParams) error {
 	f.cancelCalled++
 	return nil
@@ -102,6 +117,13 @@ func (f *fakeMaintenanceQuerier) CountDeferredOperations(_ context.Context) (int
 func (f *fakeMaintenanceQuerier) CreateAuditLogV1(_ context.Context, _ sqlc.CreateAuditLogV1Params) error {
 	f.auditCalls++
 	return nil
+}
+func (f *fakeMaintenanceQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	if f.outboxErr != nil {
+		return sqlc.AuditOutbox{}, f.outboxErr
+	}
+	f.auditCalls++
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
 }
 
 // makeMaintenanceRequest mirrors the makeRequest helper in admin_drill_test.go
@@ -332,19 +354,29 @@ func TestHandler_CancelDeferred_NotFound(t *testing.T) {
 // gateMaintenanceQuerier is a small stub that also implements
 // GatedOpQuerier so the gate's defer-path can insert rows.
 type gateMaintenanceQuerier struct {
-	createdRow sqlc.DeferredOperation
-	createErr  error
-	calls      int
-	auditCalls int
-	idemCalls  int
-	idemByKey  map[string]sqlc.DeferredOperation
+	createdRow  sqlc.DeferredOperation
+	createErr   error
+	calls       int
+	auditCalls  int
+	idemCalls   int
+	idemByKey   map[string]sqlc.DeferredOperation
+	outboxCalls int
+	outboxErr   error
 }
 
-func (g *gateMaintenanceQuerier) CreateDeferredOperation(_ context.Context, _ sqlc.CreateDeferredOperationParams) (sqlc.DeferredOperation, error) {
+func (g *gateMaintenanceQuerier) CreateDeferredOperation(_ context.Context, arg sqlc.CreateDeferredOperationParams) (sqlc.DeferredOperation, error) {
 	g.calls++
 	if g.createErr != nil {
 		return sqlc.DeferredOperation{}, g.createErr
 	}
+	g.createdRow.WindowID = arg.WindowID
+	g.createdRow.OperationType = arg.OperationType
+	g.createdRow.OperationSpec = arg.OperationSpec
+	g.createdRow.TargetClusterID = arg.TargetClusterID
+	g.createdRow.TargetProjectID = arg.TargetProjectID
+	g.createdRow.DeferredUntil = arg.DeferredUntil
+	g.createdRow.ExpiresAt = arg.ExpiresAt
+	g.createdRow.RequestedBy = arg.RequestedBy
 	return g.createdRow, nil
 }
 func (g *gateMaintenanceQuerier) CreateDeferredOperationIdempotent(_ context.Context, arg sqlc.CreateDeferredOperationIdempotentParams) (sqlc.DeferredOperation, error) {
@@ -379,11 +411,24 @@ func (g *gateMaintenanceQuerier) CreateAuditLogV1(_ context.Context, _ sqlc.Crea
 	g.auditCalls++
 	return nil
 }
+func (g *gateMaintenanceQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	if g.outboxErr != nil {
+		return sqlc.AuditOutbox{}, g.outboxErr
+	}
+	g.outboxCalls++
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
+}
 
 // gateEvalQuerier is a tiny WindowQuerier for the maintenance.Evaluator
 // so the gate sees real windows during the test.
 type gateEvalQuerier struct {
 	rows []sqlc.MaintenanceWindow
+}
+
+type gateTestCipher struct{}
+
+func (gateTestCipher) Encrypt(plaintext string) (string, error) {
+	return base64.RawURLEncoding.EncodeToString([]byte(plaintext)), nil
 }
 
 func (g *gateEvalQuerier) ListEnabledMaintenanceWindows(_ context.Context) ([]sqlc.MaintenanceWindow, error) {
@@ -406,7 +451,7 @@ func TestRefuse_Returns409(t *testing.T) {
 	}
 	ev := maintenance.NewEvaluator(&gateEvalQuerier{rows: []sqlc.MaintenanceWindow{row}})
 	q := &gateMaintenanceQuerier{}
-	gate := NewMaintenanceGate(ev, q)
+	gate := NewMaintenanceGate(ev, q, gateTestCipher{})
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/abc/", nil)
@@ -455,15 +500,15 @@ func TestDefer_Returns202AndInserts(t *testing.T) {
 	q := &gateMaintenanceQuerier{
 		createdRow: sqlc.DeferredOperation{ID: uuid.New(), Status: "pending"},
 	}
-	gate := NewMaintenanceGate(ev, q)
+	gate := NewMaintenanceGate(ev, q, gateTestCipher{})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/abc/", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/abc/template/", strings.NewReader(`{"secret":"top-secret"}`))
 	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
 		ID: uuid.New().String(), AuthMethod: "jwt",
 	})
 	req = req.WithContext(ctx)
-	blocked := EnforceMaintenanceWindow(w, req, gate, "cluster.delete", nil, pgtypeUUIDZero(), pgtypeUUIDZero())
+	blocked := EnforceMaintenanceWindow(w, req, gate, "cluster_template.apply", nil, pgtypeUUIDZero(), pgtypeUUIDZero())
 	if !blocked {
 		t.Fatalf("expected blocked=true (deferred)")
 	}
@@ -472,6 +517,13 @@ func TestDefer_Returns202AndInserts(t *testing.T) {
 	}
 	if q.calls != 1 {
 		t.Fatalf("expected one CreateDeferredOperation call, got %d", q.calls)
+	}
+	if bytes.Contains(q.createdRow.OperationSpec, []byte("top-secret")) {
+		t.Fatal("deferred operation persisted a request secret in plaintext")
+	}
+	var envelope EncryptedDeferredOpSpec
+	if err := json.Unmarshal(q.createdRow.OperationSpec, &envelope); err != nil || envelope.SchemaVersion != 1 || envelope.Ciphertext == "" {
+		t.Fatalf("operation_spec is not a versioned encrypted envelope: %s", q.createdRow.OperationSpec)
 	}
 }
 
@@ -564,7 +616,7 @@ func TestGate_DeferInsertFailure_FallsBackTo409(t *testing.T) {
 	}
 	ev := maintenance.NewEvaluator(&gateEvalQuerier{rows: []sqlc.MaintenanceWindow{row}})
 	q := &gateMaintenanceQuerier{createErr: errors.New("disk full")}
-	gate := NewMaintenanceGate(ev, q)
+	gate := NewMaintenanceGate(ev, q, gateTestCipher{})
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/", nil)
 	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{

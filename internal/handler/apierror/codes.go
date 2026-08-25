@@ -745,6 +745,10 @@ const (
 	// StatusError indicates a status error condition.
 	StatusError Code = "status_error"
 
+	// AuditUnavailable means mandatory compliance evidence could not be
+	// persisted, so the sensitive operation was rejected before side effects.
+	AuditUnavailable Code = "audit_unavailable"
+
 	// SubscribeError indicates a subscribe error condition.
 	SubscribeError Code = "subscribe_error"
 

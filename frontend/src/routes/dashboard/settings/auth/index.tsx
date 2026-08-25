@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/auth/ — overview page.
  *
@@ -160,7 +160,9 @@ function AuthOverviewPage() {
             <ActionButton
               intent="primary"
               icon={<ShieldCheck className="h-4 w-4" />}
-              onClick={() => router.push("/dashboard/settings/auth/register-sso")}
+              onClick={() =>
+                router.push("/dashboard/settings/auth/register-sso")
+              }
             >
               Register Dex as SSO
             </ActionButton>
@@ -200,7 +202,9 @@ function AuthOverviewPage() {
             <ActionButton
               intent="primary"
               icon={<Plus className="h-4 w-4" />}
-              onClick={() => router.push("/dashboard/settings/auth/connectors/new")}
+              onClick={() =>
+                router.push("/dashboard/settings/auth/connectors/new")
+              }
             >
               Add Connector
             </ActionButton>
@@ -356,6 +360,6 @@ function DexInstallCard({
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/auth/')({
+export const Route = createFileRoute("/dashboard/settings/auth/")({
   component: AuthOverviewPage,
 });

@@ -31,17 +31,24 @@ function exists(file) {
 }
 
 function walk(dir, include) {
-  // Prefer git-tracked files so CI and dirty worktrees produce the same
-  // inventory. Fall back to a directory walk when git is unavailable.
+  // Use tracked plus non-ignored untracked files. A generated inventory that
+  // ignores newly added source is falsely green until the file is staged, so
+  // local verification must see the same candidate code the compiler sees.
+  // CI has no untracked files, making the resulting set identical there.
   try {
     const prefix = rel(dir) || '.';
-    const listed = execFileSync('git', ['ls-files', '-z', '--', prefix], {
-      cwd: repoRoot,
-      encoding: 'buffer',
-    })
-      .toString('utf8')
-      .split('\0')
-      .filter(Boolean)
+    const gitFiles = (gitArgs) =>
+      execFileSync('git', [...gitArgs, '-z', '--', prefix], {
+        cwd: repoRoot,
+        encoding: 'buffer',
+      })
+        .toString('utf8')
+        .split('\0')
+        .filter(Boolean);
+    const listed = [...new Set([
+      ...gitFiles(['ls-files']),
+      ...gitFiles(['ls-files', '--others', '--exclude-standard']),
+    ])]
       .map((file) => path.join(repoRoot, file))
       .filter((file) => exists(file) && (!include || include(file)))
       .sort();
@@ -194,33 +201,25 @@ const SHADOWED_GENERATED_SCHEMAS = new Set([
   'frontend/src/lib/api/project-detail.ts:CloudCredential',
   'frontend/src/lib/api/project-detail.ts:CreateProjectCatalogRequest',
   'frontend/src/lib/api/project-detail.ts:ProjectCatalog',
-  'frontend/src/lib/api/settings.ts:ApplyNetworkPolicyRequest',
-  'frontend/src/lib/api/settings.ts:WebhookDelivery',
-  'frontend/src/lib/api/settings.ts:WebhookSubscription',
-  'frontend/src/lib/api/vault.ts:VaultConnection',
-  'frontend/src/lib/api/vault.ts:VaultTestResult',
+  'frontend/src/lib/api/settings-network-policy-templates.ts:ApplyNetworkPolicyRequest',
   'frontend/src/routes/dashboard/clusters/$id/workloads/index.tsx:Workload',
-  'frontend/src/types/index.ts:AgentLifecycleOperation',
-  'frontend/src/types/index.ts:AgentLifecycleOperationsResponse',
-  'frontend/src/types/index.ts:AgentUpgradeOperationResponse',
-  'frontend/src/types/index.ts:AgentUpgradePlanRequest',
-  'frontend/src/types/index.ts:AuditLogEntry',
-  'frontend/src/types/index.ts:Cluster',
-  'frontend/src/types/index.ts:ClusterEvent',
-  'frontend/src/types/index.ts:DexConnector',
-  'frontend/src/types/index.ts:DexSettings',
-  'frontend/src/types/index.ts:HelmChart',
-  'frontend/src/types/index.ts:HelmChartVersion',
-  'frontend/src/types/index.ts:HelmRepository',
-  'frontend/src/types/index.ts:InhibitionMatcher',
-  'frontend/src/types/index.ts:InstalledChart',
-  'frontend/src/types/index.ts:Namespace',
-  'frontend/src/types/index.ts:NodeDetail',
-  'frontend/src/types/index.ts:Pod',
-  'frontend/src/types/index.ts:Project',
-  'frontend/src/types/index.ts:TestStorageResult',
-  'frontend/src/types/index.ts:User',
-  'frontend/src/types/index.ts:Workload',
+  'frontend/src/types/clusters.ts:AgentLifecycleOperation',
+  'frontend/src/types/clusters.ts:AgentLifecycleOperationsResponse',
+  'frontend/src/types/clusters.ts:AgentUpgradeOperationResponse',
+  'frontend/src/types/clusters.ts:AgentUpgradePlanRequest',
+  'frontend/src/types/metrics-settings.ts:AuditLogEntry',
+  'frontend/src/types/clusters.ts:ClusterEvent',
+  'frontend/src/types/catalog.ts:HelmChart',
+  'frontend/src/types/catalog.ts:HelmChartVersion',
+  'frontend/src/types/catalog.ts:HelmRepository',
+  'frontend/src/types/catalog.ts:InstalledChart',
+  'frontend/src/types/workloads-projects.ts:Namespace',
+  'frontend/src/types/clusters.ts:NodeDetail',
+  'frontend/src/types/workloads-projects.ts:Pod',
+  'frontend/src/types/workloads-projects.ts:Project',
+  'frontend/src/types/velero.ts:TestStorageResult',
+  'frontend/src/types/identity-rbac.ts:User',
+  'frontend/src/types/workloads-projects.ts:Workload',
 ]);
 
 // Order-insensitive word key for an identifier: `DrainNodeRequest` and
@@ -239,8 +238,10 @@ function identifierWordKey(name) {
 // spaces of indent; nested properties are deeper and quoted.
 function generatedSchemasByWordKey() {
   const source = read(path.join(repoRoot, GENERATED_TYPES_FILE));
+  const operationsStart = source.indexOf('export interface OpenAPIOperations');
+  const componentSource = operationsStart >= 0 ? source.slice(0, operationsStart) : source;
   const byWordKey = new Map();
-  for (const match of source.matchAll(/^ {4}([A-Za-z][A-Za-z0-9_]*):/gm)) {
+  for (const match of componentSource.matchAll(/^ {4}([A-Za-z][A-Za-z0-9_]*):/gm)) {
     const key = identifierWordKey(match[1]);
     byWordKey.set(key, [...(byWordKey.get(key) ?? []), match[1]]);
   }
@@ -498,7 +499,8 @@ function resolveImportToComponentKey(fromFile, specifier) {
 function componentImportCandidates(files) {
   const componentFiles = walk(path.join(repoRoot, 'frontend/src/components'), (file) =>
     ['.ts', '.tsx'].includes(path.extname(file)) &&
-    !rel(file).includes('/__tests__/'),
+    !rel(file).includes('/__tests__/') &&
+    !/\.(?:test|spec)\.(?:ts|tsx)$/.test(rel(file)),
   );
   const imported = new Set();
   for (const file of files) {

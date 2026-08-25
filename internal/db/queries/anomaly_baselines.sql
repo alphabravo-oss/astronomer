@@ -12,6 +12,15 @@ FROM anomaly_baselines
 ORDER BY updated_at DESC
 LIMIT $1 OFFSET $2;
 
+-- name: ListAnomalyBaselinesForScopes :many
+SELECT id, cluster_id, metric_name, window_seconds, sample_count, mean, stddev,
+       min_value, max_value, p50, p95, p99, last_value, last_value_at,
+       recent_samples, updated_at
+FROM anomaly_baselines
+WHERE cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
+ORDER BY updated_at DESC, id DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
 -- name: ListAnomalyBaselinesByCluster :many
 SELECT id, cluster_id, metric_name, window_seconds, sample_count, mean, stddev,
        min_value, max_value, p50, p95, p99, last_value, last_value_at,
@@ -63,3 +72,7 @@ RETURNING id, cluster_id, metric_name, window_seconds, sample_count, mean, stdde
 
 -- name: CountAnomalyBaselines :one
 SELECT count(*) FROM anomaly_baselines;
+
+-- name: CountAnomalyBaselinesForScopes :one
+SELECT count(*) FROM anomaly_baselines
+WHERE cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[]);

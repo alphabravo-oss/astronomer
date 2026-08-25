@@ -1,19 +1,19 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
-import { ArrowRight, ExternalLink, Server } from 'lucide-react';
-import { useClusters } from '@/lib/hooks';
-import { Link } from '@/lib/link';
-import { useRouter, useSearchParams } from '@/lib/navigation';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { formatPercentage } from '@/lib/utils';
-import type { Cluster } from '@/types';
-import { LoadingState } from '@/components/ui/empty-state';
-import { getSharedGrafanaStatus } from '@/lib/api/monitoring-stack';
-import { queryKeys } from '@/lib/query-keys';
-import { fleetGrafanaOpenURL } from '@/components/monitoring/stack-spec';
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { ArrowRight, ExternalLink, Server } from "lucide-react";
+import { useClusters } from "@/lib/hooks";
+import { Link } from "@/lib/link";
+import { useRouter, useSearchParams } from "@/lib/navigation";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { formatPercentage } from "@/lib/utils";
+import type { Cluster } from "@/types";
+import { LoadingState } from "@/components/ui/empty-state";
+import { getSharedGrafanaStatus } from "@/lib/api/monitoring-stack";
+import { queryKeys } from "@/lib/query-keys";
+import { fleetGrafanaOpenURL } from "@/components/monitoring/stack-spec";
 
 function clusterMetricsPath(clusterId: string, range?: string | null): string {
   const base = `/dashboard/clusters/${clusterId}/metrics`;
@@ -23,12 +23,17 @@ function clusterMetricsPath(clusterId: string, range?: string | null): string {
 function MonitoringFleetPage() {
   const router = useRouter();
   const search = useSearchParams();
-  const clusterId = search.get('cluster');
-  const range = search.get('range');
-  const { data: clustersData, isLoading, isError, refetch } = useClusters({ pageSize: 100 });
+  const clusterId = search.get("cluster");
+  const range = search.get("range");
+  const {
+    data: clustersData,
+    isLoading,
+    isError,
+    refetch,
+  } = useClusters({ pageSize: 100 });
   const clusters = useMemo(() => clustersData?.data ?? [], [clustersData]);
   const grafanaQuery = useQuery({
-    queryKey: queryKeys.monitoringStack.status('grafana'),
+    queryKey: queryKeys.monitoringStack.status("grafana"),
     queryFn: getSharedGrafanaStatus,
   });
   const grafanaOpenURL = fleetGrafanaOpenURL(grafanaQuery.data);
@@ -40,25 +45,27 @@ function MonitoringFleetPage() {
 
   const columns: Column<Cluster>[] = [
     {
-      key: 'name',
-      header: 'Cluster',
+      key: "name",
+      header: "Cluster",
       accessor: (row) => (
         <div className="min-w-0">
-          <p className="font-medium text-foreground truncate">{row.displayName || row.name}</p>
+          <p className="font-medium text-foreground truncate">
+            {row.displayName || row.name}
+          </p>
           <p className="text-xs text-muted-foreground truncate">
-            {row.environment || '—'} {row.region ? `· ${row.region}` : ''}
+            {row.environment || "—"} {row.region ? `· ${row.region}` : ""}
           </p>
         </div>
       ),
     },
     {
-      key: 'status',
-      header: 'Status',
+      key: "status",
+      header: "Status",
       accessor: (row) => <StatusBadge status={row.status} />,
     },
     {
-      key: 'cpu',
-      header: 'CPU',
+      key: "cpu",
+      header: "CPU",
       accessor: (row) => (
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatPercentage(row.cpuPercentage, 0)}
@@ -67,8 +74,8 @@ function MonitoringFleetPage() {
       sortAccessor: (row) => row.cpuPercentage,
     },
     {
-      key: 'memory',
-      header: 'Memory',
+      key: "memory",
+      header: "Memory",
       accessor: (row) => (
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatPercentage(row.memoryPercentage, 0)}
@@ -77,17 +84,19 @@ function MonitoringFleetPage() {
       sortAccessor: (row) => row.memoryPercentage,
     },
     {
-      key: 'pods',
-      header: 'Pods',
+      key: "pods",
+      header: "Pods",
       accessor: (row) => (
-        <span className="text-xs tabular-nums text-muted-foreground">{row.podCount}</span>
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {row.podCount}
+        </span>
       ),
       sortAccessor: (row) => row.podCount,
-      align: 'center',
+      align: "center",
     },
     {
-      key: 'open',
-      header: '',
+      key: "open",
+      header: "",
       accessor: (row) => (
         <Link
           href={clusterMetricsPath(row.id)}
@@ -98,7 +107,7 @@ function MonitoringFleetPage() {
         </Link>
       ),
       sortable: false,
-      align: 'right',
+      align: "right",
     },
   ];
 
@@ -109,7 +118,7 @@ function MonitoringFleetPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Fleet metrics"
+        title="Shared metrics"
         description="Open a cluster to see dashboards, node utilization, and the Prometheus stack for that environment."
         actions={
           grafanaOpenURL ? (
@@ -120,7 +129,7 @@ function MonitoringFleetPage() {
               className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-accent"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Open fleet Grafana
+              Open shared Grafana
             </a>
           ) : null
         }
@@ -149,6 +158,6 @@ function MonitoringFleetPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/monitoring/')({
+export const Route = createFileRoute("/dashboard/monitoring/")({
   component: MonitoringFleetPage,
 });

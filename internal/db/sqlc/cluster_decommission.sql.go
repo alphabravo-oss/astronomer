@@ -14,6 +14,7 @@ import (
 )
 
 const archiveAndPurgeAuditLogsForCluster = `-- name: ArchiveAndPurgeAuditLogsForCluster :execrows
+
 WITH to_archive AS (
     SELECT
         id, created_at, schema_version, user_id, actor_auth_method,
@@ -47,6 +48,12 @@ USING to_archive ta
 WHERE al.id = ta.id AND al.created_at = ta.created_at
 `
 
+// Audit archive operations.
+//
+// The archive_audit phase uses only the atomic archive-and-purge statement
+// below. The former split INSERT/DELETE queries were removed because exposing
+// either half made it possible to delete a different snapshot than the one
+// copied into the archive.
 // Atomic archive-then-delete used by the decommission archive_audit phase.
 //
 // A single statement so both halves see ONE snapshot: to_archive pins the exact
@@ -61,50 +68,6 @@ WHERE al.id = ta.id AND al.created_at = ta.created_at
 // also produces).
 func (q *Queries) ArchiveAndPurgeAuditLogsForCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, archiveAndPurgeAuditLogsForCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const archiveAuditLogsForCluster = `-- name: ArchiveAuditLogsForCluster :execrows
-
-INSERT INTO audit_archive (
-    id, created_at, schema_version, user_id, actor_auth_method,
-    action, resource_type, resource_id, resource_name,
-    http_method, path, status_code, duration_ms, request_id,
-    ip_address, user_agent, detail, source, correlation_id,
-    archived_cluster_id, archived_cluster_name
-)
-SELECT
-    id, created_at, schema_version, user_id, actor_auth_method,
-    action, resource_type, resource_id, resource_name,
-    http_method, path, status_code, duration_ms, request_id,
-    ip_address, user_agent, detail, source, correlation_id,
-    $1::uuid,
-    COALESCE((SELECT COALESCE(NULLIF(c.display_name, ''), c.name) FROM clusters c WHERE c.id = $1::uuid), '')
-FROM audit_log
-WHERE
-    (resource_type = 'cluster' AND resource_id = $2::text)
-    OR (detail ->> 'cluster_id') = $2::text
-ON CONFLICT (id, created_at) DO NOTHING
-`
-
-type ArchiveAuditLogsForClusterParams struct {
-	ClusterID     uuid.UUID `json:"cluster_id"`
-	ClusterIDText string    `json:"cluster_id_text"`
-}
-
-// Audit archive operations.
-//
-// ArchiveAuditLogsForCluster is the bulk INSERT … SELECT used during the
-// archive_audit phase. The cluster id is looked up in two places: resource_id
-// (when the row was emitted with resource_type='cluster') and the
-// detail->>'cluster_id' field (when an unrelated resource row tagged itself
-// with the cluster). The detail extraction uses ->> so it's a text comparison
-// against the cluster_id as a string.
-func (q *Queries) ArchiveAuditLogsForCluster(ctx context.Context, arg ArchiveAuditLogsForClusterParams) (int64, error) {
-	result, err := q.db.Exec(ctx, archiveAuditLogsForCluster, arg.ClusterID, arg.ClusterIDText)
 	if err != nil {
 		return 0, err
 	}
@@ -204,23 +167,6 @@ DELETE FROM alert_silences WHERE cluster_id = $1::uuid
 
 func (q *Queries) DeleteAlertSilencesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteAlertSilencesByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteAuditLogsForCluster = `-- name: DeleteAuditLogsForCluster :execrows
-DELETE FROM audit_log
-WHERE
-    (resource_type = 'cluster' AND resource_id = $1::text)
-    OR (detail ->> 'cluster_id') = $1::text
-`
-
-// Run AFTER ArchiveAuditLogsForCluster; removes the now-archived rows from
-// the live audit_log partition tree.
-func (q *Queries) DeleteAuditLogsForCluster(ctx context.Context, clusterIDText string) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteAuditLogsForCluster, clusterIDText)
 	if err != nil {
 		return 0, err
 	}

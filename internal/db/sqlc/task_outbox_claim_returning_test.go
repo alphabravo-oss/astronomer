@@ -93,3 +93,21 @@ func TestTaskOutboxColumnListsAgree(t *testing.T) {
 		}
 	}
 }
+
+func TestAdministrativeTaskOutboxRetrySerializesAndResetsDeliveryBudget(t *testing.T) {
+	if !strings.Contains(getTaskOutboxForUpdate, "FOR UPDATE") {
+		t.Fatalf("administrative retry must lock the selected row:\n%s", getTaskOutboxForUpdate)
+	}
+	for _, clause := range []string{
+		"status = 'pending'",
+		"attempt_count = 0",
+		"locked_until = NULL",
+		"delivered_at = NULL",
+		"last_error = ''",
+		"status <> 'delivered'",
+	} {
+		if !strings.Contains(retryTaskOutbox, clause) {
+			t.Errorf("retry statement missing %q:\n%s", clause, retryTaskOutbox)
+		}
+	}
+}

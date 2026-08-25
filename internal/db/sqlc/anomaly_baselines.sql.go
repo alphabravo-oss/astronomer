@@ -24,6 +24,18 @@ func (q *Queries) CountAnomalyBaselines(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countAnomalyBaselinesForScopes = `-- name: CountAnomalyBaselinesForScopes :one
+SELECT count(*) FROM anomaly_baselines
+WHERE cluster_id = ANY($1::uuid[])
+`
+
+func (q *Queries) CountAnomalyBaselinesForScopes(ctx context.Context, clusterIds []uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countAnomalyBaselinesForScopes, clusterIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getAnomalyBaseline = `-- name: GetAnomalyBaseline :one
 SELECT id, cluster_id, metric_name, window_seconds, sample_count, mean, stddev,
        min_value, max_value, p50, p95, p99, last_value, last_value_at,
@@ -162,6 +174,59 @@ ORDER BY metric_name ASC
 
 func (q *Queries) ListAnomalyBaselinesByCluster(ctx context.Context, clusterID uuid.UUID) ([]AnomalyBaseline, error) {
 	rows, err := q.db.Query(ctx, listAnomalyBaselinesByCluster, clusterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AnomalyBaseline{}
+	for rows.Next() {
+		var i AnomalyBaseline
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.MetricName,
+			&i.WindowSeconds,
+			&i.SampleCount,
+			&i.Mean,
+			&i.Stddev,
+			&i.MinValue,
+			&i.MaxValue,
+			&i.P50,
+			&i.P95,
+			&i.P99,
+			&i.LastValue,
+			&i.LastValueAt,
+			&i.RecentSamples,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAnomalyBaselinesForScopes = `-- name: ListAnomalyBaselinesForScopes :many
+SELECT id, cluster_id, metric_name, window_seconds, sample_count, mean, stddev,
+       min_value, max_value, p50, p95, p99, last_value, last_value_at,
+       recent_samples, updated_at
+FROM anomaly_baselines
+WHERE cluster_id = ANY($1::uuid[])
+ORDER BY updated_at DESC, id DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListAnomalyBaselinesForScopesParams struct {
+	ClusterIds  []uuid.UUID `json:"cluster_ids"`
+	QueryOffset int32       `json:"query_offset"`
+	QueryLimit  int32       `json:"query_limit"`
+}
+
+func (q *Queries) ListAnomalyBaselinesForScopes(ctx context.Context, arg ListAnomalyBaselinesForScopesParams) ([]AnomalyBaseline, error) {
+	rows, err := q.db.Query(ctx, listAnomalyBaselinesForScopes, arg.ClusterIds, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}

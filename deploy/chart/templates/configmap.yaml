@@ -55,6 +55,7 @@ data:
   DELIVERY_KUBERNETES_MAX_MINOR: {{ .Values.delivery.compatibility.kubernetes.maximumMinor | quote }}
   DELIVERY_AGENT_PROTOCOL_MIN: {{ .Values.delivery.compatibility.agentProtocol.minimum | quote }}
   DELIVERY_AGENT_PROTOCOL_MAX: {{ .Values.delivery.compatibility.agentProtocol.maximum | quote }}
+  RELEASE_COMPATIBILITY_JSON: {{ .Files.Get "files/release-compatibility.json" | quote }}
   DELIVERY_FLUX_VERSION: {{ .Values.delivery.compatibility.flux.version | quote }}
   DELIVERY_PUBLIC_REGISTRY: {{ .Values.delivery.artifacts.publicRegistry | quote }}
   DELIVERY_PRIVATE_REGISTRY: {{ .Values.delivery.artifacts.privateRegistry | quote }}
@@ -182,6 +183,7 @@ data:
   # Image + SA the server uses when reconciling per-destination management
   # backup CronJobs from Settings → Astronomer backup. Destinations live in
   # the DB; Helm S3 values are no longer required to turn dumps on.
+  MANAGEMENT_BACKUP_ENABLED: {{ .Values.managementBackup.enabled | quote }}
+  CRD_ENABLED: {{ .Values.crds.enabled | quote }}
   MANAGEMENT_BACKUP_IMAGE: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementBackup.image.repository "tag" .Values.managementBackup.image.tag "digest" .Values.managementBackup.image.digest "registry" .Values.managementBackup.image.registry "fallback" .Values.image.registry) | quote }}
   MANAGEMENT_BACKUP_SERVICE_ACCOUNT: {{ include "astronomer.serviceAccountName" . | quote }}
-

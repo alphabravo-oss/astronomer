@@ -1,9 +1,13 @@
 // Route files are the eslint-exempted surface for direct router imports.
-import { useEffect } from 'react';
-import { createFileRoute, Outlet, type ErrorComponentProps } from '@tanstack/react-router';
-import { Link } from '@/lib/link';
-import { AlertTriangle, RotateCcw, Server } from 'lucide-react';
-import { StatePanel } from '@/components/ui/empty-state';
+import { useEffect } from "react";
+import {
+  createFileRoute,
+  Outlet,
+  type ErrorComponentProps,
+} from "@tanstack/react-router";
+import { Link } from "@/lib/link";
+import { AlertTriangle, RotateCcw, Server } from "lucide-react";
+import { StatePanel } from "@/components/ui/empty-state";
 
 /**
  * Thin layout for the cluster subtree: its only job is scoping the error
@@ -13,24 +17,33 @@ import { StatePanel } from '@/components/ui/empty-state';
  */
 function ClusterError({ error, reset }: ErrorComponentProps) {
   useEffect(() => {
-    console.error('Cluster page render error:', error);
+    console.error("Cluster page render error:", error);
   }, [error]);
 
   // Next.js attached a `digest` ref to server-thrown errors; keep reading it
   // defensively for anything that still tags one on.
-  const digest = 'digest' in error ? String((error as { digest?: string }).digest ?? '') : '';
+  const digest =
+    "digest" in error
+      ? String((error as { digest?: string }).digest ?? "")
+      : "";
 
   return (
-    <div data-testid="route-error-boundary" className="flex flex-col items-center">
+    <div
+      data-testid="route-error-boundary"
+      className="flex flex-col items-center"
+    >
       <StatePanel
         icon={AlertTriangle}
         tone="danger"
         title="This cluster view failed to load"
         description={
           <>
-            {error.message || 'An unexpected error occurred while rendering this cluster page.'}
+            {error.message ||
+              "An unexpected error occurred while rendering this cluster page."}
             {digest && (
-              <span className="mt-1 block font-mono text-xs opacity-70">ref: {digest}</span>
+              <span className="mt-1 block font-mono text-xs opacity-70">
+                ref: {digest}
+              </span>
             )}
           </>
         }
@@ -50,7 +63,7 @@ function ClusterError({ error, reset }: ErrorComponentProps) {
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id')({
+export const Route = createFileRoute("/dashboard/clusters/$id")({
   component: Outlet,
   errorComponent: ClusterError,
 });

@@ -147,7 +147,12 @@ describe("deliveryPageRowCount", () => {
   it("stops at the observed end of an unknown total", () => {
     expect(
       deliveryPageRowCount(
-        { data: Array.from({ length: 7 }), count: 7, next: null, totalKnown: false },
+        {
+          data: Array.from({ length: 7 }),
+          count: 7,
+          next: null,
+          totalKnown: false,
+        },
         3,
         25,
       ),

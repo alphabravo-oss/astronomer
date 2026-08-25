@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 /**
  * Account → Security page. Houses the TOTP enrollment / disable / recovery-codes
@@ -15,9 +15,9 @@ import { createFileRoute } from '@tanstack/react-router';
  * come down pre-rendered).
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toastApiError, toastSuccess } from '@/lib/toast';
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 import {
   Shield,
   ShieldCheck,
@@ -30,11 +30,11 @@ import {
   RefreshCw,
   Check,
   AlertTriangle,
-} from 'lucide-react';
-import { formatRelativeTime, cn, downloadBlob } from '@/lib/utils';
-import { useAppForm, useStore } from '@/lib/form';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { PageHeader, PageShell } from '@/components/ui/page';
+} from "lucide-react";
+import { formatRelativeTime, cn, downloadBlob } from "@/lib/utils";
+import { useAppForm, useStore } from "@/lib/form";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   getTotpStatus,
   startTotpEnrollment,
@@ -43,9 +43,9 @@ import {
   regenerateRecoveryCodes,
   type TotpStatus,
   type TotpEnrollStart,
-} from '@/lib/api/account-security';
+} from "@/lib/api/account-security";
 
-const TOTP_STATUS_KEY = ['account', 'security', 'totp', 'status'] as const;
+const TOTP_STATUS_KEY = ["account", "security", "totp", "status"] as const;
 
 function AccountSecurityPage() {
   const qc = useQueryClient();
@@ -130,7 +130,8 @@ function NotEnrolledCard({ onEnable }: { onEnable: () => void }) {
             Two-factor authentication is off
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Add a one-time-code authenticator app to protect your account from password leaks.
+            Add a one-time-code authenticator app to protect your account from
+            password leaks.
           </p>
           <button
             onClick={onEnable}
@@ -168,7 +169,7 @@ function EnrolledCard({
             <p className="text-sm text-muted-foreground mt-1">
               {status.lastUsedAt
                 ? `Last used ${formatRelativeTime(status.lastUsedAt)}.`
-                : 'Not used yet.'}
+                : "Not used yet."}
             </p>
             <button
               onClick={onDisable}
@@ -184,10 +185,12 @@ function EnrolledCard({
       <div className="rounded-lg border border-border bg-card p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h3 className="text-base font-semibold text-foreground">Recovery codes</h3>
+            <h3 className="text-base font-semibold text-foreground">
+              Recovery codes
+            </h3>
             <p className="text-sm text-muted-foreground mt-1">
-              {status.recoveryCodesRemaining} of 10 remaining. Use them if you lose access to your
-              authenticator.
+              {status.recoveryCodesRemaining} of 10 remaining. Use them if you
+              lose access to your authenticator.
             </p>
           </div>
           <button
@@ -207,18 +210,25 @@ function EnrolledCard({
 // Enrollment wizard
 // ------------------------------------------------------------------
 
-type WizardStep = 'scan' | 'verify' | 'codes';
+type WizardStep = "scan" | "verify" | "codes";
 
-function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [step, setStep] = useState<WizardStep>('scan');
+function EnrollmentWizard({
+  onClose,
+  onDone,
+}: {
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [step, setStep] = useState<WizardStep>("scan");
   const [enrollment, setEnrollment] = useState<TotpEnrollStart | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
 
   const startMut = useMutation({
-    mutationFn: startTotpEnrollment,
+    mutationFn: () => startTotpEnrollment(),
     onSuccess: (data) => setEnrollment(data),
-    onError: (err: Error) => toastApiError('', err, 'Failed to start enrollment'),
+    onError: (err: Error) =>
+      toastApiError("", err, "Failed to start enrollment"),
   });
 
   useEffect(() => {
@@ -231,30 +241,35 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
     <ModalShell onClose={onClose} title="Enable two-factor authentication">
       {/* Step indicator */}
       <div className="flex items-center gap-2 text-xs">
-        {(['scan', 'verify', 'codes'] as WizardStep[]).map((s, i) => (
+        {(["scan", "verify", "codes"] as WizardStep[]).map((s, i) => (
           <div key={s} className="flex items-center gap-2">
             <div
               className={cn(
-                'h-6 w-6 rounded-full flex items-center justify-center text-xs font-medium',
+                "h-6 w-6 rounded-full flex items-center justify-center text-xs font-medium",
                 step === s
-                  ? 'bg-primary text-primary-foreground'
-                  : (['scan', 'verify', 'codes'].indexOf(step) > i)
-                    ? 'bg-status-success/20 text-status-success'
-                    : 'bg-muted text-muted-foreground'
+                  ? "bg-primary text-primary-foreground"
+                  : ["scan", "verify", "codes"].indexOf(step) > i
+                    ? "bg-status-success/20 text-status-success"
+                    : "bg-muted text-muted-foreground",
               )}
             >
-              {(['scan', 'verify', 'codes'].indexOf(step) > i) ? <Check className="h-3 w-3" /> : i + 1}
+              {["scan", "verify", "codes"].indexOf(step) > i ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                i + 1
+              )}
             </div>
             {i < 2 && <div className="h-px w-8 bg-border" />}
           </div>
         ))}
       </div>
 
-      {step === 'scan' && (
+      {step === "scan" && (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Scan this QR code with your authenticator app (Google Authenticator, 1Password, Authy, …).
-            If you can&apos;t scan, type the secret in manually.
+            Scan this QR code with your authenticator app (Google Authenticator,
+            1Password, Authy, …). If you can&apos;t scan, type the secret in
+            manually.
           </p>
           {startMut.isPending || !enrollment ? (
             <div className="flex items-center justify-center h-48">
@@ -264,7 +279,7 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
             <div className="flex flex-col items-center gap-3">
               <div className="rounded-lg bg-white p-2 border border-border">
                 <img
-                  src={`data:image/png;base64,${enrollment.qrPngBase64}`}
+                  src={enrollment.qrDataUrl}
                   alt="TOTP QR code"
                   className="block [image-rendering:pixelated]"
                   width={256}
@@ -282,7 +297,7 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(enrollment.otpauthUrl);
-                      toastSuccess('Copied');
+                      toastSuccess("Copied");
                     }}
                     className="inline-flex items-center justify-center h-8 w-8 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-accent"
                     title="Copy"
@@ -301,7 +316,7 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
               Cancel
             </button>
             <button
-              onClick={() => setStep('verify')}
+              onClick={() => setStep("verify")}
               disabled={!enrollment}
               className="inline-flex items-center h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
             >
@@ -311,19 +326,20 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
         </div>
       )}
 
-      {step === 'verify' && enrollment && (
+      {step === "verify" && enrollment && (
         <VerifyStepForm
           sessionToken={enrollment.sessionToken}
-          onBack={() => setStep('scan')}
+          challenge={enrollment.challenge}
+          onBack={() => setStep("scan")}
           onCancel={onClose}
           onVerified={(codes) => {
             setRecoveryCodes(codes);
-            setStep('codes');
+            setStep("codes");
           }}
         />
       )}
 
-      {step === 'codes' && recoveryCodes && (
+      {step === "codes" && recoveryCodes && (
         <RecoveryCodesBlock
           codes={recoveryCodes}
           acknowledged={acknowledged}
@@ -338,26 +354,30 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
 /** Wizard step 2 — its own small form (one per step, not a mega-form). */
 function VerifyStepForm({
   sessionToken,
+  challenge,
   onBack,
   onCancel,
   onVerified,
 }: {
   sessionToken: string;
+  challenge: string;
   onBack: () => void;
   onCancel: () => void;
   onVerified: (recoveryCodes: string[]) => void;
 }) {
   const confirmMut = useMutation({
-    mutationFn: (code: string) => confirmTotpEnrollment(sessionToken, code),
+    mutationFn: (code: string) =>
+      confirmTotpEnrollment(sessionToken, challenge, code),
     onSuccess: (data) => onVerified(data.recoveryCodes),
-    onError: (err: Error) => toastApiError('', err, 'Invalid code'),
+    onError: (err: Error) => toastApiError("", err, "Invalid code"),
   });
 
   const form = useAppForm({
-    defaultValues: { code: '' },
+    defaultValues: { code: "" },
     validators: {
       // Old check (disabled-button gate): a full 6-digit code — ported 1:1.
-      onSubmit: ({ value }) => (value.code.length !== 6 ? 'Enter the 6-digit code' : undefined),
+      onSubmit: ({ value }) =>
+        value.code.length !== 6 ? "Enter the 6-digit code" : undefined,
     },
     onSubmit: async ({ value }) => {
       try {
@@ -375,7 +395,13 @@ function VerifyStepForm({
         Enter the 6-digit code your authenticator app is showing right now.
       </p>
       <form.Field name="code">
-        {(field) => <CodeInput value={field.state.value} onChange={field.handleChange} autoFocus />}
+        {(field) => (
+          <CodeInput
+            value={field.state.value}
+            onChange={field.handleChange}
+            data-initial-focus
+          />
+        )}
       </form.Field>
       <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">
         <button
@@ -396,7 +422,9 @@ function VerifyStepForm({
             disabled={code.length !== 6 || confirmMut.isPending}
             className="inline-flex items-center gap-2 h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
           >
-            {confirmMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {confirmMut.isPending && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            )}
             Verify and continue
           </button>
         </div>
@@ -409,26 +437,33 @@ function VerifyStepForm({
 // Disable / Regenerate dialogs
 // ------------------------------------------------------------------
 
-function DisableDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+function DisableDialog({
+  onClose,
+  onDone,
+}: {
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const [showPassword, setShowPassword] = useState(false);
 
   const mut = useMutation({
-    mutationFn: (value: { password: string; code: string }) => disableTotp(value.password, value.code),
+    mutationFn: (value: { password: string; code: string }) =>
+      disableTotp(value.password, value.code),
     onSuccess: () => {
-      toastSuccess('Two-factor authentication disabled');
+      toastSuccess("Two-factor authentication disabled");
       onDone();
     },
-    onError: (err: Error) => toastApiError('', err, 'Could not disable 2FA'),
+    onError: (err: Error) => toastApiError("", err, "Could not disable 2FA"),
   });
 
   const form = useAppForm({
-    defaultValues: { password: '', code: '' },
+    defaultValues: { password: "", code: "" },
     validators: {
       // Old check (disabled-button gate): password present + full 6-digit
       // code — ported 1:1.
       onSubmit: ({ value }) =>
         !value.password || value.code.length !== 6
-          ? 'Enter your password and a current code'
+          ? "Enter your password and a current code"
           : undefined,
     },
     onSubmit: async ({ value }) => {
@@ -447,17 +482,24 @@ function DisableDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
         <div className="flex items-start gap-3 p-3 rounded-md bg-status-warning/10 border border-status-warning/30">
           <AlertTriangle className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
           <p className="text-xs text-status-warning">
-            Disabling 2FA removes a layer of protection from your account. You&apos;ll need to enter
-            your password and a current 6-digit code to confirm.
+            Disabling 2FA removes a layer of protection from your account.
+            You&apos;ll need to enter your password and a current 6-digit code
+            to confirm.
           </p>
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Password</label>
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-25a26509-455"
+          >
+            Password
+          </label>
           <form.Field name="password">
             {(field) => (
               <div className="relative">
                 <input
-                  type={showPassword ? 'text' : 'password'}
+                  id="field-25a26509-455"
+                  type={showPassword ? "text" : "password"}
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
@@ -469,18 +511,33 @@ function DisableDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
                   onClick={() => setShowPassword((v) => !v)}
                   className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
                   tabIndex={-1}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
             )}
           </form.Field>
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Current 6-digit code</label>
+          <label
+            htmlFor="totp-current-code"
+            className="text-sm font-medium text-foreground"
+          >
+            Current 6-digit code
+          </label>
           <form.Field name="code">
-            {(field) => <CodeInput value={field.state.value} onChange={field.handleChange} />}
+            {(field) => (
+              <CodeInput
+                id="totp-current-code"
+                value={field.state.value}
+                onChange={field.handleChange}
+              />
+            )}
           </form.Field>
         </div>
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
@@ -493,7 +550,7 @@ function DisableDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
           <button
             onClick={() => void form.handleSubmit()}
             disabled={!password || code.length !== 6 || mut.isPending}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded bg-status-error text-white text-sm font-medium hover:bg-status-error/90 disabled:opacity-50"
+            className="inline-flex items-center gap-2 h-9 px-4 rounded bg-status-error text-background text-sm font-medium hover:bg-status-error/90 disabled:opacity-50"
           >
             {mut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Disable 2FA
@@ -504,21 +561,29 @@ function DisableDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
   );
 }
 
-function RegenerateDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+function RegenerateDialog({
+  onClose,
+  onDone,
+}: {
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const [acknowledged, setAcknowledged] = useState(false);
   const [codes, setCodes] = useState<string[] | null>(null);
 
   const mut = useMutation({
     mutationFn: (code: string) => regenerateRecoveryCodes(code),
     onSuccess: (data) => setCodes(data.recoveryCodes),
-    onError: (err: Error) => toastApiError('', err, 'Could not regenerate codes'),
+    onError: (err: Error) =>
+      toastApiError("", err, "Could not regenerate codes"),
   });
 
   const form = useAppForm({
-    defaultValues: { code: '' },
+    defaultValues: { code: "" },
     validators: {
       // Old check (disabled-button gate): a full 6-digit code — ported 1:1.
-      onSubmit: ({ value }) => (value.code.length !== 6 ? 'Enter the 6-digit code' : undefined),
+      onSubmit: ({ value }) =>
+        value.code.length !== 6 ? "Enter the 6-digit code" : undefined,
     },
     onSubmit: async ({ value }) => {
       try {
@@ -542,11 +607,17 @@ function RegenerateDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Generating new codes invalidates any previous codes. Enter a current 6-digit code to
-            confirm.
+            Generating new codes invalidates any previous codes. Enter a current
+            6-digit code to confirm.
           </p>
           <form.Field name="code">
-            {(field) => <CodeInput value={field.state.value} onChange={field.handleChange} autoFocus />}
+            {(field) => (
+              <CodeInput
+                value={field.state.value}
+                onChange={field.handleChange}
+                data-initial-focus
+              />
+            )}
           </form.Field>
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
             <button
@@ -560,7 +631,9 @@ function RegenerateDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
               disabled={code.length !== 6 || mut.isPending}
               className="inline-flex items-center gap-2 h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
             >
-              {mut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {mut.isPending && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              )}
               Generate new codes
             </button>
           </div>
@@ -585,15 +658,19 @@ function RecoveryCodesBlock({
   onAcknowledge: (v: boolean) => void;
   onFinish: () => void;
 }) {
-  const codesText = useMemo(() => codes.join('\n'), [codes]);
+  const codesText = useMemo(() => codes.join("\n"), [codes]);
 
   const download = () => {
-    downloadBlob(codesText + '\n', 'astronomer-recovery-codes.txt', 'text/plain');
+    downloadBlob(
+      codesText + "\n",
+      "astronomer-recovery-codes.txt",
+      "text/plain",
+    );
   };
 
   const copy = () => {
     navigator.clipboard.writeText(codesText);
-    toastSuccess('Recovery codes copied to clipboard');
+    toastSuccess("Recovery codes copied to clipboard");
   };
 
   return (
@@ -601,8 +678,9 @@ function RecoveryCodesBlock({
       <div className="flex items-start gap-3 p-3 rounded-md bg-status-warning/10 border border-status-warning/30">
         <AlertTriangle className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
         <p className="text-xs text-status-warning">
-          Save these 10 single-use recovery codes somewhere safe. They will <strong>not</strong> be
-          shown again. Each one lets you log in once without your authenticator.
+          Save these 10 single-use recovery codes somewhere safe. They will{" "}
+          <strong>not</strong> be shown again. Each one lets you log in once
+          without your authenticator.
         </p>
       </div>
       <pre className="rounded-md border border-border bg-muted/40 p-4 text-sm font-mono text-foreground grid grid-cols-2 gap-x-6 gap-y-1 leading-6">
@@ -651,10 +729,12 @@ function RecoveryCodesBlock({
 // Not exported: route files should only export the Route so autoCodeSplitting
 // keeps the whole page body in the lazy chunk (no external consumers exist).
 function CodeInput({
+  id,
   value,
   onChange,
   autoFocus,
 }: {
+  id?: string;
   value: string;
   onChange: (v: string) => void;
   autoFocus?: boolean;
@@ -663,13 +743,14 @@ function CodeInput({
   // out of the box, and it still feels good with `inputMode=numeric`.
   return (
     <input
+      id={id}
       type="text"
       inputMode="numeric"
       pattern="[0-9]*"
       maxLength={6}
       value={value}
-      autoFocus={autoFocus}
-      onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
+      data-initial-focus={autoFocus}
+      onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
       placeholder="123 456"
       className="w-full h-12 px-3 rounded-md border border-border bg-background text-center text-2xl font-mono tracking-[0.4em] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
       autoComplete="one-time-code"
@@ -677,6 +758,6 @@ function CodeInput({
   );
 }
 
-export const Route = createFileRoute('/dashboard/account/security/')({
+export const Route = createFileRoute("/dashboard/account/security/")({
   component: AccountSecurityPage,
 });

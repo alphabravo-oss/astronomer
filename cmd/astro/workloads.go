@@ -65,7 +65,7 @@ func newWorkloadsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1ClustersClusterIdWorkloadsParams{}
+			params := &astroclient.GetClustersByClusterIdWorkloadsParams{}
 			if namespace != "" {
 				params.Namespace = &namespace
 			}
@@ -75,7 +75,7 @@ func newWorkloadsListCmd() *cobra.Command {
 			if search != "" {
 				params.Search = &search
 			}
-			resp, err := client.GetApiV1ClustersClusterIdWorkloadsWithResponse(cmd.Context(), clusterID, params)
+			resp, err := client.GetClustersByClusterIdWorkloadsWithResponse(cmd.Context(), clusterID, params)
 			if err != nil {
 				return err
 			}
@@ -112,7 +112,7 @@ func newWorkloadsGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersClusterIdWorkloadsKindNamespaceNameWithResponse(
+			resp, err := client.GetClustersByClusterIdWorkloadsByKindByNamespaceByNameWithResponse(
 				cmd.Context(), clusterID, args[1], args[2], args[3])
 			if err != nil {
 				return err
@@ -156,7 +156,7 @@ func newWorkloadsPodsCmd() *cobra.Command {
 			}
 
 			if len(args) == 4 {
-				resp, err := client.GetApiV1ClustersClusterIdWorkloadsKindNamespaceNamePodsWithResponse(
+				resp, err := client.GetClustersByClusterIdWorkloadsByKindByNamespaceByNamePodsWithResponse(
 					cmd.Context(), clusterID, args[1], args[2], args[3])
 				if err != nil {
 					return err
@@ -170,11 +170,11 @@ func newWorkloadsPodsCmd() *cobra.Command {
 				})
 			}
 
-			params := &astroclient.GetApiV1ClustersClusterIdPodsParams{}
+			params := &astroclient.GetClustersByClusterIdPodsParams{}
 			if namespace != "" {
 				params.Namespace = &namespace
 			}
-			resp, err := client.GetApiV1ClustersClusterIdPodsWithResponse(cmd.Context(), clusterID, params)
+			resp, err := client.GetClustersByClusterIdPodsWithResponse(cmd.Context(), clusterID, params)
 			if err != nil {
 				return err
 			}
@@ -222,8 +222,8 @@ func newWorkloadsDeleteCmd() *cobra.Command {
 					return fmt.Errorf("aborted")
 				}
 			}
-			resp, err := client.DeleteApiV1ClustersClusterIdWorkloadsKindNamespaceNameWithResponse(
-				cmd.Context(), clusterID, args[1], args[2], args[3])
+			resp, err := client.DeleteClustersByClusterIdWorkloadsByKindByNamespaceByNameWithResponse(
+				cmd.Context(), clusterID, args[1], args[2], args[3], &astroclient.DeleteClustersByClusterIdWorkloadsByKindByNamespaceByNameParams{IdempotencyKey: uuid.NewString()})
 			if err != nil {
 				return err
 			}
@@ -265,11 +265,11 @@ func newWorkloadsScaleCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PatchApiV1ClustersClusterIdWorkloadsKindNamespaceNameScaleJSONRequestBody{
+			body := astroclient.PatchClustersByClusterIdWorkloadsByKindByNamespaceByNameScaleJSONRequestBody{
 				Replicas: replicas,
 			}
-			resp, err := client.PatchApiV1ClustersClusterIdWorkloadsKindNamespaceNameScaleWithResponse(
-				cmd.Context(), clusterID, args[1], args[2], args[3], body)
+			resp, err := client.PatchClustersByClusterIdWorkloadsByKindByNamespaceByNameScaleWithResponse(
+				cmd.Context(), clusterID, args[1], args[2], args[3], &astroclient.PatchClustersByClusterIdWorkloadsByKindByNamespaceByNameScaleParams{IdempotencyKey: uuid.NewString()}, body)
 			if err != nil {
 				return err
 			}
@@ -304,8 +304,8 @@ func newWorkloadsRestartCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1ClustersClusterIdWorkloadsKindNamespaceNameRestartWithResponse(
-				cmd.Context(), clusterID, args[1], args[2], args[3])
+			resp, err := client.PostClustersByClusterIdWorkloadsByKindByNamespaceByNameRestartWithResponse(
+				cmd.Context(), clusterID, args[1], args[2], args[3], &astroclient.PostClustersByClusterIdWorkloadsByKindByNamespaceByNameRestartParams{IdempotencyKey: uuid.NewString()})
 			if err != nil {
 				return err
 			}
@@ -341,7 +341,7 @@ func newWorkloadsLogsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1WorkloadsPodsClusterIdNamespacePodLogsParams{}
+			params := &astroclient.GetWorkloadsPodsByClusterIdByNamespaceByPodLogsParams{}
 			if container != "" {
 				params.Container = &container
 			}
@@ -351,7 +351,7 @@ func newWorkloadsLogsCmd() *cobra.Command {
 			if cmd.Flags().Changed("since") {
 				params.SinceSeconds = &sinceSeconds
 			}
-			resp, err := client.GetApiV1WorkloadsPodsClusterIdNamespacePodLogsWithResponse(
+			resp, err := client.GetWorkloadsPodsByClusterIdByNamespaceByPodLogsWithResponse(
 				cmd.Context(), clusterID, args[1], args[2], params)
 			if err != nil {
 				return err
@@ -411,8 +411,9 @@ func newWorkloadsPodDeleteCmd() *cobra.Command {
 					return fmt.Errorf("aborted")
 				}
 			}
-			resp, err := client.DeleteApiV1WorkloadsPodsClusterIdNamespacePodWithResponse(
-				cmd.Context(), clusterID, args[1], args[2])
+			params := &astroclient.DeleteWorkloadsPodsByClusterIdByNamespaceByPodParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.DeleteWorkloadsPodsByClusterIdByNamespaceByPodWithResponse(
+				cmd.Context(), clusterID, args[1], args[2], params)
 			if err != nil {
 				return err
 			}
@@ -459,7 +460,7 @@ func newWorkloadsOperationsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1WorkloadsOperationsParams{}
+			params := &astroclient.GetWorkloadsOperationsParams{}
 			if status != "" {
 				params.Status = &status
 			}
@@ -475,7 +476,7 @@ func newWorkloadsOperationsListCmd() *cobra.Command {
 			if cmd.Flags().Changed("offset") {
 				params.Offset = &offset
 			}
-			resp, err := client.GetApiV1WorkloadsOperationsWithResponse(cmd.Context(), params)
+			resp, err := client.GetWorkloadsOperationsWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -510,7 +511,7 @@ func newWorkloadsOperationsGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1WorkloadsOperationsIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetWorkloadsOperationsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -539,7 +540,8 @@ func newWorkloadsOperationsRetryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1WorkloadsOperationsIdRetryWithResponse(cmd.Context(), id)
+			params := &astroclient.PostWorkloadsOperationsByIdRetryParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostWorkloadsOperationsByIdRetryWithResponse(cmd.Context(), id, params)
 			if err != nil {
 				return err
 			}
@@ -570,7 +572,7 @@ func newWorkloadsControllerStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1WorkloadsControllerStatusWithResponse(cmd.Context())
+			resp, err := client.GetWorkloadsControllerStatusWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}

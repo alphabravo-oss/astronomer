@@ -88,6 +88,7 @@ func (h *SCIMTokenAdminHandler) superuser(w http.ResponseWriter, r *http.Request
 	return ok
 }
 
+// openapi:request-operation postAdminScimTokens
 type createSCIMTokenRequest struct {
 	Name string `json:"name"`
 }

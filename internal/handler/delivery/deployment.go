@@ -10,8 +10,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop"
 	deliverydeployment "github.com/alphabravocompany/astronomer-go/internal/delivery/deployment"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type DeploymentQueries interface {
@@ -140,7 +142,8 @@ func (h *DeploymentHandler) action(w http.ResponseWriter, r *http.Request, actio
 		respondError(w, http.StatusPreconditionRequired, "if_match_required", err.Error())
 		return
 	}
-	if err := validateIdempotencyKey(r); err != nil {
+	key, err := requiredIdempotencyKey(r)
+	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
 		return
 	}
@@ -163,11 +166,20 @@ func (h *DeploymentHandler) action(w http.ResponseWriter, r *http.Request, actio
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery deployment controls are unavailable")
 		return
 	}
+	auditIntent := newAuditIntent(r, deliveryAuditEvent{
+		action: deploymentAuditAction(action), resourceType: "cluster_deployment", resourceID: deploymentID.String(),
+		status: http.StatusAccepted, detail: map[string]any{"project_id": projectID.String()},
+	}, "")
 	result, err := h.controller.Act(r.Context(), deliverydeployment.Request{
 		ProjectID: projectID, DeploymentID: deploymentID, ExpectedGeneration: expected,
-		Action: action, ReasonCode: request.ReasonCode,
+		Action: action, ActorID: middleware.AuthenticatedUserUUID(r.Context()), IdempotencyKey: key,
+		ReasonCode: request.ReasonCode, Audit: auditIntent,
 	})
 	if err != nil {
+		if errors.Is(err, asyncop.ErrConflict) {
+			respondError(w, http.StatusConflict, "idempotency_conflict", err.Error())
+			return
+		}
 		if errors.Is(err, deliverydeployment.ErrStaleGeneration) {
 			respondError(w, http.StatusPreconditionFailed, "stale_generation", err.Error())
 			return
@@ -175,16 +187,18 @@ func (h *DeploymentHandler) action(w http.ResponseWriter, r *http.Request, actio
 		respondDatabaseError(w, err)
 		return
 	}
-	setEntityTag(w, result.Deployment.DesiredGeneration)
-	events.PublishChanged(h.bus, "cluster_deployment", result.Deployment.ClusterID.String(), deploymentID.String(), map[string]any{"project_id": projectID.String(), "action": string(action)})
-	recordAudit(r, h.queries, deploymentAuditAction(action), "cluster_deployment", deploymentID.String(), "", map[string]any{
-		"project_id":         projectID.String(),
-		"cluster_id":         result.Deployment.ClusterID.String(),
-		"target_id":          result.Deployment.TargetID.String(),
-		"phase":              result.Deployment.Phase,
-		"desired_generation": result.Deployment.DesiredGeneration,
-	})
-	respondData(w, http.StatusAccepted, map[string]any{"deployment": result.Deployment, "event": result.Event})
+	if !result.Replayed {
+		setEntityTag(w, result.Deployment.DesiredGeneration)
+		events.PublishChanged(h.bus, "cluster_deployment", result.Deployment.ClusterID.String(), deploymentID.String(), map[string]any{"project_id": projectID.String(), "action": string(action)})
+	}
+	if !result.Replayed && !result.AuditPersisted {
+		recordAudit(r, h.queries, deploymentAuditAction(action), "cluster_deployment", deploymentID.String(), "", map[string]any{
+			"project_id": projectID.String(), "cluster_id": result.Deployment.ClusterID.String(),
+			"target_id": result.Deployment.TargetID.String(), "phase": result.Deployment.Phase,
+			"desired_generation": result.Deployment.DesiredGeneration,
+		})
+	}
+	respondAcceptedOperation(w, result.Receipt.StatusURL, result.Receipt)
 }
 
 func deploymentAuditAction(action deliverydeployment.Action) string {

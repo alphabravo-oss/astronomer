@@ -173,7 +173,7 @@ func (h *MonitoringHandler) sharedLokiPrecheck(ctx context.Context, req SharedLo
 	}
 	requested := req.Mode
 	if requested != "" && selected != "" && requested != selected {
-		if !(requested == sizerModeSingleBinary && selected == sizerModeSimpleScalable) {
+		if requested != sizerModeSingleBinary || selected != sizerModeSimpleScalable {
 			msg := "requested mode " + requested + " is not offered (sizer selected " + selected + ")"
 			return http.StatusPreconditionFailed, apierror.SizerFailed, msg, false
 		}
@@ -390,9 +390,17 @@ func (h *MonitoringHandler) updateSharedLokiMetadata(ctx context.Context, backen
 	if h.queries == nil {
 		return nil
 	}
+	if err := h.updateSharedLokiMetadataWith(ctx, h.queries, backend, req, status); err != nil {
+		return err
+	}
+	h.afterSharedLokiMetadataCommit(ctx, status)
+	return nil
+}
+
+func (h *MonitoringHandler) updateSharedLokiMetadataWith(ctx context.Context, q monitoringSharedMutationWriter, backend sqlc.MonitoringBackend, req SharedLokiRequest, status string) error {
 	// Precheck caches WAL/lastSizerVerdict on a later row than payload's
 	// snapshot. Re-read so persist cannot clobber those keys.
-	if live, err := h.queries.GetDefaultMonitoringBackend(ctx); err == nil {
+	if live, err := q.GetDefaultMonitoringBackend(ctx); err == nil {
 		backend = live
 	}
 	resolvedRollback := h.resolveAutoRollbackPolicy(backend, req.AutoRollbackOnFailure)
@@ -479,9 +487,11 @@ func (h *MonitoringHandler) updateSharedLokiMetadata(ctx context.Context, backen
 	if err := imonitoring.SealInto(&params, authCfg, h.monitoringSealer()); err != nil {
 		return err
 	}
-	if _, err = h.queries.UpsertDefaultMonitoringBackend(ctx, params); err != nil {
-		return err
-	}
+	_, err = q.UpsertDefaultMonitoringBackend(ctx, params)
+	return err
+}
+
+func (h *MonitoringHandler) afterSharedLokiMetadataCommit(ctx context.Context, status string) {
 	if status == "uninstalled" {
 		if h.systemOutputs != nil {
 			if err := h.systemOutputs.DisableSystemOutputsOnLokiUninstall(ctx); err != nil && h.log != nil {
@@ -492,7 +502,6 @@ func (h *MonitoringHandler) updateSharedLokiMetadata(ctx context.Context, backen
 	if status == "uninstalled" || status == "not_configured" {
 		_ = h.ReconcileLokiIngest(ctx)
 	}
-	return nil
 }
 
 func lokiDerivedURLs(release, ns string) (queryURL, authURL string) {

@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, type ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { useEffect, useRef, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
-type OverlayPlacement = 'center' | 'right';
+type OverlayPlacement = "center" | "right";
 
 interface OverlayShellProps {
   onClose: () => void;
@@ -15,29 +15,29 @@ interface OverlayShellProps {
 }
 
 const placementClass: Record<OverlayPlacement, string> = {
-  center: 'items-center justify-center',
-  right: 'justify-end',
+  center: "items-center justify-center",
+  right: "justify-end",
 };
 
 const focusableSelector = [
-  'a[href]',
-  'button:not([disabled])',
-  'textarea:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
+  "a[href]",
+  "button:not([disabled])",
+  "textarea:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
   '[tabindex]:not([tabindex="-1"])',
-].join(',');
+].join(",");
 
 function getFocusable(container: HTMLElement) {
-  return Array.from(container.querySelectorAll<HTMLElement>(focusableSelector)).filter(
-    (element) => !element.getAttribute('aria-hidden'),
-  );
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(focusableSelector),
+  ).filter((element) => !element.getAttribute("aria-hidden"));
 }
 
 export function OverlayShell({
   onClose,
   children,
-  placement = 'center',
+  placement = "center",
   rootClassName,
   backdropClassName,
   closeOnBackdrop = true,
@@ -45,7 +45,10 @@ export function OverlayShell({
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const previousActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousActive =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     const root = rootRef.current;
     if (!root) return;
 
@@ -54,10 +57,13 @@ export function OverlayShell({
       root.contains(document.activeElement) &&
       document.activeElement !== root;
     if (!alreadyFocused) {
-      const autoFocused = Array.from(root.querySelectorAll<HTMLElement>('input, textarea, select, button')).find(
-        (el) => el.autofocus,
+      // Native autofocus can move focus before the dialog and its focus trap
+      // are mounted. A managed marker lets the overlay establish focus in one
+      // deterministic effect, after semantics and restoration state exist.
+      const managedInitial = root.querySelector<HTMLElement>(
+        '[data-initial-focus="true"]',
       );
-      const focusTarget = autoFocused ?? getFocusable(root)[0] ?? root;
+      const focusTarget = managedInitial ?? getFocusable(root)[0] ?? root;
       focusTarget.focus({ preventScroll: true });
     }
 
@@ -70,11 +76,11 @@ export function OverlayShell({
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         onClose();
         return;
       }
-      if (e.key !== 'Tab') return;
+      if (e.key !== "Tab") return;
 
       const root = rootRef.current;
       if (!root) return;
@@ -90,7 +96,10 @@ export function OverlayShell({
       const last = focusable[focusable.length - 1];
       const active = document.activeElement;
 
-      if (e.shiftKey && (!active || active === first || !root.contains(active))) {
+      if (
+        e.shiftKey &&
+        (!active || active === first || !root.contains(active))
+      ) {
         e.preventDefault();
         last.focus({ preventScroll: true });
         return;
@@ -101,22 +110,29 @@ export function OverlayShell({
         first.focus({ preventScroll: true });
       }
     }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
   return (
     <div
       ref={rootRef}
       tabIndex={-1}
-      className={cn('fixed inset-0 z-overlay flex', placementClass[placement], rootClassName)}
+      className={cn(
+        "fixed inset-0 z-overlay flex",
+        placementClass[placement],
+        rootClassName,
+      )}
     >
       <button
         type="button"
         aria-label="Close overlay"
         aria-hidden="true"
         tabIndex={-1}
-        className={cn('absolute inset-0 border-0 bg-black/50 p-0 backdrop-blur-sm', backdropClassName)}
+        className={cn(
+          "absolute inset-0 border-0 bg-black/50 p-0 backdrop-blur-sm",
+          backdropClassName,
+        )}
         onClick={closeOnBackdrop ? onClose : undefined}
       />
       {children}

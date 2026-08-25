@@ -1,23 +1,23 @@
-import { useCreateSSOProvider } from '@/lib/hooks';
-import { useAppForm, useStore } from '@/lib/form';
-import { toastError } from '@/lib/toast';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { Select } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
+import { useCreateSSOProvider } from "@/lib/hooks/user-settings";
+import { useAppForm, useStore } from "@/lib/form";
+import { toastError } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 export function SSOModal({ onClose }: { onClose: () => void }) {
   const createSSOProvider = useCreateSSOProvider();
 
   const ssoForm = useAppForm({
     defaultValues: {
-      type: 'github' as 'github' | 'google' | 'oidc',
-      name: '',
-      clientId: '',
-      clientSecret: '',
-      metadataUrl: '',
-      allowedOrganizations: '',
+      type: "github" as "github" | "google" | "oidc",
+      name: "",
+      clientId: "",
+      clientSecret: "",
+      metadataUrl: "",
+      allowedOrganizations: "",
       autoCreateUsers: true,
     },
     validators: {
@@ -26,14 +26,14 @@ export function SSOModal({ onClose }: { onClose: () => void }) {
       // validator; same messages, same order.
       onSubmit: ({ value }) =>
         !value.name
-          ? 'Provider name is required'
+          ? "Provider name is required"
           : !value.clientId
-            ? 'Client ID is required'
+            ? "Client ID is required"
             : undefined,
     },
     // Same UX as before: the failed check surfaces as a toast, not inline.
     onSubmitInvalid: ({ formApi }) => {
-      const err = formApi.state.errors.find((e) => typeof e === 'string');
+      const err = formApi.state.errors.find((e) => typeof e === "string");
       if (err) toastError(err);
     },
     onSubmit: async ({ value }) => {
@@ -85,13 +85,22 @@ export function SSOModal({ onClose }: { onClose: () => void }) {
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <label htmlFor="sso-provider-type" className="text-sm font-medium text-foreground">Provider Type</label>
+          <label
+            htmlFor="sso-provider-type"
+            className="text-sm font-medium text-foreground"
+          >
+            Provider Type
+          </label>
           <ssoForm.Field name="type">
             {(field) => (
               <Select
                 id="sso-provider-type"
                 value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value as 'github' | 'google' | 'oidc')}
+                onChange={(e) =>
+                  field.handleChange(
+                    e.target.value as "github" | "google" | "oidc",
+                  )
+                }
                 onBlur={field.handleBlur}
               >
                 <option value="github">GitHub</option>
@@ -103,7 +112,12 @@ export function SSOModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="sso-provider-name" className="text-sm font-medium text-foreground">Provider Name</label>
+          <label
+            htmlFor="sso-provider-name"
+            className="text-sm font-medium text-foreground"
+          >
+            Provider Name
+          </label>
           <ssoForm.Field name="name">
             {(field) => (
               <Input
@@ -112,14 +126,19 @@ export function SSOModal({ onClose }: { onClose: () => void }) {
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
                 placeholder="e.g., Corporate GitHub"
-                autoFocus
+                data-initial-focus
               />
             )}
           </ssoForm.Field>
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="sso-client-id" className="text-sm font-medium text-foreground">Client ID</label>
+          <label
+            htmlFor="sso-client-id"
+            className="text-sm font-medium text-foreground"
+          >
+            Client ID
+          </label>
           <ssoForm.Field name="clientId">
             {(field) => (
               <Input
@@ -134,7 +153,12 @@ export function SSOModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="sso-client-secret" className="text-sm font-medium text-foreground">Client Secret</label>
+          <label
+            htmlFor="sso-client-secret"
+            className="text-sm font-medium text-foreground"
+          >
+            Client Secret
+          </label>
           <ssoForm.Field name="clientSecret">
             {(field) => (
               <Input
@@ -149,9 +173,14 @@ export function SSOModal({ onClose }: { onClose: () => void }) {
           </ssoForm.Field>
         </div>
 
-        {ssoType === 'oidc' && (
+        {ssoType === "oidc" && (
           <div className="space-y-1.5">
-            <label htmlFor="sso-discovery-url" className="text-sm font-medium text-foreground">Discovery URL</label>
+            <label
+              htmlFor="sso-discovery-url"
+              className="text-sm font-medium text-foreground"
+            >
+              Discovery URL
+            </label>
             <ssoForm.Field name="metadataUrl">
               {(field) => (
                 <Input
@@ -167,7 +196,12 @@ export function SSOModal({ onClose }: { onClose: () => void }) {
         )}
 
         <div className="space-y-1.5">
-          <label htmlFor="sso-allowed-orgs" className="text-sm font-medium text-foreground">Allowed Organizations</label>
+          <label
+            htmlFor="sso-allowed-orgs"
+            className="text-sm font-medium text-foreground"
+          >
+            Allowed Organizations
+          </label>
           <ssoForm.Field name="allowedOrganizations">
             {(field) => (
               <Input
@@ -183,8 +217,12 @@ export function SSOModal({ onClose }: { onClose: () => void }) {
 
         <div className="flex items-center justify-between p-3 rounded-lg border border-border">
           <div>
-            <p className="text-sm font-medium text-foreground">Auto-create Users</p>
-            <p className="text-xs text-muted-foreground">Automatically create accounts on first login</p>
+            <p className="text-sm font-medium text-foreground">
+              Auto-create Users
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Automatically create accounts on first login
+            </p>
           </div>
           <ssoForm.Field name="autoCreateUsers">
             {(field) => (

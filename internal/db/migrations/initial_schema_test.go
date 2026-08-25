@@ -65,6 +65,22 @@ func TestCanonicalInitialSchemaContainsFluxDeliveryAndNoLegacyDeliveryTables(t *
 	}
 }
 
+func TestCanonicalInitialSchemaDoesNotSeedLegacyPlatformBaselineTemplate(t *testing.T) {
+	up := readMigration(t, "001_initial.up.sql")
+	for _, forbidden := range []string{
+		"9c13ee16-6c2d-4624-adab-bca25cb351f5",
+		"'Platform baseline'",
+	} {
+		if strings.Contains(up, forbidden) {
+			t.Errorf("canonical migration still contains legacy platform baseline seed %q", forbidden)
+		}
+	}
+	const nullDefault = "INSERT INTO public.platform_configuration (id, server_url, platform_name, telemetry_enabled, bootstrapped_at, instance_id, default_cluster_template_id) VALUES (1, '', 'Astronomer', false, NULL, 'db97a1ae-a892-43ff-9f6e-6472149bd900', NULL);"
+	if !strings.Contains(up, nullDefault) {
+		t.Fatal("fresh platform_configuration must leave default_cluster_template_id NULL")
+	}
+}
+
 func TestCanonicalTeardownIsScoped(t *testing.T) {
 	down := readMigration(t, "001_initial.down.sql")
 	for _, forbidden := range []string{"DROP SCHEMA", "DROP DATABASE", "DROP OWNED", "REASSIGN OWNED"} {

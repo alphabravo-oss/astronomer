@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/smtp — SMTP configuration + recent sent-email audit.
  *
@@ -8,42 +8,60 @@ import { createFileRoute } from '@tanstack/react-router';
  * before sending the PUT — meaning operators only rotate the password if
  * they actually type a new value.
  */
-import { useEffect, useState } from 'react';
-import { Link } from '@/lib/link';
-import { ArrowLeft, Loader2, Mail, Pencil, Plus, Save, Send } from 'lucide-react';
-import { toastError } from '@/lib/toast';
-import { formatRelativeTime } from '@/lib/utils';
-import { useAppForm } from '@/lib/form';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { useEffect, useState } from "react";
+import { Link } from "@/lib/link";
+import {
+  ArrowLeft,
+  Loader2,
+  Mail,
+  Pencil,
+  Plus,
+  Save,
+  Send,
+} from "lucide-react";
+import { toastError } from "@/lib/toast";
+import { formatRelativeTime } from "@/lib/utils";
+import { useAppForm } from "@/lib/form";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import {
   useSentEmails,
   useSmtpConfig,
   useTestSmtp,
   useUpdateSmtpConfig,
-} from '@/components/settings/hooks';
-import { SMTP_REDACTED_SENTINEL, type SentEmail, type SmtpConfig } from '@/lib/api/settings';
+} from "@/components/settings/hooks";
+import {
+  SMTP_REDACTED_SENTINEL,
+  type SentEmail,
+  type SmtpConfig,
+} from "@/lib/api/settings";
 
 const DEFAULT_CONFIG: SmtpConfig = {
-  host: '',
+  host: "",
   port: 587,
-  username: '',
-  password: '',
-  fromAddress: '',
-  fromName: '',
-  authMechanism: 'plain',
-  encryption: 'starttls',
+  username: "",
+  password: "",
+  fromAddress: "",
+  fromName: "",
+  authMechanism: "plain",
+  encryption: "starttls",
   requireTls: true,
   timeoutSeconds: 30,
 };
 
-function SmtpForm({ initial, onSaved }: { initial: SmtpConfig; onSaved?: () => void }) {
-  const [testTo, setTestTo] = useState('');
+function SmtpForm({
+  initial,
+  onSaved,
+}: {
+  initial: SmtpConfig;
+  onSaved?: () => void;
+}) {
+  const [testTo, setTestTo] = useState("");
   const update = useUpdateSmtpConfig();
   const testSend = useTestSmtp();
 
@@ -68,7 +86,7 @@ function SmtpForm({ initial, onSaved }: { initial: SmtpConfig; onSaved?: () => v
 
   const handleTest = async () => {
     if (!testTo) {
-      toastError('Recipient required');
+      toastError("Recipient required");
       return;
     }
     try {
@@ -83,10 +101,14 @@ function SmtpForm({ initial, onSaved }: { initial: SmtpConfig; onSaved?: () => v
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="sm:col-span-2">
           <form.AppField name="host">
-            {(field) => <field.TextField label="Host" placeholder="smtp.example.com" />}
+            {(field) => (
+              <field.TextField label="Host" placeholder="smtp.example.com" />
+            )}
           </form.AppField>
         </div>
-        <form.AppField name="port">{(field) => <field.NumberField label="Port" />}</form.AppField>
+        <form.AppField name="port">
+          {(field) => <field.NumberField label="Port" />}
+        </form.AppField>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -106,11 +128,17 @@ function SmtpForm({ initial, onSaved }: { initial: SmtpConfig; onSaved?: () => v
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <form.AppField name="fromAddress">
           {(field) => (
-            <field.TextField label="From address" type="email" placeholder="no-reply@example.com" />
+            <field.TextField
+              label="From address"
+              type="email"
+              placeholder="no-reply@example.com"
+            />
           )}
         </form.AppField>
         <form.AppField name="fromName">
-          {(field) => <field.TextField label="From name" placeholder="Astronomer" />}
+          {(field) => (
+            <field.TextField label="From name" placeholder="Astronomer" />
+          )}
         </form.AppField>
       </div>
 
@@ -200,8 +228,8 @@ function EmailsTable() {
 
   const columns: Column<SentEmail>[] = [
     {
-      key: 'createdAt',
-      header: 'Time',
+      key: "createdAt",
+      header: "Time",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
           {formatRelativeTime(row.createdAt)}
@@ -209,13 +237,15 @@ function EmailsTable() {
       ),
     },
     {
-      key: 'to',
-      header: 'To',
-      accessor: (row) => <span className="text-sm text-foreground">{row.to}</span>,
+      key: "to",
+      header: "To",
+      accessor: (row) => (
+        <span className="text-sm text-foreground">{row.to}</span>
+      ),
     },
     {
-      key: 'template',
-      header: 'Template',
+      key: "template",
+      header: "Template",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">
           {row.template}
@@ -223,16 +253,16 @@ function EmailsTable() {
       ),
     },
     {
-      key: 'status',
-      header: 'Status',
+      key: "status",
+      header: "Status",
       accessor: (row) => (
         <StatusBadge
           status={
-            row.status === 'sent'
-              ? 'active'
-              : row.status === 'failed' || row.status === 'bounced'
-                ? 'error'
-                : 'connecting'
+            row.status === "sent"
+              ? "active"
+              : row.status === "failed" || row.status === "bounced"
+                ? "error"
+                : "connecting"
           }
           label={row.status}
           size="sm"
@@ -240,17 +270,21 @@ function EmailsTable() {
       ),
     },
     {
-      key: 'attempts',
-      header: 'Attempts',
-      align: 'right',
-      accessor: (row) => <span className="tabular-nums text-sm">{row.attempts}</span>,
+      key: "attempts",
+      header: "Attempts",
+      align: "right",
+      accessor: (row) => (
+        <span className="tabular-nums text-sm">{row.attempts}</span>
+      ),
     },
   ];
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-foreground">Sent email log</h2>
+        <h2 className="text-base font-semibold text-foreground">
+          Sent email log
+        </h2>
         {data && (
           <p className="text-xs text-muted-foreground">
             Page {data.page} of {data.totalPages || 1} · {data.total} total
@@ -293,41 +327,69 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 py-1.5">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-sm text-foreground font-mono truncate">{value || '—'}</span>
+      <span className="text-sm text-foreground font-mono truncate">
+        {value || "—"}
+      </span>
     </div>
   );
 }
 
-function SmtpSummary({ config, onEdit }: { config: SmtpConfig; onEdit: () => void }) {
+function SmtpSummary({
+  config,
+  onEdit,
+}: {
+  config: SmtpConfig;
+  onEdit: () => void;
+}) {
   const configured = !!config.host;
   return (
     <div className="rounded-xl border border-border bg-card p-6 space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold text-foreground">Server</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Connection + authentication for outbound mail.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Connection + authentication for outbound mail.
+          </p>
         </div>
         <button
           type="button"
           onClick={onEdit}
           className="inline-flex flex-shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
         >
-          {configured ? <Pencil className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-          {configured ? 'Edit configuration' : 'Configure SMTP'}
+          {configured ? (
+            <Pencil className="h-3.5 w-3.5" />
+          ) : (
+            <Plus className="h-3.5 w-3.5" />
+          )}
+          {configured ? "Edit configuration" : "Configure SMTP"}
         </button>
       </div>
       {configured ? (
         <div className="divide-y divide-border/60">
           <SummaryRow label="Host" value={`${config.host}:${config.port}`} />
           <SummaryRow label="Username" value={config.username} />
-          <SummaryRow label="Password" value={config.password ? 'Configured' : 'Not set'} />
-          <SummaryRow label="From" value={config.fromName ? `${config.fromName} <${config.fromAddress}>` : config.fromAddress} />
+          <SummaryRow
+            label="Password"
+            value={config.password ? "Configured" : "Not set"}
+          />
+          <SummaryRow
+            label="From"
+            value={
+              config.fromName
+                ? `${config.fromName} <${config.fromAddress}>`
+                : config.fromAddress
+            }
+          />
           <SummaryRow label="Auth" value={config.authMechanism} />
-          <SummaryRow label="Encryption" value={`${config.encryption}${config.requireTls ? ' · require TLS' : ''}`} />
+          <SummaryRow
+            label="Encryption"
+            value={`${config.encryption}${config.requireTls ? " · require TLS" : ""}`}
+          />
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
-          No mail server configured yet. Configure SMTP to enable outbound email and test-sends.
+          No mail server configured yet. Configure SMTP to enable outbound email
+          and test-sends.
         </p>
       )}
     </div>
@@ -391,6 +453,6 @@ function SmtpSettingsPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/smtp/')({
+export const Route = createFileRoute("/dashboard/settings/smtp/")({
   component: SmtpSettingsPage,
 });

@@ -29,6 +29,15 @@ SELECT id, cluster_id, velero_name, velero_namespace, source, spec, phase,
 FROM cluster_snapshots
 WHERE id = $1;
 
+-- name: GetClusterSnapshotForUpdate :one
+SELECT id, cluster_id, velero_name, velero_namespace, source, spec, phase,
+       start_time, completion_time, expires_at,
+       warnings_count, errors_count, last_poll_at, last_poll_error,
+       created_by, created_at, updated_at
+FROM cluster_snapshots
+WHERE id = $1
+FOR UPDATE;
+
 -- name: CreateClusterSnapshot :one
 INSERT INTO cluster_snapshots (
     cluster_id, velero_name, velero_namespace, source, spec, phase, expires_at, created_by
@@ -139,6 +148,13 @@ SELECT id, cluster_id, name, cron_schedule, spec, enabled,
        last_run_at, last_run_status, created_by, created_at, updated_at
 FROM cluster_snapshot_schedules
 WHERE id = $1;
+
+-- name: GetClusterSnapshotScheduleForUpdate :one
+SELECT id, cluster_id, name, cron_schedule, spec, enabled,
+       last_run_at, last_run_status, created_by, created_at, updated_at
+FROM cluster_snapshot_schedules
+WHERE id = $1
+FOR UPDATE;
 
 -- name: ListEnabledSnapshotSchedules :many
 -- The snapshot dispatcher iterates this set every tick and creates Velero

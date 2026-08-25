@@ -163,6 +163,7 @@ func TestCatalogInstallKeepsVaultMarkerInPayload(t *testing.T) {
 		"values_override":  "password: " + marker + "\n",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/catalog/installed/", bytes.NewReader(body))
+	req.Header.Set("Idempotency-Key", "catalog-vault-marker")
 	rec := httptest.NewRecorder()
 	h.CreateInstalledChart(rec, req)
 	if rec.Code != http.StatusAccepted {
@@ -201,6 +202,7 @@ func TestRollbackAcceptsTargetRevision(t *testing.T) {
 	// Explicit target revision 1 — roll back further than a single step.
 	body, _ := json.Marshal(map[string]any{"revision": 1})
 	req := httptest.NewRequest(http.MethodPost, "/rollback", bytes.NewReader(body))
+	req.Header.Set("Idempotency-Key", "catalog-rollback-explicit")
 	req = withChiParams(req, map[string]string{"id": instID.String()})
 	rec := httptest.NewRecorder()
 	h.RollbackInstalledChart(rec, req)
@@ -213,6 +215,7 @@ func TestRollbackAcceptsTargetRevision(t *testing.T) {
 
 	// No body → default to current.Revision-1 = 3 (prior behaviour preserved).
 	req2 := httptest.NewRequest(http.MethodPost, "/rollback", nil)
+	req2.Header.Set("Idempotency-Key", "catalog-rollback-default")
 	req2 = withChiParams(req2, map[string]string{"id": instID.String()})
 	rec2 := httptest.NewRecorder()
 	h.RollbackInstalledChart(rec2, req2)

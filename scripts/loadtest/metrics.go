@@ -33,9 +33,12 @@ type recorder struct {
 	httpStatus  map[string]map[int]int
 
 	// Agent-fleet counters.
-	connectCount    int
-	disconnectCount int
-	agentEndCount   int
+	connectCount        int
+	disconnectCount     int
+	agentEndCount       int
+	stateEventsEmitted  int64
+	resourceCardinality map[string]int
+	auditConservation   auditConservation
 
 	// Scrape snapshots — append-only series keyed by metric name.
 	scrapeSeries map[string][]scrapePoint
@@ -44,6 +47,89 @@ type recorder struct {
 	// so the report has a baseline for the harness itself.
 	driverGoroutines int
 	driverHeapBytes  uint64
+}
+
+type auditConservation struct {
+	RunID             string               `json:"run_id"`
+	Attempted         int                  `json:"attempted"`
+	Accepted          int                  `json:"accepted"`
+	Rejected          int                  `json:"rejected"`
+	IntentsObserved   int                  `json:"intents_observed"`
+	CanonicalRows     int                  `json:"canonical_rows"`
+	Duplicates        int                  `json:"duplicates"`
+	Lost              int                  `json:"lost"`
+	MaxDeliveryLag    time.Duration        `json:"-"`
+	Reconciled        bool                 `json:"reconciled"`
+	RequestAcceptedAt map[string]time.Time `json:"-"`
+	WindowStartedAt   time.Time            `json:"-"`
+	WindowEndedAt     time.Time            `json:"-"`
+	FirstAcceptedAt   time.Time            `json:"-"`
+	LastAcceptedAt    time.Time            `json:"-"`
+}
+
+func (r *recorder) beginAuditConservation(runID string) {
+	r.mu.Lock()
+	r.auditConservation = auditConservation{
+		RunID: runID, RequestAcceptedAt: make(map[string]time.Time), WindowStartedAt: time.Now().UTC(),
+	}
+	r.mu.Unlock()
+}
+
+func (r *recorder) endAuditConservation() {
+	r.mu.Lock()
+	r.auditConservation.WindowEndedAt = time.Now().UTC()
+	r.mu.Unlock()
+}
+
+func (r *recorder) recordAuditMutation(requestID string, accepted bool, acceptedAt time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.auditConservation.Attempted++
+	if accepted {
+		r.auditConservation.Accepted++
+		r.auditConservation.RequestAcceptedAt[requestID] = acceptedAt
+		if r.auditConservation.FirstAcceptedAt.IsZero() || acceptedAt.Before(r.auditConservation.FirstAcceptedAt) {
+			r.auditConservation.FirstAcceptedAt = acceptedAt
+		}
+		if r.auditConservation.LastAcceptedAt.IsZero() || acceptedAt.After(r.auditConservation.LastAcceptedAt) {
+			r.auditConservation.LastAcceptedAt = acceptedAt
+		}
+	} else {
+		r.auditConservation.Rejected++
+	}
+}
+
+func (r *recorder) recordObservedAuditIntents(count int) {
+	r.mu.Lock()
+	r.auditConservation.IntentsObserved = count
+	r.mu.Unlock()
+}
+
+func (r *recorder) finishAuditConservation(rows map[string][]time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	conservation := &r.auditConservation
+	conservation.CanonicalRows = 0
+	conservation.Duplicates = 0
+	conservation.MaxDeliveryLag = 0
+	for requestID, acceptedAt := range conservation.RequestAcceptedAt {
+		timestamps := rows[requestID]
+		if len(timestamps) == 0 {
+			continue
+		}
+		conservation.CanonicalRows++
+		if len(timestamps) > 1 {
+			conservation.Duplicates += len(timestamps) - 1
+		}
+		for _, timestamp := range timestamps {
+			if lag := timestamp.Sub(acceptedAt); lag > conservation.MaxDeliveryLag {
+				conservation.MaxDeliveryLag = lag
+			}
+		}
+	}
+	conservation.Lost = conservation.Accepted - conservation.CanonicalRows
+	conservation.Reconciled = conservation.Accepted > 0 && conservation.Lost == 0 && conservation.Duplicates == 0 && conservation.Rejected == 0
+	return conservation.Reconciled
 }
 
 type scrapePoint struct {
@@ -58,11 +144,29 @@ const maxSamplesPerScenario = 50000
 
 func newRecorder() *recorder {
 	return &recorder{
-		httpSamples:  make(map[string][]time.Duration),
-		httpCount:    make(map[string]int),
-		httpErrors:   make(map[string]int),
-		httpStatus:   make(map[string]map[int]int),
-		scrapeSeries: make(map[string][]scrapePoint),
+		httpSamples:         make(map[string][]time.Duration),
+		httpCount:           make(map[string]int),
+		httpErrors:          make(map[string]int),
+		httpStatus:          make(map[string]map[int]int),
+		scrapeSeries:        make(map[string][]scrapePoint),
+		resourceCardinality: make(map[string]int),
+	}
+}
+
+func (r *recorder) RecordStateEvents(count int) {
+	if count <= 0 {
+		return
+	}
+	r.mu.Lock()
+	r.stateEventsEmitted += int64(count)
+	r.mu.Unlock()
+}
+
+func (r *recorder) RecordResourceCardinality(kind string, count int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if count > r.resourceCardinality[kind] {
+		r.resourceCardinality[kind] = count
 	}
 }
 
@@ -229,6 +333,8 @@ func scrapeOnce(ctx context.Context, server, token string, rec *recorder) error 
 				}
 			}
 			rec.AppendScrape("worker_queue_pending", now, pending)
+		case "astronomer_worker_queue_latency_seconds":
+			rec.AppendScrape("worker_queue_age_seconds", now, maxGauge(fam))
 		case "astronomer_dropped_events_total":
 			var total float64
 			for _, m := range fam.GetMetric() {
@@ -243,6 +349,36 @@ func scrapeOnce(ctx context.Context, server, token string, rec *recorder) error 
 				sum += m.GetGauge().GetValue()
 			}
 			rec.AppendScrape("agent_connections", now, sum)
+		case "astronomer_agent_reconnects_total":
+			rec.AppendScrape("agent_reconnects_total", now, sumCounters(fam))
+		case "astronomer_worker_jobs_total":
+			rec.AppendScrape("worker_jobs_total", now, sumCountersWithLabel(fam, "status", "success"))
+		case "astronomer_tunnel_state_updates_handled_total":
+			rec.AppendScrape("tunnel_state_updates_handled_total", now, sumCountersWithLabel(fam, "outcome", "published"))
+		case "astronomer_audit_dropped_total":
+			rec.AppendScrape("audit_dropped_total", now, sumCounters(fam))
+		case "astronomer_audit_write_failures_total":
+			rec.AppendScrape("audit_write_failures_total", now, sumCounters(fam))
+		case "astronomer_audit_outbox_rows":
+			var active, dead float64
+			for _, metric := range fam.GetMetric() {
+				value := metric.GetGauge().GetValue()
+				switch labelValue(metric, "status") {
+				case "pending", "failed", "delivering":
+					active += value
+				case "dead":
+					dead += value
+				}
+			}
+			rec.AppendScrape("audit_outbox_active_rows", now, active)
+			rec.AppendScrape("audit_outbox_dead_rows", now, dead)
+		case "astronomer_delivery_cohort_latency_seconds":
+			sum, count := sumHistograms(fam)
+			if count > 0 {
+				rec.AppendScrape("delivery_cohort_latency_avg_seconds", now, sum/count)
+			}
+		case "cache_invalidation_lag_seconds":
+			rec.AppendScrape("event_relay_lag_seconds", now, maxGauge(fam))
 		case "astronomer_db_pool_acquired_connections":
 			rec.AppendScrape("db_pool_acquired", now, sumGauges(fam))
 		case "astronomer_db_pool_max_connections":
@@ -253,6 +389,8 @@ func scrapeOnce(ctx context.Context, server, token string, rec *recorder) error 
 			rec.AppendScrape("server_goroutines", now, sumGauges(fam))
 		case "go_memstats_alloc_bytes":
 			rec.AppendScrape("server_heap_bytes", now, sumGauges(fam))
+		case "process_open_fds":
+			rec.AppendScrape("server_open_fds", now, sumGauges(fam))
 		}
 	}
 	return nil
@@ -276,6 +414,36 @@ func sumCounters(fam *dto.MetricFamily) float64 {
 		}
 	}
 	return sum
+}
+
+func sumCountersWithLabel(fam *dto.MetricFamily, label, value string) float64 {
+	var sum float64
+	for _, metric := range fam.GetMetric() {
+		if labelValue(metric, label) == value && metric.GetCounter() != nil {
+			sum += metric.GetCounter().GetValue()
+		}
+	}
+	return sum
+}
+
+func maxGauge(fam *dto.MetricFamily) float64 {
+	var max float64
+	for _, metric := range fam.GetMetric() {
+		if gauge := metric.GetGauge(); gauge != nil && gauge.GetValue() > max {
+			max = gauge.GetValue()
+		}
+	}
+	return max
+}
+
+func sumHistograms(fam *dto.MetricFamily) (sum, count float64) {
+	for _, metric := range fam.GetMetric() {
+		if histogram := metric.GetHistogram(); histogram != nil {
+			sum += histogram.GetSampleSum()
+			count += float64(histogram.GetSampleCount())
+		}
+	}
+	return sum, count
 }
 
 func labelValue(m *dto.Metric, name string) string {
@@ -312,6 +480,30 @@ func lastValue(series []scrapePoint) float64 {
 		return 0
 	}
 	return series[len(series)-1].value
+}
+
+// leakWindowAverages returns averages for a post-warm-up baseline window and
+// the terminal window. It deliberately discards the first quarter of samples,
+// where synthetic agents are still establishing their expected steady-state
+// connections. Five points (75 seconds at the default cadence) are averaged
+// when available to reduce GC and scrape jitter.
+func leakWindowAverages(series []scrapePoint) (baseline, terminal float64, ok bool) {
+	if len(series) < minimumLeakSamples {
+		return 0, 0, false
+	}
+	window := len(series) / 4
+	if window > 5 {
+		window = 5
+	}
+	baselineStart := len(series) / 4
+	terminalStart := len(series) - window
+	for _, point := range series[baselineStart : baselineStart+window] {
+		baseline += point.value
+	}
+	for _, point := range series[terminalStart:] {
+		terminal += point.value
+	}
+	return baseline / float64(window), terminal / float64(window), true
 }
 
 // deltaPerSecond returns (last-first)/duration_seconds. Returns 0 if the

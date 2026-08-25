@@ -35,17 +35,20 @@ import (
 //   - engine.CheckPermission must pass for the requesting user's own bindings
 //     (the same engine/bindings/call as §DataProxy step 4).
 
+type extensionRequestContext struct {
+	ClusterID string `json:"clusterId"`
+	ProjectID string `json:"projectId"`
+	Namespace string `json:"namespace"`
+}
+
 // extTokenRequest is the ext/token.request payload: the iframe names a
 // dataSource id (also in the path) and the cluster context it is mounted in. No
 // URL, verb, or scope is client-supplied — all are re-derived from the stored
 // manifest.
+// openapi:request-operation postExtensionsByNameToken
 type extTokenRequest struct {
-	DataSource string `json:"dataSource"`
-	Context    struct {
-		ClusterID string `json:"clusterId"`
-		ProjectID string `json:"projectId"`
-		Namespace string `json:"namespace"`
-	} `json:"context"`
+	DataSource string                  `json:"dataSource"`
+	Context    extensionRequestContext `json:"context"`
 }
 
 // extTokenResponse is the host/token.grant payload. The opaque ticket is the

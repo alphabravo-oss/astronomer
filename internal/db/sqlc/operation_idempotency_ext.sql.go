@@ -70,3 +70,21 @@ func (q *Queries) AttachOperationIdempotencyKey(ctx context.Context, arg AttachO
 		arg.Response,
 	))
 }
+
+// attachOperationIdempotencyResponse is deliberately a second statement.
+// PostgreSQL data-modifying CTEs share one snapshot, so an UPDATE CTE cannot
+// reliably see the operation-idempotency row inserted by a sibling CTE on the
+// first request. When Queries is transaction-bound this statement remains in
+// the caller's transaction; otherwise the operation pointer from the first
+// statement still makes a retry safe if this projection update fails.
+func (q *Queries) attachOperationIdempotencyResponse(ctx context.Context, scope, key, table string, operationID uuid.UUID, response any) error {
+	raw, err := json.Marshal(response)
+	if err != nil {
+		return err
+	}
+	_, err = q.AttachOperationIdempotencyKey(ctx, AttachOperationIdempotencyKeyParams{
+		Scope: scope, IdempotencyKey: key, OperationTable: table,
+		OperationID: operationID, Response: raw,
+	})
+	return err
+}

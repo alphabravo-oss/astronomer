@@ -37,8 +37,14 @@ const phases: DeploymentPhase[] = [
 ];
 
 export function DeploymentsPage() {
-  const { projectId, projects, projectQuery, clusterId: workspaceClusterId, listHref, entityHref } =
-    useDeliveryWorkspace();
+  const {
+    projectId,
+    projects,
+    projectQuery,
+    clusterId: workspaceClusterId,
+    listHref,
+    entityHref,
+  } = useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const allowed = can(user, "delivery_deployments", "list", {
     type: "project",
@@ -76,7 +82,7 @@ export function DeploymentsPage() {
     queryKey: queryKeys.delivery.deployments(projectId, params),
     queryFn: ({ signal }) => {
       signal.throwIfAborted();
-      return listClusterDeployments(projectId, params);
+      return listClusterDeployments(projectId, params, signal);
     },
     enabled: Boolean(projectId && allowed),
     refetchInterval: liveFallback(10_000),

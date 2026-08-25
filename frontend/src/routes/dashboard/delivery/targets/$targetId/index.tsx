@@ -63,7 +63,7 @@ import { toastSuccess } from "@/lib/toast";
 
 export function TargetDetailPage() {
   const { targetId } = useParams<{ targetId: string }>();
-  const { projectId, projects, projectQuery, setProjectId, listHref, entityHref } =
+  const { projectId, projects, projectQuery, setProjectId, listHref } =
     useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const scope = { type: "project" as const, id: projectId };
@@ -84,11 +84,17 @@ export function TargetDetailPage() {
   const router = useRouter();
   const query = useQuery({
     queryKey: queryKeys.delivery.target(projectId, targetId),
-    queryFn: () => getDeliveryTarget(projectId, targetId),
+    queryFn: ({ signal }) => getDeliveryTarget(projectId, targetId, signal),
     enabled: Boolean(projectId && targetId && allowed),
   });
   const previewMutation = useMutation({
-    mutationFn: ({ cursor }: { cursor: string; pageIndex: number; reset?: boolean }) =>
+    mutationFn: ({
+      cursor,
+    }: {
+      cursor: string;
+      pageIndex: number;
+      reset?: boolean;
+    }) =>
       previewDeliveryTarget(projectId, targetId, {
         pageSize: 100,
         cursor: cursor || undefined,
@@ -497,7 +503,9 @@ function PreviewPanel({
           <button
             type="button"
             className={secondaryButton}
-            disabled={!preview.hasMoreDecisions || !preview.nextCursor || loadingPage}
+            disabled={
+              !preview.hasMoreDecisions || !preview.nextCursor || loadingPage
+            }
             onClick={onNext}
             aria-label="Next placement decision page"
           >
@@ -531,12 +539,7 @@ function TargetEditDialog({
   const [formError, setFormError] = useState<Error | null>(null);
   const mutation = useMutation({
     mutationFn: (body: Parameters<typeof updateDeliveryTarget>[1]) =>
-      updateDeliveryTarget(
-        target.id,
-        body,
-        etag,
-        crypto.randomUUID(),
-      ),
+      updateDeliveryTarget(target.id, body, etag, crypto.randomUUID()),
     onSuccess: () => {
       client.invalidateQueries({
         queryKey: queryKeys.delivery.target(projectId, target.id),
@@ -573,8 +576,7 @@ function TargetEditDialog({
       }
       mutation.mutate({
         project_id: projectId,
-        description:
-          String(form.get("description") ?? "").trim() || undefined,
+        description: String(form.get("description") ?? "").trim() || undefined,
         bundle_version_id: String(form.get("bundle_version_id") ?? "").trim(),
         placement,
         rollout_policy: {
@@ -625,7 +627,9 @@ function TargetEditDialog({
           </Field>
         </div>
         <fieldset className="space-y-4 rounded-md border border-border p-4">
-          <legend className="px-1 text-sm font-medium">Placement selector</legend>
+          <legend className="px-1 text-sm font-medium">
+            Placement selector
+          </legend>
           <label className="flex items-center gap-2 text-sm font-medium text-status-warning">
             <input
               type="checkbox"
@@ -732,7 +736,11 @@ function TargetEditDialog({
           <Field label="Maintenance policy (JSON object)">
             <textarea
               name="maintenance"
-              defaultValue={JSON.stringify(target.maintenanceWindowPolicy, null, 2)}
+              defaultValue={JSON.stringify(
+                target.maintenanceWindowPolicy,
+                null,
+                2,
+              )}
               className={textareaClass}
               spellCheck={false}
             />
@@ -806,9 +814,7 @@ function LaunchDialog({
       });
       toastSuccess("Rollout launched");
       onClose();
-      router.push(
-        entityHref("rollouts", rollout.id),
-      );
+      router.push(entityHref("rollouts", rollout.id));
     },
   });
   const submit = (event: FormEvent<HTMLFormElement>) => {

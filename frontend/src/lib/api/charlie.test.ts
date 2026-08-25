@@ -1,6 +1,23 @@
-import { afterEach, beforeEach, describe, expect, it, vi, type Mocked } from "vitest";
-import api from "@/lib/api";
-vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), post: vi.fn() } }));
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const mockedApi = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+vi.mock("@/lib/api/generated/client", () => ({
+  listCharlieSessions: (...args: unknown[]) => mockedApi.get(...args),
+  getCharlieSession: (...args: unknown[]) => mockedApi.get(...args),
+  getCharlieSessionHistory: (...args: unknown[]) => mockedApi.get(...args),
+  listCharlieCommands: (...args: unknown[]) => mockedApi.get(...args),
+  getActiveCharlieThread: (...args: unknown[]) => mockedApi.get(...args),
+  createCharlieThreadMessage: (...args: unknown[]) => mockedApi.post(...args),
+  listCharlieFindings: (...args: unknown[]) => mockedApi.get(...args),
+  getCharlieFinding: (...args: unknown[]) => mockedApi.get(...args),
+  acknowledgeCharlieFinding: (...args: unknown[]) => mockedApi.post(...args),
+  dismissCharlieFinding: (...args: unknown[]) => mockedApi.post(...args),
+  startCharlieFindingRemediation: (...args: unknown[]) =>
+    mockedApi.post(...args),
+  requestCharlieFindingVerification: (...args: unknown[]) =>
+    mockedApi.post(...args),
+  resolveCharlieFinding: (...args: unknown[]) => mockedApi.post(...args),
+  decideCharlieApproval: (...args: unknown[]) => mockedApi.post(...args),
+}));
 import {
   decideCharlieApproval,
   getCharlieActiveThread,
@@ -14,27 +31,23 @@ import {
   subscribeCharlieSessionEvents,
   transitionCharlieFinding,
 } from "./charlie";
-const mockedApi = api as Mocked<typeof api>;
 
 describe("Charlie browser gateway mapping", () => {
   beforeEach(() => vi.clearAllMocks());
-  it("maps the interceptor-camelized session envelope", async () => {
+  it("maps the generated raw session wire shape", async () => {
     mockedApi.get.mockResolvedValue({
-      data: {
-        data: {
-          sessions: [
-            {
-              id: "s",
-              clientSessionId: "c",
-              intent: "inspect",
-              resourceScopeSummary: "installation/a",
-              state: "active",
-              visibility: "private",
-              centralRevision: 2,
-            },
-          ],
+      sessions: [
+        {
+          id: "s",
+          client_session_id: "c",
+          intent: "inspect",
+          resource_scope_summary: "installation/a",
+          state: "active",
+          visibility: "private",
+          central_revision: 2,
         },
-      },
+      ],
+      mode: "approval",
     });
     await expect(listCharlieSessions()).resolves.toEqual([
       expect.objectContaining({
@@ -46,64 +59,61 @@ describe("Charlie browser gateway mapping", () => {
   });
   it("uses authoritative remote terminal state when local SSE projection is stale", async () => {
     mockedApi.get.mockResolvedValue({
-      data: {
-        data: {
-          session: {
-            id: "local-session",
-            clientSessionId: "client-session",
-            intent: "inspect",
-            resourceScopeSummary: "installation",
-            state: "active",
-            visibility: "private",
-            centralRevision: 1,
-            source: "user",
-          },
-          remote: { state: "failed", revision: 2 },
-        },
+      session: {
+        id: "local-session",
+        client_session_id: "client-session",
+        intent: "inspect",
+        resource_scope_summary: "installation",
+        state: "active",
+        visibility: "private",
+        central_revision: 1,
+        source: "user",
       },
+      remote: { state: "failed", revision: 2 },
     });
 
     await expect(getCharlieSession("local/session")).resolves.toEqual(
       expect.objectContaining({ id: "local-session", state: "failed" }),
     );
-    expect(mockedApi.get).toHaveBeenCalledWith(
-      "/charlie/sessions/local%2Fsession/",
-    );
+    expect(mockedApi.get).toHaveBeenCalledWith({
+      path: { session_id: "local/session" },
+      signal: undefined,
+    });
   });
   it("maps bounded redacted history items into renderable chat messages", async () => {
-    mockedApi.get.mockResolvedValue({
-      data: {
-        data: [
+    mockedApi.get.mockResolvedValue([
+      {
+        item_id: "user-1",
+        kind: "user_message",
+        redacted_content: "question",
+        created_at: "2026-08-05T22:19:10Z",
+      },
+      {
+        item_id: "assistant-1",
+        kind: "assistant_message",
+        redacted_content: "answer",
+        citations: [
           {
-            itemId: "user-1",
-            kind: "user_message",
-            redactedContent: "question",
-            createdAt: "2026-08-05T22:19:10Z",
-          },
-          {
-            itemId: "assistant-1",
-            kind: "assistant_message",
-            redactedContent: "answer",
-            citations: [
-              {
-                id: "chunk-1",
-                title: "Astronomer operations",
-                source: "knowledge://collection-1/version-1#chunk=0",
-              },
-            ],
-            createdAt: "2026-08-05T22:19:25Z",
-          },
-          {
-            itemId: "evidence-1",
-            kind: "finding_evidence",
-            redactedContent: "bounded evidence",
+            id: "chunk-1",
+            title: "Astronomer operations",
+            source: "knowledge://collection-1/version-1#chunk=0",
           },
         ],
+        created_at: "2026-08-05T22:19:25Z",
       },
-    });
+      {
+        item_id: "evidence-1",
+        kind: "finding_evidence",
+        redacted_content: "bounded evidence",
+      },
+    ]);
 
     await expect(getCharlieHistory("session/a")).resolves.toEqual([
-      expect.objectContaining({ id: "user-1", role: "user", content: "question" }),
+      expect.objectContaining({
+        id: "user-1",
+        role: "user",
+        content: "question",
+      }),
       expect.objectContaining({
         id: "assistant-1",
         role: "assistant",
@@ -116,40 +126,43 @@ describe("Charlie browser gateway mapping", () => {
           },
         ],
       }),
-      expect.objectContaining({ id: "evidence-1", role: "system", content: "bounded evidence" }),
+      expect.objectContaining({
+        id: "evidence-1",
+        role: "system",
+        content: "bounded evidence",
+      }),
     ]);
-    expect(mockedApi.get).toHaveBeenCalledWith(
-      "/charlie/sessions/session%2Fa/history/",
-    );
+    expect(mockedApi.get).toHaveBeenCalledWith({
+      path: { session_id: "session/a" },
+      signal: undefined,
+    });
   });
-  it("maps the camelized thread session needed to open live progress", async () => {
+  it("maps the generated raw thread session needed to open live progress", async () => {
     mockedApi.post.mockResolvedValue({
-      data: {
-        thread: {
-          id: "thread-1",
-          title: "health",
-          state: "active",
-          currentSessionId: "local-session-1",
-          createdAt: "2026-08-11T23:27:10Z",
-        },
-        currentSession: {
-          id: "local-session-1",
-          clientSessionId: "client-session-1",
-          intent: "assess health",
-          resourceScopeSummary: "installation/current",
-          state: "active",
-          visibility: "private",
-          centralRevision: 1,
-          source: "user",
-        },
-        sessionIds: ["local-session-1"],
-        needsContinue: false,
-        messageable: true,
-        receipt: {
-          sessionId: "central-session-1",
-          turnId: "turn-1",
-          acceptedAt: "2026-08-11T23:27:12Z",
-        },
+      thread: {
+        id: "thread-1",
+        title: "health",
+        state: "active",
+        current_session_id: "local-session-1",
+        created_at: "2026-08-11T23:27:10Z",
+      },
+      current_session: {
+        id: "local-session-1",
+        client_session_id: "client-session-1",
+        intent: "assess health",
+        resource_scope_summary: "installation/current",
+        state: "active",
+        visibility: "private",
+        central_revision: 1,
+        source: "user",
+      },
+      session_ids: ["local-session-1"],
+      needs_continue: false,
+      messageable: true,
+      receipt: {
+        session_id: "central-session-1",
+        turn_id: "turn-1",
+        accepted_at: "2026-08-11T23:27:12Z",
       },
     });
     await expect(sendCharlieThreadMessage("assess health")).resolves.toEqual(
@@ -172,33 +185,33 @@ describe("Charlie browser gateway mapping", () => {
       }),
     );
   });
-  it("maps a camelized active-thread read consistently with message responses", async () => {
+  it("maps a raw active-thread read consistently with message responses", async () => {
     mockedApi.get.mockResolvedValue({
-      data: {
-        thread: {
-          id: "thread-2",
-          title: "queue health",
-          state: "active",
-          currentSessionId: "local-session-2",
-        },
-        currentSession: {
-          id: "local-session-2",
-          clientSessionId: "client-session-2",
-          intent: "inspect queues",
-          resourceScopeSummary: "installation/current",
-          state: "active",
-          visibility: "private",
-          centralRevision: 4,
-          source: "user",
-        },
-        sessionIds: ["local-session-1", "local-session-2"],
-        needsContinue: true,
-        messageable: false,
+      thread: {
+        id: "thread-2",
+        title: "queue health",
+        state: "active",
+        current_session_id: "local-session-2",
       },
+      current_session: {
+        id: "local-session-2",
+        client_session_id: "client-session-2",
+        intent: "inspect queues",
+        resource_scope_summary: "installation/current",
+        state: "active",
+        visibility: "private",
+        central_revision: 4,
+        source: "user",
+      },
+      session_ids: ["local-session-1", "local-session-2"],
+      needs_continue: true,
+      messageable: false,
     });
     await expect(getCharlieActiveThread()).resolves.toEqual(
       expect.objectContaining({
-        thread: expect.objectContaining({ current_session_id: "local-session-2" }),
+        thread: expect.objectContaining({
+          current_session_id: "local-session-2",
+        }),
         current_session: expect.objectContaining({ id: "local-session-2" }),
         session_ids: ["local-session-1", "local-session-2"],
         needs_continue: true,
@@ -207,63 +220,66 @@ describe("Charlie browser gateway mapping", () => {
     );
   });
   it("loads the versioned product command catalog and sends a structured command selection", async () => {
-    mockedApi.get.mockResolvedValue({ data: { schema: "astronomer.charlie-command-catalog/v1", version: 1, commands: [] } });
-    await expect(getCharlieCommands()).resolves.toEqual(expect.objectContaining({ version: 1, commands: [] }));
-    expect(mockedApi.get).toHaveBeenCalledWith("/charlie/commands/");
+    mockedApi.get.mockResolvedValue({
+      schema: "astronomer.charlie-command-catalog/v1",
+      version: 1,
+      commands: [],
+    });
+    await expect(getCharlieCommands()).resolves.toEqual(
+      expect.objectContaining({ version: 1, commands: [] }),
+    );
+    expect(mockedApi.get).toHaveBeenCalledWith({ signal: undefined });
 
-    mockedApi.post.mockResolvedValue({ data: { thread: null } });
+    mockedApi.post.mockResolvedValue({ thread: null });
     await sendCharlieThreadMessage("/health", {
       command: { id: "health", version: "1", arguments: {} },
     });
     expect(mockedApi.post).toHaveBeenCalledWith(
-      "/charlie/threads/messages/",
       expect.objectContaining({
-        message: "/health",
-        command: { id: "health", version: "1", arguments: {} },
+        body: expect.objectContaining({
+          message: "/health",
+          command: { id: "health", version: "1", arguments: {} },
+        }),
       }),
     );
   });
   it("maps bounded local finding data plus on-demand central detail", async () => {
     mockedApi.get.mockResolvedValue({
-      data: {
-        data: {
+      finding: {
+        id: "f",
+        title: "Finding",
+        severity: "high",
+        state: "open",
+        summary: "bounded",
+        reason_no_action: "read_only",
+        affected_resource: {
+          type: "installation",
+          id: "a",
+          required_verb: "read",
+        },
+        risk_impact: "availability",
+        verification_summary: "re-read",
+        proposed_action: {
+          label: "Restart",
+          mode: "approval",
+          eligible: true,
+          approval_id: "approval-a",
+        },
+        detail: {
           finding: {
-            id: "f",
-            title: "Finding",
-            severity: "high",
-            state: "open",
-            summary: "bounded",
-            reasonNoAction: "read_only",
-            affectedResource: {
-              type: "installation",
-              id: "a",
-              requiredVerb: "read",
-            },
-            riskImpact: "availability",
-            verificationSummary: "re-read",
-            proposedAction: {
-              label: "Restart",
-              mode: "approval",
-              eligible: true,
-              approvalId: "approval-a",
-            },
-            detail: {
-              finding: {
-                confidence: 0.8,
-                operatorChecks: ["check health"],
-                preconditions: ["healthy backup"],
-                expectedResult: "ready",
-                workflow: {
-                  state: "manual_remediation_required",
-                  manual_remediation: {
-                    preconditions: ["authorized operator"],
-                    steps: ["review current state"],
-                    expected_impact: "restore health",
-                    verification: {
-                      method: "product.current_state",
-                      steps: ["re-read current state"],
-                    },
-                  },
+            confidence: 0.8,
+            operator_checks: ["check health"],
+            preconditions: ["healthy backup"],
+            expectedResult: "ready",
+            workflow: {
+              state: "manual_remediation_required",
+              manual_remediation: {
+                preconditions: ["authorized operator"],
+                steps: ["review current state"],
+                expected_impact: "restore health",
+                verification: {
+                  method: "product.current_state",
+                  steps: ["re-read current state"],
                 },
               },
             },
@@ -290,30 +306,35 @@ describe("Charlie browser gateway mapping", () => {
     );
   });
   it("requests the bounded full finding window for accurate topbar state filtering", async () => {
-    mockedApi.get.mockResolvedValue({ data: { data: { items: [] } } });
+    mockedApi.get.mockResolvedValue({ items: [] });
     await listCharlieFindings();
-    expect(mockedApi.get).toHaveBeenCalledWith("/charlie/findings/", {
-      params: { limit: 100 },
+    expect(mockedApi.get).toHaveBeenCalledWith({
+      query: { limit: 100 },
+      signal: undefined,
     });
   });
   it("sends a fresh idempotency key with an approval decision", async () => {
-    mockedApi.post.mockResolvedValue({ data: {} });
+    mockedApi.post.mockResolvedValue({});
     await decideCharlieApproval("approval/a", "approve", "bounded rationale");
     expect(mockedApi.post).toHaveBeenCalledWith(
-      "/charlie/approvals/approval%2Fa/decision/",
       expect.objectContaining({
-        request_id: expect.any(String),
-        decision: "approve",
-        rationale: "bounded rationale",
+        path: { approval_id: "approval/a" },
+        body: expect.objectContaining({
+          request_id: expect.any(String),
+          decision: "approve",
+          rationale: "bounded rationale",
+        }),
       }),
     );
   });
   it("maps workflow decisions to fixed product-owned paths", async () => {
-    mockedApi.post.mockResolvedValue({ data: {} });
+    mockedApi.post.mockResolvedValue({});
     await transitionCharlieFinding("finding/a", "request_verification");
     expect(mockedApi.post).toHaveBeenCalledWith(
-      "/charlie/findings/finding%2Fa/request-verification/",
-      expect.objectContaining({ request_id: expect.any(String) }),
+      expect.objectContaining({
+        path: { finding_id: "finding/a" },
+        body: expect.objectContaining({ request_id: expect.any(String) }),
+      }),
     );
   });
   it("turns stale approval conflicts into a precise safe error", async () => {
@@ -370,13 +391,20 @@ describe("Charlie session event transport", () => {
   it("treats stream closure after a terminal turn event as successful", () => {
     const onEvent = vi.fn();
     const onError = vi.fn();
-    const unsubscribe = subscribeCharlieSessionEvents("session-1", onEvent, onError);
+    const unsubscribe = subscribeCharlieSessionEvents(
+      "session-1",
+      onEvent,
+      onError,
+    );
     const source = FakeEventSource.instances[0];
-    source.emit("turn.completed", JSON.stringify({
-      turn_id: "turn-1",
-      type: "turn.completed",
-      data: {},
-    }));
+    source.emit(
+      "turn.completed",
+      JSON.stringify({
+        turn_id: "turn-1",
+        type: "turn.completed",
+        data: {},
+      }),
+    );
     source.onerror?.();
     vi.advanceTimersByTime(60_000);
     expect(onEvent).toHaveBeenCalledOnce();

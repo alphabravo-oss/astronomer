@@ -36,16 +36,15 @@ func TestResolveCallbackBaseURLWithoutPlatformConfig(t *testing.T) {
 }
 
 func TestStartCRDControllerFailsClosedInProduction(t *testing.T) {
-	t.Setenv("CRD_ENABLED", "true")
 	t.Setenv("KUBECONFIG", t.TempDir()+"/missing-kubeconfig")
 	t.Setenv("HOME", t.TempDir())
 
-	err := startCRDController(context.Background(), slog.Default(), &config.Config{Env: "production"}, nil)
+	err := startCRDController(context.Background(), slog.Default(), &config.Config{Env: "production", CRDEnabled: true}, nil)
 	if err == nil {
 		t.Fatal("expected production CRD controller bootstrap to fail without Kubernetes config")
 	}
 
-	err = startCRDController(context.Background(), slog.Default(), &config.Config{Env: "development"}, nil)
+	err = startCRDController(context.Background(), slog.Default(), &config.Config{Env: "development", CRDEnabled: true}, nil)
 	if err != nil {
 		t.Fatalf("development CRD controller bootstrap error = %v, want nil", err)
 	}
@@ -317,9 +316,9 @@ func (stubProjectBindingsQuerier) ListProjectNamespaces(context.Context, uuid.UU
 // tenant notices. It has been dropped once already, which is why this exists.
 func TestServerWiresProjectRBACInvalidator(t *testing.T) {
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "server.go", nil, 0)
+	file, err := parser.ParseFile(fset, "app_tenant_handlers.go", nil, 0)
 	if err != nil {
-		t.Fatalf("parse server.go: %v", err)
+		t.Fatalf("parse app_tenant_handlers.go: %v", err)
 	}
 	found := false
 	ast.Inspect(file, func(n ast.Node) bool {
@@ -339,7 +338,7 @@ func TestServerWiresProjectRBACInvalidator(t *testing.T) {
 		return false
 	})
 	if !found {
-		t.Fatal("internal/server/server.go no longer calls projectHandler.SetRBACInvalidator: " +
+		t.Fatal("production composition no longer calls projectHandler.SetRBACInvalidator: " +
 			"add/remove-namespace's RBAC cache flush is a silent no-op without it, so a namespace " +
 			"revoked from a project keeps authorizing reads until the cache TTL expires")
 	}

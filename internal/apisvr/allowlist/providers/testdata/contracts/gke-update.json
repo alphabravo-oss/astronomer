@@ -1,0 +1,15 @@
+{
+  "update": {
+    "desiredControlPlaneEndpointsConfig": {
+      "ipEndpointsConfig": {
+        "authorizedNetworksConfig": {
+          "enabled": true,
+          "cidrBlocks": [
+            {"displayName": "astronomer-managed", "cidrBlock": "10.0.0.0/8"},
+            {"displayName": "astronomer-managed", "cidrBlock": "203.0.113.0/24"}
+          ]
+        }
+      }
+    }
+  }
+}

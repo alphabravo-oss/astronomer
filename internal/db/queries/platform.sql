@@ -1,6 +1,11 @@
 -- name: GetPlatformConfig :one
 SELECT * FROM platform_configuration WHERE id = 1;
 
+-- name: GetPlatformConfigForUpdate :one
+-- Serializes platform-default changes and reapply decisions against the
+-- singleton configuration row. Call only from a transaction-bound querier.
+SELECT * FROM platform_configuration WHERE id = 1 FOR UPDATE;
+
 -- name: UpsertPlatformConfig :one
 INSERT INTO platform_configuration (id, server_url, platform_name, telemetry_enabled, bootstrapped_at, instance_id)
 VALUES (1, $1, $2, $3, $4, $5)

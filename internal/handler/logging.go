@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
@@ -56,8 +58,10 @@ type LoggingQuerier interface {
 	ListLoggingPipelines(ctx context.Context, arg sqlc.ListLoggingPipelinesParams) ([]sqlc.LoggingPipeline, error)
 	ListPipelinesByCluster(ctx context.Context, arg sqlc.ListPipelinesByClusterParams) ([]sqlc.LoggingPipeline, error)
 	GetLoggingPipelineByID(ctx context.Context, id uuid.UUID) (sqlc.LoggingPipeline, error)
+	ListLoggingPipelineOutputDetails(ctx context.Context, pipelineIDs []uuid.UUID) ([]sqlc.ListLoggingPipelineOutputDetailsRow, error)
 	CreateLoggingPipeline(ctx context.Context, arg sqlc.CreateLoggingPipelineParams) (sqlc.LoggingPipeline, error)
 	UpdateLoggingPipeline(ctx context.Context, arg sqlc.UpdateLoggingPipelineParams) (sqlc.LoggingPipeline, error)
+	ReplaceLoggingPipelineOutputs(ctx context.Context, arg sqlc.ReplaceLoggingPipelineOutputsParams) (int64, error)
 	DeleteLoggingPipeline(ctx context.Context, id uuid.UUID) error
 	CountLoggingPipelines(ctx context.Context) (int64, error)
 	CountPipelinesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
@@ -78,6 +82,44 @@ type LoggingQuerier interface {
 	ListLokiIngestTokenHashes(ctx context.Context) ([]sqlc.ListLokiIngestTokenHashesRow, error)
 }
 
+type loggingOperationPager interface {
+	CountLoggingOperations(ctx context.Context, arg sqlc.CountLoggingOperationsParams) (int64, error)
+	ListLoggingOperationsForScopes(ctx context.Context, arg sqlc.ListLoggingOperationsForScopesParams) ([]sqlc.LoggingOperation, error)
+	CountLoggingOperationsForScopes(ctx context.Context, arg sqlc.CountLoggingOperationsForScopesParams) (int64, error)
+}
+
+// LoggingMutationTx is the transaction-bound write surface for logging
+// configuration. Production supplies sqlc.New(tx), so desired state, the
+// durable reconciliation operation, and mandatory audit intent share one
+// commit decision.
+type LoggingMutationTx interface {
+	audit.OutboxQuerier
+	CreateLoggingOutput(context.Context, sqlc.CreateLoggingOutputParams) (sqlc.LoggingOutput, error)
+	UpdateLoggingOutput(context.Context, sqlc.UpdateLoggingOutputParams) (sqlc.LoggingOutput, error)
+	DeleteLoggingOutput(context.Context, uuid.UUID) error
+	CreateLoggingPipeline(context.Context, sqlc.CreateLoggingPipelineParams) (sqlc.LoggingPipeline, error)
+	UpdateLoggingPipeline(context.Context, sqlc.UpdateLoggingPipelineParams) (sqlc.LoggingPipeline, error)
+	ReplaceLoggingPipelineOutputs(context.Context, sqlc.ReplaceLoggingPipelineOutputsParams) (int64, error)
+	DeleteLoggingPipeline(context.Context, uuid.UUID) error
+	CreateLoggingOperation(context.Context, sqlc.CreateLoggingOperationParams) (sqlc.LoggingOperation, error)
+	CreateLoggingOperationIdempotent(context.Context, sqlc.CreateLoggingOperationIdempotentParams) (sqlc.LoggingOperation, error)
+	CreateLoggingOperationIdempotentWithDisposition(context.Context, sqlc.CreateLoggingOperationIdempotentWithDispositionParams) (sqlc.CreateLoggingOperationIdempotentWithDispositionRow, error)
+	RequeueLoggingOperation(context.Context, uuid.UUID) (sqlc.LoggingOperation, error)
+	UpsertLokiIngestToken(context.Context, sqlc.UpsertLokiIngestTokenParams) (sqlc.LokiIngestToken, error)
+	GetSystemLoggingOutputByCluster(context.Context, pgtype.UUID) (sqlc.LoggingOutput, error)
+	GetLoggingSavedSearchForOwner(context.Context, sqlc.GetLoggingSavedSearchForOwnerParams) (sqlc.LoggingSavedSearch, error)
+	CreateLoggingSavedSearch(context.Context, sqlc.CreateLoggingSavedSearchParams) (sqlc.LoggingSavedSearch, error)
+	UpdateLoggingSavedSearch(context.Context, sqlc.UpdateLoggingSavedSearchParams) (sqlc.LoggingSavedSearch, error)
+	DeleteLoggingSavedSearch(context.Context, sqlc.DeleteLoggingSavedSearchParams) (int64, error)
+}
+
+type loggingRunTxFunc func(context.Context, func(LoggingMutationTx) error) error
+
+type loggingMutationResult[T any] struct {
+	row T
+	op  sqlc.LoggingOperation
+}
+
 // LoggingHandler handles logging output and pipeline endpoints.
 //
 // As of the logging-controller refactor (comparison.md §7/§10/§11) the
@@ -89,6 +131,7 @@ type LoggingQuerier interface {
 // bearer_token_file. Fluent Bit itself is assumed already installed.
 type LoggingHandler struct {
 	queries   LoggingQuerier
+	runTx     loggingRunTxFunc
 	requester K8sRequester
 	helm      HelmRequester
 	log       *slog.Logger
@@ -102,6 +145,66 @@ type LoggingHandler struct {
 	encryptor       *auth.Encryptor
 	lokiIngest      lokiIngestReconciler
 	lokiAttach      lokiAttachGate
+	// querySlots bounds expensive remote log queries across all providers.
+	// A handler-local semaphore keeps one noisy tenant from exhausting the
+	// server's outbound connection pool.
+	querySlots chan struct{}
+}
+
+// SetRunTx wires the production transaction boundary used for logging state,
+// operation intent, and mandatory audit intent.
+func (h *LoggingHandler) SetRunTx(runTx loggingRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *LoggingHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
+
+func executeLoggingMutation[T any](r *http.Request, h *LoggingHandler, mutate func(LoggingMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("logging handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q LoggingMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
+}
+
+var (
+	errLoggingOperationIdempotencyConflict = errors.New("logging operation idempotency key already identifies a committed operation")
+	errLoggingPipelineOutputsInvalid       = errors.New("logging pipeline outputs are invalid")
+)
+
+func respondLoggingMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackStatus int, fallbackCode, fallbackMessage string) {
+	if errors.Is(err, errLoggingOperationIdempotencyConflict) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+			"Idempotency-Key already identifies a logging operation; retrieve the existing operation instead of restaging it")
+		return
+	}
+	if errors.Is(err, errLoggingPipelineOutputsInvalid) {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody,
+			"Every logging pipeline must reference one or more outputs from the same cluster")
+		return
+	}
+	respondTransactionalMutationError(w, r, err, fallbackStatus, fallbackCode, fallbackMessage)
 }
 
 type lokiIngestReconciler interface {
@@ -116,19 +219,23 @@ type lokiAttachGate interface {
 }
 
 type lokiAttachState struct {
-	Status       string
-	IngestPublic bool
-	Host         string
-	Port         string
-	Mode         string
+	Status              string
+	IngestPublic        bool
+	Host                string
+	Port                string
+	Mode                string
+	ManagementClusterID string
+	Namespace           string
+	ReleaseName         string
 }
 
 // NewLoggingHandler creates a new logging handler.
 func NewLoggingHandler(queries LoggingQuerier) *LoggingHandler {
 	return &LoggingHandler{
-		queries: queries,
-		log:     slog.Default(),
-		trigger: make(chan struct{}, 1),
+		queries:    queries,
+		log:        slog.Default(),
+		trigger:    make(chan struct{}, 1),
+		querySlots: make(chan struct{}, 8),
 	}
 }
 
@@ -318,6 +425,8 @@ func (h *LoggingHandler) controllerSummary(ctx context.Context) (map[string]any,
 // Next.js frontend, which posts to /api/v1/logging/outputs/ with the cluster
 // ID in the body rather than the URL. Query (?cluster_id=) is preferred when
 // present; otherwise we fall back to this body field.
+//
+// openapi:request LoggingOutputWriteRequest
 type CreateLoggingOutputRequest struct {
 	Name          string          `json:"name" validate:"required"`
 	OutputType    string          `json:"output_type" validate:"required"`
@@ -327,13 +436,60 @@ type CreateLoggingOutputRequest struct {
 }
 
 // CreateLoggingPipelineRequest represents the request body for creating a logging pipeline.
+//
+// openapi:request LoggingPipelineWriteRequest
 type CreateLoggingPipelineRequest struct {
 	Name       string          `json:"name" validate:"required"`
 	ClusterID  string          `json:"cluster_id"`
 	Namespaces json.RawMessage `json:"namespaces"`
 	Labels     json.RawMessage `json:"labels"`
 	Filters    json.RawMessage `json:"filters"`
+	OutputIDs  []string        `json:"output_ids"`
 	Enabled    bool            `json:"enabled"`
+}
+
+const maxLoggingPipelineOutputs = 200
+
+func (h *LoggingHandler) validatePipelineOutputs(ctx context.Context, clusterID uuid.UUID, rawIDs []string) ([]uuid.UUID, []string, error) {
+	if len(rawIDs) == 0 || len(rawIDs) > maxLoggingPipelineOutputs {
+		return nil, nil, errLoggingPipelineOutputsInvalid
+	}
+	ids := make([]uuid.UUID, 0, len(rawIDs))
+	names := make([]string, 0, len(rawIDs))
+	seen := make(map[uuid.UUID]struct{}, len(rawIDs))
+	for _, rawID := range rawIDs {
+		id, err := uuid.Parse(rawID)
+		if err != nil {
+			return nil, nil, errLoggingPipelineOutputsInvalid
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return nil, nil, errLoggingPipelineOutputsInvalid
+		}
+		output, err := h.queries.GetLoggingOutputByID(ctx, id)
+		if err != nil || !output.ClusterID.Valid || uuid.UUID(output.ClusterID.Bytes) != clusterID {
+			return nil, nil, errLoggingPipelineOutputsInvalid
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+		names = append(names, output.Name)
+	}
+	return ids, names, nil
+}
+
+func replacePipelineOutputs(ctx context.Context, q interface {
+	ReplaceLoggingPipelineOutputs(context.Context, sqlc.ReplaceLoggingPipelineOutputsParams) (int64, error)
+}, pipelineID uuid.UUID, outputIDs []uuid.UUID) error {
+	count, err := q.ReplaceLoggingPipelineOutputs(ctx, sqlc.ReplaceLoggingPipelineOutputsParams{
+		LoggingPipelineID: pipelineID,
+		OutputIds:         outputIDs,
+	})
+	if err != nil {
+		return err
+	}
+	if count != int64(len(outputIDs)) {
+		return fmt.Errorf("%w: associated %d of %d requested outputs", errLoggingPipelineOutputsInvalid, count, len(outputIDs))
+	}
+	return nil
 }
 
 // --- Output endpoints ---
@@ -399,10 +555,13 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbCreate) {
 		return
 	}
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
 
 	configuration := stripBearerFromLoggingConfiguration(req.Configuration)
 
-	output, err := h.queries.CreateLoggingOutput(r.Context(), sqlc.CreateLoggingOutputParams{
+	params := sqlc.CreateLoggingOutputParams{
 		Name:          req.Name,
 		OutputType:    req.OutputType,
 		Configuration: configuration,
@@ -410,26 +569,39 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 		Enabled:       req.Enabled,
 		CreatedByID:   currentUserUUID(r),
 		IsSystem:      false,
-	})
+	}
+	mutationContext := withOperationIdempotency(r, "logging")
+	result, err := executeLoggingMutation(r, h,
+		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingOutput], error) {
+			output, createErr := q.CreateLoggingOutput(r.Context(), params)
+			if createErr != nil {
+				return loggingMutationResult[sqlc.LoggingOutput]{}, createErr
+			}
+			op, opErr := createLoggingOutputApplyOperation(mutationContext, q, output, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingOutput]{row: output, op: op}, opErr
+		},
+		func() (loggingMutationResult[sqlc.LoggingOutput], error) {
+			output, createErr := h.queries.CreateLoggingOutput(r.Context(), params)
+			if createErr != nil {
+				return loggingMutationResult[sqlc.LoggingOutput]{}, createErr
+			}
+			op, opErr := createLoggingOutputApplyOperation(mutationContext, h.queries, output, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingOutput]{row: output, op: op}, opErr
+		},
+		func(result loggingMutationResult[sqlc.LoggingOutput]) clusterAuditEvent {
+			return clusterAuditEvent{action: "logging.output.create", resourceType: "logging_output", resourceID: result.row.ID.String(), resourceName: result.row.Name, status: http.StatusAccepted, detail: map[string]any{
+				"cluster_id": clusterID.String(), "output_type": result.row.OutputType, "enabled": result.row.Enabled, "operation_id": operationIDOrEmpty(result.op),
+			}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create logging output")
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create logging output")
 		return
 	}
-
-	op, opErr := h.enqueueOutputApply(withOperationIdempotency(r, "logging"), output, currentUserUUID(r))
-	if opErr != nil && h.log != nil {
-		h.log.Warn("logging: failed to enqueue output apply", "id", output.ID.String(), "error", opErr)
-	}
-
-	recordAudit(r, h.queries, "logging.output.create", "logging_output", output.ID.String(), output.Name, map[string]any{
-		"cluster_id":   clusterID.String(),
-		"output_type":  output.OutputType,
-		"enabled":      output.Enabled,
-		"operation_id": operationIDOrEmpty(op),
+	h.afterLoggingOperationCommit(result.op)
+	RespondAcceptedOperation(w, "/api/v1/logging/operations/"+result.op.ID.String()+"/", loggingOutputMutationReceipt{
+		Output:    loggingOutputDTO(result.row),
+		Operation: loggingOperationResponse(result.op),
 	})
-
-	w.Header().Set("Location", "/api/v1/logging/outputs/"+output.ID.String()+"/")
-	RespondJSON(w, http.StatusCreated, loggingOutputDTO(output))
 }
 
 // UpdateOutput handles PUT /api/v1/logging/outputs/{id}/.
@@ -456,27 +628,48 @@ func (h *LoggingHandler) UpdateOutput(w http.ResponseWriter, r *http.Request) {
 	if rejectSystemOutputMutation(w, r, existing, "edited") {
 		return
 	}
-	output, err := h.queries.UpdateLoggingOutput(r.Context(), sqlc.UpdateLoggingOutputParams{
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	params := sqlc.UpdateLoggingOutputParams{
 		ID:            id,
 		Name:          req.Name,
 		OutputType:    req.OutputType,
 		Configuration: stripBearerFromLoggingConfiguration(req.Configuration),
 		Enabled:       req.Enabled,
-	})
+	}
+	mutationContext := withOperationIdempotency(r, "logging")
+	result, err := executeLoggingMutation(r, h,
+		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingOutput], error) {
+			output, updateErr := q.UpdateLoggingOutput(r.Context(), params)
+			if updateErr != nil {
+				return loggingMutationResult[sqlc.LoggingOutput]{}, updateErr
+			}
+			op, opErr := createLoggingOutputApplyOperation(mutationContext, q, output, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingOutput]{row: output, op: op}, opErr
+		},
+		func() (loggingMutationResult[sqlc.LoggingOutput], error) {
+			output, updateErr := h.queries.UpdateLoggingOutput(r.Context(), params)
+			if updateErr != nil {
+				return loggingMutationResult[sqlc.LoggingOutput]{}, updateErr
+			}
+			op, opErr := createLoggingOutputApplyOperation(mutationContext, h.queries, output, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingOutput]{row: output, op: op}, opErr
+		},
+		func(result loggingMutationResult[sqlc.LoggingOutput]) clusterAuditEvent {
+			return clusterAuditEvent{action: "logging.output.update", resourceType: "logging_output", resourceID: result.row.ID.String(), resourceName: result.row.Name, status: http.StatusAccepted, detail: map[string]any{
+				"output_type": result.row.OutputType, "enabled": result.row.Enabled, "operation_id": operationIDOrEmpty(result.op),
+			}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging output")
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging output")
 		return
 	}
-	op, opErr := h.enqueueOutputApply(withOperationIdempotency(r, "logging"), output, currentUserUUID(r))
-	if opErr != nil && h.log != nil {
-		h.log.Warn("logging: failed to enqueue output apply", "id", output.ID.String(), "error", opErr)
-	}
-	recordAudit(r, h.queries, "logging.output.update", "logging_output", output.ID.String(), output.Name, map[string]any{
-		"output_type":  output.OutputType,
-		"enabled":      output.Enabled,
-		"operation_id": operationIDOrEmpty(op),
+	h.afterLoggingOperationCommit(result.op)
+	RespondAcceptedOperation(w, "/api/v1/logging/operations/"+result.op.ID.String()+"/", loggingOutputMutationReceipt{
+		Output:    loggingOutputDTO(result.row),
+		Operation: loggingOperationResponse(result.op),
 	})
-	RespondJSON(w, http.StatusOK, loggingOutputDTO(output))
 }
 
 // TestOutput handles POST /api/v1/logging/outputs/{id}/test/.
@@ -500,15 +693,33 @@ func (h *LoggingHandler) TestOutput(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, uuid.UUID(output.ClusterID.Bytes), rbac.ResourceLogging, rbac.VerbUpdate) {
 		return
 	}
-	op, err := h.enqueueOutputApply(withOperationIdempotency(r, "logging"), output, currentUserUUID(r))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue apply test")
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
-	RespondJSON(w, http.StatusAccepted, map[string]any{
+	mutationContext := withOperationIdempotency(r, "logging")
+	result, err := executeLoggingMutation(r, h,
+		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingOutput], error) {
+			op, opErr := createLoggingOutputApplyOperation(mutationContext, q, output, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingOutput]{row: output, op: op}, opErr
+		},
+		func() (loggingMutationResult[sqlc.LoggingOutput], error) {
+			op, opErr := createLoggingOutputApplyOperation(mutationContext, h.queries, output, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingOutput]{row: output, op: op}, opErr
+		},
+		func(result loggingMutationResult[sqlc.LoggingOutput]) clusterAuditEvent {
+			return clusterAuditEvent{action: "logging.output.test", resourceType: "logging_output", resourceID: output.ID.String(), resourceName: output.Name, status: http.StatusAccepted, detail: map[string]any{
+				"cluster_id": uuid.UUID(output.ClusterID.Bytes).String(), "operation_id": operationIDOrEmpty(result.op),
+			}}
+		})
+	if err != nil {
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue apply test")
+		return
+	}
+	h.afterLoggingOperationCommit(result.op)
+	RespondAcceptedOperation(w, "/api/v1/logging/operations/"+result.op.ID.String()+"/", map[string]any{
 		"success":   true,
 		"message":   "Logging output apply enqueued",
-		"operation": loggingOperationResponse(op),
+		"operation": loggingOperationResponse(result.op),
 	})
 }
 
@@ -533,28 +744,53 @@ func (h *LoggingHandler) DeleteOutput(w http.ResponseWriter, r *http.Request) {
 	if lookupErr == nil && rejectSystemOutputMutation(w, r, existing, "deleted") {
 		return
 	}
-	// Enqueue the delete operation BEFORE the row goes away — the
-	// reconciler will use the snapshot in the payload to know which
-	// ConfigMap to remove.
-	var deleteOp sqlc.LoggingOperation
-	if lookupErr == nil {
-		op, opErr := h.enqueueOutputDelete(withOperationIdempotency(r, "logging"), existing, currentUserUUID(r))
-		if opErr != nil && h.log != nil {
-			h.log.Warn("logging: failed to enqueue output delete", "id", id.String(), "error", opErr)
-		}
-		deleteOp = op
-	}
-
-	if err := h.queries.DeleteLoggingOutput(r.Context(), id); err != nil {
+	if lookupErr != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
 		return
 	}
-
-	recordAudit(r, h.queries, "logging.output.delete", "logging_output", id.String(), outputName, map[string]any{
-		"operation_id": operationIDOrEmpty(deleteOp),
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	mutationContext := withOperationIdempotency(r, "logging")
+	result, err := executeLoggingMutation(r, h,
+		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingOutput], error) {
+			op, opErr := createLoggingOutputDeleteOperation(mutationContext, q, existing, currentUserUUID(r))
+			if opErr != nil {
+				return loggingMutationResult[sqlc.LoggingOutput]{}, opErr
+			}
+			if deleteErr := q.DeleteLoggingOutput(r.Context(), id); deleteErr != nil {
+				return loggingMutationResult[sqlc.LoggingOutput]{}, deleteErr
+			}
+			return loggingMutationResult[sqlc.LoggingOutput]{row: existing, op: op}, nil
+		},
+		func() (loggingMutationResult[sqlc.LoggingOutput], error) {
+			op, opErr := createLoggingOutputDeleteOperation(mutationContext, h.queries, existing, currentUserUUID(r))
+			if opErr != nil {
+				return loggingMutationResult[sqlc.LoggingOutput]{}, opErr
+			}
+			if deleteErr := h.queries.DeleteLoggingOutput(r.Context(), id); deleteErr != nil {
+				return loggingMutationResult[sqlc.LoggingOutput]{}, deleteErr
+			}
+			return loggingMutationResult[sqlc.LoggingOutput]{row: existing, op: op}, nil
+		},
+		func(result loggingMutationResult[sqlc.LoggingOutput]) clusterAuditEvent {
+			return clusterAuditEvent{action: "logging.output.delete", resourceType: "logging_output", resourceID: id.String(), resourceName: outputName, status: http.StatusAccepted, detail: map[string]any{
+				"operation_id": operationIDOrEmpty(result.op),
+			}}
+		})
+	if err != nil {
+		if isFKRestrictViolation(err) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Logging output is still selected by a pipeline; edit or delete the pipeline first")
+			return
+		}
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete logging output")
+		return
+	}
+	h.afterLoggingOperationCommit(result.op)
+	RespondAcceptedOperation(w, "/api/v1/logging/operations/"+result.op.ID.String()+"/", loggingOutputMutationReceipt{
+		Output:    loggingOutputDTO(existing),
+		Operation: loggingOperationResponse(result.op),
 	})
-
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- Pipeline endpoints ---
@@ -590,8 +826,13 @@ func (h *LoggingHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count logging pipelines")
 		return
 	}
+	pipelineDTOs, err := h.loggingPipelineDTOs(r.Context(), pipelines)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to load logging pipeline outputs")
+		return
+	}
 
-	RespondPaginated(w, r, pipelines, total)
+	RespondPaginated(w, r, pipelineDTOs, total)
 }
 
 // CreatePipeline handles POST /api/v1/clusters/{cluster_id}/logging/pipelines/.
@@ -611,6 +852,14 @@ func (h *LoggingHandler) CreatePipeline(w http.ResponseWriter, r *http.Request) 
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbCreate) {
 		return
 	}
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	outputIDs, outputNames, err := h.validatePipelineOutputs(r.Context(), clusterID, req.OutputIDs)
+	if err != nil {
+		respondLoggingMutationError(w, r, err, http.StatusBadRequest, apierror.InvalidBody, "Invalid logging pipeline outputs")
+		return
+	}
 
 	namespaces := req.Namespaces
 	if namespaces == nil {
@@ -625,7 +874,7 @@ func (h *LoggingHandler) CreatePipeline(w http.ResponseWriter, r *http.Request) 
 		filters = json.RawMessage(`{}`)
 	}
 
-	pipeline, err := h.queries.CreateLoggingPipeline(r.Context(), sqlc.CreateLoggingPipelineParams{
+	params := sqlc.CreateLoggingPipelineParams{
 		Name:        req.Name,
 		ClusterID:   clusterID,
 		Namespaces:  namespaces,
@@ -633,25 +882,45 @@ func (h *LoggingHandler) CreatePipeline(w http.ResponseWriter, r *http.Request) 
 		Filters:     filters,
 		Enabled:     req.Enabled,
 		CreatedByID: currentUserUUID(r),
-	})
+	}
+	mutationContext := withOperationIdempotency(r, "logging")
+	result, err := executeLoggingMutation(r, h,
+		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingPipeline], error) {
+			pipeline, createErr := q.CreateLoggingPipeline(r.Context(), params)
+			if createErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, createErr
+			}
+			if associationErr := replacePipelineOutputs(r.Context(), q, pipeline.ID, outputIDs); associationErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, associationErr
+			}
+			op, opErr := createLoggingPipelineApplyOperation(mutationContext, q, pipeline, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingPipeline]{row: pipeline, op: op}, opErr
+		},
+		func() (loggingMutationResult[sqlc.LoggingPipeline], error) {
+			pipeline, createErr := h.queries.CreateLoggingPipeline(r.Context(), params)
+			if createErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, createErr
+			}
+			if associationErr := replacePipelineOutputs(r.Context(), h.queries, pipeline.ID, outputIDs); associationErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, associationErr
+			}
+			op, opErr := createLoggingPipelineApplyOperation(mutationContext, h.queries, pipeline, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingPipeline]{row: pipeline, op: op}, opErr
+		},
+		func(result loggingMutationResult[sqlc.LoggingPipeline]) clusterAuditEvent {
+			return clusterAuditEvent{action: "logging.pipeline.create", resourceType: "logging_pipeline", resourceID: result.row.ID.String(), resourceName: result.row.Name, status: http.StatusAccepted, detail: map[string]any{
+				"cluster_id": clusterID.String(), "enabled": result.row.Enabled, "output_count": len(outputIDs), "operation_id": operationIDOrEmpty(result.op),
+			}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create logging pipeline")
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create logging pipeline")
 		return
 	}
-
-	op, opErr := h.enqueuePipelineApply(withOperationIdempotency(r, "logging"), pipeline, currentUserUUID(r))
-	if opErr != nil && h.log != nil {
-		h.log.Warn("logging: failed to enqueue pipeline apply", "id", pipeline.ID.String(), "error", opErr)
-	}
-
-	recordAudit(r, h.queries, "logging.pipeline.create", "logging_pipeline", pipeline.ID.String(), pipeline.Name, map[string]any{
-		"cluster_id":   clusterID.String(),
-		"enabled":      pipeline.Enabled,
-		"operation_id": operationIDOrEmpty(op),
+	h.afterLoggingOperationCommit(result.op)
+	RespondAcceptedOperation(w, "/api/v1/logging/operations/"+result.op.ID.String()+"/", loggingPipelineMutationReceipt{
+		Pipeline:  loggingPipelineDTO(result.row, outputIDs, outputNames),
+		Operation: loggingOperationResponse(result.op),
 	})
-
-	w.Header().Set("Location", "/api/v1/logging/pipelines/"+pipeline.ID.String()+"/")
-	RespondJSON(w, http.StatusCreated, pipeline)
 }
 
 // UpdatePipeline handles PUT /api/v1/logging/pipelines/{id}/.
@@ -675,27 +944,60 @@ func (h *LoggingHandler) UpdatePipeline(w http.ResponseWriter, r *http.Request) 
 	if !h.authz.authorizeClusterAction(w, r, existing.ClusterID, rbac.ResourceLogging, rbac.VerbUpdate) {
 		return
 	}
-	pipeline, err := h.queries.UpdateLoggingPipeline(r.Context(), sqlc.UpdateLoggingPipelineParams{
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	outputIDs, outputNames, err := h.validatePipelineOutputs(r.Context(), existing.ClusterID, req.OutputIDs)
+	if err != nil {
+		respondLoggingMutationError(w, r, err, http.StatusBadRequest, apierror.InvalidBody, "Invalid logging pipeline outputs")
+		return
+	}
+	params := sqlc.UpdateLoggingPipelineParams{
 		ID:         id,
 		Name:       req.Name,
 		Namespaces: req.Namespaces,
 		Labels:     req.Labels,
 		Filters:    req.Filters,
 		Enabled:    req.Enabled,
-	})
+	}
+	mutationContext := withOperationIdempotency(r, "logging")
+	result, err := executeLoggingMutation(r, h,
+		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingPipeline], error) {
+			pipeline, updateErr := q.UpdateLoggingPipeline(r.Context(), params)
+			if updateErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, updateErr
+			}
+			if associationErr := replacePipelineOutputs(r.Context(), q, pipeline.ID, outputIDs); associationErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, associationErr
+			}
+			op, opErr := createLoggingPipelineApplyOperation(mutationContext, q, pipeline, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingPipeline]{row: pipeline, op: op}, opErr
+		},
+		func() (loggingMutationResult[sqlc.LoggingPipeline], error) {
+			pipeline, updateErr := h.queries.UpdateLoggingPipeline(r.Context(), params)
+			if updateErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, updateErr
+			}
+			if associationErr := replacePipelineOutputs(r.Context(), h.queries, pipeline.ID, outputIDs); associationErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, associationErr
+			}
+			op, opErr := createLoggingPipelineApplyOperation(mutationContext, h.queries, pipeline, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingPipeline]{row: pipeline, op: op}, opErr
+		},
+		func(result loggingMutationResult[sqlc.LoggingPipeline]) clusterAuditEvent {
+			return clusterAuditEvent{action: "logging.pipeline.update", resourceType: "logging_pipeline", resourceID: result.row.ID.String(), resourceName: result.row.Name, status: http.StatusAccepted, detail: map[string]any{
+				"enabled": result.row.Enabled, "output_count": len(outputIDs), "operation_id": operationIDOrEmpty(result.op),
+			}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging pipeline")
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging pipeline")
 		return
 	}
-	op, opErr := h.enqueuePipelineApply(withOperationIdempotency(r, "logging"), pipeline, currentUserUUID(r))
-	if opErr != nil && h.log != nil {
-		h.log.Warn("logging: failed to enqueue pipeline apply", "id", pipeline.ID.String(), "error", opErr)
-	}
-	recordAudit(r, h.queries, "logging.pipeline.update", "logging_pipeline", pipeline.ID.String(), pipeline.Name, map[string]any{
-		"enabled":      pipeline.Enabled,
-		"operation_id": operationIDOrEmpty(op),
+	h.afterLoggingOperationCommit(result.op)
+	RespondAcceptedOperation(w, "/api/v1/logging/operations/"+result.op.ID.String()+"/", loggingPipelineMutationReceipt{
+		Pipeline:  loggingPipelineDTO(result.row, outputIDs, outputNames),
+		Operation: loggingOperationResponse(result.op),
 	})
-	RespondJSON(w, http.StatusOK, pipeline)
 }
 
 // DeletePipeline handles DELETE /api/v1/clusters/{cluster_id}/logging/pipelines/{id}/.
@@ -716,25 +1018,54 @@ func (h *LoggingHandler) DeletePipeline(w http.ResponseWriter, r *http.Request) 
 	if !h.authz.authorizeClusterAction(w, r, pipelineClusterID, rbac.ResourceLogging, rbac.VerbDelete) {
 		return
 	}
-	var deleteOp sqlc.LoggingOperation
-	if lookupErr == nil {
-		op, opErr := h.enqueuePipelineDelete(withOperationIdempotency(r, "logging"), existing, currentUserUUID(r))
-		if opErr != nil && h.log != nil {
-			h.log.Warn("logging: failed to enqueue pipeline delete", "id", id.String(), "error", opErr)
-		}
-		deleteOp = op
-	}
-
-	if err := h.queries.DeleteLoggingPipeline(r.Context(), id); err != nil {
+	if lookupErr != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging pipeline not found")
 		return
 	}
-
-	recordAudit(r, h.queries, "logging.pipeline.delete", "logging_pipeline", id.String(), pipelineName, map[string]any{
-		"operation_id": operationIDOrEmpty(deleteOp),
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	existingDTOs, err := h.loggingPipelineDTOs(r.Context(), []sqlc.LoggingPipeline{existing})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to load logging pipeline outputs")
+		return
+	}
+	mutationContext := withOperationIdempotency(r, "logging")
+	result, err := executeLoggingMutation(r, h,
+		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingPipeline], error) {
+			op, opErr := createLoggingPipelineDeleteOperation(mutationContext, q, existing, currentUserUUID(r))
+			if opErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, opErr
+			}
+			if deleteErr := q.DeleteLoggingPipeline(r.Context(), id); deleteErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, deleteErr
+			}
+			return loggingMutationResult[sqlc.LoggingPipeline]{row: existing, op: op}, nil
+		},
+		func() (loggingMutationResult[sqlc.LoggingPipeline], error) {
+			op, opErr := createLoggingPipelineDeleteOperation(mutationContext, h.queries, existing, currentUserUUID(r))
+			if opErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, opErr
+			}
+			if deleteErr := h.queries.DeleteLoggingPipeline(r.Context(), id); deleteErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, deleteErr
+			}
+			return loggingMutationResult[sqlc.LoggingPipeline]{row: existing, op: op}, nil
+		},
+		func(result loggingMutationResult[sqlc.LoggingPipeline]) clusterAuditEvent {
+			return clusterAuditEvent{action: "logging.pipeline.delete", resourceType: "logging_pipeline", resourceID: id.String(), resourceName: pipelineName, status: http.StatusAccepted, detail: map[string]any{
+				"operation_id": operationIDOrEmpty(result.op),
+			}}
+		})
+	if err != nil {
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete logging pipeline")
+		return
+	}
+	h.afterLoggingOperationCommit(result.op)
+	RespondAcceptedOperation(w, "/api/v1/logging/operations/"+result.op.ID.String()+"/", loggingPipelineMutationReceipt{
+		Pipeline:  existingDTOs[0],
+		Operation: loggingOperationResponse(result.op),
 	})
-
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // EnableOutput handles POST /api/v1/logging/outputs/{id}/enable/.
@@ -768,47 +1099,73 @@ func (h *LoggingHandler) setOutputEnabled(w http.ResponseWriter, r *http.Request
 	if rejectSystemOutputMutation(w, r, current, denyAction) {
 		return
 	}
-	output, err := h.queries.UpdateLoggingOutput(r.Context(), sqlc.UpdateLoggingOutputParams{
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	params := sqlc.UpdateLoggingOutputParams{
 		ID:            id,
 		Name:          current.Name,
 		OutputType:    current.OutputType,
 		Configuration: current.Configuration,
 		Enabled:       enabled,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging output")
-		return
-	}
-	// Re-render the ConfigMap on enable/disable so cluster state tracks
-	// intent. When disabled we still apply — the rendered config will
-	// reflect enabled=false so Fluent Bit can skip it.
-	op, opErr := h.enqueueOutputApply(withOperationIdempotency(r, "logging"), output, currentUserUUID(r))
-	if opErr != nil && h.log != nil {
-		h.log.Warn("logging: failed to enqueue output apply", "id", output.ID.String(), "error", opErr)
 	}
 	action := "logging.output.enable"
 	if !enabled {
 		action = "logging.output.disable"
 	}
-	recordAudit(r, h.queries, action, "logging_output", output.ID.String(), output.Name, map[string]any{
-		"enabled":      enabled,
-		"operation_id": operationIDOrEmpty(op),
+	mutationContext := withOperationIdempotency(r, "logging")
+	result, err := executeLoggingMutation(r, h,
+		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingOutput], error) {
+			output, updateErr := q.UpdateLoggingOutput(r.Context(), params)
+			if updateErr != nil {
+				return loggingMutationResult[sqlc.LoggingOutput]{}, updateErr
+			}
+			op, opErr := createLoggingOutputApplyOperation(mutationContext, q, output, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingOutput]{row: output, op: op}, opErr
+		},
+		func() (loggingMutationResult[sqlc.LoggingOutput], error) {
+			output, updateErr := h.queries.UpdateLoggingOutput(r.Context(), params)
+			if updateErr != nil {
+				return loggingMutationResult[sqlc.LoggingOutput]{}, updateErr
+			}
+			op, opErr := createLoggingOutputApplyOperation(mutationContext, h.queries, output, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingOutput]{row: output, op: op}, opErr
+		},
+		func(result loggingMutationResult[sqlc.LoggingOutput]) clusterAuditEvent {
+			return clusterAuditEvent{action: action, resourceType: "logging_output", resourceID: result.row.ID.String(), resourceName: result.row.Name, status: http.StatusAccepted, detail: map[string]any{
+				"enabled": enabled, "operation_id": operationIDOrEmpty(result.op),
+			}}
+		})
+	if err != nil {
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging output")
+		return
+	}
+	// Re-render the ConfigMap on enable/disable so cluster state tracks
+	// intent. When disabled we still apply — the rendered config will
+	// reflect enabled=false so Fluent Bit can skip it.
+	h.afterLoggingOperationCommit(result.op)
+	RespondAcceptedOperation(w, "/api/v1/logging/operations/"+result.op.ID.String()+"/", loggingOutputMutationReceipt{
+		Output:    loggingOutputDTO(result.row),
+		Operation: loggingOperationResponse(result.op),
 	})
-	RespondJSON(w, http.StatusOK, loggingOutputDTO(output))
 }
 
 // loggingQueryRequest is the body for POST .../logging/outputs/{id}/query/.
+//
+// openapi:request LoggingQueryRequest
 type loggingQueryRequest struct {
-	Query     string `json:"query"`
-	Limit     int    `json:"limit,omitempty"`
-	Start     string `json:"start,omitempty"` // RFC3339 or Loki ns epoch
-	End       string `json:"end,omitempty"`
-	Direction string `json:"direction,omitempty"` // forward | backward
+	Query      string   `json:"query"`
+	Limit      int      `json:"limit,omitempty"`
+	Start      string   `json:"start,omitempty"` // RFC3339 or Loki ns epoch
+	End        string   `json:"end,omitempty"`
+	Direction  string   `json:"direction,omitempty"` // forward | backward
+	Namespaces []string `json:"namespaces,omitempty"`
 }
 
 // QueryOutput handles POST /api/v1/logging/outputs/{id}/query/.
-// DIR-06: Loki outputs are queryable via the Loki HTTP API; other backends
-// still return 501 until their clients land.
+// Every provider advertises query support in the output DTO. This endpoint
+// therefore rejects shipping-only providers before making an outbound call,
+// rather than surprising the UI with a generic provider-specific 501.
 func (h *LoggingHandler) QueryOutput(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -825,29 +1182,36 @@ func (h *LoggingHandler) QueryOutput(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if output.IsSystem {
-		RespondRequestError(w, r, http.StatusNotImplemented, apierror.NotImplemented,
-			"Querying Astronomer Loki destinations is not supported; use fleet Grafana")
-		return
-	}
 	var req loggingQueryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
-	switch strings.ToLower(output.OutputType) {
-	case "loki":
-		result, qerr := queryLokiOutput(r.Context(), output.Configuration, req)
-		if qerr != nil {
-			RespondRequestError(w, r, http.StatusBadGateway, apierror.ProxyError, qerr.Error())
-			return
-		}
-		RespondJSON(w, http.StatusOK, result)
+	capabilities := loggingCapabilitiesFor(output)
+	if !capabilities.Query {
+		RespondRequestError(w, r, http.StatusUnprocessableEntity, apierror.NotImplemented,
+			fmt.Sprintf("Logging output type %q is shipping-only; configure a queryable store or use its secure link-out", output.OutputType))
 		return
-	default:
-		RespondRequestError(w, r, http.StatusNotImplemented, apierror.NotImplemented,
-			fmt.Sprintf("Querying logs from output type %q is not yet implemented", output.OutputType))
 	}
+	if h.querySlots == nil {
+		h.querySlots = make(chan struct{}, 8)
+	}
+	select {
+	case h.querySlots <- struct{}{}:
+		defer func() { <-h.querySlots }()
+	case <-r.Context().Done():
+		RespondRequestError(w, r, http.StatusRequestTimeout, apierror.ProxyError, "Logging query canceled while waiting for capacity")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	result, qerr := h.queryLoggingOutput(ctx, output, req)
+	if qerr != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ProxyError, qerr.Error())
+		return
+	}
+	recordLoggingQueryAudit(r, h.queries, output, req)
+	RespondJSON(w, http.StatusOK, result)
 }
 
 // EnablePipeline handles POST /api/v1/logging/pipelines/{id}/enable/.
@@ -874,31 +1238,58 @@ func (h *LoggingHandler) setPipelineEnabled(w http.ResponseWriter, r *http.Reque
 	if !h.authz.authorizeClusterAction(w, r, current.ClusterID, rbac.ResourceLogging, rbac.VerbUpdate) {
 		return
 	}
-	pipeline, err := h.queries.UpdateLoggingPipeline(r.Context(), sqlc.UpdateLoggingPipelineParams{
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	currentDTOs, err := h.loggingPipelineDTOs(r.Context(), []sqlc.LoggingPipeline{current})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to load logging pipeline outputs")
+		return
+	}
+	params := sqlc.UpdateLoggingPipelineParams{
 		ID:         id,
 		Name:       current.Name,
 		Namespaces: current.Namespaces,
 		Labels:     current.Labels,
 		Filters:    current.Filters,
 		Enabled:    enabled,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging pipeline")
-		return
-	}
-	op, opErr := h.enqueuePipelineApply(withOperationIdempotency(r, "logging"), pipeline, currentUserUUID(r))
-	if opErr != nil && h.log != nil {
-		h.log.Warn("logging: failed to enqueue pipeline apply", "id", pipeline.ID.String(), "error", opErr)
 	}
 	action := "logging.pipeline.enable"
 	if !enabled {
 		action = "logging.pipeline.disable"
 	}
-	recordAudit(r, h.queries, action, "logging_pipeline", pipeline.ID.String(), pipeline.Name, map[string]any{
-		"enabled":      enabled,
-		"operation_id": operationIDOrEmpty(op),
+	mutationContext := withOperationIdempotency(r, "logging")
+	result, err := executeLoggingMutation(r, h,
+		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingPipeline], error) {
+			pipeline, updateErr := q.UpdateLoggingPipeline(r.Context(), params)
+			if updateErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, updateErr
+			}
+			op, opErr := createLoggingPipelineApplyOperation(mutationContext, q, pipeline, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingPipeline]{row: pipeline, op: op}, opErr
+		},
+		func() (loggingMutationResult[sqlc.LoggingPipeline], error) {
+			pipeline, updateErr := h.queries.UpdateLoggingPipeline(r.Context(), params)
+			if updateErr != nil {
+				return loggingMutationResult[sqlc.LoggingPipeline]{}, updateErr
+			}
+			op, opErr := createLoggingPipelineApplyOperation(mutationContext, h.queries, pipeline, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LoggingPipeline]{row: pipeline, op: op}, opErr
+		},
+		func(result loggingMutationResult[sqlc.LoggingPipeline]) clusterAuditEvent {
+			return clusterAuditEvent{action: action, resourceType: "logging_pipeline", resourceID: result.row.ID.String(), resourceName: result.row.Name, status: http.StatusAccepted, detail: map[string]any{
+				"enabled": enabled, "operation_id": operationIDOrEmpty(result.op),
+			}}
+		})
+	if err != nil {
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging pipeline")
+		return
+	}
+	h.afterLoggingOperationCommit(result.op)
+	RespondAcceptedOperation(w, "/api/v1/logging/operations/"+result.op.ID.String()+"/", loggingPipelineMutationReceipt{
+		Pipeline:  loggingPipelineDTO(result.row, currentDTOs[0].OutputIDs, currentDTOs[0].OutputNames),
+		Operation: loggingOperationResponse(result.op),
 	})
-	RespondJSON(w, http.StatusOK, pipeline)
 }
 
 // FluentbitConfig handles GET /api/v1/logging/pipelines/{id}/fluentbit-config/.
@@ -914,7 +1305,11 @@ func (h *LoggingHandler) FluentbitConfig(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging pipeline not found")
 		return
 	}
-	config := h.renderFullFluentbitConfig(r.Context(), pipeline.ClusterID, false)
+	config, err := h.renderFullFluentbitConfig(r.Context(), pipeline.ClusterID, false)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to render logging configuration")
+		return
+	}
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"cluster_id": pipeline.ClusterID.String(),
 		"config":     config,
@@ -935,7 +1330,10 @@ func (h *LoggingHandler) refreshAggregateFluentBitConfig(ctx context.Context, cl
 	if err != nil {
 		return fmt.Errorf("parse cluster id: %w", err)
 	}
-	config := h.renderFullFluentbitConfig(ctx, cu, true)
+	config, err := h.renderFullFluentbitConfig(ctx, cu, true)
+	if err != nil {
+		return fmt.Errorf("render aggregate config: %w", err)
+	}
 	if err := ensureNamespace(ctx, h.requester, clusterID, LoggingNamespace); err != nil {
 		return fmt.Errorf("ensure namespace: %w", err)
 	}
@@ -968,7 +1366,7 @@ const fluentBitDefaultParsers = `[PARSER]
 // a cluster from its enabled pipelines (filters) and outputs, reusing the same
 // block renderers the controller applies to the cluster. Previously this view
 // returned a hardcoded stub that ignored the actual pipelines/outputs.
-func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterID uuid.UUID, includeSecrets bool) string {
+func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterID uuid.UUID, includeSecrets bool) (string, error) {
 	// includeSecrets is retained for callers; system ingest tokens are never
 	// rendered into this ConfigMap (bearer_token_file + member Secret).
 	_ = includeSecrets
@@ -997,34 +1395,71 @@ func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterI
 	writeKV(&b, "Merge_Log", "On")
 
 	pipelines, err := h.queries.ListPipelinesByCluster(ctx, sqlc.ListPipelinesByClusterParams{ClusterID: clusterID, Limit: 500, Offset: 0})
-	if err == nil {
-		for _, p := range pipelines {
-			if !p.Enabled {
-				continue
-			}
-			b.WriteString("\n")
-			b.WriteString(renderPipelineBlock(loggingOperationEnvelope{
-				ClusterID: clusterID.String(), TargetID: p.ID.String(), TargetType: "pipeline",
-				Name: p.Name, Enabled: p.Enabled, Namespaces: p.Namespaces, Labels: p.Labels, Filters: p.Filters,
-			}))
+	if err != nil {
+		return "", fmt.Errorf("list pipelines: %w", err)
+	}
+	pipelineByID := make(map[uuid.UUID]sqlc.LoggingPipeline, len(pipelines))
+	pipelineIDs := make([]uuid.UUID, 0, len(pipelines))
+	for _, p := range pipelines {
+		pipelineByID[p.ID] = p
+		pipelineIDs = append(pipelineIDs, p.ID)
+		if !p.Enabled {
+			continue
+		}
+		b.WriteString("\n")
+		b.WriteString(renderPipelineBlock(loggingOperationEnvelope{
+			ClusterID: clusterID.String(), TargetID: p.ID.String(), TargetType: "pipeline",
+			Name: p.Name, Enabled: p.Enabled, Namespaces: p.Namespaces, Labels: p.Labels, Filters: p.Filters,
+		}))
+	}
+	details, err := h.queries.ListLoggingPipelineOutputDetails(ctx, pipelineIDs)
+	if err != nil {
+		return "", fmt.Errorf("list pipeline outputs: %w", err)
+	}
+	pipelinesByOutput := make(map[uuid.UUID][]sqlc.LoggingPipeline)
+	for _, detail := range details {
+		pipeline, ok := pipelineByID[detail.LoggingPipelineID]
+		if ok {
+			pipelinesByOutput[detail.LoggingOutputID] = append(pipelinesByOutput[detail.LoggingOutputID], pipeline)
 		}
 	}
 
 	outputs, err := h.queries.ListOutputsByCluster(ctx, sqlc.ListOutputsByClusterParams{ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true}, Limit: 500, Offset: 0})
+	if err != nil {
+		return "", fmt.Errorf("list outputs: %w", err)
+	}
 	enabledOutputs := 0
-	if err == nil {
-		for _, o := range outputs {
-			if !o.Enabled {
+	for _, o := range outputs {
+		if !o.Enabled {
+			continue
+		}
+		linkedPipelines := pipelinesByOutput[o.ID]
+		// A cluster with no pipelines keeps the historical direct-output mode.
+		// Once any pipeline exists, only explicit links receive records. This
+		// fails safe for pre-association rows and for damaged relationships:
+		// missing metadata cannot silently copy every cluster log externally.
+		if len(pipelines) == 0 {
+			enabledOutputs++
+			b.WriteString("\n")
+			b.WriteString(renderOutputBlock(loggingOperationEnvelope{
+				ClusterID: clusterID.String(), TargetID: o.ID.String(), TargetType: "output",
+				Name: o.Name, OutputType: o.OutputType, Enabled: o.Enabled, Configuration: o.Configuration,
+				IsSystem: o.IsSystem,
+			}))
+			continue
+		}
+		for _, pipeline := range linkedPipelines {
+			if !pipeline.Enabled {
 				continue
 			}
 			enabledOutputs++
 			b.WriteString("\n")
-			env := loggingOperationEnvelope{
+			b.WriteString(renderOutputBlock(loggingOperationEnvelope{
 				ClusterID: clusterID.String(), TargetID: o.ID.String(), TargetType: "output",
-				Name: o.Name, OutputType: o.OutputType, Enabled: o.Enabled, Configuration: o.Configuration,
-				IsSystem: o.IsSystem,
-			}
-			b.WriteString(renderOutputBlock(env))
+				Name: o.Name + " via " + pipeline.Name, OutputType: o.OutputType, Enabled: o.Enabled,
+				Configuration: withLoggingOutputMatch(o.Configuration, pipelineRouteTag(pipeline.ID)),
+				IsSystem:      o.IsSystem,
+			}))
 		}
 	}
 	if enabledOutputs == 0 {
@@ -1034,7 +1469,7 @@ func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterI
 		writeKV(&b, "Name", "stdout")
 		writeKV(&b, "Match", "*")
 	}
-	return b.String()
+	return b.String(), nil
 }
 
 // --- Operations endpoints ---
@@ -1053,31 +1488,50 @@ func (h *LoggingHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 	if v := strings.TrimSpace(r.URL.Query().Get("status")); v != "" {
 		arg.Status = pgtype.Text{String: v, Valid: true}
 	}
-	ops, err := h.queries.ListLoggingOperations(r.Context(), arg)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list logging operations")
-		return
-	}
-	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
+	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceLogging, rbac.VerbRead, rbac.NarrowedClustersWiden)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
+	var ops []sqlc.LoggingOperation
+	var total int64
+	pager, hasPager := h.queries.(loggingOperationPager)
+	if all {
+		ops, err = h.queries.ListLoggingOperations(r.Context(), arg)
+		if err == nil && hasPager {
+			total, err = pager.CountLoggingOperations(r.Context(), sqlc.CountLoggingOperationsParams{
+				TargetType: arg.TargetType, TargetKey: arg.TargetKey, Status: arg.Status,
+			})
+		}
+	} else {
+		if !hasPager {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Scoped logging-operation pagination is unavailable")
+			return
+		}
+		scoped := sqlc.ListLoggingOperationsForScopesParams{
+			TargetType: arg.TargetType, TargetKey: arg.TargetKey, Status: arg.Status,
+			ClusterIds: clusterIDs, QueryLimit: limit, QueryOffset: offset,
+		}
+		ops, err = pager.ListLoggingOperationsForScopes(r.Context(), scoped)
+		if err == nil {
+			total, err = pager.CountLoggingOperationsForScopes(r.Context(), sqlc.CountLoggingOperationsForScopesParams{
+				TargetType: arg.TargetType, TargetKey: arg.TargetKey, Status: arg.Status, ClusterIds: clusterIDs,
+			})
+		}
+	}
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list logging operations")
+		return
+	}
 	items := make([]map[string]any, 0, len(ops))
 	for _, op := range ops {
-		if restricted {
-			clusterID, err := h.loggingOperationClusterID(r.Context(), op)
-			if err != nil || !h.authz.allowsCluster(bindings, clusterID, rbac.ResourceLogging, rbac.VerbRead) {
-				continue
-			}
-		}
 		items = append(items, loggingOperationResponse(op))
 	}
-	// Operations are filtered in-memory by per-cluster RBAC after the page
-	// query, so a COUNT of all operations wouldn't match the visible page.
-	// Use the page length as the total. // TODO(total): push the RBAC
-	// cluster filter into a counted SQL query.
-	RespondList(w, items, NewPagination(len(items), int(limit), int(offset), len(items)))
+	if !hasPager {
+		RespondList(w, items, NewPaginationFromPage(int(limit), int(offset), len(ops)))
+		return
+	}
+	RespondList(w, items, NewPagination(int(total), int(limit), int(offset), len(ops)))
 }
 
 // GetOperation handles GET /api/v1/logging/operations/{id}/.
@@ -1130,18 +1584,27 @@ func (h *LoggingHandler) RetryOperation(w http.ResponseWriter, r *http.Request) 
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbUpdate) {
 		return
 	}
-	requeued, err := h.queries.RequeueLoggingOperation(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, "Failed to retry logging operation")
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
-	h.publishLoggingOperationChanged(requeued)
-	h.TriggerReconcile()
-	recordAudit(r, h.queries, "logging.operation.retry", "logging_operation", id.String(), op.TargetKey, map[string]any{
-		"target_type":     op.TargetType,
-		"previous_status": op.Status,
-	})
-	RespondJSON(w, http.StatusAccepted, loggingOperationResponse(requeued))
+	requeued, err := executeLoggingMutation(r, h,
+		func(q LoggingMutationTx) (sqlc.LoggingOperation, error) {
+			return q.RequeueLoggingOperation(r.Context(), id)
+		},
+		func() (sqlc.LoggingOperation, error) {
+			return h.queries.RequeueLoggingOperation(r.Context(), id)
+		},
+		func(requeued sqlc.LoggingOperation) clusterAuditEvent {
+			return clusterAuditEvent{action: "logging.operation.retry", resourceType: "logging_operation", resourceID: id.String(), resourceName: op.TargetKey, status: http.StatusAccepted, detail: map[string]any{
+				"target_type": op.TargetType, "previous_status": op.Status,
+			}}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.RetryError, "Failed to retry logging operation")
+		return
+	}
+	h.afterLoggingOperationCommit(requeued)
+	RespondAcceptedOperation(w, "/api/v1/logging/operations/"+requeued.ID.String()+"/", loggingOperationResponse(requeued))
 }
 
 // --- Reconciler internals ---
@@ -1166,6 +1629,14 @@ type loggingOperationEnvelope struct {
 }
 
 func (h *LoggingHandler) enqueueOutputApply(ctx context.Context, output sqlc.LoggingOutput, userID pgtype.UUID) (sqlc.LoggingOperation, error) {
+	op, err := createLoggingOutputApplyOperation(ctx, h.queries, output, userID)
+	if err == nil {
+		h.afterLoggingOperationCommit(op)
+	}
+	return op, err
+}
+
+func createLoggingOutputApplyOperation(ctx context.Context, q loggingOperationCreator, output sqlc.LoggingOutput, userID pgtype.UUID) (sqlc.LoggingOperation, error) {
 	if !output.ClusterID.Valid {
 		return sqlc.LoggingOperation{}, errors.New("logging output has no cluster_id")
 	}
@@ -1179,10 +1650,10 @@ func (h *LoggingHandler) enqueueOutputApply(ctx context.Context, output sqlc.Log
 		IsSystem:      output.IsSystem,
 		Configuration: stripBearerFromLoggingConfiguration(output.Configuration),
 	}
-	return h.enqueueOperation(ctx, "output", output.ID.String(), "apply", env, userID)
+	return createLoggingOperation(ctx, q, "output", output.ID.String(), "apply", env, userID)
 }
 
-func (h *LoggingHandler) enqueueOutputDelete(ctx context.Context, output sqlc.LoggingOutput, userID pgtype.UUID) (sqlc.LoggingOperation, error) {
+func createLoggingOutputDeleteOperation(ctx context.Context, q loggingOperationCreator, output sqlc.LoggingOutput, userID pgtype.UUID) (sqlc.LoggingOperation, error) {
 	clusterID := ""
 	if output.ClusterID.Valid {
 		clusterID = uuid.UUID(output.ClusterID.Bytes).String()
@@ -1194,10 +1665,10 @@ func (h *LoggingHandler) enqueueOutputDelete(ctx context.Context, output sqlc.Lo
 		Name:       output.Name,
 		OutputType: output.OutputType,
 	}
-	return h.enqueueOperation(ctx, "output", output.ID.String(), "delete", env, userID)
+	return createLoggingOperation(ctx, q, "output", output.ID.String(), "delete", env, userID)
 }
 
-func (h *LoggingHandler) enqueuePipelineApply(ctx context.Context, pipeline sqlc.LoggingPipeline, userID pgtype.UUID) (sqlc.LoggingOperation, error) {
+func createLoggingPipelineApplyOperation(ctx context.Context, q loggingOperationCreator, pipeline sqlc.LoggingPipeline, userID pgtype.UUID) (sqlc.LoggingOperation, error) {
 	env := loggingOperationEnvelope{
 		ClusterID:  pipeline.ClusterID.String(),
 		TargetID:   pipeline.ID.String(),
@@ -1208,17 +1679,17 @@ func (h *LoggingHandler) enqueuePipelineApply(ctx context.Context, pipeline sqlc
 		Labels:     pipeline.Labels,
 		Filters:    pipeline.Filters,
 	}
-	return h.enqueueOperation(ctx, "pipeline", pipeline.ID.String(), "apply", env, userID)
+	return createLoggingOperation(ctx, q, "pipeline", pipeline.ID.String(), "apply", env, userID)
 }
 
-func (h *LoggingHandler) enqueuePipelineDelete(ctx context.Context, pipeline sqlc.LoggingPipeline, userID pgtype.UUID) (sqlc.LoggingOperation, error) {
+func createLoggingPipelineDeleteOperation(ctx context.Context, q loggingOperationCreator, pipeline sqlc.LoggingPipeline, userID pgtype.UUID) (sqlc.LoggingOperation, error) {
 	env := loggingOperationEnvelope{
 		ClusterID:  pipeline.ClusterID.String(),
 		TargetID:   pipeline.ID.String(),
 		TargetType: "pipeline",
 		Name:       pipeline.Name,
 	}
-	return h.enqueueOperation(ctx, "pipeline", pipeline.ID.String(), "delete", env, userID)
+	return createLoggingOperation(ctx, q, "pipeline", pipeline.ID.String(), "delete", env, userID)
 }
 
 // SetEventBus wires the SSE bus for logging_operation.changed liveness
@@ -1244,7 +1715,27 @@ func (h *LoggingHandler) publishLoggingOperationChanged(op sqlc.LoggingOperation
 	events.PublishChanged(h.bus, "logging_operation", env.ClusterID, op.ID.String(), map[string]any{"status": op.Status})
 }
 
-func (h *LoggingHandler) enqueueOperation(ctx context.Context, targetType, targetKey, operationType string, env loggingOperationEnvelope, userID pgtype.UUID) (sqlc.LoggingOperation, error) {
+func (h *LoggingHandler) afterLoggingOperationCommit(op sqlc.LoggingOperation) {
+	if h == nil || op.ID == uuid.Nil {
+		return
+	}
+	h.publishLoggingOperationChanged(op)
+	h.TriggerReconcile()
+}
+
+type loggingOperationCreator interface {
+	CreateLoggingOperation(context.Context, sqlc.CreateLoggingOperationParams) (sqlc.LoggingOperation, error)
+}
+
+type idempotentLoggingOperationCreator interface {
+	CreateLoggingOperationIdempotent(context.Context, sqlc.CreateLoggingOperationIdempotentParams) (sqlc.LoggingOperation, error)
+}
+
+type dispositionLoggingOperationCreator interface {
+	CreateLoggingOperationIdempotentWithDisposition(context.Context, sqlc.CreateLoggingOperationIdempotentWithDispositionParams) (sqlc.CreateLoggingOperationIdempotentWithDispositionRow, error)
+}
+
+func createLoggingOperation(ctx context.Context, q loggingOperationCreator, targetType, targetKey, operationType string, env loggingOperationEnvelope, userID pgtype.UUID) (sqlc.LoggingOperation, error) {
 	payload, err := json.Marshal(env)
 	if err != nil {
 		return sqlc.LoggingOperation{}, err
@@ -1259,9 +1750,19 @@ func (h *LoggingHandler) enqueueOperation(ctx context.Context, targetType, targe
 	}
 	var op sqlc.LoggingOperation
 	if idem, ok := operationIdempotencyFromContext(ctx); ok {
-		if creator, ok := h.queries.(interface {
-			CreateLoggingOperationIdempotent(context.Context, sqlc.CreateLoggingOperationIdempotentParams) (sqlc.LoggingOperation, error)
-		}); ok {
+		if creator, ok := q.(dispositionLoggingOperationCreator); ok {
+			result, createErr := creator.CreateLoggingOperationIdempotentWithDisposition(ctx, sqlc.CreateLoggingOperationIdempotentWithDispositionParams{
+				Scope: idem.scope, IdempotencyKey: idem.key, TargetType: params.TargetType, TargetKey: params.TargetKey,
+				OperationType: params.OperationType, Payload: params.Payload, Status: params.Status, CreatedByID: params.CreatedByID,
+			})
+			if createErr != nil {
+				return sqlc.LoggingOperation{}, createErr
+			}
+			if !result.Inserted {
+				return sqlc.LoggingOperation{}, errLoggingOperationIdempotencyConflict
+			}
+			op = result.LoggingOperation
+		} else if creator, ok := q.(idempotentLoggingOperationCreator); ok {
 			op, err = creator.CreateLoggingOperationIdempotent(ctx, sqlc.CreateLoggingOperationIdempotentParams{
 				Scope:          idem.scope,
 				IdempotencyKey: idem.key,
@@ -1272,14 +1773,13 @@ func (h *LoggingHandler) enqueueOperation(ctx context.Context, targetType, targe
 				Status:         params.Status,
 				CreatedByID:    params.CreatedByID,
 			})
+			if err == nil && op.ID != uuid.Nil && (op.TargetType != params.TargetType || op.TargetKey != params.TargetKey || op.OperationType != params.OperationType || !bytes.Equal(op.Payload, params.Payload)) {
+				return sqlc.LoggingOperation{}, errLoggingOperationIdempotencyConflict
+			}
 		}
 	}
 	if op.ID == uuid.Nil && err == nil {
-		op, err = h.queries.CreateLoggingOperation(ctx, params)
-	}
-	if err == nil {
-		h.publishLoggingOperationChanged(op)
-		h.TriggerReconcile()
+		op, err = q.CreateLoggingOperation(ctx, params)
 	}
 	return op, err
 }
@@ -1507,21 +2007,26 @@ func renderOutputBlock(env loggingOperationEnvelope) string {
 		return b.String()
 	}
 	switch env.OutputType {
-	case "elasticsearch":
+	case "elasticsearch", "opensearch":
+		host, port := outputHostPort(cfg, "url", "9200")
 		b.WriteString("[OUTPUT]\n")
 		writeKV(&b, "Name", "es")
 		writeKV(&b, "Match", configString(cfg, "match", "*"))
-		writeKV(&b, "Host", configString(cfg, "host", ""))
-		writeKV(&b, "Port", configString(cfg, "port", "9200"))
+		writeKV(&b, "Host", host)
+		writeKV(&b, "Port", port)
 		writeKV(&b, "Index", configString(cfg, "index", "astronomer"))
-		if v := configString(cfg, "http_user", ""); v != "" {
+		if v := configString(cfg, "username", configString(cfg, "http_user", "")); v != "" {
 			writeKV(&b, "HTTP_User", v)
 		}
-		if v := configString(cfg, "http_passwd", ""); v != "" {
+		if v := configString(cfg, "password", configString(cfg, "http_passwd", "")); v != "" {
 			writeKV(&b, "HTTP_Passwd", v)
 		}
-		if v := configString(cfg, "tls", ""); v != "" {
-			writeKV(&b, "tls", v)
+		tls := configString(cfg, "tls", "")
+		if tls == "" && strings.HasPrefix(strings.ToLower(configString(cfg, "url", "")), "https://") {
+			tls = "on"
+		}
+		if tls != "" {
+			writeKV(&b, "tls", tls)
 		}
 	case "loki":
 		b.WriteString("[OUTPUT]\n")
@@ -1681,6 +2186,7 @@ func renderPipelineBlock(env loggingOperationEnvelope) string {
 	}
 
 	namespaces := decodeStringList(env.Namespaces)
+	patterns := pipelineMatchPatterns(namespaces)
 	if len(namespaces) == 0 {
 		b.WriteString("# no namespaces declared; matches all kube.* records\n")
 	}
@@ -1694,10 +2200,6 @@ func renderPipelineBlock(env loggingOperationEnvelope) string {
 
 	labels := decodeStringMap(env.Labels)
 	if len(labels) > 0 {
-		matchPattern := pipelineMatchPattern(namespaces)
-		b.WriteString("[FILTER]\n")
-		writeKV(&b, "Name", "modify")
-		writeKV(&b, "Match", matchPattern)
 		// Sort keys so renders are deterministic — important for unit tests
 		// and for avoiding spurious diffs in ConfigMap apply traffic.
 		keys := make([]string, 0, len(labels))
@@ -1705,65 +2207,91 @@ func renderPipelineBlock(env loggingOperationEnvelope) string {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		for _, k := range keys {
-			v := labels[k]
-			if !fluentBitValuePattern.MatchString(k) {
-				b.WriteString("# warning: skipped invalid label " + safeComment(k) + "\n")
-				continue
+		for _, matchPattern := range patterns {
+			b.WriteString("[FILTER]\n")
+			writeKV(&b, "Name", "modify")
+			writeKV(&b, "Match", matchPattern)
+			for _, k := range keys {
+				v := labels[k]
+				if !fluentBitValuePattern.MatchString(k) || !fluentBitValuePattern.MatchString(v) {
+					b.WriteString("# warning: skipped invalid label " + safeComment(k) + "\n")
+					continue
+				}
+				b.WriteString("    Add         " + k + " " + v + "\n")
 			}
-			if !fluentBitValuePattern.MatchString(v) {
-				b.WriteString("# warning: skipped invalid label " + safeComment(k) + "\n")
-				continue
-			}
-			b.WriteString("    Add         " + k + " " + v + "\n")
 		}
 	}
 
 	for _, f := range decodeFilters(env.Filters) {
-		if f.Type == "" {
-			b.WriteString("# warning: skipped filter with empty type\n")
+		if !fluentBitValuePattern.MatchString(f.Type) {
+			b.WriteString("# warning: skipped filter with invalid type " + safeComment(f.Type) + "\n")
 			continue
 		}
-		b.WriteString("[FILTER]\n")
-		writeKV(&b, "Name", f.Type)
-		writeKV(&b, "Match", pipelineMatchPattern(namespaces))
 		// Stable iteration order across params for the same reasons as above.
 		keys := make([]string, 0, len(f.Params))
 		for k := range f.Params {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		for _, k := range keys {
-			v := f.Params[k]
-			if !fluentBitValuePattern.MatchString(k) {
-				b.WriteString("# warning: skipped invalid param " + safeComment(k) + "\n")
-				continue
+		for _, matchPattern := range patterns {
+			b.WriteString("[FILTER]\n")
+			writeKV(&b, "Name", f.Type)
+			writeKV(&b, "Match", matchPattern)
+			for _, k := range keys {
+				v := f.Params[k]
+				if !fluentBitValuePattern.MatchString(k) || !fluentBitValuePattern.MatchString(v) {
+					b.WriteString("# warning: skipped invalid param " + safeComment(k) + "\n")
+					continue
+				}
+				writeKV(&b, k, v)
 			}
-			if !fluentBitValuePattern.MatchString(v) {
-				b.WriteString("# warning: skipped invalid param " + safeComment(k) + "\n")
-				continue
+		}
+	}
+
+	// The rewrite creates a pipeline-specific tag. Output blocks match that
+	// exact tag, making the persisted pipeline-output association operational
+	// rather than presentation-only. KEEP=true intentionally permits one input
+	// record to fan out through multiple overlapping pipelines.
+	if env.Enabled {
+		if pipelineID, err := uuid.Parse(env.TargetID); err == nil {
+			emitterBase := "astronomer_pipeline_" + strings.ReplaceAll(pipelineID.String(), "-", "")
+			for i, matchPattern := range patterns {
+				b.WriteString("[FILTER]\n")
+				writeKV(&b, "Name", "rewrite_tag")
+				writeKV(&b, "Match", matchPattern)
+				writeKV(&b, "Rule", "$TAG ^.+$ "+pipelineRouteTag(pipelineID)+" true")
+				writeKV(&b, "Emitter_Name", fmt.Sprintf("%s_%d", emitterBase, i))
 			}
-			writeKV(&b, k, v)
 		}
 	}
 	return b.String()
 }
 
-// pipelineMatchPattern collapses the namespace list into a single Match tag
-// pattern. Fluent Bit supports a glob, so for one namespace we emit
-// kube.<ns>.* and for many we use kube.* with a note above (the per-ns
-// comment lines above let an operator audit what was intended).
-func pipelineMatchPattern(namespaces []string) string {
-	valid := make([]string, 0, len(namespaces))
+func pipelineMatchPatterns(namespaces []string) []string {
+	patterns := make([]string, 0, len(namespaces))
 	for _, ns := range namespaces {
 		if fluentBitValuePattern.MatchString(ns) {
-			valid = append(valid, ns)
+			patterns = append(patterns, "kube."+ns+".*")
 		}
 	}
-	if len(valid) == 1 {
-		return "kube." + valid[0] + ".*"
+	if len(patterns) == 0 {
+		return []string{"kube.*"}
 	}
-	return "kube.*"
+	return patterns
+}
+
+func pipelineRouteTag(pipelineID uuid.UUID) string {
+	return "astronomer.pipeline." + pipelineID.String()
+}
+
+func withLoggingOutputMatch(configuration json.RawMessage, match string) json.RawMessage {
+	cfg := decodeConfiguration(configuration)
+	cfg["match"] = match
+	rendered, err := json.Marshal(cfg)
+	if err != nil {
+		return configuration
+	}
+	return rendered
 }
 
 // loggingFilterSpec mirrors the per-filter shape we accept inside a
@@ -1943,6 +2471,16 @@ func (h *LoggingHandler) recordEvent(ctx context.Context, operationID uuid.UUID,
 
 // --- Response helpers ---
 
+type loggingPipelineMutationReceipt struct {
+	Pipeline  loggingPipelineResponse `json:"pipeline"`
+	Operation map[string]any          `json:"operation"`
+}
+
+type loggingOutputMutationReceipt struct {
+	Output    loggingOutputResponse `json:"output"`
+	Operation map[string]any        `json:"operation"`
+}
+
 func loggingOperationResponse(op sqlc.LoggingOperation) map[string]any {
 	return map[string]any{
 		"id":            op.ID.String(),
@@ -2090,7 +2628,12 @@ func (h *LoggingHandler) listPipelinesFleetWide(w http.ResponseWriter, r *http.R
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count logging pipelines")
 			return
 		}
-		RespondPaginated(w, r, pipelines, total)
+		pipelineDTOs, err := h.loggingPipelineDTOs(r.Context(), pipelines)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to load logging pipeline outputs")
+			return
+		}
+		RespondPaginated(w, r, pipelineDTOs, total)
 		return
 	}
 	filtered := pipelines[:0]
@@ -2099,7 +2642,12 @@ func (h *LoggingHandler) listPipelinesFleetWide(w http.ResponseWriter, r *http.R
 			filtered = append(filtered, p)
 		}
 	}
-	RespondPaginated(w, r, filtered, int64(len(filtered)))
+	pipelineDTOs, err := h.loggingPipelineDTOs(r.Context(), filtered)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to load logging pipeline outputs")
+		return
+	}
+	RespondPaginated(w, r, pipelineDTOs, int64(len(filtered)))
 }
 
 func clusterIDFromRequestOrBody(r *http.Request, raw json.RawMessage) (uuid.UUID, error) {

@@ -6,10 +6,10 @@
 //     plus operator-authored custom constraints (with best-effort live
 //     violation counts).
 //   - POST   …/constraints/validate/   — validate YAML only, no apply.
-//   - POST   …/constraints/            — validate + server-side-apply through
-//     the agent tunnel + persist the authored record. RBAC-gated + audited.
-//   - DELETE …/constraints/{name}/     — remove the authored record and delete
-//     the resource from the cluster. RBAC-gated + audited.
+//   - POST   …/constraints/            — validate and atomically queue desired
+//     state, reconciliation, and audit records. RBAC-gated.
+//   - DELETE …/constraints/{name}/     — atomically queue absent desired state,
+//     reconciliation, and audit records. RBAC-gated.
 //
 // Reuses internal/gatekeeperpolicy bundle apply mechanics (ParseManifest,
 // Manifest.APIPath, kubeutil server-side-apply) and the same K8sRequester the
@@ -20,23 +20,28 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/gatekeeperpolicy"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
-
-const gatekeeperAuthoredFieldManager = "astronomer-authored-constraint"
 
 // GatekeeperConstraintQuerier is the narrow DB surface the handler needs.
 type GatekeeperConstraintQuerier interface {
@@ -46,12 +51,23 @@ type GatekeeperConstraintQuerier interface {
 	DeleteAuthoredConstraint(ctx context.Context, arg sqlc.DeleteAuthoredConstraintParams) error
 }
 
+type GatekeeperConstraintMutationTx interface {
+	GatekeeperConstraintQuerier
+	GetAuthoredConstraintByNameForUpdate(context.Context, sqlc.GetAuthoredConstraintByNameForUpdateParams) (sqlc.AuthoredConstraint, error)
+	MarkAuthoredConstraintDeleted(context.Context, sqlc.MarkAuthoredConstraintDeletedParams) (sqlc.AuthoredConstraint, error)
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+}
+
+type gatekeeperConstraintRunTxFunc func(context.Context, func(GatekeeperConstraintMutationTx) error) error
+
 // GatekeeperConstraintsHandler owns the custom-constraint authoring routes.
 type GatekeeperConstraintsHandler struct {
 	queries   GatekeeperConstraintQuerier
 	requester K8sRequester
 	authz     authorizationSupport
 	audit     any
+	runTx     gatekeeperConstraintRunTxFunc
 }
 
 // NewGatekeeperConstraintsHandler constructs the handler. Both deps are
@@ -72,6 +88,16 @@ func (h *GatekeeperConstraintsHandler) SetAuditWriter(audit any) {
 	h.audit = audit
 }
 
+func (h *GatekeeperConstraintsHandler) SetRunTx(runTx gatekeeperConstraintRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *GatekeeperConstraintsHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
+}
+
 // ConstraintValidationResponse is the create/validate response shape.
 type ConstraintValidationResponse struct {
 	Valid   bool     `json:"valid"`
@@ -79,6 +105,14 @@ type ConstraintValidationResponse struct {
 	Applied bool     `json:"applied"`
 	Name    string   `json:"name,omitempty"`
 	Kind    string   `json:"kind,omitempty"`
+	Status  string   `json:"status,omitempty"`
+	TaskID  string   `json:"task_id,omitempty"`
+}
+
+type GatekeeperConstraintMutationResponse struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	TaskID string `json:"task_id,omitempty"`
 }
 
 // ConstraintYAMLRequest is the create/validate request body.
@@ -109,9 +143,10 @@ func (h *GatekeeperConstraintsHandler) ListConstraints(w http.ResponseWriter, r 
 	if manifests, err := gatekeeperpolicy.Manifests(); err == nil {
 		for _, m := range manifests {
 			bundleItems = append(bundleItems, map[string]any{
-				"name":        m.Name,
-				"kind":        m.Kind,
-				"api_version": m.Group + "/" + m.Version,
+				"name":               m.Name,
+				"kind":               m.Kind,
+				"api_version":        m.Group + "/" + m.Version,
+				"enforcement_action": constraintEnforcementAction(m.JSON),
 			})
 		}
 	}
@@ -124,18 +159,34 @@ func (h *GatekeeperConstraintsHandler) ListConstraints(w http.ResponseWriter, r 
 	customItems := make([]map[string]any, 0, len(authored))
 	for _, c := range authored {
 		item := map[string]any{
-			"name":        c.Name,
-			"kind":        c.Kind,
-			"api_version": c.ApiVersion,
-			"created_by":  nullableUUID(c.CreatedBy),
-			"created_at":  c.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			"name":                c.Name,
+			"kind":                c.Kind,
+			"api_version":         c.ApiVersion,
+			"yaml":                c.Yaml,
+			"created_by":          nullableUUID(c.CreatedBy),
+			"created_at":          c.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			"desired_state":       c.DesiredState,
+			"sync_status":         c.SyncStatus,
+			"generation":          c.Generation,
+			"observed_generation": c.ObservedGeneration,
+		}
+		if c.LastError != "" {
+			item["last_error"] = c.LastError
+		}
+		if c.LastReconciledAt.Valid {
+			item["last_reconciled_at"] = c.LastReconciledAt.Time.UTC().Format(time.RFC3339)
+		}
+		if manifest, parseErr := gatekeeperpolicy.ParseManifest([]byte(c.Yaml)); parseErr == nil {
+			item["enforcement_action"] = constraintEnforcementAction(manifest.JSON)
 		}
 		// Best-effort live violation count: only for Constraint instances (a
 		// ConstraintTemplate has no status.totalViolations), and only when the
 		// tunnel requester is wired and the cluster answers. A failure just
 		// omits the count rather than failing the whole list.
-		if count, ok := h.violationCount(r, clusterID, c); ok {
-			item["violation_count"] = count
+		if c.DesiredState != "absent" {
+			if count, ok := h.violationCount(r, clusterID, c); ok {
+				item["violation_count"] = count
+			}
 		}
 		customItems = append(customItems, item)
 	}
@@ -144,6 +195,18 @@ func (h *GatekeeperConstraintsHandler) ListConstraints(w http.ResponseWriter, r 
 		"bundle": bundleItems,
 		"custom": customItems,
 	})
+}
+
+func constraintEnforcementAction(document []byte) string {
+	var manifest struct {
+		Spec struct {
+			EnforcementAction string `json:"enforcementAction"`
+		} `json:"spec"`
+	}
+	if err := json.Unmarshal(document, &manifest); err != nil {
+		return ""
+	}
+	return manifest.Spec.EnforcementAction
 }
 
 // ValidateConstraint handles POST …/constraints/validate/ — no apply.
@@ -168,7 +231,7 @@ func (h *GatekeeperConstraintsHandler) ValidateConstraint(w http.ResponseWriter,
 	RespondJSON(w, http.StatusOK, resp)
 }
 
-// CreateConstraint handles POST …/constraints/ — validate + apply + persist.
+// CreateConstraint handles POST …/constraints/ — validate and queue desired state.
 func (h *GatekeeperConstraintsHandler) CreateConstraint(w http.ResponseWriter, r *http.Request) {
 	clusterID, ok := h.clusterID(w, r)
 	if !ok {
@@ -180,8 +243,7 @@ func (h *GatekeeperConstraintsHandler) CreateConstraint(w http.ResponseWriter, r
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceClusters, rbac.VerbUpdate) {
 		return
 	}
-	if h.queries == nil || h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnwired, "Gatekeeper apply path is not available")
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	var req ConstraintYAMLRequest
@@ -194,56 +256,70 @@ func (h *GatekeeperConstraintsHandler) CreateConstraint(w http.ResponseWriter, r
 		RespondJSON(w, http.StatusBadRequest, ConstraintValidationResponse{Valid: false, Errors: errs, Applied: false})
 		return
 	}
+	if h.queries == nil || h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnwired, "Gatekeeper apply path is not available")
+		return
+	}
 
-	// Server-side apply through the agent tunnel (same mechanics as the bundle
-	// reconciler).
-	path := kubeutil.ServerSideApplyPath(manifest.APIPath(), kubeutil.ApplyOptions{
-		FieldManager: gatekeeperAuthoredFieldManager,
-		Force:        true,
-	})
-	resp, err := h.requester.Do(r.Context(), clusterID.String(), http.MethodPatch, path, manifest.JSON, kubeutil.ApplyPatchHeaders())
+	params := sqlc.UpsertAuthoredConstraintParams{
+		ClusterID: clusterID, Name: manifest.Name, Kind: manifest.Kind,
+		ApiVersion: manifest.Group + "/" + manifest.Version, Yaml: req.YAML,
+		CreatedBy: currentUserUUID(r),
+	}
+	r = r.WithContext(withOperationIdempotency(r, "gatekeeper_constraint_create"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		ClusterID string `json:"cluster_id"`
+		YAML      string `json:"yaml"`
+	}{ClusterID: clusterID.String(), YAML: req.YAML})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ApplyError, "Failed to apply constraint to cluster: "+err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode Gatekeeper constraint request")
 		return
 	}
-	if resp == nil || resp.StatusCode >= http.StatusBadRequest {
-		msg := "cluster rejected the constraint"
-		if body, derr := decodeResponseBody(resp); derr == nil && len(body) > 0 {
-			msg = string(body)
-		}
-		RespondJSON(w, http.StatusBadRequest, ConstraintValidationResponse{
-			Valid:   true,
-			Errors:  []string{msg},
-			Applied: false,
-			Name:    manifest.Name,
-			Kind:    manifest.Kind,
+	if h.runTx != nil {
+		receipt := ConstraintValidationResponse{Valid: true, Errors: []string{}, Applied: false, Name: manifest.Name, Kind: manifest.Kind}
+		err := h.runTx(r.Context(), func(q GatekeeperConstraintMutationTx) error {
+			idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+			if !ok {
+				return errors.New("Gatekeeper idempotency store is not configured")
+			}
+			_, stored, replay, claimErr := claimOperationReceipt[ConstraintValidationResponse](r.Context(), idemQ, "gatekeeper_constraint_creates", digest)
+			if claimErr != nil {
+				return claimErr
+			}
+			if replay {
+				receipt = stored
+				return nil
+			}
+			var mutationErr error
+			row, mutationErr := q.UpsertAuthoredConstraint(r.Context(), params)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			taskRow, mutationErr := enqueueGatekeeperConstraintReconcile(r, q, row)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			receipt.Status, receipt.TaskID = row.SyncStatus, taskRow.ID.String()
+			if auditErr := recordAuditOutbox(r, q, "gatekeeper.constraint.create", "gatekeeper_constraint", clusterID.String()+"/"+manifest.Name, manifest.Name, http.StatusAccepted, map[string]any{
+				"cluster_id": clusterID.String(), "kind": manifest.Kind,
+				"generation": row.Generation, "task_id": taskRow.ID.String(),
+			}); auditErr != nil {
+				return auditErr
+			}
+			return attachOperationReceipt(r.Context(), idemQ, "gatekeeper_constraint_creates", row.ID, digest, receipt)
 		})
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different Gatekeeper constraint create request")
+			return
+		}
+		if err != nil {
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to queue Gatekeeper constraint")
+			return
+		}
+		RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/gatekeeper/constraints/", receipt)
 		return
 	}
 
-	if _, err := h.queries.UpsertAuthoredConstraint(r.Context(), sqlc.UpsertAuthoredConstraintParams{
-		ClusterID:  clusterID,
-		Name:       manifest.Name,
-		Kind:       manifest.Kind,
-		ApiVersion: manifest.Group + "/" + manifest.Version,
-		Yaml:       req.YAML,
-		CreatedBy:  currentUserUUID(r),
-	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Constraint applied but failed to persist record")
-		return
-	}
-
-	recordAuditWithWriter(r, h.audit, "gatekeeper.constraint.create", "gatekeeper_constraint", clusterID.String()+"/"+manifest.Name, manifest.Name, map[string]any{
-		"cluster_id": clusterID.String(),
-		"kind":       manifest.Kind,
-	})
-	RespondJSON(w, http.StatusCreated, ConstraintValidationResponse{
-		Valid:   true,
-		Errors:  []string{},
-		Applied: true,
-		Name:    manifest.Name,
-		Kind:    manifest.Kind,
-	})
 }
 
 // DeleteConstraint handles DELETE …/constraints/{name}/.
@@ -255,7 +331,10 @@ func (h *GatekeeperConstraintsHandler) DeleteConstraint(w http.ResponseWriter, r
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceClusters, rbac.VerbUpdate) {
 		return
 	}
-	if h.queries == nil {
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	if h.queries == nil || h.runTx == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Gatekeeper constraint store is not available")
 		return
 	}
@@ -264,47 +343,87 @@ func (h *GatekeeperConstraintsHandler) DeleteConstraint(w http.ResponseWriter, r
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Constraint name is required")
 		return
 	}
-	authored, err := h.queries.GetAuthoredConstraintByName(r.Context(), sqlc.GetAuthoredConstraintByNameParams{
+	getParams := sqlc.GetAuthoredConstraintByNameParams{
 		ClusterID: clusterID,
 		Name:      name,
-	})
+	}
+	r = r.WithContext(withOperationIdempotency(r, "gatekeeper_constraint_delete"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		ClusterID string `json:"cluster_id"`
+		Name      string `json:"name"`
+	}{ClusterID: clusterID.String(), Name: name})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Authored constraint not found")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode Gatekeeper constraint delete request")
 		return
 	}
-
-	// Best-effort delete from the cluster before dropping the record. A tunnel
-	// error surfaces to the caller so the record is NOT removed while the
-	// in-cluster resource lingers.
-	if h.requester != nil {
-		if manifest, perr := gatekeeperpolicy.ParseManifest([]byte(authored.Yaml)); perr == nil {
-			resp, derr := h.requester.Do(r.Context(), clusterID.String(), http.MethodDelete, manifest.APIPath(), nil, requestHeaders(""))
-			if derr != nil {
-				RespondRequestError(w, r, http.StatusBadGateway, apierror.K8sError, "Failed to delete constraint from cluster: "+derr.Error())
-				return
+	if h.runTx != nil {
+		receipt := GatekeeperConstraintMutationResponse{Name: name}
+		err := h.runTx(r.Context(), func(q GatekeeperConstraintMutationTx) error {
+			idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+			if !ok {
+				return errors.New("Gatekeeper idempotency store is not configured")
 			}
-			// A 404 means the resource is already gone — proceed to drop the record.
-			if resp != nil && resp.StatusCode >= http.StatusBadRequest && resp.StatusCode != http.StatusNotFound {
-				RespondRequestError(w, r, http.StatusBadGateway, apierror.K8sError, "Cluster rejected the constraint deletion")
-				return
+			_, stored, replay, claimErr := claimOperationReceipt[GatekeeperConstraintMutationResponse](r.Context(), idemQ, "gatekeeper_constraint_deletes", digest)
+			if claimErr != nil {
+				return claimErr
 			}
+			if replay {
+				receipt = stored
+				return nil
+			}
+			locked, lockErr := q.GetAuthoredConstraintByNameForUpdate(r.Context(), sqlc.GetAuthoredConstraintByNameForUpdateParams(getParams))
+			if lockErr != nil {
+				return lockErr
+			}
+			authored, lockErr := q.MarkAuthoredConstraintDeleted(r.Context(), sqlc.MarkAuthoredConstraintDeletedParams(getParams))
+			if lockErr != nil {
+				return lockErr
+			}
+			taskRow, lockErr := enqueueGatekeeperConstraintReconcile(r, q, authored)
+			if lockErr != nil {
+				return lockErr
+			}
+			receipt.Status, receipt.TaskID = authored.SyncStatus, taskRow.ID.String()
+			if auditErr := recordAuditOutbox(r, q, "gatekeeper.constraint.delete", "gatekeeper_constraint", clusterID.String()+"/"+name, name, http.StatusAccepted, map[string]any{
+				"cluster_id": clusterID.String(), "kind": locked.Kind,
+				"generation": authored.Generation, "task_id": taskRow.ID.String(),
+			}); auditErr != nil {
+				return auditErr
+			}
+			return attachOperationReceipt(r.Context(), idemQ, "gatekeeper_constraint_deletes", authored.ID, digest, receipt)
+		})
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different Gatekeeper constraint delete request")
+			return
 		}
-	}
-
-	if err := h.queries.DeleteAuthoredConstraint(r.Context(), sqlc.DeleteAuthoredConstraintParams{
-		ClusterID: clusterID,
-		Name:      name,
-	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete authored constraint")
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Authored constraint not found")
+				return
+			}
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to queue Gatekeeper constraint deletion")
+			return
+		}
+		RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/gatekeeper/constraints/", receipt)
 		return
 	}
-
-	recordAuditWithWriter(r, h.audit, "gatekeeper.constraint.delete", "gatekeeper_constraint", clusterID.String()+"/"+name, name, map[string]any{
-		"cluster_id": clusterID.String(),
-		"kind":       authored.Kind,
-	})
-	w.WriteHeader(http.StatusNoContent)
 }
+
+func enqueueGatekeeperConstraintReconcile(r *http.Request, q tasks.TaskOutboxWriter, row sqlc.AuthoredConstraint) (sqlc.TaskOutbox, error) {
+	task, err := tasks.NewGatekeeperConstraintReconcileTask(row.ClusterID, row.Name, row.Generation)
+	if err != nil {
+		return sqlc.TaskOutbox{}, err
+	}
+	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(5))
+	return tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{
+		DedupeKey: fmt.Sprintf("gatekeeper_constraint:%s:%s:%d", row.ClusterID, row.Name, row.Generation),
+		QueueName: tasks.ClusterTemplateApplyQueueName, MaxRetry: 5,
+		Timeout: gatekeeperConstraintReconcileTimeout, MaxDeliveryAttempts: 20,
+	})
+}
+
+const gatekeeperConstraintReconcileTimeout = 2 * time.Minute
 
 // clusterID parses and validates the {id} path param.
 func (h *GatekeeperConstraintsHandler) clusterID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
@@ -455,14 +574,4 @@ func delimitersBalanced(s string) bool {
 		prev = ch
 	}
 	return len(stack) == 0 && !inString
-}
-
-// recordAuditWithWriter writes an audit row through an explicit writer (the
-// handler's injected audit dep) rather than a querier field, mirroring
-// recordAudit's best-effort, never-fail-the-request contract.
-func recordAuditWithWriter(r *http.Request, writer any, action, resourceType, resourceID, resourceName string, detail map[string]any) {
-	if writer == nil {
-		return
-	}
-	recordAudit(r, writer, action, resourceType, resourceID, resourceName, detail)
 }

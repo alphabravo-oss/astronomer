@@ -45,9 +45,8 @@ randomly-generated one on first boot) is independent of SSO. Log in
 with that account, fix the SSO config in
 `platform_configuration.sso_providers` via the UI, then save.
 
-Live env credentials live in
-[project_live_env.md](../../../.claude/memory/project_live_env.md) for
-the dev environment; production should retrieve from a secret store.
+Retrieve environment credentials from the deployment's approved secret store;
+runbooks must never point at workstation-local credential notes.
 
 ### Repair stuck state
 

@@ -20,7 +20,7 @@ accompanies, and a short description. Codes are grouped by status family; a
 handful of codes legitimately appear under more than one status depending on
 context, so the grouping reflects the dominant usage, not an exhaustive contract.
 
-**Total codes: 221**
+**Total codes: 222**
 
 ## Codes by category
 
@@ -303,6 +303,7 @@ Dominant HTTP status: 500 · Provenance: codemod
 | `SilenceError` | `silence_error` | 500 | indicates a silence error condition. |
 | `SnapshotParse` | `snapshot_parse` | 500 | indicates a snapshot parse condition. |
 | `StatusError` | `status_error` | 500 | indicates a status error condition. |
+| `AuditUnavailable` | `audit_unavailable` | 500 | means mandatory compliance evidence could not be persisted, so the sensitive operation was rejected before side effects. |
 | `SubscribeError` | `subscribe_error` | 500 | indicates a subscribe error condition. |
 | `SyncError` | `sync_error` | 500 | indicates a sync error condition. |
 | `TaskError` | `task_error` | 500 | indicates a task error condition. |

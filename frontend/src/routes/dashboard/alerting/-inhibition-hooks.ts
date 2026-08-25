@@ -4,11 +4,11 @@
  * Co-located with the alerting page to avoid touching the shared
  * `lib/hooks.ts` this wave. Mirrors the silence hooks' conventions.
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import * as api from '@/lib/api';
-import type { InhibitionWriteRequest } from '@/lib/api/alerting-inhibitions';
-import { queryKeys } from '@/lib/query-keys';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import * as api from "@/lib/api";
+import type { InhibitionWriteRequest } from "@/lib/api/alerting-inhibitions";
+import { queryKeys } from "@/lib/query-keys";
 
 export function useInhibitions() {
   return useQuery({
@@ -23,9 +23,10 @@ export function useCreateInhibition() {
     mutationFn: (body: InhibitionWriteRequest) => api.createInhibition(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.alerting.inhibitions });
-      toastSuccess('Inhibition rule created');
+      toastSuccess("Inhibition rule created");
     },
-    onError: (err: Error) => toastApiError('Failed to create inhibition rule', err),
+    onError: (err: Error) =>
+      toastApiError("Failed to create inhibition rule", err),
   });
 }
 
@@ -36,9 +37,10 @@ export function useUpdateInhibition() {
       api.updateInhibition(id, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.alerting.inhibitions });
-      toastSuccess('Inhibition rule updated');
+      toastSuccess("Inhibition rule updated");
     },
-    onError: (err: Error) => toastApiError('Failed to update inhibition rule', err),
+    onError: (err: Error) =>
+      toastApiError("Failed to update inhibition rule", err),
   });
 }
 
@@ -48,8 +50,9 @@ export function useDeleteInhibition() {
     mutationFn: (id: string) => api.deleteInhibition(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.alerting.inhibitions });
-      toastSuccess('Inhibition rule deleted');
+      toastSuccess("Inhibition rule deleted");
     },
-    onError: (err: Error) => toastApiError('Failed to delete inhibition rule', err),
+    onError: (err: Error) =>
+      toastApiError("Failed to delete inhibition rule", err),
   });
 }

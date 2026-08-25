@@ -23,6 +23,7 @@ package tasks
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/hibiken/asynq"
 
@@ -39,33 +40,29 @@ func NewKubectlSessionReapTask() *asynq.Task {
 	return asynq.NewTask(KubectlSessionReapType, nil, asynq.MaxRetry(2))
 }
 
-// KubectlSessionReapDeps is the wiring for the reaper. Built once at
-// server startup and passed to Configure; tests can swap fakes in.
-type KubectlSessionReapDeps struct {
-	Deps kubectl.Deps
+// KubectlSessionReapRuntime is the immutable wiring for the optional reaper.
+// An empty runtime represents a disabled feature and records a skipped tick.
+type KubectlSessionReapRuntime struct {
+	Deps   kubectl.Deps
+	Leader LeaderElector
+	Log    *slog.Logger
 }
 
-var kubectlReapDeps KubectlSessionReapDeps
-
-// ConfigureKubectlSessionReap stores the reaper's runtime deps.
-func ConfigureKubectlSessionReap(deps KubectlSessionReapDeps) {
-	kubectlReapDeps = deps
-}
-
-// ResetKubectlSessionReap clears runtime deps. Tests use this.
-func ResetKubectlSessionReap() {
-	kubectlReapDeps = KubectlSessionReapDeps{}
+func (runtime KubectlSessionReapRuntime) normalized() KubectlSessionReapRuntime {
+	if runtime.Log == nil {
+		runtime.Log = slog.Default()
+	}
+	return runtime
 }
 
 // HandleKubectlSessionReap is the asynq handler. The leader-election
 // wrapper around it ensures only one replica fires per tick.
-func HandleKubectlSessionReap(ctx context.Context, _ *asynq.Task) error {
-	return runPeriodicTaskWithLeader(ctx, KubectlSessionReapType, func() error {
-		if kubectlReapDeps.Deps.Queries == nil {
-			// Feature disabled or not yet wired — exit quietly so the
-			// scheduler's idempotent re-enqueue doesn't generate alerts.
-			return nil
+func (runtime KubectlSessionReapRuntime) HandleKubectlSessionReap(ctx context.Context, _ *asynq.Task) error {
+	runtime = runtime.normalized()
+	return runPeriodicTaskWithLeaderUsing(ctx, runtime.Leader, runtime.Log, KubectlSessionReapType, func() error {
+		if runtime.Deps.Queries == nil {
+			return ErrPeriodicTaskSkipped
 		}
-		return kubectl.Reap(ctx, kubectlReapDeps.Deps)
+		return kubectl.Reap(ctx, runtime.Deps)
 	})
 }

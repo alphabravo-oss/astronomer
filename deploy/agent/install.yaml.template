@@ -55,6 +55,88 @@ metadata:
 automountServiceAccountToken: true
 
 ---
+# Dedicated direct-access identity. This account is never used by the agent and
+# has no long-lived Secret token. The API creates only bounded TokenRequest
+# credentials for it, and its ClusterRole is permanently read-only.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: astronomer-direct-reader
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-direct-reader
+    app.kubernetes.io/component: direct-access
+    app.kubernetes.io/part-of: astronomer
+automountServiceAccountToken: false
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: astronomer-direct-reader
+  labels:
+    app.kubernetes.io/name: astronomer-direct-reader
+    app.kubernetes.io/component: direct-access
+    app.kubernetes.io/part-of: astronomer
+rules:
+{{DIRECT_KUBECONFIG_RBAC_RULES}}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: astronomer-direct-reader
+  labels:
+    app.kubernetes.io/name: astronomer-direct-reader
+    app.kubernetes.io/component: direct-access
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: astronomer-direct-reader
+subjects:
+  - kind: ServiceAccount
+    name: astronomer-direct-reader
+    namespace: astronomer-system
+
+---
+# Exact-name TokenRequest grant: the agent can mint only the dedicated reader
+# identity, never its own ServiceAccount or an administrator identity.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: astronomer-direct-kubeconfig-issuer
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: direct-access
+    app.kubernetes.io/part-of: astronomer
+rules:
+  - apiGroups: [""]
+    resources: ["serviceaccounts/token"]
+    resourceNames: ["astronomer-direct-reader"]
+    verbs: ["create"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: astronomer-direct-kubeconfig-issuer
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: direct-access
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: astronomer-direct-kubeconfig-issuer
+subjects:
+  - kind: ServiceAccount
+    name: {{AGENT_SERVICE_ACCOUNT_NAME}}
+    namespace: astronomer-system
+
+---
 # ClusterRole - rules are rendered from the selected agent privilege profile
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

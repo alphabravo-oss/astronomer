@@ -6,6 +6,13 @@ nightly `pg_dump` taken by the `managementBackup` CronJob (see
 counterpart to that backup: the CronJob writes a custom-format dump to S3;
 this document is how you put it back.
 
+The concise lifecycle and evidence checklist lives in
+[management backup and restore](runbooks/management-backup-and-restore.md).
+Use that document for continuous backup/drill ownership and this document for
+the detailed cutover procedure. Use
+[production installation](runbooks/production-installation.md) when building a
+clean recovery management cluster.
+
 It is intentionally an operator-facing document. It does not assume the reader
 has Astronomer Go internals memorised — but it does assume the reader is
 comfortable with `kubectl`, `helm`, and `psql` / `pg_restore`.

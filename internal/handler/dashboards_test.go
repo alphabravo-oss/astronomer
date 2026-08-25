@@ -215,6 +215,7 @@ func (f *fakeDashboardQuerier) UpdatePrometheusDatasource(_ context.Context, arg
 	if !ok {
 		return sqlc.PrometheusDatasource{}, pgx.ErrNoRows
 	}
+	d.Name = arg.Name
 	d.Url = arg.Url
 	d.AuthEncrypted = arg.AuthEncrypted
 	d.TlsSkipVerify = arg.TlsSkipVerify
@@ -353,6 +354,76 @@ func TestWidget_CRUD(t *testing.T) {
 	// Audit: at least created + updated + deleted entries were stamped.
 	if len(q.auditActions) < 3 {
 		t.Fatalf("expected ≥3 audit ops, got %v", q.auditActions)
+	}
+}
+
+func TestDashboardAdminListsHonorPaginationContract(t *testing.T) {
+	cid, user := dashboardCallerIDSuperuser()
+	q := newFakeDashboardQuerier(user)
+	h := NewDashboardHandler(q)
+	for i := 0; i < 3; i++ {
+		id := uuid.New()
+		q.widgets[id] = sqlc.DashboardWidget{
+			ID: id, Name: fmt.Sprintf("widget-%d", i), Description: "",
+			WidgetType: "prom_stat", Spec: json.RawMessage(`{"datasource":"default","query":"up"}`),
+			Scope: "global", ScopeIds: []uuid.UUID{}, GridW: 4, GridH: 2,
+			RefreshSeconds: 60, Enabled: true, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		}
+	}
+
+	w := httptest.NewRecorder()
+	h.AdminList(w, authedRequest(http.MethodGet, "/api/v1/admin/dashboard-widgets/?limit=1&offset=1", cid, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("widget list status=%d body=%s", w.Code, w.Body.String())
+	}
+	var page struct {
+		Data       []WidgetResponse `json:"data"`
+		Pagination Pagination       `json:"pagination"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode widget page: %v", err)
+	}
+	if len(page.Data) != 1 || page.Pagination.Limit != 1 || page.Pagination.Offset != 1 || page.Pagination.Total == nil || *page.Pagination.Total != 3 {
+		t.Fatalf("unexpected widget page: %+v", page)
+	}
+
+	empty := httptest.NewRecorder()
+	h.AdminListDatasources(empty, authedRequest(http.MethodGet, "/api/v1/admin/prometheus-datasources/", cid, nil))
+	var emptyPage struct {
+		Data       []DatasourceResponse `json:"data"`
+		Pagination Pagination           `json:"pagination"`
+	}
+	if err := json.Unmarshal(empty.Body.Bytes(), &emptyPage); err != nil {
+		t.Fatalf("decode datasource page: %v", err)
+	}
+	if len(emptyPage.Data) != 0 || emptyPage.Pagination.Limit < 1 {
+		t.Fatalf("empty page violates pagination contract: %+v", emptyPage)
+	}
+}
+
+func TestDatasourceURLValidationAndAuditRedaction(t *testing.T) {
+	for _, rawURL := range []string{
+		"https://user:password@prometheus.example.com/api",
+		"https:///missing-host",
+	} {
+		if err := validateDatasourceRequest(DatasourceRequest{Name: "primary", URL: rawURL}); err == nil {
+			t.Fatalf("validateDatasourceRequest(%q) = nil, want error", rawURL)
+		}
+	}
+	row := sqlc.PrometheusDatasource{
+		Url:           "https://prometheus.example.com:9090/tenant/secret?token=top-secret",
+		AuthEncrypted: "ciphertext", TlsSkipVerify: true, Enabled: true,
+	}
+	detail := datasourceAuditDetail(row)
+	if got := detail["endpoint_origin"]; got != "https://prometheus.example.com:9090" {
+		t.Fatalf("endpoint_origin = %v", got)
+	}
+	encoded, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "secret") || strings.Contains(string(encoded), "token") || strings.Contains(string(encoded), "tenant") {
+		t.Fatalf("audit detail leaked endpoint path/query: %s", encoded)
 	}
 }
 
@@ -615,7 +686,8 @@ func TestDatasource_CRUD_And_Test(t *testing.T) {
 	q := newFakeDashboardQuerier(user)
 	h := NewDashboardHandler(q)
 	h.SetAuditor(q)
-	body := []byte(`{"name":"default","url":"` + srv.URL + `","enabled":true}`)
+	h.SetEncryptor(testEncryptor(t))
+	body := []byte(`{"name":"default","url":"` + srv.URL + `","bearer_token":"secret-token","enabled":true}`)
 	w := httptest.NewRecorder()
 	h.AdminCreateDatasource(w, authedRequest(http.MethodPost, "/api/v1/admin/prometheus-datasources/", cid, body))
 	if w.Code != http.StatusCreated {
@@ -644,6 +716,22 @@ func TestDatasource_CRUD_And_Test(t *testing.T) {
 	_ = json.Unmarshal(tw.Body.Bytes(), &probeEnv)
 	if v, _ := probeEnv.Data["ok"].(bool); !v {
 		t.Fatalf("expected ok=true from test endpoint, got %v", probeEnv)
+	}
+	// Empty auth fields on PUT preserve the sealed credential, while the
+	// ordinary mutable fields (including name) are updated.
+	originalCiphertext := q.datasources[ds.ID].AuthEncrypted
+	uw := httptest.NewRecorder()
+	updateBody := []byte(`{"name":"primary","url":"` + srv.URL + `","tls_skip_verify":true,"enabled":false}`)
+	h.AdminUpdateDatasource(uw, withURLParam(authedRequest(http.MethodPut, "/api/v1/admin/prometheus-datasources/"+ds.ID.String()+"/", cid, updateBody), "id", ds.ID.String()))
+	if uw.Code != http.StatusOK {
+		t.Fatalf("update status=%d body=%s", uw.Code, uw.Body.String())
+	}
+	updated := q.datasources[ds.ID]
+	if updated.Name != "primary" || updated.Enabled || !updated.TlsSkipVerify {
+		t.Fatalf("datasource update did not persist mutable fields: %+v", updated)
+	}
+	if updated.AuthEncrypted == "" || updated.AuthEncrypted != originalCiphertext {
+		t.Fatalf("empty-auth PUT did not preserve ciphertext")
 	}
 	// Delete
 	dw := httptest.NewRecorder()

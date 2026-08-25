@@ -51,11 +51,10 @@ func NewAgentUpgradeStuckSweepTask() *asynq.Task {
 // a cluster that is gone.
 func HandleAgentUpgradeStuckSweep(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, AgentUpgradeStuckSweepType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().DebugContext(ctx, "agent upgrade sweep runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("agent upgrade sweep runtime is not configured")
 		}
-		q, ok := runtimeDeps.Queries.(agentUpgradeSweeper)
+		q, ok := runtimeDependencies(ctx).Queries.(agentUpgradeSweeper)
 		if !ok {
 			return fmt.Errorf("agent upgrade sweep not supported by runtime querier")
 		}
@@ -67,7 +66,7 @@ func HandleAgentUpgradeStuckSweep(ctx context.Context, _ *asynq.Task) error {
 			return fmt.Errorf("fail stuck agent upgrade operations: %w", err)
 		}
 		for _, op := range stuck {
-			runtimeLogger().WarnContext(ctx, "failed a stuck agent upgrade operation",
+			runtimeLogger(ctx).WarnContext(ctx, "failed a stuck agent upgrade operation",
 				"operation_id", op.ID.String(),
 				"cluster_id", op.ClusterID.String(),
 				"target_version", op.TargetVersion,

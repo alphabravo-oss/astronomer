@@ -1,0 +1,23 @@
+[
+  {
+    "kubernetes_version": "v1.33.0",
+    "source_url": "https://raw.githubusercontent.com/kubernetes/kubernetes/v1.33.0/api/openapi-spec/swagger.json",
+    "root_properties": ["apiVersion", "kind", "metadata", "spec", "status"],
+    "spec_properties": ["minReadySeconds", "paused", "progressDeadlineSeconds", "replicas", "revisionHistoryLimit", "selector", "strategy", "template"],
+    "status_properties": ["availableReplicas", "collisionCount", "conditions", "observedGeneration", "readyReplicas", "replicas", "terminatingReplicas", "unavailableReplicas", "updatedReplicas"]
+  },
+  {
+    "kubernetes_version": "v1.34.0",
+    "source_url": "https://raw.githubusercontent.com/kubernetes/kubernetes/v1.34.0/api/openapi-spec/swagger.json",
+    "root_properties": ["apiVersion", "kind", "metadata", "spec", "status"],
+    "spec_properties": ["minReadySeconds", "paused", "progressDeadlineSeconds", "replicas", "revisionHistoryLimit", "selector", "strategy", "template"],
+    "status_properties": ["availableReplicas", "collisionCount", "conditions", "observedGeneration", "readyReplicas", "replicas", "terminatingReplicas", "unavailableReplicas", "updatedReplicas"]
+  },
+  {
+    "kubernetes_version": "v1.35.0",
+    "source_url": "https://raw.githubusercontent.com/kubernetes/kubernetes/v1.35.0/api/openapi-spec/swagger.json",
+    "root_properties": ["apiVersion", "kind", "metadata", "spec", "status"],
+    "spec_properties": ["minReadySeconds", "paused", "progressDeadlineSeconds", "replicas", "revisionHistoryLimit", "selector", "strategy", "template"],
+    "status_properties": ["availableReplicas", "collisionCount", "conditions", "observedGeneration", "readyReplicas", "replicas", "terminatingReplicas", "unavailableReplicas", "updatedReplicas"]
+  }
+]

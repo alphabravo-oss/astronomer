@@ -108,6 +108,19 @@ func (q *Queries) ListUIExtensions(ctx context.Context) ([]UIExtension, error) {
 	return items, nil
 }
 
+const getUIExtensionByNameForUpdate = `-- name: GetUIExtensionByNameForUpdate :one
+SELECT ` + uiExtensionColumns + `
+FROM ui_extensions
+WHERE name = $1
+FOR UPDATE`
+
+// GetUIExtensionByNameForUpdate is intentionally transaction-only. Mutation
+// handlers use it to serialize compatibility and bundle-verification decisions
+// with the row update and mandatory audit intent.
+func (q *Queries) GetUIExtensionByNameForUpdate(ctx context.Context, name string) (UIExtension, error) {
+	return scanUIExtension(q.db.QueryRow(ctx, getUIExtensionByNameForUpdate, name))
+}
+
 const upsertUIExtension = `-- name: UpsertUIExtension :one
 INSERT INTO ui_extensions (
     name,

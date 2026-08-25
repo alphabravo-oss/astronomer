@@ -1,0 +1,49 @@
+{
+  "agent": {
+    "future_major_policy": "reject",
+    "heartbeat_schema": {
+      "maximum": 2,
+      "minimum": 2
+    },
+    "maximum_supported_version_exclusive": "v2.0.0",
+    "minimum_compatible_version": "v1.0.0",
+    "minimum_supported_version": "v1.1.0",
+    "support_window_release_lines": 2,
+    "tunnel_protocol": {
+      "maximum": 1,
+      "minimum": 1
+    }
+  },
+  "agent_protocol": {
+    "name": "astronomer.delivery",
+    "required_capabilities": [
+      "delivery.assignments.v2",
+      "delivery.status.v2",
+      "delivery.system.v2"
+    ],
+    "supported_ranges": [
+      {
+        "maximum": 2,
+        "minimum": 2
+      }
+    ],
+    "unknown_field_policy": "reject"
+  },
+  "postgresql": {
+    "migration_mode": "versioned_incremental",
+    "minimum_upgrade_schema": 1,
+    "reversible_through_schema": 26,
+    "supported_majors": [
+      16,
+      17
+    ],
+    "supported_upgrade_release_lines": [
+      "1.0.x",
+      "1.1.x"
+    ],
+    "target_schema": 26,
+    "tls_required_in_production": true
+  },
+  "release_line": "1.1.x",
+  "schema_version": 1
+}

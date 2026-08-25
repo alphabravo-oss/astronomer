@@ -1,77 +1,90 @@
-/**
- * Request contract for POST /api/v1/catalog/repositories/.
- *
- * The bug: `createHelmRepository` posted its camelCase argument object
- * verbatim. Only RESPONSES are translated (the `camelizeKeys` interceptor);
- * there is no request interceptor, so the server saw `repoType` where it reads
- * `repo_type`, and saw `username`/`password` at the top level where it reads
- * `auth_config`. Go's json decoder discards unknown fields silently, so an
- * operator who filled in the Authentication fields got a repository with no
- * credential at all — surfacing much later as a 401 from the registry that
- * reads as a wrong password rather than a dropped one. The body also omitted
- * `enabled`, which decoded to `false` and excluded the repository from the
- * scheduled sync sweep entirely.
- *
- * These assertions are on the BODY, not on the arguments, because the body is
- * the half of the contract the compiler cannot see.
- */
-import api from '@/lib/api';
-import { createHelmRepository } from '@/lib/api';
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as generated from "@/lib/api/generated/client";
+import { createHelmRepository } from "@/lib/api/catalog";
 
-describe('createHelmRepository request body', () => {
-  let post: ReturnType<typeof vi.spyOn>;
+vi.mock("@/lib/api/generated/client", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("@/lib/api/generated/client")
+  >();
+  return { ...actual, postCatalogRepositories: vi.fn() };
+});
 
-  beforeEach(() => {
-    post = vi.spyOn(api, 'post').mockResolvedValue({ data: { data: { id: 'r1' } } });
-  });
-  afterEach(() => post.mockRestore());
+const repositoryWire = {
+  id: "1fa85f64-5717-4562-b3fc-2c963f66afa6",
+  name: "private",
+  url: "https://charts.example.com",
+  repo_type: "helm",
+  description: "",
+  is_default: false,
+  auth_type: "basic",
+  auth_config: {},
+  enabled: true,
+  last_synced_at: null,
+  last_sync_attempted_at: null,
+  last_sync_error: "",
+  created_by_id: null,
+  created_at: "2026-08-23T00:00:00Z",
+  updated_at: "2026-08-23T00:00:00Z",
+  owner_project_id: null,
+  chart_count: 0,
+};
 
-  const bodyOf = () => post.mock.calls[0][1] as Record<string, unknown>;
+describe("createHelmRepository generated request contract", () => {
+  afterEach(() => vi.clearAllMocks());
 
-  it('sends credentials inside auth_config, never at the top level', async () => {
+  function mockCreate() {
+    vi.mocked(generated.postCatalogRepositories).mockResolvedValueOnce({
+      data: repositoryWire,
+    });
+  }
+
+  const bodyOf = () =>
+    vi.mocked(generated.postCatalogRepositories).mock.calls[0][0].body;
+
+  it("nests credentials in auth_config and declares basic auth", async () => {
+    mockCreate();
     await createHelmRepository({
-      name: 'private',
-      url: 'https://charts.example.com',
-      repoType: 'helm',
-      username: 'deploy',
-      password: 's3cret',
+      name: "private",
+      url: "https://charts.example.com",
+      repoType: "helm",
+      username: "deploy",
+      password: "s3cret",
     });
 
-    const body = bodyOf();
-    expect(body.auth_config).toEqual({ username: 'deploy', password: 's3cret' });
-    expect(body).not.toHaveProperty('username');
-    expect(body).not.toHaveProperty('password');
+    expect(bodyOf()).toEqual(
+      expect.objectContaining({
+        auth_type: "basic",
+        auth_config: { username: "deploy", password: "s3cret" },
+      }),
+    );
+    expect(bodyOf()).not.toHaveProperty("username");
+    expect(bodyOf()).not.toHaveProperty("password");
   });
 
-  it('sets auth_type so the sync path actually sends the credential', async () => {
+  it("serializes repository type and enabled state in wire casing", async () => {
+    mockCreate();
     await createHelmRepository({
-      name: 'private',
-      url: 'https://charts.example.com',
-      repoType: 'helm',
-      username: 'deploy',
-      password: 's3cret',
+      name: "oci-repo",
+      url: "oci://registry.example.com",
+      repoType: "oci",
     });
-    // ApplyIndexAuth short-circuits on 'none'/'': a credential stored without
-    // an auth_type is a credential that is never sent.
-    expect(bodyOf().auth_type).toBe('basic');
+
+    expect(bodyOf()).toEqual(
+      expect.objectContaining({ repo_type: "oci", enabled: true }),
+    );
+    expect(bodyOf()).not.toHaveProperty("repoType");
   });
 
-  it("sends snake_case repo_type, so the operator's choice is not discarded", async () => {
-    await createHelmRepository({ name: 'oci-repo', url: 'oci://registry.example.com', repoType: 'oci' });
-    const body = bodyOf();
-    expect(body.repo_type).toBe('oci');
-    expect(body).not.toHaveProperty('repoType');
-  });
+  it("makes anonymous authentication explicit", async () => {
+    mockCreate();
+    await createHelmRepository({
+      name: "public",
+      url: "https://charts.example.com",
+      repoType: "helm",
+    });
 
-  it('enables the repository, so the scheduled sweep picks it up', async () => {
-    await createHelmRepository({ name: 'public', url: 'https://charts.example.com', repoType: 'helm' });
-    expect(bodyOf().enabled).toBe(true);
-  });
-
-  it('sends auth_type none and an empty auth_config for an anonymous repository', async () => {
-    await createHelmRepository({ name: 'public', url: 'https://charts.example.com', repoType: 'helm' });
-    const body = bodyOf();
-    expect(body.auth_type).toBe('none');
-    expect(body.auth_config).toEqual({});
+    expect(bodyOf()).toEqual(
+      expect.objectContaining({ auth_type: "none", auth_config: {} }),
+    );
   });
 });

@@ -221,6 +221,42 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 	return i, err
 }
 
+const getUserByIDForUpdate = `-- name: GetUserByIDForUpdate :one
+SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides, is_service FROM users WHERE id = $1 FOR UPDATE
+`
+
+// Administrative identity mutations lock the row before deriving omitted
+// fields, revocation decisions, and transactional audit evidence.
+func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByIDForUpdate, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.FirstName,
+		&i.LastName,
+		&i.Password,
+		&i.IsActive,
+		&i.IsStaff,
+		&i.IsSuperuser,
+		&i.LastLogin,
+		&i.DateJoined,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MustChangePassword,
+		&i.FailedLoginCount,
+		&i.FailedLoginAt,
+		&i.LockedUntil,
+		&i.LockedReason,
+		&i.TokensInvalidatedAt,
+		&i.QuotaPlan,
+		&i.QuotaOverrides,
+		&i.IsService,
+	)
+	return i, err
+}
+
 const getUserByUsername = `-- name: GetUserByUsername :one
 SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides, is_service FROM users WHERE username = $1
 `

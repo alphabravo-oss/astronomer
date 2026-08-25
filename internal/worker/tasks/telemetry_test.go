@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -53,8 +54,8 @@ func TestTelemetry_SkipsWhenDisabled(t *testing.T) {
 		},
 		clusters: 1, users: 1, projects: 1,
 	}
-	if err := sendTelemetry(context.Background(), q, server.Client(), time.Now()); err != nil {
-		t.Fatalf("sendTelemetry returned error: %v", err)
+	if err := sendTelemetry(context.Background(), q, server.Client(), time.Now()); !errors.Is(err, ErrPeriodicTaskSkipped) {
+		t.Fatalf("sendTelemetry returned %v, want disabled-feature skip", err)
 	}
 	if atomic.LoadInt32(&posts) != 0 {
 		t.Fatalf("posts = %d, want 0 (opt-in is off)", posts)
@@ -62,8 +63,8 @@ func TestTelemetry_SkipsWhenDisabled(t *testing.T) {
 
 	// Explicit false too.
 	q.settings["telemetry.enabled"] = []byte(`false`)
-	if err := sendTelemetry(context.Background(), q, server.Client(), time.Now()); err != nil {
-		t.Fatalf("sendTelemetry returned error: %v", err)
+	if err := sendTelemetry(context.Background(), q, server.Client(), time.Now()); !errors.Is(err, ErrPeriodicTaskSkipped) {
+		t.Fatalf("sendTelemetry returned %v, want disabled-feature skip", err)
 	}
 	if atomic.LoadInt32(&posts) != 0 {
 		t.Fatalf("posts = %d after explicit false, want 0", posts)

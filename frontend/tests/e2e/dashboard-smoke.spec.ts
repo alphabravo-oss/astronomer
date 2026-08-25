@@ -1,7 +1,12 @@
 import { expect, type Page, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-import { CSRF_COOKIE, SESSION_COOKIE, seedAuth } from "./helpers/auth";
+import {
+  authMeWire,
+  CSRF_COOKIE,
+  SESSION_COOKIE,
+  seedAuth,
+} from "./helpers/auth";
 
 type SmokeUser = {
   id: string;
@@ -192,7 +197,7 @@ async function mockApi(page: Page, user = adminUser) {
       return route.fulfill({ json: apiResponse({ ok: true }) });
     }
     if (path === "/auth/me") {
-      return route.fulfill({ json: apiResponse(user) });
+      return route.fulfill({ json: apiResponse(authMeWire(user)) });
     }
     if (path === "/settings/features") {
       return route.fulfill({
@@ -260,7 +265,7 @@ async function mockApi(page: Page, user = adminUser) {
         },
       });
     }
-    if (path === "/delivery/fleet" && method === "GET") {
+    if (path === "/delivery/estate" && method === "GET") {
       return route.fulfill({
         json: apiResponse({
           summary: {
@@ -491,7 +496,8 @@ async function mockApi(page: Page, user = adminUser) {
       return route.fulfill({
         json: apiResponse({
           enabled: false,
-          reason: "Add an S3 destination to start nightly dumps of Astronomer's database.",
+          reason:
+            "Add an S3 destination to start nightly dumps of Astronomer's database.",
           destinations: [],
           encryption_key_backup: { wrapping_configured: false },
         }),
@@ -538,11 +544,17 @@ test("cluster registration wizard creates a cluster and advances to connect step
     page.getByRole("heading", { name: /register an existing cluster/i }),
   ).toBeVisible();
 
-  await page.getByPlaceholder("my-cluster").fill("e2e-cluster");
-  await page.getByPlaceholder("My Production Cluster").fill("E2E Cluster");
-  await page
-    .getByRole("button", { name: /next: get install command/i })
-    .click();
+  const clusterName = page.getByPlaceholder("my-cluster");
+  await clusterName.focus();
+  await page.keyboard.type("e2e-cluster");
+  const displayName = page.getByPlaceholder("My Production Cluster");
+  await displayName.focus();
+  await page.keyboard.type("E2E Cluster");
+  const next = page.getByRole("button", {
+    name: /next: get install command/i,
+  });
+  await next.focus();
+  await page.keyboard.press("Enter");
 
   await expect(page).toHaveURL(
     /\/dashboard\/clusters\/register\/cluster-new\/connect/,
@@ -568,7 +580,7 @@ test("delivery overview renders the Flux-native system for authenticated users",
   await seedAuth(context, page, adminUser);
   await page.goto("/dashboard/delivery");
 
-  await expect(page.getByRole("heading", { name: /^Fleet$/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Estate$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /flux ready/i })).toBeVisible();
   await expect(page.getByRole("link", { name: /^Sources$/ })).toHaveCount(0);
 });

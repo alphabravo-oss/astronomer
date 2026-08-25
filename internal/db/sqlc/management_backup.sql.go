@@ -12,6 +12,122 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimManagementBackupDestinationGeneration = `-- name: ClaimManagementBackupDestinationGeneration :one
+UPDATE management_backup_destinations
+SET reconcile_status = 'applying', last_error = '', updated_at = now()
+WHERE id = $1 AND desired_generation = $2
+  AND (reconcile_status IN ('pending', 'retrying')
+       OR (reconcile_status = 'applying' AND updated_at < now() - interval '6 minutes'))
+RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
+`
+
+type ClaimManagementBackupDestinationGenerationParams struct {
+	ID         uuid.UUID `json:"id"`
+	Generation int64     `json:"generation"`
+}
+
+func (q *Queries) ClaimManagementBackupDestinationGeneration(ctx context.Context, arg ClaimManagementBackupDestinationGenerationParams) (ManagementBackupDestination, error) {
+	row := q.db.QueryRow(ctx, claimManagementBackupDestinationGeneration, arg.ID, arg.Generation)
+	var i ManagementBackupDestination
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Bucket,
+		&i.Prefix,
+		&i.Region,
+		&i.EndpointUrl,
+		&i.EncryptedCredentials,
+		&i.Schedule,
+		&i.Enabled,
+		&i.KeepDaily,
+		&i.KeepWeekly,
+		&i.KeepMonthly,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DesiredGeneration,
+		&i.AppliedGeneration,
+		&i.DesiredState,
+		&i.ReconcileStatus,
+		&i.LastError,
+		&i.LastReconciledAt,
+	)
+	return i, err
+}
+
+const claimManagementBackupOperation = `-- name: ClaimManagementBackupOperation :one
+UPDATE workload_operations
+SET status = 'running', attempt_count = attempt_count + 1, started_at = now(),
+    completed_at = NULL, error_message = '', updated_at = now()
+WHERE id = $1
+  AND operation_type IN ('management_backup_test', 'management_backup_run')
+  AND (status IN ('pending', 'retrying') OR (status = 'running' AND started_at < now() - interval '6 minutes'))
+RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
+`
+
+func (q *Queries) ClaimManagementBackupOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error) {
+	row := q.db.QueryRow(ctx, claimManagementBackupOperation, id)
+	var i WorkloadOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TargetType,
+		&i.TargetKey,
+		&i.OperationType,
+		&i.Payload,
+		&i.Status,
+		&i.AttemptCount,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const completeManagementBackupDestinationGeneration = `-- name: CompleteManagementBackupDestinationGeneration :one
+UPDATE management_backup_destinations
+SET applied_generation = $1, reconcile_status = 'ready', last_error = '',
+    last_reconciled_at = now(), updated_at = now()
+WHERE id = $2 AND desired_generation = $1
+RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
+`
+
+type CompleteManagementBackupDestinationGenerationParams struct {
+	Generation int64     `json:"generation"`
+	ID         uuid.UUID `json:"id"`
+}
+
+func (q *Queries) CompleteManagementBackupDestinationGeneration(ctx context.Context, arg CompleteManagementBackupDestinationGenerationParams) (ManagementBackupDestination, error) {
+	row := q.db.QueryRow(ctx, completeManagementBackupDestinationGeneration, arg.Generation, arg.ID)
+	var i ManagementBackupDestination
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Bucket,
+		&i.Prefix,
+		&i.Region,
+		&i.EndpointUrl,
+		&i.EncryptedCredentials,
+		&i.Schedule,
+		&i.Enabled,
+		&i.KeepDaily,
+		&i.KeepWeekly,
+		&i.KeepMonthly,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DesiredGeneration,
+		&i.AppliedGeneration,
+		&i.DesiredState,
+		&i.ReconcileStatus,
+		&i.LastError,
+		&i.LastReconciledAt,
+	)
+	return i, err
+}
+
 const createManagementBackupDestination = `-- name: CreateManagementBackupDestination :one
 INSERT INTO management_backup_destinations (
     name, bucket, prefix, region, endpoint_url, encrypted_credentials,
@@ -19,7 +135,7 @@ INSERT INTO management_backup_destinations (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
-RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at
+RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
 `
 
 type CreateManagementBackupDestinationParams struct {
@@ -69,21 +185,61 @@ func (q *Queries) CreateManagementBackupDestination(ctx context.Context, arg Cre
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DesiredGeneration,
+		&i.AppliedGeneration,
+		&i.DesiredState,
+		&i.ReconcileStatus,
+		&i.LastError,
+		&i.LastReconciledAt,
 	)
 	return i, err
 }
 
-const deleteManagementBackupDestination = `-- name: DeleteManagementBackupDestination :exec
-DELETE FROM management_backup_destinations WHERE id = $1
+const failManagementBackupDestinationGeneration = `-- name: FailManagementBackupDestinationGeneration :one
+UPDATE management_backup_destinations
+SET reconcile_status = 'failed', last_error = left($1, 1024),
+    last_reconciled_at = now(), updated_at = now()
+WHERE id = $2 AND desired_generation = $3
+RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
 `
 
-func (q *Queries) DeleteManagementBackupDestination(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteManagementBackupDestination, id)
-	return err
+type FailManagementBackupDestinationGenerationParams struct {
+	ErrorMessage string    `json:"error_message"`
+	ID           uuid.UUID `json:"id"`
+	Generation   int64     `json:"generation"`
+}
+
+func (q *Queries) FailManagementBackupDestinationGeneration(ctx context.Context, arg FailManagementBackupDestinationGenerationParams) (ManagementBackupDestination, error) {
+	row := q.db.QueryRow(ctx, failManagementBackupDestinationGeneration, arg.ErrorMessage, arg.ID, arg.Generation)
+	var i ManagementBackupDestination
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Bucket,
+		&i.Prefix,
+		&i.Region,
+		&i.EndpointUrl,
+		&i.EncryptedCredentials,
+		&i.Schedule,
+		&i.Enabled,
+		&i.KeepDaily,
+		&i.KeepWeekly,
+		&i.KeepMonthly,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DesiredGeneration,
+		&i.AppliedGeneration,
+		&i.DesiredState,
+		&i.ReconcileStatus,
+		&i.LastError,
+		&i.LastReconciledAt,
+	)
+	return i, err
 }
 
 const getManagementBackupDestination = `-- name: GetManagementBackupDestination :one
-SELECT id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at FROM management_backup_destinations WHERE id = $1
+SELECT id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at FROM management_backup_destinations WHERE id = $1
 `
 
 func (q *Queries) GetManagementBackupDestination(ctx context.Context, id uuid.UUID) (ManagementBackupDestination, error) {
@@ -105,13 +261,52 @@ func (q *Queries) GetManagementBackupDestination(ctx context.Context, id uuid.UU
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DesiredGeneration,
+		&i.AppliedGeneration,
+		&i.DesiredState,
+		&i.ReconcileStatus,
+		&i.LastError,
+		&i.LastReconciledAt,
+	)
+	return i, err
+}
+
+const getManagementBackupDestinationForUpdate = `-- name: GetManagementBackupDestinationForUpdate :one
+SELECT id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at FROM management_backup_destinations WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetManagementBackupDestinationForUpdate(ctx context.Context, id uuid.UUID) (ManagementBackupDestination, error) {
+	row := q.db.QueryRow(ctx, getManagementBackupDestinationForUpdate, id)
+	var i ManagementBackupDestination
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Bucket,
+		&i.Prefix,
+		&i.Region,
+		&i.EndpointUrl,
+		&i.EncryptedCredentials,
+		&i.Schedule,
+		&i.Enabled,
+		&i.KeepDaily,
+		&i.KeepWeekly,
+		&i.KeepMonthly,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DesiredGeneration,
+		&i.AppliedGeneration,
+		&i.DesiredState,
+		&i.ReconcileStatus,
+		&i.LastError,
+		&i.LastReconciledAt,
 	)
 	return i, err
 }
 
 const listManagementBackupDestinations = `-- name: ListManagementBackupDestinations :many
 
-SELECT id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at FROM management_backup_destinations
+SELECT id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at FROM management_backup_destinations
 ORDER BY created_at ASC
 `
 
@@ -142,6 +337,12 @@ func (q *Queries) ListManagementBackupDestinations(ctx context.Context) ([]Manag
 			&i.CreatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DesiredGeneration,
+			&i.AppliedGeneration,
+			&i.DesiredState,
+			&i.ReconcileStatus,
+			&i.LastError,
+			&i.LastReconciledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -151,6 +352,86 @@ func (q *Queries) ListManagementBackupDestinations(ctx context.Context) ([]Manag
 		return nil, err
 	}
 	return items, nil
+}
+
+const markManagementBackupDestinationDeleted = `-- name: MarkManagementBackupDestinationDeleted :one
+UPDATE management_backup_destinations
+SET desired_generation = desired_generation + 1,
+    desired_state = 'deleted', reconcile_status = 'pending', last_error = '', updated_at = now()
+WHERE id = $1
+RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
+`
+
+func (q *Queries) MarkManagementBackupDestinationDeleted(ctx context.Context, id uuid.UUID) (ManagementBackupDestination, error) {
+	row := q.db.QueryRow(ctx, markManagementBackupDestinationDeleted, id)
+	var i ManagementBackupDestination
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Bucket,
+		&i.Prefix,
+		&i.Region,
+		&i.EndpointUrl,
+		&i.EncryptedCredentials,
+		&i.Schedule,
+		&i.Enabled,
+		&i.KeepDaily,
+		&i.KeepWeekly,
+		&i.KeepMonthly,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DesiredGeneration,
+		&i.AppliedGeneration,
+		&i.DesiredState,
+		&i.ReconcileStatus,
+		&i.LastError,
+		&i.LastReconciledAt,
+	)
+	return i, err
+}
+
+const retryManagementBackupDestinationGeneration = `-- name: RetryManagementBackupDestinationGeneration :one
+UPDATE management_backup_destinations
+SET reconcile_status = 'retrying', last_error = left($1, 1024),
+    last_reconciled_at = now(), updated_at = now()
+WHERE id = $2 AND desired_generation = $3
+RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
+`
+
+type RetryManagementBackupDestinationGenerationParams struct {
+	ErrorMessage string    `json:"error_message"`
+	ID           uuid.UUID `json:"id"`
+	Generation   int64     `json:"generation"`
+}
+
+func (q *Queries) RetryManagementBackupDestinationGeneration(ctx context.Context, arg RetryManagementBackupDestinationGenerationParams) (ManagementBackupDestination, error) {
+	row := q.db.QueryRow(ctx, retryManagementBackupDestinationGeneration, arg.ErrorMessage, arg.ID, arg.Generation)
+	var i ManagementBackupDestination
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Bucket,
+		&i.Prefix,
+		&i.Region,
+		&i.EndpointUrl,
+		&i.EncryptedCredentials,
+		&i.Schedule,
+		&i.Enabled,
+		&i.KeepDaily,
+		&i.KeepWeekly,
+		&i.KeepMonthly,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DesiredGeneration,
+		&i.AppliedGeneration,
+		&i.DesiredState,
+		&i.ReconcileStatus,
+		&i.LastError,
+		&i.LastReconciledAt,
+	)
+	return i, err
 }
 
 const updateManagementBackupDestination = `-- name: UpdateManagementBackupDestination :one
@@ -166,9 +447,13 @@ UPDATE management_backup_destinations SET
     keep_daily = $10,
     keep_weekly = $11,
     keep_monthly = $12,
+    desired_generation = desired_generation + 1,
+    desired_state = 'active',
+    reconcile_status = 'pending',
+    last_error = '',
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at
+RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
 `
 
 type UpdateManagementBackupDestinationParams struct {
@@ -218,6 +503,12 @@ func (q *Queries) UpdateManagementBackupDestination(ctx context.Context, arg Upd
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DesiredGeneration,
+		&i.AppliedGeneration,
+		&i.DesiredState,
+		&i.ReconcileStatus,
+		&i.LastError,
+		&i.LastReconciledAt,
 	)
 	return i, err
 }

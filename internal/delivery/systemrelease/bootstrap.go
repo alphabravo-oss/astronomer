@@ -55,20 +55,19 @@ func build(config Config) (immutableSpec, string, error) {
 	if !config.Enabled {
 		return immutableSpec{}, "", nil
 	}
-	values := []string{config.ArtifactRepository, config.ArtifactDigest, config.DistributionDigest,
-		config.AgentVersion, config.AgentImage, config.CertificateIssuer, config.CertificateIdentity}
-	complete := true
-	any := false
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		complete = complete && trimmed != ""
-		any = any || trimmed != ""
-	}
-	if !any {
+	repository := strings.TrimSpace(config.ArtifactRepository)
+	artifactDigest := strings.TrimSpace(config.ArtifactDigest)
+	if repository == "" && artifactDigest == "" {
 		// Development can use only the embedded enrollment distribution. A
 		// production configuration validator requires the complete signed OCI
 		// release, so a no-op here is never a production downgrade.
 		return immutableSpec{}, "", nil
+	}
+	values := []string{repository, artifactDigest, config.DistributionDigest,
+		config.AgentVersion, config.AgentImage, config.CertificateIssuer, config.CertificateIdentity}
+	complete := true
+	for _, value := range values {
+		complete = complete && strings.TrimSpace(value) != ""
 	}
 	if !complete {
 		return immutableSpec{}, "", errors.New("delivery system release configuration is incomplete")
@@ -77,7 +76,7 @@ func build(config Config) (immutableSpec, string, error) {
 	if !kubernetesMinorPattern.MatchString(minimum) || !kubernetesMinorPattern.MatchString(maximum) {
 		return immutableSpec{}, "", errors.New("delivery Kubernetes bounds must be major.minor values")
 	}
-	artifactURL := strings.TrimSpace(config.ArtifactRepository)
+	artifactURL := repository
 	if !strings.HasPrefix(artifactURL, "oci://") {
 		artifactURL = "oci://" + artifactURL
 	}
@@ -91,7 +90,7 @@ func build(config Config) (immutableSpec, string, error) {
 	}
 	spec := immutableSpec{
 		Version: version, ArtifactURL: artifactURL,
-		ArtifactDigest: strings.TrimSpace(config.ArtifactDigest), DistributionDigest: strings.TrimSpace(config.DistributionDigest),
+		ArtifactDigest: artifactDigest, DistributionDigest: strings.TrimSpace(config.DistributionDigest),
 		AgentVersion: agentVersion, AgentImage: strings.TrimSpace(config.AgentImage),
 		MinimumKubernetes: "v" + minimum + ".0", MaximumKubernetes: "v" + maximum + ".999",
 		CRDStorageVersion: "v1", Interval: "5m", Timeout: "15m",

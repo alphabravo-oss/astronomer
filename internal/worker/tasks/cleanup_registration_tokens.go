@@ -21,11 +21,10 @@ func NewCleanupRegistrationTokensTask() *asynq.Task {
 // Cron: every 6h (matches Python “cleanup_expired_registration_tokens“).
 func HandleCleanupRegistrationTokens(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, CleanupExpiredRegistrationTokensType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "registration token cleanup runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("registration token cleanup runtime is not configured")
 		}
-		q, ok := runtimeDeps.Queries.(interface {
+		q, ok := runtimeDependencies(ctx).Queries.(interface {
 			DeleteExpiredRegistrationTokens(ctx context.Context) (int64, error)
 		})
 		if !ok {
@@ -35,7 +34,7 @@ func HandleCleanupRegistrationTokens(ctx context.Context, _ *asynq.Task) error {
 		if err != nil {
 			return fmt.Errorf("delete expired registration tokens: %w", err)
 		}
-		runtimeLogger().InfoContext(ctx, "removed expired registration tokens", "rows", rows)
+		runtimeLogger(ctx).InfoContext(ctx, "removed expired registration tokens", "rows", rows)
 		return nil
 	})
 }

@@ -80,9 +80,8 @@ func HandleHealthCheck(ctx context.Context, t *asynq.Task) error {
 			slog.InfoContext(ctx, "running health check for all clusters")
 		}
 
-		if runtimeDeps.Queries == nil {
-			slog.InfoContext(ctx, "health check runtime not configured, skipping DB updates")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("health check runtime is not configured")
 		}
 
 		clusters, err := healthCheckTargets(ctx, p.ClusterID)
@@ -127,7 +126,7 @@ func healthCheckTargets(ctx context.Context, clusterID string) ([]sqlc.Cluster, 
 		if err != nil {
 			return nil, fmt.Errorf("invalid cluster_id: %w", err)
 		}
-		cluster, err := runtimeDeps.Queries.GetClusterByID(ctx, id)
+		cluster, err := runtimeDependencies(ctx).Queries.GetClusterByID(ctx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -138,7 +137,7 @@ func healthCheckTargets(ctx context.Context, clusterID string) ([]sqlc.Cluster, 
 	// reached the end.
 	var all []sqlc.Cluster
 	for offset := int32(0); ; offset += healthCheckPageSize {
-		page, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: healthCheckPageSize, Offset: offset})
+		page, err := runtimeDependencies(ctx).Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: healthCheckPageSize, Offset: offset})
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +168,7 @@ func updateClusterHealth(ctx context.Context, cluster sqlc.Cluster) error {
 	// that reconnected mid-sweep (and vice-versa). A zero-row result just means the
 	// snapshot status no longer matches reality — the next sweep/publisher pass
 	// converges, so it is not an error.
-	if _, err := runtimeDeps.Queries.UpdateClusterStatusOnHeartbeat(ctx, sqlc.UpdateClusterStatusOnHeartbeatParams{
+	if _, err := runtimeDependencies(ctx).Queries.UpdateClusterStatusOnHeartbeat(ctx, sqlc.UpdateClusterStatusOnHeartbeatParams{
 		ID:     cluster.ID,
 		Status: status,
 	}); err != nil {
@@ -183,7 +182,7 @@ func updateClusterHealth(ctx context.Context, cluster sqlc.Cluster) error {
 		"distribution":       cluster.Distribution,
 		"source":             "worker-health-check",
 	})
-	_, err := runtimeDeps.Queries.UpsertClusterHealthStatus(ctx, sqlc.UpsertClusterHealthStatusParams{
+	_, err := runtimeDependencies(ctx).Queries.UpsertClusterHealthStatus(ctx, sqlc.UpsertClusterHealthStatusParams{
 		ClusterID:          cluster.ID,
 		CpuUsagePercent:    0,
 		MemoryUsagePercent: 0,
@@ -209,15 +208,15 @@ func updateClusterHealth(ctx context.Context, cluster sqlc.Cluster) error {
 // server has access to.
 func updateClusterConditions(ctx context.Context, cluster sqlc.Cluster, heartbeatFresh bool) {
 	upsert := func(condType, status, reason, message string) {
-		_, err := runtimeDeps.Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
+		_, err := runtimeDependencies(ctx).Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
 			ClusterID: cluster.ID,
 			Type:      condType,
 			Status:    status,
 			Reason:    reason,
 			Message:   message,
 		})
-		if err != nil && runtimeDeps.Log != nil {
-			runtimeDeps.Log.Warn("failed to upsert cluster condition",
+		if err != nil && runtimeDependencies(ctx).Log != nil {
+			runtimeDependencies(ctx).Log.Warn("failed to upsert cluster condition",
 				"cluster_id", cluster.ID.String(), "type", condType, "error", err)
 		}
 	}
@@ -246,7 +245,7 @@ func updateClusterConditions(ctx context.Context, cluster sqlc.Cluster, heartbea
 	// clusters.status (set above by liveness); the MetricsAvailable=False
 	// reasons are also ignored by cluster_condition_reconcile's dispatch
 	// (default no-op) and by the agent self-test.
-	health, err := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
+	health, err := runtimeDependencies(ctx).Queries.GetClusterHealthStatus(ctx, cluster.ID)
 	if err != nil {
 		// No health row yet (no frames at all) — nothing to classify. Don't
 		// write a spurious condition; the next sweep retries once a row exists.

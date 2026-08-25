@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Check, Copy, Terminal } from 'lucide-react';
-import { cn, copyToClipboard } from '@/lib/utils';
-import { toastError, toastSuccess } from '@/lib/toast';
+import { useState } from "react";
+import { Check, Copy, Terminal } from "lucide-react";
+import { cn, copyToClipboard } from "@/lib/utils";
+import { toastError, toastSuccess } from "@/lib/toast";
 
 interface CodeBlockProps {
   code: string;
@@ -15,7 +15,7 @@ interface CodeBlockProps {
 
 export function CodeBlock({
   code,
-  language = 'bash',
+  language = "bash",
   title,
   showLineNumbers = false,
   className,
@@ -26,17 +26,22 @@ export function CodeBlock({
     const success = await copyToClipboard(code);
     if (success) {
       setCopied(true);
-      toastSuccess('Copied to clipboard');
+      toastSuccess("Copied to clipboard");
       setTimeout(() => setCopied(false), 2000);
     } else {
-      toastError('Failed to copy');
+      toastError("Failed to copy");
     }
   };
 
-  const lines = code.split('\n');
+  const lines = code.split("\n");
 
   return (
-    <div className={cn('rounded-lg border border-border overflow-hidden', className)}>
+    <div
+      className={cn(
+        "rounded-lg border border-border overflow-hidden",
+        className,
+      )}
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-b border-border">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -46,10 +51,10 @@ export function CodeBlock({
         <button
           onClick={handleCopy}
           className={cn(
-            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all",
             copied
-              ? 'bg-status-success/10 text-status-success'
-              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              ? "bg-status-success/10 text-status-success"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent",
           )}
         >
           {copied ? (

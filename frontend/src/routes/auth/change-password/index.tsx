@@ -1,13 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { useState } from 'react';
-import { useRouter } from '@/lib/navigation';
-import { Orbit, Eye, EyeOff, KeyRound, ArrowRight } from 'lucide-react';
-import { useAuthStore } from '@/lib/store';
-import { changeOwnPassword } from '@/lib/api';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import { useAppForm, useStore } from '@/lib/form';
-import { ActionButton } from '@/components/ui/action-button';
+import { useState } from "react";
+import { useRouter } from "@/lib/navigation";
+import { Orbit, Eye, EyeOff, KeyRound, ArrowRight } from "lucide-react";
+import { useAuthStore } from "@/lib/store";
+import { changeOwnPassword } from "@/lib/api/auth";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import { useAppForm, useStore } from "@/lib/form";
+import { ActionButton } from "@/components/ui/action-button";
 
 // Forced password-rotation screen for the bootstrap admin and for any user
 // whose `must_change_password` flag is set. Reachable directly at
@@ -22,7 +22,7 @@ function ChangePasswordPage() {
   const [showConfirm, setShowConfirm] = useState(false);
 
   const form = useAppForm({
-    defaultValues: { current: '', next: '', confirm: '' },
+    defaultValues: { current: "", next: "", confirm: "" },
     validators: {
       // Old imperative gate (`if (!canSubmit) return`) ported 1:1: current
       // required, new ≥ 12 chars, new ≠ current, confirm matches. The button
@@ -32,17 +32,17 @@ function ChangePasswordPage() {
         value.next.length < 12 ||
         value.next === value.current ||
         value.next !== value.confirm
-          ? 'Password requirements not met'
+          ? "Password requirements not met"
           : undefined,
     },
     onSubmit: async ({ value }) => {
       try {
         await changeOwnPassword(value.current, value.next);
         updateUser({ must_change_password: false, mustChangePassword: false });
-        toastSuccess('Password updated');
-        router.push('/dashboard');
+        toastSuccess("Password updated");
+        router.push("/dashboard");
       } catch (err) {
-        toastApiError('', err, 'Failed to update password');
+        toastApiError("", err, "Failed to update password");
       }
     },
   });
@@ -65,12 +65,18 @@ function ChangePasswordPage() {
         <div className="flex flex-col items-center gap-2 text-center">
           <Orbit className="h-8 w-8 text-foreground" />
           <h1 className="text-xl font-semibold tracking-tight">
-            {forced ? 'Set a new password to continue' : 'Change your password'}
+            {forced ? "Set a new password to continue" : "Change your password"}
           </h1>
           {forced && (
             <p className="text-sm text-muted-foreground">
-              You signed in with the bootstrap password. Choose a new one before continuing
-              to {user?.username ? <span className="font-mono">{user.username}</span> : 'your account'}.
+              You signed in with the bootstrap password. Choose a new one before
+              continuing to{" "}
+              {user?.username ? (
+                <span className="font-mono">{user.username}</span>
+              ) : (
+                "your account"
+              )}
+              .
             </p>
           )}
         </div>
@@ -91,7 +97,7 @@ function ChangePasswordPage() {
                 onToggleVisible={() => setShowCurrent((v) => !v)}
                 value={field.state.value}
                 onChange={field.handleChange}
-                autoFocus
+                data-initial-focus
               />
             )}
           </form.Field>
@@ -106,14 +112,20 @@ function ChangePasswordPage() {
                 onChange={field.handleChange}
                 hint={
                   values.next.length === 0
-                    ? 'At least 12 characters.'
+                    ? "At least 12 characters."
                     : !newLongEnough
-                      ? 'Must be at least 12 characters.'
+                      ? "Must be at least 12 characters."
                       : !newDiffers
-                        ? 'Must differ from the current password.'
-                        : 'Looks good.'
+                        ? "Must differ from the current password."
+                        : "Looks good."
                 }
-                hintTone={values.next.length === 0 ? 'muted' : (newLongEnough && newDiffers) ? 'success' : 'danger'}
+                hintTone={
+                  values.next.length === 0
+                    ? "muted"
+                    : newLongEnough && newDiffers
+                      ? "success"
+                      : "danger"
+                }
               />
             )}
           </form.Field>
@@ -128,12 +140,18 @@ function ChangePasswordPage() {
                 onChange={field.handleChange}
                 hint={
                   values.confirm.length === 0
-                    ? ' '
+                    ? " "
                     : matches
-                      ? 'Matches.'
-                      : 'Does not match the new password.'
+                      ? "Matches."
+                      : "Does not match the new password."
                 }
-                hintTone={values.confirm.length === 0 ? 'muted' : matches ? 'success' : 'danger'}
+                hintTone={
+                  values.confirm.length === 0
+                    ? "muted"
+                    : matches
+                      ? "success"
+                      : "danger"
+                }
               />
             )}
           </form.Field>
@@ -156,7 +174,7 @@ function ChangePasswordPage() {
               type="button"
               onClick={() => {
                 logout();
-                router.push('/auth/login');
+                router.push("/auth/login");
               }}
               className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
@@ -177,7 +195,7 @@ function PasswordField({
   value,
   onChange,
   hint,
-  hintTone = 'muted',
+  hintTone = "muted",
   autoFocus,
 }: {
   label: string;
@@ -187,20 +205,22 @@ function PasswordField({
   value: string;
   onChange: (v: string) => void;
   hint?: string;
-  hintTone?: 'muted' | 'success' | 'danger';
+  hintTone?: "muted" | "success" | "danger";
   autoFocus?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-foreground">{label}</label>
+      <label htmlFor={id} className="text-sm font-medium text-foreground">
+        {label}
+      </label>
       <div className="relative">
         <input
           id={id}
-          type={visible ? 'text' : 'password'}
+          type={visible ? "text" : "password"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          autoComplete={id === 'current' ? 'current-password' : 'new-password'}
-          autoFocus={autoFocus}
+          autoComplete={id === "current" ? "current-password" : "new-password"}
+          data-initial-focus={autoFocus}
           className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
         />
         <button
@@ -208,19 +228,23 @@ function PasswordField({
           onClick={onToggleVisible}
           className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
           tabIndex={-1}
-          aria-label={visible ? 'Hide password' : 'Show password'}
+          aria-label={visible ? "Hide password" : "Show password"}
         >
-          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          {visible ? (
+            <EyeOff className="h-4 w-4" />
+          ) : (
+            <Eye className="h-4 w-4" />
+          )}
         </button>
       </div>
       {hint && (
         <p
           className={
-            hintTone === 'success'
-              ? 'text-xs text-status-success'
-              : hintTone === 'danger'
-                ? 'text-xs text-status-error'
-                : 'text-xs text-muted-foreground'
+            hintTone === "success"
+              ? "text-xs text-status-success"
+              : hintTone === "danger"
+                ? "text-xs text-status-error"
+                : "text-xs text-muted-foreground"
           }
         >
           {hint}
@@ -230,6 +254,6 @@ function PasswordField({
   );
 }
 
-export const Route = createFileRoute('/auth/change-password/')({
+export const Route = createFileRoute("/auth/change-password/")({
   component: ChangePasswordPage,
 });

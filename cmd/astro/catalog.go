@@ -130,7 +130,7 @@ func newCatalogChartsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1CatalogChartsParams{Tag: catStrPtr(tag)}
+			params := &astroclient.GetCatalogChartsParams{Tag: catStrPtr(tag)}
 			params.ProjectId, err = catalogOptionalUUID(projectID, "project")
 			if err != nil {
 				return err
@@ -141,7 +141,7 @@ func newCatalogChartsListCmd() *cobra.Command {
 			if cmd.Flags().Changed("offset") {
 				params.Offset = &offset
 			}
-			resp, err := client.GetApiV1CatalogChartsWithResponse(cmd.Context(), params)
+			resp, err := client.GetCatalogChartsWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -179,7 +179,7 @@ func newCatalogChartsGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1CatalogChartsIdWithResponse(cmd.Context(), id, &astroclient.GetApiV1CatalogChartsIdParams{ProjectId: project})
+			resp, err := client.GetCatalogChartsByIdWithResponse(cmd.Context(), id, &astroclient.GetCatalogChartsByIdParams{ProjectId: project})
 			if err != nil {
 				return err
 			}
@@ -214,8 +214,8 @@ func newCatalogChartReadmeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1CatalogChartsIdReadmeParams{Version: catStrPtr(version), ProjectId: project}
-			resp, err := client.GetApiV1CatalogChartsIdReadmeWithResponse(cmd.Context(), id, params)
+			params := &astroclient.GetCatalogChartsByIdReadmeParams{Version: catStrPtr(version), ProjectId: project}
+			resp, err := client.GetCatalogChartsByIdReadmeWithResponse(cmd.Context(), id, params)
 			if err != nil {
 				return err
 			}
@@ -256,8 +256,8 @@ func newCatalogChartValuesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1CatalogChartsIdValuesParams{Version: catStrPtr(version), ProjectId: project}
-			resp, err := client.GetApiV1CatalogChartsIdValuesWithResponse(cmd.Context(), id, params)
+			params := &astroclient.GetCatalogChartsByIdValuesParams{Version: catStrPtr(version), ProjectId: project}
+			resp, err := client.GetCatalogChartsByIdValuesWithResponse(cmd.Context(), id, params)
 			if err != nil {
 				return err
 			}
@@ -298,15 +298,15 @@ func newCatalogChartVersionsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1CatalogChartsIdVersionsWithResponse(cmd.Context(), id, &astroclient.GetApiV1CatalogChartsIdVersionsParams{ProjectId: project})
+			resp, err := client.GetCatalogChartsByIdVersionsWithResponse(cmd.Context(), id, &astroclient.GetCatalogChartsByIdVersionsParams{ProjectId: project})
 			if err != nil {
 				return err
 			}
 			if resp.JSON200 == nil {
 				return catalogError(resp.Status(), resp.StatusCode(), resp.JSON400, resp.JSON500)
 			}
-			return render(cmd, resp.JSON200, func(w io.Writer) error {
-				return writeChartVersionsTable(w, *resp.JSON200)
+			return render(cmd, resp.JSON200.Data, func(w io.Writer) error {
+				return writeChartVersionsTable(w, resp.JSON200.Data)
 			})
 		},
 	}
@@ -348,7 +348,7 @@ func newCatalogReposListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1CatalogRepositoriesParams{}
+			params := &astroclient.GetCatalogRepositoriesParams{}
 			if cmd.Flags().Changed("limit") {
 				params.Limit = &limit
 			}
@@ -358,7 +358,7 @@ func newCatalogReposListCmd() *cobra.Command {
 			if cmd.Flags().Changed("include-project-owned") {
 				params.IncludeProjectOwned = &includeProjectOwned
 			}
-			resp, err := client.GetApiV1CatalogRepositoriesWithResponse(cmd.Context(), params)
+			resp, err := client.GetCatalogRepositoriesWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -414,7 +414,7 @@ func newCatalogReposGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1CatalogRepositoriesIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetCatalogRepositoriesByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -444,7 +444,7 @@ func newCatalogReposCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1CatalogRepositoriesJSONRequestBody{
+			body := astroclient.PostCatalogRepositoriesJSONRequestBody{
 				Name:        name,
 				Url:         url,
 				RepoType:    catStrPtr(repoType),
@@ -457,7 +457,7 @@ func newCatalogReposCreateCmd() *cobra.Command {
 			if cmd.Flags().Changed("default") {
 				body.IsDefault = &isDefault
 			}
-			resp, err := client.PostApiV1CatalogRepositoriesWithResponse(cmd.Context(), body)
+			resp, err := client.PostCatalogRepositoriesWithResponse(cmd.Context(), body)
 			if err != nil {
 				return err
 			}
@@ -498,7 +498,7 @@ func newCatalogReposUpdateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PutApiV1CatalogRepositoriesIdJSONRequestBody{
+			body := astroclient.PutCatalogRepositoriesByIdJSONRequestBody{
 				Name:        catStrPtr(name),
 				Url:         catStrPtr(url),
 				RepoType:    catStrPtr(repoType),
@@ -511,7 +511,7 @@ func newCatalogReposUpdateCmd() *cobra.Command {
 			if cmd.Flags().Changed("default") {
 				body.IsDefault = &isDefault
 			}
-			resp, err := client.PutApiV1CatalogRepositoriesIdWithResponse(cmd.Context(), id, body)
+			resp, err := client.PutCatalogRepositoriesByIdWithResponse(cmd.Context(), id, body)
 			if err != nil {
 				return err
 			}
@@ -560,7 +560,7 @@ func newCatalogReposDeleteCmd() *cobra.Command {
 					return fmt.Errorf("aborted")
 				}
 			}
-			resp, err := client.DeleteApiV1CatalogRepositoriesIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteCatalogRepositoriesByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -594,14 +594,15 @@ func newCatalogRepoSyncCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1CatalogRepositoriesIdSyncWithResponse(cmd.Context(), id)
+			params := &astroclient.PostCatalogRepositoriesByIdSyncParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostCatalogRepositoriesByIdSyncWithResponse(cmd.Context(), id, params)
 			if err != nil {
 				return err
 			}
-			if resp.JSON200 == nil {
-				return catalogError(resp.Status(), resp.StatusCode(), resp.JSON400, resp.JSON404, resp.JSON500, resp.JSON502)
+			if resp.JSON202 == nil {
+				return catalogError(resp.Status(), resp.StatusCode(), resp.JSON400, resp.JSON404, resp.JSON500, resp.JSON503)
 			}
-			return renderSDK(cmd, resp.JSON200)
+			return renderSDK(cmd, resp.JSON202)
 		},
 	}
 	return cmd
@@ -622,7 +623,7 @@ func newCatalogRepoTestConnectionCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1CatalogRepositoriesIdTestConnectionWithResponse(cmd.Context(), id)
+			resp, err := client.PostCatalogRepositoriesByIdTestConnectionWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -673,7 +674,7 @@ func newCatalogInstalledListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1CatalogInstalledParams{}
+			params := &astroclient.GetCatalogInstalledParams{}
 			if strings.TrimSpace(clusterID) != "" {
 				cid, err := catalogUUID(clusterID)
 				if err != nil {
@@ -687,7 +688,7 @@ func newCatalogInstalledListCmd() *cobra.Command {
 			if cmd.Flags().Changed("offset") {
 				params.Offset = &offset
 			}
-			resp, err := client.GetApiV1CatalogInstalledWithResponse(cmd.Context(), params)
+			resp, err := client.GetCatalogInstalledWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -719,7 +720,7 @@ func newCatalogInstalledGetValuesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1CatalogInstalledIdValuesWithResponse(cmd.Context(), id)
+			resp, err := client.GetCatalogInstalledByIdValuesWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -765,7 +766,7 @@ func newCatalogInstallCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("invalid --chart-version: %w", err)
 			}
-			body := astroclient.PostApiV1CatalogInstalledJSONRequestBody{
+			body := astroclient.PostCatalogInstalledJSONRequestBody{
 				ProjectId:      pid,
 				ClusterId:      cid,
 				ChartVersionId: cvid,
@@ -775,14 +776,15 @@ func newCatalogInstallCmd() *cobra.Command {
 				ToolSlug:       catStrPtr(toolSlug),
 				Notes:          catStrPtr(notes),
 			}
-			resp, err := client.PostApiV1CatalogInstalledWithResponse(cmd.Context(), body)
+			params := &astroclient.PostCatalogInstalledParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostCatalogInstalledWithResponse(cmd.Context(), params, body)
 			if err != nil {
 				return err
 			}
 			if resp.JSON202 == nil {
 				return catalogError(resp.Status(), resp.StatusCode(), resp.JSON400, resp.JSON403, resp.JSON404, resp.JSON409, resp.JSON500)
 			}
-			return renderInstallResult(cmd, resp.JSON202.Installation, resp.JSON202.Operation)
+			return renderInstallResult(cmd, &resp.JSON202.Data.Installation, &resp.JSON202.Data.Operation)
 		},
 	}
 	cmd.Flags().StringVar(&projectID, "project", "", "project id (required)")
@@ -811,17 +813,18 @@ func newCatalogUpgradeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PutApiV1CatalogInstalledIdUpgradeJSONRequestBody{
+			body := astroclient.PutCatalogInstalledByIdUpgradeJSONRequestBody{
 				ValuesOverride: catStrPtr(valuesOverride),
 			}
-			resp, err := client.PutApiV1CatalogInstalledIdUpgradeWithResponse(cmd.Context(), id, body)
+			params := &astroclient.PutCatalogInstalledByIdUpgradeParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PutCatalogInstalledByIdUpgradeWithResponse(cmd.Context(), id, params, body)
 			if err != nil {
 				return err
 			}
 			if resp.JSON202 == nil {
 				return catalogError(resp.Status(), resp.StatusCode(), resp.JSON400, resp.JSON403, resp.JSON404, resp.JSON500)
 			}
-			return renderInstallResult(cmd, resp.JSON202.Installation, resp.JSON202.Operation)
+			return renderInstallResult(cmd, &resp.JSON202.Data.Installation, &resp.JSON202.Data.Operation)
 		},
 	}
 	cmd.Flags().StringVar(&valuesOverride, "values", "", "new values override (raw YAML string)")
@@ -842,15 +845,17 @@ func newCatalogRollbackCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1CatalogInstalledIdRollbackWithResponse(cmd.Context(), id)
+			resp, err := client.PostCatalogInstalledByIdRollbackWithResponse(
+				cmd.Context(), id, &astroclient.PostCatalogInstalledByIdRollbackParams{IdempotencyKey: uuid.NewString()}, astroclient.PostCatalogInstalledByIdRollbackJSONRequestBody{},
+			)
 			if err != nil {
 				return err
 			}
 			if resp.JSON202 == nil {
 				return catalogError(resp.Status(), resp.StatusCode(), resp.JSON400, resp.JSON403, resp.JSON404, resp.JSON500)
 			}
-			return render(cmd, resp.JSON202, func(w io.Writer) error {
-				return writeOperationsTable(w, []astroclient.CatalogOperation{*resp.JSON202})
+			return render(cmd, resp.JSON202.Data, func(w io.Writer) error {
+				return writeOperationsTable(w, []astroclient.CatalogOperation{resp.JSON202.Data})
 			})
 		},
 	}
@@ -884,15 +889,16 @@ func newCatalogUninstallCmd() *cobra.Command {
 					return fmt.Errorf("aborted")
 				}
 			}
-			resp, err := client.DeleteApiV1CatalogInstalledIdWithResponse(cmd.Context(), id)
+			params := &astroclient.DeleteCatalogInstalledByIdParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.DeleteCatalogInstalledByIdWithResponse(cmd.Context(), id, params)
 			if err != nil {
 				return err
 			}
 			if resp.JSON202 == nil {
 				return catalogError(resp.Status(), resp.StatusCode(), resp.JSON400, resp.JSON403, resp.JSON404, resp.JSON409, resp.JSON500)
 			}
-			return render(cmd, resp.JSON202, func(w io.Writer) error {
-				return writeOperationsTable(w, []astroclient.CatalogOperation{*resp.JSON202})
+			return render(cmd, resp.JSON202.Data, func(w io.Writer) error {
+				return writeOperationsTable(w, []astroclient.CatalogOperation{resp.JSON202.Data})
 			})
 		},
 	}
@@ -947,7 +953,7 @@ func newCatalogOpsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1CatalogOperationsParams{
+			params := &astroclient.GetCatalogOperationsParams{
 				TargetType: catStrPtr(targetType),
 				TargetKey:  catStrPtr(targetKey),
 				Status:     catStrPtr(status),
@@ -958,7 +964,7 @@ func newCatalogOpsListCmd() *cobra.Command {
 			if cmd.Flags().Changed("offset") {
 				params.Offset = &offset
 			}
-			resp, err := client.GetApiV1CatalogOperationsWithResponse(cmd.Context(), params)
+			resp, err := client.GetCatalogOperationsWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -966,7 +972,7 @@ func newCatalogOpsListCmd() *cobra.Command {
 				return catalogError(resp.Status(), resp.StatusCode(), resp.JSON500)
 			}
 			return render(cmd, resp.JSON200, func(w io.Writer) error {
-				return writeOperationsTable(w, *resp.JSON200)
+				return writeOperationsTable(w, resp.JSON200.Data)
 			})
 		},
 	}
@@ -992,7 +998,7 @@ func newCatalogOpsGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1CatalogOperationsIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetCatalogOperationsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -1022,7 +1028,8 @@ func newCatalogOpRetryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1CatalogOperationsIdRetryWithResponse(cmd.Context(), id)
+			params := &astroclient.PostCatalogOperationsByIdRetryParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.PostCatalogOperationsByIdRetryWithResponse(cmd.Context(), id, params)
 			if err != nil {
 				return err
 			}
@@ -1052,7 +1059,7 @@ func newCatalogControllerStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1CatalogControllerStatusWithResponse(cmd.Context())
+			resp, err := client.GetCatalogControllerStatusWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}

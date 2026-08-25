@@ -267,6 +267,33 @@ func (q *Queries) GetQuotaPlan(ctx context.Context, name string) (QuotaPlan, err
 	return i, err
 }
 
+const getQuotaPlanForUpdate = `-- name: GetQuotaPlanForUpdate :one
+SELECT name, enforcement, description, max_clusters_per_project, max_namespaces_per_project, max_members_per_project, max_projects_per_user, max_tokens_per_user, max_streams_per_user, max_total_clusters, max_total_users, created_at, updated_at FROM quota_plans WHERE name = $1 FOR UPDATE
+`
+
+// Serialize update/delete decisions for a named plan so the existence and
+// reference checks cannot race a concurrent administrative mutation.
+func (q *Queries) GetQuotaPlanForUpdate(ctx context.Context, name string) (QuotaPlan, error) {
+	row := q.db.QueryRow(ctx, getQuotaPlanForUpdate, name)
+	var i QuotaPlan
+	err := row.Scan(
+		&i.Name,
+		&i.Enforcement,
+		&i.Description,
+		&i.MaxClustersPerProject,
+		&i.MaxNamespacesPerProject,
+		&i.MaxMembersPerProject,
+		&i.MaxProjectsPerUser,
+		&i.MaxTokensPerUser,
+		&i.MaxStreamsPerUser,
+		&i.MaxTotalClusters,
+		&i.MaxTotalUsers,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listProjectQuotaSnapshots = `-- name: ListProjectQuotaSnapshots :many
 
 SELECT
@@ -282,7 +309,7 @@ SELECT
     (SELECT count(DISTINCT user_id) FROM project_role_bindings WHERE project_id = pr.id AND user_id IS NOT NULL)::bigint      AS members_in_project
 FROM projects pr
 JOIN quota_plans p ON p.name = pr.quota_plan
-ORDER BY pr.created_at DESC
+ORDER BY pr.created_at DESC, pr.id DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -390,7 +417,7 @@ SELECT
 FROM users u
 JOIN quota_plans p ON p.name = u.quota_plan
 WHERE u.is_active = true
-ORDER BY u.created_at DESC
+ORDER BY u.created_at DESC, u.id DESC
 LIMIT $1 OFFSET $2
 `
 

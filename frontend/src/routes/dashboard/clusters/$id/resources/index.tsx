@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * Cluster Resources tab — sprint 069 CRD-mirror v2 read-only view.
  *
@@ -17,9 +24,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * second-guess whether a row is still in the cluster.
  */
 
-import { useState } from 'react';
-import { useParams } from '@/lib/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from "react";
+import { useParams } from "@/lib/navigation";
+import { useQuery } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronRight,
@@ -31,7 +38,7 @@ import {
   Shield,
   Slash,
   SquareStack,
-} from 'lucide-react';
+} from "lucide-react";
 
 import {
   listMirroredGatewayClasses,
@@ -44,20 +51,20 @@ import {
   type MirroredLimitRange,
   type MirroredNetworkPolicy,
   type MirroredResourceQuota,
-} from '@/lib/api/cluster-detail';
-import { queryKeys } from '@/lib/hooks';
+} from "@/lib/api/cluster-detail";
+import { queryKeys } from "@/lib/hooks";
 
 // ---------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------
 
 function fmtRelative(iso?: string): string {
-  if (!iso) return '—';
+  if (!iso) return "—";
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return iso;
   const delta = Date.now() - t;
   const mins = Math.floor(delta / 60_000);
-  if (mins < 1) return 'just now';
+  if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
@@ -70,13 +77,13 @@ function fmtRelative(iso?: string): string {
 // denominator string when that happens.
 function parseQuantity(v: string | number | undefined | null): number {
   if (v == null) return NaN;
-  if (typeof v === 'number') return v;
+  if (typeof v === "number") return v;
   const m = /^(\d+(?:\.\d+)?)([a-zA-Z]*)$/.exec(v.trim());
   if (!m) return Number.NaN;
   const num = parseFloat(m[1]);
   const suffix = m[2];
   const mult: Record<string, number> = {
-    '': 1,
+    "": 1,
     Ki: 1024,
     Mi: 1024 ** 2,
     Gi: 1024 ** 3,
@@ -118,9 +125,15 @@ function Section({
         <div className="flex items-center gap-2">
           {icon}
           <h2 className="text-base font-semibold">{title}</h2>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-xs">{count}</span>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+            {count}
+          </span>
         </div>
-        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        {open ? (
+          <ChevronDown className="h-4 w-4" />
+        ) : (
+          <ChevronRight className="h-4 w-4" />
+        )}
       </button>
       {open && <div className="border-t p-4">{children}</div>}
     </div>
@@ -133,7 +146,11 @@ function Section({
 
 function IngressClassesTable({ rows }: { rows: MirroredIngressClass[] }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No IngressClasses installed.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No IngressClasses installed.
+      </p>
+    );
   }
   return (
     <Table className="w-full text-sm">
@@ -149,7 +166,9 @@ function IngressClassesTable({ rows }: { rows: MirroredIngressClass[] }) {
         {rows.map((r) => (
           <TableRow key={r.name} className="border-t">
             <TableCell className="py-2 font-mono">{r.name}</TableCell>
-            <TableCell className="py-2 font-mono text-xs">{r.controller || '—'}</TableCell>
+            <TableCell className="py-2 font-mono text-xs">
+              {r.controller || "—"}
+            </TableCell>
             <TableCell className="py-2">
               {r.isDefault ? (
                 <span className="rounded-full bg-status-success/10 px-2 py-0.5 text-xs text-status-success">
@@ -159,7 +178,9 @@ function IngressClassesTable({ rows }: { rows: MirroredIngressClass[] }) {
                 <span className="text-muted-foreground">—</span>
               )}
             </TableCell>
-            <TableCell className="py-2 text-muted-foreground">{fmtRelative(r.lastSeenAt)}</TableCell>
+            <TableCell className="py-2 text-muted-foreground">
+              {fmtRelative(r.lastSeenAt)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -168,14 +189,14 @@ function IngressClassesTable({ rows }: { rows: MirroredIngressClass[] }) {
 }
 
 function AcceptedBadge({ status }: { status: string }) {
-  if (status === 'True') {
+  if (status === "True") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-status-success/10 px-2 py-0.5 text-xs text-status-success">
         <CircleCheck className="h-3 w-3" /> Accepted
       </span>
     );
   }
-  if (status === 'False') {
+  if (status === "False") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-status-error/10 px-2 py-0.5 text-xs text-status-error">
         <CircleX className="h-3 w-3" /> Rejected
@@ -191,7 +212,11 @@ function AcceptedBadge({ status }: { status: string }) {
 
 function GatewayClassesTable({ rows }: { rows: MirroredGatewayClass[] }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No GatewayClasses installed.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No GatewayClasses installed.
+      </p>
+    );
   }
   return (
     <Table className="w-full text-sm">
@@ -207,11 +232,15 @@ function GatewayClassesTable({ rows }: { rows: MirroredGatewayClass[] }) {
         {rows.map((r) => (
           <TableRow key={r.name} className="border-t">
             <TableCell className="py-2 font-mono">{r.name}</TableCell>
-            <TableCell className="py-2 font-mono text-xs">{r.controllerName || '—'}</TableCell>
+            <TableCell className="py-2 font-mono text-xs">
+              {r.controllerName || "—"}
+            </TableCell>
             <TableCell className="py-2">
               <AcceptedBadge status={r.acceptedStatus} />
             </TableCell>
-            <TableCell className="py-2 text-muted-foreground">{fmtRelative(r.lastSeenAt)}</TableCell>
+            <TableCell className="py-2 text-muted-foreground">
+              {fmtRelative(r.lastSeenAt)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -221,7 +250,11 @@ function GatewayClassesTable({ rows }: { rows: MirroredGatewayClass[] }) {
 
 function NetworkPoliciesTable({ rows }: { rows: MirroredNetworkPolicy[] }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No NetworkPolicies in this cluster.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No NetworkPolicies in this cluster.
+      </p>
+    );
   }
   return (
     <Table className="w-full text-sm">
@@ -241,7 +274,10 @@ function NetworkPoliciesTable({ rows }: { rows: MirroredNetworkPolicy[] }) {
             <TableCell className="py-2 font-mono">{r.name}</TableCell>
             <TableCell className="py-2">
               {(r.policyTypes ?? []).map((t) => (
-                <span key={t} className="mr-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs">
+                <span
+                  key={t}
+                  className="mr-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs"
+                >
                   {t}
                 </span>
               ))}
@@ -257,7 +293,9 @@ function NetworkPoliciesTable({ rows }: { rows: MirroredNetworkPolicy[] }) {
                 </span>
               )}
             </TableCell>
-            <TableCell className="py-2 text-muted-foreground">{fmtRelative(r.lastSeenAt)}</TableCell>
+            <TableCell className="py-2 text-muted-foreground">
+              {fmtRelative(r.lastSeenAt)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -280,20 +318,27 @@ function QuotaProgressRow({
     Number.isFinite(hardN) && Number.isFinite(usedN) && hardN > 0
       ? Math.min(100, Math.round((usedN / hardN) * 100))
       : null;
-  const barColor = pct == null ? 'bg-zinc-400' : pct > 90 ? 'bg-status-error' : pct > 75 ? 'bg-status-warning' : 'bg-status-success';
+  const barColor =
+    pct == null
+      ? "bg-zinc-400"
+      : pct > 90
+        ? "bg-status-error"
+        : pct > 75
+          ? "bg-status-warning"
+          : "bg-status-success";
   return (
     <div className="mb-2">
       <div className="flex items-center justify-between text-xs">
         <span className="font-mono">{label}</span>
         <span className="text-muted-foreground">
-          {used ?? '0'} / {hard ?? '—'}
-          {pct != null ? ` (${pct}%)` : ''}
+          {used ?? "0"} / {hard ?? "—"}
+          {pct != null ? ` (${pct}%)` : ""}
         </span>
       </div>
       <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-muted">
         <div
           className={`h-full ${barColor}`}
-          style={{ width: pct == null ? '0%' : `${pct}%` }}
+          style={{ width: pct == null ? "0%" : `${pct}%` }}
         />
       </div>
     </div>
@@ -302,7 +347,11 @@ function QuotaProgressRow({
 
 function ResourceQuotasView({ rows }: { rows: MirroredResourceQuota[] }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No ResourceQuotas in this cluster.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No ResourceQuotas in this cluster.
+      </p>
+    );
   }
   return (
     <div className="space-y-4">
@@ -312,15 +361,26 @@ function ResourceQuotasView({ rows }: { rows: MirroredResourceQuota[] }) {
           <div key={`${r.namespace}/${r.name}`} className="rounded border p-3">
             <div className="mb-2 flex items-center justify-between">
               <div>
-                <span className="font-mono text-sm">{r.namespace}/{r.name}</span>
+                <span className="font-mono text-sm">
+                  {r.namespace}/{r.name}
+                </span>
               </div>
-              <span className="text-xs text-muted-foreground">{fmtRelative(r.lastSeenAt)}</span>
+              <span className="text-xs text-muted-foreground">
+                {fmtRelative(r.lastSeenAt)}
+              </span>
             </div>
             {hardEntries.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No hard limits set.</p>
+              <p className="text-xs text-muted-foreground">
+                No hard limits set.
+              </p>
             ) : (
               hardEntries.map(([k, v]) => (
-                <QuotaProgressRow key={k} label={k} hard={v} used={r.used?.[k]} />
+                <QuotaProgressRow
+                  key={k}
+                  label={k}
+                  hard={v}
+                  used={r.used?.[k]}
+                />
               ))
             )}
           </div>
@@ -340,7 +400,11 @@ interface LimitRangeItem {
 
 function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No LimitRanges in this cluster.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No LimitRanges in this cluster.
+      </p>
+    );
   }
   return (
     <div className="space-y-3">
@@ -349,8 +413,12 @@ function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
         return (
           <div key={`${r.namespace}/${r.name}`} className="rounded border p-3">
             <div className="mb-2 flex items-center justify-between">
-              <span className="font-mono text-sm">{r.namespace}/{r.name}</span>
-              <span className="text-xs text-muted-foreground">{fmtRelative(r.lastSeenAt)}</span>
+              <span className="font-mono text-sm">
+                {r.namespace}/{r.name}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {fmtRelative(r.lastSeenAt)}
+              </span>
             </div>
             <Table className="w-full text-xs">
               <TableHeader>
@@ -365,11 +433,21 @@ function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
               <TableBody>
                 {limits.map((l, i) => (
                   <TableRow key={i} className="border-t">
-                    <TableCell className="py-1 font-mono">{l.type ?? '—'}</TableCell>
-                    <TableCell className="py-1 font-mono">{fmtMap(l.default)}</TableCell>
-                    <TableCell className="py-1 font-mono">{fmtMap(l.defaultRequest)}</TableCell>
-                    <TableCell className="py-1 font-mono">{fmtMap(l.min)}</TableCell>
-                    <TableCell className="py-1 font-mono">{fmtMap(l.max)}</TableCell>
+                    <TableCell className="py-1 font-mono">
+                      {l.type ?? "—"}
+                    </TableCell>
+                    <TableCell className="py-1 font-mono">
+                      {fmtMap(l.default)}
+                    </TableCell>
+                    <TableCell className="py-1 font-mono">
+                      {fmtMap(l.defaultRequest)}
+                    </TableCell>
+                    <TableCell className="py-1 font-mono">
+                      {fmtMap(l.min)}
+                    </TableCell>
+                    <TableCell className="py-1 font-mono">
+                      {fmtMap(l.max)}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -382,10 +460,10 @@ function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
 }
 
 function fmtMap(m?: Record<string, string>): string {
-  if (!m) return '—';
+  if (!m) return "—";
   const keys = Object.keys(m);
-  if (keys.length === 0) return '—';
-  return keys.map((k) => `${k}=${m[k]}`).join(', ');
+  if (keys.length === 0) return "—";
+  return keys.map((k) => `${k}=${m[k]}`).join(", ");
 }
 
 // ---------------------------------------------------------------------
@@ -421,9 +499,10 @@ function ClusterResourcesPage() {
       <header className="mb-4">
         <h1 className="text-xl font-semibold">Cluster resources</h1>
         <p className="text-sm text-muted-foreground">
-          A read-only view of the policy / routing / quota objects installed in this cluster.
-          Data is mirrored from the cluster agent every ~10 minutes; rows you delete in the
-          cluster disappear here within roughly an hour.
+          A read-only view of the policy / routing / quota objects installed in
+          this cluster. Data is mirrored from the cluster agent every ~10
+          minutes; rows you delete in the cluster disappear here within roughly
+          an hour.
         </p>
       </header>
 
@@ -470,6 +549,6 @@ function ClusterResourcesPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id/resources/')({
+export const Route = createFileRoute("/dashboard/clusters/$id/resources/")({
   component: ClusterResourcesPage,
 });

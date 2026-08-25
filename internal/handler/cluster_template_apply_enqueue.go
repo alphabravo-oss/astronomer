@@ -3,12 +3,15 @@ package handler
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -23,6 +26,17 @@ type clusterTemplateApplicationTaskOutboxQuerier interface {
 // key turns every reapply after the first delivered task into a silent no-op.
 func clusterTemplateApplyDedupeKey(clusterID uuid.UUID) string {
 	return fmt.Sprintf("cluster_template_apply:%s:%s", clusterID.String(), uuid.NewString())
+}
+
+func clusterTemplateRequestDedupeKey(r *http.Request, clusterID uuid.UUID) string {
+	if r == nil {
+		return clusterTemplateApplyDedupeKey(clusterID)
+	}
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if key == "" {
+		return clusterTemplateApplyDedupeKey(clusterID)
+	}
+	return "cluster_template_apply:" + audit.MutationDedupeKey(key, r.Method+":"+r.URL.Path, "cluster", clusterID.String())
 }
 
 func enqueueClusterTemplateApplyOutbox(ctx context.Context, outbox tasks.TaskOutboxWriter, task *asynq.Task, clusterID uuid.UUID) bool {

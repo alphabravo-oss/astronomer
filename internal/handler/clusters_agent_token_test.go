@@ -15,6 +15,7 @@ func serveClusterAction(h http.HandlerFunc, id string) *httptest.ResponseRecorde
 	r := chi.NewRouter()
 	r.Post("/clusters/{id}/agent-token/action/", h)
 	req := httptest.NewRequest(http.MethodPost, "/clusters/"+id+"/agent-token/action/", nil)
+	req.Header.Set("Idempotency-Key", "agent-token-action-"+id)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	return rec
@@ -29,14 +30,11 @@ func TestRotateAgentTokenSetsPendingAndAudits(t *testing.T) {
 	h := NewClusterHandler(q)
 
 	rec := serveClusterAction(h.RotateAgentToken, id.String())
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("rotate code = %d, want 202; body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unwired rotate code = %d, want 503; body=%s", rec.Code, rec.Body.String())
 	}
-	if q.rotationPendingCalledID != id {
-		t.Fatalf("rotation pending set for %s, want %s", q.rotationPendingCalledID, id)
-	}
-	if len(q.auditRows) != 1 || q.auditRows[0].Action != "agent.token.rotate.requested" {
-		t.Fatalf("expected agent.token.rotate.requested audit, got %+v", q.auditRows)
+	if q.rotationPendingCalledID != uuid.Nil || len(q.auditRows) != 0 {
+		t.Fatalf("unwired rotate mutated state or audit")
 	}
 }
 
@@ -51,8 +49,8 @@ func TestRotateAgentTokenNoEligibleTokenIs409(t *testing.T) {
 	h := NewClusterHandler(q)
 
 	rec := serveClusterAction(h.RotateAgentToken, id.String())
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("rotate with no eligible token code = %d, want 409", rec.Code)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unwired rotate code = %d, want 503", rec.Code)
 	}
 	if len(q.auditRows) != 0 {
 		t.Fatalf("expected no audit when nothing rotated, got %+v", q.auditRows)

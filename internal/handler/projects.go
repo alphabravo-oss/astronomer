@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -97,6 +98,7 @@ type ProjectHandler struct {
 
 	reconcileOnce sync.Once
 	runTask       func(context.Context, *asynq.Task) error
+	runSweep      func(context.Context, *asynq.Task) error
 
 	// maintenanceGate is the migration-057 hook on project.delete.
 	// Optional + nil-safe; see clusters.SetMaintenanceGate.
@@ -140,6 +142,7 @@ func (h *ProjectHandler) SetAuthorization(engine *rbac.Engine, querier middlewar
 // SELECT ... FOR UPDATE row lock so concurrent add/remove calls serialize on
 // the read-modify-write of the JSONB list instead of last-writer-wins.
 type ProjectNamespaceTx interface {
+	audit.OutboxQuerier
 	GetProjectByIDForUpdate(ctx context.Context, id uuid.UUID) (sqlc.Project, error)
 	UpdateProject(ctx context.Context, arg sqlc.UpdateProjectParams) (sqlc.Project, error)
 	UpsertProjectNamespace(ctx context.Context, arg sqlc.UpsertProjectNamespaceParams) (sqlc.ProjectNamespace, error)
@@ -185,10 +188,7 @@ var errProjectOwnershipTransferUnsupported = errors.New("project ownership can o
 // setters below so the constructor signature stays compatible with all
 // existing call sites (server.go, tests).
 func NewProjectHandler(queries ProjectQuerier) *ProjectHandler {
-	return &ProjectHandler{
-		queries: queries,
-		runTask: tasks.HandleProjectReconcile,
-	}
+	return &ProjectHandler{queries: queries}
 }
 
 // SetTaskQueue wires the asynq client used to enqueue project:reconcile and
@@ -210,32 +210,27 @@ func (h *ProjectHandler) SetEncryptor(e *auth.Encryptor) {
 		return
 	}
 	h.encryptor = e
-	if h.requester != nil {
-		h.configureProjectReconcile()
-	}
 }
 
 // SetK8sRequester wires the tunnel-backed K8sRequester used by the in-process
-// project reconcile sweep. Calling SetK8sRequester also configures the
-// worker/tasks package so it can perform applies against connected clusters
-// when running inside the server process.
+// project reconcile sweep.
 func (h *ProjectHandler) SetK8sRequester(requester K8sRequester) {
 	h.requester = requester
-	if requester == nil {
-		return
-	}
-	h.configureProjectReconcile()
 }
 
-func (h *ProjectHandler) configureProjectReconcile() {
-	if h == nil || h.requester == nil {
-		return
+// WorkerRuntime returns the explicitly composed project reconciliation graph.
+func (h *ProjectHandler) WorkerRuntime() tasks.ProjectRuntime {
+	if h == nil {
+		return tasks.ProjectRuntime{}
 	}
-	tasks.ConfigureProjectReconcile(tasks.ProjectReconcileDeps{
+	runtime := tasks.ProjectRuntime{Deps: tasks.ProjectReconcileDeps{
 		Queries:   projectQuerierAdapter{h.queries},
 		Requester: projectRequesterAdapter{h.requester},
 		Encryptor: h.encryptor,
-	})
+	}}
+	h.runTask = runtime.HandleProjectReconcile
+	h.runSweep = runtime.HandleProjectReconcileAll
+	return runtime
 }
 
 // SetLogger replaces the handler's logger. Optional; defaults to slog.Default.
@@ -351,7 +346,10 @@ func (h *ProjectHandler) runReconciler(ctx context.Context) {
 			if h.requester == nil {
 				continue
 			}
-			if err := tasks.HandleProjectReconcileAll(ctx, nil); err != nil {
+			if h.runSweep == nil {
+				continue
+			}
+			if err := h.runSweep(ctx, nil); err != nil {
 				h.logger().Warn("project reconcile sweep failed", "error", err)
 			}
 		}
@@ -453,13 +451,6 @@ func projectToResponse(p sqlc.Project) ProjectResponse {
 //   - ResourceQuota*:     omitted ⇒ unbounded (empty string / 0).
 //
 // openapi:request CreateProjectRequest
-// openapi:request-allow display_name  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow resource_quota  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow limit_range  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow network_policy_mode  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow resource_quota_cpu_limit  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow resource_quota_memory_limit  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow resource_quota_pod_count  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
 type CreateProjectRequest struct {
 	Name                     string          `json:"name" validate:"required"`
 	DisplayName              string          `json:"display_name"`
@@ -482,44 +473,61 @@ type CreateProjectRequest struct {
 // is omitted from the payload, the existing DB value is preserved (the
 // handler loads the row first to copy missing fields through to UpdateProject).
 // openapi:request UpdateProjectRequest
-// openapi:request-allow display_name  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow resource_quota  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow limit_range  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow network_policy_mode  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow resource_quota_cpu_limit  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow resource_quota_memory_limit  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow resource_quota_pod_count  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow name  DEBT: documented but never decoded here — a spec-following rename is a silent no-op
-// openapi:request-allow resource_quota_cpu  DEBT: the spec spells this field resource_quota_cpu; the decoder reads resource_quota_cpu_limit, so a spec-following quota is dropped
-// openapi:request-allow resource_quota_memory  DEBT: the spec spells this field resource_quota_memory; the decoder reads resource_quota_memory_limit, so a spec-following quota is dropped
-// openapi:request-allow resource_quota_pods  DEBT: the spec spells this field resource_quota_pods; the decoder reads resource_quota_pod_count, so a spec-following quota is dropped
 type UpdateProjectRequest struct {
-	DisplayName              string          `json:"display_name"`
-	Description              string          `json:"description"`
-	Namespaces               json.RawMessage `json:"namespaces"`
-	ResourceQuota            json.RawMessage `json:"resource_quota"`
-	LimitRange               json.RawMessage `json:"limit_range"`
-	NetworkPolicyMode        string          `json:"network_policy_mode"`
-	PodSecurityProfile       *string         `json:"pod_security_profile,omitempty"`
-	ResourceQuotaCpuLimit    *string         `json:"resource_quota_cpu_limit,omitempty"`
-	ResourceQuotaMemoryLimit *string         `json:"resource_quota_memory_limit,omitempty"`
-	ResourceQuotaPodCount    *int32          `json:"resource_quota_pod_count,omitempty"`
+	// Name is retained as an ignored v1 compatibility field. Project names are
+	// immutable; older generated clients included it in update bodies.
+	Name                      string          `json:"name,omitempty"`
+	DisplayName               string          `json:"display_name"`
+	Description               string          `json:"description"`
+	Namespaces                json.RawMessage `json:"namespaces"`
+	ResourceQuota             json.RawMessage `json:"resource_quota"`
+	LimitRange                json.RawMessage `json:"limit_range"`
+	NetworkPolicyMode         string          `json:"network_policy_mode"`
+	PodSecurityProfile        *string         `json:"pod_security_profile,omitempty"`
+	ResourceQuotaCpuLimit     *string         `json:"resource_quota_cpu_limit,omitempty"`
+	ResourceQuotaMemoryLimit  *string         `json:"resource_quota_memory_limit,omitempty"`
+	ResourceQuotaPodCount     *int32          `json:"resource_quota_pod_count,omitempty"`
+	ResourceQuotaCPULegacy    *string         `json:"resource_quota_cpu,omitempty"`
+	ResourceQuotaMemoryLegacy *string         `json:"resource_quota_memory,omitempty"`
+	ResourceQuotaPodsLegacy   *int32          `json:"resource_quota_pods,omitempty"`
 }
 
 // UpdateProjectPolicyRequest is the body for PATCH /projects/{id}/policy/.
 // All fields are optional; missing ones leave the existing value in place.
 // openapi:request UpdateProjectPolicyRequest
-// openapi:request-allow resource_quota_cpu_limit  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow resource_quota_memory_limit  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow resource_quota_pod_count  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow resource_quota_cpu  DEBT: the spec spells this field resource_quota_cpu; the decoder reads resource_quota_cpu_limit, so a spec-following quota is dropped
-// openapi:request-allow resource_quota_memory  DEBT: the spec spells this field resource_quota_memory; the decoder reads resource_quota_memory_limit, so a spec-following quota is dropped
-// openapi:request-allow resource_quota_pods  DEBT: the spec spells this field resource_quota_pods; the decoder reads resource_quota_pod_count, so a spec-following quota is dropped
 type UpdateProjectPolicyRequest struct {
-	PodSecurityProfile       *string `json:"pod_security_profile,omitempty"`
-	ResourceQuotaCpuLimit    *string `json:"resource_quota_cpu_limit,omitempty"`
-	ResourceQuotaMemoryLimit *string `json:"resource_quota_memory_limit,omitempty"`
-	ResourceQuotaPodCount    *int32  `json:"resource_quota_pod_count,omitempty"`
+	PodSecurityProfile        *string `json:"pod_security_profile,omitempty"`
+	NetworkPolicyMode         *string `json:"network_policy_mode,omitempty"`
+	ResourceQuotaCpuLimit     *string `json:"resource_quota_cpu_limit,omitempty"`
+	ResourceQuotaMemoryLimit  *string `json:"resource_quota_memory_limit,omitempty"`
+	ResourceQuotaPodCount     *int32  `json:"resource_quota_pod_count,omitempty"`
+	ResourceQuotaCPULegacy    *string `json:"resource_quota_cpu,omitempty"`
+	ResourceQuotaMemoryLegacy *string `json:"resource_quota_memory,omitempty"`
+	ResourceQuotaPodsLegacy   *int32  `json:"resource_quota_pods,omitempty"`
+}
+
+func (r *UpdateProjectRequest) normalizeLegacyQuotaFields() {
+	if r.ResourceQuotaCpuLimit == nil {
+		r.ResourceQuotaCpuLimit = r.ResourceQuotaCPULegacy
+	}
+	if r.ResourceQuotaMemoryLimit == nil {
+		r.ResourceQuotaMemoryLimit = r.ResourceQuotaMemoryLegacy
+	}
+	if r.ResourceQuotaPodCount == nil {
+		r.ResourceQuotaPodCount = r.ResourceQuotaPodsLegacy
+	}
+}
+
+func (r *UpdateProjectPolicyRequest) normalizeLegacyQuotaFields() {
+	if r.ResourceQuotaCpuLimit == nil {
+		r.ResourceQuotaCpuLimit = r.ResourceQuotaCPULegacy
+	}
+	if r.ResourceQuotaMemoryLimit == nil {
+		r.ResourceQuotaMemoryLimit = r.ResourceQuotaMemoryLegacy
+	}
+	if r.ResourceQuotaPodCount == nil {
+		r.ResourceQuotaPodCount = r.ResourceQuotaPodsLegacy
+	}
 }
 
 // List handles GET /api/v1/projects/.
@@ -752,6 +760,7 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
+	req.normalizeLegacyQuotaFields()
 
 	// req.Namespaces is deliberately NOT defaulted to `[]` here: the field is
 	// absent on every policy-only PATCH, and treating absent as "clear" would
@@ -851,7 +860,6 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 			podCount = *req.ResourceQuotaPodCount
 		}
 	}
-
 	project, err := h.queries.UpdateProject(r.Context(), sqlc.UpdateProjectParams{
 		ID:                       id,
 		DisplayName:              req.DisplayName,
@@ -1048,6 +1056,7 @@ func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
+	req.normalizeLegacyQuotaFields()
 
 	existing, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
@@ -1087,6 +1096,17 @@ func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 			podCount = *req.ResourceQuotaPodCount
 		}
 	}
+	networkPolicyMode := existing.NetworkPolicyMode
+	if req.NetworkPolicyMode != nil {
+		candidate := strings.TrimSpace(*req.NetworkPolicyMode)
+		switch candidate {
+		case "isolated", "allow-same-project", "none":
+			networkPolicyMode = candidate
+		default:
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid network_policy_mode (must be isolated | allow-same-project | none)")
+			return
+		}
+	}
 
 	updated, err := h.queries.UpdateProjectPolicy(r.Context(), sqlc.UpdateProjectPolicyParams{
 		ID:                       id,
@@ -1094,6 +1114,7 @@ func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		ResourceQuotaCpuLimit:    cpuLimit,
 		ResourceQuotaMemoryLimit: memLimit,
 		ResourceQuotaPodCount:    podCount,
+		NetworkPolicyMode:        networkPolicyMode,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project policy")
@@ -1104,6 +1125,7 @@ func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		"resource_quota_cpu_limit":    updated.ResourceQuotaCpuLimit,
 		"resource_quota_memory_limit": updated.ResourceQuotaMemoryLimit,
 		"resource_quota_pod_count":    updated.ResourceQuotaPodCount,
+		"network_policy_mode":         updated.NetworkPolicyMode,
 	})
 	RespondJSON(w, http.StatusOK, projectToResponse(updated))
 }
@@ -1551,6 +1573,7 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var updated sqlc.Project
+	auditCommitted := false
 	if h.runTx != nil {
 		// Atomic path: row-lock the project, re-read the namespaces JSONB under
 		// the lock, and write both the JSONB list and the project_namespaces
@@ -1593,11 +1616,16 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 				}
 				return uerr
 			}
+			if aerr := recordProjectAuditOutbox(r, q, "project.add_namespace", u, map[string]any{"namespace": req.Namespace}); aerr != nil {
+				return aerr
+			}
 			updated = u
 			return nil
 		})
 		if txErr != nil {
 			switch {
+			case errors.Is(txErr, audit.ErrOutboxUnavailable):
+				respondTransactionalMutationError(w, r, txErr, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
 			case errors.Is(txErr, errNamespaceAlreadyInProject):
 				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already in this project.")
 			case errors.Is(txErr, errNamespaceOwnedByOtherProject):
@@ -1609,6 +1637,7 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+		auditCommitted = true
 		// The sidecar row is committed; schedule enforcement out-of-band.
 		h.dispatchProjectReconcile(r.Context(), project.ID, project.ClusterID, req.Namespace, "apply")
 	} else {
@@ -1628,7 +1657,9 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 	// Membership changed: flush the namespace-scoped RBAC cache so the new grant
 	// is visible immediately instead of after the cache TTL.
 	h.invalidateRBACCache()
-	h.recordProjectAudit(r, "project.add_namespace", updated, map[string]any{"namespace": req.Namespace})
+	if !auditCommitted {
+		h.recordProjectAudit(r, "project.add_namespace", updated, map[string]any{"namespace": req.Namespace})
+	}
 	RespondJSON(w, http.StatusOK, projectToResponse(updated))
 }
 
@@ -1677,6 +1708,7 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 	}
 
 	var updated sqlc.Project
+	auditCommitted := false
 	if h.runTx != nil {
 		// Atomic path: row-lock the project, re-filter the namespaces JSONB under
 		// the lock, and delete the project_namespaces sidecar row in the same
@@ -1715,11 +1747,16 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 			}); derr != nil {
 				return derr
 			}
+			if aerr := recordProjectAuditOutbox(r, q, "project.remove_namespace", u, map[string]any{"namespace": req.Namespace}); aerr != nil {
+				return aerr
+			}
 			updated = u
 			return nil
 		})
 		if txErr != nil {
 			switch {
+			case errors.Is(txErr, audit.ErrOutboxUnavailable):
+				respondTransactionalMutationError(w, r, txErr, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
 			case errors.Is(txErr, errNamespaceNotInProject):
 				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Namespace '"+req.Namespace+"' is not in this project.")
 			case errors.Is(txErr, pgx.ErrNoRows):
@@ -1729,6 +1766,7 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 			}
 			return
 		}
+		auditCommitted = true
 		// Sidecar row is gone; schedule the in-cluster managed-CR cleanup. The
 		// remove task's own DeleteProjectNamespace is an idempotent no-op now.
 		h.dispatchProjectReconcile(r.Context(), project.ID, project.ClusterID, req.Namespace, "remove")
@@ -1753,7 +1791,9 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 	// Membership changed: flush the namespace-scoped RBAC cache so the revoked
 	// grant stops authorizing immediately instead of after the cache TTL.
 	h.invalidateRBACCache()
-	h.recordProjectAudit(r, "project.remove_namespace", updated, map[string]any{"namespace": req.Namespace})
+	if !auditCommitted {
+		h.recordProjectAudit(r, "project.remove_namespace", updated, map[string]any{"namespace": req.Namespace})
+	}
 	RespondJSON(w, http.StatusOK, projectToResponse(updated))
 }
 
@@ -1795,7 +1835,7 @@ func (h *ProjectHandler) upsertAndEnqueue(ctx context.Context, projectID, cluste
 	if h.queue == nil {
 		return
 	}
-	if _, err := h.queue.Enqueue(task); err != nil {
+	if _, err := h.queue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName)); err != nil {
 		h.logger().Warn("enqueue project reconcile task", "error", err)
 	}
 }
@@ -1835,7 +1875,7 @@ func (h *ProjectHandler) enqueueCleanup(ctx context.Context, projectID, clusterI
 		})
 		return
 	}
-	if _, err := h.queue.Enqueue(task); err != nil {
+	if _, err := h.queue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName)); err != nil {
 		h.logger().Warn("enqueue project cleanup task", "error", err)
 	}
 }
@@ -1847,7 +1887,7 @@ func (h *ProjectHandler) enqueueProjectTaskOutbox(ctx context.Context, task *asy
 	dedupe := fmt.Sprintf("project_reconcile:%s:%s:%s:%s", op, projectID.String(), clusterID.String(), namespace)
 	_, err := tasks.EnqueueTaskOutbox(ctx, h.taskOutbox, task, tasks.TaskOutboxOptions{
 		DedupeKey:           dedupe,
-		QueueName:           "default",
+		QueueName:           tasks.ClusterTemplateApplyQueueName,
 		MaxDeliveryAttempts: 20,
 	})
 	if err != nil {
@@ -1863,7 +1903,8 @@ func (h *ProjectHandler) dispatchProjectTask(ctx context.Context, task *asynq.Ta
 	}
 	runTask := h.runTask
 	if runTask == nil {
-		runTask = tasks.HandleProjectReconcile
+		h.logger().Error("project reconcile runtime is not configured", "type", task.Type())
+		return
 	}
 	go func() {
 		runCtx := context.Background()
@@ -1964,7 +2005,7 @@ func (h *ProjectHandler) dispatchProjectReconcile(ctx context.Context, projectID
 	if h.queue == nil {
 		return
 	}
-	if _, err := h.queue.Enqueue(task); err != nil {
+	if _, err := h.queue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName)); err != nil {
 		h.logger().Warn("enqueue project reconcile task", "op", op, "error", err)
 	}
 }
@@ -1974,6 +2015,10 @@ func (h *ProjectHandler) recordProjectAudit(r *http.Request, action string, proj
 		return
 	}
 	recordAudit(r, h.queries, action, "project", project.ID.String(), project.Name, detail)
+}
+
+func recordProjectAuditOutbox(r *http.Request, q audit.OutboxQuerier, action string, project sqlc.Project, detail map[string]any) error {
+	return recordAuditOutbox(r, q, action, "project", project.ID.String(), project.Name, http.StatusOK, detail)
 }
 
 func decodeJSONArray(raw json.RawMessage) []any {
@@ -1991,7 +2036,7 @@ func decodeJSONArray(raw json.RawMessage) []any {
 //
 // The worker/tasks package defines its own minimal interfaces (so it has no
 // import dependency on internal/handler). These adapters wrap our concrete
-// types into those interfaces for ConfigureProjectReconcile.
+// types into the immutable tasks.ProjectRuntime interfaces.
 
 type projectQuerierAdapter struct{ q ProjectQuerier }
 

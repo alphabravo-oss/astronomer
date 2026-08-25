@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -19,6 +21,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/baseline"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
@@ -60,8 +63,27 @@ type ToolQuerier interface {
 	ListToolOperationEvents(ctx context.Context, operationID uuid.UUID) ([]sqlc.ToolOperationEvent, error)
 }
 
+type toolOperationPager interface {
+	CountToolOperations(ctx context.Context, arg sqlc.CountToolOperationsParams) (int64, error)
+	ListToolOperationsForScopes(ctx context.Context, arg sqlc.ListToolOperationsForScopesParams) ([]sqlc.ToolOperation, error)
+	CountToolOperationsForScopes(ctx context.Context, arg sqlc.CountToolOperationsForScopesParams) (int64, error)
+}
+
+// ToolMutationTx commits the durable controller operation and mandatory audit
+// intent together. Tool desired state is materialized by the reconciler only
+// after this transaction commits.
+type ToolMutationTx interface {
+	audit.OutboxQuerier
+	CreateToolOperation(context.Context, sqlc.CreateToolOperationParams) (sqlc.ToolOperation, error)
+	CreateToolOperationIdempotent(context.Context, sqlc.CreateToolOperationIdempotentParams) (sqlc.ToolOperation, error)
+	RequeueToolOperation(context.Context, uuid.UUID) (sqlc.ToolOperation, error)
+}
+
+type toolRunTxFunc func(context.Context, func(ToolMutationTx) error) error
+
 type ToolHandler struct {
 	queries ToolQuerier
+	runTx   toolRunTxFunc
 	helm    HelmRequester
 	log     *slog.Logger
 	authz   authorizationSupport
@@ -78,6 +100,41 @@ type ToolHandler struct {
 	// YAML right before the tool install / upgrade task is enqueued.
 	// Migration 067. Nil-safe — see vaultResolveBlob in vault_hook.go.
 	vaultResolver *avault.Resolver
+}
+
+func (h *ToolHandler) SetRunTx(runTx toolRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *ToolHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
+
+func executeToolMutation[T any](r *http.Request, h *ToolHandler, mutate func(ToolMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("tool handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q ToolMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 // SetVaultResolver wires the Vault resolver used to substitute
@@ -178,11 +235,17 @@ type toolChart struct {
 	Order     int    `json:"order"`
 }
 
+// openapi:request ToolActionRequest
 type toolActionRequest struct {
 	ClusterID      string `json:"cluster_id"`
 	Preset         string `json:"preset"`
 	ValuesOverride string `json:"values_override"`
 	ReleaseName    string `json:"release_name"`
+}
+
+// openapi:request ToolUninstallRequest
+type toolUninstallRequest struct {
+	ClusterID string `json:"cluster_id"`
 }
 
 type toolOperationEnvelope struct {
@@ -434,6 +497,7 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbCreate) {
 		return
 	}
+	restoreToolActionRequestBody(r, req)
 	// Migration 057: maintenance window gate. Look up the cluster's
 	// labels for selector matching.
 	if blocked := h.checkToolMaintenanceWindow(w, r, clusterID, "tool.install"); blocked {
@@ -472,7 +536,10 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 	// resolved plaintext only exists in-memory on the wire. Tools install
 	// at cluster scope; unqualified vault refs require the explicit
 	// "${vault://<connection>/...}" form.
-	op, err := h.enqueueOperation(withOperationIdempotency(r, "tools"), "tool_installation", operationTargetKey(clusterID, tool.Slug), "install", toolOperationEnvelope{
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	op, err := h.createAuditedToolOperation(r, "tool_installation", operationTargetKey(clusterID, tool.Slug), "install", toolOperationEnvelope{
 		ClusterID:   req.ClusterID,
 		ToolSlug:    tool.Slug,
 		ReleaseName: releaseName,
@@ -482,20 +549,14 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 		ChartName:   chart.ChartName,
 		RepoURL:     chart.RepoURL,
 		Version:     tool.VersionConstraint,
-	}, currentUserUUID(r))
+	}, currentUserUUID(r), clusterAuditEvent{action: "tool.install", resourceType: "tool", resourceID: tool.ID.String(), resourceName: tool.Slug, status: http.StatusAccepted, detail: map[string]any{
+		"cluster_id": req.ClusterID, "release_name": releaseName, "chart": chart.ChartName, "version": tool.VersionConstraint, "preset": req.Preset,
+	}})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue tool installation")
+		respondToolMutationError(w, r, err, apierror.EnqueueError, "Failed to enqueue tool installation")
 		return
 	}
-	recordAudit(r, h.queries, "tool.install", "tool", tool.ID.String(), tool.Slug, map[string]any{
-		"cluster_id":   req.ClusterID,
-		"release_name": releaseName,
-		"chart":        chart.ChartName,
-		"version":      tool.VersionConstraint,
-		"preset":       req.Preset,
-		"operation_id": op.ID.String(),
-	})
-	RespondJSON(w, http.StatusAccepted, toolOperationResponse(op))
+	RespondAcceptedOperation(w, "/api/v1/tools/operations/"+op.ID.String()+"/", toolOperationResponse(op))
 }
 
 func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
@@ -516,6 +577,7 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
 		return
 	}
+	restoreToolActionRequestBody(r, req)
 	// Migration 057: maintenance window gate.
 	if blocked := h.checkToolMaintenanceWindow(w, r, clusterID, "tool.upgrade"); blocked {
 		return
@@ -535,7 +597,10 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 	// both the payload and the installed_charts row; the reconciler
 	// (sendHelmRaw) resolves them in-memory at execution time so no
 	// cleartext secret is persisted.
-	op, err := h.enqueueOperation(withOperationIdempotency(r, "tools"), "tool_installation", operationTargetKey(clusterID, tool.Slug), "upgrade", toolOperationEnvelope{
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	op, err := h.createAuditedToolOperation(r, "tool_installation", operationTargetKey(clusterID, tool.Slug), "upgrade", toolOperationEnvelope{
 		ClusterID:      req.ClusterID,
 		ToolSlug:       tool.Slug,
 		ReleaseName:    releaseName,
@@ -546,20 +611,14 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		RepoURL:        chart.RepoURL,
 		Version:        tool.VersionConstraint,
 		InstalledChart: &chartID,
-	}, currentUserUUID(r))
+	}, currentUserUUID(r), clusterAuditEvent{action: "tool.upgrade", resourceType: "tool", resourceID: tool.ID.String(), resourceName: tool.Slug, status: http.StatusAccepted, detail: map[string]any{
+		"cluster_id": req.ClusterID, "release_name": releaseName, "chart": chart.ChartName, "version": tool.VersionConstraint, "preset": req.Preset,
+	}})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue tool upgrade")
+		respondToolMutationError(w, r, err, apierror.EnqueueError, "Failed to enqueue tool upgrade")
 		return
 	}
-	recordAudit(r, h.queries, "tool.upgrade", "tool", tool.ID.String(), tool.Slug, map[string]any{
-		"cluster_id":   req.ClusterID,
-		"release_name": releaseName,
-		"chart":        chart.ChartName,
-		"version":      tool.VersionConstraint,
-		"preset":       req.Preset,
-		"operation_id": op.ID.String(),
-	})
-	RespondJSON(w, http.StatusAccepted, toolOperationResponse(op))
+	RespondAcceptedOperation(w, "/api/v1/tools/operations/"+op.ID.String()+"/", toolOperationResponse(op))
 }
 
 func (h *ToolHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
@@ -569,7 +628,7 @@ func (h *ToolHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Tool not found")
 		return
 	}
-	var req toolActionRequest
+	var req toolUninstallRequest
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
@@ -581,6 +640,7 @@ func (h *ToolHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbDelete) {
 		return
 	}
+	restoreToolActionRequestBody(r, toolActionRequest{ClusterID: req.ClusterID})
 	// Migration 057: maintenance window gate.
 	if blocked := h.checkToolMaintenanceWindow(w, r, clusterID, "tool.uninstall"); blocked {
 		return
@@ -595,24 +655,23 @@ func (h *ToolHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	chartID := existing.ID
-	op, err := h.enqueueOperation(withOperationIdempotency(r, "tools"), "tool_installation", operationTargetKey(clusterID, slug), "uninstall", toolOperationEnvelope{
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	op, err := h.createAuditedToolOperation(r, "tool_installation", operationTargetKey(clusterID, slug), "uninstall", toolOperationEnvelope{
 		ClusterID:      req.ClusterID,
 		ToolSlug:       slug,
 		ReleaseName:    existing.ReleaseName,
 		Namespace:      existing.Namespace,
 		InstalledChart: &chartID,
-	}, currentUserUUID(r))
+	}, currentUserUUID(r), clusterAuditEvent{action: "tool.uninstall", resourceType: "tool", resourceID: existing.ID.String(), resourceName: slug, status: http.StatusAccepted, detail: map[string]any{
+		"cluster_id": req.ClusterID, "release_name": existing.ReleaseName, "namespace": existing.Namespace,
+	}})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue tool uninstall")
+		respondToolMutationError(w, r, err, apierror.EnqueueError, "Failed to enqueue tool uninstall")
 		return
 	}
-	recordAudit(r, h.queries, "tool.uninstall", "tool", existing.ID.String(), slug, map[string]any{
-		"cluster_id":   req.ClusterID,
-		"release_name": existing.ReleaseName,
-		"namespace":    existing.Namespace,
-		"operation_id": op.ID.String(),
-	})
-	RespondJSON(w, http.StatusAccepted, toolOperationResponse(op))
+	RespondAcceptedOperation(w, "/api/v1/tools/operations/"+op.ID.String()+"/", toolOperationResponse(op))
 }
 
 func (h *ToolHandler) Adopt(w http.ResponseWriter, r *http.Request) {
@@ -639,23 +698,22 @@ func (h *ToolHandler) Adopt(w http.ResponseWriter, r *http.Request) {
 	}
 	charts, _ := parseToolCharts(tool.Charts)
 	chart := firstChart(charts)
-	op, err := h.enqueueOperation(withOperationIdempotency(r, "tools"), "tool_installation", operationTargetKey(clusterID, slug), "adopt", toolOperationEnvelope{
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	op, err := h.createAuditedToolOperation(r, "tool_installation", operationTargetKey(clusterID, slug), "adopt", toolOperationEnvelope{
 		ClusterID:   req.ClusterID,
 		ToolSlug:    slug,
 		ReleaseName: req.ReleaseName,
 		Namespace:   chartNamespace(tool, chart),
-	}, currentUserUUID(r))
+	}, currentUserUUID(r), clusterAuditEvent{action: "tool.adopt", resourceType: "tool", resourceID: tool.ID.String(), resourceName: slug, status: http.StatusAccepted, detail: map[string]any{
+		"cluster_id": req.ClusterID, "release_name": req.ReleaseName, "namespace": chartNamespace(tool, chart),
+	}})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue tool adoption")
+		respondToolMutationError(w, r, err, apierror.EnqueueError, "Failed to enqueue tool adoption")
 		return
 	}
-	recordAudit(r, h.queries, "tool.adopt", "tool", tool.ID.String(), slug, map[string]any{
-		"cluster_id":   req.ClusterID,
-		"release_name": req.ReleaseName,
-		"namespace":    chartNamespace(tool, chart),
-		"operation_id": op.ID.String(),
-	})
-	RespondJSON(w, http.StatusAccepted, toolOperationResponse(op))
+	RespondAcceptedOperation(w, "/api/v1/tools/operations/"+op.ID.String()+"/", toolOperationResponse(op))
 }
 
 func (h *ToolHandler) ClusterStatus(w http.ResponseWriter, r *http.Request) {
@@ -731,8 +789,7 @@ func (h *ToolHandler) ClusterStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		statuses = append(statuses, status)
 	}
-	// TODO(total): per-cluster tool status is an unpaged full scan of
-	// enabled tools; no COUNT query matches it, so use the page length.
+	// Per-cluster tool status is a complete scan of enabled tools.
 	RespondList(w, statuses, NewPagination(len(statuses), len(statuses), 0, len(statuses)))
 }
 
@@ -749,30 +806,49 @@ func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 	if v := strings.TrimSpace(r.URL.Query().Get("status")); v != "" {
 		arg.Status = pgtype.Text{String: v, Valid: true}
 	}
-	ops, err := h.queries.ListToolOperations(r.Context(), arg)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list tool operations")
-		return
-	}
-	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
+	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceCatalog, rbac.VerbRead, rbac.NarrowedClustersWiden)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
+	var ops []sqlc.ToolOperation
+	var total int64
+	pager, hasPager := h.queries.(toolOperationPager)
+	if all {
+		ops, err = h.queries.ListToolOperations(r.Context(), arg)
+		if err == nil && hasPager {
+			total, err = pager.CountToolOperations(r.Context(), sqlc.CountToolOperationsParams{
+				TargetType: arg.TargetType, TargetKey: arg.TargetKey, Status: arg.Status,
+			})
+		}
+	} else {
+		if !hasPager {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Scoped tool-operation pagination is unavailable")
+			return
+		}
+		ops, err = pager.ListToolOperationsForScopes(r.Context(), sqlc.ListToolOperationsForScopesParams{
+			TargetType: arg.TargetType, TargetKey: arg.TargetKey, Status: arg.Status,
+			ClusterIds: clusterIDs, QueryLimit: int32(limit), QueryOffset: int32(offset),
+		})
+		if err == nil {
+			total, err = pager.CountToolOperationsForScopes(r.Context(), sqlc.CountToolOperationsForScopesParams{
+				TargetType: arg.TargetType, TargetKey: arg.TargetKey, Status: arg.Status, ClusterIds: clusterIDs,
+			})
+		}
+	}
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list tool operations")
+		return
+	}
 	items := make([]map[string]any, 0, len(ops))
 	for _, op := range ops {
-		if restricted {
-			clusterID, err := toolOperationClusterID(op)
-			if err != nil || !h.authz.allowsCluster(bindings, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
-				continue
-			}
-		}
 		items = append(items, toolOperationResponse(op))
 	}
-	// TODO(total): list is filtered in-Go by RBAC; no COUNT matches the
-	// visible set. has_more is inferred from the DB page (len(ops)) being full,
-	// not the post-filter items, so next_offset advances over skipped rows.
-	RespondList(w, items, NewPaginationFromPage(limit, offset, len(ops)))
+	if !hasPager {
+		RespondList(w, items, NewPaginationFromPage(limit, offset, len(ops)))
+		return
+	}
+	RespondList(w, items, NewPagination(int(total), limit, offset, len(ops)))
 }
 
 func (h *ToolHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
@@ -823,18 +899,23 @@ func (h *ToolHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
 		return
 	}
-	requeued, err := h.queries.RequeueToolOperation(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, "Failed to retry tool operation")
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
-	h.publishToolOperationChanged(requeued)
-	h.TriggerReconcile()
-	recordAudit(r, h.queries, "tool.operation.retry", "tool_operation", id.String(), op.TargetKey, map[string]any{
-		"target_type":     op.TargetType,
-		"previous_status": op.Status,
-	})
-	RespondJSON(w, http.StatusAccepted, toolOperationResponse(requeued))
+	requeued, err := executeToolMutation(r, h,
+		func(q ToolMutationTx) (sqlc.ToolOperation, error) { return q.RequeueToolOperation(r.Context(), id) },
+		func() (sqlc.ToolOperation, error) { return h.queries.RequeueToolOperation(r.Context(), id) },
+		func(requeued sqlc.ToolOperation) clusterAuditEvent {
+			return clusterAuditEvent{action: "tool.operation.retry", resourceType: "tool_operation", resourceID: id.String(), resourceName: op.TargetKey, status: http.StatusAccepted, detail: map[string]any{
+				"target_type": op.TargetType, "previous_status": op.Status,
+			}}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.RetryError, "Failed to retry tool operation")
+		return
+	}
+	h.afterToolOperationCommit(requeued)
+	RespondAcceptedOperation(w, "/api/v1/tools/operations/"+requeued.ID.String()+"/", toolOperationResponse(requeued))
 }
 
 func toolOperationClusterID(op sqlc.ToolOperation) (uuid.UUID, error) {
@@ -942,6 +1023,20 @@ func (h *ToolHandler) resolveAction(r *http.Request) (sqlc.ClusterTool, toolActi
 	// conflicting operator value still wins.
 	valuesYAML := mergeValueLayers(distYAML, presetYAML, req.ValuesOverride)
 	return tool, req, firstChart(charts), valuesYAML, nil
+}
+
+// resolveAction consumes the request body before the maintenance gate runs.
+// Restore a canonical copy so defer mode captures a complete, replayable
+// request envelope rather than an empty body.
+func restoreToolActionRequestBody(r *http.Request, req toolActionRequest) {
+	if r == nil {
+		return
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
 }
 
 func (h *ToolHandler) sendHelmRaw(ctx context.Context, env toolOperationEnvelope, msgType protocol.MessageType) (*protocol.HelmResultPayload, error) {
@@ -1183,7 +1278,65 @@ func (h *ToolHandler) publishToolOperationChanged(op sqlc.ToolOperation) {
 	events.PublishChanged(h.bus, "tool_operation", env.ClusterID, op.ID.String(), map[string]any{"status": op.Status})
 }
 
+func (h *ToolHandler) afterToolOperationCommit(op sqlc.ToolOperation) {
+	if h == nil || op.ID == uuid.Nil {
+		return
+	}
+	h.publishToolOperationChanged(op)
+	h.TriggerReconcile()
+}
+
+type toolOperationCreator interface {
+	CreateToolOperation(context.Context, sqlc.CreateToolOperationParams) (sqlc.ToolOperation, error)
+}
+
+type idempotentToolOperationCreator interface {
+	CreateToolOperationIdempotent(context.Context, sqlc.CreateToolOperationIdempotentParams) (sqlc.ToolOperation, error)
+}
+
+var errToolOperationIdempotencyConflict = errors.New("tool operation idempotency key identifies a different operation")
+
+func respondToolMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackCode, fallbackMessage string) {
+	if errors.Is(err, errToolOperationIdempotencyConflict) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different tool operation")
+		return
+	}
+	respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, fallbackCode, fallbackMessage)
+}
+
+func (h *ToolHandler) createAuditedToolOperation(r *http.Request, targetType, targetKey, operationType string, env toolOperationEnvelope, userID pgtype.UUID, event clusterAuditEvent) (sqlc.ToolOperation, error) {
+	opContext := withOperationIdempotency(r, "tools")
+	op, err := executeToolMutation(r, h,
+		func(q ToolMutationTx) (sqlc.ToolOperation, error) {
+			return createToolOperation(opContext, q, targetType, targetKey, operationType, env, userID)
+		},
+		func() (sqlc.ToolOperation, error) {
+			return createToolOperation(opContext, h.queries, targetType, targetKey, operationType, env, userID)
+		},
+		func(op sqlc.ToolOperation) clusterAuditEvent {
+			detail := make(map[string]any, len(event.detail)+1)
+			for key, value := range event.detail {
+				detail[key] = value
+			}
+			detail["operation_id"] = op.ID.String()
+			event.detail = detail
+			return event
+		})
+	if err == nil {
+		h.afterToolOperationCommit(op)
+	}
+	return op, err
+}
+
 func (h *ToolHandler) enqueueOperation(ctx context.Context, targetType, targetKey, operationType string, env toolOperationEnvelope, userID pgtype.UUID) (sqlc.ToolOperation, error) {
+	op, err := createToolOperation(ctx, h.queries, targetType, targetKey, operationType, env, userID)
+	if err == nil {
+		h.afterToolOperationCommit(op)
+	}
+	return op, err
+}
+
+func createToolOperation(ctx context.Context, q toolOperationCreator, targetType, targetKey, operationType string, env toolOperationEnvelope, userID pgtype.UUID) (sqlc.ToolOperation, error) {
 	payload, err := json.Marshal(env)
 	if err != nil {
 		return sqlc.ToolOperation{}, err
@@ -1198,9 +1351,7 @@ func (h *ToolHandler) enqueueOperation(ctx context.Context, targetType, targetKe
 	}
 	var op sqlc.ToolOperation
 	if idem, ok := operationIdempotencyFromContext(ctx); ok {
-		if creator, ok := h.queries.(interface {
-			CreateToolOperationIdempotent(context.Context, sqlc.CreateToolOperationIdempotentParams) (sqlc.ToolOperation, error)
-		}); ok {
+		if creator, ok := q.(idempotentToolOperationCreator); ok {
 			op, err = creator.CreateToolOperationIdempotent(ctx, sqlc.CreateToolOperationIdempotentParams{
 				Scope:          idem.scope,
 				IdempotencyKey: idem.key,
@@ -1211,14 +1362,13 @@ func (h *ToolHandler) enqueueOperation(ctx context.Context, targetType, targetKe
 				Status:         params.Status,
 				CreatedByID:    params.CreatedByID,
 			})
+			if err == nil && op.ID != uuid.Nil && (op.TargetType != params.TargetType || op.TargetKey != params.TargetKey || op.OperationType != params.OperationType || !bytes.Equal(op.Payload, params.Payload)) {
+				return sqlc.ToolOperation{}, errToolOperationIdempotencyConflict
+			}
 		}
 	}
 	if op.ID == uuid.Nil && err == nil {
-		op, err = h.queries.CreateToolOperation(ctx, params)
-	}
-	if err == nil {
-		h.publishToolOperationChanged(op)
-		h.TriggerReconcile()
+		op, err = q.CreateToolOperation(ctx, params)
 	}
 	return op, err
 }

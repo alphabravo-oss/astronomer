@@ -30,6 +30,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -48,9 +49,54 @@ type GroupMappingsQuerier interface {
 	auth.GroupSyncQuerier
 }
 
+type GroupMappingsMutationTx interface {
+	GroupMappingsQuerier
+	audit.OutboxQuerier
+}
+
+type groupMappingsRunTxFunc func(context.Context, func(GroupMappingsMutationTx) error) error
+
+type groupMappingsMutationResult[T any] struct {
+	value  T
+	events []clusterAuditEvent
+}
+
+func executeGroupMappingsMutation[T any](r *http.Request, h *GroupMappingsHandler, mutate func(GroupMappingsQuerier) (groupMappingsMutationResult[T], error)) (groupMappingsMutationResult[T], error) {
+	var zero groupMappingsMutationResult[T]
+	persist := func(q audit.OutboxQuerier, result groupMappingsMutationResult[T]) error {
+		for _, event := range result.events {
+			if err := recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if h.runTx != nil {
+		var result groupMappingsMutationResult[T]
+		err := h.runTx(r.Context(), func(q GroupMappingsMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			return persist(q, result)
+		})
+		return result, err
+	}
+	result, err := mutate(h.queries)
+	if err != nil {
+		return zero, err
+	}
+	for _, event := range result.events {
+		recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	}
+	return result, nil
+}
+
 // GroupMappingsHandler owns the CRUD + resync endpoints.
 type GroupMappingsHandler struct {
 	queries   GroupMappingsQuerier
+	runTx     groupMappingsRunTxFunc
 	rbacCache SSORBACInvalidator // optional; nil-safe
 }
 
@@ -60,6 +106,14 @@ type GroupMappingsHandler struct {
 func NewGroupMappingsHandler(queries GroupMappingsQuerier) *GroupMappingsHandler {
 	return &GroupMappingsHandler{queries: queries}
 }
+
+func (h *GroupMappingsHandler) SetRunTx(runTx groupMappingsRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *GroupMappingsHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // SetRBACCacheInvalidator wires the per-user cache hook. The resync
 // endpoint calls Invalidate after a successful run so the operator
@@ -75,6 +129,7 @@ func (h *GroupMappingsHandler) SetRBACCacheInvalidator(inv SSORBACInvalidator) {
 // keep the wire shape friendly to the JS frontend (uuid.UUID's JSON
 // codec accepts strings, but bare-empty-string for nullable fields is
 // what the UI sends).
+// openapi:request GroupMappingWriteRequest
 type GroupMappingRequest struct {
 	ConnectorID string `json:"connector_id"` // empty = wildcard
 	GroupName   string `json:"group_name"`
@@ -247,19 +302,15 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	row, err := h.queries.CreateGroupMapping(r.Context(), params)
+	result, err := executeGroupMappingsMutation(r, h, func(q GroupMappingsQuerier) (groupMappingsMutationResult[sqlc.IdentityGroupMapping], error) {
+		row, createErr := q.CreateGroupMapping(r.Context(), params)
+		return groupMappingsMutationResult[sqlc.IdentityGroupMapping]{value: row, events: []clusterAuditEvent{groupMappingAuditEvent("admin.group_mapping.created", row, http.StatusCreated)}}, createErr
+	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create group mapping")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create group mapping")
 		return
 	}
-	recordAudit(r, h.queries, "admin.group_mapping.created", "group_mapping", row.ID.String(), row.GroupName, map[string]any{
-		"connector_id": uuidPgOrEmpty(row.ConnectorID),
-		"group_name":   row.GroupName,
-		"scope":        row.Scope,
-		"role_id":      row.RoleID.String(),
-		"cluster_id":   uuidPgOrEmpty(row.ClusterID),
-		"project_id":   uuidPgOrEmpty(row.ProjectID),
-	})
+	row := result.value
 	w.Header().Set("Location", "/api/v1/admin/group-mappings/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, toGroupMappingResponse(row))
 }
@@ -274,28 +325,33 @@ func (h *GroupMappingsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid mapping ID")
 		return
 	}
-	existing, err := h.queries.GetGroupMappingByID(r.Context(), id)
+	_, err = executeGroupMappingsMutation(r, h, func(q GroupMappingsQuerier) (groupMappingsMutationResult[sqlc.IdentityGroupMapping], error) {
+		existing, getErr := q.GetGroupMappingByID(r.Context(), id)
+		if getErr != nil {
+			return groupMappingsMutationResult[sqlc.IdentityGroupMapping]{}, getErr
+		}
+		deleteErr := q.DeleteGroupMapping(r.Context(), id)
+		return groupMappingsMutationResult[sqlc.IdentityGroupMapping]{value: existing, events: []clusterAuditEvent{groupMappingAuditEvent("admin.group_mapping.deleted", existing, http.StatusNoContent)}}, deleteErr
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Group mapping not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to get group mapping")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete group mapping")
 		return
 	}
-	if err := h.queries.DeleteGroupMapping(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete group mapping")
-		return
-	}
-	recordAudit(r, h.queries, "admin.group_mapping.deleted", "group_mapping", existing.ID.String(), existing.GroupName, map[string]any{
-		"connector_id": uuidPgOrEmpty(existing.ConnectorID),
-		"group_name":   existing.GroupName,
-		"scope":        existing.Scope,
-		"role_id":      existing.RoleID.String(),
-		"cluster_id":   uuidPgOrEmpty(existing.ClusterID),
-		"project_id":   uuidPgOrEmpty(existing.ProjectID),
-	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func groupMappingAuditEvent(action string, row sqlc.IdentityGroupMapping, status int) clusterAuditEvent {
+	return clusterAuditEvent{
+		action: action, resourceType: "group_mapping", resourceID: row.ID.String(), resourceName: row.GroupName, status: status,
+		detail: map[string]any{
+			"connector_id": uuidPgOrEmpty(row.ConnectorID), "group_name": row.GroupName, "scope": row.Scope,
+			"role_id": row.RoleID.String(), "cluster_id": uuidPgOrEmpty(row.ClusterID), "project_id": uuidPgOrEmpty(row.ProjectID),
+		},
+	}
 }
 
 // ResyncUser handles POST /api/v1/admin/users/{id}/resync-groups/.
@@ -313,77 +369,96 @@ func (h *GroupMappingsHandler) ResyncUser(w http.ResponseWriter, r *http.Request
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
 		return
 	}
-	user, err := h.queries.GetUserByID(r.Context(), uid)
+	result, err := executeGroupMappingsMutation(r, h, func(q GroupMappingsQuerier) (groupMappingsMutationResult[groupResyncResult], error) {
+		user, getErr := q.GetUserByID(r.Context(), uid)
+		if getErr != nil {
+			return groupMappingsMutationResult[groupResyncResult]{}, getErr
+		}
+		snapshot, snapshotErr := q.GetUserIDPGroups(r.Context(), user.ID)
+		if errors.Is(snapshotErr, pgx.ErrNoRows) {
+			return groupMappingsMutationResult[groupResyncResult]{}, errGroupSnapshotMissing
+		}
+		if snapshotErr != nil {
+			return groupMappingsMutationResult[groupResyncResult]{}, errGroupSnapshotLoad
+		}
+		var groups []string
+		if len(snapshot.Groups) > 0 {
+			if decodeErr := json.Unmarshal(snapshot.Groups, &groups); decodeErr != nil {
+				return groupMappingsMutationResult[groupResyncResult]{}, errGroupSnapshotParse
+			}
+		}
+		syncResult, syncErr := auth.SyncUserGroups(r.Context(), q, user.ID, snapshot.ConnectorID, groups, true)
+		if syncErr != nil {
+			return groupMappingsMutationResult[groupResyncResult]{}, errGroupSync
+		}
+		events := groupResyncAuditEvents(user, syncResult)
+		return groupMappingsMutationResult[groupResyncResult]{
+			value: groupResyncResult{user: user, groups: groups, sync: syncResult}, events: events,
+		}, nil
+	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
-			return
-		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load user")
-		return
-	}
-	snapshot, err := h.queries.GetUserIDPGroups(r.Context(), user.ID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.NoSnapshot,
-				"User has no IdP-groups snapshot yet; ask them to log in via SSO once")
-
-			return
-		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load user IdP-groups snapshot")
-		return
-	}
-
-	var groups []string
-	if len(snapshot.Groups) > 0 {
-		if err := json.Unmarshal(snapshot.Groups, &groups); err != nil {
+		case errors.Is(err, errGroupSnapshotMissing):
+			RespondRequestError(w, r, http.StatusConflict, apierror.NoSnapshot, "User has no IdP-groups snapshot yet; ask them to log in via SSO once")
+		case errors.Is(err, errGroupSnapshotParse):
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SnapshotParse, "Failed to parse IdP-groups snapshot")
-			return
+		case errors.Is(err, errGroupSnapshotLoad):
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load user IdP-groups snapshot")
+		case errors.Is(err, errGroupSync):
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, "Failed to sync user groups")
+		default:
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SyncError, "Failed to sync user groups")
 		}
-	}
-
-	result, err := auth.SyncUserGroups(r.Context(), h.queries, user.ID, snapshot.ConnectorID, groups, true)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, "Failed to sync user groups")
 		return
 	}
-
-	for _, added := range result.Added {
-		recordAudit(r, h.queries, "auth.group_sync.binding_added", "role_binding", added.BindingID.String(), "",
-			map[string]any{
-				"user_id":    user.ID.String(),
-				"group_name": added.GroupName,
-				"role_id":    added.RoleID.String(),
-				"scope":      added.Scope,
-				"cluster_id": uuidOrEmpty(added.ClusterID),
-				"project_id": uuidOrEmpty(added.ProjectID),
-				"trigger":    "admin_resync",
-			},
-		)
-	}
-	for _, removed := range result.Removed {
-		recordAudit(r, h.queries, "auth.group_sync.binding_removed", "role_binding", removed.BindingID.String(), "",
-			map[string]any{
-				"user_id":    user.ID.String(),
-				"role_id":    removed.RoleID.String(),
-				"scope":      removed.Scope,
-				"cluster_id": uuidOrEmpty(removed.ClusterID),
-				"project_id": uuidOrEmpty(removed.ProjectID),
-				"trigger":    "admin_resync",
-			},
-		)
-	}
-	if (len(result.Added) > 0 || len(result.Removed) > 0) && h.rbacCache != nil {
-		h.rbacCache.Invalidate(user.ID.String())
+	resync := result.value
+	if (len(resync.sync.Added) > 0 || len(resync.sync.Removed) > 0) && h.rbacCache != nil {
+		h.rbacCache.Invalidate(resync.user.ID.String())
 	}
 
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{
 		"success":       true,
-		"user_id":       user.ID.String(),
-		"added_count":   len(result.Added),
-		"removed_count": len(result.Removed),
-		"groups":        groups,
+		"user_id":       resync.user.ID.String(),
+		"added_count":   len(resync.sync.Added),
+		"removed_count": len(resync.sync.Removed),
+		"groups":        resync.groups,
 	})
+}
+
+type groupResyncResult struct {
+	user   sqlc.User
+	groups []string
+	sync   auth.SyncResult
+}
+
+var (
+	errGroupSnapshotMissing = errors.New("group snapshot missing")
+	errGroupSnapshotLoad    = errors.New("group snapshot load failed")
+	errGroupSnapshotParse   = errors.New("group snapshot parse failed")
+	errGroupSync            = errors.New("group sync failed")
+)
+
+func groupResyncAuditEvents(user sqlc.User, result auth.SyncResult) []clusterAuditEvent {
+	events := make([]clusterAuditEvent, 0, len(result.Added)+len(result.Removed)+1)
+	for _, added := range result.Added {
+		events = append(events, clusterAuditEvent{
+			action: "auth.group_sync.binding_added", resourceType: "role_binding", resourceID: added.BindingID.String(), status: http.StatusOK,
+			detail: map[string]any{"user_id": user.ID.String(), "group_name": added.GroupName, "role_id": added.RoleID.String(), "scope": added.Scope, "cluster_id": uuidOrEmpty(added.ClusterID), "project_id": uuidOrEmpty(added.ProjectID), "trigger": "admin_resync"},
+		})
+	}
+	for _, removed := range result.Removed {
+		events = append(events, clusterAuditEvent{
+			action: "auth.group_sync.binding_removed", resourceType: "role_binding", resourceID: removed.BindingID.String(), status: http.StatusOK,
+			detail: map[string]any{"user_id": user.ID.String(), "role_id": removed.RoleID.String(), "scope": removed.Scope, "cluster_id": uuidOrEmpty(removed.ClusterID), "project_id": uuidOrEmpty(removed.ProjectID), "trigger": "admin_resync"},
+		})
+	}
+	events = append(events, clusterAuditEvent{
+		action: "admin.group_mapping.user_resynced", resourceType: "user", resourceID: user.ID.String(), status: http.StatusOK,
+		detail: map[string]any{"added_count": len(result.Added), "removed_count": len(result.Removed)},
+	})
+	return events
 }
 
 // gate enforces superuser-only access. Mirrors the in-handler gate

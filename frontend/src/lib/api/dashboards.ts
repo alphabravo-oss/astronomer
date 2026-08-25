@@ -14,30 +14,43 @@
  *     RBAC-gated on the parent resource read verb (clusters:read for
  *     a cluster page).
  *
- * Conventions mirror `lib/api/settings.ts`:
- *   - Reads come back through the axios response interceptor (camelCase).
- *   - Writes send snake_case keys matching the Go handler's json:"..." tags.
- *   - The standard {data, …} envelope.
+ * Generated operations preserve the exact snake_case wire contract. This
+ * module is the one explicit wire-to-view-model mapping boundary.
  */
 
-import api from '@/lib/api';
-import type { APIResponse } from '@/types';
+import {
+  deleteAdminDashboardWidgetsById,
+  deleteAdminPrometheusDatasourcesById,
+  getAdminDashboardWidgets,
+  getAdminDashboardWidgetsById,
+  getAdminPrometheusDatasources,
+  getDashboardsClustersById,
+  getDashboardsGlobal,
+  getDashboardsProjectsById,
+  postAdminDashboardWidgets,
+  postAdminPrometheusDatasources,
+  postAdminPrometheusDatasourcesByIdTest,
+  putAdminDashboardWidgetsById,
+  putAdminPrometheusDatasourcesById,
+} from "@/lib/api/generated/client";
+import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { CamelizeKeys } from "@/types/wire-contract";
+
+type Contracts = OpenAPIComponents["schemas"];
+type WidgetWire = Contracts["DashboardWidget"];
+type RenderedWidgetWire = Contracts["RenderedDashboardWidget"];
+type DatasourceWire = Contracts["PrometheusDatasource"];
 
 // ============================================================
 // Types
 // ============================================================
 
-export type WidgetType = 'grafana_panel' | 'prom_sparkline' | 'prom_stat' | 'url_iframe';
-export type WidgetScope = 'global' | 'cluster' | 'project';
+export type WidgetType = WidgetWire["widget_type"];
+export type WidgetScope = WidgetWire["scope"];
 
-export interface WidgetGrid {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+export type WidgetGrid = Contracts["DashboardWidgetGrid"];
 
-export interface WidgetSpec {
+export interface WidgetSpec extends Record<string, unknown> {
   // grafana_panel
   base_url?: string;
   dashboard_uid?: string;
@@ -55,76 +68,92 @@ export interface WidgetSpec {
   height_px?: number;
 }
 
-export interface Widget {
-  id: string;
-  name: string;
-  description: string;
-  widgetType: WidgetType;
+export type Widget = Omit<CamelizeKeys<WidgetWire>, "spec"> & {
   spec: WidgetSpec;
-  scope: WidgetScope;
-  scopeIds: string[];
-  grid: WidgetGrid;
-  refreshSeconds: number;
-  enabled: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+};
 
-export interface WidgetWriteBody {
-  name: string;
-  description?: string;
-  widget_type: WidgetType;
+export type WidgetWriteBody = Omit<
+  Contracts["DashboardWidgetRequest"],
+  "spec" | "grid" | "refresh_seconds"
+> & {
   spec: WidgetSpec;
-  scope: WidgetScope;
-  scope_ids?: string[];
   grid: WidgetGrid;
   refresh_seconds: number;
-  enabled?: boolean;
-}
+};
 
-export interface RenderedWidgetData {
-  sparkline_svg?: string;
-  sparklineSvg?: string;
-  stat_value?: number;
-  statValue?: number;
-  stat_ok?: boolean;
-  statOk?: boolean;
-  stat_unit?: string;
-  statUnit?: string;
-  stat_format?: string;
-  statFormat?: string;
-  error?: string;
-}
+export type RenderedWidgetData = CamelizeKeys<
+  Contracts["RenderedDashboardWidgetData"]
+>;
 
-export interface RenderedWidget {
-  id: string;
-  name: string;
-  widgetType: WidgetType;
+export type RenderedWidget = Omit<
+  CamelizeKeys<RenderedWidgetWire>,
+  "specResolved" | "data"
+> & {
   specResolved: WidgetSpec;
-  grid: WidgetGrid;
-  refreshSeconds: number;
   data?: RenderedWidgetData;
+};
+
+export type DashboardDatasource = CamelizeKeys<DatasourceWire>;
+
+export type DatasourceWriteBody = Contracts["PrometheusDatasourceRequest"];
+
+function requireData<T>(response: { data?: T }, operation: string): T {
+  if (response.data === undefined) {
+    throw new Error(`${operation} returned no data payload`);
+  }
+  return response.data;
 }
 
-export interface PrometheusDatasource {
-  id: string;
-  name: string;
-  url: string;
-  hasAuth: boolean;
-  tlsSkipVerify: boolean;
-  enabled: boolean;
-  createdAt: string;
-  updatedAt: string;
+export function mapWidget(wire: WidgetWire): Widget {
+  return {
+    id: wire.id,
+    name: wire.name,
+    description: wire.description,
+    widgetType: wire.widget_type,
+    spec: wire.spec as WidgetSpec,
+    scope: wire.scope,
+    scopeIds: wire.scope_ids,
+    grid: wire.grid,
+    refreshSeconds: wire.refresh_seconds,
+    enabled: wire.enabled,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
+  };
 }
 
-export interface DatasourceWriteBody {
-  name: string;
-  url: string;
-  basic_auth_user?: string;
-  basic_auth_pass?: string;
-  bearer_token?: string;
-  tls_skip_verify?: boolean;
-  enabled?: boolean;
+function mapDatasource(wire: DatasourceWire): DashboardDatasource {
+  return {
+    id: wire.id,
+    name: wire.name,
+    url: wire.url,
+    hasAuth: wire.has_auth,
+    tlsSkipVerify: wire.tls_skip_verify,
+    enabled: wire.enabled,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
+  };
+}
+
+export function mapRenderedWidget(wire: RenderedWidgetWire): RenderedWidget {
+  const data = wire.data
+    ? {
+        sparklineSvg: wire.data.sparkline_svg,
+        statValue: wire.data.stat_value,
+        statUnit: wire.data.stat_unit,
+        statFormat: wire.data.stat_format,
+        statOk: wire.data.stat_ok,
+        error: wire.data.error,
+      }
+    : undefined;
+  return {
+    id: wire.id,
+    name: wire.name,
+    widgetType: wire.widget_type,
+    specResolved: wire.spec_resolved as WidgetSpec,
+    grid: wire.grid,
+    refreshSeconds: wire.refresh_seconds,
+    data,
+  };
 }
 
 // ============================================================
@@ -132,56 +161,83 @@ export interface DatasourceWriteBody {
 // ============================================================
 
 export async function listWidgets(): Promise<Widget[]> {
-  const res = await api.get<APIResponse<Widget[]>>('/admin/dashboard-widgets/');
-  return res.data.data ?? [];
+  const page = await getAdminDashboardWidgets({ query: { limit: 200 } });
+  return page.data.map(mapWidget);
 }
 
 export async function getWidget(id: string): Promise<Widget> {
-  const res = await api.get<APIResponse<Widget>>(`/admin/dashboard-widgets/${id}/`);
-  return res.data.data;
+  return mapWidget(
+    requireData(
+      await getAdminDashboardWidgetsById({ path: { id } }),
+      "getWidget",
+    ),
+  );
 }
 
 export async function createWidget(body: WidgetWriteBody): Promise<Widget> {
-  const res = await api.post<APIResponse<Widget>>('/admin/dashboard-widgets/', body);
-  return res.data.data;
+  return mapWidget(
+    requireData(await postAdminDashboardWidgets({ body }), "createWidget"),
+  );
 }
 
-export async function updateWidget(id: string, body: WidgetWriteBody): Promise<Widget> {
-  const res = await api.put<APIResponse<Widget>>(`/admin/dashboard-widgets/${id}/`, body);
-  return res.data.data;
+export async function updateWidget(
+  id: string,
+  body: WidgetWriteBody,
+): Promise<Widget> {
+  return mapWidget(
+    requireData(
+      await putAdminDashboardWidgetsById({ path: { id }, body }),
+      "updateWidget",
+    ),
+  );
 }
 
 export async function deleteWidget(id: string): Promise<void> {
-  await api.delete(`/admin/dashboard-widgets/${id}/`);
+  await deleteAdminDashboardWidgetsById({ path: { id } });
 }
 
-export async function listDatasources(): Promise<PrometheusDatasource[]> {
-  const res = await api.get<APIResponse<PrometheusDatasource[]>>('/admin/prometheus-datasources/');
-  return res.data.data ?? [];
+export async function listDatasources(): Promise<DashboardDatasource[]> {
+  const page = await getAdminPrometheusDatasources({ query: { limit: 200 } });
+  return page.data.map(mapDatasource);
 }
 
-export async function createDatasource(body: DatasourceWriteBody): Promise<PrometheusDatasource> {
-  const res = await api.post<APIResponse<PrometheusDatasource>>('/admin/prometheus-datasources/', body);
-  return res.data.data;
+export async function createDatasource(
+  body: DatasourceWriteBody,
+): Promise<DashboardDatasource> {
+  return mapDatasource(
+    requireData(
+      await postAdminPrometheusDatasources({ body }),
+      "createDatasource",
+    ),
+  );
 }
 
-export async function updateDatasource(id: string, body: DatasourceWriteBody): Promise<PrometheusDatasource> {
-  const res = await api.put<APIResponse<PrometheusDatasource>>(`/admin/prometheus-datasources/${id}/`, body);
-  return res.data.data;
+export async function updateDatasource(
+  id: string,
+  body: DatasourceWriteBody,
+): Promise<DashboardDatasource> {
+  return mapDatasource(
+    requireData(
+      await putAdminPrometheusDatasourcesById({ path: { id }, body }),
+      "updateDatasource",
+    ),
+  );
 }
 
 export async function deleteDatasource(id: string): Promise<void> {
-  await api.delete(`/admin/prometheus-datasources/${id}/`);
+  await deleteAdminPrometheusDatasourcesById({ path: { id } });
 }
 
-export interface DatasourceTestResult {
-  ok: boolean;
-  message: string;
-}
+export type DatasourceTestResult =
+  Contracts["PrometheusDatasourceTestResult"];
 
-export async function testDatasource(id: string): Promise<DatasourceTestResult> {
-  const res = await api.post<APIResponse<DatasourceTestResult>>(`/admin/prometheus-datasources/${id}/test/`);
-  return res.data.data;
+export async function testDatasource(
+  id: string,
+): Promise<DatasourceTestResult> {
+  return requireData(
+    await postAdminPrometheusDatasourcesByIdTest({ path: { id } }),
+    "testDatasource",
+  );
 }
 
 // ============================================================
@@ -189,16 +245,20 @@ export async function testDatasource(id: string): Promise<DatasourceTestResult> 
 // ============================================================
 
 export async function renderGlobal(): Promise<RenderedWidget[]> {
-  const res = await api.get<APIResponse<RenderedWidget[]>>('/dashboards/global/');
-  return res.data.data ?? [];
+  const response = await getDashboardsGlobal();
+  return response.data.map(mapRenderedWidget);
 }
 
-export async function renderForCluster(clusterId: string): Promise<RenderedWidget[]> {
-  const res = await api.get<APIResponse<RenderedWidget[]>>(`/dashboards/clusters/${clusterId}/`);
-  return res.data.data ?? [];
+export async function renderForCluster(
+  clusterId: string,
+): Promise<RenderedWidget[]> {
+  const response = await getDashboardsClustersById({ path: { id: clusterId } });
+  return response.data.map(mapRenderedWidget);
 }
 
-export async function renderForProject(projectId: string): Promise<RenderedWidget[]> {
-  const res = await api.get<APIResponse<RenderedWidget[]>>(`/dashboards/projects/${projectId}/`);
-  return res.data.data ?? [];
+export async function renderForProject(
+  projectId: string,
+): Promise<RenderedWidget[]> {
+  const response = await getDashboardsProjectsById({ path: { id: projectId } });
+  return response.data.map(mapRenderedWidget);
 }

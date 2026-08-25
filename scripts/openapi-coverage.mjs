@@ -13,14 +13,10 @@
 //
 // Modes:
 //   (default)  print the report, always exit 0
-//   --check    exit non-zero when there is drift (any extra spec operation, i.e.
-//              a documented operation that no longer maps to a real route).
+//   --check    exit non-zero when there is drift in either direction.
 //
-// Coverage is intentionally informational: the spec documents only the stable
-// public surface, so "missing" is expected to be large and does NOT fail --check.
-// Drift that DOES fail --check is an `extra` operation: the spec describes a
-// path/method the router no longer serves AND that is not a known
-// nil-gated route (see KNOWN_NIL_GATED below).
+// Every mounted operation must be explicitly documented and classified. A
+// missing operation is contract drift just like a stale operation is.
 //
 // CAVEAT: docs/routes.json is walked from the route-security test router,
 // which may leave a handler dependency nil. chi omits routes whose handler
@@ -69,6 +65,43 @@ const KNOWN_NIL_GATED = new Set([
   'DELETE /api/v1/admin/management-backup/destinations/{}',
   'POST /api/v1/admin/management-backup/destinations/{}/test',
   'POST /api/v1/admin/management-backup/destinations/{}/run',
+  'GET /api/v1/admin/management-backup/operations/{}',
+  // Compliance baselines and SIEM forwarders are optional production
+  // dependencies and are nil in the route-dump test router.
+  'GET /api/v1/admin/compliance-baselines',
+  'GET /api/v1/admin/compliance-baselines/active',
+  'GET /api/v1/admin/compliance-baselines/{}',
+  'GET /api/v1/admin/compliance-baselines/{}/diff',
+  'POST /api/v1/admin/compliance-baselines/{}/apply',
+  'GET /api/v1/admin/compliance-baseline-applications',
+  'POST /api/v1/admin/compliance-baseline-applications/{}/revert',
+  'GET /api/v1/admin/siem-forwarders',
+  'POST /api/v1/admin/siem-forwarders',
+  'GET /api/v1/admin/siem-forwarders/{}',
+  'PUT /api/v1/admin/siem-forwarders/{}',
+  'DELETE /api/v1/admin/siem-forwarders/{}',
+  'POST /api/v1/admin/siem-forwarders/{}/test',
+  'GET /api/v1/admin/siem-forwarders/{}/status',
+  // Notification templates are nil in the route-dump test router.
+  'GET /api/v1/admin/notification-templates',
+  'GET /api/v1/admin/notification-templates/{}',
+  'PUT /api/v1/admin/notification-templates/{}',
+  'DELETE /api/v1/admin/notification-templates/{}',
+  'POST /api/v1/admin/notification-templates/{}/preview',
+  'GET /api/v1/admin/notification-templates/{}/variables',
+  'GET /api/v1/admin/read-audit-policies',
+  'POST /api/v1/admin/read-audit-policies',
+  'GET /api/v1/admin/read-audit-policies/{}',
+  'PUT /api/v1/admin/read-audit-policies/{}',
+  'DELETE /api/v1/admin/read-audit-policies/{}',
+  // Task delivery operations and control-plane snapshot guidance are optional
+  // production dependencies and are nil in the route-dump test router.
+  'GET /api/v1/admin/task-outbox',
+  'POST /api/v1/admin/task-outbox/{}/retry',
+  'GET /api/v1/clusters/{}/control-plane-snapshots',
+  'POST /api/v1/clusters/{}/control-plane-snapshots',
+  'GET /api/v1/clusters/{}/control-plane-snapshots/{}',
+  'GET /api/v1/clusters/{}/control-plane-snapshots/{}/restore-guidance',
   'GET /api/v1/alerting/channels',
   'POST /api/v1/alerting/channels',
   'GET /api/v1/alerting/events',
@@ -218,9 +251,9 @@ if (args.has('--verbose')) {
   for (const op of missing) console.log(`  ${op.method} ${op.pattern}`);
 }
 
-if (check && extra.length > 0) {
-  console.error(`\nFAIL: ${extra.length} documented operation(s) no longer map to a route (spec drift).`);
-  console.error('Fix the spec, or if intentionally nil-gated, add to KNOWN_NIL_GATED in this script.');
+if (check && (extra.length > 0 || missing.length > 0)) {
+  console.error(`\nFAIL: OpenAPI drift: ${missing.length} mounted operation(s) missing and ${extra.length} stale operation(s).`);
+  console.error('Run the route dump and scripts/sync-openapi-routes.mjs, or explicitly classify an intentionally nil-gated route.');
   process.exit(1);
 }
 

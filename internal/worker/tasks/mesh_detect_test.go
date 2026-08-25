@@ -136,20 +136,17 @@ func meshNSList(names ...string) map[string]any {
 	return map[string]any{"items": items}
 }
 
-// setupMeshDeps installs a fakeMeshQuerier + scriptedRequester and
-// returns both. Caller is responsible for ResetMeshDetect at the end
-// of the test.
-func setupMeshDeps(t *testing.T) (*fakeMeshQuerier, *scriptedRequester) {
+// setupMeshDeps constructs an isolated runtime for each test.
+func setupMeshDeps(t *testing.T) (*fakeMeshQuerier, *scriptedRequester, MeshRuntime) {
 	t.Helper()
 	q := newFakeMeshQuerier()
 	r := newScriptedRequester()
-	ConfigureMeshDetect(MeshDetectDeps{Queries: q, Requester: r})
-	t.Cleanup(ResetMeshDetect)
-	return q, r
+	runtime := MeshRuntime{Deps: MeshDetectDeps{Queries: q, Requester: r}}
+	return q, r, runtime
 }
 
 func TestWorker_UpsertsRow(t *testing.T) {
-	q, r := setupMeshDeps(t)
+	q, r, runtime := setupMeshDeps(t)
 	clusterID := uuid.New()
 	// "active" is the real connected status the fleet carries — the sweep gate
 	// selects on it. (Historically the gate compared against "healthy", a status
@@ -160,7 +157,7 @@ func TestWorker_UpsertsRow(t *testing.T) {
 	r.set("GET", "/api/v1/namespaces", 200, meshNSList("default"))
 	r.set("GET", "/apis/networking.istio.io/v1beta1/gateways", 200, meshItemsList(2))
 
-	if err := HandleMeshDetect(context.Background(), nil); err != nil {
+	if err := runtime.HandleMeshDetect(context.Background(), nil); err != nil {
 		t.Fatalf("HandleMeshDetect: %v", err)
 	}
 	if len(q.upserts) != 1 {
@@ -185,7 +182,7 @@ func TestWorker_UpsertsRow(t *testing.T) {
 // the fix the gate compared against "healthy", so EVERY cluster was skipped and
 // the sweep never upserted a single row.
 func TestWorker_SelectsActiveClusters(t *testing.T) {
-	q, r := setupMeshDeps(t)
+	q, r, runtime := setupMeshDeps(t)
 	activeA := uuid.New()
 	activeB := uuid.New()
 	q.clusters = []sqlc.Cluster{
@@ -199,7 +196,7 @@ func TestWorker_SelectsActiveClusters(t *testing.T) {
 	r.set("GET", "/api/v1/namespaces", 200, meshNSList("default"))
 	r.set("GET", "/apis/networking.istio.io/v1beta1/gateways", 200, meshItemsList(1))
 
-	if err := HandleMeshDetect(context.Background(), nil); err != nil {
+	if err := runtime.HandleMeshDetect(context.Background(), nil); err != nil {
 		t.Fatalf("HandleMeshDetect: %v", err)
 	}
 
@@ -213,12 +210,12 @@ func TestWorker_SelectsActiveClusters(t *testing.T) {
 }
 
 func TestWorker_NoOpForUnhealthyCluster(t *testing.T) {
-	q, _ := setupMeshDeps(t)
+	q, _, runtime := setupMeshDeps(t)
 	q.clusters = []sqlc.Cluster{
 		{ID: uuid.New(), Name: "offline", Status: "unhealthy"},
 		{ID: uuid.New(), Name: "pending", Status: "pending"},
 	}
-	if err := HandleMeshDetect(context.Background(), nil); err != nil {
+	if err := runtime.HandleMeshDetect(context.Background(), nil); err != nil {
 		t.Fatalf("HandleMeshDetect: %v", err)
 	}
 	if len(q.upserts) != 0 {
@@ -227,7 +224,7 @@ func TestWorker_NoOpForUnhealthyCluster(t *testing.T) {
 }
 
 func TestWorker_DetectAndUpsert_RecordsMeshFlip(t *testing.T) {
-	q, r := setupMeshDeps(t)
+	q, r, runtime := setupMeshDeps(t)
 	clusterID := uuid.New()
 	// Seed a prior detection of "linkerd" so this run's "istio"
 	// result counts as a flip — verifies the prior-vs-new branch
@@ -237,7 +234,7 @@ func TestWorker_DetectAndUpsert_RecordsMeshFlip(t *testing.T) {
 	q.rows[clusterID] = sqlc.ClusterServiceMesh{ClusterID: clusterID, DetectedMesh: "linkerd"}
 	r.set("GET", "/api/v1/namespaces", 200, meshNSList("default"))
 	r.set("GET", "/apis/networking.istio.io/v1beta1/gateways", 200, meshItemsList(1))
-	if err := DetectAndUpsert(context.Background(), clusterID); err != nil {
+	if err := runtime.DetectAndUpsert(context.Background(), clusterID); err != nil {
 		t.Fatalf("DetectAndUpsert: %v", err)
 	}
 	if len(q.upserts) != 1 {
@@ -248,12 +245,12 @@ func TestWorker_DetectAndUpsert_RecordsMeshFlip(t *testing.T) {
 	}
 }
 
-func TestWorker_NotConfiguredIsNoOp(t *testing.T) {
-	ResetMeshDetect()
-	if err := HandleMeshDetect(context.Background(), nil); err != nil {
-		t.Fatalf("HandleMeshDetect: %v", err)
+func TestWorker_NotConfiguredFailsClosed(t *testing.T) {
+	runtime := MeshRuntime{}
+	if err := runtime.HandleMeshDetect(context.Background(), nil); err == nil {
+		t.Fatal("HandleMeshDetect returned nil, want an unconfigured-runtime error")
 	}
-	if err := DetectAndUpsert(context.Background(), uuid.New()); err == nil {
+	if err := runtime.DetectAndUpsert(context.Background(), uuid.New()); err == nil {
 		t.Errorf("DetectAndUpsert with unconfigured deps must return an error")
 	}
 }

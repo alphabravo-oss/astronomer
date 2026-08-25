@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * Schema-driven cloud-credential form (TanStack Form). Mirrors the Dex
@@ -11,22 +11,22 @@
  * The form is intentionally generic over the provider — adding a new
  * provider only requires a backend registry entry.
  */
-import { useEffect } from 'react';
-import { cn } from '@/lib/utils';
-import { useAppForm } from '@/lib/form';
-import { ActionButton } from '@/components/ui/action-button';
-import { stripUntouchedSecrets } from '@/components/form/secrets';
+import { useEffect } from "react";
+import { cn } from "@/lib/utils";
+import { useAppForm } from "@/lib/form";
+import { ActionButton } from "@/components/ui/action-button";
+import { stripUntouchedSecrets } from "@/components/form/secrets";
 import type {
   CloudCredentialProviderSpec,
   CloudCredentialTargetRef,
   CloudCredentialWriteRequest,
   CloudProvider,
-} from '@/lib/api/project-detail';
-import { TargetRefsEditor } from './target-refs-editor';
+} from "@/lib/api/project-detail";
+import { TargetRefsEditor } from "./target-refs-editor";
 
 // This form's inputs are one notch tighter than the kit default — merged
 // over the kit's base input class (twMerge, later wins).
-const credInputClassName = 'h-9 rounded-md focus:ring-1';
+const credInputClassName = "h-9 rounded-md focus:ring-1";
 
 export interface CredentialFormState {
   name: string;
@@ -60,12 +60,13 @@ export function CredentialForm({
   onSubmit,
   onCancel,
 }: CredentialFormProps) {
-  const secretIsSet = (key: string): boolean => Boolean(initial?.secretsSet?.has(key));
+  const secretIsSet = (key: string): boolean =>
+    Boolean(initial?.secretsSet?.has(key));
 
   const form = useAppForm({
     defaultValues: {
-      name: initial?.name ?? '',
-      description: initial?.description ?? '',
+      name: initial?.name ?? "",
+      description: initial?.description ?? "",
       config: (initial?.config ?? {}) as Record<string, unknown>,
       targetRefs: initial?.targetRefs ?? [],
     },
@@ -76,7 +77,7 @@ export function CredentialForm({
         value.config,
         form,
         spec.fields.filter((f) => f.secret).map((f) => f.name),
-        'config.',
+        "config.",
       );
       const cleaned: Record<string, unknown> = {};
       for (const field of spec.fields) {
@@ -114,9 +115,9 @@ export function CredentialForm({
           name="name"
           validators={{
             onSubmit: ({ value }) => {
-              if (!value.trim()) return 'Name is required';
+              if (!value.trim()) return "Name is required";
               if (!isEdit && !/^[a-z0-9-]+$/.test(value.trim())) {
-                return 'Name must be lowercase letters, digits, and dashes';
+                return "Name must be lowercase letters, digits, and dashes";
               }
               return undefined;
             },
@@ -127,7 +128,7 @@ export function CredentialForm({
               label="Name"
               disabled={isEdit}
               placeholder="my-aws-keys"
-              transform={(v) => v.toLowerCase().replace(/[^a-z0-9-]/g, '-')}
+              transform={(v) => v.toLowerCase().replace(/[^a-z0-9-]/g, "-")}
               className={credInputClassName}
             />
           )}
@@ -145,9 +146,13 @@ export function CredentialForm({
 
       {/* Provider fields */}
       <div className="space-y-3">
-        <h3 className="text-sm font-medium text-foreground">{spec.displayName} fields</h3>
+        <h3 className="text-sm font-medium text-foreground">
+          {spec.displayName} fields
+        </h3>
         {spec.fields.length === 0 ? (
-          <p className="text-xs text-muted-foreground">This provider has no fields.</p>
+          <p className="text-xs text-muted-foreground">
+            This provider has no fields.
+          </p>
         ) : (
           spec.fields.map((fieldSpec) =>
             fieldSpec.secret ? (
@@ -158,7 +163,8 @@ export function CredentialForm({
                   fieldSpec.required
                     ? {
                         onSubmit: ({ fieldApi }) =>
-                          !fieldApi.state.meta.isDirty && !secretIsSet(fieldSpec.name)
+                          !fieldApi.state.meta.isDirty &&
+                          !secretIsSet(fieldSpec.name)
                             ? `${fieldSpec.label || fieldSpec.name} is required`
                             : undefined,
                       }
@@ -173,7 +179,7 @@ export function CredentialForm({
                     placeholder={fieldSpec.placeholder}
                     stored={secretIsSet(fieldSpec.name)}
                     revealable
-                    className={cn(credInputClassName, 'font-mono')}
+                    className={cn(credInputClassName, "font-mono")}
                   />
                 )}
               </form.AppField>
@@ -185,7 +191,8 @@ export function CredentialForm({
                   fieldSpec.required
                     ? {
                         onSubmit: ({ value }) =>
-                          value == null || (typeof value === 'string' && value.trim() === '')
+                          value == null ||
+                          (typeof value === "string" && value.trim() === "")
                             ? `${fieldSpec.label || fieldSpec.name} is required`
                             : undefined,
                       }
@@ -210,13 +217,21 @@ export function CredentialForm({
       {/* Target refs */}
       <div className="space-y-3">
         <div>
-          <h3 className="text-sm font-medium text-foreground">Where to materialize</h3>
+          <h3 className="text-sm font-medium text-foreground">
+            Where to materialize
+          </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Pick the clusters and namespaces where this credential should be created as a Secret.
+            Pick the clusters and namespaces where this credential should be
+            created as a Secret.
           </p>
         </div>
         <form.AppField name="targetRefs">
-          {(field) => <TargetRefsEditor value={field.state.value} onChange={field.handleChange} />}
+          {(field) => (
+            <TargetRefsEditor
+              value={field.state.value}
+              onChange={field.handleChange}
+            />
+          )}
         </form.AppField>
       </div>
 
@@ -239,7 +254,7 @@ export function CredentialForm({
           disabled={submitting}
           loading={submitting}
         >
-          {isEdit ? 'Save credential' : 'Create credential'}
+          {isEdit ? "Save credential" : "Create credential"}
         </ActionButton>
       </div>
     </div>

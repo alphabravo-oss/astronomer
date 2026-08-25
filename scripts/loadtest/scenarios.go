@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 // scenario is one HTTP request profile in the load mix. weight is summed into
 // a cumulative probability table at startup; path is appended to the server
 // base URL.
@@ -17,12 +19,21 @@ type scenario struct {
 	weight float64
 }
 
+const fixtureClusterPathToken = "{cluster_id}"
+
+func (s scenario) pathForCluster(clusterID string) string {
+	return strings.ReplaceAll(s.path, fixtureClusterPathToken, clusterID)
+}
+
 // defaultScenarios returns the dashboard-shaped workload profile referenced by
 // docs/scale-baseline.md. Keep this in sync with the doc table.
 func defaultScenarios() []scenario {
 	return []scenario{
-		{name: "cluster_list", path: "/api/v1/clusters/", weight: 0.30},
-		{name: "cluster_pods", path: "/api/v1/clusters/00000000-0000-0000-0000-000000000000/k8s/api/v1/pods", weight: 0.25},
+		{name: "cluster_list", path: "/api/v1/clusters/", weight: 0.25},
+		{name: "cluster_pods", path: "/api/v1/clusters/{cluster_id}/k8s/api/v1/pods", weight: 0.15},
+		{name: "cluster_deployments", path: "/api/v1/clusters/{cluster_id}/k8s/apis/apps/v1/deployments", weight: 0.05},
+		{name: "cluster_services", path: "/api/v1/clusters/{cluster_id}/k8s/api/v1/services", weight: 0.05},
+		{name: "cluster_events", path: "/api/v1/clusters/{cluster_id}/k8s/api/v1/events", weight: 0.05},
 		{name: "project_list", path: "/api/v1/projects/", weight: 0.10},
 		{name: "audit_logs", path: "/api/v1/audit-logs/", weight: 0.10},
 		{name: "admin_queues", path: "/api/v1/admin/queues/", weight: 0.05},

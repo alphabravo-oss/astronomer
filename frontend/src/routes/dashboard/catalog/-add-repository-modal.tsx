@@ -1,23 +1,23 @@
-import { useState } from 'react';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { useAppForm, useStore } from '@/lib/form';
-import { useCreateHelmRepository } from '@/lib/hooks';
-import { cn } from '@/lib/utils';
-import type { HelmRepoType } from '@/types';
-import { ChevronDown } from 'lucide-react';
+import { useState } from "react";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { useAppForm, useStore } from "@/lib/form";
+import { useCreateHelmRepository } from "@/lib/hooks/catalog";
+import { cn } from "@/lib/utils";
+import type { HelmRepoType } from "@/types";
+import { ChevronDown } from "lucide-react";
 
 export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
   const createRepo = useCreateHelmRepository();
   const form = useAppForm({
     defaultValues: {
-      name: '',
-      url: '',
-      repoType: 'helm' as HelmRepoType,
-      description: '',
-      username: '',
-      password: '',
+      name: "",
+      url: "",
+      repoType: "helm" as HelmRepoType,
+      description: "",
+      username: "",
+      password: "",
     },
     onSubmit: async ({ value }) => {
       try {
@@ -64,10 +64,16 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
       footerClassName="flex items-center justify-end gap-2"
     >
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Name</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-1b397e60-67"
+        >
+          Name
+        </label>
         <form.Field name="name">
           {(field) => (
             <Input
+              id="field-1b397e60-67"
               type="text"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -79,10 +85,16 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">URL</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-1b397e60-82"
+        >
+          URL
+        </label>
         <form.Field name="url">
           {(field) => (
             <Input
+              id="field-1b397e60-82"
               type="text"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -95,17 +107,26 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Type</label>
-        <div className="flex gap-1.5">
-          {(['helm', 'oci'] as const).map((type) => (
+        <span
+          id="catalog-repository-type-label"
+          className="text-sm font-medium text-foreground"
+        >
+          Type
+        </span>
+        <div
+          role="group"
+          aria-labelledby="catalog-repository-type-label"
+          className="flex gap-1.5"
+        >
+          {(["helm", "oci"] as const).map((type) => (
             <button
               key={type}
-              onClick={() => form.setFieldValue('repoType', type)}
+              onClick={() => form.setFieldValue("repoType", type)}
               className={cn(
-                'px-4 py-1.5 rounded-md text-xs font-medium transition-colors uppercase',
+                "px-4 py-1.5 rounded-md text-xs font-medium transition-colors uppercase",
                 repoType === type
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:text-foreground',
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground",
               )}
             >
               {type}
@@ -115,10 +136,16 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Description</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-1b397e60-118"
+        >
+          Description
+        </label>
         <form.Field name="description">
           {(field) => (
             <Input
+              id="field-1b397e60-118"
               type="text"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -133,17 +160,28 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
         onClick={() => setShowAuth(!showAuth)}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
-        <ChevronDown className={cn('h-4 w-4 transition-transform', showAuth && 'rotate-180')} />
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 transition-transform",
+            showAuth && "rotate-180",
+          )}
+        />
         Authentication (optional)
       </button>
 
       {showAuth && (
         <div className="space-y-4 pl-4 border-l-2 border-border">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Username</label>
+            <label
+              className="text-sm font-medium text-foreground"
+              htmlFor="field-1b397e60-143"
+            >
+              Username
+            </label>
             <form.Field name="username">
               {(field) => (
                 <Input
+                  id="field-1b397e60-143"
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -154,10 +192,16 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
             </form.Field>
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Password</label>
+            <label
+              className="text-sm font-medium text-foreground"
+              htmlFor="field-1b397e60-157"
+            >
+              Password
+            </label>
             <form.Field name="password">
               {(field) => (
                 <Input
+                  id="field-1b397e60-157"
                   type="password"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}

@@ -10,81 +10,8 @@ import (
 	"encoding/json"
 )
 
-const getXClusterAnomalyBaseline = `-- name: GetXClusterAnomalyBaseline :one
-SELECT id, metric_name, window_seconds, cluster_count, population_mean, population_stddev,
-       population_min, population_max, stddev_mult, outlier_cluster_ids, updated_at
-FROM xcluster_anomaly_baselines
-WHERE metric_name = $1 AND window_seconds = $2
-`
-
-type GetXClusterAnomalyBaselineParams struct {
-	MetricName    string `json:"metric_name"`
-	WindowSeconds int32  `json:"window_seconds"`
-}
-
-func (q *Queries) GetXClusterAnomalyBaseline(ctx context.Context, arg GetXClusterAnomalyBaselineParams) (XclusterAnomalyBaseline, error) {
-	row := q.db.QueryRow(ctx, getXClusterAnomalyBaseline, arg.MetricName, arg.WindowSeconds)
-	var i XclusterAnomalyBaseline
-	err := row.Scan(
-		&i.ID,
-		&i.MetricName,
-		&i.WindowSeconds,
-		&i.ClusterCount,
-		&i.PopulationMean,
-		&i.PopulationStddev,
-		&i.PopulationMin,
-		&i.PopulationMax,
-		&i.StddevMult,
-		&i.OutlierClusterIds,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const listXClusterAnomalyBaselines = `-- name: ListXClusterAnomalyBaselines :many
-
-SELECT id, metric_name, window_seconds, cluster_count, population_mean, population_stddev,
-       population_min, population_max, stddev_mult, outlier_cluster_ids, updated_at
-FROM xcluster_anomaly_baselines
-ORDER BY metric_name ASC
-`
-
-// Migration 111 — cross-cluster ("fleet-wide") anomaly baselines.
-// Aggregates the per-cluster anomaly_baselines means across clusters
-// and records which clusters are outliers vs. the fleet.
-func (q *Queries) ListXClusterAnomalyBaselines(ctx context.Context) ([]XclusterAnomalyBaseline, error) {
-	rows, err := q.db.Query(ctx, listXClusterAnomalyBaselines)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []XclusterAnomalyBaseline{}
-	for rows.Next() {
-		var i XclusterAnomalyBaseline
-		if err := rows.Scan(
-			&i.ID,
-			&i.MetricName,
-			&i.WindowSeconds,
-			&i.ClusterCount,
-			&i.PopulationMean,
-			&i.PopulationStddev,
-			&i.PopulationMin,
-			&i.PopulationMax,
-			&i.StddevMult,
-			&i.OutlierClusterIds,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const upsertXClusterAnomalyBaseline = `-- name: UpsertXClusterAnomalyBaseline :one
+
 INSERT INTO xcluster_anomaly_baselines (
     metric_name, window_seconds, cluster_count, population_mean, population_stddev,
     population_min, population_max, stddev_mult, outlier_cluster_ids, updated_at
@@ -117,6 +44,9 @@ type UpsertXClusterAnomalyBaselineParams struct {
 	OutlierClusterIds json.RawMessage `json:"outlier_cluster_ids"`
 }
 
+// Migration 111 — cross-cluster ("fleet-wide") anomaly baselines.
+// Aggregates the per-cluster anomaly_baselines means across clusters
+// and records which clusters are outliers vs. the fleet.
 func (q *Queries) UpsertXClusterAnomalyBaseline(ctx context.Context, arg UpsertXClusterAnomalyBaselineParams) (XclusterAnomalyBaseline, error) {
 	row := q.db.QueryRow(ctx, upsertXClusterAnomalyBaseline,
 		arg.MetricName,

@@ -28,6 +28,7 @@ LIMIT $1 OFFSET $2;
 -- name: ListPendingWorkloadOperations :many
 SELECT * FROM workload_operations
 WHERE status IN ('pending', 'running')
+  AND operation_type IN ('scale', 'restart', 'delete')
 ORDER BY created_at ASC
 LIMIT $1;
 
@@ -47,6 +48,44 @@ WHERE id = $1
   )
 RETURNING *;
 
+-- name: ClaimImageVulnerabilityRescanOperation :one
+-- The 3-minute stale lease exceeds the task's 2-minute hard timeout, so a
+-- healthy execution cannot be reclaimed concurrently. Retrying rows are
+-- reclaimable by Asynq retry; stale running rows recover after process loss.
+UPDATE workload_operations
+SET status = 'running',
+    attempt_count = attempt_count + 1,
+    started_at = now(),
+    completed_at = NULL,
+    error_message = '',
+    updated_at = now()
+WHERE id = $1
+  AND operation_type = 'vulnerability_rescan'
+  AND (
+      status IN ('pending', 'retrying')
+      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '3 minutes'))
+  )
+RETURNING *;
+
+-- name: ClaimPodDeleteOperation :one
+-- The stale lease exceeds the task's 2-minute hard timeout. Retrying attempts
+-- are reclaimable by bounded Asynq retry; stale running rows recover after a
+-- tunnel worker exits after claiming but before recording the outcome.
+UPDATE workload_operations
+SET status = 'running',
+    attempt_count = attempt_count + 1,
+    started_at = now(),
+    completed_at = NULL,
+    error_message = '',
+    updated_at = now()
+WHERE id = $1
+  AND operation_type = 'delete_pod'
+  AND (
+      status IN ('pending', 'retrying')
+      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '3 minutes'))
+  )
+RETURNING *;
+
 -- name: MarkWorkloadOperationCompleted :one
 UPDATE workload_operations
 SET
@@ -55,6 +94,8 @@ SET
     error_message = '',
     updated_at = now()
 WHERE id = $1
+  AND attempt_count = $2
+  AND status = 'running'
 RETURNING *;
 
 -- name: MarkWorkloadOperationFailed :one
@@ -62,9 +103,23 @@ UPDATE workload_operations
 SET
     status = 'failed',
     completed_at = now(),
-    error_message = $2,
+    error_message = $3,
     updated_at = now()
 WHERE id = $1
+  AND attempt_count = $2
+  AND status = 'running'
+RETURNING *;
+
+-- name: MarkWorkloadOperationRetrying :one
+UPDATE workload_operations
+SET
+    status = 'retrying',
+    completed_at = NULL,
+    error_message = $3,
+    updated_at = now()
+WHERE id = $1
+  AND attempt_count = $2
+  AND status = 'running'
 RETURNING *;
 
 -- name: MarkWorkloadOperationSuperseded :one

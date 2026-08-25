@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // Migration 065 / sprint 17 — in-browser kubectl shell.
 //
@@ -14,23 +14,33 @@
 // selection / copy-paste / accessibility. Migrated from xterm.js
 // 2026-05-12.
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { Loader2, Terminal as TerminalIcon, RefreshCw, AlertCircle, Clock, Play, Square } from 'lucide-react';
-import { Terminal, useTerminal } from '@wterm/react';
-import '@wterm/react/css';
+import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  Loader2,
+  Terminal as TerminalIcon,
+  RefreshCw,
+  AlertCircle,
+  Clock,
+  Play,
+  Square,
+} from "lucide-react";
+import { Terminal, useTerminal } from "@wterm/react";
+import type { WTerm } from "@wterm/dom";
+import "@wterm/react/css";
 import {
   openShellSession,
   closeShellSession,
   listShellSessionCommands,
   type ShellSession,
   type RecordedCommand,
-} from '@/lib/api/kubectl-shell';
-import { createStreamTicket } from '@/lib/api';
-import { wsBase } from '@/lib/env';
-import { cn } from '@/lib/utils';
-import { StatusBadge as UiStatusBadge } from '@/components/ui/status-badge';
+} from "@/lib/api/kubectl-shell";
+import { createStreamTicket } from "@/lib/api/auth";
+import { wsBase } from "@/lib/env";
+import { cn } from "@/lib/utils";
+import { StatusBadge as UiStatusBadge } from "@/components/ui/status-badge";
 
-type Status = 'idle' | 'opening' | 'connecting' | 'connected' | 'disconnected' | 'error';
+type Status =
+  "idle" | "opening" | "connecting" | "connected" | "disconnected" | "error";
 
 interface ClusterShellProps {
   clusterId: string;
@@ -42,8 +52,8 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
   const sessionRef = useRef<ShellSession | null>(null);
   const readyRef = useRef(false);
 
-  const [status, setStatus] = useState<Status>('idle');
-  const [errorMsg, setErrorMsg] = useState<string>('');
+  const [status, setStatus] = useState<Status>("idle");
+  const [errorMsg, setErrorMsg] = useState<string>("");
   const [session, setSession] = useState<ShellSession | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [commands, setCommands] = useState<RecordedCommand[]>([]);
@@ -56,11 +66,16 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
 
   // Periodically refresh the recorded-commands pane (every 5s).
   useEffect(() => {
-    if (!session || status !== 'connected') return;
+    if (!session || status !== "connected") return;
     let cancelled = false;
+    let controller: AbortController | undefined;
     const refresh = async () => {
+      controller?.abort();
+      controller = new AbortController();
       try {
-        const rows = await listShellSessionCommands(clusterId, session.id);
+        const rows = await listShellSessionCommands(clusterId, session.id, {
+          signal: controller.signal,
+        });
         if (!cancelled) setCommands(rows);
       } catch {
         // Ignore; pane will re-fetch on the next tick.
@@ -70,6 +85,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
     const t = setInterval(refresh, 5000);
     return () => {
       cancelled = true;
+      controller?.abort();
       clearInterval(t);
     };
   }, [clusterId, session, status]);
@@ -80,11 +96,15 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
   // gave operators no way to bail out before a session was provisioned
   // on the cluster).
   const handleConnect = useCallback(async () => {
-    if (status === 'opening' || status === 'connecting' || status === 'connected') {
+    if (
+      status === "opening" ||
+      status === "connecting" ||
+      status === "connected"
+    ) {
       return; // already in-flight
     }
-    setStatus('opening');
-    setErrorMsg('');
+    setStatus("opening");
+    setErrorMsg("");
     try {
       const info = await openShellSession(clusterId);
       setSession(info);
@@ -95,10 +115,10 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
       if (readyRef.current) {
         connectWS(info);
       }
-      setStatus('connecting');
+      setStatus("connecting");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setStatus('error');
+      setStatus("error");
       setErrorMsg(msg);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,12 +129,16 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
   const handleDisconnect = useCallback(async () => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
-      try { ws.close(1000, 'client requested disconnect'); } catch { /* ignore */ }
+      try {
+        ws.close(1000, "client requested disconnect");
+      } catch {
+        /* ignore */
+      }
     }
     wsRef.current = null;
     const s = sessionRef.current;
     sessionRef.current = null;
-    setStatus('disconnected');
+    setStatus("disconnected");
     if (s) {
       await closeShellSession(clusterId, s.id).catch(() => {});
     }
@@ -125,75 +149,101 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
   // for idleTimeout. Same fire-and-forget semantics as Disconnect.
   useEffect(() => {
     return () => {
-      try { wsRef.current?.close(); } catch { /* ignore */ }
+      try {
+        wsRef.current?.close();
+      } catch {
+        /* ignore */
+      }
       if (sessionRef.current) {
         closeShellSession(clusterId, sessionRef.current.id).catch(() => {});
       }
     };
   }, [clusterId]);
 
-  const connectWS = useCallback((info: ShellSession) => {
-    createStreamTicket('shell', info.clusterId)
-      .then(({ ticket }) => {
-        const ticketQuery = `?ticket=${encodeURIComponent(ticket)}`;
-        const wsUrl = `${wsBase()}/clusters/${info.clusterId}/shell/sessions/${info.id}/${ticketQuery}`;
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
-        ws.onopen = () => {
-          setStatus('connected');
-          ws.send(JSON.stringify({ type: 'resize', cols: 80, rows: 24 }));
-        };
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data?.type === 'output' || data?.type === 'stdout' || data?.type === 'stderr') {
-              write(data.data ?? '');
-              return;
+  const connectWS = useCallback(
+    (info: ShellSession) => {
+      createStreamTicket("shell", info.clusterId)
+        .then(({ ticket }) => {
+          const ticketQuery = `?ticket=${encodeURIComponent(ticket)}`;
+          const wsUrl = `${wsBase()}/clusters/${info.clusterId}/shell/sessions/${info.id}/${ticketQuery}`;
+          const ws = new WebSocket(wsUrl);
+          wsRef.current = ws;
+          ws.onopen = () => {
+            setStatus("connected");
+            ws.send(JSON.stringify({ type: "resize", cols: 80, rows: 24 }));
+          };
+          ws.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data);
+              if (
+                data?.type === "output" ||
+                data?.type === "stdout" ||
+                data?.type === "stderr"
+              ) {
+                write(data.data ?? "");
+                return;
+              }
+              if (data?.type === "error") {
+                write(
+                  `\r\n\x1b[31mError: ${data.message ?? "unknown"}\x1b[0m\r\n`,
+                );
+                return;
+              }
+              if (data?.type === "end") {
+                write(
+                  `\r\n\x1b[33mSession ended${data.reason ? `: ${data.reason}` : ""}\x1b[0m\r\n`,
+                );
+                return;
+              }
+              if (typeof data?.data === "string") write(data.data);
+            } catch {
+              write(event.data);
             }
-            if (data?.type === 'error') {
-              write(`\r\n\x1b[31mError: ${data.message ?? 'unknown'}\x1b[0m\r\n`);
-              return;
-            }
-            if (data?.type === 'end') {
-              write(`\r\n\x1b[33mSession ended${data.reason ? `: ${data.reason}` : ''}\x1b[0m\r\n`);
-              return;
-            }
-            if (typeof data?.data === 'string') write(data.data);
-          } catch {
-            write(event.data);
-          }
-        };
-        ws.onerror = () => {
-          setStatus('error');
-          setErrorMsg('WebSocket error');
-        };
-        ws.onclose = () => {
-          setStatus('disconnected');
-          write('\r\n\x1b[33mConnection closed\x1b[0m\r\n');
-        };
-      })
-      .catch((error: Error) => {
-        setStatus('error');
-        setErrorMsg(error.message || 'Failed to create stream ticket');
-      });
-  }, [write]);
+          };
+          ws.onerror = () => {
+            setStatus("error");
+            setErrorMsg("WebSocket error");
+          };
+          ws.onclose = () => {
+            setStatus("disconnected");
+            write("\r\n\x1b[33mConnection closed\x1b[0m\r\n");
+          };
+        })
+        .catch((error: Error) => {
+          setStatus("error");
+          setErrorMsg(error.message || "Failed to create stream ticket");
+        });
+    },
+    [write],
+  );
 
   // Fires once wterm's WASM core is initialized and ready to accept writes.
-  const handleReady = useCallback(() => {
-    readyRef.current = true;
-    write(`\x1b[36mOpening shell on cluster ${clusterId}\x1b[0m\r\n`);
-    if (sessionRef.current) {
-      const info = sessionRef.current;
-      write(`\x1b[2mpod: ${info.podName} (${info.podNamespace})  container: ${info.container}\x1b[0m\r\n\r\n`);
-      connectWS(info);
-    }
-  }, [clusterId, write, connectWS]);
+  const handleReady = useCallback(
+    (terminal: WTerm) => {
+      // wterm 0.3.x makes its real keyboard-input textarea focusable while also
+      // marking it aria-hidden. Expose and name that input so keyboard and
+      // assistive-technology users reach the same terminal control.
+      const input = terminal.element.querySelector("textarea");
+      input?.removeAttribute("aria-hidden");
+      input?.setAttribute("aria-label", "Cluster terminal input");
+      readyRef.current = true;
+      write(`\x1b[36mOpening shell on cluster ${clusterId}\x1b[0m\r\n`);
+      if (sessionRef.current) {
+        const info = sessionRef.current;
+        write(
+          `\x1b[2mpod: ${info.podName} (${info.podNamespace})  container: ${info.container}\x1b[0m\r\n\r\n`,
+        );
+        connectWS(info);
+      }
+    },
+    [clusterId, write, connectWS],
+  );
 
   // Operator keystrokes → ws stdin.
   const handleData = useCallback((data: string) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'stdin', data }));
+      ws.send(JSON.stringify({ type: "stdin", data }));
     }
   }, []);
 
@@ -207,14 +257,23 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
   const handleResize = useCallback((cols: number, rows: number) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+      ws.send(JSON.stringify({ type: "resize", cols, rows }));
     }
   }, []);
 
   // Age + countdown copy.
-  const sessionAgeSeconds = session ? Math.floor((now - new Date(session.startedAt).getTime()) / 1000) : 0;
-  const lastInputSeconds = session ? Math.floor((now - new Date(session.lastInputAt).getTime()) / 1000) : 0;
-  const expiresInSeconds = session ? Math.max(0, Math.floor((new Date(session.expiresAt).getTime() - now) / 1000)) : 0;
+  const sessionAgeSeconds = session
+    ? Math.floor((now - new Date(session.startedAt).getTime()) / 1000)
+    : 0;
+  const lastInputSeconds = session
+    ? Math.floor((now - new Date(session.lastInputAt).getTime()) / 1000)
+    : 0;
+  const expiresInSeconds = session
+    ? Math.max(
+        0,
+        Math.floor((new Date(session.expiresAt).getTime() - now) / 1000),
+      )
+    : 0;
   const idleExpiresInSeconds = session
     ? Math.max(0, session.idleTimeoutSeconds - lastInputSeconds)
     : 0;
@@ -223,8 +282,8 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
   // pre-WS state (POST /shell/sessions/ in flight) so the button can
   // render a spinner without making Disconnect available before the
   // session actually exists.
-  const isLive = status === 'connecting' || status === 'connected';
-  const isOpening = status === 'opening';
+  const isLive = status === "connecting" || status === "connected";
+  const isOpening = status === "opening";
 
   return (
     <div className="flex flex-col h-full">
@@ -243,7 +302,10 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
               <span>•</span>
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
-                Auto-expires in {formatDuration(Math.min(expiresInSeconds, idleExpiresInSeconds))}
+                Auto-expires in{" "}
+                {formatDuration(
+                  Math.min(expiresInSeconds, idleExpiresInSeconds),
+                )}
               </span>
             </>
           ) : isOpening ? (
@@ -275,7 +337,9 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
               title="Provision an ephemeral debug pod and open a shell"
             >
               <Play className="h-3 w-3" />
-              {status === 'disconnected' || status === 'error' ? 'Reconnect' : 'Connect'}
+              {status === "disconnected" || status === "error"
+                ? "Reconnect"
+                : "Connect"}
             </button>
           )}
         </div>
@@ -293,21 +357,27 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
 
       <div className="flex-1 flex min-h-0">
         <div className="flex-1 bg-black min-h-0 relative">
-          {status === 'opening' && (
+          {status === "opening" && (
             <div className="absolute top-0 left-0 right-0 flex items-center gap-2 p-4 text-sm text-muted-foreground bg-black/70 z-10">
               <Loader2 className="h-4 w-4 animate-spin" />
               Preparing ephemeral debug pod...
             </div>
           )}
-          {status === 'idle' && (
+          {status === "idle" && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center max-w-sm pointer-events-auto">
                 <TerminalIcon className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
-                <p className="text-sm font-medium text-foreground">No active session</p>
+                <p className="text-sm font-medium text-foreground">
+                  No active session
+                </p>
                 <p className="text-xs text-muted-foreground mt-1.5 mb-4">
-                  Clicking <strong>Connect</strong> spins up an ephemeral kubectl pod in
-                  <code className="mx-1 px-1 rounded bg-muted font-mono">kube-system</code>, opens a shell into it,
-                  and records every command line you type to the audit log.
+                  Clicking <strong>Connect</strong> spins up an ephemeral
+                  kubectl pod in
+                  <code className="mx-1 px-1 rounded bg-muted font-mono">
+                    kube-system
+                  </code>
+                  , opens a shell into it, and records every command line you
+                  type to the audit log.
                 </p>
                 <button
                   onClick={handleConnect}
@@ -319,12 +389,21 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
               </div>
             </div>
           )}
-          {(status === 'disconnected' || status === 'error') && (
+          {(status === "disconnected" || status === "error") && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center max-w-sm pointer-events-auto">
-                <AlertCircle className={cn('h-8 w-8 mx-auto mb-3', status === 'error' ? 'text-status-error' : 'text-status-warning')} />
+                <AlertCircle
+                  className={cn(
+                    "h-8 w-8 mx-auto mb-3",
+                    status === "error"
+                      ? "text-status-error"
+                      : "text-status-warning",
+                  )}
+                />
                 <p className="text-sm font-medium text-foreground">
-                  {status === 'error' ? 'Connection failed' : 'Session disconnected'}
+                  {status === "error"
+                    ? "Connection failed"
+                    : "Session disconnected"}
                 </p>
                 {errorMsg && (
                   <p className="text-xs text-muted-foreground mt-1.5 font-mono break-words">
@@ -349,8 +428,13 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
               on a focused descendant violates WAI-ARIA). inert prevents
               focus entirely, which is the spec-recommended fix. */}
           <div
-            className={cn('h-full w-full', !(isLive || isOpening) && 'pointer-events-none opacity-0')}
-            {...(!(isLive || isOpening) ? { inert: '' as unknown as undefined } : {})}
+            className={cn(
+              "h-full w-full",
+              !(isLive || isOpening) && "pointer-events-none opacity-0",
+            )}
+            {...(!(isLive || isOpening)
+              ? { inert: "" as unknown as undefined }
+              : {})}
           >
             <Terminal
               ref={ref}
@@ -372,17 +456,24 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
             Recorded commands ({commands.length})
           </div>
           {commands.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">No commands recorded yet.</p>
+            <p className="text-xs text-muted-foreground italic">
+              No commands recorded yet.
+            </p>
           ) : (
             <ul className="space-y-1 text-xs font-mono">
-              {commands.slice().reverse().map((c, i) => (
-                <li key={i} className="break-all">
-                  <span className="text-muted-foreground">
-                    {new Date(c.commandAt).toLocaleTimeString()}{' '}
-                  </span>
-                  <span className={cn('text-foreground')}>{c.commandLine}</span>
-                </li>
-              ))}
+              {commands
+                .slice()
+                .reverse()
+                .map((c, i) => (
+                  <li key={i} className="break-all">
+                    <span className="text-muted-foreground">
+                      {new Date(c.commandAt).toLocaleTimeString()}{" "}
+                    </span>
+                    <span className={cn("text-foreground")}>
+                      {c.commandLine}
+                    </span>
+                  </li>
+                ))}
             </ul>
           )}
           <p className="mt-3 text-[10px] text-muted-foreground">
@@ -396,8 +487,13 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
 }
 
 function ShellStatusBadge({ status }: { status: Status }) {
-  const badgeStatus = status === 'opening' ? 'connecting' : status === 'idle' ? 'disconnected' : status;
-  const label = status === 'idle' ? 'not connected' : status;
+  const badgeStatus =
+    status === "opening"
+      ? "connecting"
+      : status === "idle"
+        ? "disconnected"
+        : status;
+  const label = status === "idle" ? "not connected" : status;
   return <UiStatusBadge status={badgeStatus} label={label} size="sm" />;
 }
 
@@ -405,8 +501,8 @@ function formatDuration(secs: number): string {
   if (secs < 60) return `${secs}s`;
   const m = Math.floor(secs / 60);
   const s = secs % 60;
-  if (m < 60) return `${m}m${s ? ` ${s}s` : ''}`;
+  if (m < 60) return `${m}m${s ? ` ${s}s` : ""}`;
   const h = Math.floor(m / 60);
   const remM = m % 60;
-  return `${h}h${remM ? ` ${remM}m` : ''}`;
+  return `${h}h${remM ? ` ${remM}m` : ""}`;
 }

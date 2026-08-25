@@ -1,22 +1,26 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * Cluster Templates · Edit — preload the existing template into the same
  * form used by the create page.
  */
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { useParams, useRouter } from '@/lib/navigation';
-import { ArrowLeft } from 'lucide-react';
-import { ErrorState, LoadingState, PermissionState } from '@/components/ui/empty-state';
-import { extractApiErrorMessage } from '@/lib/api/errors';
-import { useCurrentUser } from '@/lib/hooks';
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { useParams, useRouter } from "@/lib/navigation";
+import { ArrowLeft } from "lucide-react";
+import {
+  ErrorState,
+  LoadingState,
+  PermissionState,
+} from "@/components/ui/empty-state";
+import { extractApiErrorMessage } from "@/lib/api/errors";
+import { useCurrentUser } from "@/lib/hooks";
 import {
   useClusterTemplate,
   useUpdateClusterTemplate,
   canWriteClusterTemplates,
-} from '@/components/projects/hooks';
-import { TemplateForm } from '@/components/projects/cluster-templates/template-form';
-import { PageHeader, PageShell } from '@/components/ui/page';
+} from "@/components/projects/hooks";
+import { TemplateForm } from "@/components/projects/cluster-templates/template-form";
+import { PageHeader, PageShell } from "@/components/ui/page";
 
 function ClusterTemplateEditPage() {
   const params = useParams();
@@ -30,10 +34,17 @@ function ClusterTemplateEditPage() {
   const [serverError, setServerError] = useState<string | null>(null);
 
   if (isLoading) {
-    return <LoadingState title="Loading cluster template" className="h-32 py-0" />;
+    return (
+      <LoadingState title="Loading cluster template" className="h-32 py-0" />
+    );
   }
   if (!template) {
-    return <ErrorState title="Template not found" description="The requested cluster template does not exist or is no longer available." />;
+    return (
+      <ErrorState
+        title="Template not found"
+        description="The requested cluster template does not exist or is no longer available."
+      />
+    );
   }
 
   return (
@@ -55,7 +66,12 @@ function ClusterTemplateEditPage() {
         <PermissionState
           title="Write permission required"
           permission="cluster_templates:write"
-          description={<>Saving requires the <span className="font-mono">cluster_templates:write</span> role.</>}
+          description={
+            <>
+              Saving requires the{" "}
+              <span className="font-mono">cluster_templates:write</span> role.
+            </>
+          }
           className="rounded-lg border border-border bg-muted/30 p-6"
         />
       )}
@@ -73,7 +89,9 @@ function ClusterTemplateEditPage() {
         onCancel={() => router.push(`/dashboard/cluster-templates/${id}`)}
         onSubmit={async (body) => {
           if (!canWrite) {
-            setServerError('You do not have permission to update cluster templates.');
+            setServerError(
+              "You do not have permission to update cluster templates.",
+            );
             return;
           }
           setServerError(null);
@@ -81,7 +99,8 @@ function ClusterTemplateEditPage() {
             await updateMutation.mutateAsync({ id, body });
             router.push(`/dashboard/cluster-templates/${id}`);
           } catch (err) {
-            const msg = extractApiErrorMessage(err) ?? 'Failed to update template.';
+            const msg =
+              extractApiErrorMessage(err) ?? "Failed to update template.";
             setServerError(msg);
           }
         }}
@@ -90,6 +109,6 @@ function ClusterTemplateEditPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/cluster-templates/$id/edit/')({
+export const Route = createFileRoute("/dashboard/cluster-templates/$id/edit/")({
   component: ClusterTemplateEditPage,
 });

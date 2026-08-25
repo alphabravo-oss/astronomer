@@ -1,19 +1,25 @@
-'use client';
+"use client";
 
-import { Link } from '@/lib/link';
-import { useState } from 'react';
-import { useTools, useClusterToolsStatus, useInstallTool, useUninstallTool, useAdoptTool } from '@/lib/hooks';
+import { Link } from "@/lib/link";
+import { useState } from "react";
+import {
+  useTools,
+  useClusterToolsStatus,
+  useInstallTool,
+  useUninstallTool,
+  useAdoptTool,
+} from "@/lib/hooks/tools";
 import {
   usePermissionDecision,
   permissionDeniedReason,
   toastPermissionDenied,
-} from '@/lib/permission-hooks';
-import { ToolCard } from '@/components/clusters/tool-card';
-import { ToolInstallModal } from '@/components/clusters/tool-install-modal';
-import { ToolInstallProgress } from '@/components/clusters/tool-install-progress';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import type { ClusterTool } from '@/types';
-import { Loader2, Wrench, Sparkles } from 'lucide-react';
+} from "@/lib/permission-hooks";
+import { ToolCard } from "@/components/clusters/tool-card";
+import { ToolInstallModal } from "@/components/clusters/tool-install-modal";
+import { ToolInstallProgress } from "@/components/clusters/tool-install-progress";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import type { ClusterTool } from "@/types";
+import { Loader2, Wrench, Sparkles } from "lucide-react";
 
 interface ToolsTabProps {
   clusterId: string;
@@ -21,28 +27,51 @@ interface ToolsTabProps {
   clusterStatus?: string;
 }
 
-export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: ToolsTabProps) {
-  const isDisconnected = clusterStatus === 'disconnected';
+export function ToolsTab({
+  clusterId,
+  clusterEnvironment,
+  clusterStatus,
+}: ToolsTabProps) {
+  const isDisconnected = clusterStatus === "disconnected";
   const { data: tools, isLoading: toolsLoading } = useTools();
   const { data: statuses } = useClusterToolsStatus(clusterId);
-  const catalogScope = { type: 'cluster' as const, id: clusterId };
-  const catalogCreateDecision = usePermissionDecision('catalog', 'create', catalogScope);
-  const catalogDeleteDecision = usePermissionDecision('catalog', 'delete', catalogScope);
+  const catalogScope = { type: "cluster" as const, id: clusterId };
+  const catalogCreateDecision = usePermissionDecision(
+    "catalog",
+    "create",
+    catalogScope,
+  );
+  const catalogDeleteDecision = usePermissionDecision(
+    "catalog",
+    "delete",
+    catalogScope,
+  );
 
   const installMutation = useInstallTool();
   const uninstallMutation = useUninstallTool();
   const adoptMutation = useAdoptTool();
 
-  const [installTool, setInstallTool] = useState<{ tool: ClusterTool; preset: string } | null>(null);
-  const [activeOperation, setActiveOperation] = useState<{ id: string; name: string } | null>(null);
+  const [installTool, setInstallTool] = useState<{
+    tool: ClusterTool;
+    preset: string;
+  } | null>(null);
+  const [activeOperation, setActiveOperation] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [uninstallSlug, setUninstallSlug] = useState<string | null>(null);
 
-  const statusMap = new Map<string, (typeof statuses extends (infer T)[] | undefined ? T : never)>();
+  const statusMap = new Map<
+    string,
+    typeof statuses extends (infer T)[] | undefined ? T : never
+  >();
   statuses?.forEach((s) => statusMap.set(s.slug, s));
 
-  const defaultPreset = ['production', 'staging', 'development'].includes(clusterEnvironment)
+  const defaultPreset = ["production", "staging", "development"].includes(
+    clusterEnvironment,
+  )
     ? clusterEnvironment
-    : 'development';
+    : "development";
 
   const handleInstall = (slug: string) => {
     if (!catalogCreateDecision.allowed) {
@@ -55,7 +84,10 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
     }
   };
 
-  const handleConfirmInstall = (valuesOverride: string | undefined, preset: string) => {
+  const handleConfirmInstall = (
+    valuesOverride: string | undefined,
+    preset: string,
+  ) => {
     if (!installTool) return;
     if (!catalogCreateDecision.allowed) {
       toastPermissionDenied(catalogCreateDecision);
@@ -75,7 +107,7 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
           // Open the live progress drawer keyed on the returned operation id.
           if (op?.id) setActiveOperation({ id: op.id, name });
         },
-      }
+      },
     );
   };
 
@@ -97,7 +129,7 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
       { slug: uninstallSlug, cluster_id: clusterId },
       {
         onSuccess: () => setUninstallSlug(null),
-      }
+      },
     );
   };
 
@@ -106,7 +138,11 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
       toastPermissionDenied(catalogCreateDecision);
       return;
     }
-    adoptMutation.mutate({ slug, cluster_id: clusterId, release_name: releaseName });
+    adoptMutation.mutate({
+      slug,
+      cluster_id: clusterId,
+      release_name: releaseName,
+    });
   };
 
   if (toolsLoading) {
@@ -139,7 +175,12 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
   const noToolsInstalled =
     !statuses ||
     statuses.length === 0 ||
-    statuses.every((s) => !['installed', 'installing'].includes(String(s.status || '').toLowerCase()));
+    statuses.every(
+      (s) =>
+        !["installed", "installing"].includes(
+          String(s.status || "").toLowerCase(),
+        ),
+    );
 
   return (
     <>
@@ -149,11 +190,13 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
           <div className="flex-1">
             <p className="text-sm font-medium">No add-ons installed yet</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Metrics (kube-state-metrics, node-exporter) install automatically on every
-              cluster and are managed for you. Everything below is optional — enable what this
-              cluster needs: image scanning (trivy-operator), log forwarding (fluent-bit),
-              ingress (ingress-nginx), TLS (cert-manager), or policy (Gatekeeper). The{' '}
-              <strong>Platform Baseline</strong> template installs the recommended set in one step.
+              Metrics (kube-state-metrics, node-exporter) install automatically
+              on every cluster and are managed for you. Everything below is
+              optional — enable what this cluster needs: image scanning
+              (trivy-operator), log forwarding (fluent-bit), ingress
+              (ingress-nginx), TLS (cert-manager), or policy (Gatekeeper). The{" "}
+              <strong>Platform Baseline</strong> template installs the
+              recommended set in one step.
             </p>
             <Link
               href={`/dashboard/clusters/${clusterId}/template`}
@@ -174,11 +217,29 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
             onInstall={handleInstall}
             onUninstall={handleUninstall}
             onAdopt={handleAdopt}
-            installDisabledReason={!catalogCreateDecision.allowed ? permissionDeniedReason(catalogCreateDecision) : undefined}
-            adoptDisabledReason={!catalogCreateDecision.allowed ? permissionDeniedReason(catalogCreateDecision) : undefined}
-            uninstallDisabledReason={!catalogDeleteDecision.allowed ? permissionDeniedReason(catalogDeleteDecision) : undefined}
-            installing={installMutation.isPending && installMutation.variables?.slug === tool.slug}
-            uninstalling={uninstallMutation.isPending && uninstallMutation.variables?.slug === tool.slug}
+            installDisabledReason={
+              !catalogCreateDecision.allowed
+                ? permissionDeniedReason(catalogCreateDecision)
+                : undefined
+            }
+            adoptDisabledReason={
+              !catalogCreateDecision.allowed
+                ? permissionDeniedReason(catalogCreateDecision)
+                : undefined
+            }
+            uninstallDisabledReason={
+              !catalogDeleteDecision.allowed
+                ? permissionDeniedReason(catalogDeleteDecision)
+                : undefined
+            }
+            installing={
+              installMutation.isPending &&
+              installMutation.variables?.slug === tool.slug
+            }
+            uninstalling={
+              uninstallMutation.isPending &&
+              uninstallMutation.variables?.slug === tool.slug
+            }
             clusterDisconnected={isDisconnected}
           />
         ))}
@@ -212,9 +273,13 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
         onClose={() => setUninstallSlug(null)}
         onConfirm={handleConfirmUninstall}
         title="Disable Tool"
-        description={`This will uninstall ${uninstallTool?.name || 'this tool'} from the cluster. All related resources will be removed.`}
+        description={`This will uninstall ${uninstallTool?.name || "this tool"} from the cluster. All related resources will be removed.`}
         confirmText="Disable"
-        confirmDisabledReason={!catalogDeleteDecision.allowed ? permissionDeniedReason(catalogDeleteDecision) : undefined}
+        confirmDisabledReason={
+          !catalogDeleteDecision.allowed
+            ? permissionDeniedReason(catalogDeleteDecision)
+            : undefined
+        }
         variant="destructive"
         loading={uninstallMutation.isPending}
       />

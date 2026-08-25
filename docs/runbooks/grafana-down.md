@@ -1,15 +1,15 @@
 # AstronomerGrafanaDown
 
-Fleet Grafana on the management cluster is not serving. The lobby (long-term
+Shared Grafana on the management cluster is not serving. The lobby (long-term
 metrics via Thanos, logs via Loki/BYO) is unreachable. Cluster Grafana on
 member clusters is unaffected — it talks to **this** Prometheus (15d) and
 survives an Astronomer outage.
 
 ## Symptoms
 
-- PrometheusRule expr: fleet Grafana Deployment `astronomer-grafana` has
+- PrometheusRule expr: shared Grafana Deployment `astronomer-grafana` has
   `spec.replicas > 0` but `status.replicas_available < 1` for 5m.
-- Open fleet Grafana 502s or never leaves the ticket bounce.
+- Open shared Grafana 502s or never leaves the ticket bounce.
 - `kubectl -n monitoring get deploy astronomer-grafana` shows `0/1`.
 
 Triage the Grafana process with `GET /api/health` on the ClusterIP Service
@@ -56,4 +56,4 @@ Triage the Grafana process with `GET /api/health` on the ClusterIP Service
 
 - `kubectl -n monitoring get deploy astronomer-grafana` READY matches spec.
 - `GET /api/health` returns database ok.
-- Open fleet Grafana from Shared stacks (only when `authMode=proxy`).
+- Open shared Grafana from Shared stacks (only when `authMode=proxy`).

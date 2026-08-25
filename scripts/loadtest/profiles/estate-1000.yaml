@@ -1,0 +1,20 @@
+name: estate-1000
+clusters: 1000
+rps: 3000
+duration: 90m
+agents:
+  mode: simulated
+  reconnectStorm: {enabled: true, at: 30m, batchPercent: 100, jitter: 10m}
+resources: {podsPerCluster: 1000, deploymentsPerCluster: 250, servicesPerCluster: 350}
+eventsPerSecond: 5000
+mandatoryAudit: {ratePerSecond: 10, maxOperations: 54600}
+day2FailureDrills:
+  - agent_reconnect_storm
+  - flux_assignment_status_fanout
+  - tunnel_owner_failure
+  - worker_failure_recovery
+  - redis_failover_outbox_recovery
+  - postgres_failover
+  - management_plane_leader_failure
+  - browser_resource_list_budget
+  - soak_leak_budget

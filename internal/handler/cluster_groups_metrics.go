@@ -87,6 +87,6 @@ func RefreshClusterGroupMetrics(ctx context.Context, q ClusterGroupMetricsQuerie
 		if err != nil {
 			continue
 		}
-		clusterGroupClusters.WithLabelValues(g.Slug).Set(float64(n))
+		clusterGroupClusters.WithLabelValues(observability.MetricValues(g.Slug)...).Set(float64(n))
 	}
 }

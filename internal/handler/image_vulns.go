@@ -1,29 +1,27 @@
 // Package handler — image vulnerability scan endpoints (sprint 062).
-//
-// Five cluster-scoped routes + two fleet-wide routes. The cluster routes
-// gate on cluster:read; the fleet routes on security:read. The "rescan"
-// endpoint nudges the trivy-operator service in the managed cluster via
-// an annotation patch — the operator's own watch loop picks the change
-// up. When the K8sRequester is not wired (test fakes, k8s-less dev), we
-// degrade to a 200 with `{"triggered": false}` so the UI shows a clean
-// "operator missing" state instead of a 500.
 
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"log/slog"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // trivyOperatorNamespace is the recommended install namespace from the
@@ -48,44 +46,48 @@ type ImageVulnQuerier interface {
 	TopClustersByVulnerability(ctx context.Context, limit int32) ([]sqlc.TopClustersByVulnerabilityRow, error)
 }
 
+type ImageVulnMutationTx interface {
+	GetClusterByID(context.Context, uuid.UUID) (sqlc.Cluster, error)
+	CreateWorkloadOperation(context.Context, sqlc.CreateWorkloadOperationParams) (sqlc.WorkloadOperation, error)
+	CreateWorkloadOperationIdempotent(context.Context, sqlc.CreateWorkloadOperationIdempotentParams) (sqlc.WorkloadOperation, error)
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+}
+
+type imageVulnRunTxFunc func(context.Context, func(ImageVulnMutationTx) error) error
+
 // ImageVulnHandler owns /api/v1/clusters/{cluster_id}/vulnerabilities/*
 // and /api/v1/security/vulnerabilities/*. The K8sRequester is optional
 // — when nil the rescan path short-circuits, every read path still
 // works against the local DB.
 type ImageVulnHandler struct {
 	queries ImageVulnQuerier
-	auditQ  any
 	k8s     K8sRequester
-	log     *slog.Logger
+	runTx   imageVulnRunTxFunc
 }
 
 // NewImageVulnHandler constructs the handler. log defaults to slog's
 // process default if nil.
 func NewImageVulnHandler(q ImageVulnQuerier) *ImageVulnHandler {
-	return &ImageVulnHandler{queries: q, log: slog.Default()}
-}
-
-// SetAuditQuerier wires the audit writer. Optional — when unset the
-// audit calls are no-ops.
-func (h *ImageVulnHandler) SetAuditQuerier(q any) {
-	if h != nil {
-		h.auditQ = q
-	}
+	return &ImageVulnHandler{queries: q}
 }
 
 // SetK8sRequester wires the tunnel-backed Kubernetes API client used
-// by the rescan path.
+// by read-only scan-progress probes.
 func (h *ImageVulnHandler) SetK8sRequester(req K8sRequester) {
 	if h != nil {
 		h.k8s = req
 	}
 }
 
-// SetLogger sets the structured logger.
-func (h *ImageVulnHandler) SetLogger(log *slog.Logger) {
-	if h != nil && log != nil {
-		h.log = log
+func (h *ImageVulnHandler) SetRunTx(runTx imageVulnRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
 	}
+}
+
+func (h *ImageVulnHandler) TransactionalRescanWired() bool {
+	return h != nil && h.runTx != nil
 }
 
 // --- Cluster-scoped endpoints -----------------------------------------
@@ -212,132 +214,99 @@ func (h *ImageVulnHandler) ClusterReportDetail(w http.ResponseWriter, r *http.Re
 	RespondJSON(w, http.StatusOK, out)
 }
 
-// ClusterRescan handles POST /api/v1/clusters/{cluster_id}/vulnerabilities/rescan/.
-// Nudges the in-cluster trivy-operator service via an annotation patch
-// so the operator re-evaluates every workload. Idempotent — operators
-// can spam-click and the operator's watch loop will coalesce.
-//
-// Nil-safe when h.k8s is nil: returns 200 + {"triggered": false} so the
-// UI degrades to "operator not installed".
+// ClusterRescan persists a durable rescan operation. It never contacts the
+// member cluster in the request path: operation state, identifier-only task
+// intent, and mandatory audit are committed in one transaction before a 202
+// receipt is returned.
 func (h *ImageVulnHandler) ClusterRescan(w http.ResponseWriter, r *http.Request) {
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return
 	}
-	out := map[string]any{
-		"cluster_id":   clusterID.String(),
-		"requested_at": time.Now().UTC().Format(time.RFC3339),
-	}
-	if h.k8s == nil {
-		out["triggered"] = false
-		out["reason"] = "operator_not_wired"
-		RespondJSON(w, http.StatusOK, out)
+	if values := r.Header.Values("Idempotency-Key"); len(values) > 1 || (len(values) == 1 && !validOperationIdempotencyKey(values[0])) {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest,
+			"Idempotency-Key must occur at most once and contain 1 through 128 printable UTF-8 bytes")
 		return
 	}
-	if err := h.nudgeTrivyOperator(r.Context(), clusterID); err != nil {
-		h.log.Warn("trivy-operator rescan failed",
-			"cluster_id", clusterID.String(), "error", err)
-		out["triggered"] = false
-		out["reason"] = "operator_unreachable"
-		out["error"] = err.Error()
-		RespondJSON(w, http.StatusOK, out)
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable,
+			"Durable vulnerability rescan storage is unavailable")
 		return
 	}
-	out["triggered"] = true
-	recordAudit(r, h.auditQ, "vulnerability.rescan.requested", "cluster", clusterID.String(), "", map[string]any{
-		"namespace": trivyOperatorNamespace,
-		"service":   trivyOperatorService,
+
+	var operation sqlc.WorkloadOperation
+	opContext := withOperationIdempotency(r, "image-vulnerability-rescans")
+	err := h.runTx(r.Context(), func(q ImageVulnMutationTx) error {
+		cluster, err := q.GetClusterByID(r.Context(), clusterID)
+		if err != nil {
+			return err
+		}
+		// Keep the generic operation receipt readable through the existing
+		// /workload-operations/{id} API, whose authorization resolver consumes
+		// the canonical clusterId envelope.
+		payload, err := json.Marshal(map[string]string{"clusterId": clusterID.String()})
+		if err != nil {
+			return err
+		}
+		params := sqlc.CreateWorkloadOperationParams{
+			TargetType: "cluster", TargetKey: clusterID.String(), OperationType: "vulnerability_rescan",
+			Payload: payload, Status: "pending", CreatedByID: currentUserUUID(r),
+		}
+		if idem, present := operationIdempotencyFromContext(opContext); present {
+			operation, err = q.CreateWorkloadOperationIdempotent(r.Context(), sqlc.CreateWorkloadOperationIdempotentParams{
+				Scope: idem.scope, IdempotencyKey: idem.key, TargetType: params.TargetType,
+				TargetKey: params.TargetKey, OperationType: params.OperationType, Payload: params.Payload,
+				Status: params.Status, CreatedByID: params.CreatedByID,
+			})
+			if err == nil && operation.ID != uuid.Nil && (operation.TargetType != params.TargetType || operation.TargetKey != params.TargetKey || operation.OperationType != params.OperationType || !bytes.Equal(operation.Payload, params.Payload)) {
+				return errWorkloadOperationIdempotencyConflict
+			}
+		} else {
+			operation, err = q.CreateWorkloadOperation(r.Context(), params)
+		}
+		if err != nil {
+			return err
+		}
+		task, err := tasks.NewImageVulnerabilityRescanTask(operation.ID)
+		if err != nil {
+			return err
+		}
+		taskPayload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+		task = asynq.NewTask(task.Type(), taskPayload, asynq.MaxRetry(5), asynq.Timeout(2*time.Minute))
+		if _, err := tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{
+			DedupeKey: "vulnerability:rescan:" + operation.ID.String(), QueueName: tasks.ClusterTemplateApplyQueueName,
+			MaxRetry: 5, Timeout: 2 * time.Minute, MaxDeliveryAttempts: 20,
+		}); err != nil {
+			return err
+		}
+		return recordAuditOutbox(r, q, "vulnerability.rescan.requested", "vulnerability_rescan", operation.ID.String(), cluster.Name,
+			http.StatusAccepted, map[string]any{"cluster_id": clusterID.String(), "operation_id": operation.ID.String()})
 	})
-	RespondJSON(w, http.StatusOK, out)
-}
-
-// nudgeTrivyOperator triggers a fresh round of scans on every workload
-// in the cluster. The implementation deletes all existing
-// VulnerabilityReport CRs cluster-wide; trivy-operator watches the
-// underlying workloads (Deployments, StatefulSets, DaemonSets, Jobs)
-// and re-creates a VulnerabilityReport for each one within seconds —
-// you can see the resulting scan-vulnerabilityreport-* Jobs appear in
-// astronomer-trivy-system immediately.
-//
-// Why delete instead of an annotation patch on the operator Service:
-// trivy-operator doesn't watch its own Service for any annotation we
-// could set, so the prior implementation was a no-op pretending to be
-// a rescan. Deleting the CRs is the documented "force me to re-scan
-// everything" path in trivy-operator's own README + matches what
-// `kubectl trivy refresh` does internally.
-//
-// We use the collection-level DELETE (`/apis/.../vulnerabilityreports`
-// without a name) with a labelSelector that matches "anything" so a
-// single API call clears every namespace. That's faster than walking
-// the list + deleting per-row, and atomically idempotent — a half-
-// completed sweep just re-enqueues whichever ones are still there.
-func (h *ImageVulnHandler) nudgeTrivyOperator(ctx context.Context, clusterID uuid.UUID) error {
-	// trivy-operator deletes its own VRs on workload-delete, so we
-	// can safely delete from EVERY namespace. The Kubernetes batch
-	// DELETE for CRs is namespaced, so we walk namespaces first.
-	listResp, err := h.k8s.Do(ctx, clusterID.String(), http.MethodGet,
-		"/apis/"+trivyGroup+"/v1alpha1/vulnerabilityreports", nil, nil)
+	if errors.Is(err, pgx.ErrNoRows) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		return
+	}
+	if errors.Is(err, errWorkloadOperationIdempotencyConflict) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+			"Idempotency-Key already identifies a different vulnerability rescan")
+		return
+	}
 	if err != nil {
-		return fmt.Errorf("list vulnerabilityreports: %w", err)
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError,
+			"Failed to create vulnerability rescan operation")
+		return
 	}
-	if listResp == nil || listResp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("trivy-operator CRDs not installed in cluster (aquasecurity.github.io/v1alpha1 missing)")
-	}
-	if listResp.StatusCode >= 400 {
-		return fmt.Errorf("list vulnerabilityreports: HTTP %d", listResp.StatusCode)
-	}
-	body := decodeK8sProgressBody(listResp)
-	if len(body) == 0 {
-		return fmt.Errorf("empty list response")
-	}
-	var lst struct {
-		Items []struct {
-			Metadata struct {
-				Name      string `json:"name"`
-				Namespace string `json:"namespace"`
-			} `json:"metadata"`
-		} `json:"items"`
-	}
-	if err := json.Unmarshal(body, &lst); err != nil {
-		return fmt.Errorf("decode list: %w", err)
-	}
-	if len(lst.Items) == 0 {
-		// No existing reports yet — trivy is either still starting up
-		// or scanning for the first time. Either way the operator
-		// will produce reports on its own; this is a soft success.
-		return nil
-	}
-
-	// DELETE per report — the CR resource doesn't support collection
-	// delete with labelSelector across namespaces in a single call,
-	// but the apiserver fan-out is fast enough that doing it in a
-	// loop is fine for the report counts a normal cluster carries
-	// (10s to low hundreds). Each delete returns 200 once accepted;
-	// trivy re-creates the report within ~10s as a fresh scan Job.
-	for _, it := range lst.Items {
-		path := fmt.Sprintf("/apis/%s/v1alpha1/namespaces/%s/vulnerabilityreports/%s",
-			trivyGroup, it.Metadata.Namespace, it.Metadata.Name)
-		delResp, derr := h.k8s.Do(ctx, clusterID.String(), http.MethodDelete, path, nil, nil)
-		if derr != nil {
-			return fmt.Errorf("delete %s/%s: %w", it.Metadata.Namespace, it.Metadata.Name, derr)
-		}
-		// 404 on delete = the row vanished between list and delete
-		// (concurrent operator delete is fine — we wanted it gone).
-		if delResp != nil && delResp.StatusCode >= 400 && delResp.StatusCode != http.StatusNotFound {
-			return fmt.Errorf("delete %s/%s: HTTP %d", it.Metadata.Namespace, it.Metadata.Name, delResp.StatusCode)
-		}
-	}
-	return nil
+	operationURL := "/api/v1/workloads/operations/" + operation.ID.String() + "/"
+	w.Header().Set("Location", operationURL)
+	w.Header().Set("Retry-After", "2")
+	RespondJSON(w, http.StatusAccepted, map[string]any{
+		"operation_id": operation.ID.String(), "cluster_id": clusterID.String(), "status": operation.Status,
+		"requested_at":  operation.CreatedAt.UTC().Format(time.RFC3339),
+		"operation_url": operationURL,
+	})
 }
 
-// trivyGroup is the upstream Trivy CRD API group. Pulled out as a
-// constant so the nudge + progress paths stay in sync if Aqua ever
-// renames it (they migrated from `tunnel.aquasecurity.com` to this
-// one in v0.16 — moving it to a constant prevents the same bug if
-// they do it again).
-const trivyGroup = "aquasecurity.github.io"
-
-// --- Fleet-wide endpoints --------------------------------------------
+// --- Estate-wide endpoints --------------------------------------------
 
 // FleetSummary handles GET /api/v1/security/vulnerabilities/summary/.
 // Gated by security:read in the route layer.

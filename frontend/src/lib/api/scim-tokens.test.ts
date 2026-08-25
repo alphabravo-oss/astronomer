@@ -1,49 +1,73 @@
-import type { Mocked } from 'vitest';
-import api from '@/lib/api';
-import { listSCIMTokens, createSCIMToken, deleteSCIMToken } from './scim-tokens';
+import {
+  deleteAdminScimTokensById,
+  getAdminScimTokens,
+  postAdminScimTokens,
+} from "@/lib/api/generated/client";
+import {
+  createSCIMToken,
+  deleteSCIMToken,
+  listSCIMTokens,
+} from "@/lib/api/scim-tokens";
 
-vi.mock('@/lib/api', () => ({
-  __esModule: true,
-  default: {
-    get: vi.fn(),
-    post: vi.fn(),
-    delete: vi.fn(),
-  },
+vi.mock("@/lib/api/generated/client", () => ({
+  deleteAdminScimTokensById: vi.fn(),
+  getAdminScimTokens: vi.fn(),
+  postAdminScimTokens: vi.fn(),
 }));
 
-const mockedApi = api as Mocked<typeof api>;
+const tokenWire = {
+  id: "1e5a4fe6-b2d1-4d97-bf8c-a8b239f963dd",
+  name: "Okta provisioning",
+  prefix: "astro_scim_AbCd",
+  last_used_at: null,
+  created_at: "2026-08-24T07:00:00Z",
+};
 
-describe('SCIM tokens API client', () => {
+describe("SCIM token generated API boundary", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('unwraps the { data: { tokens } } list envelope', async () => {
-    mockedApi.get.mockResolvedValueOnce({
-      data: { data: { tokens: [{ id: 't1', name: 'okta', prefix: 'astro_scim_ab' }] } },
+  it("maps the handler's data-wrapped list response", async () => {
+    vi.mocked(getAdminScimTokens).mockResolvedValueOnce({
+      data: { tokens: [tokenWire] },
     });
+
     await expect(listSCIMTokens()).resolves.toEqual([
-      expect.objectContaining({ id: 't1', name: 'okta' }),
+      {
+        id: tokenWire.id,
+        name: tokenWire.name,
+        prefix: tokenWire.prefix,
+        lastUsedAt: null,
+        createdAt: tokenWire.created_at,
+      },
     ]);
-    expect(mockedApi.get).toHaveBeenCalledWith('/admin/scim-tokens/');
   });
 
-  it('returns an empty array when tokens is absent', async () => {
-    mockedApi.get.mockResolvedValueOnce({ data: { data: {} } });
-    await expect(listSCIMTokens()).resolves.toEqual([]);
-  });
-
-  it('posts the name and returns the one-time plaintext token', async () => {
-    mockedApi.post.mockResolvedValueOnce({
-      data: { data: { id: 't2', name: 'okta', prefix: 'astro_scim_cd', token: 'astro_scim_secret' } },
+  it("serializes create and preserves the one-time secret", async () => {
+    vi.mocked(postAdminScimTokens).mockResolvedValueOnce({
+      data: {
+        ...tokenWire,
+        token: "astro_scim_plaintext-once",
+      },
     });
-    await expect(createSCIMToken('okta')).resolves.toEqual(
-      expect.objectContaining({ id: 't2', token: 'astro_scim_secret' }),
-    );
-    expect(mockedApi.post).toHaveBeenCalledWith('/admin/scim-tokens/', { name: 'okta' });
+
+    await expect(createSCIMToken("Okta provisioning")).resolves.toEqual({
+      id: tokenWire.id,
+      name: tokenWire.name,
+      prefix: tokenWire.prefix,
+      lastUsedAt: null,
+      createdAt: tokenWire.created_at,
+      token: "astro_scim_plaintext-once",
+    });
+    expect(postAdminScimTokens).toHaveBeenCalledWith({
+      body: { name: "Okta provisioning" },
+    });
   });
 
-  it('deletes at the id path', async () => {
-    mockedApi.delete.mockResolvedValueOnce({});
-    await deleteSCIMToken('t2');
-    expect(mockedApi.delete).toHaveBeenCalledWith('/admin/scim-tokens/t2/');
+  it("passes the token identifier through the generated delete path", async () => {
+    vi.mocked(deleteAdminScimTokensById).mockResolvedValueOnce(undefined);
+    await deleteSCIMToken(tokenWire.id);
+    expect(deleteAdminScimTokensById).toHaveBeenCalledWith({
+      path: { id: tokenWire.id },
+    });
   });
 });

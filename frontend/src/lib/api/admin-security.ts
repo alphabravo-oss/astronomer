@@ -7,14 +7,17 @@
  *   - GET /admin/shell-sessions/{id}/commands — the audited command trail for
  *     one session (closes the loop on the kubectl-shell RCE surface).
  *
- * All endpoints are superuser-gated server-side. The shared axios interceptor
- * in ../api.ts camelizes snake_case response keys, so the types below are
- * camelCase even though the wire format is snake_case.
+ * All endpoints are superuser-gated server-side. Generated responses retain
+ * snake_case and the functions below map them into camelCase view models.
  *
  * Re-exported from ../api.ts via `export * from './api/admin-security'`.
  */
 
-import api from '../api';
+import {
+  adminKeyStatus,
+  adminShellSessionCommands,
+  adminShellSessionsList,
+} from "@/lib/api/generated/client";
 
 export interface KeyStatus {
   encryptionKeys: number;
@@ -29,10 +32,14 @@ export interface KeyStatus {
   asOf: string;
 }
 
-export async function getKeyStatus(): Promise<KeyStatus> {
-  // Bare JSON body (not APIResponse-wrapped); interceptor camelizes keys.
-  const res = await api.get<KeyStatus>('/admin/key-status/');
-  return res.data;
+export async function getKeyStatus(signal?: AbortSignal): Promise<KeyStatus> {
+  const response = await adminKeyStatus({ signal });
+  return {
+    encryptionKeys: response.encryption_keys,
+    jwtKeys: response.jwt_keys,
+    insecureDevKeys: response.insecure_dev_keys,
+    asOf: response.as_of,
+  };
 }
 
 export interface ShellSession {
@@ -50,9 +57,22 @@ export interface ShellSession {
   commandCount?: number;
 }
 
-export async function listShellSessions(): Promise<ShellSession[]> {
-  const res = await api.get<{ data: ShellSession[] }>('/admin/shell-sessions/');
-  return res.data.data ?? [];
+export async function listShellSessions(signal?: AbortSignal): Promise<ShellSession[]> {
+  const response = await adminShellSessionsList({ signal });
+  return (response.data ?? []).map((session) => ({
+    id: session.id ?? "",
+    clusterId: session.cluster_id ?? "",
+    userId: session.user_id ?? "",
+    status: session.status ?? "unknown",
+    podName: session.pod_name ?? "",
+    podNamespace: session.pod_namespace ?? "",
+    container: session.container ?? "",
+    startedAt: session.started_at ?? "",
+    lastInputAt: session.last_input_at ?? "",
+    expiresAt: session.expires_at ?? "",
+    idleTimeoutSeconds: session.idle_timeout_seconds ?? 0,
+    commandCount: session.command_count,
+  }));
 }
 
 export interface ShellSessionCommand {
@@ -62,9 +82,18 @@ export interface ShellSessionCommand {
 
 export async function listShellSessionCommands(
   sessionId: string,
+  signal?: AbortSignal,
 ): Promise<ShellSessionCommand[]> {
-  const res = await api.get<{ data: ShellSessionCommand[] }>(
-    `/admin/shell-sessions/${sessionId}/commands/`,
-  );
-  return res.data.data ?? [];
+  const response = await adminShellSessionCommands({
+    path: { id: sessionId },
+    signal,
+  });
+  const commands = (response.data ?? []) as Array<{
+    command_at?: string;
+    command_line?: string;
+  }>;
+  return commands.map((command) => ({
+    commandAt: command.command_at ?? "",
+    commandLine: command.command_line ?? "",
+  }));
 }

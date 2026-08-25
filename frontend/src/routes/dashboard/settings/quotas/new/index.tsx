@@ -1,42 +1,39 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/quotas/new — create a new quota plan.
  *
  * Shares the same field set as the detail page; only the name field is
  * editable on this surface (it becomes the immutable URL key once saved).
  */
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { useRouter } from '@/lib/navigation';
-import {
-  ArrowLeft,
-  Gauge,
-  Save,
-} from 'lucide-react';
-import { toastError } from '@/lib/toast';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { useCreateQuotaPlan } from '@/components/settings/hooks';
-import type { QuotaEnforcement, QuotaPlanWriteRequest } from '@/lib/api/settings';
+import { useId, useState } from "react";
+import { Link } from "@/lib/link";
+import { useRouter } from "@/lib/navigation";
+import { ArrowLeft, Gauge, Save } from "lucide-react";
+import { toastError } from "@/lib/toast";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useCreateQuotaPlan } from "@/components/settings/hooks";
+import type {
+  QuotaEnforcement,
+  QuotaPlanWriteRequest,
+} from "@/lib/api/quotas";
 
 const DEFAULT_FORM: QuotaPlanWriteRequest = {
-  name: '',
-  display_name: '',
-  description: '',
-  enforcement: 'soft',
-  max_projects: 10,
-  max_clusters: 5,
-  max_namespaces: 50,
-  max_users: 25,
-  max_storage_gb: 500,
-  max_cpu_cores: 64,
-  max_memory_gb: 256,
-  max_backups_per_day: 24,
-  max_api_tokens: 25,
+  name: "",
+  description: "",
+  enforcement: "soft",
+  max_clusters_per_project: 5,
+  max_namespaces_per_project: 50,
+  max_members_per_project: 25,
+  max_projects_per_user: 10,
+  max_tokens_per_user: 25,
+  max_streams_per_user: 5,
+  max_total_clusters: 0,
+  max_total_users: 0,
 };
 
 function NumberField({
@@ -48,10 +45,14 @@ function NumberField({
   value: number;
   onChange: (v: number) => void;
 }) {
+  const id = useId();
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-foreground">{label}</label>
+      <label htmlFor={id} className="text-sm font-medium text-foreground">
+        {label}
+      </label>
       <Input
+        id={id}
         type="number"
         value={value}
         min={0}
@@ -68,16 +69,18 @@ function NewQuotaPlanForm() {
 
   const handleCreate = async () => {
     if (!form.name) {
-      toastError('Plan name is required');
+      toastError("Plan name is required");
       return;
     }
     if (!/^[a-z0-9][a-z0-9-]*$/.test(form.name)) {
-      toastError('Plan name must be lowercase letters, numbers, and dashes');
+      toastError("Plan name must be lowercase letters, numbers, and dashes");
       return;
     }
     try {
       const created = await create.mutateAsync(form);
-      router.push(`/dashboard/settings/quotas/${encodeURIComponent(created.name)}`);
+      router.push(
+        `/dashboard/settings/quotas/${encodeURIComponent(created.name)}`,
+      );
     } catch {
       // mutation toasts
     }
@@ -86,50 +89,65 @@ function NewQuotaPlanForm() {
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-        <h2 className="text-base font-semibold text-foreground">Identification</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <h2 className="text-base font-semibold text-foreground">
+          Identification
+        </h2>
+        <div className="grid grid-cols-1 gap-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Name</label>
+            <label
+              className="text-sm font-medium text-foreground"
+              htmlFor="field-71779899-92"
+            >
+              Name
+            </label>
             <Input
+              id="field-71779899-92"
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="enterprise-tier"
               className="font-mono"
-              autoFocus
+              data-initial-focus
             />
             <p className="text-xs text-muted-foreground">
               Lowercase, numbers, dashes. This becomes the immutable URL key.
             </p>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Display name</label>
-            <Input
-              type="text"
-              value={form.display_name}
-              onChange={(e) => setForm({ ...form, display_name: e.target.value })}
-              placeholder="Enterprise"
-            />
-          </div>
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Description</label>
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-71779899-116"
+          >
+            Description
+          </label>
           <Textarea
-            value={form.description ?? ''}
+            id="field-71779899-116"
+            value={form.description ?? ""}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             rows={2}
             className="min-h-0 text-sm font-sans"
           />
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Enforcement</label>
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-71779899-125"
+          >
+            Enforcement
+          </label>
           <Select
+            id="field-71779899-125"
             value={form.enforcement}
-            onChange={(e) => setForm({ ...form, enforcement: e.target.value as QuotaEnforcement })}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                enforcement: e.target.value as QuotaEnforcement,
+              })
+            }
           >
             <option value="hard">Hard — reject writes over cap</option>
             <option value="soft">Soft — warn but allow</option>
-            <option value="disabled">Disabled — record only</option>
           </Select>
         </div>
       </div>
@@ -137,20 +155,63 @@ function NewQuotaPlanForm() {
       <div className="rounded-xl border border-border bg-card p-6 space-y-4">
         <h2 className="text-base font-semibold text-foreground">Limits</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <NumberField label="Max projects" value={form.max_projects} onChange={(v) => setForm({ ...form, max_projects: v })} />
-          <NumberField label="Max clusters" value={form.max_clusters} onChange={(v) => setForm({ ...form, max_clusters: v })} />
-          <NumberField label="Max namespaces" value={form.max_namespaces} onChange={(v) => setForm({ ...form, max_namespaces: v })} />
-          <NumberField label="Max users" value={form.max_users} onChange={(v) => setForm({ ...form, max_users: v })} />
-          <NumberField label="Max storage (GiB)" value={form.max_storage_gb} onChange={(v) => setForm({ ...form, max_storage_gb: v })} />
-          <NumberField label="Max CPU cores" value={form.max_cpu_cores} onChange={(v) => setForm({ ...form, max_cpu_cores: v })} />
-          <NumberField label="Max memory (GiB)" value={form.max_memory_gb} onChange={(v) => setForm({ ...form, max_memory_gb: v })} />
-          <NumberField label="Max backups / day" value={form.max_backups_per_day} onChange={(v) => setForm({ ...form, max_backups_per_day: v })} />
-          <NumberField label="Max API tokens" value={form.max_api_tokens} onChange={(v) => setForm({ ...form, max_api_tokens: v })} />
+          <NumberField
+            label="Max clusters per project"
+            value={form.max_clusters_per_project}
+            onChange={(v) =>
+              setForm({ ...form, max_clusters_per_project: v })
+            }
+          />
+          <NumberField
+            label="Max namespaces per project"
+            value={form.max_namespaces_per_project}
+            onChange={(v) =>
+              setForm({ ...form, max_namespaces_per_project: v })
+            }
+          />
+          <NumberField
+            label="Max members per project"
+            value={form.max_members_per_project}
+            onChange={(v) =>
+              setForm({ ...form, max_members_per_project: v })
+            }
+          />
+          <NumberField
+            label="Max projects per user"
+            value={form.max_projects_per_user}
+            onChange={(v) =>
+              setForm({ ...form, max_projects_per_user: v })
+            }
+          />
+          <NumberField
+            label="Max API tokens per user"
+            value={form.max_tokens_per_user}
+            onChange={(v) =>
+              setForm({ ...form, max_tokens_per_user: v })
+            }
+          />
+          <NumberField
+            label="Max concurrent streams per user"
+            value={form.max_streams_per_user}
+            onChange={(v) =>
+              setForm({ ...form, max_streams_per_user: v })
+            }
+          />
+          <NumberField
+            label="Fleet cluster cap"
+            value={form.max_total_clusters}
+            onChange={(v) => setForm({ ...form, max_total_clusters: v })}
+          />
+          <NumberField
+            label="Fleet active-user cap"
+            value={form.max_total_users}
+            onChange={(v) => setForm({ ...form, max_total_users: v })}
+          />
         </div>
       </div>
 
       <div className="flex items-center justify-end gap-2">
-        <ActionButton onClick={() => router.push('/dashboard/settings/quotas')}>
+        <ActionButton onClick={() => router.push("/dashboard/settings/quotas")}>
           Cancel
         </ActionButton>
         <ActionButton
@@ -192,6 +253,6 @@ function NewQuotaPlanPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/quotas/new/')({
+export const Route = createFileRoute("/dashboard/settings/quotas/new/")({
   component: NewQuotaPlanPage,
 });

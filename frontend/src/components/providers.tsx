@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { ThemeProvider, useTheme } from '@/lib/theme';
-import { Toaster } from 'sonner';
-import { useState, type ReactNode } from 'react';
-import { IS_DEV } from '@/lib/env';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { ThemeProvider, useTheme } from "@/lib/theme";
+import { Toaster } from "sonner";
+import { useState, type ReactNode } from "react";
+import { IS_DEV } from "@/lib/env";
 
 function ThemedToaster() {
   const { theme } = useTheme();
@@ -16,7 +16,7 @@ function ThemedToaster() {
       richColors
       closeButton
       toastOptions={{
-        className: 'border border-border',
+        className: "border border-border",
         duration: 4000,
       }}
     />
@@ -33,7 +33,8 @@ export function Providers({ children }: { children: ReactNode }) {
             gcTime: 5 * 60 * 1000,
             refetchOnWindowFocus: true,
             retry: (failureCount, error) => {
-              if (error instanceof Error && error.message.includes('401')) return false;
+              if (error instanceof Error && error.message.includes("401"))
+                return false;
               return failureCount < 2;
             },
           },
@@ -41,7 +42,7 @@ export function Providers({ children }: { children: ReactNode }) {
             retry: false,
           },
         },
-      })
+      }),
   );
 
   return (
@@ -54,7 +55,10 @@ export function Providers({ children }: { children: ReactNode }) {
         <ThemedToaster />
       </ThemeProvider>
       {IS_DEV && (
-        <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
+        <ReactQueryDevtools
+          initialIsOpen={false}
+          buttonPosition="bottom-left"
+        />
       )}
     </QueryClientProvider>
   );

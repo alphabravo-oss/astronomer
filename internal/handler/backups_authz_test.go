@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,8 +21,9 @@ import (
 // and overrides just the two reads the authz tests touch.
 type idorBackupQuerier struct {
 	*fakeBackupQuerier
-	backups map[uuid.UUID]sqlc.Backup
-	list    []sqlc.Backup
+	backups  map[uuid.UUID]sqlc.Backup
+	restores map[uuid.UUID]sqlc.RestoreOperation
+	list     []sqlc.Backup
 }
 
 func (q *idorBackupQuerier) GetBackupByID(_ context.Context, id uuid.UUID) (sqlc.Backup, error) {
@@ -38,6 +40,14 @@ func (q *idorBackupQuerier) ListBackups(_ context.Context, _ sqlc.ListBackupsPar
 
 func (q *idorBackupQuerier) CountBackups(_ context.Context) (int64, error) {
 	return int64(len(q.list)), nil
+}
+
+func (q *idorBackupQuerier) GetRestoreOperationByID(_ context.Context, id uuid.UUID) (sqlc.RestoreOperation, error) {
+	restore, ok := q.restores[id]
+	if !ok {
+		return sqlc.RestoreOperation{}, pgx.ErrNoRows
+	}
+	return restore, nil
 }
 
 func pgClusterID(id uuid.UUID) pgtype.UUID {
@@ -123,5 +133,35 @@ func TestBackupHandler_ListBackupsScopesByCluster(t *testing.T) {
 	}
 	if len(env.Data) != 1 {
 		t.Fatalf("cluster-scoped caller should see 1 backup, got %d", len(env.Data))
+	}
+}
+
+func TestBackupHandler_GetRestoreUsesRestoreClusterAuthorization(t *testing.T) {
+	clusterA := uuid.New()
+	clusterB := uuid.New()
+	restoreID := uuid.New()
+	q := &idorBackupQuerier{
+		fakeBackupQuerier: &fakeBackupQuerier{},
+		restores: map[uuid.UUID]sqlc.RestoreOperation{
+			restoreID: {
+				ID: restoreID, BackupID: uuid.New(), Status: "running",
+				ClusterID: pgClusterID(clusterB), CreatedAt: time.Now(), UpdatedAt: time.Now(),
+			},
+		},
+	}
+	h := NewBackupHandler(q)
+
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: backupBindings(clusterA, rbac.VerbRead)})
+	rec := httptest.NewRecorder()
+	h.GetRestore(rec, authedCatalogReq(http.MethodGet, "/api/v1/backups/restores/"+restoreID.String()+"/", map[string]string{"id": restoreID.String()}))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("cross-cluster restore read: want 403, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: backupBindings(clusterB, rbac.VerbRead)})
+	rec = httptest.NewRecorder()
+	h.GetRestore(rec, authedCatalogReq(http.MethodGet, "/api/v1/backups/restores/"+restoreID.String()+"/", map[string]string{"id": restoreID.String()}))
+	if rec.Code != http.StatusOK || !bodyContains(rec, restoreID.String()) {
+		t.Fatalf("authorized restore read: want 200 with id, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }

@@ -23,7 +23,6 @@ package tasks
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -64,52 +63,21 @@ type DeferredDispatchDeps struct {
 	Replayers map[string]DeferredReplayer
 }
 
-var (
-	deferredDispatchMu   sync.RWMutex
-	deferredDispatchDeps DeferredDispatchDeps
-)
-
-// ConfigureDeferredDispatch wires the dispatcher's dependencies. Safe
-// to call multiple times (last call wins). Passing an empty Replayers
-// map disables the replay path; the dispatcher will still tick through
-// expiry-handling for orphan rows.
-func ConfigureDeferredDispatch(deps DeferredDispatchDeps) {
-	deferredDispatchMu.Lock()
-	defer deferredDispatchMu.Unlock()
-	deferredDispatchDeps = deps
-}
-
-// RegisterDeferredReplayer adds a replayer for a specific op_type.
-// Idempotent — the latest call wins per op_type. Used so each handler
-// package can self-register without the worker package needing a hard
-// import on every handler/task type.
-func RegisterDeferredReplayer(opType string, fn DeferredReplayer) {
-	deferredDispatchMu.Lock()
-	defer deferredDispatchMu.Unlock()
-	if deferredDispatchDeps.Replayers == nil {
-		deferredDispatchDeps.Replayers = map[string]DeferredReplayer{}
-	}
-	deferredDispatchDeps.Replayers[opType] = fn
-}
-
 // HandleDispatchDeferred is the periodic task that drains the
 // dispatchable rows. Same wrapper as the other periodic tasks so the
 // reconciler metrics + leader election apply.
-func HandleDispatchDeferred(ctx context.Context, _ *asynq.Task) error {
+func (runtime DeferredRuntime) HandleDispatchDeferred(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, DispatchDeferredType, func() error {
-		deferredDispatchMu.RLock()
-		deps := deferredDispatchDeps
-		deferredDispatchMu.RUnlock()
+		deps := runtime.normalized().Deps
 
 		if deps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "deferred dispatch not configured, skipping")
-			return nil
+			return fmt.Errorf("deferred dispatch runtime is not configured")
 		}
 
 		now := time.Now().UTC()
 		rows, err := deps.Queries.ListPendingDeferredOperations(ctx, sqlc.ListPendingDeferredOperationsParams{
-			Now:   pgtype.Timestamptz{Time: now, Valid: true},
-			Limit: dispatchBatchSize,
+			Now:        pgtype.Timestamptz{Time: now, Valid: true},
+			BatchLimit: dispatchBatchSize,
 		})
 		if err != nil {
 			return fmt.Errorf("list pending deferred operations: %w", err)
@@ -129,7 +97,7 @@ func HandleDispatchDeferred(ctx context.Context, _ *asynq.Task) error {
 					ID:        row.ID,
 					LastError: fmt.Sprintf("expired at %s before window opened", row.ExpiresAt.Time.Format(time.RFC3339)),
 				})
-				runtimeLogger().WarnContext(ctx, "deferred operation expired",
+				runtimeLogger(ctx).WarnContext(ctx, "deferred operation expired",
 					"id", row.ID.String(),
 					"op_type", row.OperationType,
 					"window_id", row.WindowID.String(),

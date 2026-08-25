@@ -101,8 +101,7 @@ const projectReconcileSweepMaxRows = 200
 
 // ProjectReconcileQuerier is the slice of sqlc.Queries the reconcile task
 // needs. Defined locally so tests can stand up a fake without importing the
-// whole project. The runtime wires the live *sqlc.Queries via
-// ConfigureProjectReconcile.
+// whole project. ProjectRuntime owns the live query implementation.
 type ProjectReconcileQuerier interface {
 	GetProjectByID(ctx context.Context, id uuid.UUID) (sqlc.Project, error)
 	GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterRegistryConfig, error)
@@ -137,19 +136,6 @@ type ProjectReconcileDeps struct {
 	Encryptor *auth.Encryptor
 }
 
-var projectDeps ProjectReconcileDeps
-
-// ConfigureProjectReconcile stores the task's runtime dependencies. Called
-// from server startup once the K8s tunnel hub and DB are wired.
-func ConfigureProjectReconcile(deps ProjectReconcileDeps) {
-	projectDeps = deps
-}
-
-// ResetProjectReconcile clears runtime deps. Used by tests.
-func ResetProjectReconcile() {
-	projectDeps = ProjectReconcileDeps{}
-}
-
 // ProjectReconcilePayload is the JSON body of a "project:reconcile" task.
 // Op == "remove" deletes our managed CRs and the project label; Op == "apply"
 // (default) renders + applies them.
@@ -177,10 +163,9 @@ func NewProjectReconcileAllTask() (*asynq.Task, error) {
 }
 
 // HandleProjectReconcile is the asynq handler for "project:reconcile".
-func HandleProjectReconcile(ctx context.Context, t *asynq.Task) error {
-	if projectDeps.Queries == nil || projectDeps.Requester == nil {
-		runtimeLogger().InfoContext(ctx, "project reconcile runtime not configured, skipping")
-		return nil
+func (runtime ProjectRuntime) HandleProjectReconcile(ctx context.Context, t *asynq.Task) error {
+	if runtime.Deps.Queries == nil || runtime.Deps.Requester == nil {
+		return fmt.Errorf("project reconcile runtime is not configured")
 	}
 	var p ProjectReconcilePayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
@@ -206,32 +191,31 @@ func HandleProjectReconcile(ctx context.Context, t *asynq.Task) error {
 		// Best-effort cleanup. We DELETE the row regardless of K8s outcome;
 		// the user already removed the namespace from the project, so leaving
 		// a row dangling here would just be confusing.
-		_ = removeProjectEnforcement(ctx, projectDeps.Requester, p.ClusterID, p.Namespace, projectID)
-		return projectDeps.Queries.DeleteProjectNamespace(ctx, sqlc.DeleteProjectNamespaceParams{
+		_ = removeProjectEnforcement(ctx, runtime.Deps.Requester, p.ClusterID, p.Namespace, projectID)
+		return runtime.Deps.Queries.DeleteProjectNamespace(ctx, sqlc.DeleteProjectNamespaceParams{
 			ProjectID: projectID,
 			ClusterID: clusterID,
 			Namespace: p.Namespace,
 		})
 	}
 
-	project, err := projectDeps.Queries.GetProjectByID(ctx, projectID)
+	project, err := runtime.Deps.Queries.GetProjectByID(ctx, projectID)
 	if err != nil {
 		return fmt.Errorf("load project: %w", err)
 	}
-	return reconcileProjectNamespace(ctx, projectDeps.Queries, projectDeps.Requester, project, clusterID, p.Namespace)
+	return runtime.reconcileProjectNamespace(ctx, runtime.Deps.Queries, runtime.Deps.Requester, project, clusterID, p.Namespace)
 }
 
 // HandleProjectReconcileAll is the asynq handler for the periodic sweep.
 // It walks every project_namespaces row, attempts to claim the lease, and
 // reconciles only the ones it claims. Other workers running concurrently
 // pick up disjoint rows.
-func HandleProjectReconcileAll(ctx context.Context, _ *asynq.Task) error {
+func (runtime ProjectRuntime) HandleProjectReconcileAll(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ProjectReconcileAllType, func() error {
-		if projectDeps.Queries == nil || projectDeps.Requester == nil {
-			runtimeLogger().InfoContext(ctx, "project reconcile runtime not configured, skipping sweep")
-			return nil
+		if runtime.Deps.Queries == nil || runtime.Deps.Requester == nil {
+			return fmt.Errorf("project reconcile runtime is not configured")
 		}
-		rows, err := projectDeps.Queries.ListAllProjectNamespaces(ctx)
+		rows, err := runtime.Deps.Queries.ListAllProjectNamespaces(ctx)
 		if err != nil {
 			return fmt.Errorf("list project namespaces: %w", err)
 		}
@@ -249,12 +233,12 @@ func HandleProjectReconcileAll(ctx context.Context, _ *asynq.Task) error {
 		// a sweep spanning many namespaces on the same cluster doesn't refetch
 		// the identical config once per row.
 		q := &perTickRegistryCachingQuerier{
-			ProjectReconcileQuerier: projectDeps.Queries,
+			ProjectReconcileQuerier: runtime.Deps.Queries,
 			cache:                   map[uuid.UUID]cachedRegistryConfig{},
 		}
 		for _, row := range rows {
 			lease := pgtype.Timestamptz{Time: time.Now().UTC().Add(reconcileLeaseTTL), Valid: true}
-			claimed, err := projectDeps.Queries.ClaimProjectNamespaceReconcile(ctx, sqlc.ClaimProjectNamespaceReconcileParams{
+			claimed, err := runtime.Deps.Queries.ClaimProjectNamespaceReconcile(ctx, sqlc.ClaimProjectNamespaceReconcileParams{
 				ProjectID:   row.ProjectID,
 				ClusterID:   row.ClusterID,
 				Namespace:   row.Namespace,
@@ -265,14 +249,14 @@ func HandleProjectReconcileAll(ctx context.Context, _ *asynq.Task) error {
 				// That's the normal cooperative path — skip silently.
 				continue
 			}
-			project, err := projectDeps.Queries.GetProjectByID(ctx, claimed.ProjectID)
+			project, err := runtime.Deps.Queries.GetProjectByID(ctx, claimed.ProjectID)
 			if err != nil {
-				runtimeLogger().WarnContext(ctx, "project lookup failed during sweep", "project_id", claimed.ProjectID.String(), "error", err)
-				_ = markReconciled(ctx, projectDeps.Queries, claimed.ProjectID, claimed.ClusterID, claimed.Namespace, "project lookup failed: "+err.Error())
+				runtimeLogger(ctx).WarnContext(ctx, "project lookup failed during sweep", "project_id", claimed.ProjectID.String(), "error", err)
+				_ = markReconciled(ctx, runtime.Deps.Queries, claimed.ProjectID, claimed.ClusterID, claimed.Namespace, "project lookup failed: "+err.Error())
 				continue
 			}
-			if err := reconcileProjectNamespace(ctx, q, projectDeps.Requester, project, claimed.ClusterID, claimed.Namespace); err != nil {
-				runtimeLogger().WarnContext(ctx, "project reconcile failed", "project_id", claimed.ProjectID.String(), "namespace", claimed.Namespace, "error", err)
+			if err := runtime.reconcileProjectNamespace(ctx, q, runtime.Deps.Requester, project, claimed.ClusterID, claimed.Namespace); err != nil {
+				runtimeLogger(ctx).WarnContext(ctx, "project reconcile failed", "project_id", claimed.ProjectID.String(), "namespace", claimed.Namespace, "error", err)
 			}
 		}
 		return nil
@@ -321,7 +305,7 @@ func (c *perTickRegistryCachingQuerier) GetClusterRegistryConfig(ctx context.Con
 
 // reconcileProjectNamespace renders and applies the three managed objects
 // for a single (project, cluster, namespace) and records the outcome.
-func reconcileProjectNamespace(ctx context.Context, q ProjectReconcileQuerier, requester ProjectK8sRequester, project sqlc.Project, clusterID uuid.UUID, namespace string) error {
+func (runtime ProjectRuntime) reconcileProjectNamespace(ctx context.Context, q ProjectReconcileQuerier, requester ProjectK8sRequester, project sqlc.Project, clusterID uuid.UUID, namespace string) error {
 	clusterIDStr := clusterID.String()
 	labels, err := projectNamespaceLabels(ctx, q, namespace, project.ID.String())
 	if err != nil {
@@ -377,7 +361,7 @@ func reconcileProjectNamespace(ctx context.Context, q ProjectReconcileQuerier, r
 		}
 	}
 
-	if err := reconcileProjectRegistryAccess(ctx, q, requester, clusterID, namespace); err != nil {
+	if err := runtime.reconcileProjectRegistryAccess(ctx, q, requester, clusterID, namespace); err != nil {
 		return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("reconcile image pull secret: %v", err))
 	}
 
@@ -504,7 +488,7 @@ func namespaceExemptedByTemplate(tpl sqlc.PodSecurityTemplate, namespace string)
 	return false
 }
 
-func reconcileProjectRegistryAccess(ctx context.Context, q ProjectReconcileQuerier, requester ProjectK8sRequester, clusterID uuid.UUID, namespace string) error {
+func (runtime ProjectRuntime) reconcileProjectRegistryAccess(ctx context.Context, q ProjectReconcileQuerier, requester ProjectK8sRequester, clusterID uuid.UUID, namespace string) error {
 	if q == nil {
 		return nil
 	}
@@ -515,7 +499,7 @@ func reconcileProjectRegistryAccess(ctx context.Context, q ProjectReconcileQueri
 		}
 		return err
 	}
-	if err := materializeProjectRegistryPassword(&cfg); err != nil {
+	if err := runtime.materializeProjectRegistryPassword(&cfg); err != nil {
 		return err
 	}
 	if !hasUsableRegistryConfig(cfg) {
@@ -540,14 +524,14 @@ func hasUsableRegistryConfig(cfg sqlc.ClusterRegistryConfig) bool {
 		strings.TrimSpace(cfg.RegistryPassword) != ""
 }
 
-func materializeProjectRegistryPassword(cfg *sqlc.ClusterRegistryConfig) error {
+func (runtime ProjectRuntime) materializeProjectRegistryPassword(cfg *sqlc.ClusterRegistryConfig) error {
 	if cfg == nil || strings.TrimSpace(cfg.RegistryPasswordEncrypted) == "" {
 		return nil
 	}
-	if projectDeps.Encryptor == nil {
+	if runtime.Deps.Encryptor == nil {
 		return fmt.Errorf("encrypted registry password present but encryptor is not configured")
 	}
-	password, err := projectDeps.Encryptor.Decrypt(cfg.RegistryPasswordEncrypted)
+	password, err := runtime.Deps.Encryptor.Decrypt(cfg.RegistryPasswordEncrypted)
 	if err != nil {
 		return err
 	}

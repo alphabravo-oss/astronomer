@@ -1,13 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from '@/lib/navigation';
-import { Link } from '@/lib/link';
-import { useClusters } from '@/lib/hooks';
-import { useCISProfiles, useCreateCISScan } from '@/lib/hooks';
-import { CIS_NOT_INSTALLED_HINT } from '@/components/security/cis-scans-tab';
-import { distributionDisplayName, cn } from '@/lib/utils';
-import { ActionButton } from '@/components/ui/action-button';
-import { PageHeader, PageShell } from '@/components/ui/page';
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "@/lib/navigation";
+import { Link } from "@/lib/link";
+import { useClusters } from "@/lib/hooks";
+import { useCISProfiles, useCreateCISScan } from "@/components/security/hooks";
+import { CIS_NOT_INSTALLED_HINT } from "@/components/security/cis-scans-tab";
+import { distributionDisplayName, cn } from "@/lib/utils";
+import { ActionButton } from "@/components/ui/action-button";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   ArrowLeft,
   ArrowRight,
@@ -16,7 +16,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   AlertTriangle,
-} from 'lucide-react';
+} from "lucide-react";
 
 /**
  * Phase B5 — CIS scan wizard.
@@ -35,19 +35,23 @@ import {
 type WizardStep = 1 | 2 | 3;
 
 const STEPS: { n: WizardStep; label: string }[] = [
-  { n: 1, label: 'Cluster' },
-  { n: 2, label: 'Profile' },
-  { n: 3, label: 'Review' },
+  { n: 1, label: "Cluster" },
+  { n: 2, label: "Profile" },
+  { n: 3, label: "Review" },
 ];
 
 function NewScanWizardPage() {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>(1);
-  const [clusterId, setClusterId] = useState<string>('');
-  const [profile, setProfile] = useState<string>('');
+  const [clusterId, setClusterId] = useState<string>("");
+  const [profile, setProfile] = useState<string>("");
 
-  const { data: clustersPage, isLoading: clustersLoading } = useClusters({ pageSize: 200 });
-  const { data: profilesData, isLoading: profilesLoading } = useCISProfiles(clusterId || undefined);
+  const { data: clustersPage, isLoading: clustersLoading } = useClusters({
+    pageSize: 200,
+  });
+  const { data: profilesData, isLoading: profilesLoading } = useCISProfiles(
+    clusterId || undefined,
+  );
   const createScan = useCreateCISScan();
 
   const cluster = useMemo(
@@ -59,7 +63,7 @@ function NewScanWizardPage() {
   // list) changes — but never overwrite an explicit user choice.
   const recommendedName = useMemo(() => {
     if (!cluster) return undefined;
-    return defaultProfileForDistribution(cluster.distribution || '');
+    return defaultProfileForDistribution(cluster.distribution || "");
   }, [cluster]);
 
   useEffect(() => {
@@ -86,7 +90,10 @@ function NewScanWizardPage() {
     <PageShell>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/dashboard/security" className="hover:text-foreground transition-colors">
+        <Link
+          href="/dashboard/security"
+          className="hover:text-foreground transition-colors"
+        >
           Security
         </Link>
         <ChevronRight className="h-3.5 w-3.5" />
@@ -107,10 +114,10 @@ function NewScanWizardPage() {
             <li key={s.n} className="flex items-center gap-2">
               <div
                 className={cn(
-                  'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
-                  active && 'bg-primary text-primary-foreground',
-                  complete && 'bg-status-success/10 text-status-success',
-                  !active && !complete && 'bg-muted text-muted-foreground',
+                  "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                  active && "bg-primary text-primary-foreground",
+                  complete && "bg-status-success/10 text-status-success",
+                  !active && !complete && "bg-muted text-muted-foreground",
                 )}
               >
                 {complete ? (
@@ -120,7 +127,9 @@ function NewScanWizardPage() {
                 )}
                 {s.label}
               </div>
-              {i < STEPS.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+              {i < STEPS.length - 1 && (
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
             </li>
           );
         })}
@@ -130,15 +139,21 @@ function NewScanWizardPage() {
         {step === 1 && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-sm font-medium text-foreground">Select cluster</h2>
+              <h2 className="text-sm font-medium text-foreground">
+                Select cluster
+              </h2>
               <p className="text-xs text-muted-foreground mt-1">
-                The scan runs on the cis-operator deployed to this cluster's tunnel-managed agent.
+                The scan runs on the cis-operator deployed to this cluster's
+                tunnel-managed agent.
               </p>
             </div>
             {clustersLoading ? (
               <div className="space-y-2">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="h-12 rounded-md bg-muted animate-pulse" />
+                  <div
+                    key={i}
+                    className="h-12 rounded-md bg-muted animate-pulse"
+                  />
                 ))}
               </div>
             ) : (
@@ -149,10 +164,10 @@ function NewScanWizardPage() {
                     type="button"
                     onClick={() => setClusterId(c.id)}
                     className={cn(
-                      'w-full flex items-center justify-between rounded-md border px-4 py-3 text-left transition-colors',
+                      "w-full flex items-center justify-between rounded-md border px-4 py-3 text-left transition-colors",
                       clusterId === c.id
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:bg-accent',
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-accent",
                     )}
                   >
                     <div className="min-w-0">
@@ -160,10 +175,13 @@ function NewScanWizardPage() {
                         {c.displayName || c.name}
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {distributionDisplayName(c.distribution)} · {c.environment} · {c.status}
+                        {distributionDisplayName(c.distribution)} ·{" "}
+                        {c.environment} · {c.status}
                       </p>
                     </div>
-                    {clusterId === c.id && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                    {clusterId === c.id && (
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                    )}
                   </button>
                 ))}
                 {(clustersPage?.data ?? []).length === 0 && (
@@ -179,23 +197,31 @@ function NewScanWizardPage() {
         {step === 2 && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-sm font-medium text-foreground">Select profile</h2>
+              <h2 className="text-sm font-medium text-foreground">
+                Select profile
+              </h2>
               <p className="text-xs text-muted-foreground mt-1">
-                Profiles ship preinstalled with cis-operator. The recommended one is highlighted.
+                Profiles ship preinstalled with cis-operator. The recommended
+                one is highlighted.
               </p>
             </div>
 
-            {profilesData?.source === 'fallback' && (
+            {profilesData?.source === "fallback" && (
               <div className="rounded-md border border-status-warning/30 bg-status-warning/5 p-3 flex items-start gap-2.5">
                 <AlertTriangle className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-status-warning">{CIS_NOT_INSTALLED_HINT}</p>
+                <p className="text-xs text-status-warning">
+                  {CIS_NOT_INSTALLED_HINT}
+                </p>
               </div>
             )}
 
             {profilesLoading ? (
               <div className="space-y-2">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="h-12 rounded-md bg-muted animate-pulse" />
+                  <div
+                    key={i}
+                    className="h-12 rounded-md bg-muted animate-pulse"
+                  />
                 ))}
               </div>
             ) : (
@@ -208,16 +234,18 @@ function NewScanWizardPage() {
                       type="button"
                       onClick={() => setProfile(p.name)}
                       className={cn(
-                        'w-full flex items-center justify-between rounded-md border px-4 py-3 text-left transition-colors',
+                        "w-full flex items-center justify-between rounded-md border px-4 py-3 text-left transition-colors",
                         profile === p.name
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:bg-accent',
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-accent",
                       )}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <ShieldCheck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-sm font-mono text-foreground truncate">{p.name}</p>
+                          <p className="text-sm font-mono text-foreground truncate">
+                            {p.name}
+                          </p>
                           {p.benchmarkVersion && (
                             <p className="text-xs text-muted-foreground mt-0.5 truncate">
                               Benchmark: {p.benchmarkVersion}
@@ -230,7 +258,9 @@ function NewScanWizardPage() {
                           </span>
                         )}
                       </div>
-                      {profile === p.name && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                      {profile === p.name && (
+                        <CheckCircle2 className="h-4 w-4 text-primary" />
+                      )}
                     </button>
                   );
                 })}
@@ -242,27 +272,35 @@ function NewScanWizardPage() {
         {step === 3 && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-sm font-medium text-foreground">Review &amp; run</h2>
+              <h2 className="text-sm font-medium text-foreground">
+                Review &amp; run
+              </h2>
               <p className="text-xs text-muted-foreground mt-1">
-                Confirm the scan parameters. The scan will be polled in the background; you'll be
-                redirected to its detail page.
+                Confirm the scan parameters. The scan will be polled in the
+                background; you'll be redirected to its detail page.
               </p>
             </div>
 
             <dl className="rounded-md border border-border divide-y divide-border">
-              <ReviewRow label="Cluster" value={cluster?.displayName || cluster?.name || '—'} />
+              <ReviewRow
+                label="Cluster"
+                value={cluster?.displayName || cluster?.name || "—"}
+              />
               <ReviewRow
                 label="Distribution"
-                value={cluster ? distributionDisplayName(cluster.distribution) : '—'}
+                value={
+                  cluster ? distributionDisplayName(cluster.distribution) : "—"
+                }
               />
-              <ReviewRow label="Profile" value={profile || '—'} mono />
+              <ReviewRow label="Profile" value={profile || "—"} mono />
             </dl>
 
             {createScan.isError && (
               <div className="rounded-md border border-status-error/30 bg-status-error/5 p-3 flex items-start gap-2.5">
                 <ShieldAlert className="h-4 w-4 text-status-error flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-status-error">
-                  {(createScan.error as Error)?.message ?? 'Failed to start scan.'}
+                  {(createScan.error as Error)?.message ??
+                    "Failed to start scan."}
                 </p>
               </div>
             )}
@@ -274,10 +312,14 @@ function NewScanWizardPage() {
       <div className="flex items-center justify-between">
         <ActionButton
           icon={<ArrowLeft className="h-4 w-4" />}
-          onClick={() => (step > 1 ? setStep((s) => (s - 1) as WizardStep) : router.push('/dashboard/security'))}
+          onClick={() =>
+            step > 1
+              ? setStep((s) => (s - 1) as WizardStep)
+              : router.push("/dashboard/security")
+          }
           disabled={createScan.isPending}
         >
-          {step > 1 ? 'Back' : 'Cancel'}
+          {step > 1 ? "Back" : "Cancel"}
         </ActionButton>
 
         {step < 3 ? (
@@ -305,11 +347,21 @@ function NewScanWizardPage() {
   );
 }
 
-function ReviewRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function ReviewRow({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   return (
     <div className="flex items-center justify-between px-4 py-3">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={cn('text-sm text-foreground', mono && 'font-mono')}>{value}</dd>
+      <dd className={cn("text-sm text-foreground", mono && "font-mono")}>
+        {value}
+      </dd>
     </div>
   );
 }
@@ -321,24 +373,24 @@ function ReviewRow({ label, value, mono }: { label: string; value: string; mono?
  */
 function defaultProfileForDistribution(distribution: string): string {
   switch (distribution.toLowerCase().trim()) {
-    case 'rke':
-    case 'rke1':
-      return 'rke-cis-1.8-permissive';
-    case 'rke2':
-      return 'rke2-cis-1.8-permissive';
-    case 'k3s':
-      return 'k3s-cis-1.8-permissive';
-    case 'eks':
-      return 'eks-cis-1.5';
-    case 'aks':
-      return 'aks-cis-1.0';
-    case 'gke':
-      return 'gke-cis-1.5';
+    case "rke":
+    case "rke1":
+      return "rke-cis-1.8-permissive";
+    case "rke2":
+      return "rke2-cis-1.8-permissive";
+    case "k3s":
+      return "k3s-cis-1.8-permissive";
+    case "eks":
+      return "eks-cis-1.5";
+    case "aks":
+      return "aks-cis-1.0";
+    case "gke":
+      return "gke-cis-1.5";
     default:
-      return 'cis-1.8';
+      return "cis-1.8";
   }
 }
 
-export const Route = createFileRoute('/dashboard/security/scans/new/')({
+export const Route = createFileRoute("/dashboard/security/scans/new/")({
   component: NewScanWizardPage,
 });

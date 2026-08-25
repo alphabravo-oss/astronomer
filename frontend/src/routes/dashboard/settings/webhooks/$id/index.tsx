@@ -1,14 +1,14 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/webhooks/[id] — webhook detail with three tabs:
  *   - Config: edit name / url / filters / secret.
  *   - Deliveries: recent attempts with a per-row retry button.
  *   - Test: synthesise a payload and surface the response.
  */
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from '@/lib/navigation';
-import { useTabParam } from '@/lib/use-tab-param';
-import { Link } from '@/lib/link';
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "@/lib/navigation";
+import { useTabParam } from "@/lib/use-tab-param";
+import { Link } from "@/lib/link";
 import {
   ArrowLeft,
   Loader2,
@@ -16,20 +16,19 @@ import {
   RotateCcw,
   Save,
   Trash2,
-} from 'lucide-react';
-import { toastError, toastSuccess } from '@/lib/toast';
-import { useAppForm } from '@/lib/form';
-import { cn, formatRelativeTime } from '@/lib/utils';
-import { ActionButton } from '@/components/ui/action-button';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { CodeBlock } from '@/components/ui/code-block';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Input } from '@/components/ui/input';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { Select } from '@/components/ui/select';
-import { TabStrip, TabsContent } from '@/components/ui/tabs';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
+} from "lucide-react";
+import { toastSuccess } from "@/lib/toast";
+import { useAppForm } from "@/lib/form";
+import { cn, formatRelativeTime } from "@/lib/utils";
+import { ActionButton } from "@/components/ui/action-button";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { CodeBlock } from "@/components/ui/code-block";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Input } from "@/components/ui/input";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { TabStrip, TabsContent } from "@/components/ui/tabs";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import {
   useDeleteWebhook,
   useRetryWebhookDelivery,
@@ -37,28 +36,28 @@ import {
   useUpdateWebhook,
   useWebhook,
   useWebhookDeliveries,
-} from '@/components/settings/hooks';
+} from "@/components/settings/hooks";
 import type {
-  WebhookDelivery,
-  WebhookSubscription,
-  WebhookTestResult,
-} from '@/lib/api/settings';
+  WebhookDeliveryView,
+  WebhookSubscriptionView,
+  WebhookTestReceiptView,
+} from "@/lib/api/settings";
 
-const TAB_KEYS = ['config', 'deliveries', 'test'] as const;
+const TAB_KEYS = ["config", "deliveries", "test"] as const;
 
 const AVAILABLE_EVENTS = [
-  'cluster.unhealthy',
-  'cluster.healthy',
-  'backup.failed',
-  'backup.succeeded',
-  'project.created',
-  'project.deleted',
-  'auth.failed',
-  'auth.locked',
-  'quota.exceeded',
+  "cluster.unhealthy",
+  "cluster.healthy",
+  "backup.failed",
+  "backup.succeeded",
+  "project.created",
+  "project.deleted",
+  "auth.failed",
+  "auth.locked",
+  "quota.exceeded",
 ];
 
-function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
+function ConfigTab({ webhook }: { webhook: WebhookSubscriptionView }) {
   const update = useUpdateWebhook();
 
   const form = useAppForm({
@@ -68,7 +67,6 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
       secret: webhook.secret,
       enabled: webhook.enabled,
       events: webhook.filters.events,
-      minSeverity: webhook.filters.minSeverity ?? ('' as 'info' | 'warning' | 'critical' | ''),
     },
     onSubmit: async ({ value }) => {
       try {
@@ -78,11 +76,12 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
             name: value.name,
             url: value.url,
             // Secret only sent if it differs from the redacted snapshot.
-            ...(value.secret && value.secret !== webhook.secret ? { secret: value.secret } : {}),
+            ...(value.secret && value.secret !== webhook.secret
+              ? { secret: value.secret }
+              : {}),
             enabled: value.enabled,
             filters: {
               events: value.events,
-              ...(value.minSeverity ? { minSeverity: value.minSeverity } : {}),
             },
           },
         });
@@ -100,17 +99,22 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
       secret: webhook.secret,
       enabled: webhook.enabled,
       events: webhook.filters.events,
-      minSeverity: webhook.filters.minSeverity ?? '',
     });
   }, [form, webhook]);
 
   return (
     <div className="rounded-xl border border-border bg-card p-6 space-y-4">
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Name</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-7e0f62a0-110"
+        >
+          Name
+        </label>
         <form.Field name="name">
           {(field) => (
             <Input
+              id="field-7e0f62a0-110"
               type="text"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -120,10 +124,16 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
         </form.Field>
       </div>
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">URL</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-7e0f62a0-123"
+        >
+          URL
+        </label>
         <form.Field name="url">
           {(field) => (
             <Input
+              id="field-7e0f62a0-123"
               type="url"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -134,10 +144,16 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
         </form.Field>
       </div>
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Signing secret</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-7e0f62a0-137"
+        >
+          Signing secret
+        </label>
         <form.Field name="secret">
           {(field) => (
             <Input
+              id="field-7e0f62a0-137"
               type="password"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -145,13 +161,24 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
             />
           )}
         </form.Field>
-        <p className="text-xs text-muted-foreground">Stored value preserved — type a new secret to rotate.</p>
+        <p className="text-xs text-muted-foreground">
+          Stored value preserved — type a new secret to rotate.
+        </p>
       </div>
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Events</label>
+        <span
+          id="webhook-events-label"
+          className="text-sm font-medium text-foreground"
+        >
+          Events
+        </span>
         <form.Field name="events">
           {(field) => (
-            <div className="flex flex-wrap gap-1.5">
+            <div
+              role="group"
+              aria-labelledby="webhook-events-label"
+              className="flex flex-wrap gap-1.5"
+            >
               {AVAILABLE_EVENTS.map((ev) => {
                 const checked = field.state.value.includes(ev);
                 return (
@@ -166,10 +193,10 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
                       )
                     }
                     className={cn(
-                      'text-2xs px-2 py-1 rounded-full border font-mono transition-colors',
+                      "text-2xs px-2 py-1 rounded-full border font-mono transition-colors",
                       checked
-                        ? 'border-foreground bg-foreground text-background'
-                        : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/50',
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/50",
                     )}
                   >
                     {ev}
@@ -180,43 +207,31 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
           )}
         </form.Field>
       </div>
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Minimum severity</label>
-        <form.Field name="minSeverity">
-          {(field) => (
-            <Select
-              value={field.state.value}
-              onChange={(e) => field.handleChange(e.target.value as 'info' | 'warning' | 'critical' | '')}
-              onBlur={field.handleBlur}
-            >
-              <option value="">No threshold</option>
-              <option value="info">Info or higher</option>
-              <option value="warning">Warning or higher</option>
-              <option value="critical">Critical only</option>
-            </Select>
-          )}
-        </form.Field>
-      </div>
       <div className="flex items-center justify-between p-3 rounded-lg border border-border">
         <div>
           <p className="text-sm font-medium text-foreground">Enabled</p>
-          <p className="text-xs text-muted-foreground">Disabling drops new deliveries silently.</p>
+          <p className="text-xs text-muted-foreground">
+            Disabling drops new deliveries silently.
+          </p>
         </div>
         <form.Field name="enabled">
           {(field) => (
             <button
               type="button"
+              role="switch"
+              aria-label="Webhook enabled"
+              aria-checked={field.state.value}
               onClick={() => field.handleChange(!field.state.value)}
               onBlur={field.handleBlur}
               className={cn(
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                field.state.value ? 'bg-status-success' : 'bg-muted',
+                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                field.state.value ? "bg-status-success" : "bg-muted",
               )}
             >
               <span
                 className={cn(
-                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                  field.state.value ? 'translate-x-6' : 'translate-x-1',
+                  "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                  field.state.value ? "translate-x-6" : "translate-x-1",
                 )}
               />
             </button>
@@ -240,63 +255,68 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
 
 function DeliveriesTab({ webhookId }: { webhookId: string }) {
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useWebhookDeliveries(webhookId, { page, page_size: 25 });
+  const { data, isLoading } = useWebhookDeliveries(webhookId, {
+    page,
+    page_size: 25,
+  });
   const retry = useRetryWebhookDelivery(webhookId);
 
-  const columns: Column<WebhookDelivery>[] = [
+  const columns: Column<WebhookDeliveryView>[] = [
     {
-      key: 'createdAt',
-      header: 'Time',
+      key: "createdAt",
+      header: "Time",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground font-mono">{formatRelativeTime(row.createdAt)}</span>
+        <span className="text-xs text-muted-foreground font-mono">
+          {formatRelativeTime(row.createdAt)}
+        </span>
       ),
     },
     {
-      key: 'eventType',
-      header: 'Event',
+      key: "eventType",
+      header: "Event",
       accessor: (row) => (
-        <span className="text-xs font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground">{row.eventType}</span>
+        <span className="text-xs font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground">
+          {row.eventType}
+        </span>
       ),
     },
     {
-      key: 'status',
-      header: 'Status',
+      key: "status",
+      header: "Status",
       accessor: (row) => (
         <StatusBadge
-          status={row.status === 'success' ? 'active' : row.status === 'failed' ? 'error' : 'connecting'}
+          status={
+            row.status === "delivered"
+              ? "active"
+              : row.status === "failed"
+                ? "error"
+                : "connecting"
+          }
           label={row.status}
           size="sm"
         />
       ),
     },
     {
-      key: 'responseCode',
-      header: 'HTTP',
+      key: "responseCode",
+      header: "HTTP",
       accessor: (row) => (
         <span className="text-xs font-mono tabular-nums text-muted-foreground">
-          {row.responseCode ?? '--'}
+          {row.responseCode ?? "--"}
         </span>
       ),
     },
     {
-      key: 'attempts',
-      header: 'Attempts',
-      align: 'right',
-      accessor: (row) => <span className="tabular-nums text-sm">{row.attempts}</span>,
-    },
-    {
-      key: 'durationMs',
-      header: 'Duration',
-      align: 'right',
+      key: "attempts",
+      header: "Attempts",
+      align: "right",
       accessor: (row) => (
-        <span className="tabular-nums text-xs text-muted-foreground">
-          {row.durationMs != null ? `${row.durationMs}ms` : '--'}
-        </span>
+        <span className="tabular-nums text-sm">{row.attempts}</span>
       ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       sortable: false,
       accessor: (row) => (
         <button
@@ -305,7 +325,7 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
             e.stopPropagation();
             retry.mutate(row.id);
           }}
-          disabled={retry.isPending || row.status === 'success'}
+          disabled={retry.isPending || row.status === "delivered"}
           className="inline-flex items-center gap-1 h-7 px-2 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-30 transition-colors"
           title="Retry delivery"
         >
@@ -355,17 +375,15 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
 
 function TestTab({ webhookId }: { webhookId: string }) {
   const test = useTestWebhook();
-  const [lastResult, setLastResult] = useState<WebhookTestResult | null>(null);
+  const [lastResult, setLastResult] = useState<WebhookTestReceiptView | null>(
+    null,
+  );
 
   const handleTest = async () => {
     try {
       const result = await test.mutateAsync(webhookId);
       setLastResult(result);
-      if (result.success) {
-        toastSuccess(`Test delivered in ${result.durationMs}ms`);
-      } else {
-        toastError(`Test failed: ${result.errorMessage ?? `HTTP ${result.responseCode}`}`);
-      }
+      toastSuccess("Test delivery queued");
     } catch {
       // mutation toasts
     }
@@ -375,11 +393,13 @@ function TestTab({ webhookId }: { webhookId: string }) {
     <div className="rounded-xl border border-border bg-card p-6 space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-foreground">Send a test payload</h2>
+          <h2 className="text-base font-semibold text-foreground">
+            Send a test payload
+          </h2>
           <p className="text-xs text-muted-foreground mt-0.5 max-w-prose">
-            Fires a synthetic <span className="font-mono">webhook.test</span> event using the
-            current URL, secret, and template renderer. The response code and body are surfaced
-            below.
+            Queues a synthetic <span className="font-mono">webhook.test</span>{" "}
+            event using the current URL, secret, and template renderer. Track
+            its eventual result in Recent deliveries.
           </p>
         </div>
         <ActionButton
@@ -394,22 +414,9 @@ function TestTab({ webhookId }: { webhookId: string }) {
 
       {lastResult && (
         <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <StatusBadge
-              status={lastResult.success ? 'active' : 'error'}
-              label={lastResult.success ? 'success' : 'failed'}
-              size="sm"
-            />
-            <span className="text-xs text-muted-foreground">
-              HTTP {lastResult.responseCode ?? '—'} · {lastResult.durationMs}ms
-            </span>
-          </div>
-          {lastResult.errorMessage && (
-            <p className="text-xs text-status-error">{lastResult.errorMessage}</p>
-          )}
-          {lastResult.responseBody && (
-            <CodeBlock code={lastResult.responseBody} title="Response body" />
-          )}
+          <StatusBadge status="connecting" label="queued" size="sm" />
+          <p className="text-xs text-muted-foreground">{lastResult.message}</p>
+          <CodeBlock code={lastResult.deliveryId} title="Delivery ID" />
         </div>
       )}
     </div>
@@ -419,10 +426,10 @@ function TestTab({ webhookId }: { webhookId: string }) {
 function WebhookDetail() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const id = params?.id ?? '';
+  const id = params?.id ?? "";
   const { data, isLoading, error } = useWebhook(id);
   const del = useDeleteWebhook();
-  const [tab, setTab] = useTabParam(TAB_KEYS, 'config');
+  const [tab, setTab] = useTabParam(TAB_KEYS, "config");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   if (isLoading) {
@@ -467,18 +474,18 @@ function WebhookDetail() {
 
       <TabStrip
         tabs={[
-          { key: 'config', label: 'Config' },
-          { key: 'deliveries', label: 'Recent deliveries' },
-          { key: 'test', label: 'Test' },
+          { key: "config", label: "Config" },
+          { key: "deliveries", label: "Recent deliveries" },
+          { key: "test", label: "Test" },
         ]}
         value={tab}
         onChange={setTab}
       />
 
       <TabsContent>
-        {tab === 'config' && <ConfigTab webhook={data} />}
-        {tab === 'deliveries' && <DeliveriesTab webhookId={id} />}
-        {tab === 'test' && <TestTab webhookId={id} />}
+        {tab === "config" && <ConfigTab webhook={data} />}
+        {tab === "deliveries" && <DeliveriesTab webhookId={id} />}
+        {tab === "test" && <TestTab webhookId={id} />}
       </TabsContent>
 
       <ConfirmDialog
@@ -486,7 +493,7 @@ function WebhookDetail() {
         onClose={() => setConfirmDelete(false)}
         onConfirm={async () => {
           await del.mutateAsync(id);
-          router.push('/dashboard/settings/webhooks');
+          router.push("/dashboard/settings/webhooks");
         }}
         title="Delete webhook?"
         description={`This will remove "${data.name}" and stop further deliveries.`}
@@ -505,7 +512,7 @@ function WebhookDetailPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/webhooks/$id/')({
+export const Route = createFileRoute("/dashboard/settings/webhooks/$id/")({
   // ?tab= deep-link (P2.4): typed passthrough — useTabParam's allowlist stays the real validator.
   validateSearch: (search: Record<string, unknown>) =>
     search as { tab?: string } & Record<string, unknown>,

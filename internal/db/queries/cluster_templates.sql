@@ -51,6 +51,21 @@ DELETE FROM cluster_templates WHERE id = $1;
 -- FK-restricted delete.
 SELECT count(*) FROM cluster_template_applications WHERE template_id = $1;
 
+-- name: ListClusterTemplateBoundClusters :many
+-- Operator-facing detail rows for one template. The handler independently
+-- requires both template-read and cluster-read permissions before exposing
+-- cluster identity or application state.
+SELECT
+    a.cluster_id,
+    c.name AS cluster_name,
+    a.status,
+    a.applied_at,
+    a.last_error
+FROM cluster_template_applications AS a
+JOIN clusters AS c ON c.id = a.cluster_id
+WHERE a.template_id = $1
+ORDER BY c.name, c.id;
+
 -- name: GetClusterTemplateApplication :one
 SELECT * FROM cluster_template_applications WHERE cluster_id = $1;
 

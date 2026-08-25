@@ -1,10 +1,6 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import {
-  Table,
-  TableCell,
-  TableHead,
-} from "@/components/ui/table";
+import { Table, TableCell, TableHead } from "@/components/ui/table";
 
 export function safeLink(href: string): string | null {
   const value = href.trim();

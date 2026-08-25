@@ -1,8 +1,8 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient } from "@tanstack/react-query";
 
 // Each connect mints a fresh single-use ticket; number them so tests can
 // assert re-mint-per-(re)connect.
-vi.mock('@/lib/api', () => {
+vi.mock("@/lib/api/auth", () => {
   let n = 0;
   return {
     createStreamTicket: vi.fn(() => {
@@ -42,11 +42,11 @@ class FakeEventSource {
  */
 async function loadLive() {
   vi.resetModules();
-  const api = await import('@/lib/api');
+  const api = await import("@/lib/api");
   const createStreamTicket = vi.mocked(api.createStreamTicket);
   createStreamTicket.mockClear();
-  const stream = await import('@/lib/live/stream');
-  const status = await import('@/lib/live/status-store');
+  const stream = await import("@/lib/live/stream");
+  const status = await import("@/lib/live/status-store");
   return { createStreamTicket, stream, status };
 }
 
@@ -62,31 +62,53 @@ function fakeQueryClient() {
 beforeEach(() => {
   vi.useFakeTimers();
   FakeEventSource.instances = [];
-  (globalThis as unknown as { EventSource: unknown }).EventSource = FakeEventSource;
+  (globalThis as unknown as { EventSource: unknown }).EventSource =
+    FakeEventSource;
 });
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('live stream transport', () => {
-  it('dispatches default-framed events by envelope type with camelized data', async () => {
+describe("live stream transport", () => {
+  it("coalesces concurrent hook acquires onto one ticket and EventSource", async () => {
+    const { createStreamTicket, stream } = await loadLive();
+
+    // Multiple live hooks mount in one React commit, before ticket minting has
+    // resolved. They must share the pending attempt as well as the eventual
+    // EventSource or a single page can consume several one-use tickets.
+    stream.acquireLiveStream();
+    stream.acquireLiveStream();
+    stream.acquireLiveStream();
+    expect(createStreamTicket).toHaveBeenCalledTimes(1);
+
+    await flush();
+    expect(FakeEventSource.instances).toHaveLength(1);
+
+    stream.releaseLiveStream();
+    stream.releaseLiveStream();
+    expect(FakeEventSource.instances[0].closed).toBe(false);
+    stream.releaseLiveStream();
+    expect(FakeEventSource.instances[0].closed).toBe(true);
+  }, 15_000);
+
+  it("dispatches default-framed events by envelope type with camelized data", async () => {
     const { createStreamTicket, stream } = await loadLive();
     stream.acquireLiveStream();
     await flush();
     expect(createStreamTicket).toHaveBeenCalledTimes(1);
-    expect(createStreamTicket).toHaveBeenCalledWith('events');
+    expect(createStreamTicket).toHaveBeenCalledWith("events");
 
     const es = FakeEventSource.instances[0];
-    expect(es.url).toContain('/events/stream/?ticket=tkt-');
+    expect(es.url).toContain("/events/stream/?ticket=tkt-");
     es.emitOpen();
 
     const seen: unknown[] = [];
     const wildcard: unknown[] = [];
-    stream.liveTarget().addEventListener('cluster.registration.step', (e) => {
+    stream.liveTarget().addEventListener("cluster.registration.step", (e) => {
       seen.push((e as CustomEvent).detail);
     });
-    stream.liveTarget().addEventListener('*', (e) => {
+    stream.liveTarget().addEventListener("*", (e) => {
       wildcard.push((e as CustomEvent).detail);
     });
 
@@ -95,24 +117,24 @@ describe('live stream transport', () => {
     // registration footgun is gone).
     es.emitFrame({
       id: 7,
-      type: 'cluster.registration.step',
-      time: '2026-07-15T00:00:00Z',
-      data: { cluster_id: 'c1', step_name: 'apply' },
+      type: "cluster.registration.step",
+      time: "2026-07-15T00:00:00Z",
+      data: { cluster_id: "c1", step_name: "apply" },
     });
 
     expect(seen).toEqual([
       {
         id: 7,
-        type: 'cluster.registration.step',
-        time: '2026-07-15T00:00:00Z',
-        data: { clusterId: 'c1', stepName: 'apply' },
+        type: "cluster.registration.step",
+        time: "2026-07-15T00:00:00Z",
+        data: { clusterId: "c1", stepName: "apply" },
       },
     ]);
     expect(wildcard).toHaveLength(1);
     stream.releaseLiveStream();
   });
 
-  it('does not invalidate on first open; invalidates on drop and on reconnect', async () => {
+  it("does not invalidate on first open; invalidates on drop and on reconnect", async () => {
     const { createStreamTicket, stream } = await loadLive();
     const qc = fakeQueryClient();
     stream.registerLiveQueryClient(qc);
@@ -127,7 +149,9 @@ describe('live stream transport', () => {
     // mounted query's refetchInterval fn to re-evaluate (post-fetch only).
     FakeEventSource.instances[0].onerror?.();
     expect(qc.invalidateQueries).toHaveBeenCalledTimes(1);
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ refetchType: 'active' });
+    expect(qc.invalidateQueries).toHaveBeenCalledWith({
+      refetchType: "active",
+    });
 
     // Backoff (1s) then re-mint + reconnect: single-use tickets mean every
     // (re)connect mints a fresh one — never EventSource auto-reconnect.
@@ -142,7 +166,7 @@ describe('live stream transport', () => {
     stream.releaseLiveStream();
   });
 
-  it('watchdog force-closes a silent connection and re-enters the mint loop', async () => {
+  it("watchdog force-closes a silent connection and re-enters the mint loop", async () => {
     const { createStreamTicket, stream, status } = await loadLive();
     stream.acquireLiveStream();
     await flush();
@@ -152,24 +176,24 @@ describe('live stream transport', () => {
     // Any frame resets the watchdog: 60s silence, then a sys.ping, then
     // another 60s — still under the 75s budget from the last frame.
     await vi.advanceTimersByTimeAsync(60_000);
-    es.emitFrame({ type: 'sys.ping', time: '2026-07-15T00:01:00Z' });
+    es.emitFrame({ type: "sys.ping", time: "2026-07-15T00:01:00Z" });
     await vi.advanceTimersByTimeAsync(60_000);
     expect(es.closed).toBe(false);
-    expect(status.liveEventsStatus()).toBe('open');
+    expect(status.liveEventsStatus()).toBe("open");
 
     // 75s after the last frame (3 missed 25s pings) the connection is
     // half-open: force-close and go through the normal backoff/re-mint loop.
     await vi.advanceTimersByTimeAsync(15_000);
     expect(es.closed).toBe(true);
-    expect(status.liveEventsStatus()).toBe('closed');
+    expect(status.liveEventsStatus()).toBe("closed");
 
     await vi.advanceTimersByTimeAsync(1000);
     expect(createStreamTicket).toHaveBeenCalledTimes(2);
-    expect(status.liveEventsStatus()).toBe('connecting');
+    expect(status.liveEventsStatus()).toBe("connecting");
     stream.releaseLiveStream();
   });
 
-  it('refcounts holds: only the last release closes the source', async () => {
+  it("refcounts holds: only the last release closes the source", async () => {
     const { stream, status } = await loadLive();
     stream.acquireLiveStream();
     await flush();
@@ -181,14 +205,14 @@ describe('live stream transport', () => {
 
     stream.releaseLiveStream();
     expect(es.closed).toBe(false);
-    expect(status.liveEventsStatus()).toBe('open');
+    expect(status.liveEventsStatus()).toBe("open");
 
     stream.releaseLiveStream();
     expect(es.closed).toBe(true);
-    expect(status.liveEventsStatus()).toBe('closed');
+    expect(status.liveEventsStatus()).toBe("closed");
   });
 
-  it('liveFallback returns false only while the stream is open', async () => {
+  it("liveFallback returns false only while the stream is open", async () => {
     const { stream, status } = await loadLive();
     const interval = status.liveFallback(30_000);
     expect(interval()).toBe(30_000); // idle

@@ -39,6 +39,15 @@ type fakeCharlieSupportBundleQuerier struct {
 	findings   []sqlc.CharlieFinding
 }
 
+type fakeAuditHealthSupportBundleQuerier struct {
+	*fakeSupportBundleQuerier
+	health sqlc.GetAuditOutboxHealthRow
+}
+
+func (f *fakeAuditHealthSupportBundleQuerier) GetAuditOutboxHealth(context.Context) (sqlc.GetAuditOutboxHealthRow, error) {
+	return f.health, nil
+}
+
 func (f *fakeCharlieSupportBundleQuerier) GetLatestCharlieConnection(context.Context) (sqlc.CharlieConnection, error) {
 	return f.connection, nil
 }
@@ -202,6 +211,36 @@ func TestSupportBundleCharlieSectionIsLocalMetadataOnly(t *testing.T) {
 	}
 	if strings.Contains(status, canary) || strings.Contains(status, "central_url") || strings.Contains(status, "trust") || strings.Contains(status, "secret") {
 		t.Fatalf("Charlie support status leaked integration material: %s", status)
+	}
+}
+
+func TestSupportBundleIncludesContentFreeAuditPipelineHealth(t *testing.T) {
+	userID := uuid.New()
+	base := &fakeSupportBundleQuerier{user: sqlc.User{
+		ID: userID, Email: "admin@example.com", Username: "admin@example.com",
+		IsActive: true, IsSuperuser: true,
+	}}
+	q := &fakeAuditHealthSupportBundleQuerier{
+		fakeSupportBundleQuerier: base,
+		health: sqlc.GetAuditOutboxHealthRow{
+			PendingCount: 2, DeadCount: 1, DeliveredCount: 99,
+			OldestPendingAt: time.Date(2026, 8, 23, 11, 0, 0, 0, time.UTC),
+			LastDeliveredAt: time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC),
+		},
+	}
+	h := NewSupportBundleHandler(q, nil, "")
+	req := withAuth(httptest.NewRequest(http.MethodGet, "/api/v1/support-bundle/", nil), userID)
+	rec := httptest.NewRecorder()
+	h.Download(rec, req)
+	files := readZipFiles(t, rec.Body.Bytes())
+	payload := string(files["audit-pipeline-health.json"])
+	for _, want := range []string{`"state": "degraded"`, `"pending_count": 2`, `"dead_count": 1`, `"delivered_count": 99`} {
+		if !strings.Contains(payload, want) {
+			t.Fatalf("audit health missing %s: %s", want, payload)
+		}
+	}
+	if strings.Contains(payload, "detail") || strings.Contains(payload, "resource") || strings.Contains(payload, "action") {
+		t.Fatalf("audit health leaked event content: %s", payload)
 	}
 }
 

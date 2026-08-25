@@ -65,6 +65,13 @@ type supportBundleCharlieQuerier interface {
 	ListCharlieFindings(context.Context, sqlc.ListCharlieFindingsParams) ([]sqlc.CharlieFinding, error)
 }
 
+// supportBundleAuditOutboxQuerier is optional for compatibility with narrow
+// test and extension stores. Production *sqlc.Queries implements it and the
+// resulting section contains lifecycle counters only—never audit detail.
+type supportBundleAuditOutboxQuerier interface {
+	GetAuditOutboxHealth(context.Context) (sqlc.GetAuditOutboxHealthRow, error)
+}
+
 // SupportBundleAsynqInspector is the slice of asynq.Inspector the bundle
 // needs to capture queue + DLQ state. *asynq.Inspector satisfies this. Kept
 // behind an interface so tests can inject a fake; nil means "skip the
@@ -73,12 +80,6 @@ type SupportBundleAsynqInspector interface {
 	Queues() ([]string, error)
 	GetQueueInfo(qname string) (*asynq.QueueInfo, error)
 	ListArchivedTasks(qname string, opts ...asynq.ListOption) ([]*asynq.TaskInfo, error)
-	// Mutating ops used by the Operations admin tab (T28b). The
-	// support-bundle code never calls these, but *asynq.Inspector
-	// satisfies them naturally; keeping a single interface avoids a
-	// parallel admin-only inspector type.
-	RunTask(qname, taskID string) error
-	DeleteTask(qname, taskID string) error
 }
 
 // SupportBundleDBPooler exposes the minimum surface needed to run the
@@ -161,6 +162,7 @@ func (h *SupportBundleHandler) Download(w http.ResponseWriter, r *http.Request) 
 	h.writeClusters(r.Context(), zw, collected)
 	h.writeUsers(r.Context(), zw, collected)
 	h.writeAuditLog(r.Context(), zw, collected)
+	h.writeAuditPipelineHealth(r.Context(), zw, collected)
 	h.writePods(r.Context(), zw, collected)
 	h.writePodLogs(r.Context(), zw, collected)
 	// Extra context an L3 engineer needs without
@@ -177,6 +179,34 @@ func (h *SupportBundleHandler) Download(w http.ResponseWriter, r *http.Request) 
 	if err := zw.Close(); err != nil {
 		slog.Warn("failed to finish support bundle", "error", err)
 	}
+}
+
+func (h *SupportBundleHandler) writeAuditPipelineHealth(ctx context.Context, zw *zip.Writer, log *sectionLog) {
+	queries, ok := h.queries.(supportBundleAuditOutboxQuerier)
+	if !ok {
+		log.skipped("audit-pipeline-health.json", "transactional audit outbox health is not wired")
+		return
+	}
+	health, err := queries.GetAuditOutboxHealth(ctx)
+	if err != nil {
+		log.section("audit-pipeline-health.json", err)
+		return
+	}
+	state := "healthy"
+	if health.DeadCount > 0 {
+		state = "degraded"
+	} else if health.PendingCount > 0 {
+		state = "draining"
+	}
+	payload := map[string]any{
+		"state":             state,
+		"pending_count":     health.PendingCount,
+		"dead_count":        health.DeadCount,
+		"delivered_count":   health.DeliveredCount,
+		"oldest_pending_at": health.OldestPendingAt,
+		"last_delivered_at": health.LastDeliveredAt,
+	}
+	log.section("audit-pipeline-health.json", writeBundleJSON(zw, "audit-pipeline-health.json", payload))
 }
 
 func (h *SupportBundleHandler) writeCharlieStatus(ctx context.Context, zw *zip.Writer, log *sectionLog) {

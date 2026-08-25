@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 // Sprint 072 — Anomaly Baseline inspection page.
 //
@@ -11,77 +11,104 @@ import { createFileRoute } from '@tanstack/react-router';
 // — it would tempt the UI into rendering hundreds of points per
 // row, blowing up page render time for active baselines.
 
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { useAnomalyBaselines } from '@/lib/hooks';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { formatRelativeTime } from '@/lib/utils';
-import type { AnomalyBaseline } from '@/types';
-import { ArrowLeft, Activity, RefreshCw } from 'lucide-react';
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { useAnomalyBaselines } from "@/lib/hooks/alerting";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { formatRelativeTime } from "@/lib/utils";
+import type { AnomalyBaseline } from "@/types";
+import { ArrowLeft, Activity, RefreshCw } from "lucide-react";
 
 function AnomalyBaselinesPage() {
-  const [clusterFilter, setClusterFilter] = useState('');
-  const { data: rows, isLoading, refetch } = useAnomalyBaselines(
-    clusterFilter ? { clusterId: clusterFilter } : undefined
+  const [clusterFilter, setClusterFilter] = useState("");
+  const {
+    data: rows,
+    isLoading,
+    refetch,
+  } = useAnomalyBaselines(
+    clusterFilter ? { clusterId: clusterFilter } : undefined,
   );
 
   const columns: Column<AnomalyBaseline>[] = [
     {
-      key: 'metric',
-      header: 'Metric',
-      accessor: (b: AnomalyBaseline) => <span className="font-mono text-xs">{b.metric}</span>,
+      key: "metric",
+      header: "Metric",
+      accessor: (b: AnomalyBaseline) => (
+        <span className="font-mono text-xs">{b.metric}</span>
+      ),
     },
     {
-      key: 'clusterId',
-      header: 'Cluster',
+      key: "clusterId",
+      header: "Cluster",
       accessor: (b: AnomalyBaseline) => (
-        <span className="font-mono text-xs text-muted-foreground" title={b.clusterId}>
+        <span
+          className="font-mono text-xs text-muted-foreground"
+          title={b.clusterId}
+        >
           {b.clusterId.slice(0, 8)}
         </span>
       ),
     },
     {
-      key: 'sampleCount',
-      header: 'Samples',
+      key: "sampleCount",
+      header: "Samples",
       accessor: (b: AnomalyBaseline) => (
-        <span className={b.sampleCount < 50 ? 'text-status-warning' : 'text-foreground'}>
+        <span
+          className={
+            b.sampleCount < 50 ? "text-status-warning" : "text-foreground"
+          }
+        >
           {b.sampleCount}
         </span>
       ),
     },
     {
-      key: 'mean',
-      header: 'Mean',
-      accessor: (b: AnomalyBaseline) => <span className="font-mono text-xs">{b.mean.toFixed(2)}</span>,
-    },
-    {
-      key: 'stddev',
-      header: 'Stddev',
-      accessor: (b: AnomalyBaseline) => <span className="font-mono text-xs">{b.stddev.toFixed(2)}</span>,
-    },
-    {
-      key: 'lastValue',
-      header: 'Last Value',
-      accessor: (b: AnomalyBaseline) => <span className="font-mono text-xs">{b.lastValue.toFixed(2)}</span>,
-    },
-    {
-      key: 'p95',
-      header: 'P95',
-      accessor: (b: AnomalyBaseline) => <span className="font-mono text-xs">{b.p95.toFixed(2)}</span>,
-    },
-    {
-      key: 'windowSeconds',
-      header: 'Window',
-      accessor: (b: AnomalyBaseline) => <span className="text-xs text-muted-foreground">{formatWindow(b.windowSeconds)}</span>,
-    },
-    {
-      key: 'updatedAt',
-      header: 'Updated',
+      key: "mean",
+      header: "Mean",
       accessor: (b: AnomalyBaseline) => (
-        <span className="text-xs text-muted-foreground">{formatRelativeTime(b.updatedAt)}</span>
+        <span className="font-mono text-xs">{b.mean.toFixed(2)}</span>
+      ),
+    },
+    {
+      key: "stddev",
+      header: "Stddev",
+      accessor: (b: AnomalyBaseline) => (
+        <span className="font-mono text-xs">{b.stddev.toFixed(2)}</span>
+      ),
+    },
+    {
+      key: "lastValue",
+      header: "Last Value",
+      accessor: (b: AnomalyBaseline) => (
+        <span className="font-mono text-xs">{b.lastValue.toFixed(2)}</span>
+      ),
+    },
+    {
+      key: "p95",
+      header: "P95",
+      accessor: (b: AnomalyBaseline) => (
+        <span className="font-mono text-xs">{b.p95.toFixed(2)}</span>
+      ),
+    },
+    {
+      key: "windowSeconds",
+      header: "Window",
+      accessor: (b: AnomalyBaseline) => (
+        <span className="text-xs text-muted-foreground">
+          {formatWindow(b.windowSeconds)}
+        </span>
+      ),
+    },
+    {
+      key: "updatedAt",
+      header: "Updated",
+      accessor: (b: AnomalyBaseline) => (
+        <span className="text-xs text-muted-foreground">
+          {formatRelativeTime(b.updatedAt)}
+        </span>
       ),
     },
   ];
@@ -106,15 +133,24 @@ function AnomalyBaselinesPage() {
         }
         description="Rolling-window statistics per (cluster, metric, window) tuple. Maintained by the anomaly:baseline_recompute worker every 5 minutes."
         actions={
-          <ActionButton icon={<RefreshCw className="h-4 w-4" />} onClick={() => refetch()}>
+          <ActionButton
+            icon={<RefreshCw className="h-4 w-4" />}
+            onClick={() => refetch()}
+          >
             Refresh
           </ActionButton>
         }
       />
 
       <div className="flex items-center gap-3">
-        <label className="text-sm font-medium text-foreground">Filter by cluster ID:</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-6538f696-116"
+        >
+          Filter by cluster ID:
+        </label>
         <Input
+          id="field-6538f696-116"
           value={clusterFilter}
           onChange={(e) => setClusterFilter(e.target.value)}
           placeholder="UUID (leave empty for all)"
@@ -131,9 +167,10 @@ function AnomalyBaselinesPage() {
       />
 
       <p className="text-xs text-muted-foreground">
-        Tip: a sample count under 50 (highlighted) means the cold-start gate will short-circuit any
-        anomaly rule referencing this baseline to no-fire. That&apos;s expected for newly-created
-        rules — wait until the window fills.
+        Tip: a sample count under 50 (highlighted) means the cold-start gate
+        will short-circuit any anomaly rule referencing this baseline to
+        no-fire. That&apos;s expected for newly-created rules — wait until the
+        window fills.
       </p>
     </PageShell>
   );
@@ -146,6 +183,6 @@ function formatWindow(s: number): string {
   return `${s}s`;
 }
 
-export const Route = createFileRoute('/dashboard/alerting/baselines/')({
+export const Route = createFileRoute("/dashboard/alerting/baselines/")({
   component: AnomalyBaselinesPage,
 });

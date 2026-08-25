@@ -1,31 +1,30 @@
-import type { Mocked } from "vitest";
-import api from "@/lib/api";
+import * as generated from "@/lib/api/generated/client";
 import {
   actOnClusterDeployment,
-  approveDeliveryRollout,
   createDeliverySource,
   createDeliveryTarget,
-  getDeliveryFleet,
+  getDeliveryEstate,
   listDeliverySources,
   previewDeliveryTarget,
   startDeliveryRollout,
-  verifyDeliverySource,
   type CreateDeliverySourceRequest,
   type DeliveryTargetRequest,
   type RolloutStrategyRequest,
 } from "./delivery";
 
-vi.mock("@/lib/api", () => ({
-  __esModule: true,
-  default: {
-    get: vi.fn(),
-    post: vi.fn(),
-    patch: vi.fn(),
-    delete: vi.fn(),
-  },
-}));
-
-const mockedApi = api as Mocked<typeof api>;
+vi.mock("@/lib/api/generated/client", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/api/generated/client")>();
+  return {
+    ...actual,
+    getDeliverySources: vi.fn(),
+    postDeliverySources: vi.fn(),
+    postDeliveryTargetsByIdPreview: vi.fn(),
+    postDeliveryTargetsByIdRollouts: vi.fn(),
+    getDeliveryEstate: vi.fn(),
+    executeOpenAPIOperationWithResponse: vi.fn(),
+  };
+});
 
 const strategy: RolloutStrategyRequest = {
   type: "rolling",
@@ -38,65 +37,74 @@ const strategy: RolloutStrategyRequest = {
   respect_maintenance_windows: true,
 };
 
-describe("delivery API client", () => {
+describe("delivery generated API boundary", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("keeps list scope and pagination server-side", async () => {
-    mockedApi.get.mockResolvedValueOnce({
-      data: {
-        data: [],
-        count: 0,
-        next: null,
-        previous: null,
-        totalKnown: true,
-      },
+  it("passes project filters and cancellation to the generated list operation", async () => {
+    vi.mocked(generated.getDeliverySources).mockResolvedValueOnce({
+      data: [],
+      count: 0,
+      next: null,
+      previous: null,
+      total_known: true,
     });
+    const controller = new AbortController();
 
-    await listDeliverySources("project-1", {
-      limit: 25,
-      offset: 50,
-      status: "ready",
-    });
+    await listDeliverySources(
+      "project-1",
+      { limit: 25, offset: 50, status: "ready" },
+      controller.signal,
+    );
 
-    expect(mockedApi.get).toHaveBeenCalledWith("/delivery/sources/", {
-      params: {
+    expect(generated.getDeliverySources).toHaveBeenCalledWith({
+      query: {
         project_id: "project-1",
         limit: 25,
         offset: 50,
         status: "ready",
       },
+      signal: controller.signal,
     });
   });
 
-  it("sends source credentials only on writes with an idempotency key", async () => {
+  it("keeps write-only source credentials in the body and maps wire casing", async () => {
     const request: CreateDeliverySourceRequest = {
       project_id: "project-1",
       name: "private-charts",
       type: "helm_oci",
       url: "oci://registry.example.test/charts",
       auth_mode: "bearer",
-      credential: { token: "write-only-token" },
+      credential: { token: "fixture-token" },
       trust_policy: { allow_unsigned: false, provider: "cosign_keyless" },
     };
-    mockedApi.post.mockResolvedValueOnce({
+    vi.mocked(generated.postDeliverySources).mockResolvedValueOnce({
       data: {
-        data: {
-          id: "source-1",
-          credential: { configured: true, keyVersion: 1, epoch: 1 },
-        },
+        id: "source-1",
+        project_id: "project-1",
+        name: "private-charts",
+        type: "helm_oci",
+        url: "oci://registry.example.test/charts",
+        auth_mode: "bearer",
+        trust_policy: { allow_unsigned: false },
+        credential: { configured: true, key_version: 1, epoch: 1 },
+        status: "ready",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
       },
     });
 
     const result = await createDeliverySource(request, "request-1");
 
-    expect(mockedApi.post).toHaveBeenCalledWith("/delivery/sources/", request, {
-      headers: { "Idempotency-Key": "request-1" },
+    expect(generated.postDeliverySources).toHaveBeenCalledWith({
+      body: request,
+      headerParams: { "Idempotency-Key": "request-1" },
+      signal: undefined,
     });
+    expect(result.credential.keyVersion).toBe(1);
     expect(result).not.toHaveProperty("token");
-    expect(result.credential.configured).toBe(true);
   });
 
-  it("creates targets from an immutable version and preserves the response ETag", async () => {
+  it("preserves response ETags for target mutations", async () => {
     const request: DeliveryTargetRequest = {
       project_id: "project-1",
       name: "monitoring",
@@ -113,23 +121,81 @@ describe("delivery API client", () => {
       },
       suspended: false,
     };
-    mockedApi.post.mockResolvedValueOnce({
-      data: { data: { id: "target-1", bundleVersionId: "version-1" } },
-      headers: { get: (name: string) => (name === "etag" ? '"7"' : undefined) },
-    });
+    vi.mocked(
+      generated.executeOpenAPIOperationWithResponse,
+    ).mockResolvedValueOnce({
+      data: { data: { id: "target-1", bundle_version_id: "version-1" } },
+      headers: { etag: '"7"' },
+      status: 201,
+    } as never);
 
     await expect(createDeliveryTarget(request, "request-2")).resolves.toEqual({
-      data: expect.objectContaining({ id: "target-1" }),
+      data: expect.objectContaining({
+        id: "target-1",
+        bundleVersionId: "version-1",
+      }),
       etag: '"7"',
     });
   });
 
-  it("binds rollout launch to preview digest, generation, and idempotency", async () => {
-    mockedApi.post.mockResolvedValueOnce({
-      data: { data: { id: "rollout-1" } },
+  it("generation-fences a rollout and sends its idempotency key", async () => {
+    vi.mocked(generated.postDeliveryTargetsByIdRollouts).mockResolvedValueOnce({
+      data: {
+        id: "rollout-1",
+        target_id: "target-1",
+        project_id: "project-1",
+        target_generation: 7,
+        desired: {
+          bundle_version_id: "version-1",
+          spec_digest:
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          source: {
+            source_id: "source-1",
+            type: "git",
+            url: "https://example.test/repo.git",
+            auth_mode: "none",
+            trust_policy: { allow_unsigned: true },
+            revision: {
+              kind: "git_commit",
+              value: "abc",
+              artifact_digest:
+                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            },
+          },
+        },
+        placement_digest:
+          "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        strategy: {
+          type: "rolling",
+          max_concurrent: 2,
+          max_unavailable: { type: "count", value: 1 },
+          min_ready: "30s",
+          progress_deadline: "30m",
+          failure_threshold: { type: "count", value: 1 },
+          on_failure: "pause",
+          respect_maintenance_windows: true,
+        },
+        strategy_digest:
+          "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        approval: {
+          required: false,
+          digest:
+            "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        },
+        actor: "user-1",
+        idempotency_key: "must-not-enter-view-model",
+        request_digest:
+          "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        created_at: "2026-01-01T00:00:00Z",
+        deadline: "2026-01-02T00:00:00Z",
+        cohorts: [],
+        clusters: [],
+        plan_digest:
+          "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      },
     });
 
-    await startDeliveryRollout(
+    const result = await startDeliveryRollout(
       "target-1",
       {
         project_id: "project-1",
@@ -141,90 +207,50 @@ describe("delivery API client", () => {
       "request-3",
     );
 
-    expect(mockedApi.post).toHaveBeenCalledWith(
-      "/delivery/targets/target-1/rollouts/",
-      expect.objectContaining({ preview_digest: "sha256:preview", strategy }),
-      { headers: { "If-Match": '"7"', "Idempotency-Key": "request-3" } },
+    expect(generated.postDeliveryTargetsByIdRollouts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: { id: "target-1" },
+        headerParams: {
+          "If-Match": '"7"',
+          "Idempotency-Key": "request-3",
+        },
+      }),
     );
+    expect(result.desired.source.trust.allowUnsigned).toBe(true);
+    expect(result).not.toHaveProperty("idempotencyKey");
   });
 
-  it("requests placement decisions with the digest-bound cursor contract", async () => {
-    mockedApi.post.mockResolvedValueOnce({
+  it("uses generated preview and deployment-control operations", async () => {
+    vi.mocked(generated.postDeliveryTargetsByIdPreview).mockResolvedValueOnce({
       data: {
-        data: {
-          targetId: "target-1",
-          previewDigest: "sha256:preview",
-          decisions: [],
-          decisionCount: 125,
-          decisionOffset: 100,
-          decisionPageSize: 100,
-          hasMoreDecisions: false,
-          nextCursor: "",
-        },
+        target_id: "target-1",
+        target_generation: 1,
+        bundle_version_id: "version-1",
+        preview_digest: "sha256:preview",
+        selected_count: 0,
+        excluded_count: 0,
+        requires_all_confirmation: false,
+        decisions: [],
+        decision_count: 0,
+        decision_offset: 0,
+        decision_page_size: 100,
+        has_more_decisions: false,
+        next_cursor: "",
+        risks: [],
       },
     });
+    vi.mocked(
+      generated.executeOpenAPIOperationWithResponse,
+    ).mockResolvedValueOnce({
+      data: { data: { deployment: {}, event: {} } },
+      headers: { etag: '"10"' },
+      status: 200,
+    } as never);
 
-    await previewDeliveryTarget("project-1", "target-1", {
+    const preview = await previewDeliveryTarget("project-1", "target-1", {
       pageSize: 100,
-      cursor: "opaque-digest-bound-cursor",
+      cursor: "opaque-cursor",
     });
-
-    expect(mockedApi.post).toHaveBeenCalledWith(
-      "/delivery/targets/target-1/preview/",
-      undefined,
-      {
-        params: {
-          project_id: "project-1",
-          page_size: 100,
-          cursor: "opaque-digest-bound-cursor",
-        },
-      },
-    );
-  });
-
-  it("treats source verification as a bounded queued operation", async () => {
-    mockedApi.post.mockResolvedValueOnce({
-      data: {
-        data: { id: "resolution-1", sourceId: "source-1", status: "pending" },
-      },
-    });
-
-    await expect(
-      verifyDeliverySource(
-        "source-1",
-        { project_id: "project-1", requested_revision: "v1.2.3" },
-        "request-verify",
-      ),
-    ).resolves.toEqual({
-      id: "resolution-1",
-      sourceId: "source-1",
-      status: "pending",
-    });
-  });
-
-  it("generation-fences approval and deployment controls", async () => {
-    mockedApi.post
-      .mockResolvedValueOnce({
-        data: { data: { rollout: {}, approval: {}, event: {} } },
-        headers: { etag: '"9"' },
-      })
-      .mockResolvedValueOnce({
-        data: { data: { deployment: {}, event: {} } },
-        headers: { etag: '"10"' },
-      });
-
-    await approveDeliveryRollout(
-      "rollout-1",
-      {
-        project_id: "project-1",
-        cohort: 1,
-        binding_digest: "sha256:binding",
-        decision: "approved",
-        expires_at: "2026-08-17T12:00:00Z",
-      },
-      9,
-      "request-4",
-    );
     await actOnClusterDeployment(
       "project-1",
       "deployment-1",
@@ -234,52 +260,47 @@ describe("delivery API client", () => {
       "request-5",
     );
 
-    expect(mockedApi.post).toHaveBeenNthCalledWith(
-      1,
-      "/delivery/rollouts/rollout-1/approve/",
+    expect(preview.previewDigest).toBe("sha256:preview");
+    expect(generated.executeOpenAPIOperationWithResponse).toHaveBeenCalledWith(
+      "postDeliveryDeploymentsByIdReconcile",
       expect.objectContaining({
-        binding_digest: "sha256:binding",
-        expires_at: "2026-08-17T12:00:00Z",
+        headerParams: {
+          "If-Match": '"10"',
+          "Idempotency-Key": "request-5",
+        },
       }),
-      { headers: { "If-Match": '"9"', "Idempotency-Key": "request-4" } },
-    );
-    expect(mockedApi.post).toHaveBeenNthCalledWith(
-      2,
-      "/delivery/deployments/deployment-1/reconcile/",
-      { project_id: "project-1", reason_code: "manual_reconcile" },
-      { headers: { "If-Match": '"10"', "Idempotency-Key": "request-5" } },
     );
   });
 
-  it("loads the fleet scoreboard without a project scope", async () => {
-    mockedApi.get.mockResolvedValueOnce({
+  it("maps the estate scoreboard from raw wire casing", async () => {
+    vi.mocked(generated.getDeliveryEstate).mockResolvedValueOnce({
       data: {
-        data: {
-          summary: {
-            adoptedClusters: 2,
-            fluxReady: 2,
-            incompatible: 0,
-            disconnected: 0,
-            stale: 0,
-            assignments: 4,
-            drifted: 0,
-            failed: 0,
-            degraded: 0,
-            activeRollouts: 0,
-          },
-          clusters: [],
-          attention: [],
-          distributions: {
-            compatibility: [],
-            privilege: [],
-            assignmentPhases: [],
-          },
+        summary: {
+          adopted_clusters: 2,
+          flux_ready: 2,
+          incompatible: 0,
+          disconnected: 0,
+          stale: 0,
+          assignments: 4,
+          drifted: 0,
+          failed: 0,
+          degraded: 0,
+          active_rollouts: 0,
+        },
+        clusters: [],
+        attention: [],
+        distributions: {
+          compatibility: [],
+          privilege: [],
+          assignment_phases: [],
         },
       },
     });
 
-    await getDeliveryFleet();
-
-    expect(mockedApi.get).toHaveBeenCalledWith("/delivery/fleet/");
+    await expect(getDeliveryEstate()).resolves.toEqual(
+      expect.objectContaining({
+        summary: expect.objectContaining({ adoptedClusters: 2, fluxReady: 2 }),
+      }),
+    );
   });
 });

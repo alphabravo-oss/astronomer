@@ -114,8 +114,13 @@ twice. There are two cooperating layers, both keyed by the same header:
 1. **Durable, DB-backed** (handler layer): the source of truth for
    operations that need cross-replica, restart-surviving guarantees
    (tool install/upgrade/uninstall, catalog, clusters, delivery rollouts,
-   backups, monitoring). A completed operation's outcome is recorded and
-   replayed.
+   backups, logging, monitoring). The first claim initializes its operation
+   pointer atomically; the operation response projection is attached in a
+   second statement inside the same transaction because PostgreSQL sibling
+   data-modifying CTEs share a snapshot. Ordinary operation creates return the
+   existing operation on replay. Catalog and logging mutation services reject
+   a durable replay with `409` before committing newly staged desired state,
+   so a restart cannot attach fresh state to an older operation.
 2. **In-memory short-TTL guard** (middleware layer): a lightweight retry
    guard for the typed resource/workload/node mutations. Within a short
    TTL it replays the cached status + body of a request already in
@@ -134,3 +139,24 @@ operations that need it, the DB-backed layer). Do not rely on the
 in-memory layer for durability; rely on it only to absorb fast
 client-side retries. For durable guarantees, the operation must be on
 the DB-backed path.
+
+## Pagination consistency
+
+Operational streams use keyset cursors ordered by a stable, unique tuple such
+as `(created_at, id)`. Every next page is strictly greater than the final tuple
+from the previous page. This prevents duplicates when rows are inserted while a
+client is paging and ensures a newly committed row ahead of the cursor remains
+visible on a later page.
+
+The contract is deliberately forward-only, not a database snapshot: a row
+committed after page one with a sort tuple at or before page one's cursor is not
+returned by that traversal. This can happen during imports or backfills with an
+operator-supplied historical timestamp. Consumers that must include such late
+historical rows restart from the beginning (or a prior time boundary) and
+deduplicate by stable ID. Ordinary new events use current server timestamps and
+therefore sort ahead of an active cursor.
+
+Small administrative collections may use offset pagination and can shift under
+concurrent writes; their OpenAPI operation explicitly exposes `offset` rather
+than an opaque cursor. The release query-plan certification injects rows on
+both sides of a keyset cursor and verifies this boundary without duplicates.

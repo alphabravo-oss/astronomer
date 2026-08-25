@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -25,17 +24,6 @@ type DeliverySourceResolver interface {
 	Sweep(context.Context, int) error
 }
 
-var deliverySourceRuntime struct {
-	sync.RWMutex
-	resolver DeliverySourceResolver
-}
-
-func ConfigureDeliverySourceResolver(resolver DeliverySourceResolver) {
-	deliverySourceRuntime.Lock()
-	deliverySourceRuntime.resolver = resolver
-	deliverySourceRuntime.Unlock()
-}
-
 func NewDeliverySourceResolutionTask(resolutionID uuid.UUID) (*asynq.Task, error) {
 	if resolutionID == uuid.Nil {
 		return nil, errors.New("delivery source resolution task requires a resolution ID")
@@ -49,7 +37,7 @@ func NewDeliverySourceResolutionTask(resolutionID uuid.UUID) (*asynq.Task, error
 	return asynq.NewTask(DeliverySourceResolutionType, payload), nil
 }
 
-func HandleDeliverySourceResolution(ctx context.Context, task *asynq.Task) (finalErr error) {
+func (runtime DeliveryRuntime) HandleDeliverySourceResolution(ctx context.Context, task *asynq.Task) (finalErr error) {
 	defer func() {
 		result := "success"
 		if finalErr != nil {
@@ -60,9 +48,7 @@ func HandleDeliverySourceResolution(ctx context.Context, task *asynq.Task) (fina
 	if task == nil {
 		return errors.New("delivery source resolution task is required")
 	}
-	deliverySourceRuntime.RLock()
-	resolver := deliverySourceRuntime.resolver
-	deliverySourceRuntime.RUnlock()
+	resolver := runtime.SourceResolver
 	if resolver == nil {
 		return errors.New("delivery source resolver is not configured")
 	}

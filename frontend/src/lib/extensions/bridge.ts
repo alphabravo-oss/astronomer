@@ -20,7 +20,7 @@ import type {
   ExtensionContext,
   ExtensionDataResponse,
   ExtensionDataSourceMeta,
-} from '@/lib/api/extensions';
+} from "@/lib/api/extensions";
 
 export const BRIDGE_PROTOCOL_VERSION = 1 as const;
 
@@ -30,20 +30,20 @@ export const MAX_INBOUND_PAYLOAD_BYTES = 256 * 1024;
 
 // Host -> iframe message types.
 export type HostMessageType =
-  | 'host/hello'
-  | 'host/theme'
-  | 'host/token.grant'
-  | 'host/data.response'
-  | 'host/teardown';
+  | "host/hello"
+  | "host/theme"
+  | "host/token.grant"
+  | "host/data.response"
+  | "host/teardown";
 
 // iframe -> host message types.
 export type ExtMessageType =
-  | 'ext/ready'
-  | 'ext/token.request'
-  | 'ext/data.request'
-  | 'ext/navigate'
-  | 'ext/resize'
-  | 'ext/toast';
+  | "ext/ready"
+  | "ext/token.request"
+  | "ext/data.request"
+  | "ext/navigate"
+  | "ext/resize"
+  | "ext/toast";
 
 export type BridgeMessageType = HostMessageType | ExtMessageType;
 
@@ -75,7 +75,7 @@ export interface HostHelloPayload {
 }
 
 export interface BridgeTheme {
-  mode: 'light' | 'dark';
+  mode: "light" | "dark";
   tokens: Record<string, string>;
 }
 
@@ -89,8 +89,8 @@ export interface HostTokenGrantPayload {
 export interface HostDataResponsePayload<T = unknown> {
   ok: boolean;
   data?: T;
-  shape?: ExtensionDataResponse['shape'];
-  meta?: ExtensionDataResponse['meta'];
+  shape?: ExtensionDataResponse["shape"];
+  meta?: ExtensionDataResponse["meta"];
   error?: { code: string; message?: string };
 }
 
@@ -122,7 +122,7 @@ export interface ExtResizePayload {
 }
 
 export interface ExtToastPayload {
-  level: 'info' | 'success' | 'warning' | 'error' | string;
+  level: "info" | "success" | "warning" | "error" | string;
   message: string;
 }
 
@@ -142,14 +142,14 @@ export interface InboundGuard {
 }
 
 export type RejectReason =
-  | 'source-mismatch'
-  | 'origin-mismatch'
-  | 'wildcard-origin'
-  | 'not-bridge'
-  | 'bad-version'
-  | 'ext-mismatch'
-  | 'oversize'
-  | 'malformed';
+  | "source-mismatch"
+  | "origin-mismatch"
+  | "wildcard-origin"
+  | "not-bridge"
+  | "bad-version"
+  | "ext-mismatch"
+  | "oversize"
+  | "malformed";
 
 export interface InboundResult {
   ok: boolean;
@@ -168,46 +168,52 @@ export interface InboundEvent {
 // cheap identity/origin checks first, then the discriminator, then structural
 // validation. A failure is a hard drop — the caller audits
 // `extension.bridge.rejected` and ignores the message entirely.
-export function validateInbound(event: InboundEvent, guard: InboundGuard): InboundResult {
+export function validateInbound(
+  event: InboundEvent,
+  guard: InboundGuard,
+): InboundResult {
   // event.source must be the *exact* window we postMessage'd to. This pins the
   // sender to the one iframe we mounted — a different frame/tab cannot spoof in.
   if (event.source !== guard.expectedSource) {
-    return { ok: false, reason: 'source-mismatch' };
+    return { ok: false, reason: "source-mismatch" };
   }
   // Never accept a wildcard/empty origin, and require an exact string match to
   // the sandboxOrigin. sandbox="allow-scripts" (no allow-same-origin) yields an
   // opaque origin that browsers report as "null"; an exact-match guard against a
   // real https sandboxOrigin therefore also rejects the opaque-origin case.
-  if (!guard.expectedOrigin || guard.expectedOrigin === '*') {
-    return { ok: false, reason: 'wildcard-origin' };
+  if (!guard.expectedOrigin || guard.expectedOrigin === "*") {
+    return { ok: false, reason: "wildcard-origin" };
   }
   if (event.origin !== guard.expectedOrigin) {
-    return { ok: false, reason: 'origin-mismatch' };
+    return { ok: false, reason: "origin-mismatch" };
   }
 
   const data = event.data;
-  if (!data || typeof data !== 'object') {
-    return { ok: false, reason: 'not-bridge' };
+  if (!data || typeof data !== "object") {
+    return { ok: false, reason: "not-bridge" };
   }
   const m = data as Record<string, unknown>;
   if (m.astronomerBridge !== true) {
-    return { ok: false, reason: 'not-bridge' };
+    return { ok: false, reason: "not-bridge" };
   }
   if (m.v !== BRIDGE_PROTOCOL_VERSION) {
-    return { ok: false, reason: 'bad-version' };
+    return { ok: false, reason: "bad-version" };
   }
-  if (typeof m.type !== 'string' || typeof m.mount !== 'string') {
-    return { ok: false, reason: 'malformed' };
+  if (typeof m.type !== "string" || typeof m.mount !== "string") {
+    return { ok: false, reason: "malformed" };
   }
   if (m.ext !== guard.extensionName) {
-    return { ok: false, reason: 'ext-mismatch' };
+    return { ok: false, reason: "ext-mismatch" };
   }
-  if (m.id !== undefined && typeof m.id !== 'string') {
-    return { ok: false, reason: 'malformed' };
+  if (m.id !== undefined && typeof m.id !== "string") {
+    return { ok: false, reason: "malformed" };
   }
   // Oversize guard (bridge-DoS). Cheap to compute on the payload only.
-  if (m.payload !== undefined && approxByteSize(m.payload) > MAX_INBOUND_PAYLOAD_BYTES) {
-    return { ok: false, reason: 'oversize' };
+  if (
+    m.payload !== undefined &&
+    approxByteSize(m.payload) > MAX_INBOUND_PAYLOAD_BYTES
+  ) {
+    return { ok: false, reason: "oversize" };
   }
   return { ok: true, msg: m as unknown as BridgeMsg };
 }
@@ -230,7 +236,7 @@ export interface HandshakeExpectation {
   manifestSha: string; // the installed manifest sha the host advertised
 }
 
-export type HandshakeReject = 'manifest-mismatch' | 'protocol-unsupported';
+export type HandshakeReject = "manifest-mismatch" | "protocol-unsupported";
 
 export interface HandshakeResult {
   ok: boolean;
@@ -246,11 +252,11 @@ export function evaluateHandshake(
   expect: HandshakeExpectation,
 ): HandshakeResult {
   if (!payload || payload.manifestSha !== expect.manifestSha) {
-    return { ok: false, reason: 'manifest-mismatch' };
+    return { ok: false, reason: "manifest-mismatch" };
   }
   const accepts = payload.acceptsProtocol;
   if (!Array.isArray(accepts) || !accepts.includes(BRIDGE_PROTOCOL_VERSION)) {
-    return { ok: false, reason: 'protocol-unsupported' };
+    return { ok: false, reason: "protocol-unsupported" };
   }
   return { ok: true };
 }
@@ -262,21 +268,31 @@ export function evaluateHandshake(
 export interface NavResult {
   ok: boolean;
   to?: string;
-  reason?: 'not-dashboard' | 'has-scheme' | 'protocol-relative' | 'traversal' | 'unknown-placeholder';
+  reason?:
+    | "not-dashboard"
+    | "has-scheme"
+    | "protocol-relative"
+    | "traversal"
+    | "unknown-placeholder";
 }
 
 // Validate an ext/navigate target before the host router.push()es it. The iframe
 // can request navigation but cannot perform it (sandbox denies top-nav); this is
 // the host's allowlist filter. Route-level RBAC is then applied by the host
 // router itself — this guard only constrains the *shape* of the target.
-export function validateNavigation(payload: ExtNavigatePayload | undefined): NavResult {
-  if (!payload || typeof payload.to !== 'string') return { ok: false, reason: 'not-dashboard' };
+export function validateNavigation(
+  payload: ExtNavigatePayload | undefined,
+): NavResult {
+  if (!payload || typeof payload.to !== "string")
+    return { ok: false, reason: "not-dashboard" };
   const raw = payload.to;
   // No scheme (http:, javascript:, data:) and no protocol-relative (//evil.com).
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return { ok: false, reason: 'has-scheme' };
-  if (raw.startsWith('//')) return { ok: false, reason: 'protocol-relative' };
-  if (!raw.startsWith('/dashboard/')) return { ok: false, reason: 'not-dashboard' };
-  if (raw.includes('..')) return { ok: false, reason: 'traversal' };
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw))
+    return { ok: false, reason: "has-scheme" };
+  if (raw.startsWith("//")) return { ok: false, reason: "protocol-relative" };
+  if (!raw.startsWith("/dashboard/"))
+    return { ok: false, reason: "not-dashboard" };
+  if (raw.includes("..")) return { ok: false, reason: "traversal" };
 
   // Substitute {param} placeholders from params; reject any placeholder with no
   // supplied value and re-check the result is still within /dashboard/.
@@ -286,13 +302,13 @@ export function validateNavigation(payload: ExtNavigatePayload | undefined): Nav
     const v = params[key];
     if (v === undefined) {
       unknown = true;
-      return '';
+      return "";
     }
     return encodeURIComponent(v);
   });
-  if (unknown) return { ok: false, reason: 'unknown-placeholder' };
-  if (!to.startsWith('/dashboard/') || to.includes('..')) {
-    return { ok: false, reason: 'not-dashboard' };
+  if (unknown) return { ok: false, reason: "unknown-placeholder" };
+  if (!to.startsWith("/dashboard/") || to.includes("..")) {
+    return { ok: false, reason: "not-dashboard" };
   }
   return { ok: true, to };
 }
@@ -302,8 +318,11 @@ export function validateNavigation(payload: ExtNavigatePayload | undefined): Nav
 export const MIN_IFRAME_HEIGHT = 80;
 export const MAX_IFRAME_HEIGHT = 4096;
 export function clampHeight(height: unknown): number | null {
-  if (typeof height !== 'number' || !Number.isFinite(height)) return null;
-  return Math.min(MAX_IFRAME_HEIGHT, Math.max(MIN_IFRAME_HEIGHT, Math.round(height)));
+  if (typeof height !== "number" || !Number.isFinite(height)) return null;
+  return Math.min(
+    MAX_IFRAME_HEIGHT,
+    Math.max(MIN_IFRAME_HEIGHT, Math.round(height)),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -319,7 +338,13 @@ function envelope<P>(
   payload?: P,
   id?: string,
 ): BridgeMsg<P> {
-  const msg: BridgeMsg<P> = { astronomerBridge: true, v: BRIDGE_PROTOCOL_VERSION, ext, mount, type };
+  const msg: BridgeMsg<P> = {
+    astronomerBridge: true,
+    v: BRIDGE_PROTOCOL_VERSION,
+    ext,
+    mount,
+    type,
+  };
   if (id !== undefined) msg.id = id;
   if (payload !== undefined) msg.payload = payload;
   return msg;
@@ -344,11 +369,11 @@ export interface HelloArgs {
 }
 
 export function buildHello(a: HelloArgs): BridgeMsgWith<HostHelloPayload> {
-  return envelope<HostHelloPayload>(a.ext, a.mount, 'host/hello', {
+  return envelope<HostHelloPayload>(a.ext, a.mount, "host/hello", {
     hostOrigin: a.hostOrigin,
     extension: { name: a.ext, version: a.version, manifestSha: a.manifestSha },
     mount: { point: a.point, component: a.component, context: a.context },
-    capabilities: a.capabilities ?? ['data', 'navigate', 'theme'],
+    capabilities: a.capabilities ?? ["data", "navigate", "theme"],
     // Only the *ids* cross the bridge — never upstream paths/rbac (those stay
     // server-side in the stored manifest). This is the handshake allowlist.
     dataSources: (a.dataSources ?? []).map((d) => d.id),
@@ -356,8 +381,17 @@ export function buildHello(a: HelloArgs): BridgeMsgWith<HostHelloPayload> {
   }) as BridgeMsgWith<HostHelloPayload>;
 }
 
-export function buildTheme(ext: string, mount: string, theme: BridgeTheme): BridgeMsgWith<BridgeTheme> {
-  return envelope<BridgeTheme>(ext, mount, 'host/theme', theme) as BridgeMsgWith<BridgeTheme>;
+export function buildTheme(
+  ext: string,
+  mount: string,
+  theme: BridgeTheme,
+): BridgeMsgWith<BridgeTheme> {
+  return envelope<BridgeTheme>(
+    ext,
+    mount,
+    "host/theme",
+    theme,
+  ) as BridgeMsgWith<BridgeTheme>;
 }
 
 export function buildTokenGrant(
@@ -366,7 +400,13 @@ export function buildTokenGrant(
   id: string,
   grant: HostTokenGrantPayload,
 ): BridgeMsgWith<HostTokenGrantPayload> {
-  return envelope<HostTokenGrantPayload>(ext, mount, 'host/token.grant', grant, id) as BridgeMsgWith<HostTokenGrantPayload>;
+  return envelope<HostTokenGrantPayload>(
+    ext,
+    mount,
+    "host/token.grant",
+    grant,
+    id,
+  ) as BridgeMsgWith<HostTokenGrantPayload>;
 }
 
 export function buildDataResponse<T>(
@@ -375,16 +415,28 @@ export function buildDataResponse<T>(
   id: string,
   payload: HostDataResponsePayload<T>,
 ): BridgeMsgWith<HostDataResponsePayload<T>> {
-  return envelope<HostDataResponsePayload<T>>(ext, mount, 'host/data.response', payload, id) as BridgeMsgWith<HostDataResponsePayload<T>>;
+  return envelope<HostDataResponsePayload<T>>(
+    ext,
+    mount,
+    "host/data.response",
+    payload,
+    id,
+  ) as BridgeMsgWith<HostDataResponsePayload<T>>;
 }
 
-export function buildTeardown(ext: string, mount: string): BridgeMsg<undefined> {
-  return envelope<undefined>(ext, mount, 'host/teardown');
+export function buildTeardown(
+  ext: string,
+  mount: string,
+): BridgeMsg<undefined> {
+  return envelope<undefined>(ext, mount, "host/teardown");
 }
 
 // True iff `id` is in the handshake dataSources allowlist. Both ext/token.request
 // and ext/data.request are rejected for any dataSource not advertised in
 // host/hello (design doc: "the handshake allowlist").
-export function isAllowedDataSource(id: unknown, allowlist: string[]): id is string {
-  return typeof id === 'string' && allowlist.includes(id);
+export function isAllowedDataSource(
+  id: unknown,
+  allowlist: string[],
+): id is string {
+  return typeof id === "string" && allowlist.includes(id);
 }

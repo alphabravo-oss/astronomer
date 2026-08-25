@@ -1,7 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useMemo, useState, type ReactNode } from 'react';
-import { useRouter, useSearchParams } from '@/lib/navigation';
-import { useTabParam } from '@/lib/use-tab-param';
+import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "@/lib/navigation";
+import { useTabParam } from "@/lib/use-tab-param";
+import {
+  useClusters,
+  useProjects,
+} from "@/lib/hooks";
 import {
   useHelmRepositories,
   useSyncHelmRepository,
@@ -10,39 +14,41 @@ import {
   useInstalledCharts,
   useUninstallChart,
   useRollbackChart,
-  useClusters,
-  useProjects,
-} from '@/lib/hooks';
-import { ActionButton } from '@/components/ui/action-button';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { Select } from '@/components/ui/select';
-import { TabStrip, Tabs, TabsContent } from '@/components/ui/tabs';
-import type { HelmChart, HelmChartCategory, HelmChartVersion } from '@/types';
-import { Package, Plus } from 'lucide-react';
-import { AddRepositoryModal } from './-add-repository-modal';
-import { BrowseTab } from './-browse-tab';
-import { ChartDetailModal } from './-chart-detail-modal';
-import { InstallChartModal } from './-install-chart-modal';
-import { InstalledTab } from './-installed-tab';
-import { RepositoriesTab } from './-repositories-tab';
+} from "@/lib/hooks/catalog";
+import { ActionButton } from "@/components/ui/action-button";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { Select } from "@/components/ui/select";
+import { TabStrip, Tabs, TabsContent } from "@/components/ui/tabs";
+import type { HelmChart, HelmChartCategory, HelmChartVersion } from "@/types";
+import { Package, Plus } from "lucide-react";
+import { AddRepositoryModal } from "./-add-repository-modal";
+import { BrowseTab } from "./-browse-tab";
+import { ChartDetailModal } from "./-chart-detail-modal";
+import { InstallChartModal } from "./-install-chart-modal";
+import { InstalledTab } from "./-installed-tab";
+import { RepositoriesTab } from "./-repositories-tab";
 
-type TabKey = 'browse' | 'installed' | 'repositories';
+type TabKey = "browse" | "installed" | "repositories";
 
-const TAB_KEYS = ['browse', 'installed', 'repositories'] as const;
+const TAB_KEYS = ["browse", "installed", "repositories"] as const;
 
 function CatalogPage() {
-  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'browse');
-  const [selectedCategory, setSelectedCategory] = useState<HelmChartCategory | 'all'>('all');
+  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, "browse");
+  const [selectedCategory, setSelectedCategory] = useState<
+    HelmChartCategory | "all"
+  >("all");
   const initialSearchParams = useSearchParams();
   const router = useRouter();
   const projectsQuery = useProjects({ pageSize: 200 });
   const projects = projectsQuery.data?.data ?? [];
-  const requestedProjectId = initialSearchParams?.get('project') ?? '';
-  const projectId = projects.some((project) => project.id === requestedProjectId)
+  const requestedProjectId = initialSearchParams?.get("project") ?? "";
+  const projectId = projects.some(
+    (project) => project.id === requestedProjectId,
+  )
     ? requestedProjectId
     : projects.length === 1
       ? projects[0].id
-      : '';
+      : "";
   const selectedProject = projects.find((project) => project.id === projectId);
   const allowedClusterIds = [
     selectedProject?.clusterId,
@@ -50,30 +56,64 @@ function CatalogPage() {
   ].filter((id): id is string => Boolean(id));
   const setProjectId = (nextProjectId: string) => {
     const next = new URLSearchParams(initialSearchParams);
-    if (nextProjectId) next.set('project', nextProjectId);
-    else next.delete('project');
-    router.replace(`/dashboard/catalog${next.size ? `?${next.toString()}` : ''}`);
+    if (nextProjectId) next.set("project", nextProjectId);
+    else next.delete("project");
+    router.replace(
+      `/dashboard/catalog${next.size ? `?${next.toString()}` : ""}`,
+    );
     setSelectedChart(null);
     setShowInstallModal(false);
     setInstallChart(null);
   };
-  const [searchQuery, setSearchQuery] = useState(initialSearchParams?.get('search') ?? '');
-  const presetClusterIdPage = initialSearchParams?.get('cluster_id') ?? '';
+  const [searchQuery, setSearchQuery] = useState(
+    initialSearchParams?.get("search") ?? "",
+  );
+  const presetClusterIdPage = initialSearchParams?.get("cluster_id") ?? "";
   const [selectedChart, setSelectedChart] = useState<HelmChart | null>(null);
   const [showRepoModal, setShowRepoModal] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
-  const [installChart, setInstallChart] = useState<{ chart: HelmChart; version: HelmChartVersion } | null>(null);
+  const [installChart, setInstallChart] = useState<{
+    chart: HelmChart;
+    version: HelmChartVersion;
+  } | null>(null);
 
   const { data: charts, isLoading: chartsLoading } = useHelmCharts({
     projectId,
-    category: selectedCategory !== 'all' ? selectedCategory : undefined,
+    category: selectedCategory !== "all" ? selectedCategory : undefined,
     search: searchQuery || undefined,
   });
   const { data: installed, isLoading: installedLoading } = useInstalledCharts();
   const { data: repos, isLoading: reposLoading } = useHelmRepositories();
   const { data: presetClusterData } = useClusters({ pageSize: 100 });
+  const clusterNames = useMemo(
+    () =>
+      Object.fromEntries(
+        (presetClusterData?.data || []).map((cluster) => [
+          cluster.id,
+          cluster.displayName || cluster.name,
+        ]),
+      ),
+    [presetClusterData],
+  );
+  const repositoryNames = useMemo(
+    () => new Map((repos || []).map((repo) => [repo.id, repo.name])),
+    [repos],
+  );
+  const catalogCharts = useMemo(
+    () =>
+      charts?.map((chart) => ({
+        ...chart,
+        repositoryName: repositoryNames.get(chart.repositoryId),
+      })),
+    [charts, repositoryNames],
+  );
   const presetCluster = useMemo(
-    () => (presetClusterIdPage ? (presetClusterData?.data || []).find((c) => c.id === presetClusterIdPage) : undefined),
+    () =>
+      presetClusterIdPage
+        ? (presetClusterData?.data || []).find(
+            (c) => c.id === presetClusterIdPage,
+          )
+        : undefined,
     [presetClusterIdPage, presetClusterData],
   );
 
@@ -83,9 +123,9 @@ function CatalogPage() {
   const rollback = useRollbackChart();
 
   const tabs: { key: TabKey; label: ReactNode }[] = [
-    { key: 'browse', label: 'Browse Charts' },
+    { key: "browse", label: "Browse Charts" },
     {
-      key: 'installed',
+      key: "installed",
       label: (
         <>
           Installed
@@ -98,7 +138,7 @@ function CatalogPage() {
       ),
     },
     {
-      key: 'repositories',
+      key: "repositories",
       label: (
         <>
           Repositories
@@ -117,7 +157,7 @@ function CatalogPage() {
       <div>
         <PageHeader
           title="Catalog"
-          description="Fleet Helm repositories. Browse and install charts from a cluster's Apps page."
+          description="Shared Helm repositories. Browse and install charts from a cluster's Apps page."
           actions={
             <>
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -137,7 +177,7 @@ function CatalogPage() {
                   ))}
                 </Select>
               </label>
-              {activeTab === 'repositories' && (
+              {activeTab === "repositories" && (
                 <ActionButton
                   intent="primary"
                   icon={<Plus className="h-4 w-4" />}
@@ -152,9 +192,11 @@ function CatalogPage() {
         {presetClusterIdPage && (
           <div className="mt-2 inline-flex items-center gap-2 text-xs px-2 py-1 rounded bg-accent/40 text-foreground">
             <Package className="h-3.5 w-3.5" />
-            Installing onto{' '}
+            Installing onto{" "}
             <span className="font-medium">
-              {presetCluster?.displayName || presetCluster?.name || presetClusterIdPage}
+              {presetCluster?.displayName ||
+                presetCluster?.name ||
+                presetClusterIdPage}
             </span>
           </div>
         )}
@@ -169,29 +211,30 @@ function CatalogPage() {
         />
 
         <TabsContent>
-          {activeTab === 'browse' && (
+          {activeTab === "browse" && (
             <BrowseTab
               projectId={projectId}
               searchQuery={searchQuery}
               onSearchQueryChange={setSearchQuery}
               selectedCategory={selectedCategory}
               onSelectedCategoryChange={setSelectedCategory}
-              charts={charts}
+              charts={catalogCharts}
               chartsLoading={chartsLoading}
               onSelectChart={setSelectedChart}
             />
           )}
 
-          {activeTab === 'installed' && (
+          {activeTab === "installed" && (
             <InstalledTab
               installed={installed}
               loading={installedLoading}
+              clusterNames={clusterNames}
               onRollback={(id, revision) => rollback.mutate({ id, revision })}
               onUninstall={(id) => uninstall.mutate(id)}
             />
           )}
 
-          {activeTab === 'repositories' && (
+          {activeTab === "repositories" && (
             <RepositoriesTab
               repos={repos}
               loading={reposLoading}
@@ -236,9 +279,12 @@ function CatalogPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/catalog/')({
+export const Route = createFileRoute("/dashboard/catalog/")({
   // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
   validateSearch: (search: Record<string, unknown>) =>
-    search as { tab?: string; search?: string; cluster_id?: string } & Record<string, unknown>,
+    search as { tab?: string; search?: string; cluster_id?: string } & Record<
+      string,
+      unknown
+    >,
   component: CatalogPage,
 });

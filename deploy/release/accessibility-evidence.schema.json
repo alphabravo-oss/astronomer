@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astronomer.io/schemas/accessibility-evidence-v1.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "result", "target_version", "source_commit", "source_run_id", "started_at", "completed_at", "reviewer", "raw_evidence", "matrix"],
+  "properties": {
+    "schema_version": {"const": 1}, "result": {"const": "passed"},
+    "target_version": {"type": "string", "pattern": "^v1\\.[0-9]+\\.[0-9]+$"},
+    "source_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "source_run_id": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+    "started_at": {"type": "string", "format": "date-time"}, "completed_at": {"type": "string", "format": "date-time"},
+    "reviewer": {"type": "string", "minLength": 1, "maxLength": 128},
+    "raw_evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_run_id", "source_workflow", "source_commit", "source_ref", "source_conclusion", "manifest_sha256", "signature_bundle_sha256"],
+      "properties": {
+        "source_run_id": {"type": "string", "pattern": "^[1-9][0-9]*$"}, "source_workflow": {"const": ".github/workflows/accessibility-raw-evidence.yaml"},
+        "source_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"}, "source_ref": {"type": "string", "pattern": "^refs/tags/v1\\.[0-9]+\\.[0-9]+$"},
+        "source_conclusion": {"const": "success"}, "manifest_sha256": {"$ref": "#/$defs/digest"}, "signature_bundle_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "matrix": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"$ref": "#/$defs/matrixRow"}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "matrixRow": {
+      "type": "object", "additionalProperties": false,
+      "required": ["platform", "browser", "assistive_technology", "at_version", "viewport", "zoom_levels", "critical_workflows", "status", "open_blocking_defects", "evidence_uri", "evidence_sha256"],
+      "properties": {
+        "platform": {"enum": ["windows", "macos", "ios"]}, "browser": {"enum": ["chrome", "edge", "safari"]},
+        "assistive_technology": {"enum": ["nvda", "narrator", "voiceover"]},
+        "at_version": {"type": "string", "minLength": 1, "maxLength": 128}, "viewport": {"type": "string", "minLength": 1, "maxLength": 64},
+        "zoom_levels": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"enum": ["100%", "200%"]}, "uniqueItems": true},
+        "critical_workflows": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 128}, "uniqueItems": true},
+        "status": {"const": "passed"}, "open_blocking_defects": {"const": 0},
+        "evidence_uri": {"type": "string", "minLength": 1, "maxLength": 512}, "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    }
+  }
+}

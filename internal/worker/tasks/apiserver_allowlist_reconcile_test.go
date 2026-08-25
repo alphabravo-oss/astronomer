@@ -84,6 +84,14 @@ type fakeAllowlistProvider struct {
 }
 
 func (f *fakeAllowlistProvider) ID() providers.ProviderID { return f.id }
+func (f *fakeAllowlistProvider) Capability() providers.Capability {
+	canEnforce := f.id != providers.ProviderSelfManaged && f.id != providers.ProviderUnknown
+	reason := ""
+	if !canEnforce {
+		reason = "test provider is monitor-only"
+	}
+	return providers.Capability{Provider: f.id, CanMonitor: true, CanEnforce: canEnforce, Reason: reason}
+}
 func (f *fakeAllowlistProvider) Detect(ctx context.Context, c providers.Cluster) string {
 	if f.detect != nil {
 		return f.detect(c)
@@ -108,7 +116,7 @@ func (f *fakeAllowlistProvider) Apply(ctx context.Context, c providers.Cluster, 
 	return nil
 }
 
-func setupReconciler(t *testing.T, mode string, operatorCIDRs []string, prov *fakeAllowlistProvider) (*fakeAllowlistQuerier, uuid.UUID) {
+func setupReconciler(t *testing.T, mode string, operatorCIDRs []string, prov *fakeAllowlistProvider) (ApiserverAllowlistRuntime, *fakeAllowlistQuerier, uuid.UUID) {
 	t.Helper()
 	clusterID := uuid.New()
 	cidrsJSON, _ := json.Marshal(operatorCIDRs)
@@ -122,13 +130,42 @@ func setupReconciler(t *testing.T, mode string, operatorCIDRs []string, prov *fa
 	}
 	reg := providers.NewRegistry()
 	reg.Register(prov)
-	ConfigureApiserverAllowlistReconcile(ApiserverAllowlistReconcileDeps{
+	runtime := ApiserverAllowlistRuntime{Deps: ApiserverAllowlistReconcileDeps{
 		Queries:          q,
 		Registry:         reg,
+		ClusterShaper:    providers.ClusterFromSQLC,
 		AstronomerEgress: []string{"54.10.0.0/16"},
-	})
-	t.Cleanup(ResetApiserverAllowlistReconcile)
-	return q, clusterID
+		AuditWriter:      q,
+	}}
+	return runtime, q, clusterID
+}
+
+func TestApiserverAllowlistRuntimeValidatesAndBindsAllHandlers(t *testing.T) {
+	err := (ApiserverAllowlistRuntime{}).Validate()
+	if err == nil {
+		t.Fatal("empty API-server allow-list runtime validated successfully")
+	}
+	for _, dependency := range []string{"queries", "registry", "cluster_shaper", "audit_writer"} {
+		if !strings.Contains(err.Error(), dependency) {
+			t.Errorf("validation error %q does not report %s", err, dependency)
+		}
+	}
+
+	provider := &fakeAllowlistProvider{id: providers.ProviderEKS}
+	runtime, _, _ := setupReconciler(t, "monitor", nil, provider)
+	bindings, err := runtime.HandlerBindings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bindings) != 3 || bindings[ApiserverAllowlistReconcileType] == nil || bindings[ApiserverAllowlistReconcileAllType] == nil || bindings[ApiserverAllowlistCleanupSnapshotsType] == nil {
+		t.Fatalf("API-server allow-list bindings = %#v", bindings)
+	}
+
+	var typedNil *fakeAllowlistQuerier
+	runtime.Deps.Queries = typedNil
+	if err := runtime.Validate(); err == nil || !strings.Contains(err.Error(), "queries") {
+		t.Fatalf("typed-nil query validation error = %v", err)
+	}
 }
 
 func TestReconciler_MonitorModeDoesNotPatch(t *testing.T) {
@@ -138,8 +175,8 @@ func TestReconciler_MonitorModeDoesNotPatch(t *testing.T) {
 			return []string{"10.0.0.0/8"}, nil // missing the egress
 		},
 	}
-	q, clusterID := setupReconciler(t, "monitor", []string{"10.0.0.0/8"}, prov)
-	if err := ReconcileApiserverAllowlistOnce(context.Background(), clusterID); err != nil {
+	runtime, q, clusterID := setupReconciler(t, "monitor", []string{"10.0.0.0/8"}, prov)
+	if err := runtime.ReconcileApiserverAllowlistOnce(context.Background(), clusterID); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	if prov.applyCalls != 0 {
@@ -169,8 +206,8 @@ func TestReconciler_EnforceModePatchesOnDrift(t *testing.T) {
 		},
 		apply: func(providers.Cluster, []string) error { return nil },
 	}
-	q, clusterID := setupReconciler(t, "enforce", []string{"10.0.0.0/8"}, prov)
-	if err := ReconcileApiserverAllowlistOnce(context.Background(), clusterID); err != nil {
+	runtime, q, clusterID := setupReconciler(t, "enforce", []string{"10.0.0.0/8"}, prov)
+	if err := runtime.ReconcileApiserverAllowlistOnce(context.Background(), clusterID); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	if prov.applyCalls != 1 {
@@ -189,8 +226,8 @@ func TestReconciler_EnforceMode_NoDrift_NoPatch(t *testing.T) {
 		},
 		apply: func(providers.Cluster, []string) error { return nil },
 	}
-	q, clusterID := setupReconciler(t, "enforce", []string{"10.0.0.0/8"}, prov)
-	if err := ReconcileApiserverAllowlistOnce(context.Background(), clusterID); err != nil {
+	runtime, q, clusterID := setupReconciler(t, "enforce", []string{"10.0.0.0/8"}, prov)
+	if err := runtime.ReconcileApiserverAllowlistOnce(context.Background(), clusterID); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	if prov.applyCalls != 0 {
@@ -201,7 +238,7 @@ func TestReconciler_EnforceMode_NoDrift_NoPatch(t *testing.T) {
 	}
 }
 
-func TestReconciler_RefusesEnforceOnSelfManaged_LogsWarn(t *testing.T) {
+func TestReconciler_RefusesEnforceOnSelfManaged(t *testing.T) {
 	prov := &fakeAllowlistProvider{
 		id: providers.ProviderSelfManaged,
 		getEffective: func(providers.Cluster) ([]string, error) {
@@ -212,42 +249,41 @@ func TestReconciler_RefusesEnforceOnSelfManaged_LogsWarn(t *testing.T) {
 			return nil
 		},
 	}
-	q, clusterID := setupReconciler(t, "enforce", []string{"10.0.0.0/8"}, prov)
-	if err := ReconcileApiserverAllowlistOnce(context.Background(), clusterID); err != nil {
-		t.Fatalf("reconcile: %v", err)
+	runtime, q, clusterID := setupReconciler(t, "enforce", []string{"10.0.0.0/8"}, prov)
+	var unsupported *providers.UnsupportedEnforcementError
+	if err := runtime.ReconcileApiserverAllowlistOnce(context.Background(), clusterID); !errors.As(err, &unsupported) {
+		t.Fatalf("expected permanent unsupported-enforcement error; got %v", err)
 	}
 	last := q.updates[len(q.updates)-1]
 	if last.DetectedProvider != providers.ProviderSelfManaged {
 		t.Fatalf("expected detected_provider=self_managed; got %q", last.DetectedProvider)
 	}
-	if !strings.Contains(last.LastError, "cloud-managed provider") {
-		t.Fatalf("expected last_error to mention cloud-managed restriction; got %q", last.LastError)
+	if last.SyncStatus != "failed" || !strings.Contains(last.LastError, "monitor-only") {
+		t.Fatalf("expected failed status with capability reason; got %+v", last)
 	}
 }
 
-func TestReconciler_HandlesProviderNotImplemented(t *testing.T) {
+func TestReconciler_PropagatesProviderApplyFailure(t *testing.T) {
 	prov := &fakeAllowlistProvider{
 		id: providers.ProviderAKS,
 		getEffective: func(providers.Cluster) ([]string, error) {
 			return nil, nil
 		},
 		apply: func(providers.Cluster, []string) error {
-			return errors.New("provider not implemented in v1")
+			return errors.New("provider throttled")
 		},
 	}
-	q, clusterID := setupReconciler(t, "enforce", []string{"10.0.0.0/8"}, prov)
-	if err := ReconcileApiserverAllowlistOnce(context.Background(), clusterID); err != nil {
-		t.Fatalf("reconcile should not propagate not-implemented as task error; got %v", err)
+	runtime, q, clusterID := setupReconciler(t, "enforce", []string{"10.0.0.0/8"}, prov)
+	if err := runtime.ReconcileApiserverAllowlistOnce(context.Background(), clusterID); err == nil {
+		t.Fatalf("provider failure must propagate so asynq retries")
 	}
-	if got := q.updates[len(q.updates)-1].SyncStatus; got != "drifting" {
-		t.Fatalf("expected drifting on not-implemented; got %q", got)
+	if got := q.updates[len(q.updates)-1].SyncStatus; got != "failed" {
+		t.Fatalf("expected failed on provider error; got %q", got)
 	}
 }
 
 func TestReconciler_CleanupSnapshots(t *testing.T) {
 	q := &fakeAllowlistQuerier{}
-	ConfigureApiserverAllowlistReconcile(ApiserverAllowlistReconcileDeps{Queries: q})
-	t.Cleanup(ResetApiserverAllowlistReconcile)
 	// We can't easily invoke the periodic-leader wrapper here without a
 	// running leader system; instead exercise the DeleteOlderThan path.
 	if err := q.DeleteApiserverAllowlistSnapshotsOlderThan(context.Background(), time.Now()); err != nil {

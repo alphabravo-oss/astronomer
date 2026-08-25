@@ -30,9 +30,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/netpol"
@@ -67,6 +66,45 @@ type NetworkPolicyQuerier interface {
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
 }
 
+type NetworkPolicyMutationTx interface {
+	NetworkPolicyQuerier
+	UpsertNetworkPolicyApplication(context.Context, sqlc.UpsertNetworkPolicyApplicationParams) (sqlc.NetworkPolicyApplication, error)
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+}
+
+type networkPolicyRunTxFunc func(context.Context, func(NetworkPolicyMutationTx) error) error
+
+func executeNetworkPolicyMutation[T any](r *http.Request, h *NetworkPolicyHandler, mutate func(NetworkPolicyMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("network policy handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q NetworkPolicyMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			if event.action == "" {
+				return nil
+			}
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
+}
+
 // NetworkPolicyEnqueuer is the minimal asynq.Client surface used to fire
 // network_policy:apply tasks from the handler.
 type NetworkPolicyEnqueuer interface {
@@ -83,6 +121,7 @@ type NetworkPolicyK8sRequester interface {
 // NetworkPolicyHandler owns the admin + per-cluster routes.
 type NetworkPolicyHandler struct {
 	queries   NetworkPolicyQuerier
+	runTx     networkPolicyRunTxFunc
 	queue     NetworkPolicyEnqueuer
 	requester NetworkPolicyK8sRequester
 }
@@ -91,6 +130,14 @@ type NetworkPolicyHandler struct {
 func NewNetworkPolicyHandler(q NetworkPolicyQuerier) *NetworkPolicyHandler {
 	return &NetworkPolicyHandler{queries: q}
 }
+
+func (h *NetworkPolicyHandler) SetRunTx(runTx networkPolicyRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *NetworkPolicyHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // SetQueue wires the asynq client. Optional — when nil, the handler
 // still writes the DB row but only the periodic sweep will pick it up.
@@ -207,6 +254,11 @@ type ApplyNetworkPolicyRequest struct {
 	TemplateID string   `json:"template_id"`
 	Namespace  string   `json:"namespace,omitempty"`
 	Namespaces []string `json:"namespaces,omitempty"`
+}
+
+type networkPolicyApplyResult struct {
+	applications []sqlc.NetworkPolicyApplication
+	namespaces   []string
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -328,7 +380,7 @@ func (h *NetworkPolicyHandler) CreateTemplate(w http.ResponseWriter, r *http.Req
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	tmpl, err := h.queries.CreateNetworkPolicyTemplate(r.Context(), sqlc.CreateNetworkPolicyTemplateParams{
+	params := sqlc.CreateNetworkPolicyTemplateParams{
 		Slug:         req.Slug,
 		Name:         req.Name,
 		Description:  req.Description,
@@ -336,18 +388,29 @@ func (h *NetworkPolicyHandler) CreateTemplate(w http.ResponseWriter, r *http.Req
 		SpecTemplate: req.SpecTemplate,
 		Enabled:      enabled,
 		CreatedBy:    currentUserUUID(r),
-	})
+	}
+	tmpl, err := executeNetworkPolicyMutation(r, h,
+		func(q NetworkPolicyMutationTx) (sqlc.NetworkPolicyTemplate, error) {
+			return q.CreateNetworkPolicyTemplate(r.Context(), params)
+		},
+		func() (sqlc.NetworkPolicyTemplate, error) {
+			return h.queries.CreateNetworkPolicyTemplate(r.Context(), params)
+		},
+		func(row sqlc.NetworkPolicyTemplate) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.network_policy_template.created", resourceType: "network_policy_template",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated,
+				detail: map[string]any{"slug": row.Slug},
+			}
+		})
 	if err != nil {
 		if isUniqueViolation(err) {
 			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A template with this slug already exists")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create network policy template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create network policy template")
 		return
 	}
-	recordAudit(r, h.queries, "admin.network_policy_template.created", "network_policy_template", tmpl.ID.String(), tmpl.Name, map[string]any{
-		"slug": tmpl.Slug,
-	})
 	w.Header().Set("Location", "/api/v1/admin/network-policy-templates/"+tmpl.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, networkPolicyTemplateToResponse(tmpl))
 }
@@ -388,18 +451,30 @@ func (h *NetworkPolicyHandler) UpdateTemplate(w http.ResponseWriter, r *http.Req
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	tmpl, err := h.queries.UpdateNetworkPolicyTemplate(r.Context(), sqlc.UpdateNetworkPolicyTemplateParams{
+	params := sqlc.UpdateNetworkPolicyTemplateParams{
 		ID:           id,
 		Name:         req.Name,
 		Description:  req.Description,
 		SpecTemplate: req.SpecTemplate,
 		Enabled:      enabled,
-	})
+	}
+	tmpl, err := executeNetworkPolicyMutation(r, h,
+		func(q NetworkPolicyMutationTx) (sqlc.NetworkPolicyTemplate, error) {
+			return q.UpdateNetworkPolicyTemplate(r.Context(), params)
+		},
+		func() (sqlc.NetworkPolicyTemplate, error) {
+			return h.queries.UpdateNetworkPolicyTemplate(r.Context(), params)
+		},
+		func(row sqlc.NetworkPolicyTemplate) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.network_policy_template.updated", resourceType: "network_policy_template",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusOK,
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update network policy template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update network policy template")
 		return
 	}
-	recordAudit(r, h.queries, "admin.network_policy_template.updated", "network_policy_template", tmpl.ID.String(), tmpl.Name, nil)
 	RespondJSON(w, http.StatusOK, networkPolicyTemplateToResponse(tmpl))
 }
 
@@ -423,11 +498,23 @@ func (h *NetworkPolicyHandler) DeleteTemplate(w http.ResponseWriter, r *http.Req
 		RespondRequestError(w, r, http.StatusForbidden, apierror.BuiltinReadonly, "Builtin templates are read-only and cannot be deleted.")
 		return
 	}
-	if err := h.queries.DeleteNetworkPolicyTemplate(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete network policy template")
+	_, err = executeNetworkPolicyMutation(r, h,
+		func(q NetworkPolicyMutationTx) (struct{}, error) {
+			return struct{}{}, q.DeleteNetworkPolicyTemplate(r.Context(), id)
+		},
+		func() (struct{}, error) {
+			return struct{}{}, h.queries.DeleteNetworkPolicyTemplate(r.Context(), id)
+		},
+		func(struct{}) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.network_policy_template.deleted", resourceType: "network_policy_template",
+				resourceID: existing.ID.String(), resourceName: existing.Name, status: http.StatusNoContent,
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete network policy template")
 		return
 	}
-	recordAudit(r, h.queries, "admin.network_policy_template.deleted", "network_policy_template", existing.ID.String(), existing.Name, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -463,16 +550,23 @@ func (h *NetworkPolicyHandler) ListApplications(w http.ResponseWriter, r *http.R
 	}
 	// ListApplicationsForCluster returns the full per-cluster set in one
 	// shot (no SQL limit/offset), so the page is the whole result and the
-	// total is its length. // TODO(total): add a counted, paged query if
+	// total is its exact length. Add pagination if
 	// per-cluster application counts ever grow unbounded.
 	RespondList(w, resp, NewPagination(len(resp), len(resp), 0, len(resp)))
 }
 
 // CreateApplications handles POST /api/v1/clusters/{cluster_id}/network-policies/applications/.
-// Accepts a single namespace OR a list (bulk-apply). Each successful row
-// fires a network_policy:apply task; failures are partial — the response
-// includes per-namespace status so the UI can retry just the failed ones.
+// Accepts a single namespace OR a list (bulk-apply). The complete batch, one
+// durable network_policy:apply task per namespace, and the audit intent commit
+// atomically. Existing rows are reset to pending, making retries idempotent.
 func (h *NetworkPolicyHandler) CreateApplications(w http.ResponseWriter, r *http.Request) {
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "network policy transaction runner is not configured")
+		return
+	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
@@ -517,46 +611,119 @@ func (h *NetworkPolicyHandler) CreateApplications(w http.ResponseWriter, r *http
 			return
 		}
 	}
-
-	created := make([]NetworkPolicyApplicationResponse, 0, len(namespaces))
-	for _, ns := range namespaces {
-		app, err := h.queries.CreateNetworkPolicyApplication(r.Context(), sqlc.CreateNetworkPolicyApplicationParams{
-			TemplateID: tmpl.ID,
-			ClusterID:  clusterID,
-			Namespace:  ns,
-			PolicyName: netpol.PolicyName(tmpl.Slug),
-			AppliedBy:  currentUserUUID(r),
-		})
-		if err != nil {
-			if isUniqueViolation(err) {
-				// Row already exists — treat the POST as idempotent and
-				// re-trigger the reconciler. Fetch the existing row so
-				// the response surfaces its current status.
-				existing, gerr := h.queries.GetNetworkPolicyApplicationByUnique(r.Context(), sqlc.GetNetworkPolicyApplicationByUniqueParams{
-					ClusterID:  clusterID,
-					Namespace:  ns,
-					TemplateID: tmpl.ID,
-				})
-				if gerr == nil {
-					h.enqueueApply(r, existing.ID)
-					created = append(created, networkPolicyApplicationToResponse(existing, tmpl.Slug))
-					continue
-				}
-			}
-			// Per-namespace partial failure — return what succeeded.
-			// The caller can retry the missing namespaces.
-			_ = err
-			continue
-		}
-		h.enqueueApply(r, app.ID)
-		created = append(created, networkPolicyApplicationToResponse(app, tmpl.Slug))
+	r = r.WithContext(withOperationIdempotency(r, "network_policy_apply"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		ClusterID  string   `json:"cluster_id"`
+		TemplateID string   `json:"template_id"`
+		Namespaces []string `json:"namespaces"`
+	}{ClusterID: clusterID.String(), TemplateID: tmpl.ID.String(), Namespaces: namespaces})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode network policy request")
+		return
 	}
-	recordAudit(r, h.queries, "cluster.network_policy.applied", "cluster", clusterID.String(), cluster.Name, map[string]any{
-		"template_id":   tmpl.ID.String(),
-		"template_slug": tmpl.Slug,
-		"namespaces":    namespaces,
-	})
-	RespondJSON(w, http.StatusAccepted, created)
+	var receipt NetworkPolicyApplicationsReceipt
+	replayed := false
+
+	_, err = executeNetworkPolicyMutation(r, h,
+		func(q NetworkPolicyMutationTx) (networkPolicyApplyResult, error) {
+			idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+			if !ok {
+				return networkPolicyApplyResult{}, errors.New("network policy idempotency store is not configured")
+			}
+			_, stored, replay, claimErr := claimOperationReceipt[NetworkPolicyApplicationsReceipt](r.Context(), idemQ, "network_policy_applications", digest)
+			if claimErr != nil {
+				return networkPolicyApplyResult{}, claimErr
+			}
+			if replay {
+				receipt, replayed = stored, true
+				return networkPolicyApplyResult{}, nil
+			}
+			result := networkPolicyApplyResult{
+				applications: make([]sqlc.NetworkPolicyApplication, 0, len(namespaces)),
+				namespaces:   make([]string, 0, len(namespaces)),
+			}
+			for _, ns := range namespaces {
+				app, upsertErr := q.UpsertNetworkPolicyApplication(r.Context(), sqlc.UpsertNetworkPolicyApplicationParams{
+					TemplateID: tmpl.ID, ClusterID: clusterID, Namespace: ns,
+					PolicyName: netpol.PolicyName(tmpl.Slug), AppliedBy: currentUserUUID(r),
+				})
+				if upsertErr != nil {
+					return networkPolicyApplyResult{}, upsertErr
+				}
+				if taskErr := enqueueNetworkPolicyApplyTaskOutbox(r, q, app.ID); taskErr != nil {
+					return networkPolicyApplyResult{}, taskErr
+				}
+				result.applications = append(result.applications, app)
+				result.namespaces = append(result.namespaces, ns)
+			}
+			created := make([]NetworkPolicyApplicationResponse, 0, len(result.applications))
+			for _, application := range result.applications {
+				created = append(created, networkPolicyApplicationToResponse(application, tmpl.Slug))
+			}
+			receipt = NetworkPolicyApplicationsReceipt{ClusterID: clusterID.String(), Status: "pending", Applications: created}
+			if len(result.applications) == 0 {
+				return networkPolicyApplyResult{}, errors.New("network policy application batch is empty")
+			}
+			if attachErr := attachOperationReceipt(r.Context(), idemQ, "network_policy_applications", result.applications[0].ID, digest, receipt); attachErr != nil {
+				return networkPolicyApplyResult{}, attachErr
+			}
+			return result, nil
+		},
+		func() (networkPolicyApplyResult, error) {
+			result := networkPolicyApplyResult{
+				applications: make([]sqlc.NetworkPolicyApplication, 0, len(namespaces)),
+				namespaces:   make([]string, 0, len(namespaces)),
+			}
+			for _, ns := range namespaces {
+				app, createErr := h.queries.CreateNetworkPolicyApplication(r.Context(), sqlc.CreateNetworkPolicyApplicationParams{
+					TemplateID: tmpl.ID, ClusterID: clusterID, Namespace: ns,
+					PolicyName: netpol.PolicyName(tmpl.Slug), AppliedBy: currentUserUUID(r),
+				})
+				if createErr != nil {
+					if !isUniqueViolation(createErr) {
+						continue
+					}
+					app, createErr = h.queries.GetNetworkPolicyApplicationByUnique(r.Context(), sqlc.GetNetworkPolicyApplicationByUniqueParams{
+						ClusterID: clusterID, Namespace: ns, TemplateID: tmpl.ID,
+					})
+					if createErr != nil {
+						continue
+					}
+				}
+				h.enqueueApply(r, app.ID)
+				result.applications = append(result.applications, app)
+				result.namespaces = append(result.namespaces, ns)
+			}
+			return result, nil
+		},
+		func(result networkPolicyApplyResult) clusterAuditEvent {
+			if replayed {
+				return clusterAuditEvent{}
+			}
+			return clusterAuditEvent{
+				action: "cluster.network_policy.applied", resourceType: "cluster",
+				resourceID: clusterID.String(), resourceName: cluster.Name, status: http.StatusAccepted,
+				detail: map[string]any{
+					"template_id": tmpl.ID.String(), "template_slug": tmpl.Slug,
+					"namespaces": result.namespaces,
+				},
+			}
+		})
+	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different network policy application request")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.ApplyError, "Failed to apply network policy template")
+		return
+	}
+	RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/network-policies/applications/", receipt)
+}
+
+type NetworkPolicyApplicationsReceipt struct {
+	ClusterID    string                             `json:"cluster_id"`
+	Status       string                             `json:"status"`
+	Applications []NetworkPolicyApplicationResponse `json:"applications"`
 }
 
 // DeleteApplication handles DELETE /api/v1/clusters/{cluster_id}/network-policies/applications/{id}/.
@@ -593,31 +760,67 @@ func (h *NetworkPolicyHandler) DeleteApplication(w http.ResponseWriter, r *http.
 	// losing track of which template was applied where.
 	if h.requester != nil {
 		if err := tasks.DeleteNetworkPolicyInCluster(r.Context(), h.requester, clusterID, app.Namespace, app.PolicyName); err != nil {
-			_, _ = h.queries.MarkNetworkPolicyApplicationStatus(r.Context(), sqlc.MarkNetworkPolicyApplicationStatusParams{
+			params := sqlc.MarkNetworkPolicyApplicationStatusParams{
 				ID:           app.ID,
 				Status:       "failed",
 				LastError:    fmt.Sprintf("revoke in-cluster: %v", err),
 				TouchApplied: false,
-			})
+			}
+			_, persistErr := executeNetworkPolicyMutation(r, h,
+				func(q NetworkPolicyMutationTx) (sqlc.NetworkPolicyApplication, error) {
+					return q.MarkNetworkPolicyApplicationStatus(r.Context(), params)
+				},
+				func() (sqlc.NetworkPolicyApplication, error) {
+					return h.queries.MarkNetworkPolicyApplicationStatus(r.Context(), params)
+				},
+				func(row sqlc.NetworkPolicyApplication) clusterAuditEvent {
+					return clusterAuditEvent{
+						action: "cluster.network_policy.revert_failed", resourceType: "cluster",
+						resourceID: clusterID.String(), resourceName: cluster.Name, status: http.StatusInternalServerError,
+						detail: map[string]any{"application_id": row.ID.String(), "namespace": row.Namespace, "policy_name": row.PolicyName},
+					}
+				})
+			if persistErr != nil {
+				respondTransactionalMutationError(w, r, persistErr, http.StatusInternalServerError, apierror.RevokeError, "Failed to persist network policy revocation failure")
+				return
+			}
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.RevokeError, fmt.Sprintf("Failed to revoke in-cluster NetworkPolicy: %v", err))
 			return
 		}
 	}
-	if err := h.queries.DeleteNetworkPolicyApplication(r.Context(), app.ID); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete network policy application")
+	_, err = executeNetworkPolicyMutation(r, h,
+		func(q NetworkPolicyMutationTx) (struct{}, error) {
+			return struct{}{}, q.DeleteNetworkPolicyApplication(r.Context(), app.ID)
+		},
+		func() (struct{}, error) {
+			return struct{}{}, h.queries.DeleteNetworkPolicyApplication(r.Context(), app.ID)
+		},
+		func(struct{}) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.network_policy.reverted", resourceType: "cluster",
+				resourceID: clusterID.String(), resourceName: cluster.Name, status: http.StatusNoContent,
+				detail: map[string]any{
+					"application_id": app.ID.String(), "namespace": app.Namespace, "policy_name": app.PolicyName,
+				},
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete network policy application")
 		return
 	}
-	recordAudit(r, h.queries, "cluster.network_policy.reverted", "cluster", clusterID.String(), cluster.Name, map[string]any{
-		"application_id": app.ID.String(),
-		"namespace":      app.Namespace,
-		"policy_name":    app.PolicyName,
-	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // Reapply handles POST /api/v1/clusters/{cluster_id}/network-policies/applications/{id}/reapply/.
 // Resets the row to status='pending' and re-fires the apply task.
 func (h *NetworkPolicyHandler) Reapply(w http.ResponseWriter, r *http.Request) {
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "network policy transaction runner is not configured")
+		return
+	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
@@ -637,22 +840,80 @@ func (h *NetworkPolicyHandler) Reapply(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Network policy application not found for this cluster")
 		return
 	}
-	app, err = h.queries.MarkNetworkPolicyApplicationStatus(r.Context(), sqlc.MarkNetworkPolicyApplicationStatusParams{
+	params := sqlc.MarkNetworkPolicyApplicationStatusParams{
 		ID:           app.ID,
 		Status:       "pending",
 		LastError:    "",
 		TouchApplied: false,
-	})
+	}
+	r = r.WithContext(withOperationIdempotency(r, "network_policy_reapply"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		ClusterID     string `json:"cluster_id"`
+		ApplicationID string `json:"application_id"`
+	}{ClusterID: clusterID.String(), ApplicationID: app.ID.String()})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReapplyError, "Failed to reset application status")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode network policy reapply request")
 		return
 	}
-	h.enqueueApply(r, app.ID)
-	slug := ""
-	if t, err := h.queries.GetNetworkPolicyTemplateByID(r.Context(), app.TemplateID); err == nil {
-		slug = t.Slug
+	var receipt NetworkPolicyApplicationResponse
+	replayed := false
+	app, err = executeNetworkPolicyMutation(r, h,
+		func(q NetworkPolicyMutationTx) (sqlc.NetworkPolicyApplication, error) {
+			idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+			if !ok {
+				return sqlc.NetworkPolicyApplication{}, errors.New("network policy idempotency store is not configured")
+			}
+			_, stored, replay, claimErr := claimOperationReceipt[NetworkPolicyApplicationResponse](r.Context(), idemQ, "network_policy_reapplications", digest)
+			if claimErr != nil {
+				return sqlc.NetworkPolicyApplication{}, claimErr
+			}
+			if replay {
+				receipt, replayed = stored, true
+				return sqlc.NetworkPolicyApplication{}, nil
+			}
+			row, updateErr := q.MarkNetworkPolicyApplicationStatus(r.Context(), params)
+			if updateErr != nil {
+				return sqlc.NetworkPolicyApplication{}, updateErr
+			}
+			if taskErr := enqueueNetworkPolicyApplyTaskOutbox(r, q, row.ID); taskErr != nil {
+				return sqlc.NetworkPolicyApplication{}, taskErr
+			}
+			slug := ""
+			if template, lookupErr := h.queries.GetNetworkPolicyTemplateByID(r.Context(), row.TemplateID); lookupErr == nil {
+				slug = template.Slug
+			}
+			receipt = networkPolicyApplicationToResponse(row, slug)
+			if attachErr := attachOperationReceipt(r.Context(), idemQ, "network_policy_reapplications", row.ID, digest, receipt); attachErr != nil {
+				return sqlc.NetworkPolicyApplication{}, attachErr
+			}
+			return row, nil
+		},
+		func() (sqlc.NetworkPolicyApplication, error) {
+			row, updateErr := h.queries.MarkNetworkPolicyApplicationStatus(r.Context(), params)
+			if updateErr == nil {
+				h.enqueueApply(r, row.ID)
+			}
+			return row, updateErr
+		},
+		func(row sqlc.NetworkPolicyApplication) clusterAuditEvent {
+			if replayed {
+				return clusterAuditEvent{}
+			}
+			return clusterAuditEvent{
+				action: "cluster.network_policy.reapplied", resourceType: "cluster",
+				resourceID: clusterID.String(), status: http.StatusAccepted,
+				detail: map[string]any{"application_id": row.ID.String(), "namespace": row.Namespace, "policy_name": row.PolicyName},
+			}
+		})
+	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different network policy reapply request")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.ReapplyError, "Failed to reset application status")
+		return
 	}
-	RespondJSON(w, http.StatusAccepted, networkPolicyApplicationToResponse(app, slug))
+	RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/network-policies/applications/", receipt)
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -662,23 +923,40 @@ func (h *NetworkPolicyHandler) Reapply(w http.ResponseWriter, r *http.Request) {
 // enqueueApply fires a network_policy:apply task. Best-effort; the
 // reconciler will eventually pick up pending rows via the periodic sweep
 // even when no queue is wired.
+func newNetworkPolicyApplyTask(r *http.Request, applicationID uuid.UUID) (*asynq.Task, error) {
+	task, err := tasks.NewNetworkPolicyApplyTask(applicationID)
+	if err != nil {
+		return nil, err
+	}
+	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+	return asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3)), nil
+}
+
+func enqueueNetworkPolicyApplyTaskOutbox(r *http.Request, q tasks.TaskOutboxWriter, applicationID uuid.UUID) error {
+	task, err := newNetworkPolicyApplyTask(r, applicationID)
+	if err != nil {
+		return err
+	}
+	dedupeKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if dedupeKey == "" {
+		dedupeKey = uuid.NewString()
+	}
+	_, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{
+		DedupeKey:           "network_policy_apply:" + audit.MutationDedupeKey(dedupeKey, r.Method+":"+r.URL.Path, "network_policy_application", applicationID.String()),
+		QueueName:           tasks.ClusterTemplateApplyQueueName,
+		MaxRetry:            3,
+		MaxDeliveryAttempts: 20,
+	})
+	return err
+}
+
 func (h *NetworkPolicyHandler) enqueueApply(r *http.Request, applicationID uuid.UUID) {
 	if h == nil || h.queue == nil {
 		return
 	}
-	task, err := tasks.NewNetworkPolicyApplyTask(applicationID)
+	task, err := newNetworkPolicyApplyTask(r, applicationID)
 	if err != nil {
 		return
 	}
-	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
-	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
-	_, _ = h.queue.Enqueue(task)
+	_, _ = h.queue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
 }
-
-// ensureUUIDColumnOK keeps the import list useful so future additions of
-// pgtype-typed helpers won't break the existing diff.
-var _ pgtype.UUID = pgtype.UUID{}
-
-// keep pgx import referenced for future error-classification branches.
-var _ = errors.Is
-var _ = pgx.ErrNoRows

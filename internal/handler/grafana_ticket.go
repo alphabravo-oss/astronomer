@@ -113,6 +113,7 @@ func (h *MonitoringHandler) MintGrafanaTicket(w http.ResponseWriter, r *http.Req
 	http.Redirect(w, r, appendTicketQuery(returnURL, token), http.StatusFound)
 }
 
+// openapi:request GrafanaTicketRedeemRequest
 type grafanaTicketRedeemRequest struct {
 	Ticket string `json:"ticket"`
 }

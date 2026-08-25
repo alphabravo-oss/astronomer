@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type auditRetentionQuerier interface {
@@ -34,6 +35,16 @@ type ssoSessionPurger interface {
 	PurgeExpiredSSOSessions(ctx context.Context) (int64, error)
 }
 
+// auditOutboxPurger removes only delivery receipts whose canonical event is
+// already present in partitioned audit_log. Pending, failed, delivering, and
+// dead intents are never retention-pruned: they are evidence of an unresolved
+// delivery obligation and must remain available to operators.
+type auditOutboxPurger interface {
+	DeleteDeliveredAuditOutboxBefore(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error)
+}
+
+const deliveredAuditOutboxRetention = 30 * 24 * time.Hour
+
 // EnforceAuditLogRetentionType is the periodic task identifier for pruning old
 // monthly audit_log partitions after they age out of the configured window.
 const EnforceAuditLogRetentionType = "audit_log:enforce_retention"
@@ -44,15 +55,14 @@ func NewEnforceAuditLogRetentionTask() *asynq.Task {
 
 func HandleEnforceAuditLogRetention(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, EnforceAuditLogRetentionType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().DebugContext(ctx, "audit retention runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("audit retention runtime is not configured")
 		}
-		q, ok := runtimeDeps.Queries.(auditRetentionQuerier)
+		q, ok := runtimeDependencies(ctx).Queries.(auditRetentionQuerier)
 		if !ok {
 			return fmt.Errorf("audit retention not supported by runtime querier")
 		}
-		return enforceAuditLogRetention(ctx, q, time.Now().UTC(), runtimeDeps.AuditLogRetentionMonths)
+		return enforceAuditLogRetention(ctx, q, time.Now().UTC(), runtimeDependencies(ctx).AuditLogRetentionMonths)
 	})
 }
 
@@ -66,7 +76,7 @@ func enforceAuditLogRetention(ctx context.Context, q auditRetentionQuerier, now 
 			return fmt.Errorf("drop audit_log partition %s: %w", name, err)
 		}
 	}
-	runtimeLogger().InfoContext(ctx, "enforced audit_log partition retention", "retention_months", normalizeAuditLogRetentionMonths(retentionMonths), "dropped_partitions", len(toDrop))
+	runtimeLogger(ctx).InfoContext(ctx, "enforced audit_log partition retention", "retention_months", normalizeAuditLogRetentionMonths(retentionMonths), "dropped_partitions", len(toDrop))
 
 	// JWT revocation GC piggy-backs on the same nightly cron. The deny
 	// list is bounded by the access-token lifetime (~1h to 7d) so
@@ -77,9 +87,9 @@ func enforceAuditLogRetention(ctx context.Context, q auditRetentionQuerier, now 
 			// Don't fail the whole task — partition retention
 			// already ran successfully, and the deny list will
 			// re-attempt tomorrow.
-			runtimeLogger().WarnContext(ctx, "purge expired jwt revocations failed", "error", err)
+			runtimeLogger(ctx).WarnContext(ctx, "purge expired jwt revocations failed", "error", err)
 		} else if purged > 0 {
-			runtimeLogger().InfoContext(ctx, "purged expired jwt revocations", "rows", purged)
+			runtimeLogger(ctx).InfoContext(ctx, "purged expired jwt revocations", "rows", purged)
 		}
 	}
 	// SLO session GC (migration 054). Same daily cadence as the
@@ -89,9 +99,18 @@ func enforceAuditLogRetention(ctx context.Context, q auditRetentionQuerier, now 
 	// DB blip on one purge doesn't suppress the other.
 	if purger, ok := q.(ssoSessionPurger); ok {
 		if purged, err := purger.PurgeExpiredSSOSessions(ctx); err != nil {
-			runtimeLogger().WarnContext(ctx, "purge expired sso sessions failed", "error", err)
+			runtimeLogger(ctx).WarnContext(ctx, "purge expired sso sessions failed", "error", err)
 		} else if purged > 0 {
-			runtimeLogger().InfoContext(ctx, "purged expired sso sessions", "rows", purged)
+			runtimeLogger(ctx).InfoContext(ctx, "purged expired sso sessions", "rows", purged)
+		}
+	}
+	if purger, ok := q.(auditOutboxPurger); ok {
+		cutoff := now.UTC().Add(-deliveredAuditOutboxRetention)
+		purged, err := purger.DeleteDeliveredAuditOutboxBefore(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true})
+		if err != nil {
+			runtimeLogger(ctx).WarnContext(ctx, "purge delivered audit outbox receipts failed", "error", err)
+		} else if purged > 0 {
+			runtimeLogger(ctx).InfoContext(ctx, "purged delivered audit outbox receipts", "rows", purged, "cutoff", cutoff)
 		}
 	}
 	return nil

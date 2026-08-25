@@ -39,9 +39,6 @@ func (e *recordingEnqueuer) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq
 // A global rule (empty rule.ClusterID) firing on a specific cluster must
 // report that firing cluster in the notification, not the empty rule one.
 func TestDispatchAlertNotifications_GlobalRuleReportsFiringCluster(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	firingCluster := uuid.New()
 	q := &alertDispatchQuerier{
 		channels: []sqlc.NotificationChannel{
@@ -49,7 +46,7 @@ func TestDispatchAlertNotifications_GlobalRuleReportsFiringCluster(t *testing.T)
 		},
 	}
 	enq := &recordingEnqueuer{}
-	runtimeDeps = RuntimeDependencies{Queries: q, Enqueuer: enq}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, Enqueuer: enq})
 
 	rule := sqlc.AlertRule{ID: uuid.New(), Name: "global-rule"} // ClusterID zero/invalid => global
 	event := sqlc.AlertEvent{
@@ -58,7 +55,7 @@ func TestDispatchAlertNotifications_GlobalRuleReportsFiringCluster(t *testing.T)
 		ClusterID: pgtype.UUID{Bytes: firingCluster, Valid: true},
 	}
 
-	dispatchAlertNotifications(context.Background(), rule, event, "subject", "body", false)
+	dispatchAlertNotifications(ctx, rule, event, "subject", "body", false)
 
 	if len(enq.tasks) != 1 {
 		t.Fatalf("expected 1 enqueued notification, got %d", len(enq.tasks))
@@ -97,9 +94,6 @@ func (q *pagingEventQuerier) ListAlertEventsByRule(_ context.Context, arg sqlc.L
 // must return EVERY active event, not just the first page — otherwise a firing
 // cluster past the old 200-row cap is invisible (stuck-firing + alert storm).
 func TestListAllAlertEventsByRule_PagesBeyondOneBatch(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	ruleID := uuid.New()
 	total := int(alertEvalSweepPageSize)*2 + 37 // spans three pages
 	sentinel := uuid.New()
@@ -115,9 +109,9 @@ func TestListAllAlertEventsByRule_PagesBeyondOneBatch(t *testing.T) {
 		ClusterID: pgtype.UUID{Bytes: uuid.New(), Valid: true},
 	}
 	q := &pagingEventQuerier{events: events}
-	runtimeDeps = RuntimeDependencies{Queries: q}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q})
 
-	got, err := listAllAlertEventsByRule(context.Background(), ruleID)
+	got, err := listAllAlertEventsByRule(ctx, ruleID)
 	if err != nil {
 		t.Fatalf("listAllAlertEventsByRule: %v", err)
 	}

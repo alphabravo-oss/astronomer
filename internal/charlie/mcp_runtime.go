@@ -232,7 +232,9 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	listener, err := NewMCPListener(r.config.Listener, handler)
+	listenerConfig := r.config.Listener
+	listenerConfig.ExpectedClientURI = identities.MCPClient
+	listener, err := NewMCPListener(listenerConfig, handler)
 	if err != nil {
 		return err
 	}

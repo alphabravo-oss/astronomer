@@ -22,6 +22,7 @@ const specPath = path.join(repoRoot, 'docs/openapi.yaml');
 const outputPath = path.join(repoRoot, 'frontend/src/types/openapi.generated.ts');
 const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
 const schemas = spec?.components?.schemas;
+const HTTP_METHODS = new Set(['get', 'put', 'post', 'delete', 'patch', 'head', 'options', 'trace']);
 
 if (!schemas || typeof schemas !== 'object' || Array.isArray(schemas)) {
   console.error('OpenAPI spec has no components.schemas object');
@@ -86,6 +87,21 @@ function refName(ref) {
   const name = ref.slice(prefix.length);
   assertIdentifier(name);
   return `OpenAPIComponents['schemas']['${name}']`;
+}
+
+function resolveLocalRef(ref) {
+  if (typeof ref !== 'string' || !ref.startsWith('#/')) return undefined;
+  return ref
+    .slice(2)
+    .split('/')
+    .map((part) => part.replace(/~1/g, '/').replace(/~0/g, '~'))
+    .reduce((node, part) => node?.[part], spec);
+}
+
+function resolveObject(value) {
+  if (!value || typeof value !== 'object') return value;
+  if (!value.$ref) return value;
+  return resolveObject(resolveLocalRef(value.$ref));
 }
 
 function union(parts) {
@@ -194,6 +210,83 @@ function generate() {
 
   lines.push('  };');
   lines.push('}');
+  lines.push('');
+
+  const operationIds = new Set();
+  lines.push('export interface OpenAPIOperations {');
+  for (const [routePath, pathItemRaw] of Object.entries(spec.paths ?? {})) {
+    const pathItem = resolveObject(pathItemRaw) ?? {};
+    for (const [method, operationRaw] of Object.entries(pathItem)) {
+      if (!HTTP_METHODS.has(method.toLowerCase())) continue;
+      const operation = resolveObject(operationRaw) ?? {};
+      const id = operation.operationId;
+      if (!id) throw new Error(`${method.toUpperCase()} ${routePath} has no operationId`);
+      assertIdentifier(id);
+      if (operationIds.has(id)) throw new Error(`Duplicate OpenAPI operationId ${id}`);
+      operationIds.add(id);
+
+      const rawParameters = [
+        ...(Array.isArray(pathItem.parameters) ? pathItem.parameters : []),
+        ...(Array.isArray(operation.parameters) ? operation.parameters : []),
+      ].map(resolveObject).filter(Boolean);
+      const uniqueParameters = new Map();
+      for (const parameter of rawParameters) uniqueParameters.set(`${parameter.in}:${parameter.name}`, parameter);
+      const parameters = [...uniqueParameters.values()];
+      const parametersByLocation = new Map();
+      for (const parameter of parameters) {
+        const entries = parametersByLocation.get(parameter.in) ?? [];
+        entries.push(parameter);
+        parametersByLocation.set(parameter.in, entries);
+      }
+
+      const argumentLines = ['{'];
+      for (const [location, key] of [['path', 'path'], ['query', 'query'], ['header', 'headerParams']]) {
+        const entries = parametersByLocation.get(location) ?? [];
+        if (!entries.length) continue;
+        const required = location === 'path' || entries.some((parameter) => parameter.required === true);
+        argumentLines.push(`        ${literal(key)}${required ? '' : '?'}: {`);
+        for (const parameter of entries) {
+          argumentLines.push(`          ${literal(parameter.name)}${parameter.required ? '' : '?'}: ${typeForSchema(parameter.schema, 10)};`);
+        }
+        argumentLines.push('        };');
+      }
+
+      const requestBody = resolveObject(operation.requestBody);
+      if (requestBody) {
+        const media = Object.values(requestBody.content ?? {})[0];
+        argumentLines.push(`        "body"${requestBody.required ? '' : '?'}: ${typeForSchema(media?.schema, 8)};`);
+      }
+      argumentLines.push('      }');
+	  if (argumentLines.length === 2) {
+		argumentLines.splice(0, argumentLines.length, 'Record<string, never>');
+	  }
+
+      const successTypes = [];
+      for (const [status, responseRaw] of Object.entries(operation.responses ?? {})) {
+        if (!/^[23]\d\d$/.test(status) && status !== 'default') continue;
+        const response = resolveObject(responseRaw) ?? {};
+        const contents = Object.values(response.content ?? {});
+        if (!contents.length) {
+          successTypes.push('void');
+          continue;
+        }
+        for (const content of contents) successTypes.push(typeForSchema(content?.schema, 6));
+      }
+      const routeClass = operation['x-astronomer-route-class'];
+      if (!successTypes.length && ['stream', 'proxy'].includes(routeClass)) successTypes.push('void');
+      if (!successTypes.length) throw new Error(`${method.toUpperCase()} ${routePath} has no successful response contract`);
+
+      lines.push(`  ${literal(id)}: {`);
+      lines.push(`    method: ${literal(method.toUpperCase())};`);
+      lines.push(`    path: ${literal(routePath)};`);
+      lines.push(`    arguments: ${argumentLines.join('\n')};`);
+      lines.push(`    response: ${union(successTypes)};`);
+      lines.push('  };');
+    }
+  }
+  lines.push('}');
+  lines.push('');
+  lines.push('export type OpenAPIOperationId = keyof OpenAPIOperations;');
   lines.push('');
   lines.push("export type OpenAPISchemaName = keyof OpenAPIComponents['schemas'];");
   lines.push('');

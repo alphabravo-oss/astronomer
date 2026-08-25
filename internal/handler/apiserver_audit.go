@@ -136,6 +136,7 @@ type auditEventInput struct {
 	StageTimestamp string `json:"stageTimestamp"`
 }
 
+// openapi:request-operation postClustersByClusterIdApiserverAudit
 type ingestApiserverAuditRequest struct {
 	Events []json.RawMessage `json:"events"`
 }

@@ -82,6 +82,30 @@ func TestRewriteTargetsCoverAllEncryptedColumns(t *testing.T) {
 	}
 }
 
+func TestRewriteTargetsCoverDexOperationPayload(t *testing.T) {
+	for _, tg := range rewriteTargets {
+		if tg.table == "dex_operations" && tg.column == "payload_encrypted" {
+			if tg.idCol != "id" {
+				t.Fatalf("dex_operations primary key column is %q, want id", tg.idCol)
+			}
+			return
+		}
+	}
+	t.Fatal("dex_operations.payload_encrypted is not in rewriteTargets; pending SSO operations would become undecryptable after key retirement")
+}
+
+func TestRewriteTargetsCoverCloudCredentialEnvelope(t *testing.T) {
+	for _, target := range rewriteTargets {
+		if target.table == "cloud_credentials" && target.column == "data_encrypted" {
+			if target.idCol != "id" {
+				t.Fatalf("cloud_credentials primary key column is %q, want id", target.idCol)
+			}
+			return
+		}
+	}
+	t.Fatal("cloud_credentials.data_encrypted is not rotated; AWS session tokens and assumed-role source credentials would become undecryptable")
+}
+
 // TestRewriteTargetsCoverChartRepositoryAuthConfig pins the migration-145
 // column explicitly.
 //

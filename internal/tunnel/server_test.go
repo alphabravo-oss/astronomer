@@ -88,7 +88,8 @@ func connectAgent(t *testing.T, conn *websocket.Conn, ctx context.Context, clust
 	t.Helper()
 	connectPayload, _ := json.Marshal(protocol.ConnectPayload{
 		ClusterID: clusterID, AgentID: agentID, AgentVersion: "1.0.0",
-		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Token: "test-token",
+		TunnelProtocolVersion: protocol.TunnelProtocolVersion, HeartbeatSchemaVersion: protocol.HeartbeatSchemaVersion,
+		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Capabilities: protocol.RequiredConnectCapabilities(), Token: "test-token",
 	})
 	connectMsg := protocol.Message{
 		Type:    protocol.MsgConnect,
@@ -209,6 +210,30 @@ func TestSendToConnectedAgent(t *testing.T) {
 	_ = conn.Close(websocket.StatusNormalClosure, "done")
 }
 
+func TestSendToAgentRequiresAdvertisedOperationCapability(t *testing.T) {
+	h := NewHub(slog.Default())
+	agent := &AgentConnection{
+		ClusterID: "capability-cluster",
+		Capabilities: map[string]struct{}{
+			"watch": {},
+		},
+		sendCh: make(chan *protocol.Message, 2),
+	}
+	h.agents.Set(agent.ClusterID, agent)
+
+	readPayload, _ := json.Marshal(protocol.K8sRequestPayload{Method: http.MethodGet, Path: "/api/v1/pods"})
+	if err := h.SendToAgent(agent.ClusterID, &protocol.Message{Type: protocol.MsgK8sRequest, Payload: readPayload}); err != nil {
+		t.Fatalf("advertised read capability rejected: %v", err)
+	}
+	mutatePayload, _ := json.Marshal(protocol.K8sRequestPayload{Method: http.MethodDelete, Path: "/api/v1/pods/p"})
+	if err := h.SendToAgent(agent.ClusterID, &protocol.Message{Type: protocol.MsgK8sRequest, Payload: mutatePayload}); err == nil || !strings.Contains(err.Error(), "mutate") {
+		t.Fatalf("unadvertised mutation error = %v, want mutate capability rejection", err)
+	}
+	if err := h.SendToAgent(agent.ClusterID, &protocol.Message{Type: protocol.MsgHelmInstall}); err == nil || !strings.Contains(err.Error(), "helm") {
+		t.Fatalf("unadvertised Helm error = %v, want helm capability rejection", err)
+	}
+}
+
 func TestBroadcastToAll(t *testing.T) {
 	h := NewHub(slog.Default())
 
@@ -313,13 +338,24 @@ func TestConnectBlocksIncompatibleAgentVersion(t *testing.T) {
 
 	connectPayload, _ := json.Marshal(protocol.ConnectPayload{
 		ClusterID: clusterID, AgentID: "agent-old",
-		AgentVersion:            "v0.0.9", // below the compatible floor → blocked
-		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Token: "test-token",
+		AgentVersion:          "v0.9.9", // below the compatible floor → blocked
+		TunnelProtocolVersion: protocol.TunnelProtocolVersion, HeartbeatSchemaVersion: protocol.HeartbeatSchemaVersion,
+		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Capabilities: protocol.RequiredConnectCapabilities(), Token: "test-token",
 	})
 	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgConnect, Payload: connectPayload}); err != nil {
 		t.Fatalf("write connect: %v", err)
 	}
 	var msg protocol.Message
+	if err := wsjson.Read(ctx, conn, &msg); err != nil {
+		t.Fatalf("read structured rejection: %v", err)
+	}
+	var rejection protocol.ConnectAckPayload
+	if err := json.Unmarshal(msg.Payload, &rejection); err != nil {
+		t.Fatal(err)
+	}
+	if rejection.Accepted || rejection.ReasonCode != "agent_version_too_old" || rejection.UpgradeRecommendation == "" {
+		t.Fatalf("unexpected structured rejection: %+v", rejection)
+	}
 	err := wsjson.Read(ctx, conn, &msg)
 	if websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
 		t.Fatalf("read error status = %v err=%v, want policy violation", websocket.CloseStatus(err), err)
@@ -338,7 +374,8 @@ func TestConnectRejectsPreV2AgentWithStableReenrollmentReason(t *testing.T) {
 	_, conn, ctx := testServerAndClient(t, h)
 	payload, _ := json.Marshal(protocol.ConnectPayload{
 		ClusterID: "945db76b-d7f3-4e6c-8c70-6ca50ca514f4", AgentID: "old-agent",
-		AgentVersion: "1.0.0", Token: "test-token",
+		AgentVersion: "1.0.0", TunnelProtocolVersion: protocol.TunnelProtocolVersion,
+		HeartbeatSchemaVersion: protocol.HeartbeatSchemaVersion, Capabilities: protocol.RequiredConnectCapabilities(), Token: "test-token",
 	})
 	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgConnect, Payload: payload}); err != nil {
 		t.Fatal(err)
@@ -354,7 +391,7 @@ func TestConnectRejectsPreV2AgentWithStableReenrollmentReason(t *testing.T) {
 	if err := json.Unmarshal(message.Payload, &ack); err != nil {
 		t.Fatal(err)
 	}
-	if ack.Accepted || ack.Reason != "agent_reenrollment_required" {
+	if ack.Accepted || ack.Reason != "agent_reenrollment_required" || ack.ReasonCode != "delivery_protocol_unsupported" {
 		t.Fatalf("unexpected rejection: %#v", ack)
 	}
 }

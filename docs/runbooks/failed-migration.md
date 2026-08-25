@@ -28,25 +28,33 @@
    - `dirty=false` but pod failing → migration ran but a follow-up
      change (e.g. a CHECK constraint on existing data) failed.
 3. **Was it caught by `make check-migrations`?** Run locally against
-   the suspect migration (T30 lint catches `ADD COLUMN ... NOT NULL`
-   without DEFAULT but not all unsafe patterns).
+   the suspect migration. The gate rejects blocking `ADD COLUMN ... NOT NULL`
+   and destructive contract DDL without compatibility-window approval.
 
 ## Recovery
 
 ### Resolve a dirty migration
 
-```bash
-# Connect to Postgres
-psql "$DATABASE_URL"
-# Identify the version + state
+```sql
 SELECT version, dirty FROM schema_migrations;
-# Manually finish or undo the half-applied statements based on
-# inspecting the migration .up.sql file
-# Then clear the dirty flag
-UPDATE schema_migrations SET dirty = false WHERE version = <N>;
-# Restart the pods so migrate retries (or skips if you set version=N+1)
+```
+
+Compare live objects and data with the exact `.up.sql` and `.down.sql` files.
+Restore the verified pre-upgrade backup if the resulting state is uncertain.
+If all statements rolled back, reset to the last known-good version with the
+release migration binary; do not edit `schema_migrations` directly:
+
+```bash
+# Compare live objects and data with the exact .up.sql and .down.sql files.
+migrate -database "$DATABASE_URL" -path /migrations force <last-good-version>
+# Restart the pods so the serialized migration entrypoint retries.
 kubectl -n astronomer rollout restart deploy/astronomer-server
 ```
+
+For a failure in the first migration, golang-migrate's no-version sentinel is
+`-1`, not `0`. Never force a version merely to make the pod Ready: first prove
+the database objects exactly match that version and retain the SQL inspection
+and approval in the incident record.
 
 ### Roll back the migration (when an .up.sql is wrong and you have time)
 
@@ -59,10 +67,9 @@ Then redeploy the prior chart version while you fix `.up.sql`.
 
 ### Skip a known-broken migration (last resort)
 
-`UPDATE schema_migrations SET version = <next> WHERE version = <current>;`
-**Only** if you've manually run the equivalent SQL yourself. Log the
-deviation in the incident notes and add a follow-up to fix the
-migration.
+Use `migrate ... force <version>` only if you've manually run and verified the
+equivalent SQL. Direct edits to `schema_migrations` are unsupported. Log the
+deviation, query results, approver, and backup identity in the incident record.
 
 ## Verify
 
@@ -76,7 +83,9 @@ migration.
 
 - `make check-migrations` in CI (T30)
 - Every `.up.sql` ships with a working `.down.sql`
-- For destructive changes, the staging deploy goes first
+- Destructive SQL is a contract-phase release after its declared compatibility
+  window, never a same-release cleanup
+- PostgreSQL 16/17 release fixture, concurrency, and interruption matrix in CI
 
 ## Related
 

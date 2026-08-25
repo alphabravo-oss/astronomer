@@ -1,7 +1,45 @@
-import api from "@/lib/api";
+import {
+  adminCharlieAccessGet,
+  adminCharlieAccessUpdate,
+  adminCharlieActionPolicyUpdate,
+  adminCharlieAlertPolicyGet,
+  adminCharlieAlertPolicyUpdate,
+  adminCharlieDiagnosticsRun,
+  adminCharlieDisconnect,
+  adminCharlieKubernetesVisibilityGet,
+  adminCharlieKubernetesVisibilityUpdate,
+  adminCharlieModeUpdate,
+  adminCharlieOnboardingConsume,
+  adminCharlieOnboardingValidate,
+  adminCharlieStatus,
+  adminCharlieTriggerEventRetry,
+  adminCharlieTriggerEventsList,
+  adminCharlieTriggerRuleCreate,
+  adminCharlieTriggerRuleDelete,
+  adminCharlieTriggerRulesList,
+  adminCharlieTriggerRuleUpdate,
+  charlieActivation,
+} from "@/lib/api/generated/client";
+import { createIdempotencyKey } from "@/lib/api/idempotency";
+import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { CamelizeKeys } from "@/types/wire-contract";
+import {
+  mapCharlieAccess,
+  mapCharlieActionPolicy,
+  mapCharlieAdminStatus,
+  mapCharlieAlertPolicy,
+  mapCharlieAutomation,
+  mapCharlieConnection,
+  mapCharlieDiagnostics,
+  mapCharlieKubernetesVisibility,
+  mapCharlieMode,
+  mapCharlieOnboarding,
+  mapCharlieTriggerEvent,
+} from "@/lib/api/charlie-admin-mappers";
 
 export type CharlieMode = "disabled" | "read_only" | "approval" | "auto";
-export type HealthState = "healthy" | "degraded" | "unavailable" | "unknown";
+export type HealthState =
+  "healthy" | "degraded" | "unavailable" | "inactive" | "ready" | "unknown";
 
 export interface CharlieOnboardingInput {
   package: Record<string, unknown>;
@@ -108,7 +146,7 @@ export interface CharlieTriggerRule {
   gracePeriodSeconds: number;
   flapWindowSeconds: number;
   flapCount: number;
-  fleetThresholdPercent: number;
+  estateThresholdPercent: number;
   minimumAgentVersion?: string;
   suppressed: boolean;
   maximumAttempts: number;
@@ -195,6 +233,9 @@ export interface CharlieTriggerEvent {
   deadLetteredAt?: string;
   updatedAt: string;
 }
+export type CharlieTriggerRetryReceipt = CamelizeKeys<
+  OpenAPIComponents["schemas"]["CharlieTriggerRetryReceipt"]
+>;
 export interface CharlieAccessView {
   effectivePermissions: Array<{
     permission: string;
@@ -233,9 +274,7 @@ export interface CharlieDiagnosticsView {
   correlationId?: string;
 }
 export type CharlieKubernetesVisibilityProfile =
-  | "disabled"
-  | "product_namespace"
-  | "cluster_diagnostics";
+  "disabled" | "product_namespace" | "cluster_diagnostics";
 export interface CharlieKubernetesVisibilityView {
   schema: "charlie.kubernetes-visibility/v1";
   profile: CharlieKubernetesVisibilityProfile;
@@ -259,7 +298,7 @@ export interface CharlieKubernetesVisibilityView {
   availableProfiles: CharlieKubernetesVisibilityProfile[];
   scopeSummary: string;
 }
-interface CharlieAdminStatusView {
+export interface CharlieAdminStatusView {
   connection: CharlieConnectionView;
   agent: CharlieAgentView;
   mode: CharlieModeView;
@@ -281,219 +320,229 @@ function connectWire(input: CharlieConnectInput) {
     connect_token: input.connectToken.replace(/\s+/g, ""),
   };
 }
-function payload<T>(data: unknown): T {
-  const value = data as { data?: T };
-  return (value?.data ?? data) as T;
-}
-
 export async function validateCharlieOnboarding(
   input: CharlieOnboardingInput,
+  signal?: AbortSignal,
 ): Promise<CharlieOnboardingView> {
-  const { data } = await api.post(
-    "/admin/charlie/onboarding/validate/",
-    onboardingWire(input),
+  return mapCharlieOnboarding(
+    await adminCharlieOnboardingValidate({ body: onboardingWire(input), signal }),
   );
-  return payload(data);
 }
 export async function consumeCharlieOnboarding(
   input: CharlieOnboardingInput,
+  signal?: AbortSignal,
 ): Promise<CharlieOnboardingView> {
-  const { data } = await api.post(
-    "/admin/charlie/onboarding/consume/",
-    onboardingWire(input),
+  return mapCharlieOnboarding(
+    await adminCharlieOnboardingConsume({ body: onboardingWire(input), signal }),
   );
-  return payload(data);
 }
 export async function validateCharlieConnect(
   input: CharlieConnectInput,
+  signal?: AbortSignal,
 ): Promise<CharlieOnboardingView> {
-  const { data } = await api.post(
-    "/admin/charlie/onboarding/validate/",
-    connectWire(input),
+  return mapCharlieOnboarding(
+    await adminCharlieOnboardingValidate({ body: connectWire(input), signal }),
   );
-  return payload(data);
 }
 export async function consumeCharlieConnect(
   input: CharlieConnectInput,
+  signal?: AbortSignal,
 ): Promise<CharlieOnboardingView> {
-  const { data } = await api.post(
-    "/admin/charlie/onboarding/consume/",
-    connectWire(input),
+  return mapCharlieOnboarding(
+    await adminCharlieOnboardingConsume({ body: connectWire(input), signal }),
   );
-  return payload(data);
 }
-async function getCharlieAdminStatus(): Promise<CharlieAdminStatusView> {
-  const { data } = await api.get("/admin/charlie/status/");
-  return payload(data);
+async function getCharlieAdminStatus(
+  signal?: AbortSignal,
+): Promise<CharlieAdminStatusView> {
+  return mapCharlieAdminStatus(await adminCharlieStatus({ signal }));
 }
-export async function getCharlieActivation(): Promise<{
+export async function getCharlieActivation(signal?: AbortSignal): Promise<{
   activated: boolean;
   endpoint?: string;
 }> {
-  const { data } = await api.get("/charlie/activation/");
-  const value = payload<{ activated?: boolean; endpoint?: string }>(data);
+  const value = await charlieActivation({ signal });
   const endpoint = value.endpoint?.trim();
   return {
     activated: value.activated === true,
     endpoint: endpoint || undefined,
   };
 }
-export async function getCharlieConnection(): Promise<CharlieConnectionView> {
-  return (await getCharlieAdminStatus()).connection;
+export async function getCharlieConnection(
+  signal?: AbortSignal,
+): Promise<CharlieConnectionView> {
+  return (await getCharlieAdminStatus(signal)).connection;
 }
-export async function getCharlieAgent(): Promise<CharlieAgentView> {
-  return (await getCharlieAdminStatus()).agent;
+export async function getCharlieAgent(
+  signal?: AbortSignal,
+): Promise<CharlieAgentView> {
+  return (await getCharlieAdminStatus(signal)).agent;
 }
-export async function getCharlieMode(): Promise<CharlieModeView> {
-  return (await getCharlieAdminStatus()).mode;
+export async function getCharlieMode(
+  signal?: AbortSignal,
+): Promise<CharlieModeView> {
+  return (await getCharlieAdminStatus(signal)).mode;
 }
-export async function getCharlieKubernetesVisibility(): Promise<CharlieKubernetesVisibilityView> {
-  const { data } = await api.get("/admin/charlie/kubernetes-visibility/");
-  return payload(data);
+export async function getCharlieKubernetesVisibility(
+  signal?: AbortSignal,
+): Promise<CharlieKubernetesVisibilityView> {
+  return mapCharlieKubernetesVisibility(
+    await adminCharlieKubernetesVisibilityGet({ signal }),
+  );
 }
-export async function updateCharlieKubernetesVisibility(input: {
-  profile: CharlieKubernetesVisibilityProfile;
-  podLogs: boolean;
-  revision: number;
-}): Promise<CharlieKubernetesVisibilityView> {
-  const { data } = await api.put("/admin/charlie/kubernetes-visibility/", {
-    profile: input.profile,
-    pod_logs: input.podLogs,
-    revision: input.revision,
-  });
-  return payload(data);
+export async function updateCharlieKubernetesVisibility(
+  input: {
+    profile: CharlieKubernetesVisibilityProfile;
+    podLogs: boolean;
+    revision: number;
+  },
+  signal?: AbortSignal,
+): Promise<CharlieKubernetesVisibilityView> {
+  return mapCharlieKubernetesVisibility(
+    await adminCharlieKubernetesVisibilityUpdate({
+      body: {
+        profile: input.profile,
+        pod_logs: input.podLogs,
+        revision: input.revision,
+      },
+      signal,
+    }),
+  );
 }
 export async function updateCharlieMode(
   mode: CharlieMode,
   revision: number,
+  signal?: AbortSignal,
 ): Promise<CharlieModeView> {
-  const { data } = await api.patch(
-    "/admin/charlie/mode/",
-    { mode, revision },
-    { timeout: 180_000 },
+  return mapCharlieMode(
+    await adminCharlieModeUpdate({
+      body: { mode, revision },
+      signal,
+      timeoutMs: 180_000,
+    }),
   );
-  return payload(data);
 }
-export async function disconnectCharlie(): Promise<CharlieConnectionView> {
-  const { data } = await api.post("/admin/charlie/disconnect/", {
-    confirmation: "DISCONNECT CHARLIE",
+export async function disconnectCharlie(
+  signal?: AbortSignal,
+): Promise<CharlieConnectionView> {
+  const status = await adminCharlieDisconnect({
+    body: { confirmation: "DISCONNECT CHARLIE" },
+    signal,
   });
-  return payload<CharlieAdminStatusView>(data).connection;
+  return mapCharlieConnection(status.connection);
 }
 export async function emergencyDisableCharlie(
   revision: number,
+  signal?: AbortSignal,
 ): Promise<CharlieModeView> {
-  const { data } = await api.patch(
-    "/admin/charlie/mode/",
-    {
-      mode: "disabled",
-      revision,
-      emergency_disable: true,
-    },
-    { timeout: 180_000 },
+  return mapCharlieMode(
+    await adminCharlieModeUpdate({
+      body: { mode: "disabled", revision, emergency_disable: true },
+      signal,
+      timeoutMs: 180_000,
+    }),
   );
-  return payload(data);
 }
 export async function acknowledgeCharlieDisclosure(
   digest: string,
+  signal?: AbortSignal,
 ): Promise<CharlieModeView> {
-  const { data } = await api.patch("/admin/charlie/mode/", {
-    acknowledge_disclosure_digest: digest,
-  });
-  return payload(data);
+  return mapCharlieMode(
+    await adminCharlieModeUpdate({
+      body: { acknowledge_disclosure_digest: digest },
+      signal,
+    }),
+  );
 }
-export async function getCharlieAutomation(): Promise<CharlieAutomationView> {
-  const { data } = await api.get("/admin/charlie/trigger-rules/");
-  const value = payload<
-    | CharlieAutomationView
-    | {
-        items: CharlieTriggerRule[];
-        defaultsRevision?: number;
-        serviceIdentityEnabled?: boolean;
-    }
-  >(data);
-  if (value && !Array.isArray(value) && 'rules' in value && Array.isArray(value.rules)) {
-    return {
-      ...value,
-      actionPolicies: value.actionPolicies ?? [],
-      rules: value.rules.map(normalizeTriggerRule),
-    };
-  }
-  if (value && !Array.isArray(value) && 'items' in value && Array.isArray(value.items)) {
-    return {
-      rules: value.items.map(normalizeTriggerRule),
-      actionPolicies: [],
-      defaultsRevision: value.defaultsRevision ?? 0,
-      serviceIdentityEnabled: value.serviceIdentityEnabled ?? false,
-    };
-  }
-  throw new Error('Charlie trigger-rule response is unavailable');
+export async function getCharlieAutomation(
+  signal?: AbortSignal,
+): Promise<CharlieAutomationView> {
+  return mapCharlieAutomation(await adminCharlieTriggerRulesList({ signal }));
 }
-export async function getCharlieAlertPolicy(): Promise<CharlieAlertPolicy> {
-  const { data } = await api.get("/admin/charlie/alert-policy/");
-  return payload(data);
+export async function getCharlieAlertPolicy(
+  signal?: AbortSignal,
+): Promise<CharlieAlertPolicy> {
+  return mapCharlieAlertPolicy(await adminCharlieAlertPolicyGet({ signal }));
 }
 export async function updateCharlieAlertPolicy(
   input: CharlieAlertPolicy,
+  signal?: AbortSignal,
 ): Promise<CharlieAlertPolicy> {
   try {
-    const { data } = await api.put("/admin/charlie/alert-policy/", {
-      revision: input.revision,
-      enabled: input.enabled,
-      minimum_severity: input.minimumSeverity,
-      dedupe_window_seconds: input.dedupeWindowSeconds,
-      escalation_after_seconds: input.escalationAfterSeconds,
-      quiet_hours_enabled: input.quietHoursEnabled,
-      quiet_hours_start: input.quietHoursStart,
-      quiet_hours_end: input.quietHoursEnd,
-      quiet_hours_timezone: input.quietHoursTimezone,
-      channel_ids: input.channelIds,
-    });
-    return payload(data);
+    return mapCharlieAlertPolicy(
+      await adminCharlieAlertPolicyUpdate({
+        body: {
+          revision: input.revision,
+          enabled: input.enabled,
+          minimum_severity: input.minimumSeverity,
+          dedupe_window_seconds: input.dedupeWindowSeconds,
+          escalation_after_seconds: input.escalationAfterSeconds,
+          quiet_hours_enabled: input.quietHoursEnabled,
+          quiet_hours_start: input.quietHoursStart,
+          quiet_hours_end: input.quietHoursEnd,
+          quiet_hours_timezone: input.quietHoursTimezone,
+          channel_ids: input.channelIds,
+        },
+        signal,
+      }),
+    );
   } catch (error) {
-    const status = (error as { response?: { status?: number } }).response?.status;
+    const status = (error as { response?: { status?: number } }).response
+      ?.status;
     if (status === 409) {
-      throw new Error("This alert policy changed. Refresh before trying again.");
+      throw new Error(
+        "This alert policy changed. Refresh before trying again.",
+      );
     }
     throw new Error("Astronomer could not confirm the alert-policy update.");
   }
 }
 export async function updateCharlieAutomation(
   input: CharlieAutomationView,
+  signal?: AbortSignal,
 ): Promise<CharlieAutomationView> {
   await Promise.all(
-    input.rules.map((rule) =>
-      (rule.id ? api.patch : api.post)(
-        rule.id
-          ? `/admin/charlie/trigger-rules/${encodeURIComponent(rule.id)}/`
-          : "/admin/charlie/trigger-rules/",
-        triggerRuleWire(rule),
-      ),
-    ),
+    input.rules.map((rule) => {
+      const body = triggerRuleWire(rule);
+      return rule.id
+        ? adminCharlieTriggerRuleUpdate({
+            path: { rule_id: rule.id },
+            body,
+            signal,
+          })
+        : adminCharlieTriggerRuleCreate({ body, signal });
+    }),
   );
-  await api.put("/admin/charlie/access/", {
-    automation_service_identity_enabled: input.serviceIdentityEnabled,
+  await adminCharlieAccessUpdate({
+    body: {
+      automation_service_identity_enabled: input.serviceIdentityEnabled,
+    },
+    signal,
   });
-  return getCharlieAutomation();
+  return getCharlieAutomation(signal);
 }
 
 export async function updateCharlieActionPolicy(
   input: CharlieActionPolicyInput,
+  signal?: AbortSignal,
 ): Promise<CharlieActionPolicy> {
   try {
-    const { data } = await api.put(
-      `/admin/charlie/action-policies/${encodeURIComponent(input.capability)}/`,
-      {
-        enabled: input.enabled,
-        max_actions_per_incident: input.maxActionsPerIncident,
-        max_actions_per_window: input.maxActionsPerWindow,
-        budget_window_seconds: input.budgetWindowSeconds,
-        cooldown_seconds: input.cooldownSeconds,
-      },
+    return mapCharlieActionPolicy(
+      await adminCharlieActionPolicyUpdate({
+        path: { capability: input.capability },
+        body: {
+          enabled: input.enabled,
+          max_actions_per_incident: input.maxActionsPerIncident,
+          max_actions_per_window: input.maxActionsPerWindow,
+          budget_window_seconds: input.budgetWindowSeconds,
+          cooldown_seconds: input.cooldownSeconds,
+        },
+        signal,
+      }),
     );
-    return payload(data);
   } catch (error) {
-    const status = (error as { response?: { status?: number } }).response?.status;
+    const status = (error as { response?: { status?: number } }).response
+      ?.status;
     if (status === 409) {
       throw new Error(
         "This action policy conflicts with current central allowlisting or bounded budget rules. Refresh before trying again.",
@@ -508,27 +557,20 @@ export async function updateCharlieActionPolicy(
   }
 }
 
-function normalizeTriggerRule(rule: CharlieTriggerRule): CharlieTriggerRule {
-  return {
-    ...rule,
-    severities: rule.severities ?? [],
-    scopes: rule.scopes ?? [],
-  };
-}
-
 function triggerRuleWire(rule: CharlieTriggerRule) {
   return {
     ...(rule.id ? { id: rule.id } : {}),
     name: rule.name,
     enabled: rule.enabled,
     source_type: rule.sourceType,
-    severities: rule.severities,
+    severities: rule.severities.map(triggerSeverity),
     scopes: rule.scopes,
     cooldown_seconds: rule.cooldownSeconds,
     grace_period_seconds: rule.gracePeriodSeconds,
     flap_window_seconds: rule.flapWindowSeconds,
     flap_count: rule.flapCount,
-    fleet_threshold_percent: rule.fleetThresholdPercent,
+    estate_threshold_percent: rule.estateThresholdPercent,
+    fleet_threshold_percent: rule.estateThresholdPercent,
     minimum_agent_version: rule.minimumAgentVersion,
     suppressed: rule.suppressed,
     maximum_attempts: rule.maximumAttempts,
@@ -538,42 +580,74 @@ function triggerRuleWire(rule: CharlieTriggerRule) {
   };
 }
 
-export async function deleteCharlieAutomationRule(id: string): Promise<void> {
+function triggerSeverity(
+  value: string,
+): "info" | "low" | "medium" | "high" | "critical" {
+  switch (value) {
+    case "info":
+    case "low":
+    case "medium":
+    case "high":
+    case "critical":
+      return value;
+    default:
+      throw new Error(`Unsupported Charlie trigger severity: ${value}`);
+  }
+}
+
+export async function deleteCharlieAutomationRule(
+  id: string,
+  signal?: AbortSignal,
+): Promise<void> {
   if (!id) return;
-  await api.delete(
-    `/admin/charlie/trigger-rules/${encodeURIComponent(id)}/`,
-    { data: { confirmation: "DELETE TRIGGER" } },
-  );
+  await adminCharlieTriggerRuleDelete({
+    path: { rule_id: id },
+    body: { confirmation: "DELETE TRIGGER" },
+    signal,
+  });
 }
 export async function listCharlieTriggerEvents(
   state: CharlieTriggerEventState = "dead",
   offset = 0,
   limit = 20,
+  signal?: AbortSignal,
 ): Promise<CharlieTriggerEvent[]> {
-  const { data } = await api.get("/admin/charlie/trigger-events/", {
-    params: {
+  const response = await adminCharlieTriggerEventsList({
+    query: {
       state,
       offset: Math.max(0, Math.trunc(offset)),
       limit: Math.min(100, Math.max(1, Math.trunc(limit))),
     },
+    signal,
   });
-  const value = payload<{ items: CharlieTriggerEvent[] }>(data);
-  return Array.isArray(value?.items) ? value.items : [];
+  return response.items.map(mapCharlieTriggerEvent);
 }
 export async function retryCharlieTriggerEvent(
   eventId: string,
-): Promise<CharlieTriggerEvent> {
-  const { data } = await api.post(
-    `/admin/charlie/trigger-events/${encodeURIComponent(eventId)}/retry/`,
-    { request_id: crypto.randomUUID() },
-  );
-  return payload<{ event: CharlieTriggerEvent }>(data).event;
+  signal?: AbortSignal,
+): Promise<CharlieTriggerRetryReceipt> {
+  const response = await adminCharlieTriggerEventRetry({
+    path: { event_id: eventId },
+    headerParams: { "Idempotency-Key": createIdempotencyKey() },
+    body: { request_id: createIdempotencyKey() },
+    signal,
+  });
+  const receipt = response.data;
+  if (!receipt) throw new Error("Charlie trigger retry omitted its operation receipt");
+  return {
+    operationId: receipt.operation_id,
+    eventId: receipt.event_id,
+    status: receipt.status,
+    statusUrl: receipt.status_url,
+  };
 }
-export async function getCharlieAccess(): Promise<CharlieAccessView> {
-  const { data } = await api.get("/admin/charlie/access/");
-  return payload(data);
+export async function getCharlieAccess(
+  signal?: AbortSignal,
+): Promise<CharlieAccessView> {
+  return mapCharlieAccess(await adminCharlieAccessGet({ signal }));
 }
-export async function getCharlieDiagnostics(): Promise<CharlieDiagnosticsView> {
-  const { data } = await api.post("/admin/charlie/diagnostics/run/", {});
-  return payload(data);
+export async function getCharlieDiagnostics(
+  signal?: AbortSignal,
+): Promise<CharlieDiagnosticsView> {
+  return mapCharlieDiagnostics(await adminCharlieDiagnosticsRun({ signal }));
 }

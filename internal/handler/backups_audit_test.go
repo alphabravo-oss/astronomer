@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -197,6 +198,15 @@ func (q *backupAuditQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.Create
 func TestBackupMutationsAreAudited(t *testing.T) {
 	q := newBackupAuditQuerier()
 	h := NewBackupHandler(q)
+	key, err := auth.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc, err := auth.NewEncryptor(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.SetEncryptor(enc)
 
 	storageBody := map[string]any{
 		"name":             "primary",

@@ -1,109 +1,153 @@
-import type { Mocked } from 'vitest';
-import api from '@/lib/api';
+import type { MockedFunction } from "vitest";
 import {
-  getExtensionMounts,
+  getExtensionsMounts,
+  postExtensionsByNameDataByDataSourceId,
+  postExtensionsByNameToken,
+} from "@/lib/api/generated/client";
+import {
   fetchExtensionData,
+  getExtensionMounts,
   requestExtensionBridgeToken,
-} from './extensions';
+} from "./extensions";
 
-vi.mock('@/lib/api', () => ({
-  __esModule: true,
-  default: {
-    get: vi.fn(),
-    post: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-  },
+vi.mock("@/lib/api/generated/client", () => ({
+  getExtensionsMounts: vi.fn(),
+  postExtensionsByNameDataByDataSourceId: vi.fn(),
+  postExtensionsByNameToken: vi.fn(),
 }));
 
-const mockedApi = api as Mocked<typeof api>;
+const mockedMounts = getExtensionsMounts as MockedFunction<
+  typeof getExtensionsMounts
+>;
+const mockedData = postExtensionsByNameDataByDataSourceId as MockedFunction<
+  typeof postExtensionsByNameDataByDataSourceId
+>;
+const mockedToken = postExtensionsByNameToken as MockedFunction<
+  typeof postExtensionsByNameToken
+>;
 
-describe('extensions host-runtime API client', () => {
+describe("extensions host-runtime generated API boundary", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  describe('getExtensionMounts', () => {
-    it('hits the viewer-readable /extensions/mounts/ endpoint (no /api/v1 prefix)', async () => {
-      mockedApi.get.mockResolvedValueOnce({
-        data: { data: { sidebar: [], dashboardWidgets: [], clusterTabs: [], settings: [] } },
-      } as never);
-
-      await getExtensionMounts();
-
-      expect(mockedApi.get).toHaveBeenCalledWith('/extensions/mounts/');
+  it("normalizes mounts and forwards AbortSignal", async () => {
+    const controller = new AbortController();
+    mockedMounts.mockResolvedValueOnce({
+      data: {
+        clusterTabs: [
+          {
+            extension: "cost",
+            displayName: "Cost",
+            point: "clusterTab",
+            pointId: "CostTab",
+            title: "Cost",
+            tier: 1,
+            render: { declarative: { kind: "stat" } },
+            dataSources: [{ id: "pod-cost", shape: "object" }],
+          },
+        ],
+      },
     });
 
-    it('backfills missing buckets to empty arrays so callers never null-check', async () => {
-      // Server returns only one bucket populated; the rest absent.
-      mockedApi.get.mockResolvedValueOnce({
-        data: { data: { clusterTabs: [{ extension: 'x' }] } },
-      } as never);
+    const result = await getExtensionMounts({ signal: controller.signal });
 
-      const res = await getExtensionMounts();
-
-      expect(res.sidebar).toEqual([]);
-      expect(res.dashboardWidgets).toEqual([]);
-      expect(res.settings).toEqual([]);
-      expect(res.clusterTabs).toHaveLength(1);
-    });
-
-    it('tolerates a null data envelope', async () => {
-      mockedApi.get.mockResolvedValueOnce({ data: { data: null } } as never);
-
-      const res = await getExtensionMounts();
-
-      expect(res).toEqual({ sidebar: [], dashboardWidgets: [], clusterTabs: [], settings: [] });
+    expect(mockedMounts).toHaveBeenCalledWith({ signal: controller.signal });
+    expect(result.sidebar).toEqual([]);
+    expect(result.clusterTabs[0]).toMatchObject({
+      extension: "cost",
+      label: "Cost",
+      pointId: "CostTab",
     });
   });
 
-  describe('fetchExtensionData', () => {
-    it('POSTs to the name+dataSource data-proxy route, URL-encoding both segments', async () => {
-      mockedApi.post.mockResolvedValueOnce({
-        data: { data: { data: { rows: [] }, shape: 'list', meta: { dataSourceId: 'pod cost' } } },
-      } as never);
-
-      const req = { context: { clusterId: 'c1' }, query: { window: '7d' } };
-      const out = await fetchExtensionData('cost insights', 'pod cost', req);
-
-      expect(mockedApi.post).toHaveBeenCalledWith(
-        '/extensions/cost%20insights/data/pod%20cost/',
-        req,
-      );
-      expect(out.shape).toBe('list');
+  it("uses generated path parameters and maps data metadata", async () => {
+    mockedData.mockResolvedValueOnce({
+      data: {
+        data: { rows: [] },
+        shape: "list",
+        meta: { dataSourceId: "pod cost", rows: 0, cached: true },
+      },
     });
+    const request = {
+      context: { clusterId: "c1" },
+      query: { window: "7d" },
+    };
 
-    it('defaults to an empty request body when none is supplied', async () => {
-      mockedApi.post.mockResolvedValueOnce({
-        data: { data: { data: {}, shape: 'object', meta: { dataSourceId: 'd1' } } },
-      } as never);
+    const result = await fetchExtensionData(
+      "cost insights",
+      "pod cost",
+      request,
+    );
 
-      await fetchExtensionData('ext', 'd1');
-
-      expect(mockedApi.post).toHaveBeenCalledWith('/extensions/ext/data/d1/', {});
+    expect(mockedData).toHaveBeenCalledWith({
+      path: { name: "cost insights", dataSourceId: "pod cost" },
+      body: {
+        context: {
+          clusterId: "c1",
+          projectId: undefined,
+          namespace: undefined,
+        },
+        pathParams: undefined,
+        query: { window: "7d" },
+        body: undefined,
+      },
+      signal: undefined,
+    });
+    expect(result).toMatchObject({
+      shape: "list",
+      meta: { dataSourceId: "pod cost", rows: 0, cached: true },
     });
   });
 
-  describe('requestExtensionBridgeToken', () => {
-    it('POSTs the dataSource + context to the ticket-issuance route', async () => {
-      mockedApi.post.mockResolvedValueOnce({
-        data: {
-          data: {
-            token: 'opaque',
-            dataSource: 'podCost',
-            expiresAt: '2026-06-25T12:00:60Z',
-            scope: 'ext:cost-insights:data:podCost',
+  it("defaults the data-proxy request to an empty generated body", async () => {
+    mockedData.mockResolvedValueOnce({
+      data: { data: {}, shape: "object", meta: {} },
+    });
+
+    await fetchExtensionData("ext", "d1");
+
+    expect(mockedData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: { name: "ext", dataSourceId: "d1" },
+        body: {
+          context: undefined,
+          pathParams: undefined,
+          query: undefined,
+          body: undefined,
+        },
+      }),
+    );
+  });
+
+  it("maps bridge-token fields and preserves the scoped context", async () => {
+    mockedToken.mockResolvedValueOnce({
+      data: {
+        token: "opaque",
+        dataSource: "podCost",
+        expiresAt: "2026-06-25T12:00:00Z",
+        scope: "ext:cost-insights:data:podCost",
+      },
+    });
+
+    const result = await requestExtensionBridgeToken(
+      "cost-insights",
+      "podCost",
+      { clusterId: "c1" },
+    );
+
+    expect(mockedToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: { name: "cost-insights" },
+        body: {
+          dataSource: "podCost",
+          context: {
+            clusterId: "c1",
+            projectId: undefined,
+            namespace: undefined,
           },
         },
-      } as never);
-
-      const ctx = { clusterId: 'c1' };
-      const tok = await requestExtensionBridgeToken('cost-insights', 'podCost', ctx);
-
-      expect(mockedApi.post).toHaveBeenCalledWith('/extensions/cost-insights/token/', {
-        dataSource: 'podCost',
-        context: ctx,
-      });
-      expect(tok.token).toBe('opaque');
-      expect(tok.scope).toBe('ext:cost-insights:data:podCost');
-    });
+      }),
+    );
+    expect(result.token).toBe("opaque");
+    expect(result.scope).toBe("ext:cost-insights:data:podCost");
   });
 });

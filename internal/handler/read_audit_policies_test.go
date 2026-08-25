@@ -27,6 +27,8 @@ type fakeReadAuditPolicyQuerier struct {
 	rows      map[uuid.UUID]sqlc.ReadAuditPolicy
 	user      sqlc.User
 	getUserOK bool
+	outboxErr error
+	auditOps  []string
 }
 
 func newFakeQuerier(superuser bool) *fakeReadAuditPolicyQuerier {
@@ -118,6 +120,40 @@ func (f *fakeReadAuditPolicyQuerier) GetUserByID(_ context.Context, id uuid.UUID
 func (f *fakeReadAuditPolicyQuerier) CreateAuditLogV1(_ context.Context, _ sqlc.CreateAuditLogV1Params) error {
 	return nil
 }
+
+func (f *fakeReadAuditPolicyQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.outboxErr != nil {
+		return sqlc.AuditOutbox{}, f.outboxErr
+	}
+	f.auditOps = append(f.auditOps, arg.Action)
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
+}
+
+func fakeReadAuditPolicyRunTx(q *fakeReadAuditPolicyQuerier) readAuditPolicyRunTxFunc {
+	return func(_ context.Context, fn func(ReadAuditPolicyMutationTx) error) error {
+		q.mu.Lock()
+		rows := make(map[uuid.UUID]sqlc.ReadAuditPolicy, len(q.rows))
+		for id, row := range q.rows {
+			rows[id] = row
+		}
+		auditOps := append([]string(nil), q.auditOps...)
+		q.mu.Unlock()
+		if err := fn(q); err != nil {
+			q.mu.Lock()
+			q.rows = rows
+			q.auditOps = auditOps
+			q.mu.Unlock()
+			return err
+		}
+		return nil
+	}
+}
+
+type countingPolicyInvalidator struct{ calls int }
+
+func (c *countingPolicyInvalidator) Invalidate() { c.calls++ }
 
 // withAuth injects an AuthenticatedUser into the request context.
 func withAuth(r *http.Request, userID uuid.UUID) *http.Request {

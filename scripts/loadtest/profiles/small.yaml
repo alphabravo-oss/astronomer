@@ -14,7 +14,8 @@ resources:
   deploymentsPerCluster: 25
   servicesPerCluster: 25
 eventsPerSecond: 50
+mandatoryAudit: {ratePerSecond: 1, maxOperations: 660}
 day2FailureDrills:
   - agent_reconnect_storm
-  - argo_fanout_smoke
+  - flux_assignment_fanout_smoke
   - redis_outage_outbox_recovery

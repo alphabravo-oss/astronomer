@@ -66,6 +66,7 @@ func TestAstronomerChartArchiveContainsChartFiles(t *testing.T) {
 		"astronomer/values.yaml",
 		"astronomer/values.schema.json",
 		"astronomer/DEPENDENCIES.md",
+		"astronomer/files/release-compatibility.json",
 		"astronomer/templates/server-deployment.yaml",
 	} {
 		if !seen[want] {

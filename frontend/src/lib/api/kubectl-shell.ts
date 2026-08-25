@@ -1,29 +1,23 @@
 // Migration 065 / sprint 17 — in-browser kubectl shell API client.
-//
-// Pairs with internal/handler/kubectl_shell.go. The session lifecycle is:
-//   1. POST    sessions/            → creates a session, returns SessionInfo
-//   2. WS      sessions/{id}/        → opens the WebSocket (server 307-redirects
-//                                       onto /api/v1/ws/exec/...)
-//   3. POST    sessions/{id}/close/  → tears down the in-cluster pod
-//   4. GET     sessions/{id}/commands/ → audit drill-down (operator's own
-//                                       recorded command lines)
-//
-// All endpoints are gated on clusters:update.
 
-import api from '../api';
+import {
+  getClustersByClusterIdShellSessionsById,
+  getClustersByClusterIdShellSessionsByIdCommands,
+  getClustersByIdShellSessions,
+  postClustersByIdShellSessions,
+  postClustersByIdShellSessionsBySessionIdClose,
+} from "@/lib/api/generated/client";
+import type { OpenAPIComponents } from "@/types/openapi.generated";
 
-// camelCase to match the global axios response interceptor (frontend/src/lib/api.ts)
-// which transforms every snake_case key into camelCase before the
-// caller sees it. Until that interceptor was added this interface
-// used snake_case, which made every `session.cluster_id` read return
-// undefined at runtime — the WS URL ended up
-// `…/clusters/undefined/shell/…` and the terminal age/expires copy
-// rendered Invalid Date. Both bugs traced back to this mismatch.
+type ShellSessionWire = OpenAPIComponents["schemas"]["KubectlSession"];
+type RecordedCommandWire =
+  OpenAPIComponents["schemas"]["KubectlRecordedCommand"];
+
 export interface ShellSession {
   id: string;
   clusterId: string;
   userId: string;
-  status: 'starting' | 'active' | 'closed' | 'expired' | 'failed';
+  status: "starting" | "active" | "closed" | "expired" | "failed";
   podName: string;
   podNamespace: string;
   container: string;
@@ -39,44 +33,100 @@ export interface RecordedCommand {
   commandLine: string;
 }
 
-export async function openShellSession(clusterId: string): Promise<ShellSession> {
-  const resp = await api.post<{ data: ShellSession }>(
-    `/clusters/${clusterId}/shell/sessions/`,
-    {}
-  );
-  return resp.data.data;
+export interface ShellCloseReceipt {
+  status: "closed";
+}
+
+export interface ShellRequestOptions {
+  signal?: AbortSignal;
+}
+
+export interface ShellCommandListOptions extends ShellRequestOptions {
+  limit?: number;
+  offset?: number;
+}
+
+function shellSessionFromWire(wire: ShellSessionWire): ShellSession {
+  return {
+    id: wire.id,
+    clusterId: wire.cluster_id,
+    userId: wire.user_id,
+    status: wire.status,
+    podName: wire.pod_name,
+    podNamespace: wire.pod_namespace,
+    container: wire.container,
+    startedAt: wire.started_at,
+    lastInputAt: wire.last_input_at,
+    expiresAt: wire.expires_at,
+    idleTimeoutSeconds: wire.idle_timeout_seconds,
+    ...(wire.command_count === undefined
+      ? {}
+      : { commandCount: wire.command_count }),
+  };
+}
+
+function recordedCommandFromWire(wire: RecordedCommandWire): RecordedCommand {
+  return {
+    commandAt: wire.command_at,
+    commandLine: wire.command_line,
+  };
+}
+
+export async function openShellSession(
+  clusterId: string,
+  options: ShellRequestOptions = {},
+): Promise<ShellSession> {
+  const response = await postClustersByIdShellSessions({
+    path: { id: clusterId },
+    signal: options.signal,
+  });
+  return shellSessionFromWire(response.data);
 }
 
 export async function getShellSession(
   clusterId: string,
   sessionId: string,
+  options: ShellRequestOptions = {},
 ): Promise<ShellSession> {
-  const resp = await api.get<{ data: ShellSession }>(
-    `/clusters/${clusterId}/shell/sessions/${sessionId}/`,
-  );
-  return resp.data.data;
+  const response = await getClustersByClusterIdShellSessionsById({
+    path: { cluster_id: clusterId, id: sessionId },
+    signal: options.signal,
+  });
+  return shellSessionFromWire(response.data);
 }
 
-export async function listShellSessions(clusterId: string): Promise<ShellSession[]> {
-  const resp = await api.get<{ data: ShellSession[] }>(
-    `/clusters/${clusterId}/shell/sessions/`,
-  );
-  return resp.data.data ?? [];
+export async function listShellSessions(
+  clusterId: string,
+  options: ShellRequestOptions = {},
+): Promise<ShellSession[]> {
+  const response = await getClustersByIdShellSessions({
+    path: { id: clusterId },
+    signal: options.signal,
+  });
+  return response.data.map(shellSessionFromWire);
 }
 
 export async function closeShellSession(
   clusterId: string,
   sessionId: string,
-): Promise<void> {
-  await api.post(`/clusters/${clusterId}/shell/sessions/${sessionId}/close/`, {});
+  options: ShellRequestOptions = {},
+): Promise<ShellCloseReceipt> {
+  const response = await postClustersByIdShellSessionsBySessionIdClose({
+    path: { id: clusterId, session_id: sessionId },
+    signal: options.signal,
+  });
+  return { status: response.data.status };
 }
 
 export async function listShellSessionCommands(
   clusterId: string,
   sessionId: string,
+  options: ShellCommandListOptions = {},
 ): Promise<RecordedCommand[]> {
-  const resp = await api.get<{ data: RecordedCommand[] }>(
-    `/clusters/${clusterId}/shell/sessions/${sessionId}/commands/`,
-  );
-  return resp.data.data ?? [];
+  const response = await getClustersByClusterIdShellSessionsByIdCommands({
+    path: { cluster_id: clusterId, id: sessionId },
+    query: { limit: options.limit, offset: options.offset },
+    signal: options.signal,
+  });
+  return response.data.map(recordedCommandFromWire);
 }

@@ -84,13 +84,10 @@ func (q *ccrStuckQuerier) CreateAuditLogV1(_ context.Context, _ sqlc.CreateAudit
 // status='False', so the stuck row was never remediated and the wizard stayed
 // red forever.
 func TestReconcile_RemediatesStuckApplyingTrueCondition(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	q := &ccrStuckQuerier{clusterID: uuid.New(), appStatus: "applying"}
-	runtimeDeps = RuntimeDependencies{Queries: q} // Leader nil → sweep runs inline
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q}) // Leader nil → sweep runs inline
 
-	if err := HandleClusterConditionReconcile(context.Background(), nil); err != nil {
+	if err := HandleClusterConditionReconcile(ctx, nil); err != nil {
 		t.Fatalf("HandleClusterConditionReconcile returned error: %v", err)
 	}
 

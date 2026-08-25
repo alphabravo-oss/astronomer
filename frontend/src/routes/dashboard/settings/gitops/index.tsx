@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/gitops — GitOps cluster registration sources
  * (migration 060).
@@ -7,27 +7,22 @@ import { createFileRoute } from '@tanstack/react-router';
  * sync worker reconciles every 60s. This page lists every source with
  * last-sync status; the detail page handles per-source actions.
  */
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { useRouter } from '@/lib/navigation';
-import {
-  ArrowLeft,
-  GitBranch,
-  Plus,
-  Trash2,
-} from 'lucide-react';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ActionButton } from '@/components/ui/action-button';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { formatRelativeTime } from '@/lib/utils';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { useRouter } from "@/lib/navigation";
+import { ArrowLeft, GitBranch, Plus, Trash2 } from "lucide-react";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ActionButton } from "@/components/ui/action-button";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { formatRelativeTime } from "@/lib/utils";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import {
   useDeleteGitOpsSource,
   useGitOpsSources,
-} from '@/components/settings/hooks';
-import type { GitOpsSource } from '@/lib/api/settings';
+} from "@/components/settings/hooks";
+import type { GitOpsSource } from "@/lib/api/gitops";
 
 function GitOpsList() {
   const router = useRouter();
@@ -37,46 +32,48 @@ function GitOpsList() {
 
   const columns: Column<GitOpsSource>[] = [
     {
-      key: 'name',
-      header: 'Source',
+      key: "name",
+      header: "Source",
       accessor: (row) => (
         <div className="flex items-center gap-2">
           <GitBranch className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="font-medium text-foreground">{row.name}</p>
-            <p className="text-2xs font-mono text-muted-foreground">{row.branch}</p>
+            <p className="text-2xs font-mono text-muted-foreground">
+              {row.branch}
+            </p>
           </div>
         </div>
       ),
     },
     {
-      key: 'repo_url',
-      header: 'Repo',
+      key: "repo_url",
+      header: "Repo",
       sortable: false,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono truncate max-w-[360px] block">
           {row.repo_url}
-          {row.path_prefix ? ` · ${row.path_prefix}` : ''}
+          {row.path_prefix ? ` · ${row.path_prefix}` : ""}
         </span>
       ),
     },
     {
-      key: 'sync_mode',
-      header: 'Mode',
-      align: 'center',
+      key: "sync_mode",
+      header: "Mode",
+      align: "center",
       sortable: false,
       accessor: (row) => (
         <span className="text-xs font-mono uppercase text-muted-foreground">
-          {row.sync_mode === 'manual'
-            ? 'manual'
+          {row.sync_mode === "manual"
+            ? "manual"
             : `every ${row.sync_interval_seconds}s`}
         </span>
       ),
     },
     {
-      key: 'on_delete',
-      header: 'On delete',
-      align: 'center',
+      key: "on_delete",
+      header: "On delete",
+      align: "center",
       sortable: false,
       accessor: (row) => (
         <span className="text-xs font-mono uppercase text-muted-foreground">
@@ -85,14 +82,16 @@ function GitOpsList() {
       ),
     },
     {
-      key: 'last_synced_at',
-      header: 'Last sync',
+      key: "last_synced_at",
+      header: "Last sync",
       accessor: (row) => {
         if (row.last_error) {
           return <StatusBadge status="error" label="error" size="sm" />;
         }
         if (!row.last_synced_at) {
-          return <span className="text-xs text-muted-foreground">Never synced</span>;
+          return (
+            <span className="text-xs text-muted-foreground">Never synced</span>
+          );
         }
         return (
           <span className="text-xs text-muted-foreground">
@@ -102,21 +101,21 @@ function GitOpsList() {
       },
     },
     {
-      key: 'enabled',
-      header: 'Enabled',
-      align: 'center',
+      key: "enabled",
+      header: "Enabled",
+      align: "center",
       sortable: false,
       accessor: (row) => (
         <StatusBadge
-          status={row.enabled ? 'active' : 'inactive'}
-          label={row.enabled ? 'on' : 'off'}
+          status={row.enabled ? "active" : "inactive"}
+          label={row.enabled ? "on" : "off"}
           size="sm"
         />
       ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       sortable: false,
       accessor: (row) => (
         <button
@@ -141,7 +140,9 @@ function GitOpsList() {
         columns={columns}
         keyExtractor={(row) => row.id}
         loading={isLoading}
-        onRowClick={(row) => router.push(`/dashboard/settings/gitops/${row.id}`)}
+        onRowClick={(row) =>
+          router.push(`/dashboard/settings/gitops/${row.id}`)
+        }
         emptyMessage="No GitOps sources configured"
         searchPlaceholder="Search sources..."
       />
@@ -179,7 +180,11 @@ function GitOpsSourcesPage() {
           title="GitOps cluster registration"
           description="Operators commit ClusterRegistration YAML to a tracked repo; Astronomer reconciles every 60s."
           actions={
-            <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => router.push('/dashboard/settings/gitops/new')}>
+            <ActionButton
+              intent="primary"
+              icon={<Plus className="h-4 w-4" />}
+              onClick={() => router.push("/dashboard/settings/gitops/new")}
+            >
               New source
             </ActionButton>
           }
@@ -190,6 +195,6 @@ function GitOpsSourcesPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/gitops/')({
+export const Route = createFileRoute("/dashboard/settings/gitops/")({
   component: GitOpsSourcesPage,
 });

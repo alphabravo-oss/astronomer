@@ -15,7 +15,11 @@ function fixture(
     title: "Finding",
     severity: "medium",
     state: "open",
-    affectedResource: { type: "installation", id: "local", requiredVerb: "read" },
+    affectedResource: {
+      type: "installation",
+      id: "local",
+      requiredVerb: "read",
+    },
     summary: "bounded",
     workflowState,
     availableDecisions,
@@ -41,7 +45,9 @@ describe("Charlie finding workflow decisions", () => {
     const finding = fixture("approval_pending", []);
     expect(findingLifecycleDecisions(finding)).toEqual([]);
     expect(findingWorkflowLabel(finding)).toBe("approval pending");
-    expect(findingWorkflowGuidance(finding)).toContain("separate approvals list");
+    expect(findingWorkflowGuidance(finding)).toContain(
+      "separate approvals list",
+    );
   });
 
   it("makes blocked automation explicit and non-executing", () => {
@@ -49,15 +55,15 @@ describe("Charlie finding workflow decisions", () => {
       "start_remediation",
       "dismiss",
     ]);
-    expect(findingWorkflowGuidance(finding)).toContain("No Charlie action is authorized");
+    expect(findingWorkflowGuidance(finding)).toContain(
+      "No Charlie action is authorized",
+    );
   });
 
-  it.each([
-    "resolved",
-    "rejected",
-    "dismissed",
-    "expired",
-  ] as const)("exposes no decision for terminal %s", (state) => {
-    expect(findingLifecycleDecisions(fixture(state, []))).toEqual([]);
-  });
+  it.each(["resolved", "rejected", "dismissed", "expired"] as const)(
+    "exposes no decision for terminal %s",
+    (state) => {
+      expect(findingLifecycleDecisions(fixture(state, []))).toEqual([]);
+    },
+  );
 });

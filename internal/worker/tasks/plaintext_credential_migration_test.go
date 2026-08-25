@@ -152,7 +152,6 @@ func (f *fakePlaintextCredentialMigrationQuerier) UpdateClusterRegistryConfig(_ 
 }
 
 func TestPlaintextCredentialMigrationEncryptsAndBlanksLegacyRows(t *testing.T) {
-	ResetPlaintextCredentialMigration()
 	key, err := auth.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
@@ -174,13 +173,12 @@ func TestPlaintextCredentialMigrationEncryptsAndBlanksLegacyRows(t *testing.T) {
 		}},
 	}
 
-	if err := HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
-		t.Fatalf("unexpected unconfigured error: %v", err)
+	if err := (MaintenanceRuntime{}).HandlePlaintextCredentialMigration(context.Background(), nil); err == nil {
+		t.Fatal("HandlePlaintextCredentialMigration returned nil, want an unconfigured-runtime error")
 	}
-	ConfigurePlaintextCredentialMigration(PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc})
-	t.Cleanup(ResetPlaintextCredentialMigration)
+	runtime := MaintenanceRuntime{PlaintextCredentials: PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc}}
 
-	if err := HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
+	if err := runtime.HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
 		t.Fatalf("HandlePlaintextCredentialMigration: %v", err)
 	}
 	if len(q.backupUpdates) != 1 {
@@ -245,10 +243,9 @@ func TestPlaintextCredentialMigrationBlanksRowsWithExistingCiphertext(t *testing
 			RegistryPasswordEncrypted: registryCiphertext,
 		}},
 	}
-	ConfigurePlaintextCredentialMigration(PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc})
-	t.Cleanup(ResetPlaintextCredentialMigration)
+	runtime := MaintenanceRuntime{PlaintextCredentials: PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc}}
 
-	if err := HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
+	if err := runtime.HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
 		t.Fatalf("HandlePlaintextCredentialMigration: %v", err)
 	}
 	if q.backupUpdates[0].EncryptedCredentials != backupCiphertext {
@@ -266,7 +263,6 @@ func TestPlaintextCredentialMigrationBlanksRowsWithExistingCiphertext(t *testing
 // auth_config. Without this converter the fix would only ever apply to
 // installs where somebody happened to re-save the backend through the API.
 func TestPlaintextCredentialMigrationSealsMonitoringBackendAuthConfig(t *testing.T) {
-	ResetPlaintextCredentialMigration()
 	key, err := auth.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
@@ -295,10 +291,9 @@ func TestPlaintextCredentialMigrationSealsMonitoringBackendAuthConfig(t *testing
 			},
 		},
 	}
-	ConfigurePlaintextCredentialMigration(PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc})
-	t.Cleanup(ResetPlaintextCredentialMigration)
+	runtime := MaintenanceRuntime{PlaintextCredentials: PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc}}
 
-	if err := HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
+	if err := runtime.HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
 		t.Fatalf("HandlePlaintextCredentialMigration: %v", err)
 	}
 	if len(q.backendSeals) != 1 {
@@ -329,7 +324,7 @@ func TestPlaintextCredentialMigrationSealsMonitoringBackendAuthConfig(t *testing
 
 	// Idempotent: a second pass finds the sealed row no longer matching.
 	before := len(q.backendSeals)
-	if err := HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
+	if err := runtime.HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
 		t.Fatalf("second pass: %v", err)
 	}
 	if len(q.backendSeals) != before {

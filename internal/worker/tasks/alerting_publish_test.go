@@ -48,16 +48,13 @@ func alertingPublishReceive(t *testing.T, ch <-chan events.Event) map[string]any
 }
 
 func TestPublishAlertEventChanged_CarriesKindAndCluster(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	bus := events.NewBus()
 	ch := alertingPublishSubscribe(t, bus)
-	runtimeDeps = RuntimeDependencies{Bus: bus}
+	ctx := testRuntimeContext(RuntimeDependencies{Bus: bus})
 
 	clusterID := uuid.New()
 	eventID := uuid.New()
-	publishAlertEventChanged(pgtype.UUID{Bytes: clusterID, Valid: true}, eventID)
+	publishAlertEventChanged(ctx, pgtype.UUID{Bytes: clusterID, Valid: true}, eventID)
 
 	payload := alertingPublishReceive(t, ch)
 	if payload["cluster_id"] != clusterID.String() {
@@ -72,17 +69,13 @@ func TestPublishAlertEventChanged_CarriesKindAndCluster(t *testing.T) {
 }
 
 func TestPublishAlertEventChanged_InvalidClusterIsUnscopedAndNilBusSafe(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	// Nil bus must be a no-op, never a panic.
-	runtimeDeps = RuntimeDependencies{}
-	publishAlertEventChanged(pgtype.UUID{}, uuid.New())
+	publishAlertEventChanged(testRuntimeContext(RuntimeDependencies{}), pgtype.UUID{}, uuid.New())
 
 	bus := events.NewBus()
 	ch := alertingPublishSubscribe(t, bus)
-	runtimeDeps = RuntimeDependencies{Bus: bus}
-	publishAlertEventChanged(pgtype.UUID{}, uuid.New())
+	ctx := testRuntimeContext(RuntimeDependencies{Bus: bus})
+	publishAlertEventChanged(ctx, pgtype.UUID{}, uuid.New())
 
 	payload := alertingPublishReceive(t, ch)
 	if _, ok := payload["cluster_id"]; ok {
@@ -93,9 +86,6 @@ func TestPublishAlertEventChanged_InvalidClusterIsUnscopedAndNilBusSafe(t *testi
 // A recompute pass publishes ONE baseline event per distinct cluster —
 // per-row events would spam the bus every 5 minutes.
 func TestBaselineRecompute_PublishesOncePerCluster(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	q := newFakeAnomalyQuerier()
 	clusterID := uuid.New()
 	for _, metric := range []string{"cpu_percent", "memory_percent"} {
@@ -111,9 +101,9 @@ func TestBaselineRecompute_PublishesOncePerCluster(t *testing.T) {
 
 	bus := events.NewBus()
 	ch := alertingPublishSubscribe(t, bus)
-	runtimeDeps = RuntimeDependencies{Queries: nil, Bus: bus}
+	ctx := testRuntimeContext(RuntimeDependencies{Bus: bus})
 
-	if err := RunAnomalyBaselineRecompute(context.Background(), q, time.Now().UTC()); err != nil {
+	if err := RunAnomalyBaselineRecompute(ctx, q, time.Now().UTC()); err != nil {
 		t.Fatalf("recompute: %v", err)
 	}
 

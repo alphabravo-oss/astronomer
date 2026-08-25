@@ -7,19 +7,36 @@
  *
  * Re-exported from ../api.ts via `export * from './api/scim-tokens'`.
  */
-import api from '@/lib/api';
-import type { SCIMToken, SCIMTokenCreated } from '@/types';
+import {
+  deleteAdminScimTokensById,
+  getAdminScimTokens,
+  postAdminScimTokens,
+} from "@/lib/api/generated/client";
+import type { SCIMToken, SCIMTokenCreated } from "@/types";
+import type { OpenAPIComponents } from "@/types/openapi.generated";
+
+type SCIMTokenWire = OpenAPIComponents["schemas"]["SCIMToken"];
+
+function mapSCIMToken(token: SCIMTokenWire): SCIMToken {
+  return {
+    id: token.id,
+    name: token.name,
+    prefix: token.prefix,
+    lastUsedAt: token.last_used_at,
+    createdAt: token.created_at,
+  };
+}
 
 export async function listSCIMTokens(): Promise<SCIMToken[]> {
-  const res = await api.get<{ data?: { tokens?: SCIMToken[] } }>('/admin/scim-tokens/');
-  return res.data.data?.tokens ?? [];
+  const response = await getAdminScimTokens();
+  return response.data.tokens.map(mapSCIMToken);
 }
 
 export async function createSCIMToken(name: string): Promise<SCIMTokenCreated> {
-  const res = await api.post<{ data: SCIMTokenCreated }>('/admin/scim-tokens/', { name });
-  return res.data.data;
+  const response = await postAdminScimTokens({ body: { name } });
+  return { ...mapSCIMToken(response.data), token: response.data.token };
 }
 
 export async function deleteSCIMToken(id: string): Promise<void> {
-  await api.delete(`/admin/scim-tokens/${id}/`);
+  await deleteAdminScimTokensById({ path: { id } });
 }

@@ -1,9 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  CharlieLifecycleNotice,
-  CharlieMessageParts,
-} from "../message-parts";
+import { CharlieLifecycleNotice, CharlieMessageParts } from "../message-parts";
 import { decideCharlieApproval } from "@/lib/api/charlie";
 import { useAuthStore } from "@/lib/store";
 import type { User } from "@/types";
@@ -160,9 +157,13 @@ describe("Charlie message safety and states", () => {
       target: { value: "Health checks are failing" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Review approval" }));
-    expect(screen.getByText("Approve exact Charlie action")).toBeInTheDocument();
+    expect(
+      screen.getByText("Approve exact Charlie action"),
+    ).toBeInTheDocument();
     expect(decideCharlieApproval).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Approve exact action" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Approve exact action" }),
+    );
     await waitFor(() =>
       expect(decideCharlieApproval).toHaveBeenCalledWith(
         "a",

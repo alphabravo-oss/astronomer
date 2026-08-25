@@ -1,23 +1,23 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
-import { toastError } from '@/lib/toast';
-import { useCreateRole } from '@/lib/hooks';
+import { useId, useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { toastError } from "@/lib/toast";
+import { useCreateRole } from "@/lib/hooks/rbac";
 
 interface RoleEditorProps {
   onClose: () => void;
-  defaultScope?: 'global' | 'cluster' | 'project';
+  defaultScope?: "global" | "cluster" | "project";
   initialRole?: {
     name: string;
     displayName: string;
     description: string;
-    scope: 'global' | 'cluster' | 'project';
+    scope: "global" | "cluster" | "project";
     rules: PolicyRuleInput[];
   };
 }
@@ -34,46 +34,63 @@ interface CRDGrantInput {
 }
 
 const PLATFORM_RESOURCES = [
-  'clusters',
-  'projects',
-  'workloads',
-  'pods',
-  'custom_resources',
-  'secrets',
-  'configmaps',
-  'services',
-  'ingresses',
-  'storage',
-  'nodes',
-  'monitoring',
-  'alerts',
-  'catalog',
-  'logging',
-  'backups',
-  'security',
-  'rbac',
-  'users',
-  'audit_logs',
-  'agents',
+  "clusters",
+  "projects",
+  "workloads",
+  "pods",
+  "custom_resources",
+  "secrets",
+  "configmaps",
+  "services",
+  "ingresses",
+  "storage",
+  "nodes",
+  "monitoring",
+  "alerts",
+  "catalog",
+  "logging",
+  "backups",
+  "security",
+  "rbac",
+  "users",
+  "audit_logs",
+  "agents",
 ];
 
-const PLATFORM_VERBS = ['read', 'list', 'watch', 'create', 'update', 'delete'];
-const CRD_VERBS = ['read', 'list', 'watch', 'create', 'update', 'delete'];
+const PLATFORM_VERBS = ["read", "list", "watch", "create", "update", "delete"];
+const CRD_VERBS = ["read", "list", "watch", "create", "update", "delete"];
 
-export function RoleEditor({ onClose, initialRole, defaultScope = 'cluster' }: RoleEditorProps) {
+export function RoleEditor({
+  onClose,
+  initialRole,
+  defaultScope = "cluster",
+}: RoleEditorProps) {
   const createRole = useCreateRole();
-  const [form, setForm] = useState(() => splitInitial(initialRole, defaultScope));
+  const [form, setForm] = useState(() =>
+    splitInitial(initialRole, defaultScope),
+  );
 
   const addPlatform = () => {
-    setForm((f) => ({ ...f, platform: [...f.platform, { resource: 'workloads', verbs: ['read', 'list'] }] }));
+    setForm((f) => ({
+      ...f,
+      platform: [
+        ...f.platform,
+        { resource: "workloads", verbs: ["read", "list"] },
+      ],
+    }));
   };
   const removePlatform = (index: number) => {
-    setForm((f) => ({ ...f, platform: f.platform.filter((_, i) => i !== index) }));
+    setForm((f) => ({
+      ...f,
+      platform: f.platform.filter((_, i) => i !== index),
+    }));
   };
   const updatePlatform = (index: number, updates: Partial<PolicyRuleInput>) => {
     setForm((f) => ({
       ...f,
-      platform: f.platform.map((rule, i) => (i === index ? { ...rule, ...updates } : rule)),
+      platform: f.platform.map((rule, i) =>
+        i === index ? { ...rule, ...updates } : rule,
+      ),
     }));
   };
   const togglePlatformVerb = (index: number, verb: string) => {
@@ -81,14 +98,19 @@ export function RoleEditor({ onClose, initialRole, defaultScope = 'cluster' }: R
       ...f,
       platform: f.platform.map((rule, i) => {
         if (i !== index) return rule;
-        const verbs = rule.verbs.includes(verb) ? rule.verbs.filter((v) => v !== verb) : [...rule.verbs, verb];
+        const verbs = rule.verbs.includes(verb)
+          ? rule.verbs.filter((v) => v !== verb)
+          : [...rule.verbs, verb];
         return { ...rule, verbs };
       }),
     }));
   };
 
   const addCRD = () => {
-    setForm((f) => ({ ...f, crd: [...f.crd, { apiGroup: '', resource: '', verbs: ['read', 'list'] }] }));
+    setForm((f) => ({
+      ...f,
+      crd: [...f.crd, { apiGroup: "", resource: "", verbs: ["read", "list"] }],
+    }));
   };
   const removeCRD = (index: number) => {
     setForm((f) => ({ ...f, crd: f.crd.filter((_, i) => i !== index) }));
@@ -96,7 +118,9 @@ export function RoleEditor({ onClose, initialRole, defaultScope = 'cluster' }: R
   const updateCRD = (index: number, updates: Partial<CRDGrantInput>) => {
     setForm((f) => ({
       ...f,
-      crd: f.crd.map((rule, i) => (i === index ? { ...rule, ...updates } : rule)),
+      crd: f.crd.map((rule, i) =>
+        i === index ? { ...rule, ...updates } : rule,
+      ),
     }));
   };
   const toggleCRDVerb = (index: number, verb: string) => {
@@ -104,7 +128,9 @@ export function RoleEditor({ onClose, initialRole, defaultScope = 'cluster' }: R
       ...f,
       crd: f.crd.map((rule, i) => {
         if (i !== index) return rule;
-        const verbs = rule.verbs.includes(verb) ? rule.verbs.filter((v) => v !== verb) : [...rule.verbs, verb];
+        const verbs = rule.verbs.includes(verb)
+          ? rule.verbs.filter((v) => v !== verb)
+          : [...rule.verbs, verb];
         return { ...rule, verbs };
       }),
     }));
@@ -112,13 +138,18 @@ export function RoleEditor({ onClose, initialRole, defaultScope = 'cluster' }: R
 
   const handleSave = async () => {
     if (!form.name || !form.displayName) {
-      toastError('Name and display name are required');
+      toastError("Name and display name are required");
       return;
     }
-    const platform = form.platform.filter((r) => r.resource && r.verbs.length > 0);
-    const crd = form.scope === 'global' ? [] : form.crd.filter((r) => r.resource && r.verbs.length > 0);
+    const platform = form.platform.filter(
+      (r) => r.resource && r.verbs.length > 0,
+    );
+    const crd =
+      form.scope === "global"
+        ? []
+        : form.crd.filter((r) => r.resource && r.verbs.length > 0);
     if (platform.length === 0 && crd.length === 0) {
-      toastError('Add at least one platform permission or CRD grant');
+      toastError("Add at least one platform permission or CRD grant");
       return;
     }
 
@@ -147,7 +178,7 @@ export function RoleEditor({ onClose, initialRole, defaultScope = 'cluster' }: R
 
   return (
     <ModalShell
-      title={initialRole ? 'Edit Role' : 'Create Role'}
+      title={initialRole ? "Edit Role" : "Create Role"}
       onClose={onClose}
       size="lg"
       panelClassName="max-h-[85vh] bg-popover flex flex-col overflow-hidden"
@@ -156,55 +187,95 @@ export function RoleEditor({ onClose, initialRole, defaultScope = 'cluster' }: R
       footer={
         <>
           <ActionButton onClick={onClose}>Cancel</ActionButton>
-          <ActionButton intent="primary" loading={createRole.isPending} onClick={() => void handleSave()}>
-            {initialRole ? 'Update Role' : 'Create Role'}
+          <ActionButton
+            intent="primary"
+            loading={createRole.isPending}
+            onClick={() => void handleSave()}
+          >
+            {initialRole ? "Update Role" : "Create Role"}
           </ActionButton>
         </>
       }
     >
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Name</label>
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-7a90ea76-167"
+          >
+            Name
+          </label>
           <Input
+            id="field-7a90ea76-167"
             type="text"
             value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                name: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+              }))
+            }
             placeholder="role-name"
           />
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Display Name</label>
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-7a90ea76-176"
+          >
+            Display Name
+          </label>
           <Input
+            id="field-7a90ea76-176"
             type="text"
             value={form.displayName}
-            onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, displayName: e.target.value }))
+            }
             placeholder="My Custom Role"
           />
         </div>
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Description</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-7a90ea76-187"
+        >
+          Description
+        </label>
         <Input
+          id="field-7a90ea76-187"
           type="text"
           value={form.description}
-          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, description: e.target.value }))
+          }
           placeholder="Describe this role's purpose"
         />
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Scope</label>
-        <div className="flex gap-2">
-          {(['global', 'cluster', 'project'] as const).map((scope) => (
+        <span
+          id="role-scope-label"
+          className="text-sm font-medium text-foreground"
+        >
+          Scope
+        </span>
+        <div
+          role="group"
+          aria-labelledby="role-scope-label"
+          className="flex gap-2"
+        >
+          {(["global", "cluster", "project"] as const).map((scope) => (
             <button
               key={scope}
               onClick={() => setForm((f) => ({ ...f, scope }))}
               className={cn(
-                'px-3 py-1.5 rounded-md text-sm font-medium transition-colors capitalize',
+                "px-3 py-1.5 rounded-md text-sm font-medium transition-colors capitalize",
                 form.scope === scope
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:text-foreground',
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground",
               )}
             >
               {scope}
@@ -220,20 +291,36 @@ export function RoleEditor({ onClose, initialRole, defaultScope = 'cluster' }: R
         addLabel="Add permission"
       >
         {form.platform.map((rule, idx) => (
-          <div key={idx} className="rounded-lg border border-border p-4 space-y-3 bg-card">
+          <div
+            key={idx}
+            className="rounded-lg border border-border p-4 space-y-3 bg-card"
+          >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Permission {idx + 1}</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Permission {idx + 1}
+              </span>
               {form.platform.length > 1 && (
-                <button onClick={() => removePlatform(idx)} className="text-muted-foreground hover:text-status-error">
+                <button
+                  onClick={() => removePlatform(idx)}
+                  className="text-muted-foreground hover:text-status-error"
+                >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Resource</label>
+              <label
+                className="text-xs text-muted-foreground"
+                htmlFor="field-7a90ea76-233"
+              >
+                Resource
+              </label>
               <Select
+                id="field-7a90ea76-233"
                 value={rule.resource}
-                onChange={(e) => updatePlatform(idx, { resource: e.target.value })}
+                onChange={(e) =>
+                  updatePlatform(idx, { resource: e.target.value })
+                }
                 className="h-8 text-xs"
               >
                 {PLATFORM_RESOURCES.map((res) => (
@@ -243,12 +330,16 @@ export function RoleEditor({ onClose, initialRole, defaultScope = 'cluster' }: R
                 ))}
               </Select>
             </div>
-            <VerbPills verbs={PLATFORM_VERBS} selected={rule.verbs} onToggle={(v) => togglePlatformVerb(idx, v)} />
+            <VerbPills
+              verbs={PLATFORM_VERBS}
+              selected={rule.verbs}
+              onToggle={(v) => togglePlatformVerb(idx, v)}
+            />
           </div>
         ))}
       </RuleSection>
 
-      {form.scope !== 'global' && (
+      {form.scope !== "global" && (
         <RuleSection
           title="CRD grants"
           hint="Extra allow for a single Custom Resource when a platform permission is too coarse. Bind this role to a user to apply the grant."
@@ -256,37 +347,68 @@ export function RoleEditor({ onClose, initialRole, defaultScope = 'cluster' }: R
           addLabel="Add CRD grant"
         >
           {form.crd.length === 0 && (
-            <p className="text-xs text-muted-foreground">No CRD grants. Optional — most roles only need platform permissions.</p>
+            <p className="text-xs text-muted-foreground">
+              No CRD grants. Optional — most roles only need platform
+              permissions.
+            </p>
           )}
           {form.crd.map((rule, idx) => (
-            <div key={idx} className="rounded-lg border border-border p-4 space-y-3 bg-card">
+            <div
+              key={idx}
+              className="rounded-lg border border-border p-4 space-y-3 bg-card"
+            >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">Grant {idx + 1}</span>
-                <button onClick={() => removeCRD(idx)} className="text-muted-foreground hover:text-status-error">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Grant {idx + 1}
+                </span>
+                <button
+                  onClick={() => removeCRD(idx)}
+                  className="text-muted-foreground hover:text-status-error"
+                >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs text-muted-foreground">API group</label>
+                  <label
+                    className="text-xs text-muted-foreground"
+                    htmlFor="field-7a90ea76-271"
+                  >
+                    API group
+                  </label>
                   <Input
+                    id="field-7a90ea76-271"
                     value={rule.apiGroup}
-                    onChange={(e) => updateCRD(idx, { apiGroup: e.target.value })}
+                    onChange={(e) =>
+                      updateCRD(idx, { apiGroup: e.target.value })
+                    }
                     placeholder="cert-manager.io (empty = core)"
                     className="h-8 px-2.5 text-xs font-mono"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs text-muted-foreground">Resource</label>
+                  <label
+                    className="text-xs text-muted-foreground"
+                    htmlFor="field-7a90ea76-280"
+                  >
+                    Resource
+                  </label>
                   <Input
+                    id="field-7a90ea76-280"
                     value={rule.resource}
-                    onChange={(e) => updateCRD(idx, { resource: e.target.value })}
+                    onChange={(e) =>
+                      updateCRD(idx, { resource: e.target.value })
+                    }
                     placeholder="certificates"
                     className="h-8 px-2.5 text-xs font-mono"
                   />
                 </div>
               </div>
-              <VerbPills verbs={CRD_VERBS} selected={rule.verbs} onToggle={(v) => toggleCRDVerb(idx, v)} />
+              <VerbPills
+                verbs={CRD_VERBS}
+                selected={rule.verbs}
+                onToggle={(v) => toggleCRDVerb(idx, v)}
+              />
             </div>
           ))}
         </RuleSection>
@@ -315,7 +437,12 @@ function RuleSection({
           <label className="text-sm font-medium text-foreground">{title}</label>
           <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
         </div>
-        <ActionButton size="sm" intent="ghost" icon={<Plus className="h-3 w-3" />} onClick={onAdd}>
+        <ActionButton
+          size="sm"
+          intent="ghost"
+          icon={<Plus className="h-3 w-3" />}
+          onClick={onAdd}
+        >
           {addLabel}
         </ActionButton>
       </div>
@@ -333,20 +460,27 @@ function VerbPills({
   selected: string[];
   onToggle: (verb: string) => void;
 }) {
+  const labelId = useId();
   return (
     <div className="space-y-1.5">
-      <label className="text-xs text-muted-foreground">Verbs</label>
-      <div className="flex flex-wrap gap-1.5">
+      <span id={labelId} className="text-xs text-muted-foreground">
+        Verbs
+      </span>
+      <div
+        role="group"
+        aria-labelledby={labelId}
+        className="flex flex-wrap gap-1.5"
+      >
         {verbs.map((verb) => (
           <button
             key={verb}
             type="button"
             onClick={() => onToggle(verb)}
             className={cn(
-              'px-2.5 py-1 rounded text-xs font-medium transition-colors',
+              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
               selected.includes(verb)
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:text-foreground',
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:text-foreground",
             )}
           >
             {verb}
@@ -358,30 +492,39 @@ function VerbPills({
 }
 
 function splitInitial(
-  initial?: RoleEditorProps['initialRole'],
-  defaultScope: 'global' | 'cluster' | 'project' = 'cluster',
+  initial?: RoleEditorProps["initialRole"],
+  defaultScope: "global" | "cluster" | "project" = "cluster",
 ) {
   const platform: PolicyRuleInput[] = [];
   const crd: CRDGrantInput[] = [];
   for (const rule of initial?.rules ?? []) {
-    const rec = rule as PolicyRuleInput & { api_groups?: string[]; apiGroups?: string[]; resources?: string[] };
+    const rec = rule as PolicyRuleInput & {
+      api_groups?: string[];
+      apiGroups?: string[];
+      resources?: string[];
+    };
     const groups = rec.api_groups ?? rec.apiGroups ?? [];
     if (groups.length > 0) {
       crd.push({
-        apiGroup: groups[0] ?? '',
-        resource: rec.resource || rec.resources?.[0] || '',
+        apiGroup: groups[0] ?? "",
+        resource: rec.resource || rec.resources?.[0] || "",
         verbs: rec.verbs ?? [],
       });
     } else if (rec.resource || rec.resources?.[0]) {
-      platform.push({ resource: rec.resource || rec.resources?.[0] || 'workloads', verbs: rec.verbs ?? [] });
+      platform.push({
+        resource: rec.resource || rec.resources?.[0] || "workloads",
+        verbs: rec.verbs ?? [],
+      });
     }
   }
   return {
-    name: initial?.name || '',
-    displayName: initial?.displayName || '',
-    description: initial?.description || '',
+    name: initial?.name || "",
+    displayName: initial?.displayName || "",
+    description: initial?.description || "",
     scope: initial?.scope || defaultScope,
-    platform: platform.length ? platform : [{ resource: 'workloads', verbs: ['read', 'list'] }],
+    platform: platform.length
+      ? platform
+      : [{ resource: "workloads", verbs: ["read", "list"] }],
     crd,
   };
 }

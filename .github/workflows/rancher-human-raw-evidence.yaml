@@ -1,0 +1,28 @@
+name: capture retained Rancher human-study evidence
+on:
+  workflow_dispatch:
+    inputs:
+      tag: {description: "Exact v1 tag studied", required: true, type: string}
+permissions: {contents: read, id-token: write}
+jobs:
+  capture:
+    runs-on: [self-hosted, rancher-human-evidence]
+    environment: rancher-human-raw-evidence
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {ref: "refs/tags/${{ inputs.tag }}", persist-credentials: false}
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with: {cosign-release: v2.5.3}
+      - name: Capture files from the owned study runner
+        env: {RAW_SOURCE_DIR: "${{ vars.RANCHER_HUMAN_RAW_SOURCE_DIR }}", TARGET_TAG: "${{ inputs.tag }}"}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/tags/$TARGET_TAG" && test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -d "$RAW_SOURCE_DIR" && test ! -L "$RAW_SOURCE_DIR"
+          install -d -m 0700 "$RUNNER_TEMP/rancher-human-raw"
+          cp -a "$RAW_SOURCE_DIR/." "$RUNNER_TEMP/rancher-human-raw/"
+          test -f "$RUNNER_TEMP/rancher-human-raw/human-evaluation.json"
+          python3 scripts/raw-human-evidence-manifest.py --root "$RUNNER_TEMP/rancher-human-raw" --manifest "$RUNNER_TEMP/rancher-human-raw/raw-manifest.json"
+          cosign sign-blob --yes --bundle "$RUNNER_TEMP/rancher-human-raw/raw-manifest.sigstore.json" "$RUNNER_TEMP/rancher-human-raw/raw-manifest.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: {name: "rancher-human-raw-${{ github.run_id }}", path: "${{ runner.temp }}/rancher-human-raw", if-no-files-found: error, retention-days: 365}

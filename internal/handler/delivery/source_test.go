@@ -15,10 +15,35 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
+
+type sourceVerifyTxFake struct {
+	*sourceQueryFake
+	key sqlc.OperationIdempotencyKey
+}
+
+func (f *sourceVerifyTxFake) ReserveOperationIdempotencyKey(_ context.Context, arg sqlc.ReserveOperationIdempotencyKeyParams) (sqlc.OperationIdempotencyKey, error) {
+	if f.key.Scope == "" {
+		f.key.Scope, f.key.IdempotencyKey = arg.Scope, arg.IdempotencyKey
+	}
+	return f.key, nil
+}
+
+func (f *sourceVerifyTxFake) AttachOperationIdempotencyKey(_ context.Context, arg sqlc.AttachOperationIdempotencyKeyParams) (sqlc.OperationIdempotencyKey, error) {
+	f.key.OperationTable = arg.OperationTable
+	f.key.OperationID = pgtype.UUID{Bytes: arg.OperationID, Valid: true}
+	f.key.Response = arg.Response
+	return f.key, nil
+}
+
+func (f *sourceVerifyTxFake) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	return sqlc.AuditOutbox{ID: arg.ID}, nil
+}
 
 type sourceQueryFake struct {
 	countFn   func(context.Context, sqlc.CountDeliverySourcesParams) (int64, error)
@@ -197,8 +222,12 @@ func TestSourceVerifyQueuesOnlyPublicIdentity(t *testing.T) {
 	body := fmt.Sprintf(`{"project_id":%q,"requested_revision":"1.2.3","chart":"widget"}`, projectID)
 	request := requestWithPathParams(http.MethodPost, "/api/v1/delivery/sources/"+sourceID.String()+"/verify", strings.NewReader(body), map[string]string{"id": sourceID.String()})
 	request.Header.Set("Idempotency-Key", "verify-widget-1.2.3")
+	request = request.WithContext(middleware.SetAuthenticatedUserForTest(request.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
 	recorder := httptest.NewRecorder()
-	NewSourceHandler(fake, nil, 0).Verify(recorder, request)
+	handler := NewSourceHandler(fake, nil, 0)
+	tx := &sourceVerifyTxFake{sourceQueryFake: fake}
+	handler.SetRunTx(func(_ context.Context, fn func(SourceMutationTx) error) error { return fn(tx) })
+	handler.Verify(recorder, request)
 	if recorder.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}

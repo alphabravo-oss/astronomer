@@ -1,6 +1,12 @@
 -- name: GetClusterByID :one
 SELECT * FROM clusters WHERE id = $1;
 
+-- name: GetClusterByIDForUpdate :one
+-- Cluster PATCH semantics merge omitted fields with the current row. Lock the
+-- row while that merge is computed so concurrent partial updates cannot restore
+-- stale values over one another.
+SELECT * FROM clusters WHERE id = $1 AND decommissioned_at IS NULL FOR UPDATE;
+
 -- name: EnsureLocalCluster :one
 -- Idempotently create-or-return the singleton "local" cluster row that
 -- represents the Kubernetes cluster the server itself runs in. Uses a CTE
@@ -51,6 +57,35 @@ SELECT * FROM clusters WHERE name = $1 AND decommissioned_at IS NULL;
 -- their row in the DB for forensics but never appear in the UI list.
 SELECT * FROM clusters WHERE decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 
+-- name: ListClustersFiltered :many
+-- Authorization-independent fleet filter. The handler selects this only for
+-- platform-wide callers; scoped callers use the predicate-identical scoped
+-- variant below so authorization is applied before pagination.
+SELECT * FROM clusters
+WHERE decommissioned_at IS NULL
+  AND (sqlc.arg(filter_status)::text = '' OR status = sqlc.arg(filter_status))
+  AND (sqlc.arg(filter_provider)::text = '' OR provider = sqlc.arg(filter_provider))
+  AND (sqlc.arg(filter_environment)::text = '' OR environment = sqlc.arg(filter_environment))
+  AND (
+    sqlc.arg(filter_search)::text = ''
+    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountClustersFiltered :one
+SELECT count(*) FROM clusters
+WHERE decommissioned_at IS NULL
+  AND (sqlc.arg(filter_status)::text = '' OR status = sqlc.arg(filter_status))
+  AND (sqlc.arg(filter_provider)::text = '' OR provider = sqlc.arg(filter_provider))
+  AND (sqlc.arg(filter_environment)::text = '' OR environment = sqlc.arg(filter_environment))
+  AND (
+    sqlc.arg(filter_search)::text = ''
+    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+  );
+
 -- name: ListClustersForScopes :many
 -- Scope-filtered ListClusters: only the clusters the caller's cluster-scoped
 -- bindings name (see rbac.AuthorizedScopeIDs). Callers holding a platform-wide
@@ -62,6 +97,34 @@ WHERE decommissioned_at IS NULL
   AND id = ANY(sqlc.arg(cluster_ids)::uuid[])
 ORDER BY created_at DESC
 LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: ListClustersFilteredForScopes :many
+SELECT * FROM clusters
+WHERE decommissioned_at IS NULL
+  AND id = ANY(sqlc.arg(cluster_ids)::uuid[])
+  AND (sqlc.arg(filter_status)::text = '' OR status = sqlc.arg(filter_status))
+  AND (sqlc.arg(filter_provider)::text = '' OR provider = sqlc.arg(filter_provider))
+  AND (sqlc.arg(filter_environment)::text = '' OR environment = sqlc.arg(filter_environment))
+  AND (
+    sqlc.arg(filter_search)::text = ''
+    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountClustersFilteredForScopes :one
+SELECT count(*) FROM clusters
+WHERE decommissioned_at IS NULL
+  AND id = ANY(sqlc.arg(cluster_ids)::uuid[])
+  AND (sqlc.arg(filter_status)::text = '' OR status = sqlc.arg(filter_status))
+  AND (sqlc.arg(filter_provider)::text = '' OR provider = sqlc.arg(filter_provider))
+  AND (sqlc.arg(filter_environment)::text = '' OR environment = sqlc.arg(filter_environment))
+  AND (
+    sqlc.arg(filter_search)::text = ''
+    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+  );
 
 -- name: CountClustersForScopes :one
 -- Total for a ListClustersForScopes page. The predicate MUST stay identical to
@@ -75,8 +138,8 @@ WHERE decommissioned_at IS NULL
 SELECT * FROM clusters WHERE status = sqlc.arg(status) AND decommissioned_at IS NULL ORDER BY created_at DESC LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: CreateCluster :one
-INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, labels, annotations, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, labels, annotations, api_server_url, ca_certificate, created_by_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING *;
 
 -- name: UpdateCluster :one
@@ -86,7 +149,9 @@ UPDATE clusters SET
     environment = $4,
     region = $5,
     labels = $6,
-    annotations = $7
+    annotations = $7,
+    api_server_url = COALESCE(sqlc.narg(api_server_url), api_server_url),
+    ca_certificate = COALESCE(sqlc.narg(ca_certificate), ca_certificate)
 WHERE id = $1
 RETURNING *;
 

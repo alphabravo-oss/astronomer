@@ -1,6 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from "@playwright/test";
 
-import { seedAuth } from './helpers/auth';
+import { authMeWire, seedAuth } from "./helpers/auth";
 
 // Confirms DataTable server-side mode (B4) against the real Audit page: each
 // page is a separate offset-based fetch, and the table footer reports the
@@ -10,12 +10,12 @@ const TOTAL = 125;
 const PAGE_SIZE = 50;
 
 const adminUser = {
-  id: 'user-admin',
-  username: 'admin',
-  email: 'admin@example.com',
-  displayName: 'Admin User',
-  provider: 'local',
-  globalRoles: ['admin'],
+  id: "user-admin",
+  username: "admin",
+  email: "admin@example.com",
+  displayName: "Admin User",
+  provider: "local",
+  globalRoles: ["admin"],
   isSuperuser: true,
   roles: { global: [], cluster: [], project: [] },
   enabled: true,
@@ -33,27 +33,34 @@ function auditPage(offset: number, limit: number) {
       timestamp: new Date(1700000000000 + idx * 1000).toISOString(),
       user: `user-${idx}`,
       action: `action.${idx}`,
-      actionClass: 'mutation',
+      actionClass: "mutation",
       resourceName: `res-${idx}`,
-      resourceType: 'cluster',
-      result: 'success',
-      source: 'web',
+      resourceType: "cluster",
+      result: "success",
+      source: "web",
     });
   }
   return { data, count: TOTAL };
 }
 
 async function mockApi(page: Page) {
-  await page.route('**/api/v1/**', async (route) => {
+  await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
-    const path = url.pathname.replace(/^\/api\/v1/, '').replace(/\/$/, '') || '/';
+    const path =
+      url.pathname.replace(/^\/api\/v1/, "").replace(/\/$/, "") || "/";
 
-    if (path === '/events/stream') return route.fulfill({ status: 204, body: '' });
-    if (path === '/auth/me') return route.fulfill({ json: { status: 200, data: adminUser } });
-    if (path === '/settings/features') return route.fulfill({ json: { status: 200, data: {} } });
-    if (path === '/audit') {
-      const offset = Number(url.searchParams.get('offset') ?? '0');
-      const limit = Number(url.searchParams.get('limit') ?? String(PAGE_SIZE));
+    if (path === "/events/stream")
+      return route.fulfill({ status: 204, body: "" });
+    if (path === "/auth/me") {
+      return route.fulfill({
+        json: { status: 200, data: authMeWire(adminUser) },
+      });
+    }
+    if (path === "/settings/features")
+      return route.fulfill({ json: { status: 200, data: {} } });
+    if (path === "/audit") {
+      const offset = Number(url.searchParams.get("offset") ?? "0");
+      const limit = Number(url.searchParams.get("limit") ?? String(PAGE_SIZE));
       return route.fulfill({ json: auditPage(offset, limit) });
     }
     return route.fulfill({ json: { status: 200, data: [] } });
@@ -64,27 +71,30 @@ test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
 
-test('DataTable server-side: audit paginates via per-page offset requests (B4)', async ({ context, page }) => {
+test("DataTable server-side: audit paginates via per-page offset requests (B4)", async ({
+  context,
+  page,
+}) => {
   const offsets: number[] = [];
-  page.on('request', (req) => {
+  page.on("request", (req) => {
     const u = new URL(req.url());
-    if (u.pathname.replace(/\/$/, '').endsWith('/audit')) {
-      offsets.push(Number(u.searchParams.get('offset') ?? '0'));
+    if (u.pathname.replace(/\/$/, "").endsWith("/audit")) {
+      offsets.push(Number(u.searchParams.get("offset") ?? "0"));
     }
   });
 
   await seedAuth(context, page, adminUser);
-  await page.goto('/dashboard/audit');
+  await page.goto("/dashboard/audit");
 
   // Footer reports the SERVER total (125), not the 50 loaded rows.
-  await expect(page.getByText('Showing 1-50 of 125')).toBeVisible();
-  await expect(page.getByText('action.0', { exact: true })).toBeVisible();
+  await expect(page.getByText("Showing 1-50 of 125")).toBeVisible();
+  await expect(page.getByText("action.0", { exact: true })).toBeVisible();
 
   // Page 2 → a fresh request with offset=50 → different rows.
-  await page.getByRole('button', { name: '2' }).click();
-  await expect(page.getByText('Showing 51-100 of 125')).toBeVisible();
-  await expect(page.getByText('action.50', { exact: true })).toBeVisible();
-  await expect(page.getByText('action.0', { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "2" }).click();
+  await expect(page.getByText("Showing 51-100 of 125")).toBeVisible();
+  await expect(page.getByText("action.50", { exact: true })).toBeVisible();
+  await expect(page.getByText("action.0", { exact: true })).toHaveCount(0);
 
   // Confirm the offset=50 request actually went to the server (true server-side).
   expect(offsets).toContain(50);

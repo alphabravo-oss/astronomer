@@ -1,0 +1,13 @@
+{
+  "name": "projects/fixture-project/locations/us-central1/clusters/fixture-gke",
+  "controlPlaneEndpointsConfig": {
+    "ipEndpointsConfig": {
+      "authorizedNetworksConfig": {
+        "enabled": true,
+        "cidrBlocks": [
+          {"displayName": "existing", "cidrBlock": "10.0.0.0/8"}
+        ]
+      }
+    }
+  }
+}

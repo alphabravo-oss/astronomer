@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * Project detail Overview tab — the bare /projects/[id] route.
  *
@@ -7,15 +7,15 @@ import { createFileRoute } from '@tanstack/react-router';
  * ProjectNamespacesCard); the Policy / Cloud Credentials / Quota tabs handle
  * the rest of the editable surfaces.
  */
-import { Link } from '@/lib/link';
-import { useParams } from '@/lib/navigation';
-import { Loader2, Users, Server, Layers } from 'lucide-react';
-import { useProject, useCurrentUser } from '@/lib/hooks';
-import { canAssignProjectNamespaces } from '@/components/projects/hooks';
-import { ProjectNamespacesCard } from '@/components/projects/namespaces-card';
-import { formatRelativeTime } from '@/lib/utils';
-import { WidgetGrid } from '@/components/dashboards/widget-grid';
-import { renderForProject } from '@/lib/api/dashboards';
+import { Link } from "@/lib/link";
+import { useParams } from "@/lib/navigation";
+import { Loader2, Users, Server, Layers } from "lucide-react";
+import { useProject, useCurrentUser } from "@/lib/hooks";
+import { canAssignProjectNamespaces } from "@/components/projects/hooks";
+import { ProjectNamespacesCard } from "@/components/projects/namespaces-card";
+import { formatRelativeTime } from "@/lib/utils";
+import { WidgetGrid } from "@/components/dashboards/widget-grid";
+import { renderForProject } from "@/lib/api/dashboards";
 
 function ProjectOverviewPage() {
   const params = useParams();
@@ -41,14 +41,30 @@ function ProjectOverviewPage() {
           empty by default so the project overview stays clean unless
           the operator explicitly pins something here. */}
       <section className="space-y-2">
-        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Widgets</h3>
+        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          Widgets
+        </h3>
         <WidgetGrid fetcher={() => renderForProject(project.id)} emptyHint="" />
       </section>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <SummaryCard icon={Server} label="Clusters" value={(project.clusterIds?.length ?? (project.clusterId ? 1 : 0)) || 1} />
-        <SummaryCard icon={Layers} label="Namespaces" value={project.namespaces?.length ?? 0} />
-        <SummaryCard icon={Users} label="Members" value={project.members?.length ?? 0} />
+        <SummaryCard
+          icon={Server}
+          label="Clusters"
+          value={
+            (project.clusterIds?.length ?? (project.clusterId ? 1 : 0)) || 1
+          }
+        />
+        <SummaryCard
+          icon={Layers}
+          label="Namespaces"
+          value={project.namespaces?.length ?? 0}
+        />
+        <SummaryCard
+          icon={Users}
+          label="Members"
+          value={project.members?.length ?? 0}
+        />
 
         <div className="md:col-span-3">
           <ProjectNamespacesCard
@@ -62,16 +78,22 @@ function ProjectOverviewPage() {
           <h3 className="text-sm font-medium text-foreground">Identifiers</h3>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
             <dt className="text-muted-foreground">Name</dt>
-            <dd className="font-mono text-xs text-foreground">{project.name}</dd>
+            <dd className="font-mono text-xs text-foreground">
+              {project.name}
+            </dd>
             <dt className="text-muted-foreground">Project ID</dt>
             <dd className="font-mono text-xs text-foreground">{project.id}</dd>
             <dt className="text-muted-foreground">Created</dt>
-            <dd className="text-foreground">{formatRelativeTime(project.createdAt)}</dd>
+            <dd className="text-foreground">
+              {formatRelativeTime(project.createdAt)}
+            </dd>
             <dt className="text-muted-foreground">Updated</dt>
-            <dd className="text-foreground">{formatRelativeTime(project.updatedAt)}</dd>
+            <dd className="text-foreground">
+              {formatRelativeTime(project.updatedAt)}
+            </dd>
           </dl>
           <p className="text-xs text-muted-foreground pt-2">
-            Configure pod security and resource limits on the{' '}
+            Configure pod security and resource limits on the{" "}
             <Link
               href={`/dashboard/projects/${project.id}/policy`}
               className="text-foreground underline-offset-2 hover:underline"
@@ -101,11 +123,13 @@ function SummaryCard({
         <Icon className="h-3.5 w-3.5" />
         {label}
       </div>
-      <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">{value}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
+        {value}
+      </p>
     </div>
   );
 }
 
-export const Route = createFileRoute('/dashboard/projects/$id/')({
+export const Route = createFileRoute("/dashboard/projects/$id/")({
   component: ProjectOverviewPage,
 });

@@ -1,12 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo } from "react";
 import {
   useLocation,
   useNavigate,
   useParams as useRouteParams,
   useRouter as useTanstackRouter,
   type NavigateOptions,
-} from '@tanstack/react-router';
-import { hrefToLocation } from '@/lib/link';
+} from "@tanstack/react-router";
+import { hrefToLocation } from "@/lib/link";
 
 // Runtime-string hrefs cannot satisfy the registered-route literal union; one
 // deliberate widening cast keeps the wrapper's `href: string` API (D2).
@@ -29,7 +29,11 @@ export function useRouter() {
         void navigate(locationOptions(href));
       },
       replace: (href: string, _options?: { scroll?: boolean }) => {
-        void navigate({ ...locationOptions(href), replace: true, resetScroll: false });
+        void navigate({
+          ...locationOptions(href),
+          replace: true,
+          resetScroll: false,
+        });
       },
       back: () => history.back(),
     }),

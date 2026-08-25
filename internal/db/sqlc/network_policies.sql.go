@@ -522,3 +522,53 @@ func (q *Queries) UpdateNetworkPolicyTemplate(ctx context.Context, arg UpdateNet
 	)
 	return i, err
 }
+
+const upsertNetworkPolicyApplication = `-- name: UpsertNetworkPolicyApplication :one
+INSERT INTO network_policy_applications
+    (template_id, cluster_id, namespace, policy_name, status, applied_by)
+VALUES ($1, $2, $3, $4, 'pending', $5)
+ON CONFLICT (cluster_id, namespace, template_id) DO UPDATE SET
+    policy_name = EXCLUDED.policy_name,
+    status = 'pending',
+    last_error = '',
+    applied_by = EXCLUDED.applied_by,
+    updated_at = now()
+RETURNING id, template_id, cluster_id, namespace, policy_name, status, last_applied_at, last_error, applied_by, created_at, updated_at
+`
+
+type UpsertNetworkPolicyApplicationParams struct {
+	TemplateID uuid.UUID   `json:"template_id"`
+	ClusterID  uuid.UUID   `json:"cluster_id"`
+	Namespace  string      `json:"namespace"`
+	PolicyName string      `json:"policy_name"`
+	AppliedBy  pgtype.UUID `json:"applied_by"`
+}
+
+// HTTP bulk apply is idempotent and transaction-friendly. A plain INSERT
+// followed by unique-violation recovery aborts the surrounding PostgreSQL
+// transaction before the handler can fetch the existing row. Resetting the
+// existing row to pending represents the caller's explicit reconcile intent.
+func (q *Queries) UpsertNetworkPolicyApplication(ctx context.Context, arg UpsertNetworkPolicyApplicationParams) (NetworkPolicyApplication, error) {
+	row := q.db.QueryRow(ctx, upsertNetworkPolicyApplication,
+		arg.TemplateID,
+		arg.ClusterID,
+		arg.Namespace,
+		arg.PolicyName,
+		arg.AppliedBy,
+	)
+	var i NetworkPolicyApplication
+	err := row.Scan(
+		&i.ID,
+		&i.TemplateID,
+		&i.ClusterID,
+		&i.Namespace,
+		&i.PolicyName,
+		&i.Status,
+		&i.LastAppliedAt,
+		&i.LastError,
+		&i.AppliedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

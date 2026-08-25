@@ -78,6 +78,7 @@ func attachAstronomerReq(t *testing.T, clusterID uuid.UUID, rotate bool, binding
 		target += "?rotate=true"
 	}
 	req := authedLoggingReq(http.MethodPost, target, nil)
+	req.Header.Set("Idempotency-Key", "attach-astronomer-1")
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", clusterID.String())
 	req = req.WithContext(middleware.SetAuthenticatedUserForTest(
@@ -99,34 +100,42 @@ func TestAttachAstronomerLogsCreated(t *testing.T) {
 	h, q, rec, req := attachAstronomerReq(t, clusterID, false, loggingCreateBinding(clusterID))
 	w := httptest.NewRecorder()
 	h.AttachAstronomerLogs(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want 201: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", w.Code, w.Body.String())
 	}
 	var wrap struct {
 		Data struct {
-			Name       string          `json:"name"`
-			OutputType string          `json:"output_type"`
-			IsSystem   bool            `json:"is_system"`
-			Enabled    bool            `json:"enabled"`
-			Token      string          `json:"token"`
-			Config     json.RawMessage `json:"configuration"`
+			Output struct {
+				Name       string          `json:"name"`
+				OutputType string          `json:"output_type"`
+				IsSystem   bool            `json:"is_system"`
+				Enabled    bool            `json:"enabled"`
+				Token      string          `json:"token"`
+				Config     json.RawMessage `json:"configuration"`
+			} `json:"output"`
+			Operation struct {
+				ID string `json:"id"`
+			} `json:"operation"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &wrap); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if wrap.Data.Name != systemLoggingOutputName || wrap.Data.OutputType != "loki" || !wrap.Data.IsSystem || !wrap.Data.Enabled {
-		t.Fatalf("output = %+v", wrap.Data)
+	if wrap.Data.Output.Name != systemLoggingOutputName || wrap.Data.Output.OutputType != "loki" || !wrap.Data.Output.IsSystem || !wrap.Data.Output.Enabled {
+		t.Fatalf("output = %+v", wrap.Data.Output)
 	}
-	if wrap.Data.Token == "" {
-		t.Fatal("201 body missing plaintext token")
+	if wrap.Data.Output.Token == "" {
+		t.Fatal("202 body missing plaintext token")
 	}
 	if strings.Contains(w.Body.String(), "token_hash") || strings.Contains(w.Body.String(), "token_encrypted") || strings.Contains(w.Body.String(), "bearer") {
 		t.Fatal("response leaked hash, ciphertext, or bearer")
 	}
 	stored := q.lokiTokens[clusterID]
-	if stored.TokenHash != lokiauth.HashBearer(wrap.Data.Token) {
+	if stored.TokenHash != lokiauth.HashBearer(wrap.Data.Output.Token) {
 		t.Fatal("stored hash does not match minted token")
+	}
+	if wrap.Data.Operation.ID == "" || w.Header().Get("Location") != "/api/v1/logging/operations/"+wrap.Data.Operation.ID+"/" || w.Header().Get("Retry-After") != "2" {
+		t.Fatalf("operation receipt or headers missing: operation=%+v headers=%v", wrap.Data.Operation, w.Header())
 	}
 	if rec.calls != 1 {
 		t.Fatalf("reconcile calls = %d, want 1", rec.calls)
@@ -145,22 +154,25 @@ func TestAttachAstronomerLogsIdempotent(t *testing.T) {
 	h, q, rec, req := attachAstronomerReq(t, clusterID, false, loggingCreateBinding(clusterID))
 	first := httptest.NewRecorder()
 	h.AttachAstronomerLogs(first, req)
-	if first.Code != http.StatusCreated {
+	if first.Code != http.StatusAccepted {
 		t.Fatalf("first status = %d: %s", first.Code, first.Body.String())
 	}
 	var firstWrap struct {
 		Data struct {
-			Token string `json:"token"`
-			ID    string `json:"id"`
+			Output struct {
+				Token string `json:"token"`
+				ID    string `json:"id"`
+			} `json:"output"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(first.Body.Bytes(), &firstWrap); err != nil {
 		t.Fatal(err)
 	}
-	firstToken := firstWrap.Data.Token
+	firstToken := firstWrap.Data.Output.Token
 	firstHash := q.lokiTokens[clusterID].TokenHash
 
 	secondReq := authedLoggingReq(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/logging/outputs/attach-astronomer/", nil)
+	secondReq.Header.Set("Idempotency-Key", "attach-astronomer-noop-1")
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", clusterID.String())
 	secondReq = secondReq.WithContext(middleware.SetAuthenticatedUserForTest(
@@ -195,6 +207,7 @@ func TestAttachAstronomerLogsRotate(t *testing.T) {
 	oldHash := q.lokiTokens[clusterID].TokenHash
 
 	rotateReq := authedLoggingReq(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/logging/outputs/attach-astronomer/?rotate=true", nil)
+	rotateReq.Header.Set("Idempotency-Key", "attach-astronomer-rotate-1")
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", clusterID.String())
 	rotateReq = rotateReq.WithContext(middleware.SetAuthenticatedUserForTest(
@@ -203,7 +216,7 @@ func TestAttachAstronomerLogsRotate(t *testing.T) {
 	))
 	rotate := httptest.NewRecorder()
 	h.AttachAstronomerLogs(rotate, rotateReq)
-	if rotate.Code != http.StatusCreated {
+	if rotate.Code != http.StatusAccepted {
 		t.Fatalf("rotate status = %d: %s", rotate.Code, rotate.Body.String())
 	}
 	if q.lokiTokens[clusterID].TokenHash == oldHash {

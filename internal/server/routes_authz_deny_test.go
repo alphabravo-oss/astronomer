@@ -57,6 +57,54 @@ func TestSecurityMutatingRoutesRequireSecurityRBAC(t *testing.T) {
 	}
 }
 
+// TestSecurityReadRoutesRequireExplicitRBAC closes the read-side counterpart
+// of the mutating-route guard above. CIS findings and policy/template metadata
+// are security data; an authenticated principal with an unrelated grant must
+// never reach the handler. Using a nil-query handler makes this a strict
+// middleware test: an accidental pass-through would panic instead of producing
+// the expected denial.
+func TestSecurityReadRoutesRequireExplicitRBAC(t *testing.T) {
+	jwtMgr := auth.MustNewJWTManager("route-security-read-test-secret", 60)
+	token, err := jwtMgr.GenerateAccessToken(uuid.New())
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+	clusterID := uuid.NewString()
+	scanID := uuid.NewString()
+	templateID := uuid.NewString()
+	router := NewRouter(&config.Config{}, RouterDependencies{
+		JWT:         jwtMgr,
+		RBACEngine:  rbac.NewEngine(),
+		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceUsers, rbac.VerbRead)},
+		Security:    handler.NewSecurityHandler(nil),
+	})
+
+	paths := []string{
+		"/api/v1/security/controller/status/",
+		"/api/v1/security/templates/",
+		"/api/v1/security/templates/" + templateID + "/",
+		"/api/v1/security/policies/",
+		"/api/v1/security/scans/",
+		"/api/v1/security/profiles/",
+		"/api/v1/security/scans/" + scanID + "/",
+		"/api/v1/security/scans/" + scanID + "/report.csv",
+		"/api/v1/clusters/" + clusterID + "/security/policy/",
+		"/api/v1/clusters/" + clusterID + "/security/scans/",
+		"/api/v1/clusters/" + clusterID + "/security/scans/" + scanID + "/",
+	}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("GET %s status = %d, want %d; body=%s", path, rec.Code, http.StatusForbidden, rec.Body.String())
+			}
+		})
+	}
+}
+
 // TestCatalogRepositoryRoutesRequireCatalogRBAC proves repository CRUD refuses a
 // zero-grant viewer, honoring the catalog:create/update/delete requirement that
 // docs/security-sensitive-routes.json already declares.
@@ -277,6 +325,35 @@ func newClusterMonitoringAuthzRouter(jwtMgr *auth.JWTManager, bindings []rbac.Ro
 		Clusters:   clusters,
 		Monitoring: monitoring,
 	})
+}
+
+func TestDirectKubeconfigRouteRequiresClusterUpdateRBAC(t *testing.T) {
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
+	token, err := jwtMgr.GenerateAccessToken(uuid.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/clusters/" + uuid.NewString() + "/generate-direct-kubeconfig/"
+
+	for _, tc := range []struct {
+		name       string
+		bindings   []rbac.RoleBinding
+		wantStatus int
+	}{
+		{name: "cluster read is forbidden", bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead), wantStatus: http.StatusForbidden},
+		{name: "cluster update reaches handler", bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbUpdate), wantStatus: http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := newClusterMonitoringAuthzRouter(jwtMgr, tc.bindings)
+			req := httptest.NewRequest(http.MethodPost, path, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tc.wantStatus, rec.Body.String())
+			}
+		})
+	}
 }
 
 // TestClusterMonitoringRoutesRequireMonitoringRBAC is the fence for the eight

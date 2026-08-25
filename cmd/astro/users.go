@@ -60,14 +60,14 @@ func newUsersListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1UsersParams{}
+			params := &astroclient.GetUsersParams{}
 			if cmd.Flags().Changed("limit") {
 				params.Limit = &limit
 			}
 			if cmd.Flags().Changed("offset") {
 				params.Offset = &offset
 			}
-			resp, err := client.GetApiV1UsersWithResponse(cmd.Context(), params)
+			resp, err := client.GetUsersWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -103,7 +103,7 @@ func newUsersGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1UsersIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetUsersByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -145,7 +145,7 @@ defaults to the email when omitted, and --active defaults to true.`,
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1UsersJSONRequestBody{
+			body := astroclient.PostUsersJSONRequestBody{
 				Email:    openapi_types.Email(email),
 				Password: password,
 			}
@@ -167,7 +167,7 @@ defaults to the email when omitted, and --active defaults to true.`,
 			if cmd.Flags().Changed("superuser") {
 				body.IsSuperuser = &isSuperuser
 			}
-			resp, err := client.PostApiV1UsersWithResponse(cmd.Context(), body)
+			resp, err := client.PostUsersWithResponse(cmd.Context(), body)
 			if err != nil {
 				return err
 			}
@@ -246,7 +246,7 @@ PUT instead; both map to the same request shape server-side.`,
 			}
 
 			if replace {
-				resp, err := client.PutApiV1UsersIdWithResponse(cmd.Context(), id, body)
+				resp, err := client.PutUsersByIdWithResponse(cmd.Context(), id, body)
 				if err != nil {
 					return err
 				}
@@ -259,7 +259,7 @@ PUT instead; both map to the same request shape server-side.`,
 				})
 			}
 
-			resp, err := client.PatchApiV1UsersIdWithResponse(cmd.Context(), id, body)
+			resp, err := client.PatchUsersByIdWithResponse(cmd.Context(), id, body)
 			if err != nil {
 				return err
 			}
@@ -312,7 +312,7 @@ func newUsersDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1UsersIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteUsersByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -349,11 +349,11 @@ value, or omit it to have the server auto-generate a temporary password
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1UsersIdResetPasswordJSONRequestBody{}
+			body := astroclient.PostUsersByIdResetPasswordJSONRequestBody{}
 			if cmd.Flags().Changed("password") {
 				body.Password = &password
 			}
-			resp, err := client.PostApiV1UsersIdResetPasswordWithResponse(cmd.Context(), id, body)
+			resp, err := client.PostUsersByIdResetPasswordWithResponse(cmd.Context(), id, body)
 			if err != nil {
 				return err
 			}
@@ -398,7 +398,7 @@ func newUsersAdminUnlockCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1AdminUsersIdUnlockWithResponse(cmd.Context(), id)
+			resp, err := client.PostAdminUsersByIdUnlockWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -425,7 +425,7 @@ func newUsersAdminForceLogoutCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1AdminUsersIdForceLogoutWithResponse(cmd.Context(), id)
+			resp, err := client.PostAdminUsersByIdForceLogoutWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -452,7 +452,7 @@ func newUsersAdminDisableTotpCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1AdminUsersIdDisableTotpWithResponse(cmd.Context(), id)
+			resp, err := client.PostAdminUsersByIdDisableTotpWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}

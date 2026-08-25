@@ -1,7 +1,7 @@
-import { createRootRoute, Outlet } from '@tanstack/react-router';
-import { Compass } from 'lucide-react';
-import { Providers } from '@/components/providers';
-import { StatePanel } from '@/components/ui/empty-state';
+import { createRootRoute, Outlet } from "@tanstack/react-router";
+import { Compass } from "lucide-react";
+import { Providers } from "@/components/providers";
+import { StatePanel } from "@/components/ui/empty-state";
 
 /**
  * Root 404 boundary (F-04). Rendered for any unmatched route outside the

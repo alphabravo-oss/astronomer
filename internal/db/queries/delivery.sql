@@ -44,13 +44,6 @@ FROM delivery_sources
 WHERE project_id = sqlc.arg(project_id)
   AND (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status)::text);
 
--- name: GetDeliverySourceSecret :one
-SELECT id, project_id, source_type, url, auth_mode, credential_encrypted,
-       credential_key_version, credential_epoch, ca_bundle_encrypted,
-       proxy_ref, trust_policy, status
-FROM delivery_sources
-WHERE id = sqlc.arg(id);
-
 -- name: UpdateDeliverySourceStatus :one
 UPDATE delivery_sources
 SET status = sqlc.arg(status),
@@ -313,14 +306,6 @@ LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 SELECT count(*) FROM delivery_targets
 WHERE project_id = sqlc.arg(project_id) AND deletion_state <> 'deleted';
 
--- name: GetDeliveryTargetByBundleVersion :one
-SELECT t.*
-FROM delivery_targets t
-JOIN component_bundle_versions bv ON bv.id = t.bundle_version_id
-JOIN component_bundles b ON b.id = bv.bundle_id
-WHERE t.id = sqlc.arg(id) AND t.project_id = sqlc.arg(project_id)
-  AND bv.id = sqlc.arg(bundle_version_id) AND b.project_id = t.project_id;
-
 -- name: UpdateDeliveryTargetCAS :one
 UPDATE delivery_targets
 SET description = sqlc.arg(description),
@@ -333,15 +318,6 @@ SET description = sqlc.arg(description),
     generation = generation + 1,
     resource_version = resource_version + 1,
     updated_by = sqlc.narg(updated_by)
-WHERE id = sqlc.arg(id) AND project_id = sqlc.arg(project_id)
-  AND resource_version = sqlc.arg(expected_resource_version)
-  AND deletion_state = 'active'
-RETURNING *;
-
--- name: MarkDeliveryTargetDeleting :one
-UPDATE delivery_targets
-SET deletion_state = 'deleting', generation = generation + 1,
-    resource_version = resource_version + 1, updated_by = sqlc.narg(updated_by)
 WHERE id = sqlc.arg(id) AND project_id = sqlc.arg(project_id)
   AND resource_version = sqlc.arg(expected_resource_version)
   AND deletion_state = 'active'
@@ -375,15 +351,6 @@ WHERE t.id = sqlc.arg(target_id) AND t.deletion_state = 'deleting'
       WHERE d.target_id = t.id AND d.phase <> 'removed'
   )
 RETURNING t.*;
-
--- name: RequestDeliveryTargetDeletion :many
-UPDATE cluster_deployments d
-SET action = 'delete', phase = 'pending', desired_generation = desired_generation + 1,
-    last_error_code = '', last_message = ''
-FROM delivery_targets t
-WHERE d.target_id = t.id AND t.id = sqlc.arg(target_id)
-  AND t.project_id = sqlc.arg(project_id) AND d.phase <> 'removed'
-RETURNING d.*;
 
 -- name: RequestDeliveryTargetDeletionCAS :one
 WITH changed_target AS (
@@ -494,7 +461,7 @@ FOR UPDATE OF r;
 
 -- name: TransitionDeliveryRolloutCAS :one
 UPDATE delivery_rollouts
-SET state = sqlc.arg(to_state), fencing_generation = fencing_generation + 1,
+SET state = sqlc.arg(to_state)::text, fencing_generation = fencing_generation + 1,
     lease_owner = '', lease_expires_at = NULL,
     started_at = CASE WHEN sqlc.arg(to_state) = 'progressing' THEN COALESCE(started_at, now()) ELSE started_at END,
     completed_at = CASE WHEN sqlc.arg(to_state) IN ('aborted','rejected','rolled_back') THEN now() ELSE NULL END,
@@ -628,8 +595,8 @@ RETURNING *;
 UPDATE delivery_rollout_clusters rc
 SET state = sqlc.arg(to_state)::text,
     fence = fence + 1,
-    ready_at = CASE WHEN sqlc.arg(to_state)::text IN ('ready','ready_previous') THEN COALESCE(ready_at, now()) ELSE ready_at END,
-    completed_at = CASE WHEN sqlc.arg(to_state)::text IN ('ready','failed','skipped','timed_out','ready_previous') THEN now() ELSE completed_at END,
+    ready_at = CASE WHEN sqlc.arg(to_state)::text IN ('ready','ready_previous') THEN COALESCE(rc.ready_at, now()) ELSE rc.ready_at END,
+    completed_at = CASE WHEN sqlc.arg(to_state)::text IN ('ready','failed','skipped','timed_out','ready_previous') THEN now() ELSE rc.completed_at END,
     last_error_code = sqlc.arg(last_error_code)
 FROM delivery_rollouts r
 WHERE rc.id = sqlc.arg(id) AND rc.rollout_id = r.id
@@ -925,9 +892,6 @@ WHERE cluster_id = sqlc.arg(cluster_id)
   AND desired_content_digest = sqlc.arg(content_digest)
 RETURNING *;
 
--- name: GetDeliveryAssignmentReceipt :one
-SELECT * FROM delivery_assignment_receipts WHERE cluster_id = sqlc.arg(cluster_id);
-
 -- name: AcknowledgeDeliveryAssignmentSnapshot :one
 UPDATE delivery_assignment_receipts
 SET acknowledged_snapshot_generation = sqlc.arg(snapshot_generation),
@@ -973,11 +937,11 @@ FROM delivery_controller_inventory
 GROUP BY compatibility_status
 ORDER BY compatibility_status;
 
--- Fleet scoreboard: one row per live cluster. Local host-only clusters stay
+-- Estate scoreboard: one row per live cluster. Local host-only clusters stay
 -- in the table so operators can see them, but the handler excludes is_local
 -- from Flux-managed tiles. Removed assignments are omitted; Drifted is the
 -- normalized condition the observer persists.
--- name: ListDeliveryFleetClusters :many
+-- name: ListDeliveryEstateClusters :many
 SELECT
     c.id,
     c.name,

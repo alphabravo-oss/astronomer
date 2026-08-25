@@ -83,12 +83,13 @@ func TestResourceCreate_AuthorizesBodyNamespaceNotQuery(t *testing.T) {
 		{"body names a foreign namespace", "", `{"metadata":{"name":"api","namespace":"team-b"}}`, denied},
 		// A body with no namespace would proxy to an implicit/cluster-wide path;
 		// no namespace-narrowed grant covers that.
-		{"body names no namespace", "?namespace=team-a", `{"metadata":{"name":"api"}}`, http.StatusBadRequest},
+		{"body names no namespace", "?namespace=team-a", `{"metadata":{"name":"api"}}`, denied},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, path+tc.query, strings.NewReader(tc.body))
 			req.Header.Set("Authorization", "Bearer "+token)
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Idempotency-Key", "namespace-authorization-fixture")
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 			if rec.Code != tc.want {

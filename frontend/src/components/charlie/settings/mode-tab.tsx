@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Loader2,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { StatePanel } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -60,11 +56,7 @@ const modeAllowedSummary: Record<CharlieMode, string[]> = {
 };
 
 type ModeTransitionPhase =
-  | "idle"
-  | "applying"
-  | "verifying"
-  | "ready"
-  | "failed";
+  "idle" | "applying" | "verifying" | "ready" | "failed";
 
 type ModeTransitionState = {
   phase: ModeTransitionPhase;
@@ -124,7 +116,7 @@ export function ModeTab() {
 
   const q = useQuery({
     queryKey: queryKeys.charlie.adminMode,
-    queryFn: getCharlieMode,
+    queryFn: ({ signal }) => getCharlieMode(signal),
     retry: false,
     refetchInterval: (query) => {
       if (settling) return 2000;
@@ -135,14 +127,14 @@ export function ModeTab() {
   });
   const agentQ = useQuery({
     queryKey: queryKeys.charlie.adminAgent,
-    queryFn: getCharlieAgent,
+    queryFn: ({ signal }) => getCharlieAgent(signal),
     retry: false,
     enabled: settling || (!!q.data && !q.data.workloadCeilingReady),
     refetchInterval: settling ? 2000 : false,
   });
   const visibilityQ = useQuery({
     queryKey: queryKeys.charlie.adminKubernetesVisibility,
-    queryFn: getCharlieKubernetesVisibility,
+    queryFn: ({ signal }) => getCharlieKubernetesVisibility(signal),
     retry: false,
   });
 
@@ -159,18 +151,10 @@ export function ModeTab() {
       phase: "ready",
       message: `${productModeLabel[target]} is live. Both product-agent replicas report the verified ceiling.`,
     }));
-    toastSuccess(
-      `Charlie is ready in ${productModeLabel[target]} mode`,
-    );
+    toastSuccess(`Charlie is ready in ${productModeLabel[target]} mode`);
     void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminConnection });
     void qc.invalidateQueries({ queryKey: queryKeys.charlie.overview });
-  }, [
-    transition.phase,
-    transition.target,
-    q.data,
-    agentQ.data,
-    qc,
-  ]);
+  }, [transition.phase, transition.target, q.data, agentQ.data, qc]);
 
   // Safety timeout so "verifying" never hangs forever in the UI.
   useEffect(() => {
@@ -205,7 +189,9 @@ export function ModeTab() {
     onSuccess: (v) => {
       qc.setQueryData(queryKeys.charlie.adminMode, v);
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminAgent });
-      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminConnection });
+      void qc.invalidateQueries({
+        queryKey: queryKeys.charlie.adminConnection,
+      });
       const readyNow = charlieModeWorkReady(v, agentQ.data);
       if (readyNow) {
         setTransition((prev) => ({
@@ -250,7 +236,9 @@ export function ModeTab() {
     },
     onSuccess: (v) => {
       qc.setQueryData(queryKeys.charlie.adminMode, v);
-      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminConnection });
+      void qc.invalidateQueries({
+        queryKey: queryKeys.charlie.adminConnection,
+      });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminAgent });
       if (charlieModeWorkReady(v, agentQ.data)) {
         setTransition({
@@ -281,8 +269,12 @@ export function ModeTab() {
     mutationFn: (digest: string) => acknowledgeCharlieDisclosure(digest),
     onSuccess: (v) => {
       qc.setQueryData(queryKeys.charlie.adminMode, v);
-      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminConnection });
-      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminKubernetesVisibility });
+      void qc.invalidateQueries({
+        queryKey: queryKeys.charlie.adminConnection,
+      });
+      void qc.invalidateQueries({
+        queryKey: queryKeys.charlie.adminKubernetesVisibility,
+      });
       toastSuccess("Disclosure digest acknowledged");
     },
     onError: (e) => toastApiError("Disclosure acknowledgement failed", e),
@@ -343,7 +335,9 @@ export function ModeTab() {
               "border-status-info/40 bg-status-info/5",
             transition.phase === "failed" &&
               "border-status-error/40 bg-status-error/5",
-            transition.phase === "idle" && workReady && "border-border bg-muted/20",
+            transition.phase === "idle" &&
+              workReady &&
+              "border-border bg-muted/20",
             transition.phase === "idle" &&
               !workReady &&
               "border-status-warning/40 bg-status-warning/5",
@@ -494,14 +488,19 @@ export function ModeTab() {
           )}
         </div>
         {visibility?.requiresRediscovery && (
-          <p role="status" className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 text-sm">
-            Kubernetes visibility is waiting for catalog rediscovery. Finish that on the Kubernetes tab before raising mode.
+          <p
+            role="status"
+            className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 text-sm"
+          >
+            Kubernetes visibility is waiting for catalog rediscovery. Finish
+            that on the Kubernetes tab before raising mode.
           </p>
         )}
         {catalogBlocked && !visibility?.requiresRediscovery && (
           <p role="status" className="text-sm text-status-warning">
             Accept the rediscovered catalog below before enabling a non-disabled
-            authority mode. Acceptance is an Astronomer action, not a Charlie one.
+            authority mode. Acceptance is an Astronomer action, not a Charlie
+            one.
           </p>
         )}
         <div className="rounded-lg border p-4">
@@ -521,7 +520,10 @@ export function ModeTab() {
           {m.autoReadiness?.blockers?.length ? (
             <ul className="mt-3 space-y-2">
               {m.autoReadiness.blockers.map((blocker) => (
-                <li key={blocker.code} className="rounded-md bg-muted p-3 text-xs">
+                <li
+                  key={blocker.code}
+                  className="rounded-md bg-muted p-3 text-xs"
+                >
                   <p className="font-medium">{blocker.message}</p>
                   <p className="mt-1 text-muted-foreground">
                     Next action: {blocker.nextAction}
@@ -554,7 +556,9 @@ export function ModeTab() {
           />
           <Meta
             label="Disable propagation"
-            value={m.disablePending ? "Pending agent confirmation" : "Confirmed"}
+            value={
+              m.disablePending ? "Pending agent confirmation" : "Confirmed"
+            }
           />
         </dl>
         {!m.workloadCeilingReady && (
@@ -582,9 +586,9 @@ export function ModeTab() {
           <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-4">
             <p className="text-sm font-medium">Accept capability catalog</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Astronomer rediscovered this catalog after the Kubernetes visibility
-              change. Accept it here to restore the ability to raise mode. Charlie
-              does not accept product capabilities.
+              Astronomer rediscovered this catalog after the Kubernetes
+              visibility change. Accept it here to restore the ability to raise
+              mode. Charlie does not accept product capabilities.
             </p>
             <p className="mt-2 break-all text-xs text-muted-foreground">
               Digest: {acceptDigest}
@@ -605,7 +609,10 @@ export function ModeTab() {
       >
         <button
           disabled={
-            m.emergencyDisabled || m.disablePending || disable.isPending || settling
+            m.emergencyDisabled ||
+            m.disablePending ||
+            disable.isPending ||
+            settling
           }
           onClick={() => setEmergency(true)}
           className={`${button} border-status-error text-status-error`}
@@ -619,9 +626,7 @@ export function ModeTab() {
         onClose={() => setNext(undefined)}
         onConfirm={() => next && change.mutate(next)}
         title={
-          next
-            ? `Change to ${productModeLabel[next]}`
-            : "Change Charlie mode"
+          next ? `Change to ${productModeLabel[next]}` : "Change Charlie mode"
         }
         description={
           next

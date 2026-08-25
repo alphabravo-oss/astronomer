@@ -62,6 +62,29 @@ SKIP_PREREQS="${SKIP_PREREQS:-0}"
 SECRET_KEY="${SECRET_KEY:-k3d-smoke-test-jwt-signing-key-32-chars}"
 ENCRYPTION_KEY="${ENCRYPTION_KEY:-3b4GoQu4Ka-ZH7D28cqSUY8vzDmQDU4vLSbv8aoNWBo=}"
 
+# Agents in a separately adopted k3d cluster reach the management plane over
+# the shared Docker network, where the management load balancer has a stable
+# container DNS name. Keep every advertised hostname on the Gateway as well as
+# the browser-facing HOST; otherwise the agent can connect at TCP level but its
+# WebSocket upgrade is rejected by hostname routing.
+SERVER_AUTHORITY="${SERVER_URL#*://}"
+SERVER_AUTHORITY="${SERVER_AUTHORITY%%/*}"
+if [[ "$SERVER_AUTHORITY" == \[* ]]; then
+  SERVER_HOST="${SERVER_AUTHORITY#\[}"
+  SERVER_HOST="${SERVER_HOST%%\]*}"
+else
+  SERVER_HOST="${SERVER_AUTHORITY%%:*}"
+fi
+if [[ -z "$SERVER_HOST" ]]; then
+  printf '\033[1;31m[x] SERVER_URL must include a hostname\033[0m\n' >&2
+  exit 1
+fi
+GATEWAY_HOSTS=("$HOST" "host.k3d.internal")
+if [[ "$SERVER_HOST" != "$HOST" && "$SERVER_HOST" != "host.k3d.internal" ]]; then
+  GATEWAY_HOSTS+=("$SERVER_HOST")
+fi
+GATEWAY_HOSTS_CSV="$(IFS=,; printf '%s' "${GATEWAY_HOSTS[*]}")"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${ROOT_DIR}/scripts/lib/gatewayclass-readiness.sh"
 cd "$ROOT_DIR"
@@ -174,7 +197,7 @@ helm upgrade --install astronomer deploy/chart \
   --set config.serverURL="${SERVER_URL}" \
   --set config.corsAllowedOrigins="${SERVER_URL}" \
   --set ingress.enabled=false \
-  --set "gateway.hosts={${HOST},host.k3d.internal}"
+  --set "gateway.hosts={${GATEWAY_HOSTS_CSV}}"
 
 SERVER_DEPLOY_NAME="$(kubectl -n "${NAMESPACE}" get deploy \
   -l 'app.kubernetes.io/name=astronomer,app.kubernetes.io/instance=astronomer,app.kubernetes.io/component=server' \

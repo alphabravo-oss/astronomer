@@ -102,11 +102,12 @@ var BuiltinProviders = map[string]ProviderSpec{
 		Name:         "aws",
 		DisplayName:  "Amazon Web Services",
 		RequiredKeys: []string{"access_key_id", "secret_access_key"},
-		OptionalKeys: []string{"region", "assume_role_arn"},
-		SecretKeys:   []string{"access_key_id", "secret_access_key"},
+		OptionalKeys: []string{"region", "session_token", "assume_role_arn"},
+		SecretKeys:   []string{"access_key_id", "secret_access_key", "session_token"},
 		SecretShape: map[string]string{
 			"access_key_id":     "access_key_id",
 			"secret_access_key": "secret_access_key",
+			"session_token":     "session_token",
 			"region":            "region",
 			"assume_role_arn":   "assume_role_arn",
 		},
@@ -137,6 +138,16 @@ var BuiltinProviders = map[string]ProviderSpec{
 			"client_secret":   "client_secret",
 			"tenant_id":       "tenant_id",
 			"subscription_id": "subscription_id",
+		},
+	},
+	"digitalocean": {
+		Name:         "digitalocean",
+		DisplayName:  "DigitalOcean",
+		RequiredKeys: []string{"token"},
+		OptionalKeys: []string{},
+		SecretKeys:   []string{"token"},
+		SecretShape: map[string]string{
+			"token": "token",
 		},
 	},
 	"generic": {

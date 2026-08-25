@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -20,6 +22,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
+
+var errMonitoringOperationNotRetryable = errors.New("monitoring operation is not retryable")
 
 func (h *MonitoringHandler) TriggerReconcile() {
 	if h == nil || h.triggerCh == nil {
@@ -137,23 +141,71 @@ func (h *MonitoringHandler) RetryOperation(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to load monitoring operation")
 		return
 	}
-	if !requireRetryableOperation(w, r, op.Status) {
-		return
-	}
 	if !h.authorizeMonitoringOperationUpdate(w, r, op) {
 		return
 	}
-	requeued, err := h.queries.RequeueMonitoringOperation(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to requeue monitoring operation")
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
-	h.TriggerReconcile()
-	recordAudit(r, h.queries, "monitoring.operation.retry", "monitoring_operation", id.String(), op.TargetKey, map[string]any{
-		"target_type":     op.TargetType,
-		"previous_status": op.Status,
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "monitoring transaction runner is not configured")
+		return
+	}
+	r = r.WithContext(withOperationIdempotency(r, "monitoring_operation_retry"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		Action      string `json:"action"`
+		OperationID string `json:"operation_id"`
+	}{Action: "retry", OperationID: id.String()})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode monitoring retry request")
+		return
+	}
+	var receipt map[string]any
+	replayed := false
+	err = h.runTx(r.Context(), func(q MonitoringMutationTx) error {
+		idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+		if !ok {
+			return errors.New("monitoring retry idempotency store is not configured")
+		}
+		_, stored, replay, claimErr := claimOperationReceipt[map[string]any](r.Context(), idemQ, "monitoring_operation_retries", digest)
+		if claimErr != nil {
+			return claimErr
+		}
+		if replay {
+			receipt, replayed = stored, true
+			return nil
+		}
+		if !isRetryableOperationStatus(op.Status) {
+			return errMonitoringOperationNotRetryable
+		}
+		requeued, requeueErr := q.RequeueMonitoringOperation(r.Context(), id)
+		if requeueErr != nil {
+			return requeueErr
+		}
+		receipt = monitoringOperationResponse(requeued)
+		if auditErr := recordAuditOutbox(r, q, "monitoring.operation.retry", "monitoring_operation", id.String(), op.TargetKey, http.StatusAccepted, map[string]any{
+			"target_type": op.TargetType, "previous_status": op.Status,
+		}); auditErr != nil {
+			return auditErr
+		}
+		return attachOperationReceipt(r.Context(), idemQ, "monitoring_operation_retries", requeued.ID, digest, receipt)
 	})
-	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(requeued))
+	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different monitoring operation retry")
+			return
+		}
+		if errors.Is(err, errMonitoringOperationNotRetryable) {
+			requireRetryableOperation(w, r, op.Status)
+			return
+		}
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to requeue monitoring operation")
+		return
+	}
+	if !replayed {
+		h.TriggerReconcile()
+	}
+	RespondAcceptedOperation(w, "/api/v1/settings/monitoring/operations/"+id.String()+"/", receipt)
 }
 
 func (h *MonitoringHandler) runReconciler(ctx context.Context) {
@@ -172,156 +224,63 @@ func (h *MonitoringHandler) runReconciler(ctx context.Context) {
 	}
 }
 
-func (h *MonitoringHandler) enqueueSharedThanosOperation(ctx context.Context, userID pgtype.UUID, opType string, req SharedThanosStackRequest, values map[string]any, secretSpec *objectStoreSecretSpec) (sqlc.MonitoringOperation, error) {
+func (h *MonitoringHandler) enqueueSharedThanosOperationWith(ctx context.Context, q monitoringSharedMutationWriter, userID pgtype.UUID, opType string, req SharedThanosStackRequest, values map[string]any, secretSpec *objectStoreSecretSpec) (sqlc.MonitoringOperation, error) {
+	return enqueueSharedMonitoringOperationWith(ctx, h, q, userID, opType, "shared_thanos", req.ManagementClusterID, req, values, secretSpec, req.AutoRollbackOnFailure)
+}
+
+func (h *MonitoringHandler) enqueueSharedLokiOperationWith(ctx context.Context, q monitoringSharedMutationWriter, userID pgtype.UUID, opType string, req SharedLokiRequest, values map[string]any) (sqlc.MonitoringOperation, error) {
+	return enqueueSharedMonitoringOperationWith(ctx, h, q, userID, opType, "shared_loki", req.ManagementClusterID, req, values, nil, req.AutoRollbackOnFailure)
+}
+
+func (h *MonitoringHandler) enqueueSharedGrafanaOperationWith(ctx context.Context, q monitoringSharedMutationWriter, userID pgtype.UUID, opType string, req SharedGrafanaRequest, values map[string]any) (sqlc.MonitoringOperation, error) {
+	return enqueueSharedMonitoringOperationWith(ctx, h, q, userID, opType, "shared_grafana", req.ManagementClusterID, req, values, nil, req.AutoRollbackOnFailure)
+}
+
+func (h *MonitoringHandler) enqueueSharedAlertmanagerOperationWith(ctx context.Context, q monitoringSharedMutationWriter, userID pgtype.UUID, opType string, req SharedAlertmanagerRequest, values map[string]any) (sqlc.MonitoringOperation, error) {
+	return enqueueSharedMonitoringOperationWith(ctx, h, q, userID, opType, "shared_alertmanager", req.ManagementClusterID, req, values, nil, req.AutoRollbackOnFailure)
+}
+
+func enqueueSharedMonitoringOperationWith[Req any](ctx context.Context, h *MonitoringHandler, q monitoringSharedMutationWriter, userID pgtype.UUID, opType, targetType, clusterID string, req Req, values map[string]any, secretSpec *objectStoreSecretSpec, rollbackOverride *bool) (sqlc.MonitoringOperation, error) {
 	rawReq, err := json.Marshal(req)
 	if err != nil {
 		return sqlc.MonitoringOperation{}, err
 	}
-	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
+	backend, err := q.GetDefaultMonitoringBackend(ctx)
 	if err != nil {
 		return sqlc.MonitoringOperation{}, err
 	}
 	payload, err := json.Marshal(monitoringOperationEnvelope{
-		ClusterID:                req.ManagementClusterID,
+		ClusterID:                clusterID,
 		Request:                  rawReq,
 		Values:                   values,
 		SecretSpec:               secretSpec,
-		ResolvedAutoRollback:     h.resolveAutoRollbackPolicy(backend, req.AutoRollbackOnFailure),
+		ResolvedAutoRollback:     h.resolveAutoRollbackPolicy(backend, rollbackOverride),
 		ResolvedMaxRetryAttempts: h.resolveMaxRetryAttempts(backend),
 	})
 	if err != nil {
 		return sqlc.MonitoringOperation{}, err
 	}
-	params := sqlc.CreateMonitoringOperationParams{
-		TargetType:    "shared_thanos",
+	return createMonitoringOperationWith(ctx, q, sqlc.CreateMonitoringOperationParams{
+		TargetType:    targetType,
 		TargetKey:     "shared",
 		OperationType: opType,
 		Payload:       payload,
 		Status:        OpStatusPending,
 		CreatedByID:   userID,
-	}
-	op, err := h.createMonitoringOperation(ctx, params)
-	if err == nil {
-		h.TriggerReconcile()
-	}
-	return op, err
-}
-
-func (h *MonitoringHandler) enqueueSharedLokiOperation(ctx context.Context, userID pgtype.UUID, opType string, req SharedLokiRequest, values map[string]any) (sqlc.MonitoringOperation, error) {
-	rawReq, err := json.Marshal(req)
-	if err != nil {
-		return sqlc.MonitoringOperation{}, err
-	}
-	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
-	if err != nil {
-		return sqlc.MonitoringOperation{}, err
-	}
-	payload, err := json.Marshal(monitoringOperationEnvelope{
-		ClusterID:                req.ManagementClusterID,
-		Request:                  rawReq,
-		Values:                   values,
-		ResolvedAutoRollback:     h.resolveAutoRollbackPolicy(backend, req.AutoRollbackOnFailure),
-		ResolvedMaxRetryAttempts: h.resolveMaxRetryAttempts(backend),
 	})
-	if err != nil {
-		return sqlc.MonitoringOperation{}, err
-	}
-	params := sqlc.CreateMonitoringOperationParams{
-		TargetType:    "shared_loki",
-		TargetKey:     "shared",
-		OperationType: opType,
-		Payload:       payload,
-		Status:        OpStatusPending,
-		CreatedByID:   userID,
-	}
-	op, err := h.createMonitoringOperation(ctx, params)
-	if err == nil {
-		h.TriggerReconcile()
-	}
-	return op, err
 }
 
-func (h *MonitoringHandler) enqueueSharedGrafanaOperation(ctx context.Context, userID pgtype.UUID, opType string, req SharedGrafanaRequest, values map[string]any) (sqlc.MonitoringOperation, error) {
+type monitoringClusterOperationWriter interface {
+	monitoringOperationCreator
+	GetDefaultMonitoringBackend(context.Context) (sqlc.MonitoringBackend, error)
+}
+
+func createClusterStackOperationWith(ctx context.Context, h *MonitoringHandler, q monitoringClusterOperationWriter, userID pgtype.UUID, opType, clusterID string, req MonitoringStackRequest, values map[string]any) (sqlc.MonitoringOperation, error) {
 	rawReq, err := json.Marshal(req)
 	if err != nil {
 		return sqlc.MonitoringOperation{}, err
 	}
-	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
-	if err != nil {
-		return sqlc.MonitoringOperation{}, err
-	}
-	payload, err := json.Marshal(monitoringOperationEnvelope{
-		ClusterID:                req.ManagementClusterID,
-		Request:                  rawReq,
-		Values:                   values,
-		ResolvedAutoRollback:     h.resolveAutoRollbackPolicy(backend, req.AutoRollbackOnFailure),
-		ResolvedMaxRetryAttempts: h.resolveMaxRetryAttempts(backend),
-	})
-	if err != nil {
-		return sqlc.MonitoringOperation{}, err
-	}
-	params := sqlc.CreateMonitoringOperationParams{
-		TargetType:    "shared_grafana",
-		TargetKey:     "shared",
-		OperationType: opType,
-		Payload:       payload,
-		Status:        OpStatusPending,
-		CreatedByID:   userID,
-	}
-	op, err := h.createMonitoringOperation(ctx, params)
-	if err == nil {
-		h.TriggerReconcile()
-	}
-	return op, err
-}
-
-func (h *MonitoringHandler) enqueueSharedAlertmanagerOperation(ctx context.Context, userID pgtype.UUID, opType string, req SharedAlertmanagerRequest, values map[string]any) (sqlc.MonitoringOperation, error) {
-	rawReq, err := json.Marshal(req)
-	if err != nil {
-		return sqlc.MonitoringOperation{}, err
-	}
-	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
-	if err != nil {
-		return sqlc.MonitoringOperation{}, err
-	}
-	payload, err := json.Marshal(monitoringOperationEnvelope{
-		ClusterID:                req.ManagementClusterID,
-		Request:                  rawReq,
-		Values:                   values,
-		ResolvedAutoRollback:     h.resolveAutoRollbackPolicy(backend, req.AutoRollbackOnFailure),
-		ResolvedMaxRetryAttempts: h.resolveMaxRetryAttempts(backend),
-	})
-	if err != nil {
-		return sqlc.MonitoringOperation{}, err
-	}
-	params := sqlc.CreateMonitoringOperationParams{
-		TargetType:    "shared_alertmanager",
-		TargetKey:     "shared",
-		OperationType: opType,
-		Payload:       payload,
-		Status:        OpStatusPending,
-		CreatedByID:   userID,
-	}
-	op, err := h.createMonitoringOperation(ctx, params)
-	if err == nil {
-		h.TriggerReconcile()
-	}
-	return op, err
-}
-
-func (h *MonitoringHandler) enqueueClusterStackOperation(ctx context.Context, userID pgtype.UUID, opType, clusterID string, req MonitoringStackRequest, values map[string]any) (sqlc.MonitoringOperation, error) {
-	// Defensive no-op for an unwired store: production always injects queries,
-	// but the route-security tests reach here with a nil querier once a caller
-	// clears the RBAC gate. Return a clean error so the handler answers 500
-	// rather than dereferencing nil below.
-	if h.queries == nil {
-		return sqlc.MonitoringOperation{}, fmt.Errorf("monitoring store not configured")
-	}
-	rawReq, err := json.Marshal(req)
-	if err != nil {
-		return sqlc.MonitoringOperation{}, err
-	}
-	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
+	backend, err := q.GetDefaultMonitoringBackend(ctx)
 	if err != nil {
 		return sqlc.MonitoringOperation{}, err
 	}
@@ -343,19 +302,23 @@ func (h *MonitoringHandler) enqueueClusterStackOperation(ctx context.Context, us
 		Status:        OpStatusPending,
 		CreatedByID:   userID,
 	}
-	op, err := h.createMonitoringOperation(ctx, params)
-	if err == nil {
-		h.TriggerReconcile()
-	}
-	return op, err
+	return createMonitoringOperationWith(ctx, q, params)
 }
 
-func (h *MonitoringHandler) createMonitoringOperation(ctx context.Context, params sqlc.CreateMonitoringOperationParams) (sqlc.MonitoringOperation, error) {
+type monitoringOperationCreator interface {
+	CreateMonitoringOperation(context.Context, sqlc.CreateMonitoringOperationParams) (sqlc.MonitoringOperation, error)
+}
+
+type idempotentMonitoringOperationCreator interface {
+	CreateMonitoringOperationIdempotent(context.Context, sqlc.CreateMonitoringOperationIdempotentParams) (sqlc.MonitoringOperation, error)
+}
+
+var errMonitoringOperationIdempotencyConflict = errors.New("monitoring operation idempotency key identifies a different operation")
+
+func createMonitoringOperationWith(ctx context.Context, q monitoringOperationCreator, params sqlc.CreateMonitoringOperationParams) (sqlc.MonitoringOperation, error) {
 	if idem, ok := operationIdempotencyFromContext(ctx); ok {
-		if creator, ok := h.queries.(interface {
-			CreateMonitoringOperationIdempotent(context.Context, sqlc.CreateMonitoringOperationIdempotentParams) (sqlc.MonitoringOperation, error)
-		}); ok {
-			return creator.CreateMonitoringOperationIdempotent(ctx, sqlc.CreateMonitoringOperationIdempotentParams{
+		if creator, ok := q.(idempotentMonitoringOperationCreator); ok {
+			op, err := creator.CreateMonitoringOperationIdempotent(ctx, sqlc.CreateMonitoringOperationIdempotentParams{
 				Scope:          idem.scope,
 				IdempotencyKey: idem.key,
 				TargetType:     params.TargetType,
@@ -365,9 +328,13 @@ func (h *MonitoringHandler) createMonitoringOperation(ctx context.Context, param
 				Status:         params.Status,
 				CreatedByID:    params.CreatedByID,
 			})
+			if err == nil && op.ID != uuid.Nil && (op.TargetType != params.TargetType || op.TargetKey != params.TargetKey || op.OperationType != params.OperationType || !bytes.Equal(op.Payload, params.Payload)) {
+				return sqlc.MonitoringOperation{}, errMonitoringOperationIdempotencyConflict
+			}
+			return op, err
 		}
 	}
-	return h.queries.CreateMonitoringOperation(ctx, params)
+	return q.CreateMonitoringOperation(ctx, params)
 }
 
 func monitoringOperationResponse(op sqlc.MonitoringOperation) map[string]any {

@@ -31,6 +31,10 @@ type fakeBaselineDB struct {
 	settings     map[string]sqlc.PlatformSetting
 	quotaPlans   map[string]sqlc.QuotaPlan
 	auditOps     []string
+	auditRows    []sqlc.UpsertAuditOutboxParams
+	auditErr     error
+	appLocks     int
+	activeLocks  int
 }
 
 func newFakeBaselineDB(user sqlc.User) *fakeBaselineDB {
@@ -200,11 +204,35 @@ func (f *fakeBaselineDB) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAudi
 	return nil
 }
 
+func (f *fakeBaselineDB) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.auditErr != nil {
+		return sqlc.AuditOutbox{}, f.auditErr
+	}
+	f.auditRows = append(f.auditRows, arg)
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action, Detail: arg.Detail}, nil
+}
+
+func (f *fakeBaselineDB) GetComplianceBaselineApplicationForUpdate(ctx context.Context, id uuid.UUID) (sqlc.ComplianceBaselineApplication, error) {
+	f.mu.Lock()
+	f.appLocks++
+	f.mu.Unlock()
+	return f.GetComplianceBaselineApplication(ctx, id)
+}
+
+func (f *fakeBaselineDB) GetActiveComplianceBaselineApplicationForUpdate(ctx context.Context) (sqlc.ComplianceBaselineApplication, error) {
+	f.mu.Lock()
+	f.activeLocks++
+	f.mu.Unlock()
+	return f.GetActiveComplianceBaselineApplication(ctx)
+}
+
 // runTxInline is the test's no-op tx wrapper: just call the fn with
 // the same fake Querier. Engines that error roll back nothing (the
 // fake doesn't model partial writes); engines that succeed commit
 // nothing. This is OK for our tests because every write is idempotent.
-func (f *fakeBaselineDB) runTxInline(ctx context.Context, fn func(q compliance.Querier) error) error {
+func (f *fakeBaselineDB) runTxInline(ctx context.Context, fn func(q ComplianceBaselineMutationTx) error) error {
 	return fn(f)
 }
 

@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 /**
  * Forgot-password — collects an email address, posts to
@@ -7,22 +7,22 @@ import { createFileRoute } from '@tanstack/react-router';
  * (no user enumeration), so the UI mirrors that.
  */
 
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { Orbit, Mail, ArrowLeft, Check } from 'lucide-react';
-import { toastApiError, toastError } from '@/lib/toast';
-import { requestPasswordReset } from '@/lib/api/account-security';
-import { ActionButton } from '@/components/ui/action-button';
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { Orbit, Mail, ArrowLeft, Check } from "lucide-react";
+import { toastApiError, toastError } from "@/lib/toast";
+import { requestPasswordReset } from "@/lib/api/account-security";
+import { ActionButton } from "@/components/ui/action-button";
 
 function ForgotPasswordPage() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
-      toastError('Enter an email address');
+      toastError("Enter an email address");
       return;
     }
     setLoading(true);
@@ -31,7 +31,7 @@ function ForgotPasswordPage() {
       setSubmitted(true);
     } catch (err) {
       // The endpoint always returns 202; surface only network errors.
-      toastApiError('', err, 'Could not send reset email');
+      toastApiError("", err, "Could not send reset email");
     } finally {
       setLoading(false);
     }
@@ -43,7 +43,7 @@ function ForgotPasswordPage() {
         <div className="flex flex-col items-center gap-2 text-center">
           <Orbit className="h-8 w-8 text-foreground" />
           <h1 className="text-xl font-semibold tracking-tight">
-            {submitted ? 'Check your inbox' : 'Reset your password'}
+            {submitted ? "Check your inbox" : "Reset your password"}
           </h1>
           <p className="text-sm text-muted-foreground">
             {submitted
@@ -58,8 +58,8 @@ function ForgotPasswordPage() {
               <Check className="h-6 w-6 text-status-success" />
             </div>
             <p className="text-sm text-muted-foreground">
-              The link expires in 30 minutes. If you don&apos;t see it, check your spam folder or
-              contact your administrator.
+              The link expires in 30 minutes. If you don&apos;t see it, check
+              your spam folder or contact your administrator.
             </p>
             <Link
               href="/auth/login"
@@ -74,7 +74,10 @@ function ForgotPasswordPage() {
             className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm"
           >
             <div className="space-y-1.5">
-              <label htmlFor="email" className="text-sm font-medium text-foreground">
+              <label
+                htmlFor="email"
+                className="text-sm font-medium text-foreground"
+              >
                 Email address
               </label>
               <div className="relative">
@@ -84,7 +87,7 @@ function ForgotPasswordPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
-                  autoFocus
+                  data-initial-focus
                   className="w-full h-10 pl-9 pr-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   placeholder="you@example.com"
                 />
@@ -116,6 +119,6 @@ function ForgotPasswordPage() {
   );
 }
 
-export const Route = createFileRoute('/auth/login/forgot-password/')({
+export const Route = createFileRoute("/auth/login/forgot-password/")({
   component: ForgotPasswordPage,
 });

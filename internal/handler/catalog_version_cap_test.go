@@ -137,9 +137,8 @@ func TestHandlerAndWorkerIngestTheSameVersionSet(t *testing.T) {
 
 	// Scheduled path (catalog:sync @every 6h).
 	wq := &capWorkerQuerier{repos: []sqlc.HelmRepository{repoRecord}}
-	tasks.ConfigureRuntime(tasks.RuntimeDependencies{Queries: wq, Log: slog.Default()})
-	t.Cleanup(func() { tasks.ConfigureRuntime(tasks.RuntimeDependencies{}) })
-	if err := tasks.HandleCatalogSync(context.Background(), &asynq.Task{}); err != nil {
+	workerCtx := (tasks.CoreRuntime{Deps: tasks.RuntimeDependencies{Queries: wq, Log: slog.Default()}}).Context(context.Background())
+	if err := tasks.HandleCatalogSync(workerCtx, &asynq.Task{}); err != nil {
 		t.Fatalf("worker sweep: %v", err)
 	}
 

@@ -10,6 +10,7 @@
     "install_mode",
     "kubernetes",
     "flux",
+    "agent",
     "agent_protocol",
     "postgresql",
     "browsers",
@@ -20,7 +21,7 @@
   "properties": {
     "schema_version": {"const": 1},
     "release_line": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.x$"},
-    "install_mode": {"const": "fresh_only"},
+    "install_mode": {"const": "fresh_and_upgrade"},
     "kubernetes": {
       "type": "object",
       "additionalProperties": false,
@@ -63,6 +64,28 @@
         }
       }
     },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_compatible_version",
+        "minimum_supported_version",
+        "maximum_supported_version_exclusive",
+        "future_major_policy",
+        "support_window_release_lines",
+        "tunnel_protocol",
+        "heartbeat_schema"
+      ],
+      "properties": {
+        "minimum_compatible_version": {"$ref": "#/$defs/semver"},
+        "minimum_supported_version": {"$ref": "#/$defs/semver"},
+        "maximum_supported_version_exclusive": {"$ref": "#/$defs/semver"},
+        "future_major_policy": {"const": "reject"},
+        "support_window_release_lines": {"type": "integer", "minimum": 2},
+        "tunnel_protocol": {"$ref": "#/$defs/integerRange"},
+        "heartbeat_schema": {"$ref": "#/$defs/integerRange"}
+      }
+    },
     "agent_protocol": {
       "type": "object",
       "additionalProperties": false,
@@ -86,7 +109,15 @@
     "postgresql": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["supported_majors", "tls_required_in_production", "migration_mode"],
+      "required": [
+        "supported_majors",
+        "tls_required_in_production",
+        "migration_mode",
+        "minimum_upgrade_schema",
+        "target_schema",
+        "reversible_through_schema",
+        "supported_upgrade_release_lines"
+      ],
       "properties": {
         "supported_majors": {
           "type": "array",
@@ -95,7 +126,16 @@
           "items": {"type": "integer", "minimum": 14}
         },
         "tls_required_in_production": {"const": true},
-        "migration_mode": {"const": "single_initial"}
+        "migration_mode": {"const": "versioned_incremental"},
+        "minimum_upgrade_schema": {"type": "integer", "minimum": 1},
+        "target_schema": {"type": "integer", "minimum": 1},
+        "reversible_through_schema": {"type": "integer", "minimum": 1},
+        "supported_upgrade_release_lines": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.x$"}
+        }
       }
     },
     "browsers": {
@@ -168,6 +208,10 @@
     }
   },
   "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
     "kubernetesRange": {
       "type": "object",
       "additionalProperties": false,

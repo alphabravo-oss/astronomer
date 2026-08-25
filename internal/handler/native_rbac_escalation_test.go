@@ -39,6 +39,9 @@ func (f *fakeNativeRBACQuerier) CreateNativeRBACRule(_ context.Context, arg sqlc
 func (f *fakeNativeRBACQuerier) GetNativeRBACRuleByID(context.Context, uuid.UUID) (sqlc.NativeRbacRule, error) {
 	return sqlc.NativeRbacRule{}, nil
 }
+func (f *fakeNativeRBACQuerier) GetNativeRBACRuleForUpdate(ctx context.Context, id uuid.UUID) (sqlc.NativeRbacRule, error) {
+	return f.GetNativeRBACRuleByID(ctx, id)
+}
 func (f *fakeNativeRBACQuerier) ListNativeRBACRulesByUser(context.Context, uuid.UUID) ([]sqlc.NativeRbacRule, error) {
 	return nil, nil
 }

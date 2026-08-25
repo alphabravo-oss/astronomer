@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // §HostMounts — ExtensionProvider: the React context that owns the enabled-
 // extension registry for the host runtime. It wraps the dashboard shell once,
@@ -11,14 +11,18 @@
 // useExtensionMounts. Keeping the provider render-agnostic means a broken or
 // hostile extension can never reach the host shell through here.
 
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { useEnabledExtensions, emptyRegistry, type ExtensionRegistry } from '@/lib/extensions/registry';
-import type { ExtensionMount, ExtensionPointKind } from '@/lib/api/extensions';
+import { createContext, useContext, useMemo, type ReactNode } from "react";
+import {
+  useEnabledExtensions,
+  emptyRegistry,
+  type ExtensionRegistry,
+} from "@/lib/extensions/registry";
+import type { ExtensionMount, ExtensionPointKind } from "@/lib/api/extensions";
 
 // Host theme tokens pushed to Tier-2 iframes on handshake (§Theme). Kept here
 // so the provider is the single owner of "what theme do extensions see".
 export interface ExtensionTheme {
-  mode: 'light' | 'dark';
+  mode: "light" | "dark";
   tokens: Record<string, string>;
 }
 
@@ -54,7 +58,11 @@ export function ExtensionProvider({ children, theme }: ExtensionProviderProps) {
     [data, isLoading, isError, theme],
   );
 
-  return <ExtensionContext.Provider value={value}>{children}</ExtensionContext.Provider>;
+  return (
+    <ExtensionContext.Provider value={value}>
+      {children}
+    </ExtensionContext.Provider>
+  );
 }
 
 // Access the whole runtime. Returns a safe empty runtime when used outside a
@@ -68,7 +76,9 @@ export function useExtensionRuntime(): ExtensionRuntime {
 
 // The lookup the app uses: find the extensions mounted at a given point.
 // `<ExtensionSlot point="clusterTab" />` is built on this.
-export function useExtensionMounts(point: ExtensionPointKind): ExtensionMount[] {
+export function useExtensionMounts(
+  point: ExtensionPointKind,
+): ExtensionMount[] {
   const { registry } = useExtensionRuntime();
   return registry[point] ?? [];
 }

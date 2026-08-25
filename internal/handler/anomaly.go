@@ -32,6 +32,11 @@ type AnomalyBaselineQuerier interface {
 	CountAnomalyBaselines(ctx context.Context) (int64, error)
 }
 
+type anomalyScopedPager interface {
+	ListAnomalyBaselinesForScopes(ctx context.Context, arg sqlc.ListAnomalyBaselinesForScopesParams) ([]sqlc.AnomalyBaseline, error)
+	CountAnomalyBaselinesForScopes(ctx context.Context, clusterIDs []uuid.UUID) (int64, error)
+}
+
 // AnomalyHandler serves the /api/v1/anomaly-baselines/* read-only
 // endpoints.
 type AnomalyHandler struct {
@@ -83,41 +88,54 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 		for _, b := range rows {
 			items = append(items, anomalyBaselineResponse(b))
 		}
-		// Per-cluster listing has no COUNT query and returns the full
-		// (cluster-scoped) set unpaginated, so Total is the page length.
-		// TODO(total)
-		limit, offset := queryLimitOffset(r, 50)
-		RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
+		// Per-cluster listing returns the complete authorized set. Pagination
+		// metadata still carries a positive limit for an empty page so it honors
+		// the shared PaginationMetadata contract.
+		pageLimit := len(items)
+		if pageLimit == 0 {
+			pageLimit = 1
+		}
+		RespondList(w, items, NewPagination(len(items), pageLimit, 0, len(items)))
 		return
 	}
-	// Unscoped fleet listing: filter to clusters the caller may monitor
-	// (unrestricted/superuser sees all). Never disclose cross-tenant
-	// baselines to a cluster-scoped caller.
-	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
+	// Resolve the authorized set before LIMIT/OFFSET so hidden fleet rows never
+	// consume a scoped caller's page.
+	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceMonitoring, rbac.VerbRead, rbac.NarrowedClustersWiden)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
-	limit := int32(queryLimit(r, 50))
-	offset := int32(queryInt(r, "offset", 0))
-	rows, err := h.queries.ListAnomalyBaselines(r.Context(), sqlc.ListAnomalyBaselinesParams{
-		Limit:  limit,
-		Offset: offset,
-	})
+	limit := queryLimit(r, 50)
+	offset := queryInt(r, "offset", 0)
+	var rows []sqlc.AnomalyBaseline
+	var total int64
+	if all {
+		rows, err = h.queries.ListAnomalyBaselines(r.Context(), sqlc.ListAnomalyBaselinesParams{Limit: int32(limit), Offset: int32(offset)})
+		if err == nil {
+			total, err = h.queries.CountAnomalyBaselines(r.Context())
+		}
+	} else {
+		pager, ok := h.queries.(anomalyScopedPager)
+		if !ok {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Scoped anomaly pagination is unavailable")
+			return
+		}
+		rows, err = pager.ListAnomalyBaselinesForScopes(r.Context(), sqlc.ListAnomalyBaselinesForScopesParams{
+			ClusterIds: clusterIDs, QueryLimit: int32(limit), QueryOffset: int32(offset),
+		})
+		if err == nil {
+			total, err = pager.CountAnomalyBaselinesForScopes(r.Context(), clusterIDs)
+		}
+	}
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list anomaly baselines")
 		return
 	}
 	items := make([]map[string]any, 0, len(rows))
 	for _, b := range rows {
-		if restricted && !h.authz.allowsCluster(bindings, b.ClusterID, rbac.ResourceMonitoring, rbac.VerbRead) {
-			continue
-		}
 		items = append(items, anomalyBaselineResponse(b))
 	}
-	// TODO(total): list is RBAC-filtered in-Go; the COUNT would overcount the
-	// visible set, so report the post-filter page length.
-	RespondList(w, items, NewPagination(len(items), int(limit), int(offset), len(items)))
+	RespondList(w, items, NewPagination(int(total), limit, offset, len(rows)))
 }
 
 // Get handles GET /api/v1/anomaly-baselines/{id}/.

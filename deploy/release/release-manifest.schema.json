@@ -23,7 +23,7 @@
         "version": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
         "source_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
         "generated_at": {"type": "string", "format": "date-time"},
-        "install_mode": {"const": "fresh_only"},
+        "install_mode": {"const": "fresh_and_upgrade"},
         "artifact_signing_policy": {
           "type": "object",
           "additionalProperties": false,
@@ -172,7 +172,7 @@
     "compatibility": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kubernetes", "agent_protocol", "postgresql", "browsers"],
+      "required": ["kubernetes", "agent", "agent_protocol", "postgresql", "browsers"],
       "properties": {
         "kubernetes": {
           "type": "object",
@@ -186,24 +186,55 @@
         "agent_protocol": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["name", "minimum", "maximum"],
+          "required": ["name", "minimum", "maximum", "required_capabilities"],
           "properties": {
             "name": {"const": "astronomer.delivery"},
             "minimum": {"type": "integer", "minimum": 2},
-            "maximum": {"type": "integer", "minimum": 2}
+            "maximum": {"type": "integer", "minimum": 2},
+            "required_capabilities": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "agent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "minimum_compatible_version",
+            "minimum_supported_version",
+            "maximum_supported_version_exclusive",
+            "tunnel_protocol_minimum",
+            "tunnel_protocol_maximum",
+            "heartbeat_schema_minimum",
+            "heartbeat_schema_maximum"
+          ],
+          "properties": {
+            "minimum_compatible_version": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+            "minimum_supported_version": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+            "maximum_supported_version_exclusive": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+            "tunnel_protocol_minimum": {"type": "integer", "minimum": 1},
+            "tunnel_protocol_maximum": {"type": "integer", "minimum": 1},
+            "heartbeat_schema_minimum": {"type": "integer", "minimum": 1},
+            "heartbeat_schema_maximum": {"type": "integer", "minimum": 1}
           }
         },
         "postgresql": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["supported_majors"],
+          "required": ["supported_majors", "minimum_upgrade_schema", "target_schema", "reversible_through_schema"],
           "properties": {
             "supported_majors": {
               "type": "array",
               "minItems": 1,
               "uniqueItems": true,
               "items": {"type": "integer", "minimum": 14}
-            }
+            },
+            "minimum_upgrade_schema": {"type": "integer", "minimum": 1},
+            "target_schema": {"type": "integer", "minimum": 1},
+            "reversible_through_schema": {"type": "integer", "minimum": 1}
           }
         },
         "browsers": {

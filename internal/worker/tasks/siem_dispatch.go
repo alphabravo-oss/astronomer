@@ -37,17 +37,18 @@ const (
 )
 
 // SIEMRetryCap is the per-row retry budget. After this many failed
-// dispatch attempts, the row is dropped (force-deleted) and the
-// dropped_total counter ticks. 100 covers ~3 minutes of sustained
+// dispatch attempts, a best-effort row is dropped (force-deleted) and the
+// dropped_total counter ticks. Transactional audit receipts are exempt and
+// remain retryable until acknowledged. 100 covers ~3 minutes of sustained
 // failures at the 2s dispatch cadence — plenty for transient outages
 // but short enough that a permanently-broken forwarder doesn't pin
 // disk.
 const SIEMRetryCap int32 = 100
 
 // SIEMQueueRetention is the queue row retention window. The daily
-// cleanup task removes rows older than this regardless of forwarder
-// status so a stuck or disabled forwarder doesn't grow the queue
-// unbounded.
+// cleanup task removes best-effort rows older than this regardless of
+// forwarder status. Transactional audit receipts are exempt: storage alerts
+// surface a stuck external archive, but mandatory evidence is never discarded.
 const SIEMQueueRetention = 7 * 24 * time.Hour
 
 // SIEMQuerier is the database surface the dispatch task needs.
@@ -57,6 +58,8 @@ type SIEMQuerier interface {
 	ListSIEMQueueBatch(ctx context.Context, arg sqlc.ListSIEMQueueBatchParams) ([]sqlc.SiemForwardQueue, error)
 	ListSIEMQueueExhausted(ctx context.Context, arg sqlc.ListSIEMQueueExhaustedParams) ([]sqlc.SiemForwardQueue, error)
 	DeleteSIEMQueueByIDs(ctx context.Context, ids []int64) error
+	MarkSIEMTestOperationsSucceededByQueueIDs(ctx context.Context, ids []int64) error
+	MarkSIEMTestOperationsFailedByQueueIDs(ctx context.Context, ids []int64, code string) error
 	IncrementSIEMQueueAttempts(ctx context.Context, ids []int64) error
 	CountSIEMQueueByForwarder(ctx context.Context, forwarderID uuid.UUID) (int64, error)
 	UpsertSIEMForwarderStatus(ctx context.Context, arg sqlc.UpsertSIEMForwarderStatusParams) error
@@ -68,9 +71,7 @@ type SIEMQuerier interface {
 // up real syslog / HEC sinks.
 type SIEMTransportFactory func(sub sqlc.SiemForwarder, secret authBlob) (siem.Transport, error)
 
-// SIEMDeps is the dependency bag the dispatcher reads. Wired by the
-// server at startup; stays in a package-level var so the asynq
-// HandleFunc signature can stay standard.
+// SIEMDeps is the SIEM dispatcher's explicit dependency set.
 type SIEMDeps struct {
 	Queries          SIEMQuerier
 	Encryptor        *auth.Encryptor
@@ -78,45 +79,21 @@ type SIEMDeps struct {
 	HTTPClient       *http.Client
 }
 
-var siemDeps SIEMDeps
-
-// perForwarderLock keeps per-forwarder dispatch concurrency at 1. The
+// lockForSIEMForwarder keeps per-forwarder dispatch concurrency at 1. The
 // dispatcher tick walks every enabled forwarder; the lock means a
 // long-running send for forwarder A can't double-fire while the next
 // tick comes around. Lock map keyed by forwarder UUID; entries live for
-// the process lifetime — there are only ever ~few forwarders so
+// the runtime lifetime — there are only ever ~few forwarders so
 // unbounded growth isn't a concern.
-var (
-	perForwarderLockMu sync.Mutex
-	perForwarderLock   = map[uuid.UUID]*sync.Mutex{}
-)
-
-func lockForForwarder(id uuid.UUID) *sync.Mutex {
-	perForwarderLockMu.Lock()
-	defer perForwarderLockMu.Unlock()
-	l, ok := perForwarderLock[id]
+func (runtime DispatchRuntime) lockForSIEMForwarder(id uuid.UUID) *sync.Mutex {
+	runtime.siemState.forwarderLockMu.Lock()
+	defer runtime.siemState.forwarderLockMu.Unlock()
+	l, ok := runtime.siemState.forwarderLocks[id]
 	if !ok {
 		l = &sync.Mutex{}
-		perForwarderLock[id] = l
+		runtime.siemState.forwarderLocks[id] = l
 	}
 	return l
-}
-
-// ConfigureSIEM wires the dispatcher's dependencies. Safe to call
-// multiple times (last call wins).
-func ConfigureSIEM(deps SIEMDeps) {
-	siemDeps = deps
-	if siemDeps.HTTPClient == nil {
-		siemDeps.HTTPClient = httpclient.New(10 * time.Second)
-	}
-	if siemDeps.TransportFactory == nil {
-		siemDeps.TransportFactory = defaultSIEMTransportFactory
-	}
-	// Drop any cached per-forwarder HTTP clients so a re-wire (or a test
-	// swapping deps) doesn't hand out a client bound to stale TLS config.
-	siemHTTPClientMu.Lock()
-	siemHTTPClientCache = map[uuid.UUID]cachedSIEMHTTPClient{}
-	siemHTTPClientMu.Unlock()
 }
 
 // cachedSIEMHTTPClient memoizes a forwarder's *http.Client so keep-alive
@@ -127,11 +104,6 @@ type cachedSIEMHTTPClient struct {
 	client *http.Client
 }
 
-var (
-	siemHTTPClientMu    sync.Mutex
-	siemHTTPClientCache = map[uuid.UUID]cachedSIEMHTTPClient{}
-)
-
 // httpClientForForwarder returns a pooled *http.Client for the forwarder,
 // building it once and reusing it across drains. The HEC/NDJSON transports
 // previously allocated a fresh *http.Transport on every 2s tick (Close() is a
@@ -139,15 +111,15 @@ var (
 // hour under sustained load. Caching keyed by (tls_skip_verify, ca_cert_pem,
 // timeout) keeps a single keep-alive pool per forwarder while still rebuilding
 // when the operator changes TLS settings.
-func httpClientForForwarder(sub sqlc.SiemForwarder, timeout time.Duration) *http.Client {
+func (runtime DispatchRuntime) httpClientForSIEMForwarder(sub sqlc.SiemForwarder, timeout time.Duration) *http.Client {
 	key := fmt.Sprintf("%t|%d|%s", sub.TlsSkipVerify, int64(timeout), sub.CaCertPem)
-	siemHTTPClientMu.Lock()
-	defer siemHTTPClientMu.Unlock()
-	if c, ok := siemHTTPClientCache[sub.ID]; ok && c.key == key {
+	runtime.siemState.httpClientMu.Lock()
+	defer runtime.siemState.httpClientMu.Unlock()
+	if c, ok := runtime.siemState.httpClients[sub.ID]; ok && c.key == key {
 		return c.client
 	}
 	client := buildHTTPClient(sub, timeout)
-	siemHTTPClientCache[sub.ID] = cachedSIEMHTTPClient{key: key, client: client}
+	runtime.siemState.httpClients[sub.ID] = cachedSIEMHTTPClient{key: key, client: client}
 	return client
 }
 
@@ -170,13 +142,13 @@ type authBlob struct {
 //  1. Leader-elect so only one worker pod runs the loop.
 //  2. List enabled forwarders.
 //  3. Per forwarder, lock + drain a batch + ship + DELETE.
-func HandleSIEMDispatch(ctx context.Context, _ *asynq.Task) error {
+func (runtime DispatchRuntime) HandleSIEMDispatch(ctx context.Context, _ *asynq.Task) error {
+	runtime = runtime.normalized()
 	return runPeriodicTaskWithLeader(ctx, SIEMDispatchType, func() error {
-		if siemDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "siem dispatcher not configured, skipping")
-			return nil
+		if runtime.SIEM.Queries == nil {
+			return fmt.Errorf("SIEM dispatcher runtime is not configured")
 		}
-		forwarders, err := siemDeps.Queries.ListEnabledSIEMForwarders(ctx)
+		forwarders, err := runtime.SIEM.Queries.ListEnabledSIEMForwarders(ctx)
 		if err != nil {
 			return fmt.Errorf("list siem forwarders: %w", err)
 		}
@@ -184,7 +156,7 @@ func HandleSIEMDispatch(ctx context.Context, _ *asynq.Task) error {
 			if err := ctx.Err(); err != nil {
 				return nil
 			}
-			dispatchForwarder(ctx, sub)
+			runtime.dispatchSIEMForwarder(ctx, sub)
 		}
 		return nil
 	})
@@ -193,12 +165,12 @@ func HandleSIEMDispatch(ctx context.Context, _ *asynq.Task) error {
 // dispatchForwarder runs one forwarder's drain. Per-forwarder lock
 // keeps the dispatch concurrency at 1 even if a slow Send keeps a
 // goroutine alive when the next tick arrives.
-func dispatchForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
-	l := lockForForwarder(sub.ID)
+func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
+	l := runtime.lockForSIEMForwarder(sub.ID)
 	if !tryLock(l) {
 		// Previous tick's dispatch is still in flight. Skip this
 		// forwarder for now; the next tick picks it up.
-		runtimeLogger().DebugContext(ctx, "siem: skipping forwarder, dispatch in flight",
+		runtimeLogger(ctx).DebugContext(ctx, "siem: skipping forwarder, dispatch in flight",
 			"forwarder", sub.Name)
 		return
 	}
@@ -211,15 +183,16 @@ func dispatchForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
 
 	// First, evict rows that crossed the retry cap. These can't make
 	// progress and would starve the rest of the batch.
-	if exhausted, err := siemDeps.Queries.ListSIEMQueueExhausted(ctx, sqlc.ListSIEMQueueExhaustedParams{
+	if exhausted, err := runtime.SIEM.Queries.ListSIEMQueueExhausted(ctx, sqlc.ListSIEMQueueExhaustedParams{
 		ForwarderID: sub.ID,
 		Attempts:    SIEMRetryCap,
 		Limit:       batchSize,
 	}); err == nil && len(exhausted) > 0 {
 		ids := rowIDs(exhausted)
-		_ = siemDeps.Queries.DeleteSIEMQueueByIDs(ctx, ids)
+		_ = runtime.SIEM.Queries.MarkSIEMTestOperationsFailedByQueueIDs(ctx, ids, "retries_exhausted")
+		_ = runtime.SIEM.Queries.DeleteSIEMQueueByIDs(ctx, ids)
 		siem.RecordDropped(sub.Name, "retries_exhausted", len(ids))
-		_ = siemDeps.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
+		_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 			ForwarderID:  sub.ID,
 			LastError:    fmt.Sprintf("dropped %d rows past retry cap (%d)", len(ids), SIEMRetryCap),
 			QueueDepth:   0, // updated below after the new depth read
@@ -227,19 +200,19 @@ func dispatchForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
 		})
 	}
 
-	rows, err := siemDeps.Queries.ListSIEMQueueBatch(ctx, sqlc.ListSIEMQueueBatchParams{
+	rows, err := runtime.SIEM.Queries.ListSIEMQueueBatch(ctx, sqlc.ListSIEMQueueBatchParams{
 		ForwarderID: sub.ID,
 		Limit:       batchSize,
 	})
 	if err != nil {
-		runtimeLogger().WarnContext(ctx, "siem: list queue failed",
+		runtimeLogger(ctx).WarnContext(ctx, "siem: list queue failed",
 			"forwarder", sub.Name, "error", err)
 		return
 	}
 	if len(rows) == 0 {
 		// Refresh queue_depth gauge to 0 so dashboards see the
 		// "caught up" state.
-		_ = siemDeps.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
+		_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 			ForwarderID: sub.ID,
 			QueueDepth:  0,
 		})
@@ -248,22 +221,22 @@ func dispatchForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
 	}
 
 	// Decrypt the auth blob once per drain.
-	secret, err := decryptAuthBlob(sub.AuthEncrypted)
+	secret, err := runtime.decryptSIEMAuthBlob(sub.AuthEncrypted)
 	if err != nil {
-		runtimeLogger().WarnContext(ctx, "siem: decrypt auth blob failed",
+		runtimeLogger(ctx).WarnContext(ctx, "siem: decrypt auth blob failed",
 			"forwarder", sub.Name, "error", err)
-		_ = siemDeps.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
+		_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 			ForwarderID: sub.ID,
 			LastError:   truncateDispatchLastError("decrypt auth: "+err.Error(), 1024),
 		})
 		return
 	}
 
-	transport, err := siemDeps.TransportFactory(sub, secret)
+	transport, err := runtime.SIEM.TransportFactory(sub, secret)
 	if err != nil {
-		runtimeLogger().WarnContext(ctx, "siem: build transport failed",
+		runtimeLogger(ctx).WarnContext(ctx, "siem: build transport failed",
 			"forwarder", sub.Name, "error", err)
-		_ = siemDeps.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
+		_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 			ForwarderID: sub.ID,
 			LastError:   truncateDispatchLastError("transport: "+err.Error(), 1024),
 		})
@@ -282,7 +255,7 @@ func dispatchForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
 	for _, row := range rows {
 		ev, err := rowToSIEMEvent(row, sub)
 		if err != nil {
-			runtimeLogger().WarnContext(ctx, "siem: decode payload failed",
+			runtimeLogger(ctx).WarnContext(ctx, "siem: decode payload failed",
 				"forwarder", sub.Name, "row", row.ID, "error", err)
 			continue
 		}
@@ -296,7 +269,9 @@ func dispatchForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
 	if len(formatted) == 0 {
 		// Every row failed to format; drop them so they don't block
 		// progress.
-		_ = siemDeps.Queries.DeleteSIEMQueueByIDs(ctx, rowIDs(rows))
+		ids := rowIDs(rows)
+		_ = runtime.SIEM.Queries.MarkSIEMTestOperationsFailedByQueueIDs(ctx, ids, "format_error")
+		_ = runtime.SIEM.Queries.DeleteSIEMQueueByIDs(ctx, ids)
 		return
 	}
 
@@ -314,23 +289,29 @@ func dispatchForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
 	if sendErr != nil {
 		// Failure: keep the rows, bump their attempts counter, and
 		// record the error on the status row.
-		_ = siemDeps.Queries.IncrementSIEMQueueAttempts(ctx, ids)
-		depth, _ := siemDeps.Queries.CountSIEMQueueByForwarder(ctx, sub.ID)
+		_ = runtime.SIEM.Queries.IncrementSIEMQueueAttempts(ctx, ids)
+		depth, _ := runtime.SIEM.Queries.CountSIEMQueueByForwarder(ctx, sub.ID)
 		siem.RecordDispatched(sub.Name, formatID, "failed", len(rows))
 		siem.RecordQueueDepth(sub.Name, int(depth))
-		_ = siemDeps.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
+		_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 			ForwarderID: sub.ID,
 			LastError:   truncateDispatchLastError(sendErr.Error(), 1024),
 			QueueDepth:  int32(depth),
 		})
-		runtimeLogger().WarnContext(ctx, "siem: dispatch failed",
+		runtimeLogger(ctx).WarnContext(ctx, "siem: dispatch failed",
 			"forwarder", sub.Name, "rows", len(rows), "error", sendErr)
 		return
 	}
 
+	// Persist terminal test-operation evidence before deleting the transient
+	// queue receipt. Ordinary rows are unaffected by this targeted update.
+	if err := runtime.SIEM.Queries.MarkSIEMTestOperationsSucceededByQueueIDs(ctx, ids); err != nil {
+		runtimeLogger(ctx).WarnContext(ctx, "siem: persist test terminal status failed", "forwarder", sub.Name, "error", err)
+		return
+	}
 	// Success: DELETE the rows, refresh the status row.
-	if err := siemDeps.Queries.DeleteSIEMQueueByIDs(ctx, ids); err != nil {
-		runtimeLogger().WarnContext(ctx, "siem: delete after send failed",
+	if err := runtime.SIEM.Queries.DeleteSIEMQueueByIDs(ctx, ids); err != nil {
+		runtimeLogger(ctx).WarnContext(ctx, "siem: delete after send failed",
 			"forwarder", sub.Name, "rows", len(rows), "error", err)
 		// Rows will be retried next tick — Send already succeeded so
 		// the SIEM has the data, but the platform may re-ship until
@@ -338,10 +319,10 @@ func dispatchForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
 		// alternative is losing rows on a DELETE failure.
 		return
 	}
-	depth, _ := siemDeps.Queries.CountSIEMQueueByForwarder(ctx, sub.ID)
+	depth, _ := runtime.SIEM.Queries.CountSIEMQueueByForwarder(ctx, sub.ID)
 	siem.RecordDispatched(sub.Name, formatID, "delivered", len(rows))
 	siem.RecordQueueDepth(sub.Name, int(depth))
-	_ = siemDeps.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
+	_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 		ForwarderID:     sub.ID,
 		LastSentAt:      pgtype.Timestamptz{Time: now, Valid: true},
 		LastError:       "",
@@ -350,20 +331,20 @@ func dispatchForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
 	})
 }
 
-// HandleSIEMCleanupOld deletes queue rows older than the retention
-// window. Daily cadence; cooperative DB lease.
-func HandleSIEMCleanupOld(ctx context.Context, _ *asynq.Task) error {
+// HandleSIEMCleanupOld deletes disposable queue rows older than the retention
+// window. Mandatory audit receipts are excluded by the query. Daily cadence;
+// cooperative DB lease.
+func (runtime DispatchRuntime) HandleSIEMCleanupOld(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, SIEMCleanupOldType, func() error {
-		if siemDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "siem cleanup not configured, skipping")
-			return nil
+		if runtime.SIEM.Queries == nil {
+			return fmt.Errorf("SIEM cleanup runtime is not configured")
 		}
 		cutoff := time.Now().UTC().Add(-SIEMQueueRetention)
-		removed, err := siemDeps.Queries.DeleteSIEMQueueOlderThan(ctx, cutoff)
+		removed, err := runtime.SIEM.Queries.DeleteSIEMQueueOlderThan(ctx, cutoff)
 		if err != nil {
 			return fmt.Errorf("delete old siem queue: %w", err)
 		}
-		runtimeLogger().InfoContext(ctx, "siem retention sweep",
+		runtimeLogger(ctx).InfoContext(ctx, "siem retention sweep",
 			"rows_deleted", removed,
 			"cutoff", cutoff.Format(time.RFC3339),
 		)
@@ -436,14 +417,14 @@ func extractResourceHints(detail json.RawMessage) (resourceID, resourceType, act
 // Returns the empty blob (no token, no auth) when auth_encrypted is
 // empty — that's the default for forwarders that don't need auth (e.g.
 // a syslog UDP sink on a private network).
-func decryptAuthBlob(encrypted string) (authBlob, error) {
+func (runtime DispatchRuntime) decryptSIEMAuthBlob(encrypted string) (authBlob, error) {
 	if strings.TrimSpace(encrypted) == "" {
 		return authBlob{}, nil
 	}
-	if siemDeps.Encryptor == nil {
+	if runtime.SIEM.Encryptor == nil {
 		return authBlob{}, errors.New("encryptor unavailable")
 	}
-	plain, err := siemDeps.Encryptor.Decrypt(encrypted)
+	plain, err := runtime.SIEM.Encryptor.Decrypt(encrypted)
 	if err != nil {
 		return authBlob{}, err
 	}
@@ -456,7 +437,7 @@ func decryptAuthBlob(encrypted string) (authBlob, error) {
 
 // defaultSIEMTransportFactory is the production transport builder.
 // Tests substitute via SIEMDeps.TransportFactory.
-func defaultSIEMTransportFactory(sub sqlc.SiemForwarder, secret authBlob) (siem.Transport, error) {
+func (runtime DispatchRuntime) defaultSIEMTransportFactory(sub sqlc.SiemForwarder, secret authBlob) (siem.Transport, error) {
 	dialTimeout := time.Duration(sub.TimeoutSeconds) * time.Second
 	if dialTimeout <= 0 {
 		dialTimeout = 10 * time.Second
@@ -473,10 +454,10 @@ func defaultSIEMTransportFactory(sub sqlc.SiemForwarder, secret authBlob) (siem.
 		}
 		return siem.NewSyslogTLS(sub.Endpoint, cfg, dialTimeout), nil
 	case siem.TransportSplunkHEC:
-		client := httpClientForForwarder(sub, dialTimeout)
+		client := runtime.httpClientForSIEMForwarder(sub, dialTimeout)
 		return siem.NewSplunkHEC(sub.Endpoint, secret.Token, client), nil
 	case siem.TransportNDJSONHTTPS:
-		client := httpClientForForwarder(sub, dialTimeout)
+		client := runtime.httpClientForSIEMForwarder(sub, dialTimeout)
 		hdr := http.Header{}
 		for k, v := range secret.Headers {
 			hdr.Set(k, v)

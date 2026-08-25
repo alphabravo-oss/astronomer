@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // §HostMounts — per-extension error boundary.
 //
@@ -11,7 +11,7 @@
 // React error boundaries must be class components; this is the one class in
 // the extensions runtime for exactly that reason.
 
-import { Component, type ReactNode } from 'react';
+import { Component, type ReactNode } from "react";
 
 interface Props {
   // Shown in the fallback so an operator can see which extension failed.
@@ -37,8 +37,10 @@ export class ExtensionErrorBoundary extends Component<Props, State> {
           role="alert"
           className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-muted-foreground"
         >
-          Extension{' '}
-          <span className="font-medium text-foreground">{this.props.extensionName}</span>{' '}
+          Extension{" "}
+          <span className="font-medium text-foreground">
+            {this.props.extensionName}
+          </span>{" "}
           failed to render and was isolated. The rest of the page is unaffected.
         </div>
       );

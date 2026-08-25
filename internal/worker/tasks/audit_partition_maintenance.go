@@ -24,11 +24,10 @@ func NewEnsureAuditLogPartitionsTask() *asynq.Task {
 // workers don't race to create the same partition DDL.
 func HandleEnsureAuditLogPartitions(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, EnsureAuditLogPartitionsType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().DebugContext(ctx, "audit partition runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("audit partition runtime is not configured")
 		}
-		q, ok := runtimeDeps.Queries.(auditPartitionQuerier)
+		q, ok := runtimeDependencies(ctx).Queries.(auditPartitionQuerier)
 		if !ok {
 			return fmt.Errorf("audit partition maintenance not supported by runtime querier")
 		}
@@ -40,6 +39,6 @@ func ensureAuditLogPartitions(ctx context.Context, q auditPartitionQuerier) erro
 	if err := q.EnsureAuditLogPartitions(ctx); err != nil {
 		return fmt.Errorf("ensure audit_log partitions: %w", err)
 	}
-	runtimeLogger().InfoContext(ctx, "ensured audit_log partitions for current and next month")
+	runtimeLogger(ctx).InfoContext(ctx, "ensured audit_log partitions for current and next month")
 	return nil
 }

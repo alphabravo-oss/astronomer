@@ -41,9 +41,6 @@ func (q *clusterTombstonePurgeQuerier) CreateAuditLogV1(_ context.Context, arg s
 }
 
 func TestClusterTombstoneRetention_PurgesWithDefaultWindow(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	id := uuid.New()
 	q := &clusterTombstonePurgeQuerier{rows: []sqlc.ListExpiredClusterTombstonesRow{{
 		ID:               id,
@@ -51,11 +48,11 @@ func TestClusterTombstoneRetention_PurgesWithDefaultWindow(t *testing.T) {
 		DisplayName:      "Old Cluster",
 		DecommissionedAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(-100 * 24 * time.Hour), Valid: true},
 	}}}
-	runtimeDeps = RuntimeDependencies{Queries: q}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q})
 
 	retention := time.Duration(defaultClusterTombstoneRetentionDays) * 24 * time.Hour
 	before := time.Now().UTC().Add(-retention)
-	if err := HandleClusterTombstoneRetention(context.Background(), &asynq.Task{}); err != nil {
+	if err := HandleClusterTombstoneRetention(ctx, &asynq.Task{}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if q.listCalls != 1 {
@@ -79,13 +76,10 @@ func TestClusterTombstoneRetention_PurgesWithDefaultWindow(t *testing.T) {
 
 // The purge must be leader-gated so only the lease holder runs the DELETEs.
 func TestClusterTombstoneRetention_SkippedOnNonLeader(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	q := &clusterTombstonePurgeQuerier{}
-	runtimeDeps = RuntimeDependencies{Queries: q, Leader: &fakeLeader{held: false}}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, Leader: &fakeLeader{held: false}})
 
-	if err := HandleClusterTombstoneRetention(context.Background(), &asynq.Task{}); err != nil {
+	if err := HandleClusterTombstoneRetention(ctx, &asynq.Task{}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if q.listCalls != 0 || len(q.deleted) != 0 {

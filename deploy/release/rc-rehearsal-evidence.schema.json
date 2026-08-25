@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "result", "target_version", "previous_version", "source_run_id", "producer_run_id", "source_commit", "release_manifest_sha256", "upgrade_evidence_sha256", "backup_manifest_sha256", "backup_restore", "decrypt_proof", "clean_restore", "destructive_fence", "started_at", "completed_at"],
+  "properties": {
+    "schema_version": {"const": 1}, "result": {"const": "passed"},
+    "target_version": {"type":"string","pattern":"^v1\\.[0-9]+\\.[0-9]+$"},
+    "previous_version": {"type":"string","pattern":"^v1\\.[0-9]+\\.[0-9]+$"},
+    "source_run_id": {"type":"string","pattern":"^[1-9][0-9]*$"},
+    "producer_run_id": {"type":"string","pattern":"^[1-9][0-9]*$"},
+    "source_commit": {"type":"string","pattern":"^[a-f0-9]{40}$"},
+    "release_manifest_sha256": {"$ref":"#/$defs/digest"}, "upgrade_evidence_sha256": {"$ref":"#/$defs/digest"}, "backup_manifest_sha256": {"$ref":"#/$defs/digest"},
+    "backup_restore": {"const":"passed"}, "decrypt_proof": {"const":"passed"}, "clean_restore": {"const":"passed"}, "destructive_fence": {"const":"owned_disposable_k3d"},
+    "started_at":{"type":"string","format":"date-time"}, "completed_at":{"type":"string","format":"date-time"}
+  },
+  "$defs":{"digest":{"type":"string","pattern":"^sha256:[a-f0-9]{64}$"}}
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astronomer.io/schemas/cloud-acceptance-targets-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "targets"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "targets": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["provider", "cluster_id", "cluster_name", "project_id", "credential_id"],
+        "properties": {
+          "provider": {"enum": ["eks", "gke", "aks", "doks"]},
+          "cluster_id": {"type": "string", "format": "uuid"},
+          "cluster_name": {"type": "string", "minLength": 1, "maxLength": 253},
+          "project_id": {"type": "string", "format": "uuid"},
+          "credential_id": {"type": "string", "format": "uuid"}
+        }
+      }
+    }
+  }
+}

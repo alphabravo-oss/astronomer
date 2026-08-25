@@ -674,6 +674,7 @@ UPDATE projects SET
     resource_quota_cpu_limit      = $3,
     resource_quota_memory_limit   = $4,
     resource_quota_pod_count      = $5,
+    network_policy_mode           = $6,
     updated_at                    = now()
 WHERE id = $1
 RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation
@@ -685,6 +686,7 @@ type UpdateProjectPolicyParams struct {
 	ResourceQuotaCpuLimit    string    `json:"resource_quota_cpu_limit"`
 	ResourceQuotaMemoryLimit string    `json:"resource_quota_memory_limit"`
 	ResourceQuotaPodCount    int32     `json:"resource_quota_pod_count"`
+	NetworkPolicyMode        string    `json:"network_policy_mode"`
 }
 
 // Updates only the per-project policy fields without touching membership /
@@ -698,6 +700,7 @@ func (q *Queries) UpdateProjectPolicy(ctx context.Context, arg UpdateProjectPoli
 		arg.ResourceQuotaCpuLimit,
 		arg.ResourceQuotaMemoryLimit,
 		arg.ResourceQuotaPodCount,
+		arg.NetworkPolicyMode,
 	)
 	var i Project
 	err := row.Scan(

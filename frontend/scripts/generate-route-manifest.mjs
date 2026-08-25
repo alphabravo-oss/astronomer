@@ -27,7 +27,10 @@ const outputPath = path.join(frontendRoot, 'tests/e2e-smoke/route-manifest.gener
 // The current route inventory has one `[[...slug]]` optional catch-all
 // (custom-resources). Its TanStack port is an `index.tsx` + `$.tsx` pair, so
 // the manifest deliberately crawls both the empty and populated variants.
-const EXPECTED_ROUTE_COUNT = 118;
+// Reviewed 2026-08-23 after adding resource discovery/schema and enterprise
+// operations surfaces. Keep this exact: a route addition needs a smoke fixture
+// and a route removal needs an explicit product decision.
+const EXPECTED_ROUTE_COUNT = 130;
 
 // One fixture per `$param` name, shared across every route that uses it.
 // The route-smoke stubs answer any /api/v1 GET, so the values only need to
@@ -124,7 +127,7 @@ const manifest = files.map((file) => {
 if (manifest.length !== EXPECTED_ROUTE_COUNT) {
   console.error(
     `route-manifest: expected ${EXPECTED_ROUTE_COUNT} routes but generated ${manifest.length}. ` +
-      'A route was added or dropped: update EXPECTED_ROUTE_COUNT deliberately (and Appendix A) ' +
+      'A route was added or dropped: update EXPECTED_ROUTE_COUNT and its dated review comment deliberately ' +
       'instead of letting the smoke tier shrink silently.',
   );
   process.exit(1);

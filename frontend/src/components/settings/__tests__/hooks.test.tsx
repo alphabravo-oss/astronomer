@@ -1,8 +1,8 @@
-import { act, renderHook } from '@testing-library/react';
-import { useIsSuperuser } from '@/components/settings/hooks';
-import { useAuthStore } from '@/lib/store';
+import { act, renderHook } from "@testing-library/react";
+import { useIsSuperuser } from "@/components/settings/hooks";
+import { useAuthStore } from "@/lib/store";
 
-describe('useIsSuperuser', () => {
+describe("useIsSuperuser", () => {
   afterEach(() => {
     act(() => {
       useAuthStore.setState({ user: null, isAuthenticated: false });
@@ -10,16 +10,16 @@ describe('useIsSuperuser', () => {
     window.localStorage.clear();
   });
 
-  it('treats backend bootstrap admins with is_superuser as superusers', () => {
+  it("treats backend bootstrap admins with is_superuser as superusers", () => {
     act(() => {
       useAuthStore.setState({
         isAuthenticated: true,
         user: {
-          id: 'admin-id',
-          email: 'admin@alphabravo.io',
-          username: 'admin',
-          first_name: 'Admin',
-          last_name: '',
+          id: "admin-id",
+          email: "admin@alphabravo.io",
+          username: "admin",
+          first_name: "Admin",
+          last_name: "",
           is_active: true,
           is_staff: true,
           is_superuser: true,

@@ -1,159 +1,38 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/platform — branding, banners, feature flags, token
  * TTL, and telemetry. Each section maps to a stable dotted-key prefix on
- * the backend (`branding.*`, `banners.*`, `features.*`, ...); we hydrate a
+ * the backend (`branding.*`, `banner.*`, `feature.*`, ...); we hydrate a
  * flat key/value snapshot from `GET /admin/settings/`, mirror it into a
  * grouped form-state struct, and on save diff against the original to only
  * push keys that actually changed.
  */
-import { useMemo, useEffect, useState } from 'react';
-import { Link } from '@/lib/link';
-import {
-  ArrowLeft,
-  Loader2,
-  Pencil,
-  Save,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { Textarea } from '@/components/ui/textarea';
-import { KeyStatusPanel } from '@/components/settings/key-status-panel';
-import { toastInfo } from '@/lib/toast';
-import { useAppForm } from '@/lib/form';
+import { useMemo, useEffect, useState } from "react";
+import { Link } from "@/lib/link";
+import { ArrowLeft, Loader2, Pencil, Save } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { Textarea } from "@/components/ui/textarea";
+import { KeyStatusPanel } from "@/components/settings/key-status-panel";
+import { toastInfo } from "@/lib/toast";
+import { useAppForm } from "@/lib/form";
 import {
   usePlatformSettings,
   useSavePlatformSettings,
-} from '@/components/settings/hooks';
-import type { PlatformSettingsGrouped } from '@/lib/api/settings';
-
-// Defaults match the backend's seed values; we fall back to them when a key
-// is absent from the snapshot so the form has stable initial state.
-const DEFAULTS: PlatformSettingsGrouped = {
-  branding: {
-    logoUrl: '',
-    productName: 'Astronomer',
-    primaryColor: '#3b82f6',
-    supportUrl: '',
-    copyright: '',
-  },
-  banners: {
-    loginBannerText: '',
-    globalBannerText: '',
-    globalBannerColor: 'info',
-  },
-  features: {
-    catalog: true,
-    projects: true,
-    monitoring: true,
-    security: true,
-    backups: true,
-    extensions: false,
-  },
-  tokens: {
-    defaultTtlSeconds: 86400,
-    maxTtlSeconds: 2592000,
-  },
-  session: {
-    // Matches the backend's canonical 60-minute absolute JWT TTL.
-    timeoutMinutes: 60,
-  },
-  telemetry: {
-    enabled: false,
-    endpoint: '',
-  },
-  registration: {
-    tlsMode: 'public_ca',
-    caBundle: '',
-  },
-};
-
-const FLAT_KEYS: Record<string, (g: PlatformSettingsGrouped) => unknown> = {
-  'branding.logo_url': (g) => g.branding.logoUrl,
-  'branding.product_name': (g) => g.branding.productName,
-  'branding.primary_color': (g) => g.branding.primaryColor,
-  'branding.support_url': (g) => g.branding.supportUrl,
-  'branding.copyright': (g) => g.branding.copyright,
-  'banners.login_banner_text': (g) => g.banners.loginBannerText,
-  'banners.global_banner_text': (g) => g.banners.globalBannerText,
-  'banners.global_banner_color': (g) => g.banners.globalBannerColor,
-  'feature.catalog': (g) => g.features.catalog,
-  'feature.projects': (g) => g.features.projects,
-  'feature.monitoring': (g) => g.features.monitoring,
-  'feature.security': (g) => g.features.security,
-  'feature.backups': (g) => g.features.backups,
-  'feature.extensions': (g) => g.features.extensions,
-  'tokens.default_ttl_seconds': (g) => g.tokens.defaultTtlSeconds,
-  'tokens.max_ttl_seconds': (g) => g.tokens.maxTtlSeconds,
-  'session.timeout_minutes': (g) => g.session.timeoutMinutes,
-  'telemetry.enabled': (g) => g.telemetry.enabled,
-  'telemetry.endpoint': (g) => g.telemetry.endpoint,
-  'registration.tls_mode': (g) => g.registration.tlsMode,
-  'registration.ca_bundle': (g) => g.registration.caBundle,
-};
-
-function hydrate(flat: Array<{ key: string; value: unknown }>): PlatformSettingsGrouped {
-  const map = new Map(flat.map((s) => [s.key, s.value]));
-  const get = <T,>(key: string, fallback: T): T => {
-    const v = map.get(key);
-    return v === undefined || v === null ? fallback : (v as T);
-  };
-  return {
-    branding: {
-      logoUrl: get('branding.logo_url', DEFAULTS.branding.logoUrl),
-      productName: get('branding.product_name', DEFAULTS.branding.productName),
-      primaryColor: get('branding.primary_color', DEFAULTS.branding.primaryColor),
-      supportUrl: get('branding.support_url', DEFAULTS.branding.supportUrl),
-      copyright: get('branding.copyright', DEFAULTS.branding.copyright),
-    },
-    banners: {
-      loginBannerText: get('banners.login_banner_text', DEFAULTS.banners.loginBannerText),
-      globalBannerText: get('banners.global_banner_text', DEFAULTS.banners.globalBannerText),
-      globalBannerColor: get('banners.global_banner_color', DEFAULTS.banners.globalBannerColor),
-    },
-    features: {
-      catalog: get('feature.catalog', DEFAULTS.features.catalog),
-      projects: get('feature.projects', DEFAULTS.features.projects),
-      monitoring: get('feature.monitoring', DEFAULTS.features.monitoring),
-      security: get('feature.security', DEFAULTS.features.security),
-      backups: get('feature.backups', DEFAULTS.features.backups),
-      extensions: get('feature.extensions', DEFAULTS.features.extensions),
-    },
-    tokens: {
-      defaultTtlSeconds: get('tokens.default_ttl_seconds', DEFAULTS.tokens.defaultTtlSeconds),
-      maxTtlSeconds: get('tokens.max_ttl_seconds', DEFAULTS.tokens.maxTtlSeconds),
-    },
-    session: {
-      timeoutMinutes: Number(get('session.timeout_minutes', DEFAULTS.session.timeoutMinutes)),
-    },
-    telemetry: {
-      enabled: get('telemetry.enabled', DEFAULTS.telemetry.enabled),
-      endpoint: get('telemetry.endpoint', DEFAULTS.telemetry.endpoint),
-    },
-    registration: {
-      tlsMode: get('registration.tls_mode', DEFAULTS.registration.tlsMode) as PlatformSettingsGrouped['registration']['tlsMode'],
-      caBundle: get('registration.ca_bundle', DEFAULTS.registration.caBundle),
-    },
-  };
-}
-
-function diffKeys(a: PlatformSettingsGrouped, b: PlatformSettingsGrouped): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [flat, getter] of Object.entries(FLAT_KEYS)) {
-    const left = getter(a);
-    const right = getter(b);
-    if (left !== right) out[flat] = right;
-  }
-  return out;
-}
+} from "@/components/settings/hooks";
+import type { PlatformSettingsGrouped } from "@/lib/api/platform-settings";
+import {
+  diffPlatformSettings,
+  hydratePlatformSettings,
+} from "@/lib/platform-settings-model";
 
 // Banner textareas are text-sm / row-sized, unlike the kit's mono default —
 // merged over the kit textarea class (twMerge, later wins).
-const bannerTextareaClassName = 'min-h-0 text-sm font-sans';
+const bannerTextareaClassName = "min-h-0 text-sm font-sans";
 
 function Section({
   title,
@@ -168,25 +47,42 @@ function Section({
     <section className="rounded-xl border border-border bg-card p-6 space-y-4">
       <div>
         <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+        {description && (
+          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+        )}
       </div>
       <div className="space-y-4">{children}</div>
     </section>
   );
 }
 
-function BannerPreview({ text, color }: { text: string; color: PlatformSettingsGrouped['banners']['globalBannerColor'] }) {
+function BannerPreview({
+  text,
+  color,
+}: {
+  text: string;
+  color: PlatformSettingsGrouped["banners"]["globalBannerColor"];
+}) {
   if (!text) {
-    return <p className="text-xs text-muted-foreground italic">No banner — leave blank to hide.</p>;
+    return (
+      <p className="text-xs text-muted-foreground italic">
+        No banner — leave blank to hide.
+      </p>
+    );
   }
   const palette: Record<typeof color, string> = {
-    info: 'bg-status-info/10 border-status-info/30 text-status-info',
-    success: 'bg-status-success/10 border-status-success/30 text-status-success',
-    warning: 'bg-status-warning/10 border-status-warning/30 text-status-warning',
-    error: 'bg-status-error/10 border-status-error/30 text-status-error',
+    info: "bg-status-info/10 border-status-info/30 text-status-info",
+    warning:
+      "bg-status-warning/10 border-status-warning/30 text-status-warning",
+    critical: "bg-status-error/10 border-status-error/30 text-status-error",
   };
   return (
-    <div className={cn('rounded-lg border px-3 py-2 text-xs whitespace-pre-wrap', palette[color])}>
+    <div
+      className={cn(
+        "rounded-lg border px-3 py-2 text-xs whitespace-pre-wrap",
+        palette[color],
+      )}
+    >
       {text}
     </div>
   );
@@ -196,16 +92,19 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
   const { data: flat, isLoading } = usePlatformSettings();
   const save = useSavePlatformSettings();
 
-  const initial = useMemo<PlatformSettingsGrouped>(() => hydrate(flat ?? []), [flat]);
+  const initial = useMemo<PlatformSettingsGrouped>(
+    () => hydratePlatformSettings(flat ?? []),
+    [flat],
+  );
 
   const form = useAppForm({
     defaultValues: initial,
     onSubmit: async ({ value }) => {
       // Same pre-save gate as before: diff against the snapshot and only push
       // keys that actually changed.
-      const dirty = diffKeys(initial, value);
+      const dirty = diffPlatformSettings(initial, value);
       if (Object.keys(dirty).length === 0) {
-        toastInfo('Nothing to save');
+        toastInfo("Nothing to save");
         return;
       }
       try {
@@ -234,19 +133,30 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
 
   return (
     <div className="space-y-6">
-      <Section title="Branding" description="Logo, product name, colors. Applied across the dashboard chrome.">
+      <Section
+        title="Branding"
+        description="Logo, product name, colors. Applied across the dashboard chrome."
+      >
         <form.AppField name="branding.productName">
           {(field) => <field.TextField label="Product name" />}
         </form.AppField>
         <form.AppField name="branding.logoUrl">
-          {(field) => <field.TextField label="Logo URL" placeholder="https://..." />}
+          {(field) => (
+            <field.TextField label="Logo URL" placeholder="https://..." />
+          )}
         </form.AppField>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Primary color</label>
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-5257f27b-245"
+          >
+            Primary color
+          </label>
           <form.Field name="branding.primaryColor">
             {(field) => (
               <div className="flex items-center gap-3">
                 <Input
+                  id="field-5257f27b-245"
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -262,17 +172,32 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
               </div>
             )}
           </form.Field>
-          <p className="text-xs text-muted-foreground">Hex string (e.g. <span className="font-mono">#3b82f6</span>).</p>
+          <p className="text-xs text-muted-foreground">
+            Hex string (e.g. <span className="font-mono">#3b82f6</span>).
+          </p>
         </div>
         <form.AppField name="branding.supportUrl">
-          {(field) => <field.TextField label="Support URL" placeholder="https://help.example.com" />}
+          {(field) => (
+            <field.TextField
+              label="Support URL"
+              placeholder="https://help.example.com"
+            />
+          )}
         </form.AppField>
         <form.AppField name="branding.copyright">
-          {(field) => <field.TextField label="Copyright" placeholder="© 2026 Example Corp." />}
+          {(field) => (
+            <field.TextField
+              label="Copyright"
+              placeholder="© 2026 Example Corp."
+            />
+          )}
         </form.AppField>
       </Section>
 
-      <Section title="Banners" description="Optional banner text shown on the login screen and inside the dashboard.">
+      <Section
+        title="Banners"
+        description="Optional banner text shown on the login screen and inside the dashboard."
+      >
         <form.AppField name="banners.loginBannerText">
           {(field) => (
             <field.TextareaField
@@ -297,31 +222,47 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
           {(field) => (
             <field.SelectField label="Global banner color">
               <option value="info">Info (blue)</option>
-              <option value="success">Success (green)</option>
               <option value="warning">Warning (amber)</option>
-              <option value="error">Error (red)</option>
+              <option value="critical">Critical (red)</option>
             </field.SelectField>
           )}
         </form.AppField>
         <div className="space-y-1.5">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preview</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Preview
+          </p>
           <form.Subscribe selector={(s) => s.values.banners}>
             {(banners) => (
               <BannerPreview
                 text={banners.globalBannerText}
-                color={banners.globalBannerColor as PlatformSettingsGrouped['banners']['globalBannerColor']}
+                color={
+                  banners.globalBannerColor as PlatformSettingsGrouped["banners"]["globalBannerColor"]
+                }
               />
             )}
           </form.Subscribe>
         </div>
       </Section>
 
-      <Section title="Feature flags" description="Hide entire dashboard areas from the sidebar. Server-side authorisation still applies regardless.">
-        <form.AppField name="features.catalog">{(field) => <field.SwitchField label="Catalog" />}</form.AppField>
-        <form.AppField name="features.projects">{(field) => <field.SwitchField label="Projects" />}</form.AppField>
-        <form.AppField name="features.monitoring">{(field) => <field.SwitchField label="Monitoring" />}</form.AppField>
-        <form.AppField name="features.security">{(field) => <field.SwitchField label="Security" />}</form.AppField>
-        <form.AppField name="features.backups">{(field) => <field.SwitchField label="Backups" />}</form.AppField>
+      <Section
+        title="Feature flags"
+        description="Hide entire dashboard areas from the sidebar. Server-side authorisation still applies regardless."
+      >
+        <form.AppField name="features.catalog">
+          {(field) => <field.SwitchField label="Catalog" />}
+        </form.AppField>
+        <form.AppField name="features.projects">
+          {(field) => <field.SwitchField label="Projects" />}
+        </form.AppField>
+        <form.AppField name="features.monitoring">
+          {(field) => <field.SwitchField label="Monitoring" />}
+        </form.AppField>
+        <form.AppField name="features.security">
+          {(field) => <field.SwitchField label="Security" />}
+        </form.AppField>
+        <form.AppField name="features.backups">
+          {(field) => <field.SwitchField label="Backups" />}
+        </form.AppField>
         <form.AppField name="features.extensions">
           {(field) => (
             <field.SwitchField
@@ -332,23 +273,28 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
         </form.AppField>
       </Section>
 
-      <Section title="Token TTL" description="Defaults applied to newly minted API tokens.">
-        <form.AppField name="tokens.defaultTtlSeconds">
-          {(field) => <field.NumberField label="Default TTL (seconds)" min={60} />}
+      <Section
+        title="Token TTL"
+        description="Defaults applied to newly minted API tokens."
+      >
+        <form.AppField name="tokens.defaultTtlMinutes">
+          {(field) => (
+            <field.NumberField label="Default TTL (minutes)" min={0} />
+          )}
         </form.AppField>
-        <form.AppField name="tokens.maxTtlSeconds">
-          {(field) => <field.NumberField label="Maximum TTL (seconds)" min={60} />}
+        <form.AppField name="tokens.maxTtlMinutes">
+          {(field) => (
+            <field.NumberField label="Maximum TTL (minutes)" min={1} />
+          )}
         </form.AppField>
         <form.Subscribe selector={(s) => s.values.tokens}>
           {(tokens) => (
             <p className="text-xs text-muted-foreground">
-              {tokens.defaultTtlSeconds >= 86400
-                ? `Default ≈ ${Math.round(tokens.defaultTtlSeconds / 86400)} day(s)`
-                : `Default ≈ ${Math.round(tokens.defaultTtlSeconds / 3600)} hour(s)`}
-              {' · '}
-              {tokens.maxTtlSeconds >= 86400
-                ? `Max ≈ ${Math.round(tokens.maxTtlSeconds / 86400)} day(s)`
-                : `Max ≈ ${Math.round(tokens.maxTtlSeconds / 3600)} hour(s)`}
+              {tokens.defaultTtlMinutes === 0
+                ? "Default: no expiry"
+                : `Default: ${humanTtlMinutes(tokens.defaultTtlMinutes)}`}
+              {" · "}
+              Max: {humanTtlMinutes(tokens.maxTtlMinutes)}
             </p>
           )}
         </form.Subscribe>
@@ -359,15 +305,22 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
         description="JWT access-token lifetime for interactive logins (password, SSO, TOTP). Absolute TTL at mint/refresh — not an idle timeout."
       >
         <form.AppField name="session.timeoutMinutes">
-          {(field) => <field.NumberField label="Access token lifetime (minutes)" min={5} />}
+          {(field) => (
+            <field.NumberField
+              label="Access token lifetime (minutes)"
+              min={5}
+            />
+          )}
         </form.AppField>
         <form.Subscribe selector={(s) => s.values.session.timeoutMinutes}>
           {(timeoutMinutes) => (
             <p className="text-xs text-muted-foreground">
-              Absolute JWT <span className="font-mono">exp</span> applied on every mint and refresh
-              (setting key <span className="font-mono">session.timeout_minutes</span>). Activity does
-              not slide the access token; use refresh to obtain a new one under this same cap.
-              Compliance baselines may pin this value (e.g. 15–20 minutes).
+              Absolute JWT <span className="font-mono">exp</span> applied on
+              every mint and refresh (setting key{" "}
+              <span className="font-mono">session.timeout_minutes</span>).
+              Activity does not slide the access token; use refresh to obtain a
+              new one under this same cap. Compliance baselines may pin this
+              value (e.g. 15–20 minutes).
               {timeoutMinutes >= 60
                 ? ` Current ≈ ${Math.round(timeoutMinutes / 60)} hour(s).`
                 : ` Current = ${timeoutMinutes} minute(s).`}
@@ -376,7 +329,10 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
         </form.Subscribe>
       </Section>
 
-      <Section title="Telemetry" description="Anonymous usage signals. Opt-in only.">
+      <Section
+        title="Telemetry"
+        description="Anonymous usage signals. Opt-in only."
+      >
         <form.AppField name="telemetry.enabled">
           {(field) => (
             <field.SwitchField
@@ -387,7 +343,10 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
         </form.AppField>
         <form.AppField name="telemetry.endpoint">
           {(field) => (
-            <field.TextField label="Endpoint URL" placeholder="https://telemetry.example.com/v1/ingest" />
+            <field.TextField
+              label="Endpoint URL"
+              placeholder="https://telemetry.example.com/v1/ingest"
+            />
           )}
         </form.AppField>
       </Section>
@@ -400,13 +359,34 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
           {(field) => (
             <>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">TLS posture</label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <span
+                  id="tls-posture-label"
+                  className="text-sm font-medium text-foreground"
+                >
+                  TLS posture
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="tls-posture-label"
+                  className="grid grid-cols-1 md:grid-cols-3 gap-2"
+                >
                   {(
                     [
-                      { v: 'public_ca', label: 'Public CA', hint: 'Server certificate signed by a publicly-trusted CA. curl works with no flags.' },
-                      { v: 'private_ca', label: 'Private CA', hint: 'Server cert signed by an internal CA. Paste the PEM below; agents fetch & --cacert.' },
-                      { v: 'insecure', label: 'Skip verify', hint: 'Escape hatch — agents are told to use curl --insecure. Not recommended.' },
+                      {
+                        v: "public_ca",
+                        label: "Public CA",
+                        hint: "Server certificate signed by a publicly-trusted CA. curl works with no flags.",
+                      },
+                      {
+                        v: "private_ca",
+                        label: "Private CA",
+                        hint: "Server cert signed by an internal CA. Paste the PEM below; agents fetch & --cacert.",
+                      },
+                      {
+                        v: "insecure",
+                        label: "Skip verify",
+                        hint: "Escape hatch — agents are told to use curl --insecure. Not recommended.",
+                      },
                     ] as const
                   ).map((opt) => {
                     const active = field.state.value === opt.v;
@@ -416,23 +396,35 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
                         type="button"
                         onClick={() => field.handleChange(opt.v)}
                         className={cn(
-                          'text-left p-3 rounded-lg border transition-colors',
-                          active ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent',
+                          "text-left p-3 rounded-lg border transition-colors",
+                          active
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:bg-accent",
                         )}
                       >
-                        <p className="text-sm font-medium text-foreground">{opt.label}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{opt.hint}</p>
+                        <p className="text-sm font-medium text-foreground">
+                          {opt.label}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {opt.hint}
+                        </p>
                       </button>
                     );
                   })}
                 </div>
               </div>
-              {field.state.value === 'private_ca' && (
+              {field.state.value === "private_ca" && (
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">CA bundle (PEM)</label>
+                  <label
+                    className="text-sm font-medium text-foreground"
+                    htmlFor="field-5257f27b-432"
+                  >
+                    CA bundle (PEM)
+                  </label>
                   <form.Field name="registration.caBundle">
                     {(caField) => (
                       <Textarea
+                        id="field-5257f27b-432"
                         value={caField.state.value}
                         onChange={(e) => caField.handleChange(e.target.value)}
                         onBlur={caField.handleBlur}
@@ -442,7 +434,11 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
                     )}
                   </form.Field>
                   <p className="text-xs text-muted-foreground">
-                    Served via <code className="font-mono">GET /api/v1/register/ca.crt</code>. Concatenate any intermediate certs.
+                    Served via{" "}
+                    <code className="font-mono">
+                      GET /api/v1/register/ca.crt
+                    </code>
+                    . Concatenate any intermediate certs.
                   </p>
                 </div>
               )}
@@ -453,14 +449,14 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
 
       <form.Subscribe selector={(s) => s.values}>
         {(values) => {
-          const dirty = diffKeys(initial, values);
+          const dirty = diffPlatformSettings(initial, values);
           const hasChanges = Object.keys(dirty).length > 0;
           return (
             <div className="flex items-center justify-between sticky bottom-4 z-10 rounded-xl border border-border bg-popover/80 backdrop-blur p-3 shadow-sm">
               <p className="text-xs text-muted-foreground">
                 {hasChanges
-                  ? `${Object.keys(dirty).length} unsaved change${Object.keys(dirty).length === 1 ? '' : 's'}`
-                  : 'No changes'}
+                  ? `${Object.keys(dirty).length} unsaved change${Object.keys(dirty).length === 1 ? "" : "s"}`
+                  : "No changes"}
               </p>
               <ActionButton
                 type="button"
@@ -480,17 +476,20 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
   );
 }
 
-function humanTtl(seconds: number): string {
-  return seconds >= 86400
-    ? `${Math.round(seconds / 86400)}d`
-    : seconds >= 3600
-      ? `${Math.round(seconds / 3600)}h`
-      : `${seconds}s`;
+function humanTtlMinutes(minutes: number): string {
+  return minutes >= 1440
+    ? `${Math.round(minutes / 1440)}d`
+    : minutes >= 60
+      ? `${Math.round(minutes / 60)}h`
+      : `${minutes}m`;
 }
 
 function PlatformSummary({ onEdit }: { onEdit: () => void }) {
   const { data: flat, isLoading } = usePlatformSettings();
-  const g = useMemo<PlatformSettingsGrouped>(() => hydrate(flat ?? []), [flat]);
+  const g = useMemo<PlatformSettingsGrouped>(
+    () => hydratePlatformSettings(flat ?? []),
+    [flat],
+  );
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-32 rounded-xl border border-border bg-card">
@@ -504,8 +503,12 @@ function PlatformSummary({ onEdit }: { onEdit: () => void }) {
     <div className="rounded-xl border border-border bg-card p-6 space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-foreground">Current configuration</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Branding, banners, feature flags, TTLs, telemetry.</p>
+          <h2 className="text-base font-semibold text-foreground">
+            Current configuration
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Branding, banners, feature flags, TTLs, telemetry.
+          </p>
         </div>
         <ActionButton
           icon={<Pencil className="h-3.5 w-3.5" />}
@@ -518,29 +521,49 @@ function PlatformSummary({ onEdit }: { onEdit: () => void }) {
         <div className="flex items-center justify-between gap-4 py-1.5">
           <span className="text-xs text-muted-foreground">Product name</span>
           <span className="inline-flex items-center gap-2 text-sm text-foreground">
-            <span className="h-3.5 w-3.5 rounded border border-border" style={{ backgroundColor: g.branding.primaryColor }} />
+            <span
+              className="h-3.5 w-3.5 rounded border border-border"
+              style={{ backgroundColor: g.branding.primaryColor }}
+            />
             {g.branding.productName}
           </span>
         </div>
         <div className="flex items-center justify-between gap-4 py-1.5">
           <span className="text-xs text-muted-foreground">Feature flags</span>
-          <span className="text-sm text-foreground">{enabled}/{features.length} enabled</span>
+          <span className="text-sm text-foreground">
+            {enabled}/{features.length} enabled
+          </span>
         </div>
         <div className="flex items-center justify-between gap-4 py-1.5">
           <span className="text-xs text-muted-foreground">Token TTL</span>
-          <span className="text-sm text-foreground font-mono">{humanTtl(g.tokens.defaultTtlSeconds)} · max {humanTtl(g.tokens.maxTtlSeconds)}</span>
+          <span className="text-sm text-foreground font-mono">
+            {g.tokens.defaultTtlMinutes === 0
+              ? "no expiry"
+              : humanTtlMinutes(g.tokens.defaultTtlMinutes)}{" "}
+            · max {humanTtlMinutes(g.tokens.maxTtlMinutes)}
+          </span>
         </div>
         <div className="flex items-center justify-between gap-4 py-1.5">
-          <span className="text-xs text-muted-foreground">Session lifetime</span>
-          <span className="text-sm text-foreground font-mono">{g.session.timeoutMinutes}m</span>
+          <span className="text-xs text-muted-foreground">
+            Session lifetime
+          </span>
+          <span className="text-sm text-foreground font-mono">
+            {g.session.timeoutMinutes}m
+          </span>
         </div>
         <div className="flex items-center justify-between gap-4 py-1.5">
           <span className="text-xs text-muted-foreground">Telemetry</span>
-          <span className="text-sm text-foreground">{g.telemetry.enabled ? 'Enabled' : 'Disabled'}</span>
+          <span className="text-sm text-foreground">
+            {g.telemetry.enabled ? "Enabled" : "Disabled"}
+          </span>
         </div>
         <div className="flex items-center justify-between gap-4 py-1.5">
-          <span className="text-xs text-muted-foreground">Registration TLS</span>
-          <span className="text-sm text-foreground font-mono">{g.registration.tlsMode}</span>
+          <span className="text-xs text-muted-foreground">
+            Registration TLS
+          </span>
+          <span className="text-sm text-foreground font-mono">
+            {g.registration.tlsMode}
+          </span>
         </div>
       </div>
     </div>
@@ -581,6 +604,6 @@ function PlatformSettingsPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/platform/')({
+export const Route = createFileRoute("/dashboard/settings/platform/")({
   component: PlatformSettingsPage,
 });

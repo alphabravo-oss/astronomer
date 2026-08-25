@@ -1,5 +1,5 @@
-import type { QueryClient } from '@tanstack/react-query';
-import { clearPacedInvalidations, pacedInvalidate } from './paced-invalidate';
+import type { QueryClient } from "@tanstack/react-query";
+import { clearPacedInvalidations, pacedInvalidate } from "./paced-invalidate";
 
 function fakeQueryClient() {
   return { invalidateQueries: vi.fn() } as unknown as QueryClient & {
@@ -17,10 +17,10 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('pacedInvalidate', () => {
-  it('coalesces a burst into exactly one leading + one trailing invalidate', () => {
+describe("pacedInvalidate", () => {
+  it("coalesces a burst into exactly one leading + one trailing invalidate", () => {
     const qc = fakeQueryClient();
-    const key = ['clusters', 'list'];
+    const key = ["clusters", "list"];
 
     for (let i = 0; i < 10; i += 1) {
       pacedInvalidate(qc, key);
@@ -39,18 +39,18 @@ describe('pacedInvalidate', () => {
     expect(qc.invalidateQueries).toHaveBeenCalledTimes(2);
   });
 
-  it('a single event invalidates exactly once (leading, no trailing echo)', () => {
+  it("a single event invalidates exactly once (leading, no trailing echo)", () => {
     const qc = fakeQueryClient();
-    pacedInvalidate(qc, ['activity']);
+    pacedInvalidate(qc, ["activity"]);
     expect(qc.invalidateQueries).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(2000);
     expect(qc.invalidateQueries).toHaveBeenCalledTimes(1);
   });
 
-  it('throttles per stringified key — distinct keys are independent', () => {
+  it("throttles per stringified key — distinct keys are independent", () => {
     const qc = fakeQueryClient();
-    const a = ['clusters', 'c-1', 'pods'];
-    const b = ['clusters', 'c-2', 'pods'];
+    const a = ["clusters", "c-1", "pods"];
+    const b = ["clusters", "c-2", "pods"];
 
     pacedInvalidate(qc, a);
     pacedInvalidate(qc, b);
@@ -60,9 +60,9 @@ describe('pacedInvalidate', () => {
     expect(qc.invalidateQueries).toHaveBeenNthCalledWith(2, { queryKey: b });
   });
 
-  it('clearPacedInvalidations cancels pending trailing invalidations', () => {
+  it("clearPacedInvalidations cancels pending trailing invalidations", () => {
     const qc = fakeQueryClient();
-    const key = ['workloads', 'c-1'];
+    const key = ["workloads", "c-1"];
 
     pacedInvalidate(qc, key);
     pacedInvalidate(qc, key); // queues a trailing invalidate

@@ -66,6 +66,28 @@ func TestK3DBootstrapPinsSupportedGatewayAPIBundle(t *testing.T) {
 	}
 }
 
+func TestK3DBootstrapRoutesEveryAdvertisedServerHostname(t *testing.T) {
+	root := repoRoot(t)
+	scriptBytes, err := os.ReadFile(filepath.Join(root, "scripts", "k3d-bootstrap.sh"))
+	if err != nil {
+		t.Fatalf("read k3d bootstrap: %v", err)
+	}
+	script := string(scriptBytes)
+	for _, want := range []string{
+		`SERVER_AUTHORITY="${SERVER_URL#*://}"`,
+		`GATEWAY_HOSTS=("$HOST" "host.k3d.internal")`,
+		`GATEWAY_HOSTS+=("$SERVER_HOST")`,
+		`--set "gateway.hosts={${GATEWAY_HOSTS_CSV}}"`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("k3d bootstrap does not route advertised server hostname; missing %q", want)
+		}
+	}
+	if strings.Contains(script, `--set "gateway.hosts={${HOST},host.k3d.internal}"`) {
+		t.Fatal("k3d bootstrap retains the fixed two-host Gateway contract")
+	}
+}
+
 func TestGatewayClassReadinessRequiresCurrentAcceptedAndSupportedConditions(t *testing.T) {
 	for _, tt := range []struct {
 		name       string

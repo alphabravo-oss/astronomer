@@ -59,6 +59,8 @@ func TestEventRelayQueueCapacityConfig(t *testing.T) {
 func TestFeatureFlagEnvBinding(t *testing.T) {
 	t.Setenv("NATIVE_RBAC_ENABLED", "true")
 	t.Setenv("CONTROL_PLANE_SNAPSHOTS_ENABLED", "true")
+	t.Setenv("MANAGEMENT_BACKUP_ENABLED", "true")
+	t.Setenv("CRD_ENABLED", "true")
 	t.Setenv("NAMESPACE_SCOPED_RBAC_ENABLED", "true")
 
 	cfg, err := Load()
@@ -71,6 +73,12 @@ func TestFeatureFlagEnvBinding(t *testing.T) {
 	if !cfg.ControlPlaneSnapshotsEnabled {
 		t.Fatal("CONTROL_PLANE_SNAPSHOTS_ENABLED=true not resolved into cfg.ControlPlaneSnapshotsEnabled")
 	}
+	if !cfg.ManagementBackupEnabled {
+		t.Fatal("MANAGEMENT_BACKUP_ENABLED=true not resolved into cfg.ManagementBackupEnabled")
+	}
+	if !cfg.CRDEnabled {
+		t.Fatal("CRD_ENABLED=true not resolved into cfg.CRDEnabled")
+	}
 	if !cfg.NamespaceScopedRBACEnabled {
 		t.Fatal("NAMESPACE_SCOPED_RBAC_ENABLED=true not resolved into cfg.NamespaceScopedRBACEnabled")
 	}
@@ -81,13 +89,15 @@ func TestFeatureFlagEnvBinding(t *testing.T) {
 	// deferred on have both shipped.
 	t.Setenv("NATIVE_RBAC_ENABLED", "")
 	t.Setenv("CONTROL_PLANE_SNAPSHOTS_ENABLED", "")
+	t.Setenv("MANAGEMENT_BACKUP_ENABLED", "")
+	t.Setenv("CRD_ENABLED", "")
 	t.Setenv("NAMESPACE_SCOPED_RBAC_ENABLED", "")
 	def, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if def.NativeRBACEnabled || def.ControlPlaneSnapshotsEnabled {
-		t.Fatal("native_rbac / control_plane_snapshots must default OFF when env is unset")
+	if def.NativeRBACEnabled || def.ControlPlaneSnapshotsEnabled || def.ManagementBackupEnabled || def.CRDEnabled {
+		t.Fatal("native_rbac / control_plane_snapshots / management_backup / crd must default OFF when env is unset")
 	}
 	if !def.NamespaceScopedRBACEnabled {
 		t.Fatal("namespace_scoped_rbac_enabled must default ON")

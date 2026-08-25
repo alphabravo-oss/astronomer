@@ -18,14 +18,14 @@
 // lib/api/ so the raw streaming fetch stays inside the fetch-containment
 // boundary.
 
-import { createStreamTicket } from '../api';
-import { API_BASE } from '@/lib/env';
+import { createStreamTicket } from "@/lib/api/auth";
+import { API_BASE } from "@/lib/env";
 
 /** The Kubernetes watch verbs the reducer folds. BOOKMARK/ERROR are ignored. */
-export type WatchVerb = 'ADDED' | 'MODIFIED' | 'DELETED';
+export type WatchVerb = "ADDED" | "MODIFIED" | "DELETED";
 
 function isWatchVerb(v: string): v is WatchVerb {
-  return v === 'ADDED' || v === 'MODIFIED' || v === 'DELETED';
+  return v === "ADDED" || v === "MODIFIED" || v === "DELETED";
 }
 
 /**
@@ -39,10 +39,10 @@ export function openProxyWatch(
   clusterId: string,
   path: string,
   onFrame: (verb: WatchVerb, obj: unknown) => void,
-  onStatus: (s: 'live' | 'fallback') => void,
+  onStatus: (s: "live" | "fallback") => void,
 ): () => void {
   const controller = new AbortController();
-  const sep = path.includes('?') ? '&' : '?';
+  const sep = path.includes("?") ? "&" : "?";
   const url = `${API_BASE}/clusters/${clusterId}/k8s/${path}${sep}watch=true`;
   let cancelled = false;
 
@@ -50,34 +50,34 @@ export function openProxyWatch(
     let res: Response;
     try {
       res = await fetch(url, {
-        method: 'GET',
-        credentials: 'include',
+        method: "GET",
+        credentials: "include",
         signal: controller.signal,
-        headers: { Accept: 'application/json' },
+        headers: { Accept: "application/json" },
       });
     } catch {
-      if (!cancelled) onStatus('fallback');
+      if (!cancelled) onStatus("fallback");
       return;
     }
     if (!res.ok || !res.body) {
-      if (!cancelled) onStatus('fallback');
+      if (!cancelled) onStatus("fallback");
       return;
     }
-    if (!cancelled) onStatus('live');
+    if (!cancelled) onStatus("live");
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
-    let buf = '';
+    let buf = "";
     try {
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
         buf += decoder.decode(value, { stream: true });
-        let nl = buf.indexOf('\n');
+        let nl = buf.indexOf("\n");
         while (nl >= 0) {
           const line = buf.slice(0, nl).trim();
           buf = buf.slice(nl + 1);
-          nl = buf.indexOf('\n');
+          nl = buf.indexOf("\n");
           if (!line) continue;
           let frame: { type?: string; object?: unknown };
           try {
@@ -91,10 +91,10 @@ export function openProxyWatch(
         }
       }
       // Stream closed cleanly (server ended the watch) — resume polling.
-      if (!cancelled) onStatus('fallback');
+      if (!cancelled) onStatus("fallback");
     } catch {
       // Aborted on unmount, or the connection dropped mid-stream.
-      if (!cancelled) onStatus('fallback');
+      if (!cancelled) onStatus("fallback");
     }
   })();
 
@@ -115,24 +115,26 @@ export function openPodsWatch(
   clusterId: string,
   namespace: string | undefined,
   onFrame: (verb: WatchVerb, obj: unknown) => void,
-  onStatus: (s: 'live' | 'fallback') => void,
+  onStatus: (s: "live" | "fallback") => void,
 ): () => void {
   let cancelled = false;
   let es: EventSource | null = null;
 
-  createStreamTicket('logs', clusterId)
+  createStreamTicket("logs", clusterId)
     .then(({ ticket }) => {
       if (cancelled) return;
-      const nsQ = namespace ? `namespace=${encodeURIComponent(namespace)}&` : '';
+      const nsQ = namespace
+        ? `namespace=${encodeURIComponent(namespace)}&`
+        : "";
       const url = `${API_BASE}/clusters/${clusterId}/pods/watch/?${nsQ}ticket=${encodeURIComponent(ticket)}`;
       try {
         es = new EventSource(url, { withCredentials: false });
       } catch {
-        if (!cancelled) onStatus('fallback');
+        if (!cancelled) onStatus("fallback");
         return;
       }
       es.onopen = () => {
-        if (!cancelled) onStatus('live');
+        if (!cancelled) onStatus("live");
       };
       const onEvent = (verb: WatchVerb) => (ev: MessageEvent) => {
         if (cancelled) return;
@@ -144,9 +146,9 @@ export function openPodsWatch(
         }
         if (obj) onFrame(verb, obj);
       };
-      es.addEventListener('ADDED', onEvent('ADDED') as EventListener);
-      es.addEventListener('MODIFIED', onEvent('MODIFIED') as EventListener);
-      es.addEventListener('DELETED', onEvent('DELETED') as EventListener);
+      es.addEventListener("ADDED", onEvent("ADDED") as EventListener);
+      es.addEventListener("MODIFIED", onEvent("MODIFIED") as EventListener);
+      es.addEventListener("DELETED", onEvent("DELETED") as EventListener);
       es.onerror = () => {
         // The stream dropped (or never opened). Close rather than hammering
         // EventSource auto-reconnects — the ticket is one-use anyway.
@@ -156,11 +158,11 @@ export function openPodsWatch(
           /* ignore */
         }
         es = null;
-        if (!cancelled) onStatus('fallback');
+        if (!cancelled) onStatus("fallback");
       };
     })
     .catch(() => {
-      if (!cancelled) onStatus('fallback');
+      if (!cancelled) onStatus("fallback");
     });
 
   return () => {

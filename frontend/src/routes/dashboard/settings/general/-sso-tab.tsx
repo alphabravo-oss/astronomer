@@ -1,14 +1,14 @@
-import { Chrome, Github, KeyRound, Loader2, Plus, Shield } from 'lucide-react';
-import { useSSOProviders } from '@/lib/hooks';
-import { StatusBadge } from '@/components/ui/status-badge';
+import { Chrome, Github, KeyRound, Loader2, Plus, Shield } from "lucide-react";
+import { useSSOProviders } from "@/lib/hooks/user-settings";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 function providerIcon(type: string) {
   switch (type) {
-    case 'github':
+    case "github":
       return <Github className="h-5 w-5" />;
-    case 'google':
+    case "google":
       return <Chrome className="h-5 w-5" />;
-    case 'oidc':
+    case "oidc":
       return <KeyRound className="h-5 w-5" />;
     default:
       return <Shield className="h-5 w-5" />;
@@ -39,11 +39,13 @@ export function SSOTab({ onAdd }: { onAdd: () => void }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-foreground">{provider.name}</p>
-                <p className="text-xs text-muted-foreground capitalize">{provider.type}</p>
+                <p className="text-xs text-muted-foreground capitalize">
+                  {provider.type}
+                </p>
               </div>
               <StatusBadge
-                status={provider.enabled ? 'active' : 'disconnected'}
-                label={provider.enabled ? 'Enabled' : 'Disabled'}
+                status={provider.enabled ? "active" : "disconnected"}
+                label={provider.enabled ? "Enabled" : "Disabled"}
                 size="sm"
               />
             </div>

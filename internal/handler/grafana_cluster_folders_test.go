@@ -362,8 +362,8 @@ func TestGrafanaClusterScopedSlugsExcludeManagementPlane(t *testing.T) {
 	got := map[string]bool{}
 	for _, slug := range grafanaClusterScopedSlugs() {
 		got[slug] = true
-		if grafanaDashboardFolder(slug) != grafanaFolderFleet {
-			t.Errorf("%s is cluster-scoped but not a Fleet dashboard", slug)
+		if grafanaDashboardFolder(slug) != grafanaFolderShared {
+			t.Errorf("%s is cluster-scoped but not a Shared dashboard", slug)
 		}
 	}
 	for _, slug := range []string{"cluster-overview", "node-usage", "workload-health"} {

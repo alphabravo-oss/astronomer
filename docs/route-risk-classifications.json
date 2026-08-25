@@ -208,6 +208,7 @@
         "DELETE"
       ],
       "patterns": [
+        "/api/v1/admin/settings",
         "/api/v1/admin/settings/{key}",
         "/api/v1/admin/dashboard-widgets",
         "/api/v1/admin/dashboard-widgets/{id}",
@@ -435,6 +436,20 @@
       ],
       "classification": "covered-rbac-high-risk",
       "reason": "Approval, rollback, and orphan decisions have distinct delivery_approvals:approve, delivery_rollbacks:rollback, and delivery_orphans:orphan grants instead of inheriting ordinary rollout or target update. Every request is project-normalized, authenticated, audited, idempotency-protected, and bound to an exact strong If-Match generation; approvals also bind an exact frozen digest and bounded expiry."
+    },
+    {
+      "id": "logging-saved-searches",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/logging/saved-searches",
+        "/api/v1/logging/saved-searches/{id}"
+      ],
+      "classification": "covered-rbac-cluster-scoped-personal",
+      "reason": "Saved searches are private to the authenticated owner, require logging:read on the output's owning cluster on every read and mutation, reject live-tail state for providers without that capability, and audit only a query digest plus bounded metadata rather than query text."
     }
   ]
 }

@@ -1,70 +1,90 @@
-import { Check, CheckCircle } from 'lucide-react';
-import { useAcknowledgeAlert, useAlertEvents, useResolveAlert } from '@/lib/hooks';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { ActionButton } from '@/components/ui/action-button';
-import { cn, formatRelativeTime, statusBgColor } from '@/lib/utils';
-import type { AlertEvent } from '@/types';
+import { Check, CheckCircle } from "lucide-react";
+import {
+  useAcknowledgeAlert,
+  useAlertEvents,
+  useResolveAlert,
+} from "@/lib/hooks/alerting";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ActionButton } from "@/components/ui/action-button";
+import { cn, formatRelativeTime, statusBgColor } from "@/lib/utils";
+import type { AlertEvent } from "@/types";
 
 export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
-  const { data: events, isLoading, isError, refetch } = useAlertEvents(
-    clusterId ? { clusterId } : undefined,
-  );
+  const {
+    data: events,
+    isLoading,
+    isError,
+    refetch,
+  } = useAlertEvents(clusterId ? { clusterId } : undefined);
   const acknowledgeAlert = useAcknowledgeAlert();
   const resolveAlert = useResolveAlert();
 
   const columns: Column<AlertEvent>[] = [
     {
-      key: 'severity',
-      header: 'Severity',
+      key: "severity",
+      header: "Severity",
       accessor: (row) => (
-        <span className={cn('text-xs px-2 py-0.5 rounded capitalize font-medium', statusBgColor(row.severity))}>
+        <span
+          className={cn(
+            "text-xs px-2 py-0.5 rounded capitalize font-medium",
+            statusBgColor(row.severity),
+          )}
+        >
           {row.severity}
         </span>
       ),
     },
     {
-      key: 'rule',
-      header: 'Rule',
+      key: "rule",
+      header: "Rule",
       accessor: (row) => (
         <span className="font-medium text-foreground">{row.ruleName}</span>
       ),
     },
     {
-      key: 'message',
-      header: 'Message',
+      key: "message",
+      header: "Message",
       accessor: (row) => (
-        <span className="text-sm text-muted-foreground truncate max-w-[300px] block">{row.message}</span>
+        <span className="text-sm text-muted-foreground truncate max-w-[300px] block">
+          {row.message}
+        </span>
       ),
       sortable: false,
     },
     ...(clusterId
       ? []
-      : [{
-          key: 'cluster',
-          header: 'Cluster',
-          accessor: (row: AlertEvent) => (
-            <span className="text-sm text-muted-foreground">{row.clusterName || '--'}</span>
-          ),
-        } as Column<AlertEvent>]),
+      : [
+          {
+            key: "cluster",
+            header: "Cluster",
+            accessor: (row: AlertEvent) => (
+              <span className="text-sm text-muted-foreground">
+                {row.clusterName || "--"}
+              </span>
+            ),
+          } as Column<AlertEvent>,
+        ]),
     {
-      key: 'firedAt',
-      header: 'Fired',
+      key: "firedAt",
+      header: "Fired",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground">{formatRelativeTime(row.firedAt)}</span>
+        <span className="text-xs text-muted-foreground">
+          {formatRelativeTime(row.firedAt)}
+        </span>
       ),
     },
     {
-      key: 'status',
-      header: 'Status',
+      key: "status",
+      header: "Status",
       accessor: (row) => <StatusBadge status={row.status} />,
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       accessor: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          {row.status === 'firing' && (
+        <div className="flex items-center gap-1">
+          {row.status === "firing" && (
             <>
               <ActionButton
                 size="sm"
@@ -88,7 +108,7 @@ export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
               </ActionButton>
             </>
           )}
-          {row.status === 'acknowledged' && (
+          {row.status === "acknowledged" && (
             <ActionButton
               size="sm"
               intent="ghost"

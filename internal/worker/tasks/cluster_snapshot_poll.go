@@ -1,6 +1,6 @@
 // Per-cluster Velero snapshot lifecycle workers (migration 052).
 //
-// Three asynq task types live in this file because they share the same
+// Four asynq task types live in this file because they share the same
 // Querier interface + Velero-driver adapter:
 //
 //   cluster_snapshot:poll               every 30s
@@ -17,11 +17,13 @@
 //     terminal. Velero handles the object-store cleanup via its own TTL;
 //     this task is purely DB hygiene.
 //
-// All three tasks coordinate through a single ClusterSnapshotDeps struct
-// set once at startup via ConfigureClusterSnapshotTasks. Until that
-// fires the handlers are no-ops — the periodic schedule entries still
-// fire on the cron tick, they just return nil immediately. This matches
-// the pattern used by ConfigureWebhook / ConfigureClusterRegistryApply.
+//   cluster_snapshot:apply_operation    on demand
+//     Reconciles one committed snapshot create/delete or restore intent.
+//     The API writes this task through the PostgreSQL task outbox in the
+//     same transaction as desired state and mandatory audit.
+//
+// All three tasks coordinate through one immutable ClusterSnapshotRuntime.
+// Missing dependencies fail worker construction before queue consumption.
 
 package tasks
 
@@ -37,6 +39,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/robfig/cron/v3"
 
@@ -49,7 +52,65 @@ const (
 	ClusterSnapshotPollType              = "cluster_snapshot:poll"
 	ClusterSnapshotDispatchScheduledType = "cluster_snapshot:dispatch_scheduled"
 	ClusterSnapshotCleanupExpiredType    = "cluster_snapshot:cleanup_expired"
+	ClusterSnapshotApplyOperationType    = "cluster_snapshot:apply_operation"
 )
+
+type ClusterSnapshotOperation string
+
+const (
+	ClusterSnapshotOperationCreate  ClusterSnapshotOperation = "create_snapshot"
+	ClusterSnapshotOperationDelete  ClusterSnapshotOperation = "delete_snapshot"
+	ClusterSnapshotOperationRestore ClusterSnapshotOperation = "create_restore"
+)
+
+// ClusterSnapshotOperationPayload contains only durable identifiers and the
+// non-secret external reference needed after a local delete. Snapshot and
+// restore specs remain in PostgreSQL and are loaded by the worker.
+type ClusterSnapshotOperationPayload struct {
+	Operation       ClusterSnapshotOperation `json:"operation"`
+	SnapshotID      string                   `json:"snapshot_id,omitempty"`
+	RestoreID       string                   `json:"restore_id,omitempty"`
+	ClusterID       string                   `json:"cluster_id,omitempty"`
+	VeleroName      string                   `json:"velero_name,omitempty"`
+	VeleroNamespace string                   `json:"velero_namespace,omitempty"`
+}
+
+func NewClusterSnapshotOperationTask(payload ClusterSnapshotOperationPayload) (*asynq.Task, error) {
+	if err := payload.validate(); err != nil {
+		return nil, err
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal cluster snapshot operation: %w", err)
+	}
+	return asynq.NewTask(ClusterSnapshotApplyOperationType, body, asynq.MaxRetry(5)), nil
+}
+
+func (payload ClusterSnapshotOperationPayload) validate() error {
+	switch payload.Operation {
+	case ClusterSnapshotOperationCreate:
+		if _, err := uuid.Parse(payload.SnapshotID); err != nil {
+			return fmt.Errorf("create snapshot operation requires snapshot_id: %w", err)
+		}
+	case ClusterSnapshotOperationRestore:
+		if _, err := uuid.Parse(payload.RestoreID); err != nil {
+			return fmt.Errorf("restore operation requires restore_id: %w", err)
+		}
+	case ClusterSnapshotOperationDelete:
+		if _, err := uuid.Parse(payload.SnapshotID); err != nil {
+			return fmt.Errorf("delete snapshot operation requires snapshot_id: %w", err)
+		}
+		if _, err := uuid.Parse(payload.ClusterID); err != nil {
+			return fmt.Errorf("delete snapshot operation requires cluster_id: %w", err)
+		}
+		if strings.TrimSpace(payload.VeleroName) == "" || strings.TrimSpace(payload.VeleroNamespace) == "" {
+			return errors.New("delete snapshot operation requires Velero name and namespace")
+		}
+	default:
+		return fmt.Errorf("unsupported cluster snapshot operation %q", payload.Operation)
+	}
+	return nil
+}
 
 // snapshotPollBatchSize caps how many in-flight rows the poller looks
 // at per tick. Velero typically has at most a handful of in-flight
@@ -74,6 +135,7 @@ type ClusterSnapshotPollQuerier interface {
 	ListPendingClusterRestores(ctx context.Context, lim int32) ([]sqlc.ClusterRestore, error)
 	MarkRestorePhase(ctx context.Context, arg sqlc.MarkRestorePhaseParams) error
 	GetClusterSnapshotByID(ctx context.Context, id uuid.UUID) (sqlc.ClusterSnapshot, error)
+	GetClusterRestoreByID(ctx context.Context, id uuid.UUID) (sqlc.ClusterRestore, error)
 
 	// Schedules
 	ListEnabledSnapshotSchedules(ctx context.Context) ([]sqlc.ClusterSnapshotSchedule, error)
@@ -92,9 +154,9 @@ type VeleroSnapshotDriver interface {
 	GetBackup(ctx context.Context, clusterID, namespace, name string) (VeleroBackupStatusSnapshot, error)
 	// GetRestore fetches a Velero Restore CR.
 	GetRestore(ctx context.Context, clusterID, namespace, name string) (VeleroRestoreStatusSnapshot, error)
-	// PostBackup creates a Velero Backup CR (used by the scheduled
-	// dispatcher when firing a cron-driven snapshot).
-	PostBackup(ctx context.Context, clusterID string, body map[string]any) error
+	CreateSnapshot(ctx context.Context, snapshot sqlc.ClusterSnapshot) error
+	CreateRestore(ctx context.Context, restore sqlc.ClusterRestore, snapshot sqlc.ClusterSnapshot) error
+	DeleteSnapshot(ctx context.Context, clusterID, namespace, backupName, operationID string) error
 }
 
 // VeleroBackupStatusSnapshot is the worker-side view of Velero's
@@ -123,32 +185,11 @@ type VeleroRestoreStatusSnapshot struct {
 	ValidationError string
 }
 
-// ClusterSnapshotDeps is set once at server startup. All three workers
-// in this file consult it; until it's set, the handlers no-op.
+// ClusterSnapshotDeps wires all three workers in this file.
 type ClusterSnapshotDeps struct {
 	Queries ClusterSnapshotPollQuerier
 	Driver  VeleroSnapshotDriver
 	Log     *slog.Logger
-}
-
-var (
-	clusterSnapshotDepsMu sync.RWMutex
-	clusterSnapshotDeps   ClusterSnapshotDeps
-)
-
-// ConfigureClusterSnapshotTasks wires the three workers. Safe to call
-// multiple times — last writer wins (production wires it exactly once;
-// tests may swap fakes between cases).
-func ConfigureClusterSnapshotTasks(deps ClusterSnapshotDeps) {
-	clusterSnapshotDepsMu.Lock()
-	defer clusterSnapshotDepsMu.Unlock()
-	clusterSnapshotDeps = deps
-}
-
-func getClusterSnapshotDeps() ClusterSnapshotDeps {
-	clusterSnapshotDepsMu.RLock()
-	defer clusterSnapshotDepsMu.RUnlock()
-	return clusterSnapshotDeps
 }
 
 // terminalSnapshotPhases is the set of Velero BackupStatus.Phase values
@@ -181,6 +222,76 @@ func outcomeForPhase(phase string) string {
 }
 
 // ----------------------------------------------------------------------
+// cluster_snapshot:apply_operation
+// ----------------------------------------------------------------------
+
+// HandleClusterSnapshotApplyOperation executes one durable external-effect
+// intent. Kubernetes create conflicts are normalized by the driver, making a
+// replay after an API/worker crash safe. Missing desired-state rows are stale
+// tasks and therefore successful no-ops.
+func (runtime ClusterSnapshotRuntime) HandleClusterSnapshotApplyOperation(ctx context.Context, task *asynq.Task) error {
+	deps := runtime.normalized().Deps
+	if deps.Queries == nil || deps.Driver == nil {
+		return fmt.Errorf("cluster snapshot operation runtime is not configured")
+	}
+	if task == nil {
+		return asynq.SkipRetry
+	}
+	var payload ClusterSnapshotOperationPayload
+	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+		return fmt.Errorf("decode cluster snapshot operation: %w: %w", err, asynq.SkipRetry)
+	}
+	if err := payload.validate(); err != nil {
+		return fmt.Errorf("validate cluster snapshot operation: %w: %w", err, asynq.SkipRetry)
+	}
+
+	switch payload.Operation {
+	case ClusterSnapshotOperationCreate:
+		snapshotID, _ := uuid.Parse(payload.SnapshotID)
+		row, err := deps.Queries.GetClusterSnapshotByID(ctx, snapshotID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("load snapshot intent: %w", err)
+		}
+		if err := deps.Driver.CreateSnapshot(ctx, row); err != nil {
+			return fmt.Errorf("create Velero snapshot: %w", err)
+		}
+		return nil
+
+	case ClusterSnapshotOperationRestore:
+		restoreID, _ := uuid.Parse(payload.RestoreID)
+		restore, err := deps.Queries.GetClusterRestoreByID(ctx, restoreID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("load restore intent: %w", err)
+		}
+		snapshot, err := deps.Queries.GetClusterSnapshotByID(ctx, restore.SnapshotID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("load restore source snapshot: %w", err)
+		}
+		if err := deps.Driver.CreateRestore(ctx, restore, snapshot); err != nil {
+			return fmt.Errorf("create Velero restore: %w", err)
+		}
+		return nil
+
+	case ClusterSnapshotOperationDelete:
+		if err := deps.Driver.DeleteSnapshot(ctx, payload.ClusterID, payload.VeleroNamespace, payload.VeleroName, payload.SnapshotID); err != nil {
+			return fmt.Errorf("delete Velero snapshot: %w", err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported cluster snapshot operation %q: %w", payload.Operation, asynq.SkipRetry)
+	}
+}
+
+// ----------------------------------------------------------------------
 // cluster_snapshot:poll
 // ----------------------------------------------------------------------
 
@@ -190,24 +301,21 @@ func outcomeForPhase(phase string) string {
 // the status fields. Errors against an individual row are recorded as
 // last_poll_error on the row — they never fail the whole task (asynq
 // would otherwise retry the whole batch).
-func HandleClusterSnapshotPoll(ctx context.Context, _ *asynq.Task) error {
+func (runtime ClusterSnapshotRuntime) HandleClusterSnapshotPoll(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ClusterSnapshotPollType, func() error {
-		deps := getClusterSnapshotDeps()
+		deps := runtime.normalized().Deps
 		if deps.Queries == nil || deps.Driver == nil {
-			// Pre-wiring no-op (test fakes, startup race).
-			return nil
+			return fmt.Errorf("cluster snapshot poll runtime is not configured")
 		}
-		pollSnapshots(ctx, deps)
-		pollRestores(ctx, deps)
-		return nil
+		return errors.Join(pollSnapshots(ctx, deps), pollRestores(ctx, deps))
 	})
 }
 
-func pollSnapshots(ctx context.Context, deps ClusterSnapshotDeps) {
+func pollSnapshots(ctx context.Context, deps ClusterSnapshotDeps) error {
 	rows, err := deps.Queries.ListPendingClusterSnapshots(ctx, snapshotPollBatchSize)
 	if err != nil {
 		logSnapshotErr(deps.Log, "list pending snapshots", err)
-		return
+		return fmt.Errorf("list pending snapshots: %w", err)
 	}
 	// Refresh the per-cluster in-flight gauge from the pending set observed
 	// at fetch time (before any of these rows is mirrored to a terminal
@@ -219,11 +327,14 @@ func pollSnapshots(ctx context.Context, deps ClusterSnapshotDeps) {
 		inFlight[row.ClusterID.String()]++
 	}
 	updateInFlightSnapshotGauges(inFlight)
+	var batchErr error
 	for _, row := range rows {
 		if err := pollOneSnapshot(ctx, deps, row); err != nil {
 			logSnapshotErr(deps.Log, "poll snapshot "+row.ID.String(), err)
+			batchErr = errors.Join(batchErr, fmt.Errorf("poll snapshot %s: %w", row.ID, err))
 		}
 	}
+	return batchErr
 }
 
 // inFlightGaugeState remembers which cluster_ids carried a non-zero
@@ -273,6 +384,17 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 		})
 	}
 	if status.NotFound {
+		if row.Phase == "New" {
+			if applyErr := deps.Driver.CreateSnapshot(ctx, row); applyErr != nil {
+				persistErr := deps.Queries.MarkSnapshotPhase(ctx, sqlc.MarkSnapshotPhaseParams{
+					ID: row.ID, Phase: row.Phase, StartTime: row.StartTime,
+					CompletionTime: row.CompletionTime, WarningsCount: row.WarningsCount,
+					ErrorsCount: row.ErrorsCount, LastPollError: "snapshot submission is pending retry",
+				})
+				return errors.Join(fmt.Errorf("repair missing Velero snapshot: %w", applyErr), persistErr)
+			}
+			return nil
+		}
 		// Velero removed the CR (TTL sweep, operator kubectl delete).
 		// Move the row to the terminal "Deleted" phase so the cleanup
 		// worker can drop it. Stop polling.
@@ -326,17 +448,20 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 	return nil
 }
 
-func pollRestores(ctx context.Context, deps ClusterSnapshotDeps) {
+func pollRestores(ctx context.Context, deps ClusterSnapshotDeps) error {
 	rows, err := deps.Queries.ListPendingClusterRestores(ctx, snapshotPollBatchSize)
 	if err != nil {
 		logSnapshotErr(deps.Log, "list pending restores", err)
-		return
+		return fmt.Errorf("list pending restores: %w", err)
 	}
+	var batchErr error
 	for _, row := range rows {
 		if err := pollOneRestore(ctx, deps, row); err != nil {
 			logSnapshotErr(deps.Log, "poll restore "+row.ID.String(), err)
+			batchErr = errors.Join(batchErr, fmt.Errorf("poll restore %s: %w", row.ID, err))
 		}
 	}
+	return batchErr
 }
 
 func pollOneRestore(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.ClusterRestore) error {
@@ -353,6 +478,21 @@ func pollOneRestore(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clus
 		})
 	}
 	if status.NotFound {
+		if row.Phase == "New" {
+			snapshot, loadErr := deps.Queries.GetClusterSnapshotByID(ctx, row.SnapshotID)
+			if loadErr != nil {
+				return fmt.Errorf("load restore source for repair: %w", loadErr)
+			}
+			if applyErr := deps.Driver.CreateRestore(ctx, row, snapshot); applyErr != nil {
+				persistErr := deps.Queries.MarkRestorePhase(ctx, sqlc.MarkRestorePhaseParams{
+					ID: row.ID, Phase: row.Phase, StartTime: row.StartTime,
+					CompletionTime: row.CompletionTime, WarningsCount: row.WarningsCount,
+					ErrorsCount: row.ErrorsCount, LastPollError: "restore submission is pending retry",
+				})
+				return errors.Join(fmt.Errorf("repair missing Velero restore: %w", applyErr), persistErr)
+			}
+			return nil
+		}
 		return deps.Queries.MarkRestorePhase(ctx, sqlc.MarkRestorePhaseParams{
 			ID:             row.ID,
 			Phase:          "Deleted",
@@ -396,22 +536,24 @@ func pollOneRestore(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clus
 // than registering one asynq.Scheduler entry per row — that would
 // require restarting the scheduler on every PUT and doesn't compose
 // across replicas.
-func HandleClusterSnapshotDispatchScheduled(ctx context.Context, _ *asynq.Task) error {
+func (runtime ClusterSnapshotRuntime) HandleClusterSnapshotDispatchScheduled(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ClusterSnapshotDispatchScheduledType, func() error {
-		deps := getClusterSnapshotDeps()
+		deps := runtime.normalized().Deps
 		if deps.Queries == nil || deps.Driver == nil {
-			return nil
+			return fmt.Errorf("scheduled cluster snapshot runtime is not configured")
 		}
 		schedules, err := deps.Queries.ListEnabledSnapshotSchedules(ctx)
 		if err != nil {
 			logSnapshotErr(deps.Log, "list enabled schedules", err)
-			return nil
+			return fmt.Errorf("list enabled snapshot schedules: %w", err)
 		}
 		now := time.Now().UTC()
+		var batchErr error
 		for _, sched := range schedules {
 			due, err := scheduleIsDue(sched, now)
 			if err != nil {
 				logSnapshotErr(deps.Log, "evaluate cron "+sched.ID.String(), err)
+				batchErr = errors.Join(batchErr, fmt.Errorf("evaluate snapshot schedule %s: %w", sched.ID, err))
 				continue
 			}
 			if !due {
@@ -419,18 +561,21 @@ func HandleClusterSnapshotDispatchScheduled(ctx context.Context, _ *asynq.Task) 
 			}
 			if err := fireScheduledSnapshot(ctx, deps, sched); err != nil {
 				logSnapshotErr(deps.Log, "fire scheduled "+sched.ID.String(), err)
-				_ = deps.Queries.MarkSnapshotScheduleRan(ctx, sqlc.MarkSnapshotScheduleRanParams{
+				markErr := deps.Queries.MarkSnapshotScheduleRan(ctx, sqlc.MarkSnapshotScheduleRanParams{
 					ID:            sched.ID,
 					LastRunStatus: "error: " + err.Error(),
 				})
+				batchErr = errors.Join(batchErr, fmt.Errorf("fire snapshot schedule %s: %w", sched.ID, err), markErr)
 				continue
 			}
-			_ = deps.Queries.MarkSnapshotScheduleRan(ctx, sqlc.MarkSnapshotScheduleRanParams{
+			if err := deps.Queries.MarkSnapshotScheduleRan(ctx, sqlc.MarkSnapshotScheduleRanParams{
 				ID:            sched.ID,
 				LastRunStatus: "fired",
-			})
+			}); err != nil {
+				batchErr = errors.Join(batchErr, fmt.Errorf("mark snapshot schedule %s fired: %w", sched.ID, err))
+			}
 		}
-		return nil
+		return batchErr
 	})
 }
 
@@ -492,22 +637,18 @@ func fireScheduledSnapshot(ctx context.Context, deps ClusterSnapshotDeps, sched 
 		return fmt.Errorf("create snapshot row: %w", err)
 	}
 
-	// POST the Velero Backup CRD via the driver. The body is built
-	// inline rather than reusing the handler's renderer because the
-	// worker package can't import the handler package (cycle).
-	body := scheduleSnapshotCRBody(row.ID, veleroName, namespace, spec)
-	if err := deps.Driver.PostBackup(ctx, sched.ClusterID.String(), body); err != nil {
-		// Roll back-ish: mark the row's last_poll_error so the
-		// operator sees the failure. Don't delete — leaving the row
-		// gives auditable history.
+	if err := deps.Driver.CreateSnapshot(ctx, row); err != nil {
+		// Leave desired state retryable. The poller repairs every New row
+		// whose external CR is still missing, covering a tunnel outage or
+		// crash between row creation and this call.
 		_ = deps.Queries.MarkSnapshotPhase(ctx, sqlc.MarkSnapshotPhaseParams{
 			ID:             row.ID,
-			Phase:          "FailedValidation",
+			Phase:          "New",
 			StartTime:      pgtype.Timestamptz{},
 			CompletionTime: pgtype.Timestamptz{},
 			WarningsCount:  0,
-			ErrorsCount:    1,
-			LastPollError:  err.Error(),
+			ErrorsCount:    0,
+			LastPollError:  "snapshot submission is pending retry",
 		})
 		return err
 	}
@@ -540,72 +681,6 @@ func scheduleSnapshotName(scheduleName, stamp string) string {
 	return s
 }
 
-// scheduleSnapshotCRBody constructs an unstructured Velero Backup CRD
-// from the schedule's stored spec. Mirrors what the handler's
-// renderPerClusterBackup produces but lives in the worker package so
-// the dispatcher doesn't take a handler dep.
-func scheduleSnapshotCRBody(snapshotID uuid.UUID, name, namespace string, spec map[string]any) map[string]any {
-	specOut := map[string]any{}
-	// Copy through the supported fields verbatim; Velero validates the
-	// rest. We deliberately don't filter — schedules created via the
-	// handler are pre-validated, and a schedule with extra fields
-	// should still propagate (operators might pre-stage upcoming
-	// Velero features).
-	for _, k := range []string{
-		"includedNamespaces", "excludedNamespaces",
-		"includedResources", "excludedResources",
-		"snapshotVolumes", "ttl", "storageLocation",
-		"volumeSnapshotLocations",
-	} {
-		if v, ok := spec[k]; ok {
-			specOut[k] = v
-		}
-	}
-	if sel, ok := spec["labelSelector"].(string); ok && sel != "" {
-		// Reuse handler-side parser when possible. Worker can't import
-		// handler, so we inline a minimal version: "k=v,k=v" → matchLabels.
-		labels := parseScheduleLabelSelector(sel)
-		if len(labels) > 0 {
-			specOut["labelSelector"] = map[string]any{"matchLabels": labels}
-		}
-	}
-	return map[string]any{
-		"apiVersion": "velero.io/v1",
-		"kind":       "Backup",
-		"metadata": map[string]any{
-			"name":      name,
-			"namespace": namespace,
-			"labels": map[string]string{
-				"app.kubernetes.io/managed-by": "astronomer-go",
-				"astronomer.io/snapshot-id":    snapshotID.String(),
-				"astronomer.io/source":         "scheduled",
-			},
-		},
-		"spec": specOut,
-	}
-}
-
-func parseScheduleLabelSelector(s string) map[string]string {
-	out := map[string]string{}
-	for _, tok := range strings.Split(s, ",") {
-		tok = strings.TrimSpace(tok)
-		if tok == "" {
-			continue
-		}
-		idx := strings.Index(tok, "=")
-		if idx <= 0 || idx == len(tok)-1 {
-			continue
-		}
-		k := strings.TrimSpace(tok[:idx])
-		v := strings.TrimSpace(tok[idx+1:])
-		if k == "" {
-			continue
-		}
-		out[k] = v
-	}
-	return out
-}
-
 // ----------------------------------------------------------------------
 // cluster_snapshot:cleanup_expired
 // ----------------------------------------------------------------------
@@ -614,23 +689,25 @@ func parseScheduleLabelSelector(s string) map[string]string {
 // expires_at < now() AND whose phase is terminal. Velero handles the
 // actual object-store cleanup via its own TTL; this task is purely DB
 // hygiene so the snapshot list doesn't grow forever.
-func HandleClusterSnapshotCleanupExpired(ctx context.Context, _ *asynq.Task) error {
+func (runtime ClusterSnapshotRuntime) HandleClusterSnapshotCleanupExpired(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ClusterSnapshotCleanupExpiredType, func() error {
-		deps := getClusterSnapshotDeps()
+		deps := runtime.normalized().Deps
 		if deps.Queries == nil {
-			return nil
+			return fmt.Errorf("cluster snapshot cleanup runtime is not configured")
 		}
 		rows, err := deps.Queries.ListExpiredTerminalSnapshots(ctx, expiredCleanupBatchSize)
 		if err != nil {
 			logSnapshotErr(deps.Log, "list expired snapshots", err)
-			return nil
+			return fmt.Errorf("list expired snapshots: %w", err)
 		}
+		var batchErr error
 		for _, row := range rows {
 			if err := deps.Queries.DeleteClusterSnapshot(ctx, row.ID); err != nil {
 				logSnapshotErr(deps.Log, "delete expired snapshot "+row.ID.String(), err)
+				batchErr = errors.Join(batchErr, fmt.Errorf("delete expired snapshot %s: %w", row.ID, err))
 			}
 		}
-		return nil
+		return batchErr
 	})
 }
 

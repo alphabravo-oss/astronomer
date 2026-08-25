@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
@@ -65,6 +66,13 @@ type SMTPQuerier interface {
 	GetComplianceBaseline(ctx context.Context, id uuid.UUID) (sqlc.ComplianceBaseline, error)
 }
 
+type SMTPMutationTx interface {
+	audit.OutboxQuerier
+	UpsertSMTPSettings(context.Context, sqlc.UpsertSMTPSettingsParams) (sqlc.SmtpSettings, error)
+}
+
+type smtpRunTxFunc func(context.Context, func(SMTPMutationTx) error) error
+
 // SMTPTestSender is the surface used by the test-send endpoint. The
 // production wiring passes a *email.Sender configured against a
 // StaticSettingsProvider built from the request payload — so the
@@ -97,6 +105,7 @@ type SMTPHandler struct {
 	// SMTP that the active compliance baseline marks required (T6.064
 	// deletion guard). nil → guard always enforced.
 	override BaselineOverrideChecker
+	runTx    smtpRunTxFunc
 }
 
 // NewSMTPHandler wires the production handler.
@@ -125,6 +134,14 @@ func (h *SMTPHandler) SetSettingsProvider(p *email.SQLSettingsProvider) { h.prov
 
 // SetAuditWriter wires the audit log writer.
 func (h *SMTPHandler) SetAuditWriter(a AuthAuditWriter) { h.audit = a }
+
+func (h *SMTPHandler) SetRunTx(runTx smtpRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *SMTPHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // SetBaselineOverrideChecker wires the RBAC override predicate used by
 // the compliance deletion guard. Optional — when unset, SMTP the
@@ -209,6 +226,7 @@ func (h *SMTPHandler) Get(w http.ResponseWriter, r *http.Request) {
 // admin leaves the field as the PasswordSentinelEncrypted string the
 // existing ciphertext is preserved; any other value is re-encrypted
 // and replaces it. This is how Rancher does it.
+// openapi:request-operation adminSmtpUpdate
 type smtpSettingsUpdate struct {
 	Enabled        *bool   `json:"enabled"`
 	Host           *string `json:"host"`
@@ -284,7 +302,7 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	saved, err := h.queries.UpsertSMTPSettings(r.Context(), sqlc.UpsertSMTPSettingsParams{
+	params := sqlc.UpsertSMTPSettingsParams{
 		ID:                email.SingletonSettingsID,
 		Enabled:           merged.Enabled,
 		Host:              merged.Host,
@@ -297,9 +315,25 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Encryption:        merged.Encryption,
 		RequireTls:        merged.RequireTLS,
 		TimeoutSeconds:    merged.TimeoutSeconds,
-	})
+	}
+	var saved sqlc.SmtpSettings
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q SMTPMutationTx) error {
+			var mutationErr error
+			saved, mutationErr = q.UpsertSMTPSettings(r.Context(), params)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			return recordAuditOutbox(r, q, "admin.smtp.update", "smtp", saved.ID.String(), "smtp_settings", http.StatusOK, map[string]any{
+				"enabled": saved.Enabled, "password_set": saved.PasswordEncrypted != "",
+				"auth_mechanism": saved.AuthMechanism, "encryption": saved.Encryption, "require_tls": saved.RequireTls,
+			})
+		})
+	} else {
+		saved, err = h.queries.UpsertSMTPSettings(r.Context(), params)
+	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to save SMTP settings")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to save SMTP settings")
 		return
 	}
 	if h.provider != nil {
@@ -310,13 +344,12 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// detail — that's already in smtp_settings and would only widen
 	// the log surface. We DO persist the enabled flag because it
 	// changes runtime behaviour for everyone.
-	recordAudit(r, h.audit, "admin.smtp.update", "smtp", saved.ID.String(), "smtp_settings", map[string]any{
-		"enabled":        saved.Enabled,
-		"password_set":   saved.PasswordEncrypted != "",
-		"auth_mechanism": saved.AuthMechanism,
-		"encryption":     saved.Encryption,
-		"require_tls":    saved.RequireTls,
-	})
+	if h.runTx == nil {
+		recordAudit(r, h.audit, "admin.smtp.update", "smtp", saved.ID.String(), "smtp_settings", map[string]any{
+			"enabled": saved.Enabled, "password_set": saved.PasswordEncrypted != "",
+			"auth_mechanism": saved.AuthMechanism, "encryption": saved.Encryption, "require_tls": saved.RequireTls,
+		})
+	}
 
 	h.writeResponseFromRow(w, saved)
 }
@@ -435,6 +468,7 @@ func (h *SMTPHandler) validate(s rawSettings) string {
 }
 
 // TestRequest is the body POST'd to /smtp/test/.
+// openapi:request-operation adminSmtpTest
 type TestRequest struct {
 	Recipient string `json:"recipient" validate:"required,email"`
 }
@@ -496,13 +530,26 @@ func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 			"TriggeredBy": caller,
 		},
 	}); err != nil {
-		recordAudit(r, h.audit, "admin.smtp.test_failed", "smtp", row.ID.String(), recipient, map[string]any{
-			"error": err.Error(),
-		})
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.TestFailed, err.Error())
+		if h.log != nil {
+			h.log.WarnContext(r.Context(), "SMTP test send failed", "error", err)
+		}
+		if h.audit != nil {
+			if auditErr := recordMandatoryAudit(r, h.audit, "admin.smtp.test_failed", "smtp", row.ID.String(), recipient, map[string]any{"result": "send_failed"}); auditErr != nil {
+				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+					"Mandatory audit storage is unavailable; the SMTP test result was not returned")
+				return
+			}
+		}
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.TestFailed, "SMTP test send failed")
 		return
 	}
-	recordAudit(r, h.audit, "admin.smtp.test", "smtp", row.ID.String(), recipient, nil)
+	if h.audit != nil {
+		if auditErr := recordMandatoryAudit(r, h.audit, "admin.smtp.test", "smtp", row.ID.String(), recipient, nil); auditErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+				"Mandatory audit storage is unavailable; the SMTP test result was not returned")
+			return
+		}
+	}
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{
 		"success":   true,
 		"recipient": recipient,

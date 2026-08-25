@@ -1,6 +1,11 @@
-import api from "@/lib/api";
+import { camelizeKeys } from "@/lib/camelize";
+import * as generated from "@/lib/api/generated/client";
+import { createIdempotencyKey } from "@/lib/api/idempotency";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
-import type { AssertNoPhantomWireKeys } from "@/types/wire-contract";
+import type {
+  AssertNoPhantomWireKeys,
+  CamelizeKeys,
+} from "@/types/wire-contract";
 
 type DeliveryContracts = OpenAPIComponents["schemas"];
 
@@ -8,8 +13,8 @@ type DeliveryContracts = OpenAPIComponents["schemas"];
  * Flux-native delivery wire contract.
  *
  * Request fields deliberately retain their documented snake_case spelling.
- * Axios' response interceptor converts management-plane response keys to
- * camelCase, so response types below use camelCase. Secret material exists
+ * Generated responses retain exact wire keys. The mapping functions below
+ * deliberately build camelCase view models. Secret material exists
  * only on create/rotate request types and is never represented by a response
  * type.
  */
@@ -83,10 +88,6 @@ export interface EntityResponse<T> {
   etag?: string;
 }
 
-interface DataEnvelope<T> {
-  data: T;
-}
-
 export interface TrustPolicy {
   allowUnsigned: boolean;
   provider?: SignatureProvider;
@@ -112,23 +113,9 @@ export interface SourceCredentialInput {
   passphrase?: string;
 }
 
-export interface DeliverySource {
-  id: string;
-  projectId: string;
-  name: string;
-  description?: string;
-  type: DeliverySourceType;
-  url: string;
-  authMode: DeliveryAuthMode;
-  credential: { configured: boolean; keyVersion: number; epoch: number };
-  proxyRef?: string;
-  trustPolicy: TrustPolicy;
-  status: string;
-  lastResolvedAt: string | null;
-  lastErrorCode?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+export type DeliverySource = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliverySource"]
+>;
 
 export interface CreateDeliverySourceRequest {
   project_id: string;
@@ -293,23 +280,18 @@ export interface PlacementRequest extends Record<string, unknown> {
   all_clusters: boolean;
 }
 
-export interface DeliveryTarget {
-  id: string;
-  projectId: string;
-  name: string;
-  description?: string;
-  bundleVersionId: string;
+export type DeliveryTarget = Omit<
+  CamelizeKeys<OpenAPIComponents["schemas"]["DeliveryTarget"]>,
+  | "placement"
+  | "rolloutPolicy"
+  | "reconciliationPolicy"
+  | "maintenanceWindowPolicy"
+> & {
   placement: Placement;
   rolloutPolicy: { approvalRequired: boolean };
   reconciliationPolicy: ReconciliationPolicy;
   maintenanceWindowPolicy: Record<string, unknown>;
-  suspended: boolean;
-  generation: number;
-  resourceVersion: number;
-  deletionState: string;
-  createdAt: string;
-  updatedAt: string;
-}
+};
 
 export interface DeliveryTargetRequest {
   project_id: string;
@@ -433,335 +415,299 @@ export interface RolloutStrategyRequest extends Record<string, unknown> {
   }>;
 }
 
-export interface DeliveryRollout {
-  id: string;
-  targetId: string;
-  targetGeneration: number;
-  fromBundleVersionId?: string;
-  toBundleVersionId: string;
-  placementDigest: string;
+export type DeliveryRollout = Omit<
+  CamelizeKeys<OpenAPIComponents["schemas"]["DeliveryRollout"]>,
+  "strategy" | "state"
+> & {
   strategy: RolloutStrategy;
-  planDigest: string;
   state: RolloutState;
-  fencingGeneration: number;
-  totalClusters: number;
-  readyClusters: number;
-  failedClusters: number;
-  blockedClusters: number;
-  releasedClusters: number;
-  progressDeadline?: string;
-  startedAt?: string;
-  completedAt?: string;
-  lastErrorCode?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+};
 
-export interface DeliveryRolloutApproval {
-  id: string;
-  rolloutId: string;
-  cohort: number;
-  bindingDigest: string;
-  decision: "approved" | "rejected";
-  decidedBy?: string;
-  decidedAt: string;
-  expiresAt: string;
-  createdAt: string;
-}
+export type DeliveryRolloutApproval = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryRolloutApprovalRecord"]
+>;
 
-export interface DeliveryRolloutEvent {
-  id: string;
-  rolloutId: string;
-  clusterId?: string;
-  decisionDigest: string;
-  eventType: string;
-  fromState?: string;
-  toState?: string;
-  reasonCode?: string;
-  fence: number;
-  occurredAt: string;
-  createdAt: string;
-}
+export type DeliveryRolloutEvent = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryRolloutEvent"]
+>;
 
-export interface DeliveryRolloutDetail {
-  rollout: DeliveryRollout;
-  frozenPlan: {
-    id: string;
-    targetId: string;
-    projectId: string;
-    targetGeneration: number;
-    desired: {
-      bundleVersionId: string;
-      specDigest: string;
-      source: {
-        sourceId: string;
-        type: DeliverySourceType;
-        url: string;
-        authMode: DeliveryAuthMode;
-        trust: TrustPolicy;
-        revision: { kind: string; value: string; artifactDigest: string };
-      };
-    };
-    placementDigest: string;
-    strategy: RolloutStrategy;
-    strategyDigest: string;
-    approval: { required: boolean; digest: string };
-    actor: string;
-    requestDigest: string;
-    createdAt: string;
-    deadline: string;
-    cohorts: Array<{
-      index: number;
-      name: string;
-      clusterIds: string[];
-      approvalRequired: boolean;
-      approvalDigest?: string;
-      soakAfter: string;
-    }>;
-    planDigest: string;
-  };
-  approvals: DeliveryRolloutApproval[];
-  timeline: DeliveryRolloutEvent[];
-}
-
-export interface DeliveryFrozenRollout {
+export interface DeliveryFrozenPlan {
   id: string;
   targetId: string;
   projectId: string;
   targetGeneration: number;
-  desired: DeliveryRolloutDetail["frozenPlan"]["desired"];
+  desired: {
+    bundleVersionId: string;
+    specDigest: string;
+    source: {
+      sourceId: string;
+      type: DeliverySourceType;
+      url: string;
+      authMode: DeliveryAuthMode;
+      trust: TrustPolicy;
+      revision: { kind: string; value: string; artifactDigest: string };
+    };
+  };
   placementDigest: string;
   strategy: RolloutStrategy;
   strategyDigest: string;
   approval: { required: boolean; digest: string };
   actor: string;
-  idempotencyKey: string;
   requestDigest: string;
   createdAt: string;
   deadline: string;
-  cohorts: DeliveryRolloutDetail["frozenPlan"]["cohorts"];
+  cohorts: Array<{
+    index: number;
+    name: string;
+    clusterIds: string[];
+    approvalRequired: boolean;
+    approvalDigest?: string;
+    soakAfter: string;
+  }>;
+  planDigest: string;
+}
+
+export type DeliveryRolloutDetail = Omit<
+  CamelizeKeys<OpenAPIComponents["schemas"]["DeliveryRolloutDetail"]>,
+  "rollout" | "frozenPlan" | "approvals" | "timeline"
+> & {
+  rollout: DeliveryRollout;
+  frozenPlan: DeliveryFrozenPlan;
+  approvals: DeliveryRolloutApproval[];
+  timeline: DeliveryRolloutEvent[];
+};
+
+export type DeliveryFrozenRollout = Omit<
+  CamelizeKeys<OpenAPIComponents["schemas"]["DeliveryFrozenRollout"]>,
+  "desired" | "strategy" | "approval" | "cohorts" | "clusters"
+> & {
+  desired: DeliveryFrozenPlan["desired"];
+  strategy: RolloutStrategy;
+  approval: DeliveryFrozenPlan["approval"];
+  cohorts: DeliveryFrozenPlan["cohorts"];
   clusters: Array<{
     clusterId: string;
     cohort: number;
     order: number;
     previous?: Record<string, unknown>;
   }>;
-  planDigest: string;
-}
+};
 
-export interface DeliveryRolloutCluster {
-  id: string;
-  rolloutId: string;
-  clusterId: string;
-  cohort: number;
-  releaseOrder: number;
-  previousBundleVersionId?: string;
-  desiredBundleVersionId: string;
-  desiredSpecDigest: string;
-  state: RolloutClusterState;
-  assignmentAction: "apply" | "rollback";
-  attempt: number;
-  fence: number;
-  releasedAt?: string;
-  acknowledgedAt?: string;
-  readyAt?: string;
-  completedAt?: string;
-  deadline?: string;
-  lastErrorCode?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+export type DeliveryRolloutCluster = Omit<
+  CamelizeKeys<OpenAPIComponents["schemas"]["DeliveryRolloutCluster"]>,
+  "state"
+> & { state: RolloutClusterState };
 
-export interface DeliveryCondition {
-  type: "Ready" | "Reconciling" | "Stalled" | "Drifted";
-  status: "True" | "False" | "Unknown";
-  reason?: string;
-  message?: string;
-  observedGeneration: number;
-  lastTransitionTime: string;
-}
+export type DeliveryConditionView = CamelizeKeys<
+  DeliveryContracts["DeliveryCondition"]
+>;
 
-export interface ClusterDeployment {
-  id: string;
-  targetId: string;
-  clusterId: string;
-  currentRolloutId?: string;
-  desiredBundleVersionId?: string;
-  previousBundleVersionId?: string;
-  desiredGeneration: number;
-  observedGeneration: number;
-  desiredSpecDigest: string;
-  observedSpecDigest: string;
-  desiredRevision: string;
-  observedRevision: string;
-  action: "apply" | "suspend" | "delete";
-  phase: DeploymentPhase;
-  conditions: DeliveryCondition[];
-  sourceKind: string;
-  sourceName: string;
-  reconcilerKind: string;
-  reconcilerName: string;
-  inventory: Record<string, unknown>;
-  agentSessionId: string;
-  agentSequence: number;
-  lastErrorCode: string;
-  lastMessage: string;
-  lastObservedAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+export type ClusterDeployment = Omit<
+  CamelizeKeys<OpenAPIComponents["schemas"]["ClusterDeployment"]>,
+  "conditions"
+> & { conditions: DeliveryConditionView[] };
 
-export interface ClusterDeploymentEvent {
-  id: string;
-  deploymentId: string;
-  rolloutId?: string;
-  eventType: string;
-  fromPhase?: string;
-  toPhase?: string;
-  generation: number;
-  specDigest?: string;
-  reasonCode?: string;
-  message?: string;
-  observedAt: string;
-  createdAt: string;
-}
+export type ClusterDeploymentEvent = CamelizeKeys<
+  OpenAPIComponents["schemas"]["ClusterDeploymentEvent"]
+>;
 
-export interface ClusterDeploymentDetail {
+export type ClusterDeploymentDetail = Omit<
+  CamelizeKeys<OpenAPIComponents["schemas"]["ClusterDeploymentDetail"]>,
+  "deployment" | "events"
+> & {
   deployment: ClusterDeployment;
   events: ClusterDeploymentEvent[];
-}
+};
 
-export interface DeliveryControllerInventory {
-  clusterId: string;
-  agentVersion: string;
-  fluxVersion: string;
-  components: Record<string, string>;
-  apiVersions: string[];
-  distributionDigest: string;
-  kubernetesVersion: string;
-  ready: boolean;
-  compatibilityStatus: string;
-  errorCode: string;
-  observedAt?: string;
-  updatedAt: string;
-}
+export type DeliveryControllerInventory = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryControllerInventory"]
+>;
 
-export interface ClusterDeliveryInventory {
-  controllerInventory: DeliveryControllerInventory;
-  deployments: ClusterDeployment[];
-  deploymentCount: number;
-}
+export type ClusterDeliveryInventory = Omit<
+  CamelizeKeys<OpenAPIComponents["schemas"]["DeliveryClusterInventory"]>,
+  "deployments"
+> & { deployments: ClusterDeployment[] };
 
-export interface DeliverySystemCompatibility {
-  contract: {
-    summary: string;
-    fluxVersion: string;
-    fluxComponents: Record<string, string>;
-    fluxApis: string[];
-    kubernetesMinimum: string;
-    kubernetesMaximum: string;
-    agentProtocol: string;
-    requiredCapabilities: string[];
-  };
-  currentRelease: Record<string, unknown> | null;
-  currentRollout: Record<string, unknown> | null;
-  observedInventory: Array<{
-    compatibilityStatus: string;
-    clusterCount: number;
-  }>;
-}
+export type DeliverySystemCompatibility = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliverySystemCompatibility"]
+>;
 
-export interface DeliveryFleetCount {
-  key: string;
-  count: number;
-}
+export type DeliveryEstateCount = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryEstateCount"]
+>;
 
-export interface DeliveryFleetSummary {
-  adoptedClusters: number;
-  fluxReady: number;
-  incompatible: number;
-  disconnected: number;
-  stale: number;
-  assignments: number;
-  drifted: number;
-  failed: number;
-  degraded: number;
-  activeRollouts: number;
-}
+export type DeliveryEstateSummary = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryEstateSummary"]
+>;
 
-export interface DeliveryFleetCluster {
-  id: string;
-  name: string;
-  displayName: string;
-  isLocal: boolean;
-  connected: boolean;
-  stale: boolean;
-  privilegeProfile: string;
-  kubernetesVersion: string;
-  agentVersion: string;
-  fluxVersion: string;
-  compatibilityStatus: string;
-  inventoryReady: boolean;
-  inventoryErrorCode: string;
-  assignmentCount: number;
-  readyCount: number;
-  failedCount: number;
-  degradedCount: number;
-  driftedCount: number;
-  lastHeartbeat: string | null;
-  inventoryObservedAt: string | null;
-  lastObservedAt: string | null;
-}
+export type DeliveryEstateCluster = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryEstateCluster"]
+>;
 
-export interface DeliveryFleetAttention {
-  clusterId: string;
-  clusterName: string;
-  severity: "error" | "warning";
-  reason: string;
-  detail: string;
-}
+export type DeliveryEstateAttention = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryEstateAttention"]
+>;
 
-export interface DeliveryFleetDistributions {
-  compatibility: DeliveryFleetCount[];
-  privilege: DeliveryFleetCount[];
-  assignmentPhases: DeliveryFleetCount[];
-}
+export type DeliveryEstateDistributions = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryEstateDistributions"]
+>;
 
-export interface DeliveryFleet {
-  summary: DeliveryFleetSummary;
-  clusters: DeliveryFleetCluster[];
-  attention: DeliveryFleetAttention[];
-  distributions: DeliveryFleetDistributions;
-}
+export type DeliveryEstate = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryEstate"]
+>;
 
 export interface PageParams {
   limit?: number;
   offset?: number;
 }
 
-function idempotencyHeaders(key?: string): Record<string, string> {
-  return key ? { "Idempotency-Key": key } : {};
+function quotedETag(etag: string | number): string {
+  if (typeof etag === "number") return `"${etag}"`;
+  return etag.startsWith('"') ? etag : `"${etag}"`;
 }
 
-function mutationHeaders(
-  etag: string | number,
-  key?: string,
-): Record<string, string> {
-  const quoted =
-    typeof etag === "number"
-      ? `"${etag}"`
-      : etag.startsWith('"')
-        ? etag
-        : `"${etag}"`;
-  return { "If-Match": quoted, ...idempotencyHeaders(key) };
+function optionalIdempotencyHeader(key?: string): { "Idempotency-Key": string } {
+  return { "Idempotency-Key": key ?? createIdempotencyKey() };
 }
 
-function entity<T>(data: DataEnvelope<T>, headers: unknown): EntityResponse<T> {
-  const candidate = headers as
-    { etag?: unknown; get?: (name: string) => unknown } | undefined;
-  const value = candidate?.etag ?? candidate?.get?.("etag");
+function requiredEnvelopeData<T>(envelope: { data?: T }): T {
+  if (envelope.data === undefined) {
+    throw new Error("Delivery API returned an empty data envelope.");
+  }
+  return envelope.data;
+}
+
+function mapPage<TWire, TView>(
+  page: {
+    data: TWire[];
+    count: number;
+    next: string | null;
+    previous: string | null;
+    total_known: boolean;
+  },
+  mapper: (wire: TWire) => TView,
+): DeliveryPage<TView> {
   return {
-    data: data.data,
+    data: page.data.map(mapper),
+    count: page.count,
+    next: page.next,
+    previous: page.previous,
+    totalKnown: page.total_known,
+  };
+}
+
+// Each operation crosses the raw generated-client boundary through a
+// domain-named mapper. This keeps wire casing out of components and makes the
+// transport migration independently replaceable when the view models evolve.
+function mapSource(wire: DeliveryContracts["DeliverySource"]): DeliverySource {
+  return camelizeKeys(wire) as unknown as DeliverySource;
+}
+function mapBundle(wire: DeliveryContracts["DeliveryBundle"]): ComponentBundle {
+  return camelizeKeys(wire) as unknown as ComponentBundle;
+}
+function mapBundleVersion(
+  wire: DeliveryContracts["DeliveryBundleVersion"],
+): ComponentBundleVersion {
+  return camelizeKeys(wire) as unknown as ComponentBundleVersion;
+}
+function mapTarget(wire: DeliveryContracts["DeliveryTarget"]): DeliveryTarget {
+  return camelizeKeys(wire) as unknown as DeliveryTarget;
+}
+function mapPreview(
+  wire: DeliveryContracts["DeliveryTargetPreview"],
+): PlacementPreview {
+  return camelizeKeys(wire) as unknown as PlacementPreview;
+}
+function mapRollout(
+  wire: DeliveryContracts["DeliveryRollout"],
+): DeliveryRollout {
+  return camelizeKeys(wire) as unknown as DeliveryRollout;
+}
+function mapRolloutEvent(
+  wire: DeliveryContracts["DeliveryRolloutEvent"],
+): DeliveryRolloutEvent {
+  return camelizeKeys(wire) as unknown as DeliveryRolloutEvent;
+}
+function mapRolloutCluster(
+  wire: DeliveryContracts["DeliveryRolloutCluster"],
+): DeliveryRolloutCluster {
+  return camelizeKeys(wire) as unknown as DeliveryRolloutCluster;
+}
+function mapFrozenRollout(
+  wire: DeliveryContracts["DeliveryFrozenRollout"],
+): DeliveryFrozenRollout {
+  const mapped = camelizeKeys(wire) as unknown as CamelizeKeys<typeof wire>;
+  const { idempotencyKey: _idempotencyKey, ...safe } = mapped;
+  const { trustPolicy, ...source } = mapped.desired.source;
+  return {
+    ...safe,
+    desired: {
+      ...mapped.desired,
+      source: { ...source, trust: trustPolicy },
+    },
+  } as DeliveryFrozenRollout;
+}
+function mapRolloutDetail(
+  wire: DeliveryContracts["DeliveryRolloutDetail"],
+): DeliveryRolloutDetail {
+  const mapped = camelizeKeys(wire) as unknown as CamelizeKeys<typeof wire>;
+  return {
+    ...mapped,
+    rollout: mapRollout(wire.rollout),
+    frozenPlan: mapFrozenRollout(wire.frozen_plan),
+    approvals: wire.approvals.map((item) =>
+      camelizeKeys(item),
+    ) as unknown as DeliveryRolloutApproval[],
+    timeline: wire.timeline.map(mapRolloutEvent),
+  } as DeliveryRolloutDetail;
+}
+function mapDeployment(
+  wire: DeliveryContracts["ClusterDeployment"],
+): ClusterDeployment {
+  return camelizeKeys(wire) as unknown as ClusterDeployment;
+}
+function mapDeploymentEvent(
+  wire: DeliveryContracts["ClusterDeploymentEvent"],
+): ClusterDeploymentEvent {
+  return camelizeKeys(wire) as unknown as ClusterDeploymentEvent;
+}
+function mapDeploymentDetail(
+  wire: DeliveryContracts["ClusterDeploymentDetail"],
+): ClusterDeploymentDetail {
+  return {
+    ...camelizeKeys(wire),
+    deployment: mapDeployment(wire.deployment),
+    events: wire.events.map(mapDeploymentEvent),
+  } as ClusterDeploymentDetail;
+}
+function mapInventory(
+  wire: DeliveryContracts["DeliveryClusterInventory"],
+): ClusterDeliveryInventory {
+  return {
+    ...camelizeKeys(wire),
+    deployments: wire.deployments.map(mapDeployment),
+  } as unknown as ClusterDeliveryInventory;
+}
+function mapCompatibility(
+  wire: DeliveryContracts["DeliverySystemCompatibility"],
+): DeliverySystemCompatibility {
+  return camelizeKeys(wire) as unknown as DeliverySystemCompatibility;
+}
+function mapEstate(wire: DeliveryContracts["DeliveryEstate"]): DeliveryEstate {
+  return camelizeKeys(wire) as unknown as DeliveryEstate;
+}
+
+function entityFromResponse<TWire, TView>(
+  response: generated.OpenAPIResponse<{ data?: TWire }>,
+  mapper: (wire: TWire) => TView,
+): EntityResponse<TView> {
+  const headers = response.headers as {
+    etag?: unknown;
+    get?: (name: string) => unknown;
+  };
+  const value = headers.etag ?? headers.get?.("etag");
+  return {
+    data: mapper(requiredEnvelopeData(response.data)),
     etag: typeof value === "string" ? value : undefined,
   };
 }
@@ -769,48 +715,58 @@ function entity<T>(data: DataEnvelope<T>, headers: unknown): EntityResponse<T> {
 export async function listDeliverySources(
   projectId: string,
   params: PageParams & { status?: string } = {},
+  signal?: AbortSignal,
 ) {
-  const response = await api.get<DeliveryPage<DeliverySource>>(
-    "/delivery/sources/",
-    {
-      params: { project_id: projectId, ...params },
+  const wire = await generated.getDeliverySources({
+    query: {
+      project_id: projectId,
+      limit: params.limit,
+      offset: params.offset,
+      status: params.status as
+        "pending" | "ready" | "degraded" | "revoked" | undefined,
     },
-  );
-  return response.data;
+    signal,
+  });
+  return mapPage(wire, mapSource);
 }
 
 export async function createDeliverySource(
   body: CreateDeliverySourceRequest,
   key?: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.post<DataEnvelope<DeliverySource>>(
-    "/delivery/sources/",
+  const wire = await generated.postDeliverySources({
     body,
-    {
-      headers: idempotencyHeaders(key),
-    },
-  );
-  return response.data.data;
+    headerParams: optionalIdempotencyHeader(key),
+    signal,
+  });
+  return mapSource(requiredEnvelopeData(wire));
 }
 
-export async function getDeliverySource(projectId: string, id: string) {
-  const response = await api.get<DataEnvelope<DeliverySource>>(
-    `/delivery/sources/${id}/`,
-    {
-      params: { project_id: projectId },
-    },
-  );
-  return response.data.data;
+export async function getDeliverySource(
+  projectId: string,
+  id: string,
+  signal?: AbortSignal,
+) {
+  const wire = await generated.getDeliverySourcesById({
+    path: { id },
+    query: { project_id: projectId },
+    signal,
+  });
+  return mapSource(requiredEnvelopeData(wire));
 }
 
 export async function deleteDeliverySource(
   projectId: string,
   id: string,
   key?: string,
+  signal?: AbortSignal,
 ) {
-  await api.delete(`/delivery/sources/${id}/`, {
-    params: { project_id: projectId },
-    headers: idempotencyHeaders(key),
+  await generated.deleteDeliverySourcesById({
+    path: { id },
+    query: { project_id: projectId },
+    headers: optionalIdempotencyHeader(key),
+    signal,
   });
 }
 
@@ -818,149 +774,162 @@ export async function rotateDeliverySourceCredential(
   id: string,
   body: RotateSourceCredentialRequest,
   key?: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.post<DataEnvelope<DeliverySource>>(
-    `/delivery/sources/${id}/rotate-credential/`,
-    body,
-    {
-      headers: idempotencyHeaders(key),
-    },
-  );
-  return response.data.data;
+  if (!["basic", "bearer", "ssh"].includes(body.auth_mode)) {
+    throw new Error("Credential rotation requires basic, bearer, or SSH auth.");
+  }
+  const wire = await generated.postDeliverySourcesByIdRotateCredential({
+    path: { id },
+    body: body as DeliveryContracts["DeliverySourceCredentialRotate"],
+    headerParams: optionalIdempotencyHeader(key),
+    signal,
+  });
+  return mapSource(requiredEnvelopeData(wire));
 }
 
 export async function verifyDeliverySource(
   id: string,
   body: { project_id: string; requested_revision: string; chart?: string },
   key?: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.post<DataEnvelope<SourceVerification>>(
-    `/delivery/sources/${id}/verify/`,
+  const wire = await generated.postDeliverySourcesByIdVerify({
+    path: { id },
     body,
-    {
-      headers: idempotencyHeaders(key),
-    },
-  );
-  return response.data.data;
+    headerParams: optionalIdempotencyHeader(key),
+    signal,
+  });
+  return camelizeKeys(
+    requiredEnvelopeData(wire),
+  ) as unknown as SourceVerification;
 }
 
 export async function listComponentBundles(
   projectId: string,
   params: PageParams = {},
+  signal?: AbortSignal,
 ) {
-  const response = await api.get<DeliveryPage<ComponentBundle>>(
-    "/delivery/bundles/",
-    {
-      params: { project_id: projectId, ...params },
-    },
-  );
-  return response.data;
+  const wire = await generated.getDeliveryBundles({
+    query: { project_id: projectId, ...params },
+    signal,
+  });
+  return mapPage(wire, mapBundle);
 }
 
 export async function createComponentBundle(
   projectId: string,
   body: { name: string; description?: string },
   key?: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.post<DataEnvelope<ComponentBundle>>(
-    "/delivery/bundles/",
-    {
-      project_id: projectId,
-      ...body,
-    },
-    { headers: idempotencyHeaders(key) },
-  );
-  return response.data.data;
+  const wire = await generated.postDeliveryBundles({
+    body: { project_id: projectId, ...body },
+    headerParams: optionalIdempotencyHeader(key),
+    signal,
+  });
+  return mapBundle(requiredEnvelopeData(wire));
 }
 
-export async function getComponentBundle(projectId: string, id: string) {
-  const response = await api.get<DataEnvelope<ComponentBundle>>(
-    `/delivery/bundles/${id}/`,
-    {
-      params: { project_id: projectId },
-    },
-  );
-  return response.data.data;
+export async function getComponentBundle(
+  projectId: string,
+  id: string,
+  signal?: AbortSignal,
+) {
+  const wire = await generated.getDeliveryBundlesById({
+    path: { id },
+    query: { project_id: projectId },
+    signal,
+  });
+  return mapBundle(requiredEnvelopeData(wire));
 }
 
 export async function listComponentBundleVersions(
   projectId: string,
   bundleId: string,
   params: PageParams = {},
+  signal?: AbortSignal,
 ) {
-  const response = await api.get<DeliveryPage<ComponentBundleVersion>>(
-    `/delivery/bundles/${bundleId}/versions/`,
-    {
-      params: { project_id: projectId, ...params },
-    },
-  );
-  return response.data;
+  const wire = await generated.getDeliveryBundlesByIdVersions({
+    path: { id: bundleId },
+    query: { project_id: projectId, ...params },
+    signal,
+  });
+  return mapPage(wire, mapBundleVersion);
 }
 
 export async function getComponentBundleVersion(
   projectId: string,
   bundleId: string,
   versionId: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.get<DataEnvelope<ComponentBundleVersion>>(
-    `/delivery/bundles/${bundleId}/versions/${versionId}/`,
-    {
-      params: { project_id: projectId },
-    },
-  );
-  return response.data.data;
+  const wire = await generated.getDeliveryBundlesByIdVersionsByVersionId({
+    path: { id: bundleId, versionId },
+    query: { project_id: projectId },
+    signal,
+  });
+  return mapBundleVersion(requiredEnvelopeData(wire));
 }
 
 export async function createComponentBundleVersion(
   bundleId: string,
   body: CreateBundleVersionRequest,
   key?: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.post<DataEnvelope<ComponentBundleVersion>>(
-    `/delivery/bundles/${bundleId}/versions/`,
+  const wire = await generated.postDeliveryBundlesByIdVersions({
+    path: { id: bundleId },
+    query: { project_id: body.project_id },
     body,
-    {
-      headers: idempotencyHeaders(key),
-    },
-  );
-  return response.data.data;
+    headerParams: optionalIdempotencyHeader(key),
+    signal,
+  });
+  return mapBundleVersion(requiredEnvelopeData(wire));
 }
 
 export async function listDeliveryTargets(
   projectId: string,
   params: PageParams = {},
+  signal?: AbortSignal,
 ) {
-  const response = await api.get<DeliveryPage<DeliveryTarget>>(
-    "/delivery/targets/",
-    {
-      params: { project_id: projectId, ...params },
-    },
-  );
-  return response.data;
+  const wire = await generated.getDeliveryTargets({
+    query: { project_id: projectId, ...params },
+    signal,
+  });
+  return mapPage(wire, mapTarget);
 }
 
 export async function createDeliveryTarget(
   body: DeliveryTargetRequest & DeliveryContracts["DeliveryTargetWrite"],
   key?: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.post<DataEnvelope<DeliveryTarget>>(
-    "/delivery/targets/",
-    body,
+  const response = await generated.executeOpenAPIOperationWithResponse(
+    "postDeliveryTargets",
     {
-      headers: idempotencyHeaders(key),
+      body,
+      headerParams: optionalIdempotencyHeader(key),
+      signal,
     },
   );
-  return entity(response.data, response.headers);
+  return entityFromResponse(response, mapTarget);
 }
 
-export async function getDeliveryTarget(projectId: string, id: string) {
-  const response = await api.get<DataEnvelope<DeliveryTarget>>(
-    `/delivery/targets/${id}/`,
+export async function getDeliveryTarget(
+  projectId: string,
+  id: string,
+  signal?: AbortSignal,
+) {
+  const response = await generated.executeOpenAPIOperationWithResponse(
+    "getDeliveryTargetsById",
     {
-      params: { project_id: projectId },
+      path: { id },
+      query: { project_id: projectId },
+      signal,
     },
   );
-  return entity(response.data, response.headers);
+  return entityFromResponse(response, mapTarget);
 }
 
 export async function updateDeliveryTarget(
@@ -968,15 +937,25 @@ export async function updateDeliveryTarget(
   body: Partial<DeliveryTargetRequest>,
   etag: string | number,
   key?: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.patch<DataEnvelope<DeliveryTarget>>(
-    `/delivery/targets/${id}/`,
-    body,
+  if (!body.project_id) {
+    throw new Error("A project_id is required to update a delivery target.");
+  }
+  const response = await generated.executeOpenAPIOperationWithResponse(
+    "patchDeliveryTargetsById",
     {
-      headers: mutationHeaders(etag, key),
+      path: { id },
+      query: { project_id: body.project_id },
+      body,
+      headerParams: {
+        "If-Match": quotedETag(etag),
+        ...optionalIdempotencyHeader(key),
+      },
+      signal,
     },
   );
-  return entity(response.data, response.headers);
+  return entityFromResponse(response, mapTarget);
 }
 
 export async function deleteDeliveryTarget(
@@ -984,19 +963,23 @@ export async function deleteDeliveryTarget(
   id: string,
   etag: string | number,
   key?: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.delete<
-    DataEnvelope<{
-      id: string;
-      deletionState: string;
-      resourceVersion: number;
-      deploymentCount: number;
-    }>
-  >(`/delivery/targets/${id}/`, {
-    params: { project_id: projectId },
-    headers: mutationHeaders(etag, key),
+  const wire = await generated.deleteDeliveryTargetsById({
+    path: { id },
+    query: { project_id: projectId },
+    headerParams: {
+      "If-Match": quotedETag(etag),
+      ...optionalIdempotencyHeader(key),
+    },
+    signal,
   });
-  return response.data.data;
+  return camelizeKeys(requiredEnvelopeData(wire)) as unknown as {
+    id: string;
+    deletionState: string;
+    resourceVersion: number;
+    deploymentCount: number;
+  };
 }
 
 export async function orphanDeliveryTarget(
@@ -1004,34 +987,40 @@ export async function orphanDeliveryTarget(
   id: string,
   etag: string | number,
   key?: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.post<
-    DataEnvelope<{ id: string; deletionState: string; resourceVersion: number }>
-  >(
-    `/delivery/targets/${id}/orphan/`,
-    { project_id: projectId },
-    { headers: mutationHeaders(etag, key) },
-  );
-  return response.data.data;
+  const wire = await generated.postDeliveryTargetsByIdOrphan({
+    path: { id },
+    query: { project_id: projectId },
+    headerParams: {
+      "If-Match": quotedETag(etag),
+      ...optionalIdempotencyHeader(key),
+    },
+    signal,
+  });
+  return camelizeKeys(requiredEnvelopeData(wire)) as unknown as {
+    id: string;
+    deletionState: string;
+    resourceVersion: number;
+  };
 }
 
 export async function previewDeliveryTarget(
   projectId: string,
   id: string,
   params: PlacementPreviewPageParams = {},
+  signal?: AbortSignal,
 ) {
-  const response = await api.post<DataEnvelope<PlacementPreview>>(
-    `/delivery/targets/${id}/preview/`,
-    undefined,
-    {
-      params: {
-        project_id: projectId,
-        ...(params.pageSize ? { page_size: params.pageSize } : {}),
-        ...(params.cursor ? { cursor: params.cursor } : {}),
-      },
+  const wire = await generated.postDeliveryTargetsByIdPreview({
+    path: { id },
+    query: {
+      project_id: projectId,
+      ...(params.pageSize ? { page_size: params.pageSize } : {}),
+      ...(params.cursor ? { cursor: params.cursor } : {}),
     },
-  );
-  return response.data.data;
+    signal,
+  });
+  return mapPreview(requiredEnvelopeData(wire));
 }
 
 export async function startDeliveryRollout(
@@ -1044,66 +1033,74 @@ export async function startDeliveryRollout(
   } & DeliveryContracts["DeliveryRolloutStart"],
   targetGeneration: number,
   key: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.post<DataEnvelope<DeliveryFrozenRollout>>(
-    `/delivery/targets/${targetId}/rollouts/`,
+  const wire = await generated.postDeliveryTargetsByIdRollouts({
+    path: { id: targetId },
     body,
-    {
-      headers: mutationHeaders(targetGeneration, key),
+    headerParams: {
+      "If-Match": quotedETag(targetGeneration),
+      "Idempotency-Key": key,
     },
-  );
-  return response.data.data;
+    signal,
+  });
+  return mapFrozenRollout(requiredEnvelopeData(wire));
 }
 
 export async function listDeliveryRollouts(
   projectId: string,
   params: PageParams & { state?: RolloutState } = {},
+  signal?: AbortSignal,
 ) {
-  const response = await api.get<DeliveryPage<DeliveryRollout>>(
-    "/delivery/rollouts/",
-    {
-      params: { project_id: projectId, ...params },
-    },
-  );
-  return response.data;
+  const wire = await generated.getDeliveryRollouts({
+    query: { project_id: projectId, ...params },
+    signal,
+  });
+  return mapPage(wire, mapRollout);
 }
 
-export async function getDeliveryRollout(projectId: string, id: string) {
-  const response = await api.get<DataEnvelope<DeliveryRolloutDetail>>(
-    `/delivery/rollouts/${id}/`,
+export async function getDeliveryRollout(
+  projectId: string,
+  id: string,
+  signal?: AbortSignal,
+) {
+  const response = await generated.executeOpenAPIOperationWithResponse(
+    "getDeliveryRolloutsById",
     {
-      params: { project_id: projectId },
+      path: { id },
+      query: { project_id: projectId },
+      signal,
     },
   );
-  return entity(response.data, response.headers);
+  return entityFromResponse(response, mapRolloutDetail);
 }
 
 export async function listDeliveryRolloutClusters(
   projectId: string,
   id: string,
   params: PageParams = {},
+  signal?: AbortSignal,
 ) {
-  const response = await api.get<DeliveryPage<DeliveryRolloutCluster>>(
-    `/delivery/rollouts/${id}/clusters/`,
-    {
-      params: { project_id: projectId, ...params },
-    },
-  );
-  return response.data;
+  const wire = await generated.getDeliveryRolloutsByIdClusters({
+    path: { id },
+    query: { project_id: projectId, ...params },
+    signal,
+  });
+  return mapPage(wire, mapRolloutCluster);
 }
 
 export async function listDeliveryRolloutEvents(
   projectId: string,
   id: string,
   params: PageParams = {},
+  signal?: AbortSignal,
 ) {
-  const response = await api.get<DeliveryPage<DeliveryRolloutEvent>>(
-    `/delivery/rollouts/${id}/events/`,
-    {
-      params: { project_id: projectId, ...params },
-    },
-  );
-  return response.data;
+  const wire = await generated.getDeliveryRolloutsByIdEvents({
+    path: { id },
+    query: { project_id: projectId, ...params },
+    signal,
+  });
+  return mapPage(wire, mapRolloutEvent);
 }
 
 export async function actOnDeliveryRollout(
@@ -1113,15 +1110,70 @@ export async function actOnDeliveryRollout(
   etag: string | number,
   reasonCode: string,
   key?: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.post<
-    DataEnvelope<{ rollout: DeliveryRollout; event: DeliveryRolloutEvent }>
-  >(
-    `/delivery/rollouts/${id}/${action}/`,
-    { project_id: projectId, reason_code: reasonCode },
-    { headers: mutationHeaders(etag, key) },
-  );
-  return entity(response.data, response.headers);
+  const common = {
+    path: { id },
+    body: { project_id: projectId, reason_code: reasonCode },
+    signal,
+  };
+  const ifMatch = quotedETag(etag);
+  const response =
+    action === "pause"
+      ? await generated.executeOpenAPIOperationWithResponse(
+          "postDeliveryRolloutsByIdPause",
+          {
+            ...common,
+            headerParams: {
+              "If-Match": ifMatch,
+              ...optionalIdempotencyHeader(key),
+            },
+          },
+        )
+      : action === "resume"
+        ? await generated.executeOpenAPIOperationWithResponse(
+            "postDeliveryRolloutsByIdResume",
+            {
+              ...common,
+              headerParams: {
+                "If-Match": ifMatch,
+                ...optionalIdempotencyHeader(key),
+              },
+            },
+          )
+        : action === "abort"
+          ? await generated.executeOpenAPIOperationWithResponse(
+              "postDeliveryRolloutsByIdAbort",
+              {
+                ...common,
+                headerParams: {
+                  "If-Match": ifMatch,
+                  ...optionalIdempotencyHeader(key),
+                },
+              },
+            )
+          : action === "retry"
+            ? await generated.executeOpenAPIOperationWithResponse(
+                "postDeliveryRolloutsByIdRetry",
+                {
+                  ...common,
+                  headerParams: {
+                    "If-Match": ifMatch,
+                    ...optionalIdempotencyHeader(key),
+                  },
+                },
+              )
+            : await generated.executeOpenAPIOperationWithResponse(
+                "postDeliveryRolloutsByIdRollback",
+                {
+                  ...common,
+                  headerParams: {
+                    "If-Match": ifMatch,
+                    ...optionalIdempotencyHeader(key),
+                  },
+                },
+              );
+  return camelizeKeys(requiredEnvelopeData(response.data));
 }
 
 export async function approveDeliveryRollout(
@@ -1135,54 +1187,63 @@ export async function approveDeliveryRollout(
   } & DeliveryContracts["DeliveryRolloutApproval"],
   etag: string | number,
   key?: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.post<
-    DataEnvelope<{
-      rollout: DeliveryRollout;
-      approval: DeliveryRolloutApproval;
-      event: DeliveryRolloutEvent;
-    }>
-  >(`/delivery/rollouts/${id}/approve/`, body, {
-    headers: mutationHeaders(etag, key),
-  });
-  return entity(response.data, response.headers);
+  const response = await generated.executeOpenAPIOperationWithResponse(
+    "postDeliveryRolloutsByIdApprove",
+    {
+      path: { id },
+      body,
+      headerParams: {
+        "If-Match": quotedETag(etag),
+        ...optionalIdempotencyHeader(key),
+      },
+      signal,
+    },
+  );
+  return camelizeKeys(requiredEnvelopeData(response.data));
 }
 
 export async function listClusterDeployments(
   projectId: string,
   params: PageParams & { cluster_id?: string; phase?: DeploymentPhase } = {},
+  signal?: AbortSignal,
 ) {
-  const response = await api.get<DeliveryPage<ClusterDeployment>>(
-    "/delivery/deployments/",
-    {
-      params: { project_id: projectId, ...params },
-    },
-  );
-  return response.data;
+  const wire = await generated.getDeliveryDeployments({
+    query: { project_id: projectId, ...params },
+    signal,
+  });
+  return mapPage(wire, mapDeployment);
 }
 
-export async function getClusterDeployment(projectId: string, id: string) {
-  const response = await api.get<DataEnvelope<ClusterDeploymentDetail>>(
-    `/delivery/deployments/${id}/`,
+export async function getClusterDeployment(
+  projectId: string,
+  id: string,
+  signal?: AbortSignal,
+) {
+  const response = await generated.executeOpenAPIOperationWithResponse(
+    "getDeliveryDeploymentsById",
     {
-      params: { project_id: projectId },
+      path: { id },
+      query: { project_id: projectId },
+      signal,
     },
   );
-  return entity(response.data, response.headers);
+  return entityFromResponse(response, mapDeploymentDetail);
 }
 
 export async function listClusterDeploymentEvents(
   projectId: string,
   id: string,
   params: PageParams = {},
+  signal?: AbortSignal,
 ) {
-  const response = await api.get<DeliveryPage<ClusterDeploymentEvent>>(
-    `/delivery/deployments/${id}/events/`,
-    {
-      params: { project_id: projectId, ...params },
-    },
-  );
-  return response.data;
+  const wire = await generated.getDeliveryDeploymentsByIdEvents({
+    path: { id },
+    query: { project_id: projectId, ...params },
+    signal,
+  });
+  return mapPage(wire, mapDeploymentEvent);
 }
 
 export async function actOnClusterDeployment(
@@ -1192,45 +1253,51 @@ export async function actOnClusterDeployment(
   etag: string | number,
   reasonCode: string,
   key?: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.post<
-    DataEnvelope<{
-      deployment: ClusterDeployment;
-      event: ClusterDeploymentEvent;
-    }>
-  >(
-    `/delivery/deployments/${id}/${action}/`,
-    { project_id: projectId, reason_code: reasonCode },
-    { headers: mutationHeaders(etag, key) },
-  );
-  return entity(response.data, response.headers);
+  const args = {
+    path: { id },
+    body: { project_id: projectId, reason_code: reasonCode },
+    headerParams: {
+      "If-Match": quotedETag(etag),
+      ...optionalIdempotencyHeader(key),
+    },
+    signal,
+  };
+  const response =
+    action === "reconcile"
+      ? await generated.executeOpenAPIOperationWithResponse(
+          "postDeliveryDeploymentsByIdReconcile",
+          args,
+        )
+      : await generated.executeOpenAPIOperationWithResponse(
+          "postDeliveryDeploymentsByIdSuspend",
+          args,
+        );
+  return camelizeKeys(requiredEnvelopeData(response.data));
 }
 
 export async function getClusterDeliveryInventory(
   projectId: string,
   clusterId: string,
+  signal?: AbortSignal,
 ) {
-  const response = await api.get<DataEnvelope<ClusterDeliveryInventory>>(
-    `/delivery/clusters/${clusterId}/inventory/`,
-    {
-      params: { project_id: projectId },
-    },
-  );
-  return response.data.data;
+  const wire = await generated.getDeliveryClustersByClusterIdInventory({
+    path: { clusterId },
+    query: { project_id: projectId },
+    signal,
+  });
+  return mapInventory(requiredEnvelopeData(wire));
 }
 
-export async function getDeliverySystemCompatibility() {
-  const response = await api.get<DataEnvelope<DeliverySystemCompatibility>>(
-    "/delivery/system/compatibility/",
-  );
-  return response.data.data;
+export async function getDeliverySystemCompatibility(signal?: AbortSignal) {
+  const wire = await generated.getDeliverySystemCompatibility({ signal });
+  return mapCompatibility(requiredEnvelopeData(wire));
 }
 
-export async function getDeliveryFleet() {
-  const response = await api.get<DataEnvelope<DeliveryFleet>>(
-    "/delivery/fleet/",
-  );
-  return response.data.data;
+export async function getDeliveryEstate(signal?: AbortSignal) {
+  const wire = await generated.getDeliveryEstate({ signal });
+  return mapEstate(requiredEnvelopeData(wire));
 }
 
 export function rolloutIsTerminal(state: RolloutState): boolean {
@@ -1296,8 +1363,8 @@ const systemCompatibilityMatchesWire: AssertNoPhantomWireKeys<
   DeliveryContracts["DeliverySystemCompatibility"]
 > = true;
 const deliveryFleetMatchesWire: AssertNoPhantomWireKeys<
-  DeliveryFleet,
-  DeliveryContracts["DeliveryFleet"]
+  DeliveryEstate,
+  DeliveryContracts["DeliveryEstate"]
 > = true;
 
 void [

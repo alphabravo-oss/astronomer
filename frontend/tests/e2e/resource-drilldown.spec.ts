@@ -1,6 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from "@playwright/test";
 
-import { seedAuth } from './helpers/auth';
+import { authMeWire, seedAuth } from "./helpers/auth";
 
 // GATE A drill-down: a resource table row is clickable into the generic
 // ResourceDetail (Overview + YAML tabs), while a per-row action button does
@@ -8,12 +8,12 @@ import { seedAuth } from './helpers/auth';
 // backend), mirroring data-table.spec.ts.
 
 const adminUser = {
-  id: 'user-admin',
-  username: 'admin',
-  email: 'admin@example.com',
-  displayName: 'Admin User',
-  provider: 'local',
-  globalRoles: ['admin'],
+  id: "user-admin",
+  username: "admin",
+  email: "admin@example.com",
+  displayName: "Admin User",
+  provider: "local",
+  globalRoles: ["admin"],
   isSuperuser: true,
   roles: { global: [], cluster: [], project: [] },
   enabled: true,
@@ -21,9 +21,9 @@ const adminUser = {
   createdAt: new Date().toISOString(),
 };
 
-const CLUSTER_ID = 'cluster-01';
-const SERVICE_NAME = 'my-svc';
-const SERVICE_NS = 'default';
+const CLUSTER_ID = "cluster-01";
+const SERVICE_NAME = "my-svc";
+const SERVICE_NS = "default";
 
 function apiResponse<T>(data: T) {
   return { status: 200, data };
@@ -32,15 +32,19 @@ function apiResponse<T>(data: T) {
 const cluster = {
   id: CLUSTER_ID,
   name: CLUSTER_ID,
-  displayName: 'Cluster 01',
-  description: '',
-  status: 'active',
-  health: { status: 'active', lastCheck: new Date().toISOString(), components: [] },
-  provider: 'aws',
-  environment: 'production',
-  region: 'us-east-1',
-  distribution: 'eks',
-  kubernetesVersion: '1.30',
+  displayName: "Cluster 01",
+  description: "",
+  status: "active",
+  health: {
+    status: "active",
+    lastCheck: new Date().toISOString(),
+    components: [],
+  },
+  provider: "aws",
+  environment: "production",
+  region: "us-east-1",
+  distribution: "eks",
+  kubernetesVersion: "1.30",
   nodeCount: 3,
   podCount: 42,
   namespaceCount: 8,
@@ -52,7 +56,7 @@ const cluster = {
   memoryPercentage: 33,
   labels: {},
   annotations: {},
-  agentVersion: 'e2e',
+  agentVersion: "e2e",
   lastHeartbeat: new Date().toISOString(),
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -63,66 +67,85 @@ const cluster = {
 const serviceRow = {
   name: SERVICE_NAME,
   namespace: SERVICE_NS,
-  type: 'ClusterIP',
-  clusterIP: '10.0.0.10',
-  ports: [{ port: 80, protocol: 'TCP' }],
+  type: "ClusterIP",
+  clusterIP: "10.0.0.10",
+  ports: [{ port: 80, protocol: "TCP" }],
   createdAt: new Date().toISOString(),
 };
 
 // Single Service object returned by the k8s proxy GET (raw upstream JSON).
 // Single-word label keys survive the client's snake->camel key transform.
 const serviceObject = {
-  apiVersion: 'v1',
-  kind: 'Service',
+  apiVersion: "v1",
+  kind: "Service",
   metadata: {
     name: SERVICE_NAME,
     namespace: SERVICE_NS,
-    uid: 'svc-uid-123',
-    creationTimestamp: '2024-01-01T00:00:00Z',
-    labels: { team: 'platform' },
-    ownerReferences: [{ kind: 'Deployment', name: 'my-deploy', uid: 'dep-uid-1' }],
+    uid: "svc-uid-123",
+    creationTimestamp: "2024-01-01T00:00:00Z",
+    labels: { team: "platform" },
+    ownerReferences: [
+      { kind: "Deployment", name: "my-deploy", uid: "dep-uid-1" },
+    ],
   },
-  spec: { type: 'ClusterIP', clusterIP: '10.0.0.10', ports: [{ port: 80, protocol: 'TCP' }] },
+  spec: {
+    type: "ClusterIP",
+    clusterIP: "10.0.0.10",
+    ports: [{ port: 80, protocol: "TCP" }],
+  },
   status: {},
 };
 
 // Events list returned by the k8s proxy GET with a fieldSelector for this object.
 const eventList = {
-  apiVersion: 'v1',
-  kind: 'EventList',
+  apiVersion: "v1",
+  kind: "EventList",
   items: [
     {
-      metadata: { uid: 'evt-uid-1' },
-      type: 'Warning',
-      reason: 'FailedScheduling',
-      message: 'no nodes available',
+      metadata: { uid: "evt-uid-1" },
+      type: "Warning",
+      reason: "FailedScheduling",
+      message: "no nodes available",
       count: 3,
-      lastTimestamp: '2024-01-01T01:00:00Z',
+      lastTimestamp: "2024-01-01T01:00:00Z",
     },
   ],
 };
 
 async function mockApi(page: Page) {
-  await page.route('**/api/v1/**', async (route) => {
+  await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
-    const path = url.pathname.replace(/^\/api\/v1/, '').replace(/\/$/, '') || '/';
+    const path =
+      url.pathname.replace(/^\/api\/v1/, "").replace(/\/$/, "") || "/";
     const method = route.request().method();
 
-    if (path === '/events/stream') return route.fulfill({ status: 204, body: '' });
-    if (path === '/auth/me') return route.fulfill({ json: apiResponse(adminUser) });
-    if (path === '/settings/features') return route.fulfill({ json: apiResponse({}) });
-    if (path === `/clusters/${CLUSTER_ID}` && method === 'GET') {
+    if (path === "/events/stream")
+      return route.fulfill({ status: 204, body: "" });
+    if (path === "/auth/me")
+      return route.fulfill({ json: apiResponse(authMeWire(adminUser)) });
+    if (path === "/settings/features")
+      return route.fulfill({ json: apiResponse({}) });
+    if (path === `/clusters/${CLUSTER_ID}` && method === "GET") {
       return route.fulfill({ json: apiResponse(cluster) });
     }
-    if (path === `/clusters/${CLUSTER_ID}/resources/services` && method === 'GET') {
+    if (
+      path === `/clusters/${CLUSTER_ID}/resources/services` &&
+      method === "GET"
+    ) {
       return route.fulfill({ json: apiResponse([serviceRow]) });
     }
     // Events feed (fieldSelector query) — match before the single-object route.
-    if (path === `/clusters/${CLUSTER_ID}/k8s/api/v1/namespaces/${SERVICE_NS}/events`) {
+    if (
+      path ===
+      `/clusters/${CLUSTER_ID}/k8s/api/v1/namespaces/${SERVICE_NS}/events`
+    ) {
       return route.fulfill({ json: eventList });
     }
     // Single Service via the k8s proxy: /clusters/{id}/k8s/api/v1/namespaces/{ns}/services/{name}
-    if (path === `/clusters/${CLUSTER_ID}/k8s/api/v1/namespaces/${SERVICE_NS}/services/${SERVICE_NAME}`) {
+    if (
+      path ===
+      `/clusters/${CLUSTER_ID}/k8s/api/v1/namespaces/${SERVICE_NS}/services/${SERVICE_NAME}`
+    ) {
       return route.fulfill({ json: serviceObject });
     }
     return route.fulfill({ json: apiResponse([]) });
@@ -133,76 +156,101 @@ test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
 
-test('drilldown: clicking a Service row opens its detail (Overview + YAML)', async ({ context, page }) => {
+test("drilldown: clicking a Service row opens its detail (Overview + YAML)", async ({
+  context,
+  page,
+}) => {
   await seedAuth(context, page, adminUser);
   await page.goto(`/dashboard/clusters/${CLUSTER_ID}/services`);
 
-  await expect(page.getByRole('heading', { name: 'Services' })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Services" })).toBeVisible();
 
   // The row is clickable: click somewhere that's not the name link or actions.
-  const row = page.locator('tbody tr').filter({ hasText: SERVICE_NAME }).first();
+  const row = page
+    .locator("tbody tr")
+    .filter({ hasText: SERVICE_NAME })
+    .first();
   await expect(row).toBeVisible();
-  await row.getByText('10.0.0.10').click();
+  await row.getByText("10.0.0.10").click();
 
   // Shareable detail URL: namespaced -> .../services/<ns>/<name>.
-  await expect(page).toHaveURL(new RegExp(`/dashboard/clusters/${CLUSTER_ID}/services/${SERVICE_NS}/${SERVICE_NAME}$`));
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/dashboard/clusters/${CLUSTER_ID}/services/${SERVICE_NS}/${SERVICE_NAME}$`,
+    ),
+  );
 
   // Overview: header shows the name; Metadata + Labels render.
-  await expect(page.getByRole('heading', { name: SERVICE_NAME })).toBeVisible();
-  await expect(page.getByText('Kind: Service')).toBeVisible();
-  await expect(page.getByText('Metadata')).toBeVisible();
-  await expect(page.getByText('Labels')).toBeVisible();
-  await expect(page.getByText('platform')).toBeVisible();
+  await expect(page.getByRole("heading", { name: SERVICE_NAME })).toBeVisible();
+  await expect(page.getByText("Kind: Service")).toBeVisible();
+  await expect(page.getByText("Metadata")).toBeVisible();
+  await expect(page.getByText("Labels")).toBeVisible();
+  await expect(page.getByText("platform")).toBeVisible();
 
   // YAML tab renders the panel (View/Edit toggle + editor toolbar). Scope to
   // the tab nav — the header also has a "Download YAML" action button named YAML.
-  await page.getByRole('navigation').getByRole('button', { name: 'YAML' }).click();
-  await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
-  await expect(page.getByText('YAML', { exact: true }).last()).toBeVisible();
+  await page.getByRole("tab", { name: "YAML" }).click();
+  await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+  await expect(page.getByText("YAML", { exact: true }).last()).toBeVisible();
 });
 
-test('drilldown: clicking the row action button does NOT navigate', async ({ context, page }) => {
+test("drilldown: clicking the row action button does NOT navigate", async ({
+  context,
+  page,
+}) => {
   await seedAuth(context, page, adminUser);
   await page.goto(`/dashboard/clusters/${CLUSTER_ID}/services`);
 
-  await expect(page.getByRole('heading', { name: 'Services' })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Services" })).toBeVisible();
 
-  const row = page.locator('tbody tr').filter({ hasText: SERVICE_NAME }).first();
+  const row = page
+    .locator("tbody tr")
+    .filter({ hasText: SERVICE_NAME })
+    .first();
   await expect(row).toBeVisible();
 
   // The per-row actions trigger (ActionMenu) lives in the last cell. Clicking
   // it opens the menu but must NOT drill into the detail route. Scroll it into
   // view first: on narrow viewports the click's own auto-scroll can fire a
   // trailing scroll event that immediately closes the just-opened menu.
-  const trigger = row.locator('button').last();
+  const trigger = row.locator("button").last();
   await trigger.scrollIntoViewIfNeeded();
   await trigger.click();
 
   // Still on the list page (the action's stopPropagation prevented row click).
-  await expect(page).toHaveURL(new RegExp(`/dashboard/clusters/${CLUSTER_ID}/services$`));
-  await expect(page.getByRole('heading', { name: 'Services' })).toBeVisible();
+  await expect(page).toHaveURL(
+    new RegExp(`/dashboard/clusters/${CLUSTER_ID}/services$`),
+  );
+  await expect(page.getByRole("heading", { name: "Services" })).toBeVisible();
   // The action menu opened (View YAML item visible) — confirms we hit the button.
-  await expect(page.getByText('View YAML').first()).toBeVisible();
+  await expect(page.getByText("View YAML").first()).toBeVisible();
 });
 
-test('drilldown: Events tab lists this object\'s events; Related shows owner refs', async ({ context, page }) => {
+test("drilldown: Events tab lists this object's events; Related shows owner refs", async ({
+  context,
+  page,
+}) => {
   await seedAuth(context, page, adminUser);
-  await page.goto(`/dashboard/clusters/${CLUSTER_ID}/services/${SERVICE_NS}/${SERVICE_NAME}`);
+  await page.goto(
+    `/dashboard/clusters/${CLUSTER_ID}/services/${SERVICE_NS}/${SERVICE_NAME}`,
+  );
 
-  await expect(page.getByRole('heading', { name: SERVICE_NAME })).toBeVisible();
+  await expect(page.getByRole("heading", { name: SERVICE_NAME })).toBeVisible();
 
   // Events tab: the mocked event renders (type/reason/message).
-  await page.getByRole('button', { name: 'Events' }).click();
-  await expect(page.getByText('FailedScheduling')).toBeVisible();
-  await expect(page.getByText('no nodes available')).toBeVisible();
+  await page.getByRole("tab", { name: "Events" }).click();
+  await expect(page.getByText("FailedScheduling")).toBeVisible();
+  await expect(page.getByText("no nodes available")).toBeVisible();
 
   // Related tab: owner reference renders as a drill-down link.
-  await page.getByRole('button', { name: 'Related' }).click();
-  await expect(page.getByText('Owned By')).toBeVisible();
-  const ownerLink = page.getByRole('link', { name: 'my-deploy' });
+  await page.getByRole("tab", { name: "Related" }).click();
+  await expect(page.getByText("Owned By")).toBeVisible();
+  const ownerLink = page.getByRole("link", { name: "my-deploy" });
   await expect(ownerLink).toBeVisible();
   await expect(ownerLink).toHaveAttribute(
-    'href',
-    new RegExp(`/dashboard/clusters/${CLUSTER_ID}/deployments/${SERVICE_NS}/my-deploy$`),
+    "href",
+    new RegExp(
+      `/dashboard/clusters/${CLUSTER_ID}/deployments/${SERVICE_NS}/my-deploy$`,
+    ),
   );
 });

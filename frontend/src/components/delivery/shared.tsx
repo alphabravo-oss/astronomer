@@ -13,13 +13,12 @@ import { ArrowLeft, FolderKanban, PackageOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type DeliveryListTab =
-  | "sources"
-  | "bundles"
-  | "targets"
-  | "rollouts"
-  | "deployments";
+  "sources" | "bundles" | "targets" | "rollouts" | "deployments";
 
-export function clusterDeliveryPath(clusterId: string, tab: string = ""): string {
+export function clusterDeliveryPath(
+  clusterId: string,
+  tab: string = "",
+): string {
   const suffix = tab ? `/${tab}` : "";
   return `/dashboard/clusters/${clusterId}/delivery${suffix}`;
 }

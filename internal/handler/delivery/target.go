@@ -15,7 +15,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
@@ -35,6 +37,16 @@ type TargetQueries interface {
 	GetComponentBundleVersion(context.Context, sqlc.GetComponentBundleVersionParams) (sqlc.ComponentBundleVersion, error)
 }
 
+type TargetMutationTx interface {
+	audit.OutboxQuerier
+	CreateDeliveryTarget(context.Context, sqlc.CreateDeliveryTargetParams) (sqlc.DeliveryTarget, error)
+	UpdateDeliveryTargetCAS(context.Context, sqlc.UpdateDeliveryTargetCASParams) (sqlc.DeliveryTarget, error)
+	RequestDeliveryTargetDeletionCAS(context.Context, sqlc.RequestDeliveryTargetDeletionCASParams) (sqlc.RequestDeliveryTargetDeletionCASRow, error)
+	MarkDeliveryTargetOrphaned(context.Context, sqlc.MarkDeliveryTargetOrphanedParams) (sqlc.MarkDeliveryTargetOrphanedRow, error)
+}
+
+type targetRunTxFunc func(context.Context, func(TargetMutationTx) error) error
+
 type TargetPreviewer interface {
 	Preview(context.Context, uuid.UUID) (rollout.PlanningSnapshot, placement.Result, error)
 }
@@ -48,6 +60,41 @@ type TargetHandler struct {
 	previewer TargetPreviewer
 	bus       *events.Bus
 	platform  PlatformScopeChecker
+	runTx     targetRunTxFunc
+}
+
+func (h *TargetHandler) SetRunTx(runTx targetRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *TargetHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
+
+func executeTargetMutation[T any](r *http.Request, h *TargetHandler, mutate func(TargetMutationTx) (T, error), fallback func() (T, error), describe func(T) deliveryAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("delivery target handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q TargetMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			return recordAuditOutbox(r, q, describe(result))
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 func (h *TargetHandler) SetPlatformScopeChecker(checker PlatformScopeChecker) {
@@ -199,13 +246,28 @@ func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor := middleware.AuthenticatedUserUUID(r.Context())
-	row, err := h.queries.CreateDeliveryTarget(r.Context(), sqlc.CreateDeliveryTargetParams{
+	params := sqlc.CreateDeliveryTargetParams{
 		ProjectID: projectID, Name: request.Name, Description: request.Description,
 		BundleVersionID: request.BundleVersionID, Placement: placementJSON,
 		RolloutPolicy: rolloutJSON, ReconciliationPolicy: reconcileJSON,
 		MaintenanceWindowPolicy: maintenanceJSON, Suspended: request.Suspended,
 		CreatedBy: actor, UpdatedBy: actor,
-	})
+	}
+	row, err := executeTargetMutation(r, h,
+		func(q TargetMutationTx) (sqlc.DeliveryTarget, error) {
+			return q.CreateDeliveryTarget(r.Context(), params)
+		},
+		func() (sqlc.DeliveryTarget, error) { return h.queries.CreateDeliveryTarget(r.Context(), params) },
+		func(row sqlc.DeliveryTarget) deliveryAuditEvent {
+			return deliveryAuditEvent{
+				action: "delivery.target.created", resourceType: "delivery_target", resourceID: row.ID.String(), resourceName: row.Name,
+				status: http.StatusCreated, detail: map[string]any{
+					"project_id": projectID.String(), "bundle_version_id": row.BundleVersionID.String(),
+					"approval_required": request.RolloutPolicy.ApprovalRequired, "suspended": row.Suspended,
+					"generation": row.Generation, "resource_version": row.ResourceVersion,
+				},
+			}
+		})
 	if err != nil {
 		respondDatabaseError(w, err)
 		return
@@ -217,14 +279,6 @@ func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	setEntityTag(w, row.ResourceVersion)
 	events.PublishChanged(h.bus, "delivery_target", "", row.ID.String(), map[string]any{"project_id": projectID.String(), "action": "created"})
-	recordAudit(r, h.queries, "delivery.target.created", "delivery_target", row.ID.String(), row.Name, map[string]any{
-		"project_id":        projectID.String(),
-		"bundle_version_id": row.BundleVersionID.String(),
-		"approval_required": request.RolloutPolicy.ApprovalRequired,
-		"suspended":         row.Suspended,
-		"generation":        row.Generation,
-		"resource_version":  row.ResourceVersion,
-	})
 	respondData(w, http.StatusCreated, response)
 }
 
@@ -301,13 +355,27 @@ func (h *TargetHandler) Update(w http.ResponseWriter, r *http.Request) {
 	placementJSON, _ := json.Marshal(merged.Placement)
 	rolloutJSON, _ := json.Marshal(merged.RolloutPolicy)
 	reconcileJSON, _ := json.Marshal(merged.ReconciliationPolicy)
-	row, err := h.queries.UpdateDeliveryTargetCAS(r.Context(), sqlc.UpdateDeliveryTargetCASParams{
+	params := sqlc.UpdateDeliveryTargetCASParams{
 		Description: merged.Description, BundleVersionID: merged.BundleVersionID,
 		Placement: placementJSON, RolloutPolicy: rolloutJSON,
 		ReconciliationPolicy: reconcileJSON, MaintenanceWindowPolicy: merged.MaintenanceWindowPolicy,
 		Suspended: merged.Suspended, UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()),
 		ID: targetID, ProjectID: projectID, ExpectedResourceVersion: expected,
-	})
+	}
+	row, err := executeTargetMutation(r, h,
+		func(q TargetMutationTx) (sqlc.DeliveryTarget, error) {
+			return q.UpdateDeliveryTargetCAS(r.Context(), params)
+		},
+		func() (sqlc.DeliveryTarget, error) { return h.queries.UpdateDeliveryTargetCAS(r.Context(), params) },
+		func(row sqlc.DeliveryTarget) deliveryAuditEvent {
+			return deliveryAuditEvent{
+				action: "delivery.target.updated", resourceType: "delivery_target", resourceID: row.ID.String(), resourceName: row.Name,
+				status: http.StatusOK, detail: map[string]any{
+					"project_id": projectID.String(), "bundle_version_id": row.BundleVersionID.String(),
+					"changed_fields": targetChangedFields(request), "generation": row.Generation, "resource_version": row.ResourceVersion,
+				},
+			}
+		})
 	if err != nil {
 		respondCASError(w, err)
 		return
@@ -319,13 +387,6 @@ func (h *TargetHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	setEntityTag(w, row.ResourceVersion)
 	events.PublishChanged(h.bus, "delivery_target", "", row.ID.String(), map[string]any{"project_id": projectID.String(), "action": "updated"})
-	recordAudit(r, h.queries, "delivery.target.updated", "delivery_target", row.ID.String(), row.Name, map[string]any{
-		"project_id":        projectID.String(),
-		"bundle_version_id": row.BundleVersionID.String(),
-		"changed_fields":    targetChangedFields(request),
-		"generation":        row.Generation,
-		"resource_version":  row.ResourceVersion,
-	})
 	respondData(w, http.StatusOK, response)
 }
 
@@ -335,34 +396,87 @@ func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusPreconditionRequired, "if_match_required", err.Error())
 		return
 	}
+	key, err := requiredIdempotencyKey(r)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		return
+	}
 	projectID, targetID, ok := targetScope(w, r)
 	if !ok {
 		return
 	}
-	if h == nil || h.queries == nil {
+	if h == nil || h.queries == nil || h.runTx == nil {
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery target persistence is unavailable")
 		return
 	}
-	row, err := h.queries.RequestDeliveryTargetDeletionCAS(r.Context(), sqlc.RequestDeliveryTargetDeletionCASParams{
+	params := sqlc.RequestDeliveryTargetDeletionCASParams{
 		UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()), ID: targetID, ProjectID: projectID,
 		ExpectedResourceVersion: expected,
+	}
+	actor := middleware.AuthenticatedUserUUID(r.Context())
+	if !actor.Valid || uuid.UUID(actor.Bytes) == uuid.Nil {
+		respondError(w, http.StatusUnauthorized, "authentication_required", "authenticated actor is required")
+		return
+	}
+	digest, err := asyncop.Digest(struct {
+		ProjectID       uuid.UUID `json:"project_id"`
+		TargetID        uuid.UUID `json:"target_id"`
+		ResourceVersion int64     `json:"resource_version"`
+	}{projectID, targetID, expected})
+	if err != nil {
+		respondDatabaseError(w, err)
+		return
+	}
+	var row sqlc.RequestDeliveryTargetDeletionCASRow
+	var receipt asyncop.Receipt
+	replayed := false
+	err = h.runTx(r.Context(), func(q TargetMutationTx) error {
+		store, ok := q.(asyncop.Store)
+		if !ok {
+			return asyncop.ErrCorrupt
+		}
+		claim, claimErr := asyncop.ClaimKey(r.Context(), store, asyncop.ClaimRequest{
+			ActorID: uuid.UUID(actor.Bytes), ProjectID: projectID, Operation: "target.delete", Resource: "delivery_target", TargetID: targetID,
+			IdempotencyKey: key, RequestDigest: digest, OperationTable: "delivery_targets",
+		})
+		if claimErr != nil {
+			return claimErr
+		}
+		if claim.Replay {
+			receipt, replayed = claim.Receipt, true
+			return nil
+		}
+		var mutationErr error
+		row, mutationErr = q.RequestDeliveryTargetDeletionCAS(r.Context(), params)
+		if mutationErr != nil {
+			return mutationErr
+		}
+		receipt = asyncop.NewReceipt(row.ID, "target.delete", "delivery_target", targetID, projectID,
+			"/api/v1/delivery/targets/"+targetID.String()+"/?project_id="+projectID.String(), time.Now())
+		if attachErr := asyncop.Attach(r.Context(), store, claim, receipt); attachErr != nil {
+			return attachErr
+		}
+		return recordAuditOutbox(r, q, deliveryAuditEvent{
+			action: "delivery.target.deletion_requested", resourceType: "delivery_target", resourceID: row.ID.String(),
+			status: http.StatusAccepted, detail: map[string]any{
+				"project_id": projectID.String(), "deployment_count": row.DeploymentCount,
+				"deletion_state": row.DeletionState, "resource_version": row.ResourceVersion,
+			},
+		})
 	})
 	if err != nil {
+		if errors.Is(err, asyncop.ErrConflict) {
+			respondError(w, http.StatusConflict, "idempotency_conflict", err.Error())
+			return
+		}
 		respondCASError(w, err)
 		return
 	}
-	setEntityTag(w, row.ResourceVersion)
-	events.PublishChanged(h.bus, "delivery_target", "", row.ID.String(), map[string]any{"project_id": projectID.String(), "action": "deleting", "deployment_count": row.DeploymentCount})
-	recordAudit(r, h.queries, "delivery.target.deletion_requested", "delivery_target", row.ID.String(), "", map[string]any{
-		"project_id":       projectID.String(),
-		"deployment_count": row.DeploymentCount,
-		"deletion_state":   row.DeletionState,
-		"resource_version": row.ResourceVersion,
-	})
-	respondData(w, http.StatusAccepted, map[string]any{
-		"id": row.ID, "deletion_state": row.DeletionState, "resource_version": row.ResourceVersion,
-		"deployment_count": row.DeploymentCount,
-	})
+	if !replayed {
+		setEntityTag(w, row.ResourceVersion)
+		events.PublishChanged(h.bus, "delivery_target", "", row.ID.String(), map[string]any{"project_id": projectID.String(), "action": "deleting", "deployment_count": row.DeploymentCount})
+	}
+	respondAcceptedOperation(w, receipt.StatusURL, receipt)
 }
 
 func (h *TargetHandler) Orphan(w http.ResponseWriter, r *http.Request) {
@@ -379,21 +493,31 @@ func (h *TargetHandler) Orphan(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery target persistence is unavailable")
 		return
 	}
-	row, err := h.queries.MarkDeliveryTargetOrphaned(r.Context(), sqlc.MarkDeliveryTargetOrphanedParams{
+	params := sqlc.MarkDeliveryTargetOrphanedParams{
 		UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()), ID: targetID, ProjectID: projectID,
 		ExpectedResourceVersion: expected,
-	})
+	}
+	row, err := executeTargetMutation(r, h,
+		func(q TargetMutationTx) (sqlc.MarkDeliveryTargetOrphanedRow, error) {
+			return q.MarkDeliveryTargetOrphaned(r.Context(), params)
+		},
+		func() (sqlc.MarkDeliveryTargetOrphanedRow, error) {
+			return h.queries.MarkDeliveryTargetOrphaned(r.Context(), params)
+		},
+		func(row sqlc.MarkDeliveryTargetOrphanedRow) deliveryAuditEvent {
+			return deliveryAuditEvent{
+				action: "delivery.target.orphaned", resourceType: "delivery_target", resourceID: row.ID.String(),
+				status: http.StatusOK, detail: map[string]any{
+					"project_id": projectID.String(), "deletion_state": row.DeletionState, "resource_version": row.ResourceVersion,
+				},
+			}
+		})
 	if err != nil {
 		respondCASError(w, err)
 		return
 	}
 	setEntityTag(w, row.ResourceVersion)
 	events.PublishChanged(h.bus, "delivery_target", "", row.ID.String(), map[string]any{"project_id": projectID.String(), "action": "orphaned"})
-	recordAudit(r, h.queries, "delivery.target.orphaned", "delivery_target", row.ID.String(), "", map[string]any{
-		"project_id":       projectID.String(),
-		"deletion_state":   row.DeletionState,
-		"resource_version": row.ResourceVersion,
-	})
 	respondData(w, http.StatusOK, map[string]any{"id": row.ID, "deletion_state": row.DeletionState, "resource_version": row.ResourceVersion})
 }
 
@@ -721,6 +845,8 @@ func respondCASError(w http.ResponseWriter, err error) {
 
 func respondRolloutError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, asyncop.ErrConflict):
+		respondError(w, http.StatusConflict, "idempotency_conflict", err.Error())
 	case rollout.HasCode(err, rollout.CodePreviewStale), rollout.HasCode(err, rollout.CodeTargetChanged), rollout.HasCode(err, rollout.CodeIdempotencyConflict):
 		respondError(w, http.StatusConflict, string(extractRolloutCode(err)), err.Error())
 	case rollout.HasCode(err, rollout.CodeInvalidInput), rollout.HasCode(err, rollout.CodeNoClusters), rollout.HasCode(err, rollout.CodeInvalidCohorts):

@@ -44,6 +44,27 @@ SET failed_login_count = failed_login_count + 1,
     updated_at         = now()
 WHERE id = $1;
 
+-- name: RecordFailedLoginAttempt :one
+-- Race-safe lockout transition. The increment and threshold decision run
+-- against the row-locked current count, so concurrent bad passwords cannot
+-- both observe the same stale pre-increment value and evade the threshold.
+UPDATE users
+SET failed_login_count = failed_login_count + 1,
+    failed_login_at = sqlc.arg(failed_login_at),
+    locked_until = CASE
+        WHEN failed_login_count + 1 >= sqlc.arg(lockout_threshold)::int
+        THEN sqlc.arg(locked_until)
+        ELSE locked_until
+    END,
+    locked_reason = CASE
+        WHEN failed_login_count + 1 >= sqlc.arg(lockout_threshold)::int
+        THEN sqlc.arg(locked_reason)
+        ELSE locked_reason
+    END,
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+RETURNING *;
+
 -- name: ResetFailedLoginCount :exec
 -- Called on a successful login. Also clears any expired lock so the next
 -- failed-attempt cycle starts from a clean state.
@@ -106,8 +127,19 @@ DELETE FROM jwt_revocations WHERE expires_at < now();
 -- name: GetSSOConfigurationByID :one
 SELECT * FROM sso_configurations WHERE id = $1;
 
+-- name: GetSSOConfigurationByIDForUpdate :one
+-- Transaction-only read used by delete so the existence decision, delete,
+-- and mandatory audit intent share one serialization point.
+SELECT * FROM sso_configurations WHERE id = $1 FOR UPDATE;
+
 -- name: GetSSOConfigurationByProvider :one
 SELECT * FROM sso_configurations WHERE provider = $1;
+
+-- name: LockSSOProviderKey :exec
+-- A row lock cannot serialize two concurrent creates when the provider row
+-- does not exist yet. This transaction-scoped advisory lock gives each
+-- canonical provider key a stable lock before the transaction re-reads it.
+SELECT pg_advisory_xact_lock(hashtextextended('astronomer:sso-provider:' || sqlc.arg(provider_key)::text, 0));
 
 -- name: ListSSOConfigurations :many
 SELECT * FROM sso_configurations ORDER BY created_at DESC LIMIT $1 OFFSET $2;

@@ -13,26 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countLokiIngestTokens = `-- name: CountLokiIngestTokens :one
-SELECT count(*) FROM loki_ingest_tokens
-`
-
-func (q *Queries) CountLokiIngestTokens(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countLokiIngestTokens)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const deleteLokiIngestTokenByCluster = `-- name: DeleteLokiIngestTokenByCluster :exec
-DELETE FROM loki_ingest_tokens WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteLokiIngestTokenByCluster(ctx context.Context, clusterID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteLokiIngestTokenByCluster, clusterID)
-	return err
-}
-
 const getLokiIngestTokenByCluster = `-- name: GetLokiIngestTokenByCluster :one
 SELECT id, cluster_id, token_hash, token_encrypted, created_at, rotated_at, created_by_id FROM loki_ingest_tokens WHERE cluster_id = $1
 `

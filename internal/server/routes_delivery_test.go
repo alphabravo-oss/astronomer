@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
@@ -38,6 +39,34 @@ type deliverySourceRouteStore struct {
 	resolutionCalls int
 	lastGet         sqlc.GetDeliverySourceParams
 	lastResolution  sqlc.CreateDeliverySourceResolutionAndOutboxParams
+	idempotency     map[string]sqlc.OperationIdempotencyKey
+}
+
+func (s *deliverySourceRouteStore) ReserveOperationIdempotencyKey(_ context.Context, arg sqlc.ReserveOperationIdempotencyKeyParams) (sqlc.OperationIdempotencyKey, error) {
+	if s.idempotency == nil {
+		s.idempotency = map[string]sqlc.OperationIdempotencyKey{}
+	}
+	key := arg.Scope + "\x00" + arg.IdempotencyKey
+	if row, ok := s.idempotency[key]; ok {
+		return row, nil
+	}
+	row := sqlc.OperationIdempotencyKey{Scope: arg.Scope, IdempotencyKey: arg.IdempotencyKey}
+	s.idempotency[key] = row
+	return row, nil
+}
+
+func (s *deliverySourceRouteStore) AttachOperationIdempotencyKey(_ context.Context, arg sqlc.AttachOperationIdempotencyKeyParams) (sqlc.OperationIdempotencyKey, error) {
+	key := arg.Scope + "\x00" + arg.IdempotencyKey
+	row := s.idempotency[key]
+	row.OperationTable = arg.OperationTable
+	row.OperationID = pgtype.UUID{Bytes: arg.OperationID, Valid: true}
+	row.Response = append([]byte(nil), arg.Response...)
+	s.idempotency[key] = row
+	return row, nil
+}
+
+func (s *deliverySourceRouteStore) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	return sqlc.AuditOutbox{ID: arg.ID}, nil
 }
 
 func (s *deliverySourceRouteStore) CountDeliverySources(context.Context, sqlc.CountDeliverySourcesParams) (int64, error) {
@@ -387,7 +416,9 @@ func newDeliveryRouteTestRouter(t *testing.T, bindings []rbac.RoleBinding, sourc
 		JWT: jwtManager, RBACEngine: rbac.NewEngine(), RBACQueries: deliveryRouteRBACQuerier{bindings: bindings},
 	}
 	if sources != nil {
-		deps.DeliverySources = deliveryhandler.NewSourceHandler(sources, nil, 1)
+		handler := deliveryhandler.NewSourceHandler(sources, nil, 1)
+		handler.SetRunTx(func(_ context.Context, fn func(deliveryhandler.SourceMutationTx) error) error { return fn(sources) })
+		deps.DeliverySources = handler
 	}
 	if bundles != nil {
 		deps.DeliveryBundles = deliveryhandler.NewBundleHandler(bundles)

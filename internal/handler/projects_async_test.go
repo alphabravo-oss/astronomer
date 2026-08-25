@@ -186,7 +186,7 @@ func TestProjectHandlerUpsertAndEnqueueUsesTaskOutboxWithoutRequester(t *testing
 	if !row.DedupeKey.Valid || row.DedupeKey.String != "project_reconcile:apply:"+projectID.String()+":"+clusterID.String()+":team-a" {
 		t.Fatalf("dedupe key = %+v", row.DedupeKey)
 	}
-	if row.TaskType != tasks.ProjectReconcileType || row.QueueName != "default" || row.MaxDeliveryAttempts != 20 {
+	if row.TaskType != tasks.ProjectReconcileType || row.QueueName != tasks.ClusterTemplateApplyQueueName || row.MaxDeliveryAttempts != 20 {
 		t.Fatalf("outbox row = %+v", row)
 	}
 	var payload tasks.ProjectReconcilePayload

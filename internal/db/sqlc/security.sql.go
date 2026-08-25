@@ -8,10 +8,134 @@ package sqlc
 import (
 	"context"
 	"encoding/json"
+	"net/netip"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const cancelSecurityScan = `-- name: CancelSecurityScan :one
+UPDATE security_scan_results
+SET status = 'cancelled',
+    cancel_requested_at = now(),
+    terminal_reason = 'cancelled by operator',
+    next_poll_at = NULL,
+    poll_owner = '',
+    poll_lease_expires_at = NULL,
+    completed_at = now(),
+    updated_at = now()
+WHERE cluster_id = $1
+  AND id = $2
+  AND status IN ('pending', 'running', 'in_progress')
+RETURNING id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings, poll_generation, poll_attempt, next_poll_at, poll_deadline, poll_owner, poll_lease_expires_at, upstream_report_name, terminal_reason, cancel_requested_at
+`
+
+type CancelSecurityScanParams struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	ID        uuid.UUID `json:"id"`
+}
+
+func (q *Queries) CancelSecurityScan(ctx context.Context, arg CancelSecurityScanParams) (SecurityScanResult, error) {
+	row := q.db.QueryRow(ctx, cancelSecurityScan, arg.ClusterID, arg.ID)
+	var i SecurityScanResult
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.ScanType,
+		&i.Status,
+		&i.Summary,
+		&i.Results,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.InitiatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ClusterScanName,
+		&i.Passed,
+		&i.Failed,
+		&i.Warned,
+		&i.Skipped,
+		&i.Findings,
+		&i.PollGeneration,
+		&i.PollAttempt,
+		&i.NextPollAt,
+		&i.PollDeadline,
+		&i.PollOwner,
+		&i.PollLeaseExpiresAt,
+		&i.UpstreamReportName,
+		&i.TerminalReason,
+		&i.CancelRequestedAt,
+	)
+	return i, err
+}
+
+const claimSecurityScanPoll = `-- name: ClaimSecurityScanPoll :one
+UPDATE security_scan_results
+SET poll_owner = $1,
+    poll_lease_expires_at = $2,
+    poll_attempt = poll_attempt + 1,
+    next_poll_at = NULL,
+    updated_at = now()
+WHERE id = $3
+  AND poll_generation = $4
+  AND status IN ('pending', 'running', 'in_progress')
+  AND cancel_requested_at IS NULL
+  AND (next_poll_at IS NULL OR next_poll_at <= $5)
+  AND (poll_lease_expires_at IS NULL OR poll_lease_expires_at <= $5)
+RETURNING id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings, poll_generation, poll_attempt, next_poll_at, poll_deadline, poll_owner, poll_lease_expires_at, upstream_report_name, terminal_reason, cancel_requested_at
+`
+
+type ClaimSecurityScanPollParams struct {
+	Owner          string             `json:"owner"`
+	LeaseExpiresAt pgtype.Timestamptz `json:"lease_expires_at"`
+	ID             uuid.UUID          `json:"id"`
+	Generation     int64              `json:"generation"`
+	NowAt          pgtype.Timestamptz `json:"now_at"`
+}
+
+// A poll is executable only after winning the row's renewable lease. The
+// generation guard prevents a stale delivery from a prior retry generation
+// from completing or failing a newly restarted scan.
+func (q *Queries) ClaimSecurityScanPoll(ctx context.Context, arg ClaimSecurityScanPollParams) (SecurityScanResult, error) {
+	row := q.db.QueryRow(ctx, claimSecurityScanPoll,
+		arg.Owner,
+		arg.LeaseExpiresAt,
+		arg.ID,
+		arg.Generation,
+		arg.NowAt,
+	)
+	var i SecurityScanResult
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.ScanType,
+		&i.Status,
+		&i.Summary,
+		&i.Results,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.InitiatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ClusterScanName,
+		&i.Passed,
+		&i.Failed,
+		&i.Warned,
+		&i.Skipped,
+		&i.Findings,
+		&i.PollGeneration,
+		&i.PollAttempt,
+		&i.NextPollAt,
+		&i.PollDeadline,
+		&i.PollOwner,
+		&i.PollLeaseExpiresAt,
+		&i.UpstreamReportName,
+		&i.TerminalReason,
+		&i.CancelRequestedAt,
+	)
+	return i, err
+}
 
 const countClusterSecurityPolicies = `-- name: CountClusterSecurityPolicies :one
 SELECT count(*) FROM cluster_security_policies
@@ -36,7 +160,9 @@ func (q *Queries) CountPodSecurityTemplates(ctx context.Context) (int64, error) 
 }
 
 const countSecurityScanResults = `-- name: CountSecurityScanResults :one
-SELECT count(*) FROM security_scan_results
+SELECT count(*)
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
 `
 
 func (q *Queries) CountSecurityScanResults(ctx context.Context) (int64, error) {
@@ -46,13 +172,41 @@ func (q *Queries) CountSecurityScanResults(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countSecurityScanResultsByCluster = `-- name: CountSecurityScanResultsByCluster :one
+SELECT count(*)
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.cluster_id = $1
+`
+
+func (q *Queries) CountSecurityScanResultsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSecurityScanResultsByCluster, clusterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSecurityScanResultsForScopes = `-- name: CountSecurityScanResultsForScopes :one
+SELECT count(*)
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.cluster_id = ANY($1::uuid[])
+`
+
+func (q *Queries) CountSecurityScanResultsForScopes(ctx context.Context, clusterIds []uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSecurityScanResultsForScopes, clusterIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createCISScan = `-- name: CreateCISScan :one
 INSERT INTO security_scan_results (
     cluster_id, scan_type, status, summary, results,
-    cluster_scan_name, initiated_by_id
+    cluster_scan_name, initiated_by_id, next_poll_at, poll_deadline
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings
+VALUES ($1, $2, $3, $4, $5, $6, $7, now() + interval '30 seconds', now() + interval '35 minutes')
+RETURNING id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings, poll_generation, poll_attempt, next_poll_at, poll_deadline, poll_owner, poll_lease_expires_at, upstream_report_name, terminal_reason, cancel_requested_at
 `
 
 type CreateCISScanParams struct {
@@ -96,6 +250,167 @@ func (q *Queries) CreateCISScan(ctx context.Context, arg CreateCISScanParams) (S
 		&i.Warned,
 		&i.Skipped,
 		&i.Findings,
+		&i.PollGeneration,
+		&i.PollAttempt,
+		&i.NextPollAt,
+		&i.PollDeadline,
+		&i.PollOwner,
+		&i.PollLeaseExpiresAt,
+		&i.UpstreamReportName,
+		&i.TerminalReason,
+		&i.CancelRequestedAt,
+	)
+	return i, err
+}
+
+const createCISScanWithOutbox = `-- name: CreateCISScanWithOutbox :one
+WITH scan AS (
+    INSERT INTO security_scan_results (
+        cluster_id, scan_type, status, summary, results,
+        cluster_scan_name, initiated_by_id, next_poll_at, poll_deadline
+    )
+    VALUES (
+        $1, $2, 'running', '{}'::jsonb, '[]'::jsonb,
+        $3, $4,
+        now() + interval '30 seconds', now() + interval '35 minutes'
+    )
+    RETURNING id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings, poll_generation, poll_attempt, next_poll_at, poll_deadline, poll_owner, poll_lease_expires_at, upstream_report_name, terminal_reason, cancel_requested_at
+), task AS (
+    INSERT INTO task_outbox (
+        dedupe_key, task_type, payload, queue_name, max_retry,
+        timeout_seconds, unique_seconds, max_delivery_attempts, next_attempt_at
+    )
+    SELECT
+        'security_scan_ingest:' || scan.id::text || ':1',
+        'security:ingest_scan_results',
+        convert_to(jsonb_build_object('scan_id', scan.id::text)::text, 'UTF8'),
+        'tunnel', 3, 120, 0, 20, scan.next_poll_at
+    FROM scan
+    ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO UPDATE
+    SET status = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.status ELSE 'pending' END,
+        attempt_count = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.attempt_count ELSE 0 END,
+        next_attempt_at = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.next_attempt_at ELSE EXCLUDED.next_attempt_at END,
+        locked_until = NULL,
+        last_error = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.last_error ELSE '' END,
+        updated_at = now()
+    RETURNING id
+), audit_intent AS (
+    INSERT INTO audit_outbox (
+        id, dedupe_key, event_created_at, schema_version, user_id,
+        actor_auth_method, action, resource_type, resource_id, resource_name,
+        http_method, path, status_code, request_id, ip_address, user_agent,
+        detail, source, correlation_id, action_class, max_attempts
+    )
+    SELECT
+        $5, $6, now(), 'audit-v1',
+        $4, $7,
+        'security.scan.create', 'security_scan', scan.id::text,
+        scan.cluster_scan_name, $8, $9,
+        201, $10, $11,
+        $12, $13, 'service',
+        $14, 'mutation', 20
+    FROM scan
+    ON CONFLICT (dedupe_key) DO UPDATE
+    SET dedupe_key = EXCLUDED.dedupe_key
+    RETURNING id
+)
+SELECT scan.id, scan.cluster_id, scan.scan_type, scan.status, scan.summary, scan.results, scan.started_at, scan.completed_at, scan.initiated_by_id, scan.created_at, scan.updated_at, scan.cluster_scan_name, scan.passed, scan.failed, scan.warned, scan.skipped, scan.findings, scan.poll_generation, scan.poll_attempt, scan.next_poll_at, scan.poll_deadline, scan.poll_owner, scan.poll_lease_expires_at, scan.upstream_report_name, scan.terminal_reason, scan.cancel_requested_at FROM scan, task, audit_intent
+`
+
+type CreateCISScanWithOutboxParams struct {
+	ClusterID            uuid.UUID       `json:"cluster_id"`
+	ScanType             string          `json:"scan_type"`
+	ClusterScanName      string          `json:"cluster_scan_name"`
+	InitiatedByID        pgtype.UUID     `json:"initiated_by_id"`
+	AuditID              uuid.UUID       `json:"audit_id"`
+	AuditDedupeKey       string          `json:"audit_dedupe_key"`
+	AuditActorAuthMethod string          `json:"audit_actor_auth_method"`
+	AuditHttpMethod      string          `json:"audit_http_method"`
+	AuditPath            string          `json:"audit_path"`
+	AuditRequestID       string          `json:"audit_request_id"`
+	AuditIpAddress       *netip.Addr     `json:"audit_ip_address"`
+	AuditUserAgent       string          `json:"audit_user_agent"`
+	AuditDetail          json.RawMessage `json:"audit_detail"`
+	AuditCorrelationID   string          `json:"audit_correlation_id"`
+}
+
+type CreateCISScanWithOutboxRow struct {
+	ID                 uuid.UUID          `json:"id"`
+	ClusterID          uuid.UUID          `json:"cluster_id"`
+	ScanType           string             `json:"scan_type"`
+	Status             string             `json:"status"`
+	Summary            json.RawMessage    `json:"summary"`
+	Results            json.RawMessage    `json:"results"`
+	StartedAt          time.Time          `json:"started_at"`
+	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
+	InitiatedByID      pgtype.UUID        `json:"initiated_by_id"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	ClusterScanName    string             `json:"cluster_scan_name"`
+	Passed             int32              `json:"passed"`
+	Failed             int32              `json:"failed"`
+	Warned             int32              `json:"warned"`
+	Skipped            int32              `json:"skipped"`
+	Findings           json.RawMessage    `json:"findings"`
+	PollGeneration     int64              `json:"poll_generation"`
+	PollAttempt        int32              `json:"poll_attempt"`
+	NextPollAt         pgtype.Timestamptz `json:"next_poll_at"`
+	PollDeadline       pgtype.Timestamptz `json:"poll_deadline"`
+	PollOwner          string             `json:"poll_owner"`
+	PollLeaseExpiresAt pgtype.Timestamptz `json:"poll_lease_expires_at"`
+	UpstreamReportName string             `json:"upstream_report_name"`
+	TerminalReason     string             `json:"terminal_reason"`
+	CancelRequestedAt  pgtype.Timestamptz `json:"cancel_requested_at"`
+}
+
+// Create the management-plane scan row and its first tunnel-queue delivery
+// intent atomically. The payload needs only the generated scan id: every other
+// mutable lifecycle field is reloaded under a database lease by the consumer.
+func (q *Queries) CreateCISScanWithOutbox(ctx context.Context, arg CreateCISScanWithOutboxParams) (CreateCISScanWithOutboxRow, error) {
+	row := q.db.QueryRow(ctx, createCISScanWithOutbox,
+		arg.ClusterID,
+		arg.ScanType,
+		arg.ClusterScanName,
+		arg.InitiatedByID,
+		arg.AuditID,
+		arg.AuditDedupeKey,
+		arg.AuditActorAuthMethod,
+		arg.AuditHttpMethod,
+		arg.AuditPath,
+		arg.AuditRequestID,
+		arg.AuditIpAddress,
+		arg.AuditUserAgent,
+		arg.AuditDetail,
+		arg.AuditCorrelationID,
+	)
+	var i CreateCISScanWithOutboxRow
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.ScanType,
+		&i.Status,
+		&i.Summary,
+		&i.Results,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.InitiatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ClusterScanName,
+		&i.Passed,
+		&i.Failed,
+		&i.Warned,
+		&i.Skipped,
+		&i.Findings,
+		&i.PollGeneration,
+		&i.PollAttempt,
+		&i.NextPollAt,
+		&i.PollDeadline,
+		&i.PollOwner,
+		&i.PollLeaseExpiresAt,
+		&i.UpstreamReportName,
+		&i.TerminalReason,
+		&i.CancelRequestedAt,
 	)
 	return i, err
 }
@@ -192,7 +507,7 @@ func (q *Queries) CreatePodSecurityTemplate(ctx context.Context, arg CreatePodSe
 const createSecurityScanResult = `-- name: CreateSecurityScanResult :one
 INSERT INTO security_scan_results (cluster_id, scan_type, status, summary, results, initiated_by_id)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings
+RETURNING id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings, poll_generation, poll_attempt, next_poll_at, poll_deadline, poll_owner, poll_lease_expires_at, upstream_report_name, terminal_reason, cancel_requested_at
 `
 
 type CreateSecurityScanResultParams struct {
@@ -232,6 +547,15 @@ func (q *Queries) CreateSecurityScanResult(ctx context.Context, arg CreateSecuri
 		&i.Warned,
 		&i.Skipped,
 		&i.Findings,
+		&i.PollGeneration,
+		&i.PollAttempt,
+		&i.NextPollAt,
+		&i.PollDeadline,
+		&i.PollOwner,
+		&i.PollLeaseExpiresAt,
+		&i.UpstreamReportName,
+		&i.TerminalReason,
+		&i.CancelRequestedAt,
 	)
 	return i, err
 }
@@ -252,6 +576,189 @@ DELETE FROM pod_security_templates WHERE id = $1
 func (q *Queries) DeletePodSecurityTemplate(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deletePodSecurityTemplate, id)
 	return err
+}
+
+const failSecurityScanPoll = `-- name: FailSecurityScanPoll :execrows
+UPDATE security_scan_results
+SET status = 'failed',
+    terminal_reason = left($1, 2048),
+    summary = jsonb_set(coalesce(summary, '{}'::jsonb), '{error}', to_jsonb(left($1, 2048)::text), true),
+    next_poll_at = NULL,
+    poll_owner = '',
+    poll_lease_expires_at = NULL,
+    completed_at = now(),
+    updated_at = now()
+WHERE id = $2
+  AND poll_generation = $3
+  AND ($4::text = '' OR poll_owner = $4)
+  AND status IN ('pending', 'running', 'in_progress')
+  AND cancel_requested_at IS NULL
+`
+
+type FailSecurityScanPollParams struct {
+	Reason     string    `json:"reason"`
+	ID         uuid.UUID `json:"id"`
+	Generation int64     `json:"generation"`
+	Owner      string    `json:"owner"`
+}
+
+func (q *Queries) FailSecurityScanPoll(ctx context.Context, arg FailSecurityScanPollParams) (int64, error) {
+	result, err := q.db.Exec(ctx, failSecurityScanPoll,
+		arg.Reason,
+		arg.ID,
+		arg.Generation,
+		arg.Owner,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const finalizeSecurityScanReport = `-- name: FinalizeSecurityScanReport :execrows
+UPDATE security_scan_results
+SET status = 'completed',
+    summary = $1,
+    results = $2,
+    passed = $3,
+    failed = $4,
+    warned = $5,
+    skipped = $6,
+    findings = $7,
+    upstream_report_name = $8,
+    terminal_reason = '',
+    next_poll_at = NULL,
+    poll_owner = '',
+    poll_lease_expires_at = NULL,
+    completed_at = now(),
+    updated_at = now()
+WHERE id = $9
+  AND poll_generation = $10
+  AND poll_owner = $11
+  AND status IN ('pending', 'running', 'in_progress')
+  AND cancel_requested_at IS NULL
+`
+
+type FinalizeSecurityScanReportParams struct {
+	Summary            json.RawMessage `json:"summary"`
+	Results            json.RawMessage `json:"results"`
+	Passed             int32           `json:"passed"`
+	Failed             int32           `json:"failed"`
+	Warned             int32           `json:"warned"`
+	Skipped            int32           `json:"skipped"`
+	Findings           json.RawMessage `json:"findings"`
+	UpstreamReportName string          `json:"upstream_report_name"`
+	ID                 uuid.UUID       `json:"id"`
+	Generation         int64           `json:"generation"`
+	Owner              string          `json:"owner"`
+}
+
+func (q *Queries) FinalizeSecurityScanReport(ctx context.Context, arg FinalizeSecurityScanReportParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finalizeSecurityScanReport,
+		arg.Summary,
+		arg.Results,
+		arg.Passed,
+		arg.Failed,
+		arg.Warned,
+		arg.Skipped,
+		arg.Findings,
+		arg.UpstreamReportName,
+		arg.ID,
+		arg.Generation,
+		arg.Owner,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getActiveSecurityScanResultByID = `-- name: GetActiveSecurityScanResultByID :one
+SELECT s.id, s.cluster_id, s.scan_type, s.status, s.summary, s.results, s.started_at, s.completed_at, s.initiated_by_id, s.created_at, s.updated_at, s.cluster_scan_name, s.passed, s.failed, s.warned, s.skipped, s.findings, s.poll_generation, s.poll_attempt, s.next_poll_at, s.poll_deadline, s.poll_owner, s.poll_lease_expires_at, s.upstream_report_name, s.terminal_reason, s.cancel_requested_at
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.id = $1
+`
+
+func (q *Queries) GetActiveSecurityScanResultByID(ctx context.Context, id uuid.UUID) (SecurityScanResult, error) {
+	row := q.db.QueryRow(ctx, getActiveSecurityScanResultByID, id)
+	var i SecurityScanResult
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.ScanType,
+		&i.Status,
+		&i.Summary,
+		&i.Results,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.InitiatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ClusterScanName,
+		&i.Passed,
+		&i.Failed,
+		&i.Warned,
+		&i.Skipped,
+		&i.Findings,
+		&i.PollGeneration,
+		&i.PollAttempt,
+		&i.NextPollAt,
+		&i.PollDeadline,
+		&i.PollOwner,
+		&i.PollLeaseExpiresAt,
+		&i.UpstreamReportName,
+		&i.TerminalReason,
+		&i.CancelRequestedAt,
+	)
+	return i, err
+}
+
+const getActiveSecurityScanResultByIDForScopes = `-- name: GetActiveSecurityScanResultByIDForScopes :one
+SELECT s.id, s.cluster_id, s.scan_type, s.status, s.summary, s.results, s.started_at, s.completed_at, s.initiated_by_id, s.created_at, s.updated_at, s.cluster_scan_name, s.passed, s.failed, s.warned, s.skipped, s.findings, s.poll_generation, s.poll_attempt, s.next_poll_at, s.poll_deadline, s.poll_owner, s.poll_lease_expires_at, s.upstream_report_name, s.terminal_reason, s.cancel_requested_at
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.id = $1
+  AND s.cluster_id = ANY($2::uuid[])
+`
+
+type GetActiveSecurityScanResultByIDForScopesParams struct {
+	ID         uuid.UUID   `json:"id"`
+	ClusterIds []uuid.UUID `json:"cluster_ids"`
+}
+
+func (q *Queries) GetActiveSecurityScanResultByIDForScopes(ctx context.Context, arg GetActiveSecurityScanResultByIDForScopesParams) (SecurityScanResult, error) {
+	row := q.db.QueryRow(ctx, getActiveSecurityScanResultByIDForScopes, arg.ID, arg.ClusterIds)
+	var i SecurityScanResult
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.ScanType,
+		&i.Status,
+		&i.Summary,
+		&i.Results,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.InitiatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ClusterScanName,
+		&i.Passed,
+		&i.Failed,
+		&i.Warned,
+		&i.Skipped,
+		&i.Findings,
+		&i.PollGeneration,
+		&i.PollAttempt,
+		&i.NextPollAt,
+		&i.PollDeadline,
+		&i.PollOwner,
+		&i.PollLeaseExpiresAt,
+		&i.UpstreamReportName,
+		&i.TerminalReason,
+		&i.CancelRequestedAt,
+	)
+	return i, err
 }
 
 const getClusterSecurityPolicyByID = `-- name: GetClusterSecurityPolicyByID :one
@@ -356,9 +863,55 @@ func (q *Queries) GetPolicyByCluster(ctx context.Context, clusterID uuid.UUID) (
 	return i, err
 }
 
+const getSecurityScanResultByClusterAndID = `-- name: GetSecurityScanResultByClusterAndID :one
+SELECT s.id, s.cluster_id, s.scan_type, s.status, s.summary, s.results, s.started_at, s.completed_at, s.initiated_by_id, s.created_at, s.updated_at, s.cluster_scan_name, s.passed, s.failed, s.warned, s.skipped, s.findings, s.poll_generation, s.poll_attempt, s.next_poll_at, s.poll_deadline, s.poll_owner, s.poll_lease_expires_at, s.upstream_report_name, s.terminal_reason, s.cancel_requested_at
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.cluster_id = $1 AND s.id = $2
+`
+
+type GetSecurityScanResultByClusterAndIDParams struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	ID        uuid.UUID `json:"id"`
+}
+
+func (q *Queries) GetSecurityScanResultByClusterAndID(ctx context.Context, arg GetSecurityScanResultByClusterAndIDParams) (SecurityScanResult, error) {
+	row := q.db.QueryRow(ctx, getSecurityScanResultByClusterAndID, arg.ClusterID, arg.ID)
+	var i SecurityScanResult
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.ScanType,
+		&i.Status,
+		&i.Summary,
+		&i.Results,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.InitiatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ClusterScanName,
+		&i.Passed,
+		&i.Failed,
+		&i.Warned,
+		&i.Skipped,
+		&i.Findings,
+		&i.PollGeneration,
+		&i.PollAttempt,
+		&i.NextPollAt,
+		&i.PollDeadline,
+		&i.PollOwner,
+		&i.PollLeaseExpiresAt,
+		&i.UpstreamReportName,
+		&i.TerminalReason,
+		&i.CancelRequestedAt,
+	)
+	return i, err
+}
+
 const getSecurityScanResultByID = `-- name: GetSecurityScanResultByID :one
 
-SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings FROM security_scan_results WHERE id = $1
+SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings, poll_generation, poll_attempt, next_poll_at, poll_deadline, poll_owner, poll_lease_expires_at, upstream_report_name, terminal_reason, cancel_requested_at FROM security_scan_results WHERE id = $1
 `
 
 // Security Scan Results
@@ -383,6 +936,15 @@ func (q *Queries) GetSecurityScanResultByID(ctx context.Context, id uuid.UUID) (
 		&i.Warned,
 		&i.Skipped,
 		&i.Findings,
+		&i.PollGeneration,
+		&i.PollAttempt,
+		&i.NextPollAt,
+		&i.PollDeadline,
+		&i.PollOwner,
+		&i.PollLeaseExpiresAt,
+		&i.UpstreamReportName,
+		&i.TerminalReason,
+		&i.CancelRequestedAt,
 	)
 	return i, err
 }
@@ -437,7 +999,7 @@ const listClusterIDsWithSecurityPolicy = `-- name: ListClusterIDsWithSecurityPol
 SELECT DISTINCT cluster_id FROM cluster_security_policies
 `
 
-// Fleet-wide set of cluster_ids that have at least one security policy
+// Estate-wide set of cluster_ids that have at least one security policy
 // row. Unbounded (no LIMIT/OFFSET) so the compliance-posture rollup can
 // answer "does this cluster have a policy?" for any fleet size in one
 // query instead of a per-cluster page that silently caps at 10 rows.
@@ -546,8 +1108,78 @@ func (q *Queries) ListPodSecurityTemplates(ctx context.Context, arg ListPodSecur
 	return items, nil
 }
 
+const listRecoverableSecurityScans = `-- name: ListRecoverableSecurityScans :many
+SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings, poll_generation, poll_attempt, next_poll_at, poll_deadline, poll_owner, poll_lease_expires_at, upstream_report_name, terminal_reason, cancel_requested_at
+FROM security_scan_results
+WHERE status IN ('pending', 'running', 'in_progress')
+  AND cancel_requested_at IS NULL
+  AND (next_poll_at IS NULL OR next_poll_at <= $1)
+  AND (poll_lease_expires_at IS NULL OR poll_lease_expires_at <= $1)
+ORDER BY coalesce(next_poll_at, started_at), created_at
+LIMIT $2
+`
+
+type ListRecoverableSecurityScansParams struct {
+	NowAt    pgtype.Timestamptz `json:"now_at"`
+	RowLimit int32              `json:"row_limit"`
+}
+
+// Recover rows whose initial delivery was lost, whose consumer crashed while
+// holding a lease, or whose durable next-poll timestamp is now due.
+func (q *Queries) ListRecoverableSecurityScans(ctx context.Context, arg ListRecoverableSecurityScansParams) ([]SecurityScanResult, error) {
+	rows, err := q.db.Query(ctx, listRecoverableSecurityScans, arg.NowAt, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SecurityScanResult{}
+	for rows.Next() {
+		var i SecurityScanResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.ScanType,
+			&i.Status,
+			&i.Summary,
+			&i.Results,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.InitiatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ClusterScanName,
+			&i.Passed,
+			&i.Failed,
+			&i.Warned,
+			&i.Skipped,
+			&i.Findings,
+			&i.PollGeneration,
+			&i.PollAttempt,
+			&i.NextPollAt,
+			&i.PollDeadline,
+			&i.PollOwner,
+			&i.PollLeaseExpiresAt,
+			&i.UpstreamReportName,
+			&i.TerminalReason,
+			&i.CancelRequestedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listScansByCluster = `-- name: ListScansByCluster :many
-SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings FROM security_scan_results WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT s.id, s.cluster_id, s.scan_type, s.status, s.summary, s.results, s.started_at, s.completed_at, s.initiated_by_id, s.created_at, s.updated_at, s.cluster_scan_name, s.passed, s.failed, s.warned, s.skipped, s.findings, s.poll_generation, s.poll_attempt, s.next_poll_at, s.poll_deadline, s.poll_owner, s.poll_lease_expires_at, s.upstream_report_name, s.terminal_reason, s.cancel_requested_at
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.cluster_id = $1
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT $2 OFFSET $3
 `
 
 type ListScansByClusterParams struct {
@@ -583,60 +1215,15 @@ func (q *Queries) ListScansByCluster(ctx context.Context, arg ListScansByCluster
 			&i.Warned,
 			&i.Skipped,
 			&i.Findings,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listScansByClusterAndType = `-- name: ListScansByClusterAndType :many
-SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings FROM security_scan_results WHERE cluster_id = $1 AND scan_type = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4
-`
-
-type ListScansByClusterAndTypeParams struct {
-	ClusterID uuid.UUID `json:"cluster_id"`
-	ScanType  string    `json:"scan_type"`
-	Limit     int32     `json:"limit"`
-	Offset    int32     `json:"offset"`
-}
-
-func (q *Queries) ListScansByClusterAndType(ctx context.Context, arg ListScansByClusterAndTypeParams) ([]SecurityScanResult, error) {
-	rows, err := q.db.Query(ctx, listScansByClusterAndType,
-		arg.ClusterID,
-		arg.ScanType,
-		arg.Limit,
-		arg.Offset,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []SecurityScanResult{}
-	for rows.Next() {
-		var i SecurityScanResult
-		if err := rows.Scan(
-			&i.ID,
-			&i.ClusterID,
-			&i.ScanType,
-			&i.Status,
-			&i.Summary,
-			&i.Results,
-			&i.StartedAt,
-			&i.CompletedAt,
-			&i.InitiatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.ClusterScanName,
-			&i.Passed,
-			&i.Failed,
-			&i.Warned,
-			&i.Skipped,
-			&i.Findings,
+			&i.PollGeneration,
+			&i.PollAttempt,
+			&i.NextPollAt,
+			&i.PollDeadline,
+			&i.PollOwner,
+			&i.PollLeaseExpiresAt,
+			&i.UpstreamReportName,
+			&i.TerminalReason,
+			&i.CancelRequestedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -649,7 +1236,11 @@ func (q *Queries) ListScansByClusterAndType(ctx context.Context, arg ListScansBy
 }
 
 const listSecurityScanResults = `-- name: ListSecurityScanResults :many
-SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings FROM security_scan_results ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT s.id, s.cluster_id, s.scan_type, s.status, s.summary, s.results, s.started_at, s.completed_at, s.initiated_by_id, s.created_at, s.updated_at, s.cluster_scan_name, s.passed, s.failed, s.warned, s.skipped, s.findings, s.poll_generation, s.poll_attempt, s.next_poll_at, s.poll_deadline, s.poll_owner, s.poll_lease_expires_at, s.upstream_report_name, s.terminal_reason, s.cancel_requested_at
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT $1 OFFSET $2
 `
 
 type ListSecurityScanResultsParams struct {
@@ -684,6 +1275,15 @@ func (q *Queries) ListSecurityScanResults(ctx context.Context, arg ListSecurityS
 			&i.Warned,
 			&i.Skipped,
 			&i.Findings,
+			&i.PollGeneration,
+			&i.PollAttempt,
+			&i.NextPollAt,
+			&i.PollDeadline,
+			&i.PollOwner,
+			&i.PollLeaseExpiresAt,
+			&i.UpstreamReportName,
+			&i.TerminalReason,
+			&i.CancelRequestedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -693,6 +1293,106 @@ func (q *Queries) ListSecurityScanResults(ctx context.Context, arg ListSecurityS
 		return nil, err
 	}
 	return items, nil
+}
+
+const listSecurityScanResultsForScopes = `-- name: ListSecurityScanResultsForScopes :many
+SELECT s.id, s.cluster_id, s.scan_type, s.status, s.summary, s.results, s.started_at, s.completed_at, s.initiated_by_id, s.created_at, s.updated_at, s.cluster_scan_name, s.passed, s.failed, s.warned, s.skipped, s.findings, s.poll_generation, s.poll_attempt, s.next_poll_at, s.poll_deadline, s.poll_owner, s.poll_lease_expires_at, s.upstream_report_name, s.terminal_reason, s.cancel_requested_at
+FROM security_scan_results s
+JOIN clusters c ON c.id = s.cluster_id AND c.decommissioned_at IS NULL
+WHERE s.cluster_id = ANY($1::uuid[])
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListSecurityScanResultsForScopesParams struct {
+	ClusterIds  []uuid.UUID `json:"cluster_ids"`
+	QueryOffset int32       `json:"query_offset"`
+	QueryLimit  int32       `json:"query_limit"`
+}
+
+func (q *Queries) ListSecurityScanResultsForScopes(ctx context.Context, arg ListSecurityScanResultsForScopesParams) ([]SecurityScanResult, error) {
+	rows, err := q.db.Query(ctx, listSecurityScanResultsForScopes, arg.ClusterIds, arg.QueryOffset, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SecurityScanResult{}
+	for rows.Next() {
+		var i SecurityScanResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.ScanType,
+			&i.Status,
+			&i.Summary,
+			&i.Results,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.InitiatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ClusterScanName,
+			&i.Passed,
+			&i.Failed,
+			&i.Warned,
+			&i.Skipped,
+			&i.Findings,
+			&i.PollGeneration,
+			&i.PollAttempt,
+			&i.NextPollAt,
+			&i.PollDeadline,
+			&i.PollOwner,
+			&i.PollLeaseExpiresAt,
+			&i.UpstreamReportName,
+			&i.TerminalReason,
+			&i.CancelRequestedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rescheduleSecurityScanPoll = `-- name: RescheduleSecurityScanPoll :execrows
+UPDATE security_scan_results
+SET status = 'running',
+    next_poll_at = $1,
+    poll_owner = '',
+    poll_lease_expires_at = NULL,
+    terminal_reason = left($2, 2048),
+    summary = jsonb_set(coalesce(summary, '{}'::jsonb), '{progress}', to_jsonb(left($2, 2048)::text), true),
+    updated_at = now()
+WHERE id = $3
+  AND poll_generation = $4
+  AND poll_owner = $5
+  AND status IN ('pending', 'running', 'in_progress')
+  AND cancel_requested_at IS NULL
+`
+
+type RescheduleSecurityScanPollParams struct {
+	NextPollAt pgtype.Timestamptz `json:"next_poll_at"`
+	Reason     string             `json:"reason"`
+	ID         uuid.UUID          `json:"id"`
+	Generation int64              `json:"generation"`
+	Owner      string             `json:"owner"`
+}
+
+func (q *Queries) RescheduleSecurityScanPoll(ctx context.Context, arg RescheduleSecurityScanPollParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rescheduleSecurityScanPoll,
+		arg.NextPollAt,
+		arg.Reason,
+		arg.ID,
+		arg.Generation,
+		arg.Owner,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateClusterSecurityPolicyApplied = `-- name: UpdateClusterSecurityPolicyApplied :exec
@@ -775,66 +1475,4 @@ func (q *Queries) UpdatePodSecurityTemplate(ctx context.Context, arg UpdatePodSe
 		&i.IsBuiltin,
 	)
 	return i, err
-}
-
-const updateSecurityScanFailedWithMessage = `-- name: UpdateSecurityScanFailedWithMessage :exec
-UPDATE security_scan_results SET
-    status = 'failed',
-    summary = jsonb_set(coalesce(summary, '{}'::jsonb), '{error}', to_jsonb($1::text), true),
-    completed_at = now()
-WHERE id = $2
-`
-
-type UpdateSecurityScanFailedWithMessageParams struct {
-	ErrorMessage string    `json:"error_message"`
-	ID           uuid.UUID `json:"id"`
-}
-
-// Phase B5: failure path that preserves the operator/agent message so users
-// can see *why* an ingest timed out, instead of a blank "failed" badge.
-func (q *Queries) UpdateSecurityScanFailedWithMessage(ctx context.Context, arg UpdateSecurityScanFailedWithMessageParams) error {
-	_, err := q.db.Exec(ctx, updateSecurityScanFailedWithMessage, arg.ErrorMessage, arg.ID)
-	return err
-}
-
-const updateSecurityScanReport = `-- name: UpdateSecurityScanReport :exec
-UPDATE security_scan_results SET
-    status = 'completed',
-    summary = $2,
-    results = $3,
-    passed = $4,
-    failed = $5,
-    warned = $6,
-    skipped = $7,
-    findings = $8,
-    completed_at = now()
-WHERE id = $1
-`
-
-type UpdateSecurityScanReportParams struct {
-	ID       uuid.UUID       `json:"id"`
-	Summary  json.RawMessage `json:"summary"`
-	Results  json.RawMessage `json:"results"`
-	Passed   int32           `json:"passed"`
-	Failed   int32           `json:"failed"`
-	Warned   int32           `json:"warned"`
-	Skipped  int32           `json:"skipped"`
-	Findings json.RawMessage `json:"findings"`
-}
-
-// Phase B5: full report ingestion. Writes flattened counts + findings in one
-// statement so the row reaches its terminal state atomically and the UI never
-// sees a half-populated scan.
-func (q *Queries) UpdateSecurityScanReport(ctx context.Context, arg UpdateSecurityScanReportParams) error {
-	_, err := q.db.Exec(ctx, updateSecurityScanReport,
-		arg.ID,
-		arg.Summary,
-		arg.Results,
-		arg.Passed,
-		arg.Failed,
-		arg.Warned,
-		arg.Skipped,
-		arg.Findings,
-	)
-	return err
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/systemrollout"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
@@ -18,13 +19,20 @@ type SystemRolloutService interface {
 	Start(context.Context, systemrollout.StartRequest) (systemrollout.View, error)
 	Get(context.Context, uuid.UUID) (systemrollout.View, error)
 	Assignments(context.Context, uuid.UUID) ([]systemrollout.Assignment, error)
-	Act(context.Context, uuid.UUID, int64, systemrollout.Action, uuid.UUID, string) (systemrollout.View, error)
+	Act(context.Context, uuid.UUID, int64, systemrollout.Action, uuid.UUID, string, audit.Intent) (systemrollout.View, error)
 }
 
 type SystemRolloutHandler struct {
-	service SystemRolloutService
-	audit   any
-	bus     *events.Bus
+	service            SystemRolloutService
+	audit              any
+	bus                *events.Bus
+	transactionalAudit bool
+}
+
+func (h *SystemRolloutHandler) EnableTransactionalAudit() {
+	if h != nil {
+		h.transactionalAudit = true
+	}
 }
 
 func NewSystemRolloutHandler(service SystemRolloutService, auditWriter any, bus *events.Bus) *SystemRolloutHandler {
@@ -55,9 +63,13 @@ func (h *SystemRolloutHandler) Start(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery system rollout service is unavailable")
 		return
 	}
+	auditIntent := newAuditIntent(r, deliveryAuditEvent{
+		action: "delivery.system_rollout.created", resourceType: "delivery_system_rollout", resourceID: request.ReleaseID.String(),
+		status: http.StatusAccepted,
+	}, key)
 	result, err := h.service.Start(r.Context(), systemrollout.StartRequest{
 		ReleaseID: request.ReleaseID, Strategy: request.Strategy, IdempotencyKey: key,
-		ActorID: authenticatedActorUUID(r),
+		ActorID: authenticatedActorUUID(r), Audit: auditIntent,
 	})
 	if err != nil {
 		respondSystemRolloutError(w, err)
@@ -65,10 +77,12 @@ func (h *SystemRolloutHandler) Start(w http.ResponseWriter, r *http.Request) {
 	}
 	setEntityTag(w, result.FencingGeneration)
 	events.PublishChanged(h.bus, "delivery_system_rollout", "", result.ID.String(), map[string]any{"action": "created"})
-	recordAudit(r, h.audit, "delivery.system_rollout.created", "delivery_system_rollout", result.ID.String(), "", map[string]any{
-		"release_id": result.ReleaseID.String(), "strategy_digest": result.StrategyDigest,
-		"cluster_count": result.TotalClusters, "state": result.State,
-	})
+	if !h.transactionalAudit {
+		recordAudit(r, h.audit, "delivery.system_rollout.created", "delivery_system_rollout", result.ID.String(), "", map[string]any{
+			"release_id": result.ReleaseID.String(), "strategy_digest": result.StrategyDigest,
+			"cluster_count": result.TotalClusters, "state": result.State,
+		})
+	}
 	respondData(w, http.StatusAccepted, result)
 }
 
@@ -157,18 +171,24 @@ func (h *SystemRolloutHandler) action(w http.ResponseWriter, r *http.Request, ac
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery system rollout service is unavailable")
 		return
 	}
-	result, err := h.service.Act(r.Context(), id, expected, action, authenticatedActorUUID(r), strings.TrimSpace(request.ReasonCode))
+	reason := strings.TrimSpace(request.ReasonCode)
+	auditIntent := newAuditIntent(r, deliveryAuditEvent{
+		action: "delivery.system_rollout." + string(action), resourceType: "delivery_system_rollout", resourceID: id.String(),
+		status: http.StatusAccepted, detail: map[string]any{"reason_code": reason},
+	}, "")
+	result, err := h.service.Act(r.Context(), id, expected, action, authenticatedActorUUID(r), reason, auditIntent)
 	if err != nil {
 		respondSystemRolloutError(w, err)
 		return
 	}
 	setEntityTag(w, result.FencingGeneration)
 	events.PublishChanged(h.bus, "delivery_system_rollout", "", result.ID.String(), map[string]any{"action": string(action)})
-	recordAudit(r, h.audit, "delivery.system_rollout."+string(action), "delivery_system_rollout", result.ID.String(), "", map[string]any{
-		"release_id": result.ReleaseID.String(), "strategy_digest": result.StrategyDigest,
-		"state": result.State, "fencing_generation": result.FencingGeneration,
-		"reason_code": strings.TrimSpace(request.ReasonCode),
-	})
+	if !h.transactionalAudit {
+		recordAudit(r, h.audit, "delivery.system_rollout."+string(action), "delivery_system_rollout", result.ID.String(), "", map[string]any{
+			"release_id": result.ReleaseID.String(), "strategy_digest": result.StrategyDigest,
+			"state": result.State, "fencing_generation": result.FencingGeneration, "reason_code": reason,
+		})
+	}
 	respondData(w, http.StatusAccepted, result)
 }
 
@@ -185,6 +205,8 @@ func authenticatedActorUUID(r *http.Request) uuid.UUID {
 
 func respondSystemRolloutError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, audit.ErrOutboxUnavailable):
+		respondError(w, http.StatusServiceUnavailable, "audit_unavailable", "mandatory audit storage is unavailable")
 	case errors.Is(err, systemrollout.ErrNotFound):
 		respondError(w, http.StatusNotFound, "not_found", "delivery system rollout or release not found")
 	case errors.Is(err, systemrollout.ErrConflict):

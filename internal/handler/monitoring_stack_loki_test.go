@@ -21,6 +21,7 @@ import (
 
 func lokiAuthed(method, target, body string) *http.Request {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req.Header.Set("Idempotency-Key", "loki-lifecycle-test")
 	return req.WithContext(appmiddleware.SetAuthenticatedUserForTest(req.Context(), &appmiddleware.AuthenticatedUser{
 		ID: uuid.NewString(), AuthMethod: "jwt",
 	}))
@@ -119,9 +120,12 @@ func TestSharedLokiFeatureGateDefaultFalse(t *testing.T) {
 		t.Fatalf("status = %d, want 404 when feature.hosted_loki defaults false: %s", rec.Code, rec.Body.String())
 	}
 
-	raw, err := os.ReadFile("../server/routes.go")
+	// Monitoring's API-entry routes were extracted from routes.go into their
+	// domain-owned registrar. Keep this source fence pointed at the file that
+	// actually mounts the Loki family so a missing fail-closed gate still fails.
+	raw, err := os.ReadFile("../server/routes_api_entry.go")
 	if err != nil {
-		t.Fatalf("read routes.go: %v", err)
+		t.Fatalf("read routes_api_entry.go: %v", err)
 	}
 	if !strings.Contains(string(raw), `FeatureGateDefault("feature.hosted_loki"`) {
 		t.Fatal("Loki status/preview/mutate routes must use FeatureGateDefault(\"feature.hosted_loki\", ..., false)")

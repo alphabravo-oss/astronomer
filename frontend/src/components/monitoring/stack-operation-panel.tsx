@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * The in-flight / failed / gave-up surface for one monitoring-stack operation.
@@ -26,15 +26,22 @@
  *                       fault, so it is not worded as an error.
  *   completed         — success, dismissible.
  */
-import { AlertTriangle, CheckCircle2, Clock, Loader2, RotateCcw, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Loader2,
+  RotateCcw,
+  X,
+} from "lucide-react";
 
-import { ActionButton } from '@/components/ui/action-button';
+import { ActionButton } from "@/components/ui/action-button";
 import {
   OperationTimeline,
   type OperationTimelineStep,
-} from '@/components/ui/operation-timeline';
-import { cn } from '@/lib/utils';
-import type { MonitoringOperationTracking } from '@/components/monitoring/hooks';
+} from "@/components/ui/operation-timeline";
+import { cn } from "@/lib/utils";
+import type { MonitoringOperationTracking } from "@/components/monitoring/hooks";
 
 function formatElapsed(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -45,23 +52,23 @@ function formatElapsed(ms: number): string {
 
 function verbLabel(operationType: string | undefined): string {
   switch (operationType) {
-    case 'install':
-      return 'Install';
-    case 'upgrade':
-      return 'Upgrade';
-    case 'replace':
-      return 'Replace';
-    case 'uninstall':
-      return 'Uninstall';
+    case "install":
+      return "Install";
+    case "upgrade":
+      return "Upgrade";
+    case "replace":
+      return "Replace";
+    case "uninstall":
+      return "Uninstall";
     default:
-      return 'Operation';
+      return "Operation";
   }
 }
 
-function stepStatusForLevel(level: string): OperationTimelineStep['status'] {
+function stepStatusForLevel(level: string): OperationTimelineStep["status"] {
   const normalized = level.toLowerCase();
-  if (normalized === 'error' || normalized === 'fatal') return 'failed';
-  return 'success';
+  if (normalized === "error" || normalized === "fatal") return "failed";
+  return "success";
 }
 
 export interface StackOperationPanelProps {
@@ -75,7 +82,11 @@ export interface StackOperationPanelProps {
   className?: string;
 }
 
-export function StackOperationPanel({ tracker, canRetry, className }: StackOperationPanelProps) {
+export function StackOperationPanel({
+  tracker,
+  canRetry,
+  className,
+}: StackOperationPanelProps) {
   const op = tracker.operation;
   if (!op) return null;
 
@@ -89,15 +100,18 @@ export function StackOperationPanel({ tracker, canRetry, className }: StackOpera
 
   if (tracker.isActive && !tracker.hasStoppedTracking) {
     steps.push({
-      id: 'in-flight',
-      label: op.status === 'pending' ? 'Queued for the reconciler' : 'Reconciler working…',
-      status: 'running',
+      id: "in-flight",
+      label:
+        op.status === "pending"
+          ? "Queued for the reconciler"
+          : "Reconciler working…",
+      status: "running",
     });
   }
 
   // Superseded is terminal and retryable but is NOT an operator error: a newer
   // operation for the same target took over. Word it that way.
-  const superseded = op.status === 'superseded';
+  const superseded = op.status === "superseded";
 
   return (
     <OperationTimeline
@@ -107,9 +121,13 @@ export function StackOperationPanel({ tracker, canRetry, className }: StackOpera
           <HeaderIcon tracker={tracker} />
           <span className="truncate text-sm font-medium text-foreground">
             {verb}
-            {tracker.isActive ? ' in progress' : superseded ? ' superseded' : ''}
-            {tracker.isSuccess ? ' complete' : ''}
-            {tracker.isFailure && !superseded ? ' failed' : ''}
+            {tracker.isActive
+              ? " in progress"
+              : superseded
+                ? " superseded"
+                : ""}
+            {tracker.isSuccess ? " complete" : ""}
+            {tracker.isFailure && !superseded ? " failed" : ""}
           </span>
           {op.attemptCount > 1 && (
             <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
@@ -126,41 +144,48 @@ export function StackOperationPanel({ tracker, canRetry, className }: StackOpera
       steps={steps}
       emptyLabel={
         tracker.isActive
-          ? 'Waiting for the reconciler to pick this up…'
-          : 'This operation recorded no stage events.'
+          ? "Waiting for the reconciler to pick this up…"
+          : "This operation recorded no stage events."
       }
       footer={
         <div className="space-y-3 border-t border-border px-4 py-3">
           {tracker.hasStoppedTracking && (
             <Notice tone="warning" icon={Clock}>
-              Stopped following this operation after 30 minutes.{' '}
-              <strong className="font-medium">It may still be running on the server</strong> —
-              nothing has been cancelled. Refresh to re-read its state, or dismiss it and queue
-              another: <strong className="font-medium">a new operation supersedes this one</strong>,
-              which is the way out of a wedged reconciler. Retry is not offered because the backend
-              only requeues a row that already reached a terminal state.
+              Stopped following this operation after 30 minutes.{" "}
+              <strong className="font-medium">
+                It may still be running on the server
+              </strong>{" "}
+              — nothing has been cancelled. Refresh to re-read its state, or
+              dismiss it and queue another:{" "}
+              <strong className="font-medium">
+                a new operation supersedes this one
+              </strong>
+              , which is the way out of a wedged reconciler. Retry is not
+              offered because the backend only requeues a row that already
+              reached a terminal state.
             </Notice>
           )}
 
           {!tracker.hasStoppedTracking && tracker.isStalled && (
             <Notice tone="warning" icon={Clock}>
-              Still running after {formatElapsed(tracker.elapsedMs)}. The slowest normal path (a
-              replace, with readiness and smoke checks) finishes inside about five minutes — check
-              the cluster agent if this does not settle.
+              Still running after {formatElapsed(tracker.elapsedMs)}. The
+              slowest normal path (a replace, with readiness and smoke checks)
+              finishes inside about five minutes — check the cluster agent if
+              this does not settle.
             </Notice>
           )}
 
           {tracker.isAwaitingAutoRetry && (
             <Notice tone="warning" icon={AlertTriangle}>
-              Attempt {op.attemptCount} failed. The reconciler may requeue it automatically — its
-              retry policy runs within a few seconds.
+              Attempt {op.attemptCount} failed. The reconciler may requeue it
+              automatically — its retry policy runs within a few seconds.
             </Notice>
           )}
 
           {tracker.errorMessage && (
             <div>
               <div className="mb-1 text-xs font-medium text-muted-foreground">
-                {superseded ? 'Reason' : 'Reconciler error'}
+                {superseded ? "Reason" : "Reconciler error"}
               </div>
               {/* Verbatim: this is the real Helm / readiness / smoke-check text
                   and it is the only thing that tells an operator what to fix. */}
@@ -183,7 +208,9 @@ export function StackOperationPanel({ tracker, canRetry, className }: StackOpera
                 Retry
               </ActionButton>
             )}
-            {(tracker.hasStoppedTracking || tracker.isStalled || tracker.isTerminal) && (
+            {(tracker.hasStoppedTracking ||
+              tracker.isStalled ||
+              tracker.isTerminal) && (
               <ActionButton size="sm" onClick={tracker.refresh}>
                 Refresh
               </ActionButton>
@@ -210,10 +237,14 @@ export function StackOperationPanel({ tracker, canRetry, className }: StackOpera
 }
 
 function HeaderIcon({ tracker }: { tracker: MonitoringOperationTracking }) {
-  if (tracker.hasStoppedTracking) return <Clock className="h-4 w-4 shrink-0 text-status-warning" />;
-  if (tracker.isActive) return <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />;
-  if (tracker.isSuccess) return <CheckCircle2 className="h-4 w-4 shrink-0 text-status-success" />;
-  if (tracker.isFailure) return <AlertTriangle className="h-4 w-4 shrink-0 text-status-error" />;
+  if (tracker.hasStoppedTracking)
+    return <Clock className="h-4 w-4 shrink-0 text-status-warning" />;
+  if (tracker.isActive)
+    return <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />;
+  if (tracker.isSuccess)
+    return <CheckCircle2 className="h-4 w-4 shrink-0 text-status-success" />;
+  if (tracker.isFailure)
+    return <AlertTriangle className="h-4 w-4 shrink-0 text-status-error" />;
   return <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />;
 }
 
@@ -222,17 +253,17 @@ function Notice({
   icon: Icon,
   children,
 }: {
-  tone: 'warning' | 'info';
+  tone: "warning" | "info";
   icon: React.ElementType;
   children: React.ReactNode;
 }) {
   return (
     <div
       className={cn(
-        'flex items-start gap-2 rounded-md border px-3 py-2 text-xs',
-        tone === 'warning'
-          ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
-          : 'border-border bg-muted/40 text-muted-foreground',
+        "flex items-start gap-2 rounded-md border px-3 py-2 text-xs",
+        tone === "warning"
+          ? "border-status-warning/30 bg-status-warning/10 text-status-warning"
+          : "border-border bg-muted/40 text-muted-foreground",
       )}
     >
       <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" />

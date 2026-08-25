@@ -548,7 +548,7 @@ func ownershipMatchesRef(apiVersion, kind, namespace, name string, ref crd.Objec
 // Dev/test keeps the previous warn-and-disable behavior so local binaries can
 // run without a kubeconfig.
 func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries) error {
-	if !crdEnabled() {
+	if cfg == nil || !cfg.CRDEnabled {
 		return nil
 	}
 	restCfg, err := rest.InClusterConfig()
@@ -599,19 +599,6 @@ func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Co
 	return nil
 }
 
-// crdEnabled reads CRD_ENABLED. The chart sets the env from crds.enabled
-// (defaults to false). Truthy values: "1", "true", "yes". Anything else
-// (including empty string) leaves the controller disabled.
-func crdEnabled() bool {
-	v := strings.ToLower(strings.TrimSpace(getenv("CRD_ENABLED")))
-	switch v {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
-}
-
 // crdWatchNamespace reads CRD_WATCH_NAMESPACE; defaults to "astronomer-mgmt"
 // when unset (matches the chart's crds.watchNamespace default).
 func crdWatchNamespace() string {
@@ -622,8 +609,7 @@ func crdWatchNamespace() string {
 	return v
 }
 
-// getenv is a tiny indirection over os.Getenv so the CRD toggle is read in
-// a single place. Today it just calls through.
+// getenv is a tiny indirection over os.Getenv used by namespace discovery.
 func getenv(key string) string { return os.Getenv(key) }
 
 // _ keeps the uuid import live — adapters above currently use it via sqlc

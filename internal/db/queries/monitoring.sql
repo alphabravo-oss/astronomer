@@ -4,6 +4,28 @@ WHERE is_default = true OR name = 'default'
 ORDER BY is_default DESC, created_at ASC
 LIMIT 1;
 
+-- name: DeleteDefaultMonitoringBackendIfUnused :one
+-- Deleting the singleton backend cascades cluster_monitoring_configs, so the
+-- API must only permit it after every per-cluster stack is explicitly
+-- uninstalled (or was never configured). Retaining those terminal rows until
+-- backend deletion is useful status history and safe to cascade. Shared stack
+-- metadata lives in the non-secret auth_config projection; require each
+-- managed family to be absent or explicitly uninstalled as well so deleting
+-- configuration can never orphan a live Helm release.
+DELETE FROM monitoring_backends AS mb
+WHERE mb.id = $1
+  AND (mb.is_default = true OR mb.name = 'default')
+  AND NOT EXISTS (
+      SELECT 1 FROM cluster_monitoring_configs AS cmc
+      WHERE cmc.backend_id = mb.id
+        AND cmc.status NOT IN ('uninstalled', 'not_configured')
+  )
+  AND COALESCE(mb.auth_config->'sharedThanos'->>'status', 'not_configured') IN ('', 'not_configured', 'uninstalled')
+  AND COALESCE(mb.auth_config->'sharedAlertmanager'->>'status', 'not_configured') IN ('', 'not_configured', 'uninstalled')
+  AND COALESCE(mb.auth_config->'sharedGrafana'->>'status', 'not_configured') IN ('', 'not_configured', 'uninstalled')
+  AND COALESCE(mb.auth_config->'sharedLoki'->>'status', 'not_configured') IN ('', 'not_configured', 'uninstalled')
+RETURNING mb.*;
+
 -- name: UpsertDefaultMonitoringBackend :one
 -- auth_config and auth_config_encrypted are two halves of ONE value (migration
 -- 146) and this statement always writes both. Every caller builds its params

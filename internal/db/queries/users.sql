@@ -1,6 +1,11 @@
 -- name: GetUserByID :one
 SELECT * FROM users WHERE id = $1;
 
+-- name: GetUserByIDForUpdate :one
+-- Administrative identity mutations lock the row before deriving omitted
+-- fields, revocation decisions, and transactional audit evidence.
+SELECT * FROM users WHERE id = $1 FOR UPDATE;
+
 -- name: GetUserByEmail :one
 SELECT * FROM users WHERE email = $1;
 

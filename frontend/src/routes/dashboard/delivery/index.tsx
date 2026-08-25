@@ -32,17 +32,17 @@ import {
   useDeliveryProjectScope,
 } from "@/components/delivery/shared";
 import {
-  getDeliveryFleet,
+  getDeliveryEstate,
   getDeliverySystemCompatibility,
   listClusterDeployments,
   listComponentBundles,
   listDeliveryRollouts,
   listDeliverySources,
   listDeliveryTargets,
-  type DeliveryFleet,
-  type DeliveryFleetAttention,
-  type DeliveryFleetCluster,
-  type DeliveryFleetCount,
+  type DeliveryEstate,
+  type DeliveryEstateAttention,
+  type DeliveryEstateCluster,
+  type DeliveryEstateCount,
 } from "@/lib/api/delivery";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusters, useCurrentUser } from "@/lib/hooks";
@@ -54,9 +54,9 @@ import { cn, formatRelativeTime } from "@/lib/utils";
 function isForbiddenError(error: unknown): boolean {
   return Boolean(
     error &&
-      typeof error === "object" &&
-      "response" in error &&
-      (error as { response?: { status?: number } }).response?.status === 403,
+    typeof error === "object" &&
+    "response" in error &&
+    (error as { response?: { status?: number } }).response?.status === 403,
   );
 }
 
@@ -65,9 +65,9 @@ function DeliveryOverviewPage() {
     useDeliveryProjectScope();
   const { data: user } = useCurrentUser();
   const canReadFleet = can(user, "delivery_inventory", "read");
-  const fleet = useQuery({
-    queryKey: queryKeys.delivery.fleet,
-    queryFn: getDeliveryFleet,
+  const estate = useQuery({
+    queryKey: queryKeys.delivery.estate,
+    queryFn: ({ signal }) => getDeliveryEstate(signal),
     enabled: canReadFleet,
     refetchInterval: liveFallback(15_000),
     retry: (failureCount, error) =>
@@ -83,11 +83,11 @@ function DeliveryOverviewPage() {
       "delivery_rollout.changed",
       "cluster_deployment.changed",
     ],
-    [queryKeys.delivery.fleet],
+    [queryKeys.delivery.estate],
   );
-  const showFleet = canReadFleet && !isForbiddenError(fleet.error);
+  const showFleet = canReadFleet && !isForbiddenError(estate.error);
   if (showFleet) {
-    return <FleetDeliveryOverview query={fleet} />;
+    return <FleetDeliveryOverview query={estate} />;
   }
   return (
     <DeliveryShell
@@ -119,7 +119,7 @@ function clusterHref(clusterId: string): string {
 }
 
 function clusterMatchesFocus(
-  cluster: DeliveryFleetCluster,
+  cluster: DeliveryEstateCluster,
   focus: string,
 ): boolean {
   switch (focus) {
@@ -174,15 +174,15 @@ function clusterMatchesFocus(
 function FleetDeliveryOverview({
   query,
 }: {
-  query: UseQueryResult<DeliveryFleet>;
+  query: UseQueryResult<DeliveryEstate>;
 }) {
-  const fleet = query.data;
-  const summary = fleet?.summary;
+  const estate = query.data;
+  const summary = estate?.summary;
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
   const focus = search.get("focus") ?? "";
-  const clusters = fleet?.clusters ?? [];
+  const clusters = estate?.clusters ?? [];
   const clusterList = useClusters({ pageSize: 200 });
   const environmentById = useMemo(() => {
     const map = new Map<string, string>();
@@ -209,12 +209,12 @@ function FleetDeliveryOverview({
     router.replace(`${pathname}${params.size ? `?${params.toString()}` : ""}`);
     requestAnimationFrame(() => {
       document
-        .getElementById("fleet-clusters")
+        .getElementById("estate-clusters")
         ?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
 
-  const columns: Column<DeliveryFleetCluster>[] = [
+  const columns: Column<DeliveryEstateCluster>[] = [
     {
       key: "cluster",
       header: "Cluster",
@@ -243,9 +243,7 @@ function FleetDeliveryOverview({
       header: "Role",
       accessor: (row) =>
         row.isLocal ? (
-          <span className="text-xs text-muted-foreground">
-            Local host-only
-          </span>
+          <span className="text-xs text-muted-foreground">Local host-only</span>
         ) : (
           <span className="inline-flex items-center gap-1 text-xs">
             <Shield className="h-3 w-3" />
@@ -259,7 +257,9 @@ function FleetDeliveryOverview({
       header: "Agent",
       accessor: (row) => (
         <DeliveryPhaseBadge
-          value={row.connected ? (row.stale ? "stale" : "connected") : "disconnected"}
+          value={
+            row.connected ? (row.stale ? "stale" : "connected") : "disconnected"
+          }
         />
       ),
       sortAccessor: (row) =>
@@ -305,7 +305,7 @@ function FleetDeliveryOverview({
     <PageShell>
       <PageHeader
         eyebrow="Continuous Delivery"
-        title="Fleet"
+        title="Estate"
         description="All environments. Click a cluster to open its Flux workspace — Sources, Bundles, Targets, Rollouts, and Deployments live there."
       />
       {query.isError && !isForbiddenError(query.error) && (
@@ -313,7 +313,9 @@ function FleetDeliveryOverview({
       )}
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-foreground">Cluster health</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            Cluster health
+          </h2>
           <div className="grid grid-cols-2 gap-3">
             <FleetTile
               icon={<Radio className="h-4 w-4" />}
@@ -383,7 +385,10 @@ function FleetDeliveryOverview({
         title="Needs attention"
         description="Disconnected agents, failed assignments, incompatible controllers, drift, and stale inventory."
       >
-        <AttentionList items={fleet?.attention ?? []} loading={query.isLoading} />
+        <AttentionList
+          items={estate?.attention ?? []}
+          loading={query.isLoading}
+        />
       </PageSection>
       <PageSection
         title="Distributions"
@@ -392,56 +397,66 @@ function FleetDeliveryOverview({
         <div className="grid gap-4 md:grid-cols-3">
           <DistributionList
             title="Compatibility"
-            items={fleet?.distributions.compatibility ?? []}
-            activeKey={focus.startsWith("compatibility:") ? focus.slice("compatibility:".length) : ""}
+            items={estate?.distributions.compatibility ?? []}
+            activeKey={
+              focus.startsWith("compatibility:")
+                ? focus.slice("compatibility:".length)
+                : ""
+            }
             onSelect={(key) => setFocus(`compatibility:${key}`)}
           />
           <DistributionList
             title="Privilege"
-            items={fleet?.distributions.privilege ?? []}
-            activeKey={focus.startsWith("privilege:") ? focus.slice("privilege:".length) : ""}
+            items={estate?.distributions.privilege ?? []}
+            activeKey={
+              focus.startsWith("privilege:")
+                ? focus.slice("privilege:".length)
+                : ""
+            }
             onSelect={(key) => setFocus(`privilege:${key}`)}
           />
           <DistributionList
             title="Assignment phases"
-            items={fleet?.distributions.assignmentPhases ?? []}
-            activeKey={focus.startsWith("phase:") ? focus.slice("phase:".length) : ""}
+            items={estate?.distributions.assignmentPhases ?? []}
+            activeKey={
+              focus.startsWith("phase:") ? focus.slice("phase:".length) : ""
+            }
             onSelect={(key) => setFocus(`phase:${key}`)}
           />
         </div>
       </PageSection>
-      <div id="fleet-clusters">
-      <PageSection
-        title="Clusters"
-        description="Click a row to open that cluster's Flux workspace."
-        actions={
-          focus ? (
-            <button
-              type="button"
-              onClick={() => setFocus("")}
-              className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-accent"
-            >
-              <X className="h-3 w-3" />
-              {fleetFocusLabels[focus] ?? focus.replaceAll("_", " ")}
-            </button>
-          ) : null
-        }
-      >
-        <DataTable
-          data={visible}
-          columns={columns}
-          keyExtractor={(row) => row.id}
-          loading={query.isLoading}
-          isError={query.isError && !isForbiddenError(query.error)}
-          onRetry={() => void query.refetch()}
-          onRowClick={(row) => router.push(clusterHref(row.id))}
-          emptyMessage={
-            focus
-              ? "No clusters match this filter."
-              : "No clusters are registered."
+      <div id="estate-clusters">
+        <PageSection
+          title="Clusters"
+          description="Click a row to open that cluster's Flux workspace."
+          actions={
+            focus ? (
+              <button
+                type="button"
+                onClick={() => setFocus("")}
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-accent"
+              >
+                <X className="h-3 w-3" />
+                {fleetFocusLabels[focus] ?? focus.replaceAll("_", " ")}
+              </button>
+            ) : null
           }
-        />
-      </PageSection>
+        >
+          <DataTable
+            data={visible}
+            columns={columns}
+            keyExtractor={(row) => row.id}
+            loading={query.isLoading}
+            isError={query.isError && !isForbiddenError(query.error)}
+            onRetry={() => void query.refetch()}
+            onRowClick={(row) => router.push(clusterHref(row.id))}
+            emptyMessage={
+              focus
+                ? "No clusters match this filter."
+                : "No clusters are registered."
+            }
+          />
+        </PageSection>
       </div>
     </PageShell>
   );
@@ -475,7 +490,9 @@ function FleetTile({
           {value}
         </p>
       </div>
-      <div className="rounded-md bg-muted p-2 text-muted-foreground">{icon}</div>
+      <div className="rounded-md bg-muted p-2 text-muted-foreground">
+        {icon}
+      </div>
     </button>
   );
 }
@@ -484,7 +501,7 @@ function AttentionList({
   items,
   loading,
 }: {
-  items: DeliveryFleetAttention[];
+  items: DeliveryEstateAttention[];
   loading: boolean;
 }) {
   if (!loading && items.length === 0) {
@@ -532,7 +549,7 @@ function DistributionList({
   onSelect,
 }: {
   title: string;
-  items: DeliveryFleetCount[];
+  items: DeliveryEstateCount[];
   activeKey: string;
   onSelect: (key: string) => void;
 }) {
@@ -540,7 +557,9 @@ function DistributionList({
     <div className="rounded-lg border border-border bg-card p-4">
       <h3 className="text-sm font-medium text-foreground">{title}</h3>
       {items.length === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">No adopted clusters.</p>
+        <p className="mt-3 text-sm text-muted-foreground">
+          No adopted clusters.
+        </p>
       ) : (
         <ul className="mt-3 space-y-2" aria-label={title}>
           {items.map((item) => (
@@ -572,7 +591,11 @@ function ProjectDeliveryOverview({
   projectsCount,
 }: {
   projectId: string;
-  projectQuery: { isLoading: boolean; isError: boolean; refetch: () => unknown };
+  projectQuery: {
+    isLoading: boolean;
+    isError: boolean;
+    refetch: () => unknown;
+  };
   projectsCount: number;
 }) {
   const { data: user } = useCurrentUser();
@@ -583,7 +606,8 @@ function ProjectDeliveryOverview({
     can(user, "delivery_sources", "list", scope);
   const sources = useQuery({
     queryKey: queryKeys.delivery.sources(projectId, { limit: 1 }),
-    queryFn: () => listDeliverySources(projectId, { limit: 1 }),
+    queryFn: ({ signal }) =>
+      listDeliverySources(projectId, { limit: 1 }, signal),
     enabled: Boolean(projectId && can(user, "delivery_sources", "list", scope)),
     refetchInterval: liveFallback(30_000),
   });
@@ -592,26 +616,29 @@ function ProjectDeliveryOverview({
       limit: 1,
       status: "degraded",
     }),
-    queryFn: () =>
-      listDeliverySources(projectId, { limit: 1, status: "degraded" }),
+    queryFn: ({ signal }) =>
+      listDeliverySources(projectId, { limit: 1, status: "degraded" }, signal),
     enabled: Boolean(projectId && can(user, "delivery_sources", "list", scope)),
     refetchInterval: liveFallback(30_000),
   });
   const bundles = useQuery({
     queryKey: queryKeys.delivery.bundles(projectId, { limit: 1 }),
-    queryFn: () => listComponentBundles(projectId, { limit: 1 }),
+    queryFn: ({ signal }) =>
+      listComponentBundles(projectId, { limit: 1 }, signal),
     enabled: Boolean(projectId && can(user, "delivery_bundles", "list", scope)),
     refetchInterval: liveFallback(30_000),
   });
   const targets = useQuery({
     queryKey: queryKeys.delivery.targets(projectId, { limit: 1 }),
-    queryFn: () => listDeliveryTargets(projectId, { limit: 1 }),
+    queryFn: ({ signal }) =>
+      listDeliveryTargets(projectId, { limit: 1 }, signal),
     enabled: Boolean(projectId && can(user, "delivery_targets", "list", scope)),
     refetchInterval: liveFallback(30_000),
   });
   const rollouts = useQuery({
     queryKey: queryKeys.delivery.rollouts(projectId, { limit: 10 }),
-    queryFn: () => listDeliveryRollouts(projectId, { limit: 10 }),
+    queryFn: ({ signal }) =>
+      listDeliveryRollouts(projectId, { limit: 10 }, signal),
     enabled: Boolean(
       projectId && can(user, "delivery_rollouts", "list", scope),
     ),
@@ -619,7 +646,8 @@ function ProjectDeliveryOverview({
   });
   const deployments = useQuery({
     queryKey: queryKeys.delivery.deployments(projectId, { limit: 10 }),
-    queryFn: () => listClusterDeployments(projectId, { limit: 10 }),
+    queryFn: ({ signal }) =>
+      listClusterDeployments(projectId, { limit: 10 }, signal),
     enabled: Boolean(
       projectId && can(user, "delivery_deployments", "list", scope),
     ),
@@ -627,7 +655,7 @@ function ProjectDeliveryOverview({
   });
   const system = useQuery({
     queryKey: queryKeys.delivery.system,
-    queryFn: getDeliverySystemCompatibility,
+    queryFn: ({ signal }) => getDeliverySystemCompatibility(signal),
     enabled: can(user, "delivery_platform", "read"),
     refetchInterval: liveFallback(30_000),
   });
@@ -773,8 +801,7 @@ function ProjectDeliveryOverview({
                 value={
                   <DeliveryPhaseBadge
                     value={
-                      stringField(system.data.currentRollout, "state") ||
-                      "idle"
+                      stringField(system.data.currentRollout, "state") || "idle"
                     }
                   />
                 }

@@ -1,5 +1,5 @@
-import { render, screen, act } from '@testing-library/react';
-import { ThemeProvider, useTheme, THEME_STORAGE_KEY } from './theme';
+import { render, screen, act } from "@testing-library/react";
+import { ThemeProvider, useTheme, THEME_STORAGE_KEY } from "./theme";
 
 // jsdom has no matchMedia; stub one with controllable matches + listeners so
 // the provider's system tracking can be exercised.
@@ -18,12 +18,12 @@ function Probe() {
   return (
     <>
       <span data-testid="theme">{theme}</span>
-      <button onClick={() => setTheme('light')}>go-light</button>
+      <button onClick={() => setTheme("light")}>go-light</button>
     </>
   );
 }
 
-describe('ThemeProvider', () => {
+describe("ThemeProvider", () => {
   beforeEach(() => {
     systemPrefersDark = false;
     mqListeners.length = 0;
@@ -35,66 +35,69 @@ describe('ThemeProvider', () => {
       addEventListener: (_: string, cb: (e: { matches: boolean }) => void) => {
         mqListeners.push(cb);
       },
-      removeEventListener: (_: string, cb: (e: { matches: boolean }) => void) => {
+      removeEventListener: (
+        _: string,
+        cb: (e: { matches: boolean }) => void,
+      ) => {
         const i = mqListeners.indexOf(cb);
         if (i !== -1) mqListeners.splice(i, 1);
       },
     })) as unknown as typeof window.matchMedia;
     localStorage.clear();
-    document.documentElement.classList.remove('dark');
-    document.documentElement.style.colorScheme = '';
+    document.documentElement.classList.remove("dark");
+    document.documentElement.style.colorScheme = "";
   });
 
-  it('uses the literal astronomer-theme storage key rather than bare `theme`', () => {
+  it("uses the literal astronomer-theme storage key rather than bare `theme`", () => {
     // The key is load-bearing: assert the literal, not just the constant.
-    expect(THEME_STORAGE_KEY).toBe('astronomer-theme');
+    expect(THEME_STORAGE_KEY).toBe("astronomer-theme");
     render(
       <ThemeProvider>
         <Probe />
-      </ThemeProvider>
+      </ThemeProvider>,
     );
-    act(() => screen.getByText('go-light').click());
-    expect(localStorage.getItem('astronomer-theme')).toBe('light');
-    expect(localStorage.getItem('theme')).toBeNull();
+    act(() => screen.getByText("go-light").click());
+    expect(localStorage.getItem("astronomer-theme")).toBe("light");
+    expect(localStorage.getItem("theme")).toBeNull();
   });
 
-  it('defaults to dark when nothing is stored', () => {
+  it("defaults to dark when nothing is stored", () => {
     render(
       <ThemeProvider>
         <Probe />
-      </ThemeProvider>
+      </ThemeProvider>,
     );
-    expect(screen.getByTestId('theme')).toHaveTextContent('dark');
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
-    expect(document.documentElement.style.colorScheme).toBe('dark');
+    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.documentElement.style.colorScheme).toBe("dark");
   });
 
-  it('initializes from the stored raw value', () => {
-    localStorage.setItem('astronomer-theme', 'light');
+  it("initializes from the stored raw value", () => {
+    localStorage.setItem("astronomer-theme", "light");
     render(
       <ThemeProvider>
         <Probe />
-      </ThemeProvider>
+      </ThemeProvider>,
     );
-    expect(screen.getByTestId('theme')).toHaveTextContent('light');
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
-    expect(document.documentElement.style.colorScheme).toBe('light');
+    expect(screen.getByTestId("theme")).toHaveTextContent("light");
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(document.documentElement.style.colorScheme).toBe("light");
   });
 
-  it('tracks system preference changes while theme is system', () => {
-    localStorage.setItem('astronomer-theme', 'system');
+  it("tracks system preference changes while theme is system", () => {
+    localStorage.setItem("astronomer-theme", "system");
     render(
       <ThemeProvider>
         <Probe />
-      </ThemeProvider>
+      </ThemeProvider>,
     );
-    expect(screen.getByTestId('theme')).toHaveTextContent('system');
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(screen.getByTestId("theme")).toHaveTextContent("system");
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
 
     flipSystemPreference(true);
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
 
     flipSystemPreference(false);
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
 });

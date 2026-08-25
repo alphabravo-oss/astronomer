@@ -48,11 +48,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/cloudcreds"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -81,6 +83,20 @@ type cloudCredentialMaterializationTaskOutboxQuerier interface {
 	UpsertCloudCredentialMaterializationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertCloudCredentialMaterializationWithTaskOutboxParams) (sqlc.CloudCredentialMaterialization, error)
 	DeleteCloudCredentialMaterializationWithTaskOutbox(ctx context.Context, arg sqlc.DeleteCloudCredentialMaterializationWithTaskOutboxParams) error
 }
+
+// CloudCredentialMutationTx is the complete transaction-bound surface for a
+// credential write. Production always commits the encrypted credential row,
+// every materialization task intent, and the audit envelope together.
+type CloudCredentialMutationTx interface {
+	audit.OutboxQuerier
+	cloudCredentialMaterializationTaskOutboxQuerier
+	CreateCloudCredential(context.Context, sqlc.CreateCloudCredentialParams) (sqlc.CloudCredential, error)
+	UpdateCloudCredential(context.Context, sqlc.UpdateCloudCredentialParams) (sqlc.CloudCredential, error)
+	DeleteCloudCredential(context.Context, uuid.UUID) error
+	DeleteOrphanCloudCredentialMaterializations(context.Context, sqlc.DeleteOrphanCloudCredentialMaterializationsParams) error
+}
+
+type cloudCredentialRunTxFunc func(context.Context, func(CloudCredentialMutationTx) error) error
 
 // cloudCredentialNamespaceAuthQuerier is the optional slice of the querier
 // used to authorize a credential's target_refs against the namespaces the
@@ -112,6 +128,10 @@ type CloudTester interface {
 	TestAzure(ctx context.Context, blob map[string]string) (CloudTestResult, error)
 }
 
+type digitalOceanCloudTester interface {
+	TestDigitalOcean(ctx context.Context, blob map[string]string) (CloudTestResult, error)
+}
+
 // CloudTestResult is the wire shape for the test endpoint and the
 // outcome metric. OK=true means the SDK call succeeded; Message is a
 // human-readable description ("authenticated as arn:aws:iam::…") or an
@@ -129,6 +149,7 @@ type CloudCredentialHandler struct {
 	enqueuer   CloudCredentialEnqueuer
 	taskOutbox tasks.TaskOutboxWriter
 	tester     CloudTester
+	runTx      cloudCredentialRunTxFunc
 }
 
 // NewCloudCredentialHandler wires the handler. The encryptor is required
@@ -138,16 +159,61 @@ func NewCloudCredentialHandler(queries CloudCredentialQuerier) *CloudCredentialH
 	return &CloudCredentialHandler{queries: queries}
 }
 
-// SetAuditor wires the audit writer used to record cloud_credentials.*
-// events. The argument is `any` because recordAudit's type assertion to
-// the auditWriterV1 surface is internal to the audit_helpers code;
-// production wires *sqlc.Queries, tests pass narrow fakes. Best-effort;
-// failures inside recordAudit don't fail the request.
+// SetAuditor wires synchronous audit persistence for provider probes and the
+// compatibility fallback used by narrow unit-test fakes. Production CRUD uses
+// the transaction-bound audit outbox configured through SetRunTx.
 func (h *CloudCredentialHandler) SetAuditor(a any) {
 	if h == nil {
 		return
 	}
 	h.auditor = a
+}
+
+// SetRunTx wires the production database transaction used for encrypted
+// credential state, reconciliation task intents, and audit evidence.
+func (h *CloudCredentialHandler) SetRunTx(runTx cloudCredentialRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *CloudCredentialHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
+
+func executeCloudCredentialMutation[T any](
+	r *http.Request,
+	h *CloudCredentialHandler,
+	mutate func(CloudCredentialMutationTx) (T, error),
+	fallback func() (T, error),
+	describe func(T) clusterAuditEvent,
+) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("cloud credential handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q CloudCredentialMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	writer := h.auditor
+	if writer == nil {
+		writer = h.queries
+	}
+	recordAudit(r, writer, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 // SetEncryptor wires the Fernet encryptor. The handler 503s on POST/PUT
@@ -430,7 +496,7 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A credential with that name already exists in this project")
 		return
 	}
-	created, err := h.queries.CreateCloudCredential(r.Context(), sqlc.CreateCloudCredentialParams{
+	createParams := sqlc.CreateCloudCredentialParams{
 		ProjectID:     projectID,
 		Name:          req.Name,
 		Provider:      strings.ToLower(req.Provider),
@@ -438,16 +504,36 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 		DataEncrypted: ciphertext,
 		TargetRefs:    refsJSON,
 		CreatedBy:     userIDFromRequest(r),
-	})
+	}
+	created, err := executeCloudCredentialMutation(r, h,
+		func(q CloudCredentialMutationTx) (sqlc.CloudCredential, error) {
+			created, createErr := q.CreateCloudCredential(r.Context(), createParams)
+			if createErr != nil {
+				return sqlc.CloudCredential{}, createErr
+			}
+			if stageErr := h.stageMaterializationRefs(r.Context(), q, created, targetRefs, "apply"); stageErr != nil {
+				return sqlc.CloudCredential{}, stageErr
+			}
+			return created, nil
+		},
+		func() (sqlc.CloudCredential, error) {
+			created, createErr := h.queries.CreateCloudCredential(r.Context(), createParams)
+			if createErr == nil {
+				h.materializeCredentialRefs(r.Context(), created, targetRefs, "apply")
+			}
+			return created, createErr
+		},
+		func(created sqlc.CloudCredential) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cloud_credentials.created", resourceType: "cloud_credential",
+				resourceID: created.ID.String(), resourceName: created.Name, status: http.StatusCreated,
+				detail: map[string]any{"project_id": created.ProjectID.String(), "project_name": project.Name, "provider": created.Provider, "target_count": len(targetRefs)},
+			}
+		})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create credential")
 		return
 	}
-	h.materializeCredentialRefs(r.Context(), created, targetRefs, "apply")
-	h.audit(r, "cloud_credentials.created", created, project.Name, map[string]any{
-		"provider":     created.Provider,
-		"target_count": len(targetRefs),
-	})
 	resp, err := h.rowToResponse(r.Context(), created, true)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InvalidBody, "Failed to render created credential")
@@ -564,29 +650,57 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 		// operator clearly meant a "full PUT" (no other fields touched).
 		description = req.Description
 	}
-	updated, err := h.queries.UpdateCloudCredential(r.Context(), sqlc.UpdateCloudCredentialParams{
+	updateParams := sqlc.UpdateCloudCredentialParams{
 		ID:            existing.ID,
 		Description:   description,
 		DataEncrypted: ciphertext,
 		TargetRefs:    refsJSON,
-	})
+	}
+	droppedRefs := diffTargetRefs(decodeStoredTargetRefs(existing.TargetRefs), refsCanonical)
+	updated, err := executeCloudCredentialMutation(r, h,
+		func(q CloudCredentialMutationTx) (sqlc.CloudCredential, error) {
+			updated, updateErr := q.UpdateCloudCredential(r.Context(), updateParams)
+			if updateErr != nil {
+				return sqlc.CloudCredential{}, updateErr
+			}
+			if stageErr := h.stageDeleteMaterializationRefs(r.Context(), q, updated.ID, droppedRefs); stageErr != nil {
+				return sqlc.CloudCredential{}, stageErr
+			}
+			if orphanErr := q.DeleteOrphanCloudCredentialMaterializations(r.Context(), sqlc.DeleteOrphanCloudCredentialMaterializationsParams{
+				CredentialID: updated.ID,
+				TargetRefs:   refsJSON,
+			}); orphanErr != nil {
+				return sqlc.CloudCredential{}, orphanErr
+			}
+			if stageErr := h.stageMaterializationRefs(r.Context(), q, updated, refsCanonical, "apply"); stageErr != nil {
+				return sqlc.CloudCredential{}, stageErr
+			}
+			return updated, nil
+		},
+		func() (sqlc.CloudCredential, error) {
+			updated, updateErr := h.queries.UpdateCloudCredential(r.Context(), updateParams)
+			if updateErr != nil {
+				return sqlc.CloudCredential{}, updateErr
+			}
+			h.deleteMaterializationRefs(r.Context(), updated.ID, droppedRefs)
+			_ = h.queries.DeleteOrphanCloudCredentialMaterializations(r.Context(), sqlc.DeleteOrphanCloudCredentialMaterializationsParams{
+				CredentialID: updated.ID,
+				TargetRefs:   refsJSON,
+			})
+			h.materializeCredentialRefs(r.Context(), updated, refsCanonical, "apply")
+			return updated, nil
+		},
+		func(updated sqlc.CloudCredential) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cloud_credentials.updated", resourceType: "cloud_credential",
+				resourceID: updated.ID.String(), resourceName: updated.Name, status: http.StatusOK,
+				detail: map[string]any{"project_id": updated.ProjectID.String(), "provider": updated.Provider, "target_count": len(refsCanonical)},
+			}
+		})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update credential")
 		return
 	}
-	// On target_ref shrink: enqueue Secret deletion for the dropped pairs
-	// so we don't strand a Secret in a cluster operators have un-targeted.
-	droppedRefs := diffTargetRefs(decodeStoredTargetRefs(existing.TargetRefs), refsCanonical)
-	h.deleteMaterializationRefs(r.Context(), updated.ID, droppedRefs)
-	_ = h.queries.DeleteOrphanCloudCredentialMaterializations(r.Context(), sqlc.DeleteOrphanCloudCredentialMaterializationsParams{
-		CredentialID: updated.ID,
-		TargetRefs:   refsJSON,
-	})
-	h.materializeCredentialRefs(r.Context(), updated, refsCanonical, "apply")
-	h.audit(r, "cloud_credentials.updated", updated, "", map[string]any{
-		"provider":     updated.Provider,
-		"target_count": len(refsCanonical),
-	})
 	resp, err := h.rowToResponse(r.Context(), updated, true)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InvalidBody, "Failed to render updated credential")
@@ -605,15 +719,28 @@ func (h *CloudCredentialHandler) Delete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	stored := decodeStoredTargetRefs(existing.TargetRefs)
-	h.deleteMaterializationRefs(r.Context(), existing.ID, stored)
-	if err := h.queries.DeleteCloudCredential(r.Context(), existing.ID); err != nil {
+	_, err := executeCloudCredentialMutation(r, h,
+		func(q CloudCredentialMutationTx) (sqlc.CloudCredential, error) {
+			if stageErr := h.stageDeleteMaterializationRefs(r.Context(), q, existing.ID, stored); stageErr != nil {
+				return sqlc.CloudCredential{}, stageErr
+			}
+			return existing, q.DeleteCloudCredential(r.Context(), existing.ID)
+		},
+		func() (sqlc.CloudCredential, error) {
+			h.deleteMaterializationRefs(r.Context(), existing.ID, stored)
+			return existing, h.queries.DeleteCloudCredential(r.Context(), existing.ID)
+		},
+		func(deleted sqlc.CloudCredential) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cloud_credentials.deleted", resourceType: "cloud_credential",
+				resourceID: deleted.ID.String(), resourceName: deleted.Name, status: http.StatusNoContent,
+				detail: map[string]any{"project_id": deleted.ProjectID.String(), "provider": deleted.Provider, "target_count": len(stored)},
+			}
+		})
+	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete credential")
 		return
 	}
-	h.audit(r, "cloud_credentials.deleted", existing, "", map[string]any{
-		"provider":     existing.Provider,
-		"target_count": len(stored),
-	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -633,6 +760,10 @@ func (h *CloudCredentialHandler) Test(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.tester == nil {
 		cloudCredentialTestsTotal.WithLabelValues(observability.MetricValues(row.Provider, "unsupported")...).Inc()
+		if err := h.requireTestAudit(r, row, "unsupported"); err != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+			return
+		}
 		RespondJSON(w, http.StatusOK, CloudTestResult{OK: false, Message: "no test available (tester not configured)"})
 		return
 	}
@@ -647,26 +778,59 @@ func (h *CloudCredentialHandler) Test(w http.ResponseWriter, r *http.Request) {
 		result, terr = h.tester.TestGCP(r.Context(), blob)
 	case "azure":
 		result, terr = h.tester.TestAzure(r.Context(), blob)
+	case "digitalocean", "doks":
+		doTester, supported := h.tester.(digitalOceanCloudTester)
+		if !supported {
+			cloudCredentialTestsTotal.WithLabelValues(observability.MetricValues("digitalocean", "unsupported")...).Inc()
+			if err := h.requireTestAudit(r, row, "unsupported"); err != nil {
+				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+				return
+			}
+			RespondJSON(w, http.StatusOK, CloudTestResult{OK: false, Message: "DigitalOcean credential testing is not configured"})
+			return
+		}
+		result, terr = doTester.TestDigitalOcean(r.Context(), blob)
 	case "generic":
 		// Generic has no SDK to call; surface a clear "no-op" answer.
 		cloudCredentialTestsTotal.WithLabelValues(observability.MetricValues("generic", "unsupported")...).Inc()
-		h.audit(r, "cloud_credentials.test", row, "", map[string]any{"provider": "generic", "outcome": "unsupported"})
+		if err := h.requireTestAudit(r, row, "unsupported"); err != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+			return
+		}
 		RespondJSON(w, http.StatusOK, CloudTestResult{OK: false, Message: "no test available for generic provider"})
 		return
 	default:
 		cloudCredentialTestsTotal.WithLabelValues(observability.MetricValues(row.Provider, "unsupported")...).Inc()
+		if err := h.requireTestAudit(r, row, "unsupported"); err != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+			return
+		}
 		RespondJSON(w, http.StatusOK, CloudTestResult{OK: false, Message: fmt.Sprintf("no test available for provider %q", row.Provider)})
 		return
 	}
 	outcome := "failed"
 	if terr != nil {
-		result = CloudTestResult{OK: false, Message: terr.Error()}
+		result = CloudTestResult{OK: false, Message: redaction.String(terr.Error())}
 	} else if result.OK {
 		outcome = "ok"
 	}
 	cloudCredentialTestsTotal.WithLabelValues(observability.MetricValues(strings.ToLower(row.Provider), outcome)...).Inc()
-	h.audit(r, "cloud_credentials.test", row, "", map[string]any{"provider": row.Provider, "outcome": outcome})
+	if err := h.requireTestAudit(r, row, outcome); err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+		return
+	}
 	RespondJSON(w, http.StatusOK, result)
+}
+
+func (h *CloudCredentialHandler) requireTestAudit(r *http.Request, row sqlc.CloudCredential, outcome string) error {
+	// Production always wires an explicit auditor. Preserve narrow unit-test
+	// fakes that intentionally exercise only provider behavior when it is absent.
+	if h == nil || h.auditor == nil {
+		return nil
+	}
+	return recordMandatoryAudit(r, h.auditor, "cloud_credentials.test", "cloud_credential", row.ID.String(), row.Name, map[string]any{
+		"project_id": row.ProjectID.String(), "provider": row.Provider, "outcome": outcome,
+	})
 }
 
 // --- Internal helpers --------------------------------------------------
@@ -872,13 +1036,35 @@ func (h *CloudCredentialHandler) materializeCredentialRefs(ctx context.Context, 
 	}
 }
 
+func (h *CloudCredentialHandler) stageMaterializationRefs(ctx context.Context, q cloudCredentialMaterializationTaskOutboxQuerier, cred sqlc.CloudCredential, refs []TargetRef, op string) error {
+	for _, ref := range refs {
+		if err := stageCloudCredentialMaterialization(ctx, q, cred, ref, op); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (h *CloudCredentialHandler) deleteMaterializationRefs(ctx context.Context, credentialID uuid.UUID, refs []TargetRef) {
 	for _, ref := range refs {
 		if h.deleteMaterializationWithTaskOutbox(ctx, credentialID, ref) {
 			continue
 		}
-		h.enqueueDelete(ctx, ref)
+		h.enqueueDelete(ctx, credentialID, ref)
 	}
+}
+
+func (h *CloudCredentialHandler) stageDeleteMaterializationRefs(ctx context.Context, q cloudCredentialMaterializationTaskOutboxQuerier, credentialID uuid.UUID, refs []TargetRef) error {
+	operationID := middleware.GetRequestID(ctx)
+	if operationID == "" {
+		operationID = uuid.NewString()
+	}
+	for _, ref := range refs {
+		if err := stageCloudCredentialMaterializationDelete(ctx, q, credentialID, ref, operationID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *CloudCredentialHandler) upsertMaterializationWithTaskOutbox(ctx context.Context, cred sqlc.CloudCredential, ref TargetRef, op string) bool {
@@ -886,6 +1072,10 @@ func (h *CloudCredentialHandler) upsertMaterializationWithTaskOutbox(ctx context
 	if !ok || h.taskOutbox == nil {
 		return false
 	}
+	return stageCloudCredentialMaterialization(ctx, atomicQ, cred, ref, op) == nil
+}
+
+func stageCloudCredentialMaterialization(ctx context.Context, q cloudCredentialMaterializationTaskOutboxQuerier, cred sqlc.CloudCredential, ref TargetRef, op string) error {
 	task, err := tasks.NewCloudCredentialMaterializeTask(tasks.CloudCredentialMaterializePayload{
 		CredentialID: cred.ID.String(),
 		ClusterID:    ref.ClusterID.String(),
@@ -894,11 +1084,11 @@ func (h *CloudCredentialHandler) upsertMaterializationWithTaskOutbox(ctx context
 		Op:           op,
 	})
 	if err != nil {
-		return false
+		return err
 	}
 	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
 	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
-	_, err = atomicQ.UpsertCloudCredentialMaterializationWithTaskOutbox(ctx, sqlc.UpsertCloudCredentialMaterializationWithTaskOutboxParams{
+	_, err = q.UpsertCloudCredentialMaterializationWithTaskOutbox(ctx, sqlc.UpsertCloudCredentialMaterializationWithTaskOutboxParams{
 		CredentialID:        cred.ID,
 		ClusterID:           ref.ClusterID,
 		Namespace:           ref.Namespace,
@@ -906,12 +1096,12 @@ func (h *CloudCredentialHandler) upsertMaterializationWithTaskOutbox(ctx context
 		DedupeKey:           pgtype.Text{String: cloudCredentialMaterializeDedupeKey(cred.ID, ref, op, cloudCredentialDataVersion(cred)), Valid: true},
 		TaskType:            task.Type(),
 		Payload:             task.Payload(),
-		QueueName:           "default",
+		QueueName:           tasks.ClusterTemplateApplyQueueName,
 		MaxRetry:            3,
 		MaxDeliveryAttempts: 20,
 		NextAttemptAt:       pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
 	})
-	return err == nil
+	return err
 }
 
 func (h *CloudCredentialHandler) deleteMaterializationWithTaskOutbox(ctx context.Context, credentialID uuid.UUID, ref TargetRef) bool {
@@ -919,6 +1109,14 @@ func (h *CloudCredentialHandler) deleteMaterializationWithTaskOutbox(ctx context
 	if !ok || h.taskOutbox == nil {
 		return false
 	}
+	operationID := middleware.GetRequestID(ctx)
+	if operationID == "" {
+		operationID = uuid.NewString()
+	}
+	return stageCloudCredentialMaterializationDelete(ctx, atomicQ, credentialID, ref, operationID) == nil
+}
+
+func stageCloudCredentialMaterializationDelete(ctx context.Context, q cloudCredentialMaterializationTaskOutboxQuerier, credentialID uuid.UUID, ref TargetRef, operationID string) error {
 	task, err := tasks.NewCloudCredentialMaterializeTask(tasks.CloudCredentialMaterializePayload{
 		CredentialID: uuid.Nil.String(),
 		ClusterID:    ref.ClusterID.String(),
@@ -927,23 +1125,23 @@ func (h *CloudCredentialHandler) deleteMaterializationWithTaskOutbox(ctx context
 		Op:           "delete",
 	})
 	if err != nil {
-		return false
+		return err
 	}
 	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
 	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
-	err = atomicQ.DeleteCloudCredentialMaterializationWithTaskOutbox(ctx, sqlc.DeleteCloudCredentialMaterializationWithTaskOutboxParams{
+	err = q.DeleteCloudCredentialMaterializationWithTaskOutbox(ctx, sqlc.DeleteCloudCredentialMaterializationWithTaskOutboxParams{
 		CredentialID:        credentialID,
 		ClusterID:           ref.ClusterID,
 		Namespace:           ref.Namespace,
-		DedupeKey:           pgtype.Text{String: cloudCredentialMaterializeDedupeKey(uuid.Nil, ref, "delete", ""), Valid: true},
+		DedupeKey:           pgtype.Text{String: cloudCredentialMaterializeDedupeKey(credentialID, ref, "delete", operationID), Valid: true},
 		TaskType:            task.Type(),
 		Payload:             task.Payload(),
-		QueueName:           "default",
+		QueueName:           tasks.ClusterTemplateApplyQueueName,
 		MaxRetry:            3,
 		MaxDeliveryAttempts: 20,
 		NextAttemptAt:       pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
 	})
-	return err == nil
+	return err
 }
 
 // enqueueMaterialize fires one task per target_ref. Best-effort —
@@ -968,7 +1166,7 @@ func (h *CloudCredentialHandler) enqueueMaterialize(ctx context.Context, cred sq
 		if h.taskOutbox != nil {
 			if _, err := tasks.EnqueueTaskOutbox(ctx, h.taskOutbox, task, tasks.TaskOutboxOptions{
 				DedupeKey:           cloudCredentialMaterializeDedupeKey(cred.ID, ref, op, cloudCredentialDataVersion(cred)),
-				QueueName:           "default",
+				QueueName:           tasks.ClusterTemplateApplyQueueName,
 				MaxRetry:            3,
 				MaxDeliveryAttempts: 20,
 			}); err == nil {
@@ -976,14 +1174,14 @@ func (h *CloudCredentialHandler) enqueueMaterialize(ctx context.Context, cred sq
 			}
 		}
 		if h.enqueuer != nil {
-			_, _ = h.enqueuer.Enqueue(task)
+			_, _ = h.enqueuer.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
 		}
 	}
 }
 
 // enqueueDelete fires a single delete task for a dropped target_ref.
 // Best-effort, same as the apply path.
-func (h *CloudCredentialHandler) enqueueDelete(ctx context.Context, ref TargetRef) {
+func (h *CloudCredentialHandler) enqueueDelete(ctx context.Context, credentialID uuid.UUID, ref TargetRef) {
 	if h.enqueuer == nil && h.taskOutbox == nil {
 		return
 	}
@@ -1000,9 +1198,13 @@ func (h *CloudCredentialHandler) enqueueDelete(ctx context.Context, ref TargetRe
 	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
 	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
 	if h.taskOutbox != nil {
+		operationID := middleware.GetRequestID(ctx)
+		if operationID == "" {
+			operationID = uuid.NewString()
+		}
 		if _, err := tasks.EnqueueTaskOutbox(ctx, h.taskOutbox, task, tasks.TaskOutboxOptions{
-			DedupeKey:           cloudCredentialMaterializeDedupeKey(uuid.Nil, ref, "delete", ""),
-			QueueName:           "default",
+			DedupeKey:           cloudCredentialMaterializeDedupeKey(credentialID, ref, "delete", operationID),
+			QueueName:           tasks.ClusterTemplateApplyQueueName,
 			MaxRetry:            3,
 			MaxDeliveryAttempts: 20,
 		}); err == nil {
@@ -1010,7 +1212,7 @@ func (h *CloudCredentialHandler) enqueueDelete(ctx context.Context, ref TargetRe
 		}
 	}
 	if h.enqueuer != nil {
-		_, _ = h.enqueuer.Enqueue(task)
+		_, _ = h.enqueuer.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
 	}
 }
 
@@ -1041,21 +1243,6 @@ func cloudCredentialMaterializeDedupeKey(credentialID uuid.UUID, ref TargetRef, 
 func cloudCredentialDataVersion(cred sqlc.CloudCredential) string {
 	sum := sha256.Sum256([]byte(cred.DataEncrypted))
 	return hex.EncodeToString(sum[:6])
-}
-
-// audit writes a best-effort audit row using the optional auditor.
-func (h *CloudCredentialHandler) audit(r *http.Request, action string, row sqlc.CloudCredential, projectName string, detail map[string]any) {
-	if h == nil || h.auditor == nil {
-		return
-	}
-	if detail == nil {
-		detail = map[string]any{}
-	}
-	detail["project_id"] = row.ProjectID.String()
-	if projectName != "" {
-		detail["project_name"] = projectName
-	}
-	recordAudit(r, h.auditor, action, "cloud_credential", row.ID.String(), row.Name, detail)
 }
 
 // --- Utility helpers used by tests + caller wiring --------------------

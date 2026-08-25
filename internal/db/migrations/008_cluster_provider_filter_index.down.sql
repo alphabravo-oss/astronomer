@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS public.clusters_active_provider_created_idx;

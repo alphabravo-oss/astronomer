@@ -81,3 +81,62 @@ func TestCanonicalStrategyIsStableForExplicitCanaryOrder(t *testing.T) {
 		t.Fatalf("canonical strategies differ:\n%s\n%s", one, two)
 	}
 }
+
+func TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets(t *testing.T) {
+	t.Parallel()
+	base := model.RolloutStrategy{
+		MaxConcurrent:  5,
+		MaxUnavailable: model.Amount{Type: model.AmountCount, Value: 2},
+	}
+	tests := []struct {
+		name    string
+		current counts
+		want    int32
+	}{
+		{name: "empty fleet budget", want: 2},
+		{name: "in flight reserves both budgets", current: counts{inFlight: 1}, want: 1},
+		{name: "failed member reserves availability", current: counts{failed: 1}, want: 1},
+		{name: "immature ready reserves until soak", current: counts{immatureReady: 2}, want: 0},
+		{name: "availability exhausted", current: counts{inFlight: 1, failed: 1}, want: 0},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := systemReleaseSlots(base, 10, test.current); got != test.want {
+				t.Fatalf("release slots = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
+func TestSystemReleaseSlotsSupportsPercentageAndZeroUnavailable(t *testing.T) {
+	t.Parallel()
+	strategy := model.RolloutStrategy{
+		MaxConcurrent:  10,
+		MaxUnavailable: model.Amount{Type: model.AmountPercent, Value: 25},
+	}
+	if got := systemReleaseSlots(strategy, 10, counts{}); got != 2 {
+		t.Fatalf("percentage release slots = %d, want floor(25%% of 10)=2", got)
+	}
+	strategy.MaxUnavailable.Value = 0
+	if got := systemReleaseSlots(strategy, 10, counts{}); got != 0 {
+		t.Fatalf("zero unavailable budget released %d assignments", got)
+	}
+}
+
+func TestPartialCanaryRollbackCompletionUsesOnlyRollbackTargets(t *testing.T) {
+	t.Parallel()
+	current := counts{
+		pending:         8,
+		rolledBack:      2,
+		rollbackTargets: 2,
+	}
+	if !rollbackComplete(current) {
+		t.Fatal("completed canary rollback was not recognized")
+	}
+	current.rollbackFailed = 1
+	if rollbackComplete(current) {
+		t.Fatal("failed rollback must not be classified as complete")
+	}
+}

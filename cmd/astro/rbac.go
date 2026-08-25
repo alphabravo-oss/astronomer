@@ -104,7 +104,6 @@ func sdkErr(action string, status int, env *astroclient.ErrorEnvelope, body []by
 type roleRequestFlags struct {
 	name        string
 	displayName string
-	scope       string
 }
 
 // build assembles an RBACRoleRequest from the collected flags. The name is
@@ -116,10 +115,6 @@ func (f roleRequestFlags) build() (astroclient.RBACRoleRequest, error) {
 	}
 	req := astroclient.RBACRoleRequest{Name: f.name}
 	req.DisplayName = strPtr(f.displayName)
-	if s := strings.TrimSpace(f.scope); s != "" {
-		sc := astroclient.RBACRoleRequestScope(s)
-		req.Scope = &sc
-	}
 	return req, nil
 }
 
@@ -153,9 +148,9 @@ func newRbacGlobalRolesListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1RbacGlobalRolesParams{}
+			params := &astroclient.GetRbacGlobalRolesParams{}
 			applyLimitOffset(&params.Limit, &params.Offset, limit, offset)
-			resp, err := client.GetApiV1RbacGlobalRolesWithResponse(cmd.Context(), params)
+			resp, err := client.GetRbacGlobalRolesWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -183,7 +178,7 @@ func newRbacGlobalRolesGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1RbacGlobalRolesIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetRbacGlobalRolesByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -210,7 +205,7 @@ func newRbacGlobalRolesCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1RbacGlobalRolesWithResponse(cmd.Context(), req)
+			resp, err := client.PostRbacGlobalRolesWithResponse(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -243,7 +238,7 @@ func newRbacGlobalRolesUpdateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PutApiV1RbacGlobalRolesIdWithResponse(cmd.Context(), id, req)
+			resp, err := client.PutRbacGlobalRolesByIdWithResponse(cmd.Context(), id, req)
 			if err != nil {
 				return err
 			}
@@ -272,7 +267,7 @@ func newRbacGlobalRolesDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1RbacGlobalRolesIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteRbacGlobalRolesByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -316,9 +311,9 @@ func newRbacClusterRolesListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1RbacClusterRolesParams{}
+			params := &astroclient.GetRbacClusterRolesParams{}
 			applyLimitOffset(&params.Limit, &params.Offset, limit, offset)
-			resp, err := client.GetApiV1RbacClusterRolesWithResponse(cmd.Context(), params)
+			resp, err := client.GetRbacClusterRolesWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -346,7 +341,7 @@ func newRbacClusterRolesGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1RbacClusterRolesIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetRbacClusterRolesByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -373,7 +368,7 @@ func newRbacClusterRolesCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1RbacClusterRolesWithResponse(cmd.Context(), req)
+			resp, err := client.PostRbacClusterRolesWithResponse(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -406,7 +401,7 @@ func newRbacClusterRolesUpdateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PutApiV1RbacClusterRolesIdWithResponse(cmd.Context(), id, req)
+			resp, err := client.PutRbacClusterRolesByIdWithResponse(cmd.Context(), id, req)
 			if err != nil {
 				return err
 			}
@@ -435,7 +430,7 @@ func newRbacClusterRolesDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1RbacClusterRolesIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteRbacClusterRolesByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -479,9 +474,9 @@ func newRbacProjectRolesListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1RbacProjectRolesParams{}
+			params := &astroclient.GetRbacProjectRolesParams{}
 			applyLimitOffset(&params.Limit, &params.Offset, limit, offset)
-			resp, err := client.GetApiV1RbacProjectRolesWithResponse(cmd.Context(), params)
+			resp, err := client.GetRbacProjectRolesWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -509,7 +504,7 @@ func newRbacProjectRolesGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1RbacProjectRolesIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetRbacProjectRolesByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -536,7 +531,7 @@ func newRbacProjectRolesCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1RbacProjectRolesWithResponse(cmd.Context(), req)
+			resp, err := client.PostRbacProjectRolesWithResponse(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -569,7 +564,7 @@ func newRbacProjectRolesUpdateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PutApiV1RbacProjectRolesIdWithResponse(cmd.Context(), id, req)
+			resp, err := client.PutRbacProjectRolesByIdWithResponse(cmd.Context(), id, req)
 			if err != nil {
 				return err
 			}
@@ -598,7 +593,7 @@ func newRbacProjectRolesDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1RbacProjectRolesIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteRbacProjectRolesByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -675,9 +670,9 @@ func newRbacGlobalBindingsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1RbacGlobalBindingsParams{}
+			params := &astroclient.GetRbacGlobalBindingsParams{}
 			applyLimitOffset(&params.Limit, &params.Offset, limit, offset)
-			resp, err := client.GetApiV1RbacGlobalBindingsWithResponse(cmd.Context(), params)
+			resp, err := client.GetRbacGlobalBindingsWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -705,7 +700,7 @@ func newRbacGlobalBindingsCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1RbacGlobalBindingsWithResponse(cmd.Context(), req)
+			resp, err := client.PostRbacGlobalBindingsWithResponse(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -734,7 +729,7 @@ func newRbacGlobalBindingsDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1RbacGlobalBindingsIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteRbacGlobalBindingsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -773,12 +768,12 @@ func newRbacClusterBindingsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1RbacClusterBindingsParams{}
+			params := &astroclient.GetRbacClusterBindingsParams{}
 			applyLimitOffset(&params.Limit, &params.Offset, limit, offset)
 			if params.ClusterId, err = parseUUIDPtr("cluster id", clusterID); err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1RbacClusterBindingsWithResponse(cmd.Context(), params)
+			resp, err := client.GetRbacClusterBindingsWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -820,7 +815,7 @@ func newRbacClusterBindingsCreateCmd() *cobra.Command {
 				return fmt.Errorf("one of --user-id or --group is required")
 			}
 			req := astroclient.RBACClusterBindingRequest{ClusterId: cid, RoleId: roleID, UserId: userID, Group: strPtr(f.group)}
-			resp, err := client.PostApiV1RbacClusterBindingsWithResponse(cmd.Context(), req)
+			resp, err := client.PostRbacClusterBindingsWithResponse(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -850,7 +845,7 @@ func newRbacClusterBindingsDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1RbacClusterBindingsIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteRbacClusterBindingsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -889,12 +884,12 @@ func newRbacProjectBindingsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1RbacProjectBindingsParams{}
+			params := &astroclient.GetRbacProjectBindingsParams{}
 			applyLimitOffset(&params.Limit, &params.Offset, limit, offset)
 			if params.ProjectId, err = parseUUIDPtr("project id", projectID); err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1RbacProjectBindingsWithResponse(cmd.Context(), params)
+			resp, err := client.GetRbacProjectBindingsWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -936,7 +931,7 @@ func newRbacProjectBindingsCreateCmd() *cobra.Command {
 				return fmt.Errorf("one of --user-id or --group is required")
 			}
 			req := astroclient.RBACProjectBindingRequest{ProjectId: pid, RoleId: roleID, UserId: userID, Group: strPtr(f.group)}
-			resp, err := client.PostApiV1RbacProjectBindingsWithResponse(cmd.Context(), req)
+			resp, err := client.PostRbacProjectBindingsWithResponse(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -966,7 +961,7 @@ func newRbacProjectBindingsDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1RbacProjectBindingsIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteRbacProjectBindingsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -1008,9 +1003,9 @@ func newRbacGlobalRoleBindingsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1RbacGlobalRoleBindingsParams{}
+			params := &astroclient.GetRbacGlobalRoleBindingsParams{}
 			applyLimitOffset(&params.Limit, &params.Offset, limit, offset)
-			resp, err := client.GetApiV1RbacGlobalRoleBindingsWithResponse(cmd.Context(), params)
+			resp, err := client.GetRbacGlobalRoleBindingsWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -1038,7 +1033,7 @@ func newRbacGlobalRoleBindingsCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1RbacGlobalRoleBindingsWithResponse(cmd.Context(), req)
+			resp, err := client.PostRbacGlobalRoleBindingsWithResponse(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -1067,7 +1062,7 @@ func newRbacGlobalRoleBindingsDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1RbacGlobalRoleBindingsIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteRbacGlobalRoleBindingsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -1106,12 +1101,12 @@ func newRbacClusterRoleBindingsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1RbacClusterRoleBindingsParams{}
+			params := &astroclient.GetRbacClusterRoleBindingsParams{}
 			applyLimitOffset(&params.Limit, &params.Offset, limit, offset)
 			if params.ClusterId, err = parseUUIDPtr("cluster id", clusterID); err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1RbacClusterRoleBindingsWithResponse(cmd.Context(), params)
+			resp, err := client.GetRbacClusterRoleBindingsWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -1153,7 +1148,7 @@ func newRbacClusterRoleBindingsCreateCmd() *cobra.Command {
 				return fmt.Errorf("one of --user-id or --group is required")
 			}
 			req := astroclient.RBACClusterBindingRequest{ClusterId: cid, RoleId: roleID, UserId: userID, Group: strPtr(f.group)}
-			resp, err := client.PostApiV1RbacClusterRoleBindingsWithResponse(cmd.Context(), req)
+			resp, err := client.PostRbacClusterRoleBindingsWithResponse(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -1183,7 +1178,7 @@ func newRbacClusterRoleBindingsDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1RbacClusterRoleBindingsIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteRbacClusterRoleBindingsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -1222,12 +1217,12 @@ func newRbacProjectRoleBindingsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1RbacProjectRoleBindingsParams{}
+			params := &astroclient.GetRbacProjectRoleBindingsParams{}
 			applyLimitOffset(&params.Limit, &params.Offset, limit, offset)
 			if params.ProjectId, err = parseUUIDPtr("project id", projectID); err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1RbacProjectRoleBindingsWithResponse(cmd.Context(), params)
+			resp, err := client.GetRbacProjectRoleBindingsWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -1269,7 +1264,7 @@ func newRbacProjectRoleBindingsCreateCmd() *cobra.Command {
 				return fmt.Errorf("one of --user-id or --group is required")
 			}
 			req := astroclient.RBACProjectBindingRequest{ProjectId: pid, RoleId: roleID, UserId: userID, Group: strPtr(f.group)}
-			resp, err := client.PostApiV1RbacProjectRoleBindingsWithResponse(cmd.Context(), req)
+			resp, err := client.PostRbacProjectRoleBindingsWithResponse(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -1299,7 +1294,7 @@ func newRbacProjectRoleBindingsDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1RbacProjectRoleBindingsIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteRbacProjectRoleBindingsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -1339,7 +1334,7 @@ func newRbacTemplatesListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1RbacTemplatesWithResponse(cmd.Context())
+			resp, err := client.GetRbacTemplatesWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -1362,7 +1357,7 @@ func newRbacTemplatesGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1RbacTemplatesNameWithResponse(cmd.Context(), args[0])
+			resp, err := client.GetRbacTemplatesByNameWithResponse(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}
@@ -1389,7 +1384,7 @@ func newRbacMyPermissionsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1RbacMyPermissionsParams{}
+			params := &astroclient.GetRbacMyPermissionsParams{}
 			if params.ClusterId, err = parseUUIDPtr("cluster id", clusterID); err != nil {
 				return err
 			}
@@ -1397,7 +1392,7 @@ func newRbacMyPermissionsCmd() *cobra.Command {
 				return err
 			}
 			params.Namespace = strPtr(namespace)
-			resp, err := client.GetApiV1RbacMyPermissionsWithResponse(cmd.Context(), params)
+			resp, err := client.GetRbacMyPermissionsWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -1422,7 +1417,7 @@ func newRbacMyRolesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1RbacMyRolesWithResponse(cmd.Context())
+			resp, err := client.GetRbacMyRolesWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -1449,14 +1444,14 @@ func newRbacMyRolesCheckCmd() *cobra.Command {
 			if strings.TrimSpace(resource) == "" || strings.TrimSpace(verb) == "" {
 				return fmt.Errorf("--resource and --verb are required")
 			}
-			params := &astroclient.GetApiV1RbacMyRolesCheckParams{Resource: resource, Verb: verb}
+			params := &astroclient.GetRbacMyRolesCheckParams{Resource: resource, Verb: verb}
 			if params.ClusterId, err = parseUUIDPtr("cluster id", clusterID); err != nil {
 				return err
 			}
 			if params.ProjectId, err = parseUUIDPtr("project id", projectID); err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1RbacMyRolesCheckWithResponse(cmd.Context(), params)
+			resp, err := client.GetRbacMyRolesCheckWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -1488,7 +1483,7 @@ func newRbacEffectivePermissionsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1RbacEffectivePermissionsUserIdParams{}
+			params := &astroclient.GetRbacEffectivePermissionsByUserIdParams{}
 			if params.ClusterId, err = parseUUIDPtr("cluster id", clusterID); err != nil {
 				return err
 			}
@@ -1496,7 +1491,7 @@ func newRbacEffectivePermissionsCmd() *cobra.Command {
 				return err
 			}
 			params.Namespace = strPtr(namespace)
-			resp, err := client.GetApiV1RbacEffectivePermissionsUserIdWithResponse(cmd.Context(), userID, params)
+			resp, err := client.GetRbacEffectivePermissionsByUserIdWithResponse(cmd.Context(), userID, params)
 			if err != nil {
 				return err
 			}
@@ -1541,7 +1536,7 @@ are accepted by the API but are not exposed as flags here (see Report).`,
 			if req.RoleId == nil && req.TemplateName == nil {
 				return fmt.Errorf("one of --role-id or --template-name is required")
 			}
-			resp, err := client.PostApiV1RbacPermissionPreviewWithResponse(cmd.Context(), req)
+			resp, err := client.PostRbacPermissionPreviewWithResponse(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -1582,7 +1577,6 @@ func applyLimitOffset(dstLimit, dstOffset **int, limit, offset int) {
 func addRoleFlags(cmd *cobra.Command, f *roleRequestFlags) {
 	cmd.Flags().StringVar(&f.name, "name", "", "role name (required)")
 	cmd.Flags().StringVar(&f.displayName, "display-name", "", "human-readable name")
-	cmd.Flags().StringVar(&f.scope, "scope", "", "role scope (global|cluster|project)")
 }
 
 // firstEnv returns the first non-nil ErrorEnvelope from the candidates, so

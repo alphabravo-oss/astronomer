@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/auth/register-sso/ — one-click "wire Dex as our SSO".
  *
@@ -149,7 +149,9 @@ function RegisterAsSSOPage() {
             {displayName}&rdquo; button on the login screen.
           </p>
           <div className="flex items-center gap-2 pt-2">
-            <ActionButton onClick={() => router.push("/dashboard/settings/auth")}>
+            <ActionButton
+              onClick={() => router.push("/dashboard/settings/auth")}
+            >
               Back to Auth
             </ActionButton>
             <ActionButton intent="ghost" onClick={() => setSuccess(null)}>
@@ -215,7 +217,9 @@ function RegisterAsSSOPage() {
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
-            <ActionButton onClick={() => router.push("/dashboard/settings/auth")}>
+            <ActionButton
+              onClick={() => router.push("/dashboard/settings/auth")}
+            >
               Cancel
             </ActionButton>
             <ActionButton
@@ -260,6 +264,6 @@ function FieldRow({
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/auth/register-sso/')({
+export const Route = createFileRoute("/dashboard/settings/auth/register-sso/")({
   component: RegisterAsSSOPage,
 });

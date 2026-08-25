@@ -24,6 +24,7 @@ import (
 )
 
 type fakeClusterAgentQuerier struct {
+	fakeOperationIdempotencyStore
 	clusters   []sqlc.Cluster
 	active     []sqlc.AgentConnection
 	history    map[uuid.UUID][]sqlc.AgentConnection
@@ -32,6 +33,8 @@ type fakeClusterAgentQuerier struct {
 	created    []sqlc.AgentLifecycleOperation
 	idempotent []sqlc.CreateAgentLifecycleOperationIdempotentParams
 	users      map[uuid.UUID]sqlc.User
+	audits     []sqlc.UpsertAuditOutboxParams
+	outboxErr  error
 }
 
 func (f *fakeClusterAgentQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.User, error) {
@@ -155,6 +158,14 @@ func (f *fakeClusterAgentQuerier) ListAgentLifecycleOperationsByCluster(_ contex
 	return items[arg.Offset:end], nil
 }
 
+func (f *fakeClusterAgentQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	if f.outboxErr != nil {
+		return sqlc.AuditOutbox{}, f.outboxErr
+	}
+	f.audits = append(f.audits, arg)
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
+}
+
 func TestClusterAgentListSummarizesConnectedDegradedDisconnectedAgents(t *testing.T) {
 	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
 	connectedID := uuid.New()
@@ -167,7 +178,7 @@ func TestClusterAgentListSummarizesConnectedDegradedDisconnectedAgents(t *testin
 				Name:              "connected",
 				DisplayName:       "Connected",
 				Status:            "active",
-				AgentVersion:      "v1.0.0",
+				AgentVersion:      "v1.1.0",
 				LastHeartbeat:     ts(now.Add(-30 * time.Second)),
 				Annotations:       profileAnnotation(agenttemplate.PrivilegeProfileOperator),
 				KubernetesVersion: "v1.30.1",
@@ -199,7 +210,7 @@ func TestClusterAgentListSummarizesConnectedDegradedDisconnectedAgents(t *testin
 				Status:       "connected",
 				ConnectedAt:  now.Add(-10 * time.Minute),
 				LastPing:     ts(now.Add(-20 * time.Second)),
-				AgentVersion: "v1.0.0",
+				AgentVersion: "v1.1.0",
 			},
 			{
 				ID:           uuid.New(),
@@ -209,7 +220,7 @@ func TestClusterAgentListSummarizesConnectedDegradedDisconnectedAgents(t *testin
 				Status:       "connected",
 				ConnectedAt:  now.Add(-15 * time.Minute),
 				LastPing:     ts(now.Add(-4 * time.Minute)),
-				AgentVersion: "v0.1.0", // deprecated tier (below the v0.2.0 supported floor)
+				AgentVersion: "v1.0.0", // deprecated tier for the prior release line
 			},
 		},
 		history: map[uuid.UUID][]sqlc.AgentConnection{
@@ -222,7 +233,7 @@ func TestClusterAgentListSummarizesConnectedDegradedDisconnectedAgents(t *testin
 					Status:         "disconnected",
 					ConnectedAt:    now.Add(-2 * time.Hour),
 					DisconnectedAt: ts(now.Add(-30 * time.Minute)),
-					AgentVersion:   "v0.0.5", // below the v0.1.0 compatible floor → blocked
+					AgentVersion:   "v0.9.9", // below the v1.0.0 compatible floor → blocked
 				},
 			},
 		},
@@ -312,7 +323,7 @@ func TestClusterAgentDiagnosticsReturnsRedactedTriagePayload(t *testing.T) {
 				Status:        "active",
 				LastHeartbeat: ts(now.Add(-5 * time.Minute)),
 				Annotations:   profileAnnotation(agenttemplate.PrivilegeProfileAdmin),
-				AgentVersion:  "v0.9.0",
+				AgentVersion:  "v1.1.0",
 			},
 		},
 		history: map[uuid.UUID][]sqlc.AgentConnection{
@@ -325,7 +336,7 @@ func TestClusterAgentDiagnosticsReturnsRedactedTriagePayload(t *testing.T) {
 					Status:       "connected",
 					ConnectedAt:  now.Add(-20 * time.Minute),
 					LastPing:     ts(now.Add(-4 * time.Minute)),
-					AgentVersion: "v0.9.0",
+					AgentVersion: "v1.1.0",
 					PodName:      "astronomer-agent-abc",
 				},
 			},
@@ -401,7 +412,7 @@ func TestClusterAgentDiagnosticsBundleDownloadsRedactedJSON(t *testing.T) {
 					Status:       "connected",
 					ConnectedAt:  now.Add(-20 * time.Minute),
 					LastPing:     ts(now.Add(-20 * time.Second)),
-					AgentVersion: "v1.0.0",
+					AgentVersion: "v1.1.0",
 				},
 			},
 		},
@@ -455,7 +466,7 @@ func TestClusterAgentDiagnosticsBundleStrictlyRedactsLiveSensitiveValues(t *test
 					Status:       "connected",
 					ConnectedAt:  now.Add(-20 * time.Minute),
 					LastPing:     ts(now.Add(-20 * time.Second)),
-					AgentVersion: "v1.0.0",
+					AgentVersion: "v1.1.0",
 				},
 			},
 		},
@@ -571,7 +582,7 @@ func TestClusterAgentDiagnosticsIncludesLiveAgentSnapshot(t *testing.T) {
 					Status:       "connected",
 					ConnectedAt:  now.Add(-20 * time.Minute),
 					LastPing:     ts(now.Add(-20 * time.Second)),
-					AgentVersion: "v1.0.0",
+					AgentVersion: "v1.1.0",
 				},
 			},
 		},
@@ -659,7 +670,7 @@ func TestClusterAgentSelfTestPassesForHealthyConnectedAgent(t *testing.T) {
 				Status:        "active",
 				LastHeartbeat: ts(now.Add(-30 * time.Second)),
 				Annotations:   profileAnnotation(agenttemplate.PrivilegeProfileOperator),
-				AgentVersion:  "v1.0.0",
+				AgentVersion:  "v1.1.0",
 			},
 		},
 		history: map[uuid.UUID][]sqlc.AgentConnection{
@@ -672,7 +683,7 @@ func TestClusterAgentSelfTestPassesForHealthyConnectedAgent(t *testing.T) {
 					Status:       "connected",
 					ConnectedAt:  now.Add(-20 * time.Minute),
 					LastPing:     ts(now.Add(-20 * time.Second)),
-					AgentVersion: "v1.0.0",
+					AgentVersion: "v1.1.0",
 				},
 			},
 		},
@@ -745,7 +756,7 @@ func TestClusterAgentSelfTestFailsForDisconnectedBlockedAgent(t *testing.T) {
 				DisplayName:  "Legacy",
 				Status:       "disconnected",
 				Annotations:  profileAnnotation(agenttemplate.PrivilegeProfileViewer),
-				AgentVersion: "v0.0.5", // below the v0.1.0 compatible floor → blocked
+				AgentVersion: "v0.9.9", // below the v1.0.0 compatible floor → blocked
 			},
 		},
 		history: map[uuid.UUID][]sqlc.AgentConnection{
@@ -758,7 +769,7 @@ func TestClusterAgentSelfTestFailsForDisconnectedBlockedAgent(t *testing.T) {
 					Status:         "disconnected",
 					ConnectedAt:    now.Add(-2 * time.Hour),
 					DisconnectedAt: ts(now.Add(-30 * time.Minute)),
-					AgentVersion:   "v0.0.5", // below the v0.1.0 compatible floor → blocked
+					AgentVersion:   "v0.9.9", // below the v1.0.0 compatible floor → blocked
 				},
 			},
 		},
@@ -828,7 +839,7 @@ func TestClusterAgentUpgradePlanReadyForConnectedRemoteAgent(t *testing.T) {
 					Status:       "connected",
 					ConnectedAt:  now.Add(-20 * time.Minute),
 					LastPing:     ts(now.Add(-20 * time.Second)),
-					AgentVersion: "v1.0.0",
+					AgentVersion: "v1.1.0",
 				},
 			},
 		},
@@ -855,7 +866,7 @@ func TestClusterAgentUpgradePlanReadyForConnectedRemoteAgent(t *testing.T) {
 	if !got.Ready || got.TargetImage != "example.com/astronomer-agent:v1.2.3" {
 		t.Fatalf("upgrade plan = %+v", got)
 	}
-	if got.BatchSize != 1 || got.MaxUnavailable != 1 || got.RollbackImage != "example.com/astronomer-agent:v1.0.0" {
+	if got.BatchSize != 1 || got.MaxUnavailable != 1 || got.RollbackImage != "example.com/astronomer-agent:v1.1.0" {
 		t.Fatalf("rollout defaults = %+v", got)
 	}
 	if len(got.CanaryClusterIDs) != 1 || got.CanaryClusterIDs[0] != clusterID.String() {
@@ -889,7 +900,7 @@ func TestClusterAgentUpgradePlanAcceptsRolloutControls(t *testing.T) {
 					Status:       "connected",
 					ConnectedAt:  now.Add(-20 * time.Minute),
 					LastPing:     ts(now.Add(-20 * time.Second)),
-					AgentVersion: "v1.0.0",
+					AgentVersion: "v1.1.0",
 				},
 			},
 		},
@@ -991,7 +1002,7 @@ func TestClusterAgentUpgradeQueuesLifecycleOperation(t *testing.T) {
 					Status:       "connected",
 					ConnectedAt:  now.Add(-20 * time.Minute),
 					LastPing:     ts(now.Add(-20 * time.Second)),
-					AgentVersion: "v1.0.0",
+					AgentVersion: "v1.1.0",
 				},
 			},
 		},
@@ -999,10 +1010,12 @@ func TestClusterAgentUpgradeQueuesLifecycleOperation(t *testing.T) {
 	h := NewClusterAgentHandler(fake)
 	h.now = func() time.Time { return now }
 	h.SetAgentUpgradeTarget("example.com/astronomer-agent", "v1.2.3")
+	h.SetRunTx(fakeClusterAgentRunTx(fake))
 
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("cluster_id", clusterID.String())
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/cluster-agents/"+clusterID.String()+"/upgrade/", nil)
+	req.Header.Set("Idempotency-Key", "blocked-agent-upgrade")
 	req.Header.Set("Idempotency-Key", "agent-upgrade-retry-1")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	rr := httptest.NewRecorder()
@@ -1057,6 +1070,7 @@ func TestClusterAgentUpgradeDoesNotQueueBlockedPlan(t *testing.T) {
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("cluster_id", clusterID.String())
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/cluster-agents/"+clusterID.String()+"/upgrade/", nil)
+	req.Header.Set("Idempotency-Key", "blocked-agent-upgrade")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	rr := httptest.NewRecorder()
 	h.Upgrade(rr, req)

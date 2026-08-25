@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -26,15 +27,18 @@ type fakeSIEMQuerier struct {
 	queue      []sqlc.SiemForwardQueue
 	status     map[uuid.UUID]sqlc.SiemForwarderStatus
 	users      map[uuid.UUID]sqlc.User
+	operations map[uuid.UUID]sqlc.SIEMTestOperation
 	enqueueCnt int
+	auditCnt   int
 }
 
 func newFakeSIEMQuerier(users ...sqlc.User) *fakeSIEMQuerier {
 	q := &fakeSIEMQuerier{
-		byID:   map[uuid.UUID]sqlc.SiemForwarder{},
-		byName: map[string]sqlc.SiemForwarder{},
-		status: map[uuid.UUID]sqlc.SiemForwarderStatus{},
-		users:  map[uuid.UUID]sqlc.User{},
+		byID:       map[uuid.UUID]sqlc.SiemForwarder{},
+		byName:     map[string]sqlc.SiemForwarder{},
+		status:     map[uuid.UUID]sqlc.SiemForwarderStatus{},
+		users:      map[uuid.UUID]sqlc.User{},
+		operations: map[uuid.UUID]sqlc.SIEMTestOperation{},
 	}
 	for _, u := range users {
 		q.users[u.ID] = u
@@ -184,6 +188,39 @@ func (f *fakeSIEMQuerier) CreateAuditLogV1(_ context.Context, _ sqlc.CreateAudit
 	return nil
 }
 
+func (f *fakeSIEMQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.mu.Lock()
+	f.auditCnt++
+	f.mu.Unlock()
+	return sqlc.AuditOutbox{ID: arg.ID, DedupeKey: arg.DedupeKey}, nil
+}
+
+func (f *fakeSIEMQuerier) CreateSIEMTestOperationAndQueue(_ context.Context, arg sqlc.CreateSIEMTestOperationAndQueueParams) (sqlc.SIEMTestOperation, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if existing, ok := f.operations[arg.ID]; ok {
+		existing.Created = false
+		return existing, nil
+	}
+	f.enqueueCnt++
+	row := sqlc.SiemForwardQueue{ID: int64(f.enqueueCnt), ForwarderID: arg.ForwarderID, EventName: "siem.test_ping", Payload: arg.Payload, Severity: "info"}
+	f.queue = append(f.queue, row)
+	now := time.Now().UTC()
+	operation := sqlc.SIEMTestOperation{ID: arg.ID, ForwarderID: arg.ForwarderID, QueueID: row.ID, Status: "pending", RequestedBy: arg.RequestedBy, CreatedAt: now, UpdatedAt: now, Created: true}
+	f.operations[arg.ID] = operation
+	return operation, nil
+}
+
+func (f *fakeSIEMQuerier) GetSIEMTestOperation(_ context.Context, arg sqlc.GetSIEMTestOperationParams) (sqlc.SIEMTestOperation, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	row, ok := f.operations[arg.ID]
+	if !ok || row.ForwarderID != arg.ForwarderID {
+		return sqlc.SIEMTestOperation{}, pgx.ErrNoRows
+	}
+	return row, nil
+}
+
 func authedSIEMRequest(method, target string, callerID uuid.UUID, body []byte) *http.Request {
 	var r *http.Request
 	if body == nil {
@@ -210,6 +247,7 @@ func newSIEMTestHandler(t *testing.T, q *fakeSIEMQuerier) *SIEMHandler {
 	}
 	h := NewSIEMHandler(q, enc, nil)
 	h.SetAuditWriter(q)
+	h.SetRunTx(func(_ context.Context, fn func(SIEMMutationTx) error) error { return fn(q) })
 	return h
 }
 
@@ -328,6 +366,7 @@ func TestSIEMHandler_TestEndpoint(t *testing.T) {
 		authedSIEMRequest(http.MethodPost, "/api/v1/admin/siem-forwarders/"+fwdID.String()+"/test/", superID, nil),
 		"id", fwdID.String(),
 	)
+	req.Header.Set("Idempotency-Key", "siem-test-1")
 	h.Test(w, req)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("test endpoint status=%d body=%s", w.Code, w.Body.String())
@@ -340,6 +379,30 @@ func TestSIEMHandler_TestEndpoint(t *testing.T) {
 		t.Errorf("queue payload not test ping: %+v", q.queue)
 	}
 	q.mu.Unlock()
+
+	replay := httptest.NewRecorder()
+	h.Test(replay, req.Clone(req.Context()))
+	if replay.Code != http.StatusAccepted || replay.Header().Get("Location") != w.Header().Get("Location") {
+		t.Fatalf("replay status=%d location=%q body=%s", replay.Code, replay.Header().Get("Location"), replay.Body.String())
+	}
+	q.mu.Lock()
+	if q.enqueueCnt != 1 || q.auditCnt != 1 {
+		t.Fatalf("replay duplicated queue/audit: %d/%d", q.enqueueCnt, q.auditCnt)
+	}
+	q.mu.Unlock()
+}
+
+func TestSIEMHandlerTestRequiresIdempotencyKey(t *testing.T) {
+	superID, fwdID := uuid.New(), uuid.New()
+	q := newFakeSIEMQuerier(sqlc.User{ID: superID, IsSuperuser: true})
+	q.byID[fwdID] = sqlc.SiemForwarder{ID: fwdID, Name: "sink", Transport: "syslog_udp", Enabled: true}
+	h := newSIEMTestHandler(t, q)
+	req := withChiParam(authedSIEMRequest(http.MethodPost, "/", superID, nil), "id", fwdID.String())
+	recorder := httptest.NewRecorder()
+	h.Test(recorder, req)
+	if recorder.Code != http.StatusBadRequest || q.enqueueCnt != 0 {
+		t.Fatalf("missing key status=%d enqueues=%d body=%s", recorder.Code, q.enqueueCnt, recorder.Body.String())
+	}
 }
 
 func TestSIEMHandler_RequiresSuperuser(t *testing.T) {

@@ -254,7 +254,7 @@ func TestBaselineRecompute_SeedsRowsForAnomalyRules(t *testing.T) {
 //
 // These don't drive the full HandleAlertEvaluation function — that
 // requires a complete asynq + leader stack. Instead they call
-// evaluateAnomalyRule directly with a stubbed runtimeDeps.Queries.
+// evaluateAnomalyRule directly with an explicit query dependency.
 // The TestAlertEvaluator_Anomaly* names match the spec.
 
 func TestAlertEvaluator_AnomalyFire(t *testing.T) {
@@ -276,7 +276,7 @@ func TestAlertEvaluator_AnomalyFire(t *testing.T) {
 		LastValue:     50,
 		RecentSamples: json.RawMessage("[]"),
 	}
-	// no-op — EvaluateAnomalyRuleWith doesn't read runtimeDeps
+	// no-op — EvaluateAnomalyRuleWith receives its query dependency explicitly.
 
 	ruleCfg, _ := json.Marshal(map[string]any{
 		"rule_kind":              "anomaly",
@@ -326,7 +326,7 @@ func TestAlertEvaluator_AnomalyResolve(t *testing.T) {
 		LastValue:     50,
 		RecentSamples: json.RawMessage("[]"),
 	}
-	// no-op — EvaluateAnomalyRuleWith doesn't read runtimeDeps
+	// no-op — EvaluateAnomalyRuleWith receives its query dependency explicitly.
 
 	ruleCfg, _ := json.Marshal(map[string]any{
 		"rule_kind":              "anomaly",
@@ -370,7 +370,7 @@ func TestAlertEvaluator_AnomalyNoFireUnderMinSamples(t *testing.T) {
 		LastValue:     50,
 		RecentSamples: json.RawMessage("[]"),
 	}
-	// no-op — EvaluateAnomalyRuleWith doesn't read runtimeDeps
+	// no-op — EvaluateAnomalyRuleWith receives its query dependency explicitly.
 
 	ruleCfg, _ := json.Marshal(map[string]any{
 		"rule_kind":              "anomaly",
@@ -402,7 +402,7 @@ func TestAlertEvaluator_AnomalyNoFireWhenBaselineMissing(t *testing.T) {
 	q.clusters[clusterID] = sqlc.Cluster{ID: clusterID, Name: "edge-1"}
 	q.health[clusterID] = sqlc.ClusterHealthStatus{CpuUsagePercent: 99.0}
 	// No baseline row at all — evaluator must treat as no-fire.
-	// no-op — EvaluateAnomalyRuleWith doesn't read runtimeDeps
+	// no-op — EvaluateAnomalyRuleWith receives its query dependency explicitly.
 
 	ruleCfg, _ := json.Marshal(map[string]any{
 		"rule_kind":              "anomaly",

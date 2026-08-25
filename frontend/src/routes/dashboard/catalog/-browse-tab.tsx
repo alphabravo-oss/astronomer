@@ -1,9 +1,9 @@
-import { EmptyState } from '@/components/ui/empty-state';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
-import type { HelmChart, HelmChartCategory } from '@/types';
-import { Package, Search, X } from 'lucide-react';
-import { categories, CategoryChip } from './-category';
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import type { HelmChart, HelmChartCategory } from "@/types";
+import { Package, Search, X } from "lucide-react";
+import { categories, CategoryChip } from "./-category";
 
 export function BrowseTab({
   projectId,
@@ -18,8 +18,8 @@ export function BrowseTab({
   projectId: string;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
-  selectedCategory: HelmChartCategory | 'all';
-  onSelectedCategoryChange: (value: HelmChartCategory | 'all') => void;
+  selectedCategory: HelmChartCategory | "all";
+  onSelectedCategoryChange: (value: HelmChartCategory | "all") => void;
   charts: HelmChart[] | undefined;
   chartsLoading: boolean;
   onSelectChart: (chart: HelmChart) => void;
@@ -38,7 +38,7 @@ export function BrowseTab({
           />
           {searchQuery && (
             <button
-              onClick={() => onSearchQueryChange('')}
+              onClick={() => onSearchQueryChange("")}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
@@ -53,10 +53,10 @@ export function BrowseTab({
             key={cat.key}
             onClick={() => onSelectedCategoryChange(cat.key)}
             className={cn(
-              'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+              "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
               selectedCategory === cat.key
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:text-foreground',
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:text-foreground",
             )}
           >
             {cat.label}
@@ -73,7 +73,10 @@ export function BrowseTab({
       ) : chartsLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="rounded-lg border border-border p-4 space-y-3">
+            <div
+              key={i}
+              className="rounded-lg border border-border p-4 space-y-3"
+            >
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-muted animate-pulse" />
                 <div className="flex-1 space-y-1.5">
@@ -120,15 +123,25 @@ export function BrowseTab({
                   <p className="font-medium text-foreground text-sm truncate group-hover:text-primary transition-colors">
                     {chart.displayName || chart.name}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">{chart.repositoryName}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {chart.repositoryName ||
+                      `Repository ${chart.repositoryId.slice(0, 8)}`}
+                  </p>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-2 line-clamp-2 min-h-[2rem]">
-                {chart.description || 'No description available'}
+                {chart.description || "No description available"}
               </p>
               <div className="flex items-center justify-between mt-3">
-                <CategoryChip category={chart.category} className="text-2xs px-1.5 py-0.5" />
-                <span className="text-xs font-mono text-muted-foreground">v{chart.latestVersion}</span>
+                <CategoryChip
+                  category={chart.category}
+                  className="text-2xs px-1.5 py-0.5"
+                />
+                {chart.latestVersion && (
+                  <span className="text-xs font-mono text-muted-foreground">
+                    v{chart.latestVersion}
+                  </span>
+                )}
               </div>
             </button>
           ))}

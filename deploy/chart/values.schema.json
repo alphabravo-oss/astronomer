@@ -100,17 +100,17 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "freshInstall": {
+        "databaseSchema": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "required": { "const": true },
-            "acceptedSchemaVersion": { "const": 1 }
+            "minimumUpgradeVersion": { "const": 1 },
+            "targetVersion": { "const": 26 }
           },
-          "required": ["required", "acceptedSchemaVersion"]
+          "required": ["minimumUpgradeVersion", "targetVersion"]
         }
       },
-      "required": ["freshInstall"]
+      "required": ["databaseSchema"]
     },
     "dex": {
       "type": "object",
@@ -575,15 +575,15 @@
           "preflight": {
             "properties": {
               "enabled": { "const": true },
-              "freshInstall": {
+              "databaseSchema": {
                 "properties": {
-                  "required": { "const": true },
-                  "acceptedSchemaVersion": { "const": 1 }
+                  "minimumUpgradeVersion": { "const": 1 },
+                  "targetVersion": { "const": 26 }
                 },
-                "required": ["required", "acceptedSchemaVersion"]
+                "required": ["minimumUpgradeVersion", "targetVersion"]
               }
             },
-            "required": ["enabled", "freshInstall"]
+            "required": ["enabled", "databaseSchema"]
           },
           "delivery": {
             "properties": {

@@ -83,7 +83,7 @@ export function SourcesPage() {
     queryKey: queryKeys.delivery.sources(projectId, params),
     queryFn: ({ signal }) => {
       signal.throwIfAborted();
-      return listDeliverySources(projectId, params);
+      return listDeliverySources(projectId, params, signal);
     },
     enabled: Boolean(projectId && canList),
     refetchInterval: liveFallback(30_000),

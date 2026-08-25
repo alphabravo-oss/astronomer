@@ -1,26 +1,9 @@
-// Sprint 075 — platform-baseline slug coverage endpoint.
+// Platform-baseline catalog coverage endpoint.
 //
-// The platform baseline references the built-in Argo-managed chart slugs:
-//
-//   trivy-operator, kube-state-metrics, node-exporter,
-//   fluent-bit, ingress-nginx, cert-manager, gatekeeper
-//
-// Migrations 075/077/079/105 seed the helm_repositories (aqua, jetstack,
-// fluent, prometheus-community, ingress-nginx, open-policy-agent) that contain those slugs once the
-// first-boot catalog:sync completes. Migration 083 removed the
-// original bitnami seed after Broadcom deprecated the public catalog
-// in Aug 2025. This read-only endpoint is the operator's sanity
-// check after install: hit
-//   GET /api/v1/admin/platform-settings/default-cluster-template/coverage/
-// and see "7/7 slugs resolved" or "5/7 resolved, 2 missing".
-//
-// The check is hard-coded against the documented baseline slug list
-// (rather than reading from a `default_cluster_template` row in the
-// DB) because at the time this lands sprint 074 hasn't shipped yet;
-// when the platform-baseline template is created, it'll reference
-// exactly these slugs and this endpoint's expected_slugs[] will line
-// up with template.spec.tools[].slug 1:1. If that list diverges in a
-// future sprint, the const lives in one place — defaultBaselineSlugs.
+// The embedded Flux bundle catalog is the only source of baseline membership.
+// This endpoint reports whether every default-enabled component can also be
+// resolved through the public chart catalog; it does not consult the retired
+// cluster-template baseline.
 //
 // Security: superuser only. Same gate as platform_settings.go.
 
@@ -33,20 +16,23 @@ import (
 
 	"github.com/google/uuid"
 
+	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
-// defaultBaselineSlugs is the canonical list of chart names the
-// platform-baseline cluster_template (sprint 074) references. Kept
-// here as the single source of truth for the coverage endpoint.
-var defaultBaselineSlugs = []string{
-	"trivy-operator",
-	"kube-state-metrics",
-	"prometheus-node-exporter",
-	"fluent-bit",
-	"ingress-nginx",
-	"cert-manager",
-	"gatekeeper",
+func loadDefaultBaselineSlugs() ([]string, error) {
+	catalog, err := builtinbundles.Load()
+	if err != nil {
+		return nil, err
+	}
+	slugs := make([]string, 0, len(catalog.Components))
+	for _, component := range catalog.Components {
+		if component.DefaultEnabled {
+			slugs = append(slugs, component.Slug)
+		}
+	}
+	return slugs, nil
 }
 
 // PlatformBaselineCoverageQuerier is the narrow DB surface this handler
@@ -79,9 +65,9 @@ type coverageEntry struct {
 	Repository string `json:"repository,omitempty"`
 }
 
-// coverageResponse is the JSON returned by Coverage. template_id is
-// emitted as an empty string when no default template exists yet —
-// sprint 074 will populate this from the persisted baseline row.
+// coverageResponse is the JSON returned by Coverage. template_id remains an
+// empty string for response compatibility; the built-in baseline has no
+// cluster-template identity.
 type coverageResponse struct {
 	TemplateID    string          `json:"template_id"`
 	ExpectedSlugs []string        `json:"expected_slugs"`
@@ -90,7 +76,7 @@ type coverageResponse struct {
 }
 
 // Coverage handles GET /api/v1/admin/platform-settings/default-cluster-template/coverage/.
-// Superuser-only. Read-only. Walks the hard-coded baseline slug list and
+// Superuser-only. Read-only. Walks the embedded default-enabled bundle list and
 // resolves each one against helm_charts. Slugs not present in the catalog
 // are returned in missing_slugs so the operator can either re-run
 // catalog:sync or add a helm_repositories row that contains them.
@@ -99,25 +85,29 @@ func (h *PlatformBaselineCoverageHandler) Coverage(w http.ResponseWriter, r *htt
 		return
 	}
 	ctx := r.Context()
+	expectedSlugs, err := loadDefaultBaselineSlugs()
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Built-in bundle catalog is invalid")
+		return
+	}
 
 	resp := coverageResponse{
-		// TemplateID stays empty until sprint 074 lands the persisted
-		// default-template row. Frontend treats "" as "baseline lives in
-		// code, no DB row yet" and renders the coverage banner regardless.
+		// TemplateID remains for response compatibility. Built-in baseline
+		// ownership now lives exclusively in the versioned Flux catalog.
 		TemplateID:    "",
-		ExpectedSlugs: append([]string(nil), defaultBaselineSlugs...),
-		Resolved:      make([]coverageEntry, 0, len(defaultBaselineSlugs)),
+		ExpectedSlugs: expectedSlugs,
+		Resolved:      make([]coverageEntry, 0, len(expectedSlugs)),
 		MissingSlugs:  []string{},
 	}
 
-	for _, slug := range defaultBaselineSlugs {
+	for _, slug := range expectedSlugs {
 		res, err := h.queries.ResolveChartByName(ctx, slug)
 		if err != nil {
 			// ErrCoverageSlugNotFound or any other lookup error — both
 			// surface to the operator as "not resolved". A DB outage
 			// would produce a wave of unresolved entries which is the
-			// right signal (the dashboard banner says "0/5 — catalog
-			// unreachable?").
+			// right signal (the dashboard banner reports catalog
+			// resolution failure without hiding the remaining entries).
 			resp.Resolved = append(resp.Resolved, coverageEntry{Slug: slug, Found: false})
 			resp.MissingSlugs = append(resp.MissingSlugs, slug)
 			continue

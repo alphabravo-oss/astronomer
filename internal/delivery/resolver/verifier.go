@@ -381,15 +381,19 @@ func parseSigningCertificate(value []byte) (*x509.Certificate, error) {
 }
 
 func signatureCandidates(value []byte) [][]byte {
-	trimmed := bytes.TrimSpace(value)
-	if len(trimmed) == 0 {
+	if len(value) == 0 {
 		return nil
 	}
-	candidates := [][]byte{trimmed}
+	// Detached ECDSA signatures are binary DER. Trimming them is destructive:
+	// a valid signature can randomly begin or end with a byte that
+	// bytes.TrimSpace classifies as whitespace. Keep the exact bytes as the raw
+	// candidate and trim only the textual base64 representation.
+	raw := append([]byte(nil), value...)
+	trimmed := bytes.TrimSpace(value)
 	if decoded, err := base64.StdEncoding.DecodeString(string(trimmed)); err == nil && len(decoded) > 0 && !bytes.Equal(decoded, trimmed) {
-		candidates = [][]byte{decoded, trimmed}
+		return [][]byte{decoded, raw}
 	}
-	return candidates
+	return [][]byte{raw}
 }
 
 func primarySignature(value []byte) []byte {

@@ -3,9 +3,9 @@ import {
   type PermissionDecision,
   type PermissionScope,
   type PermissionVerb,
-} from '@/lib/permissions';
-import { useAuthStore } from '@/lib/store';
-import { toastWarning } from '@/lib/toast';
+} from "@/lib/permissions";
+import { useAuthStore } from "@/lib/store";
+import { toastWarning } from "@/lib/toast";
 
 /**
  * Human-readable reason a permission-gated action is blocked. Prefers the
@@ -22,8 +22,8 @@ export function toastPermissionDenied(decision: PermissionDecision): void {
 
 export function usePermissionDecision(
   resource: string,
-  verb: PermissionVerb | '*',
-  scope: PermissionScope = { type: 'global' }
+  verb: PermissionVerb | "*",
+  scope: PermissionScope = { type: "global" },
 ): PermissionDecision {
   const user = useAuthStore((state) => state.user);
   return explainPermission(user, resource, verb, scope);
@@ -34,9 +34,15 @@ export function usePermissionDecision(
  * reason }` shape the cluster detail tabs (template, registries, snapshots,
  * network-access) gate their write actions on.
  */
-export function useClustersUpdate(clusterId: string): { canWrite: boolean; reason: string } {
-  const decision = usePermissionDecision('clusters', 'update', { type: 'cluster', id: clusterId });
-  return { canWrite: decision.allowed, reason: decision.disabledReason ?? '' };
+export function useClustersUpdate(clusterId: string): {
+  canWrite: boolean;
+  reason: string;
+} {
+  const decision = usePermissionDecision("clusters", "update", {
+    type: "cluster",
+    id: clusterId,
+  });
+  return { canWrite: decision.allowed, reason: decision.disabledReason ?? "" };
 }
 
 /**
@@ -46,72 +52,72 @@ export function useClustersUpdate(clusterId: string): { canWrite: boolean; reaso
  */
 export function canonicalPermissionResource(resourceType: string): string {
   switch (resourceType.toLowerCase()) {
-    case 'services':
-    case 'service':
-    case 'endpoints':
-    case 'endpoint':
-      return 'services';
-    case 'ingresses':
-    case 'ingress':
-    case 'gateways':
-    case 'gateway':
-    case 'httproutes':
-    case 'httproute':
-    case 'gatewayclasses':
-    case 'gatewayclass':
-    case 'grpcroutes':
-    case 'grpcroute':
-    case 'tcproutes':
-    case 'tcproute':
-    case 'udproutes':
-    case 'udproute':
-    case 'tlsroutes':
-    case 'tlsroute':
-    case 'referencegrants':
-    case 'referencegrant':
-      return 'ingresses';
-    case 'networkpolicies':
-    case 'networkpolicy':
-      return 'network_policies';
-    case 'persistentvolumes':
-    case 'persistentvolume':
-    case 'persistentvolumeclaims':
-    case 'persistentvolumeclaim':
-    case 'storageclasses':
-    case 'storageclass':
-      return 'storage';
-    case 'configmaps':
-    case 'configmap':
-      return 'configmaps';
-    case 'secrets':
-    case 'secret':
-      return 'secrets';
-    case 'pods':
-    case 'pod':
-      return 'pods';
-    case 'nodes':
-    case 'node':
-      return 'nodes';
-    case 'deployments':
-    case 'deployment':
-    case 'daemonsets':
-    case 'daemonset':
-    case 'statefulsets':
-    case 'statefulset':
-    case 'replicasets':
-    case 'replicaset':
-    case 'jobs':
-    case 'job':
-    case 'cronjobs':
-    case 'cronjob':
-    case 'hpa':
-    case 'horizontalpodautoscalers':
-    case 'horizontalpodautoscaler':
-    case 'poddisruptionbudgets':
-    case 'poddisruptionbudget':
-      return 'workloads';
+    case "services":
+    case "service":
+    case "endpoints":
+    case "endpoint":
+      return "services";
+    case "ingresses":
+    case "ingress":
+    case "gateways":
+    case "gateway":
+    case "httproutes":
+    case "httproute":
+    case "gatewayclasses":
+    case "gatewayclass":
+    case "grpcroutes":
+    case "grpcroute":
+    case "tcproutes":
+    case "tcproute":
+    case "udproutes":
+    case "udproute":
+    case "tlsroutes":
+    case "tlsroute":
+    case "referencegrants":
+    case "referencegrant":
+      return "ingresses";
+    case "networkpolicies":
+    case "networkpolicy":
+      return "network_policies";
+    case "persistentvolumes":
+    case "persistentvolume":
+    case "persistentvolumeclaims":
+    case "persistentvolumeclaim":
+    case "storageclasses":
+    case "storageclass":
+      return "storage";
+    case "configmaps":
+    case "configmap":
+      return "configmaps";
+    case "secrets":
+    case "secret":
+      return "secrets";
+    case "pods":
+    case "pod":
+      return "pods";
+    case "nodes":
+    case "node":
+      return "nodes";
+    case "deployments":
+    case "deployment":
+    case "daemonsets":
+    case "daemonset":
+    case "statefulsets":
+    case "statefulset":
+    case "replicasets":
+    case "replicaset":
+    case "jobs":
+    case "job":
+    case "cronjobs":
+    case "cronjob":
+    case "hpa":
+    case "horizontalpodautoscalers":
+    case "horizontalpodautoscaler":
+    case "poddisruptionbudgets":
+    case "poddisruptionbudget":
+      return "workloads";
     default:
-      return 'clusters';
+      return "clusters";
   }
 }
 
@@ -123,14 +129,18 @@ export function canonicalPermissionResource(resourceType: string): string {
 export function useClusterResourcePermission(
   clusterId: string,
   resourceType: string,
-  verb: PermissionVerb | '*',
+  verb: PermissionVerb | "*",
   // Override the canonical mapping when the caller already knows the RBAC
   // resource (e.g. custom resources, whose plural would otherwise fall through
   // to the generic 'clusters' default and mis-gate read/edit).
   resourceOverride?: string,
 ): PermissionDecision {
-  return usePermissionDecision(resourceOverride ?? canonicalPermissionResource(resourceType), verb, {
-    type: 'cluster',
-    id: clusterId,
-  });
+  return usePermissionDecision(
+    resourceOverride ?? canonicalPermissionResource(resourceType),
+    verb,
+    {
+      type: "cluster",
+      id: clusterId,
+    },
+  );
 }

@@ -1,0 +1,20 @@
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: live-browser
+  namespace: velero
+  labels:
+    app.kubernetes.io/part-of: astronomer-live-browser
+spec:
+  default: true
+  provider: aws
+  objectStorage:
+    bucket: velero
+    prefix: live-browser
+  credential:
+    name: live-browser-credentials
+    key: cloud
+  config:
+    region: us-east-1
+    s3ForcePathStyle: "true"
+    s3Url: http://minio.minio.svc.cluster.local:9000

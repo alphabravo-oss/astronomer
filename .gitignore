@@ -29,6 +29,7 @@ bin/
 coverage.out
 *.test
 /keyrotate
+/node_modules/
 .claude/
 **/__pycache__/
 

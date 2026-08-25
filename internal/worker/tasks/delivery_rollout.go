@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -27,17 +26,6 @@ type DeliveryRolloutReconciler interface {
 	Sweep(context.Context, int) error
 }
 
-var deliveryRolloutRuntime struct {
-	sync.RWMutex
-	reconciler DeliveryRolloutReconciler
-}
-
-func ConfigureDeliveryRolloutReconciler(reconciler DeliveryRolloutReconciler) {
-	deliveryRolloutRuntime.Lock()
-	deliveryRolloutRuntime.reconciler = reconciler
-	deliveryRolloutRuntime.Unlock()
-}
-
 func NewDeliveryRolloutTask(rolloutID uuid.UUID) (*asynq.Task, error) {
 	if rolloutID == uuid.Nil {
 		return nil, errors.New("delivery rollout task requires a rollout ID")
@@ -51,7 +39,7 @@ func NewDeliveryRolloutTask(rolloutID uuid.UUID) (*asynq.Task, error) {
 	return asynq.NewTask(DeliveryRolloutReconcileType, payload), nil
 }
 
-func HandleDeliveryRolloutReconcile(ctx context.Context, task *asynq.Task) (finalErr error) {
+func (runtime DeliveryRuntime) HandleDeliveryRolloutReconcile(ctx context.Context, task *asynq.Task) (finalErr error) {
 	defer func() {
 		result := "success"
 		if finalErr != nil {
@@ -62,9 +50,7 @@ func HandleDeliveryRolloutReconcile(ctx context.Context, task *asynq.Task) (fina
 	if task == nil {
 		return errors.New("delivery rollout task is required")
 	}
-	deliveryRolloutRuntime.RLock()
-	reconciler := deliveryRolloutRuntime.reconciler
-	deliveryRolloutRuntime.RUnlock()
+	reconciler := runtime.RolloutReconciler
 	if reconciler == nil {
 		return errors.New("delivery rollout reconciler is not configured")
 	}

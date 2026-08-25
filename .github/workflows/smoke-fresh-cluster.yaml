@@ -6,8 +6,8 @@
 # regression that "bitnami/kubectl:1.31 404'd" + "SQLSTATE 42P08" hid
 # for months — nothing else in CI exercises this path.
 #
-# Lives in workflows-disabled/ during dev (see .github/workflows/README.md).
-# To activate: `mv` into workflows/.
+# Active release evidence lane. The smoke script emits a sanitized manifest on
+# both success and failure; the workflow retains it independently of debug logs.
 
 name: smoke-fresh-cluster
 
@@ -118,8 +118,19 @@ jobs:
           ASTRO_PASSWORD: ${{ steps.creds.outputs.password }}
           AGENT_IMAGE: ghcr.io/alphabravo-oss/astronomer-go-agent:ci
           SHELL_IMAGE: ghcr.io/alphabravo-oss/astronomer-shell:ci
+          MGMT_CONTEXT: k3d-astronomer-mgmt
+          SMOKE_EVIDENCE_FILE: smoke-evidence/evidence.json
         run: |
           ./scripts/smoke-fresh-cluster.sh
+
+      - name: Upload fresh-cluster evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fresh-cluster-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: smoke-evidence/evidence.json
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Dump cluster state on failure
         if: failure()

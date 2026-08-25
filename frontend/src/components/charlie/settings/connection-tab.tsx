@@ -1,12 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  CheckCircle2,
-  Loader2,
-  Shield,
-  Unplug,
-  Upload,
-} from "lucide-react";
+import { CheckCircle2, Loader2, Shield, Unplug, Upload } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
@@ -31,18 +25,20 @@ import {
   primary,
 } from "./shared";
 
-export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {}) {
+export function ConnectionTab({
+  localOnly = false,
+}: { localOnly?: boolean } = {}) {
   const qc = useQueryClient();
   const activation = useQuery({
     queryKey: queryKeys.charlie.activation,
-    queryFn: getCharlieActivation,
+    queryFn: ({ signal }) => getCharlieActivation(signal),
     enabled: !localOnly,
     retry: false,
     staleTime: 15_000,
   });
   const connection = useQuery({
     queryKey: queryKeys.charlie.adminConnection,
-    queryFn: getCharlieConnection,
+    queryFn: ({ signal }) => getCharlieConnection(signal),
     enabled: localOnly,
     retry: false,
   });
@@ -62,7 +58,8 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
     ? connection.isLoading && !connection.data
     : activation.isLoading && !activation.data;
   const failed = localOnly ? connection.isError : activation.isError;
-  const retry = () => void (localOnly ? connection.refetch() : activation.refetch());
+  const retry = () =>
+    void (localOnly ? connection.refetch() : activation.refetch());
   const accepted = () => {
     setValidated(undefined);
     setEndpoint("");
@@ -95,11 +92,13 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
     onError: (e) => toastApiError("Charlie connect failed", e),
   });
   const disconnect = useMutation({
-    mutationFn: disconnectCharlie,
+    mutationFn: () => disconnectCharlie(),
     onSuccess: () => {
       setConfirm(null);
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.activation });
-      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminConnection });
+      void qc.invalidateQueries({
+        queryKey: queryKeys.charlie.adminConnection,
+      });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminMode });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminAgent });
       toastSuccess("Charlie disconnected");
@@ -150,7 +149,10 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
     }
   };
   const complete = useToken
-    ? Boolean(endpoint.trim() && connectToken.trim().startsWith("charlie.connect.v1."))
+    ? Boolean(
+        endpoint.trim() &&
+        connectToken.trim().startsWith("charlie.connect.v1."),
+      )
     : Object.keys(input.package).length > 0 &&
       input.signingPublicKey &&
       input.confirmedSigningKeyId &&
@@ -180,15 +182,16 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
             <Meta
               label="Charlie endpoint"
               value={
-                (localOnly ? connection.data?.endpoint : activation.data?.endpoint) ||
-                "—"
+                (localOnly
+                  ? connection.data?.endpoint
+                  : activation.data?.endpoint) || "—"
               }
             />
           </dl>
           <p className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
-            Charlie chat, findings, and the product agent stay available until you
-            disconnect. Connecting a different Charlie is a new one-time token after
-            disconnect.
+            Charlie chat, findings, and the product agent stay available until
+            you disconnect. Connecting a different Charlie is a new one-time
+            token after disconnect.
           </p>
           <button
             onClick={() => setConfirm("disconnect")}
@@ -245,7 +248,9 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
           />
         </label>
         <details className="rounded-lg border border-border p-3">
-          <summary className="cursor-pointer text-sm font-medium">Air-gapped package file</summary>
+          <summary className="cursor-pointer text-sm font-medium">
+            Air-gapped package file
+          </summary>
           <div className="mt-3 space-y-3">
             <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border p-5 text-sm hover:bg-accent">
               <Upload className="h-4 w-4" />
@@ -279,7 +284,9 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
               <Field
                 label="Signing key ID"
                 value={input.confirmedSigningKeyId}
-                set={(v) => setInput((x) => ({ ...x, confirmedSigningKeyId: v }))}
+                set={(v) =>
+                  setInput((x) => ({ ...x, confirmedSigningKeyId: v }))
+                }
               />
               <Field
                 label="Confirmed SHA-256 fingerprint"
@@ -291,7 +298,9 @@ export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {
               <Field
                 label="Expected deployment ID"
                 value={input.expectedDeploymentId}
-                set={(v) => setInput((x) => ({ ...x, expectedDeploymentId: v }))}
+                set={(v) =>
+                  setInput((x) => ({ ...x, expectedDeploymentId: v }))
+                }
               />
               <Field
                 label="Expected route ID"

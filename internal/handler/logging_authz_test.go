@@ -121,11 +121,13 @@ func TestLoggingMutatingRoutesAllowGrantedPrincipal(t *testing.T) {
 		"enabled":       true,
 	})
 	rec := httptest.NewRecorder()
-	h.CreateOutput(rec, authedLoggingReq(http.MethodPost, "/api/v1/logging/outputs/", body))
+	req := authedLoggingReq(http.MethodPost, "/api/v1/logging/outputs/", body)
+	req.Header.Set("Idempotency-Key", "output-create-authorized-1")
+	h.CreateOutput(rec, req)
 	if rec.Code == http.StatusForbidden {
 		t.Fatalf("granted principal was denied: status = %d; body=%s", rec.Code, rec.Body.String())
 	}
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("CreateOutput status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("CreateOutput status = %d, want %d; body=%s", rec.Code, http.StatusAccepted, rec.Body.String())
 	}
 }

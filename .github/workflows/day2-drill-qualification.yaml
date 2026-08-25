@@ -1,0 +1,192 @@
+name: Day-2 drill qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Exact scale profile whose complete drill set is being attested
+        required: true
+        type: choice
+        options:
+          - estate-100
+          - estate-500
+          - estate-1000
+          - estate-1000-soak
+          - estate-2000-lab
+      raw_evidence_run_id:
+        description: Successful same-commit Actions run that produced the raw drill JSON files
+        required: true
+        type: string
+      raw_evidence_artifact:
+        description: Unique unexpired artifact containing only the raw drill JSON files
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+jobs:
+  attest:
+    environment: scale-certification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Verify raw evidence source run and artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RAW_RUN_ID: ${{ inputs.raw_evidence_run_id }}
+          RAW_ARTIFACT: ${{ inputs.raw_evidence_artifact }}
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          test "$RAW_ARTIFACT" = "raw-day2-drill-execution-${PROFILE}-${RAW_RUN_ID}"
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RAW_RUN_ID}")"
+          jq -e --arg commit "$GITHUB_SHA" --arg workflow ".github/workflows/day2-drill-execution.yaml" \
+            '.path == $workflow and .event == "workflow_dispatch" and .head_sha == $commit and
+             .status == "completed" and .conclusion == "success"' <<<"$run_json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RAW_RUN_ID}/artifacts" \
+            | jq -e --arg artifact "$RAW_ARTIFACT" \
+              '[.artifacts[] | select(.name == $artifact and .expired == false)] | length == 1'
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.raw_evidence_artifact }}
+          path: raw-drills
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.raw_evidence_run_id }}
+
+      - name: Validate, normalize, and digest the complete drill set
+        env:
+          PROFILE: ${{ inputs.profile }}
+          IMAGES: ${{ vars.SCALE_RELEASE_MANIFEST_DIGEST }}
+          ENVIRONMENT: scale-certification
+          RAW_RUN_ID: ${{ inputs.raw_evidence_run_id }}
+          RAW_ARTIFACT: ${{ inputs.raw_evidence_artifact }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, re
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          profile = os.environ["PROFILE"]
+          profile_path = Path("scripts/loadtest/profiles") / f"{profile}.yaml"
+          drills, collecting = [], False
+          for line in profile_path.read_text(encoding="utf-8").splitlines():
+              if line.strip() == "day2FailureDrills:":
+                  collecting = True
+                  continue
+              if collecting and line.startswith("  - "):
+                  drills.append(line[4:].strip())
+              elif collecting and line.strip():
+                  break
+          if not drills or len(drills) != len(set(drills)):
+              raise SystemExit("profile has no unique required drill set")
+
+          raw_root, output_root = Path("raw-drills"), Path("qualified-drills")
+          all_files = sorted(path for path in raw_root.rglob("*") if path.is_file() or path.is_symlink())
+          expected_names = {f"{drill}{suffix}" for drill in drills for suffix in (".json", ".log")}
+          if any(path.is_symlink() for path in all_files) or {path.name for path in all_files} != expected_names or len(all_files) != len(expected_names):
+              raise SystemExit("raw artifact must contain exactly one regular JSON and log file per required drill")
+          candidates = [path for path in all_files if path.suffix == ".json"]
+          output_root.mkdir()
+          files = []
+          for drill in drills:
+              source = next(path for path in candidates if path.name == f"{drill}.json")
+              body = json.loads(source.read_text(encoding="utf-8"))
+              required = {
+                  "schema_version": "astronomer-day2-drill-evidence-v2",
+                  "drill": drill, "status": "pass", "commit": os.environ["GITHUB_SHA"],
+                  "profile": profile, "images": os.environ["IMAGES"],
+                  "environment": os.environ["ENVIRONMENT"],
+                  "source_workflow": ".github/workflows/day2-drill-execution.yaml",
+                  "source_run_id": os.environ["RAW_RUN_ID"], "source_commit": os.environ["GITHUB_SHA"],
+                  "source_conclusion": "success", "source_event": "workflow_dispatch",
+              }
+              if set(body) != set(required) | {"started_at", "completed_at", "execution_evidence_path", "execution_evidence_sha256", "driver_result"}:
+                  raise SystemExit(f"{source.name}: fields do not match the closed evidence schema")
+              if any(body.get(key) != value for key, value in required.items()):
+                  raise SystemExit(f"{source.name}: qualification provenance or status mismatch")
+              if not re.fullmatch(r"sha256:[a-f0-9]{64}", body["images"]) or not body["environment"].strip():
+                  raise SystemExit(f"{source.name}: release-manifest digest/environment is invalid")
+              started = datetime.fromisoformat(body["started_at"].replace("Z", "+00:00"))
+              completed = datetime.fromisoformat(body["completed_at"].replace("Z", "+00:00"))
+              if started.tzinfo is None or completed.tzinfo is None or completed < started:
+                  raise SystemExit(f"{source.name}: execution timestamps are invalid")
+              evidence_path = body["execution_evidence_path"]
+              if not isinstance(evidence_path, str) or evidence_path != f"{drill}.log":
+                  raise SystemExit(f"{source.name}: execution evidence path is invalid")
+              evidence_file = source.with_name(evidence_path)
+              if not evidence_file.is_file() or evidence_file.is_symlink():
+                  raise SystemExit(f"{source.name}: execution evidence log is missing")
+              if hashlib.sha256(evidence_file.read_bytes()).hexdigest() != body["execution_evidence_sha256"]:
+                  raise SystemExit(f"{source.name}: execution evidence digest mismatch")
+              result = body["driver_result"]
+              if not isinstance(result, dict) or set(result) != {"schema_version", "drill", "status", "target", "precondition", "injection", "recovery", "cleanup"}:
+                  raise SystemExit(f"{source.name}: driver result violates closed schema")
+              if result["schema_version"] != 1 or result["drill"] != drill or result["status"] != "pass":
+                  raise SystemExit(f"{source.name}: driver result is not an exact pass")
+              if result["target"] != {"environment": body["environment"], "profile": profile, "release_manifest_digest": body["images"]}:
+                  raise SystemExit(f"{source.name}: driver result target mismatch")
+              expected_sections = {
+                  "precondition": {"observed_at", "metric", "value"},
+                  "injection": {"operation_id", "injected_at", "effect_observed_at", "metric", "value"},
+                  "recovery": {"recovered_at", "metric", "value"},
+                  "cleanup": {"completed_at", "restored"},
+              }
+              if any(not isinstance(result[name], dict) or set(result[name]) != keys for name, keys in expected_sections.items()):
+                  raise SystemExit(f"{source.name}: driver lifecycle evidence is incomplete")
+              if result["cleanup"]["restored"] is not True:
+                  raise SystemExit(f"{source.name}: driver did not restore the target")
+              destination = output_root / source.name
+              raw = (json.dumps(body, indent=2, sort_keys=True) + "\n").encode()
+              destination.write_bytes(raw)
+              (output_root / evidence_path).write_bytes(evidence_file.read_bytes())
+              files.append({"path": destination.name, "sha256": hashlib.sha256(raw).hexdigest()})
+              files.append({"path": evidence_path, "sha256": body["execution_evidence_sha256"]})
+          artifact = f"day2-drill-evidence-{profile}-{os.environ['GITHUB_RUN_ID']}"
+          manifest = {
+              "schema_version": "astronomer-day2-drill-manifest-v1",
+              "qualification_workflow": ".github/workflows/day2-drill-qualification.yaml",
+              "qualification_run_id": os.environ["GITHUB_RUN_ID"], "qualification_conclusion": "success",
+              "qualification_commit": os.environ["GITHUB_SHA"],
+              "raw_execution_workflow": ".github/workflows/day2-drill-execution.yaml",
+              "raw_execution_run_id": os.environ["RAW_RUN_ID"], "raw_execution_conclusion": "success",
+              "raw_execution_commit": os.environ["GITHUB_SHA"], "raw_execution_event": "workflow_dispatch",
+              "raw_artifact": os.environ["RAW_ARTIFACT"], "artifact": artifact,
+              "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+              "files": files,
+          }
+          paths = [row["path"] for row in files]
+          if len(paths) != len(set(paths)) or any(len(row["sha256"]) != 64 for row in files):
+              raise SystemExit("qualified manifest paths/digests are not unique and closed")
+          (output_root / "drill-evidence-manifest.json").write_text(
+              json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"OUTPUT_ARTIFACT={artifact}\n")
+          PY
+
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Sign and verify exact drill manifest
+        env:
+          CERTIFICATE_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/day2-drill-qualification.yaml@${{ github.ref }}
+        run: |
+          cosign sign-blob --yes \
+            --bundle qualified-drills/drill-evidence-manifest.sigstore.json \
+            qualified-drills/drill-evidence-manifest.json
+          cosign verify-blob \
+            --bundle qualified-drills/drill-evidence-manifest.sigstore.json \
+            --certificate-identity "$CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            qualified-drills/drill-evidence-manifest.json
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ env.OUTPUT_ARTIFACT }}
+          path: qualified-drills/
+          if-no-files-found: error
+          retention-days: 90

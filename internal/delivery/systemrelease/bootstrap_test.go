@@ -38,15 +38,23 @@ func TestBuildProducesValidatedDeterministicRelease(t *testing.T) {
 }
 
 func TestBuildRejectsPartialConfiguration(t *testing.T) {
-	config := validConfig()
-	config.ArtifactDigest = ""
-	if _, _, err := build(config); err == nil {
-		t.Fatal("partial release configuration accepted")
+	for _, mutate := range []func(*Config){
+		func(config *Config) { config.ArtifactDigest = "" },
+		func(config *Config) { config.ArtifactRepository = "" },
+	} {
+		config := validConfig()
+		mutate(&config)
+		if _, _, err := build(config); err == nil {
+			t.Fatal("partial release configuration accepted")
+		}
 	}
 }
 
 func TestBuildAllowsUnconfiguredDevelopment(t *testing.T) {
-	spec, digest, err := build(Config{Enabled: true})
+	config := validConfig()
+	config.ArtifactRepository = ""
+	config.ArtifactDigest = ""
+	spec, digest, err := build(config)
 	if err != nil || digest != "" || spec.Version != "" {
 		t.Fatalf("unconfigured development release = %#v %q %v", spec, digest, err)
 	}

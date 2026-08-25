@@ -30,30 +30,18 @@ type CRDOwnershipDriftDeps struct {
 	Dynamic dynamic.Interface
 }
 
-var crdOwnershipDriftDeps CRDOwnershipDriftDeps
-
-func ConfigureCRDOwnershipDrift(deps CRDOwnershipDriftDeps) {
-	crdOwnershipDriftDeps = deps
-}
-
-func ResetCRDOwnershipDrift() {
-	crdOwnershipDriftDeps = CRDOwnershipDriftDeps{}
-}
-
 func NewCRDOwnershipDriftCheckTask() *asynq.Task {
 	return asynq.NewTask(CRDOwnershipDriftCheckType, nil, asynq.MaxRetry(2))
 }
 
-func HandleCRDOwnershipDriftCheck(ctx context.Context, _ *asynq.Task) error {
+func (runtime CRDOwnershipRuntime) HandleCRDOwnershipDriftCheck(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, CRDOwnershipDriftCheckType, func() error {
-		deps := crdOwnershipDriftDeps
+		deps := runtime.Deps
 		if deps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "crd ownership drift runtime not configured, skipping")
-			return nil
+			return fmt.Errorf("CRD ownership drift runtime is not configured")
 		}
 		if deps.Dynamic == nil {
-			runtimeLogger().InfoContext(ctx, "crd ownership drift skipped: dynamic kubernetes client not configured")
-			return nil
+			return fmt.Errorf("CRD ownership drift dynamic client is not configured")
 		}
 		rows, err := deps.Queries.ListCRDOwnedClusters(ctx, 1000)
 		if err != nil {
@@ -62,7 +50,7 @@ func HandleCRDOwnershipDriftCheck(ctx context.Context, _ *asynq.Task) error {
 		var firstErr error
 		for _, row := range rows {
 			if err := checkCRDOwnedClusterRef(ctx, deps, row); err != nil {
-				runtimeLogger().WarnContext(ctx, "crd ownership drift check failed",
+				runtimeLogger(ctx).WarnContext(ctx, "crd ownership drift check failed",
 					"cluster_id", row.ID.String(),
 					"kind", row.ExternalRefKind,
 					"namespace", row.ExternalRefNamespace,

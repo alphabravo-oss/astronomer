@@ -10,53 +10,6 @@ VALUES (sqlc.arg(user_id), '', sqlc.arg(role_id), 'manual')
 ON CONFLICT (user_id, role_id) DO UPDATE SET updated_at = now()
 RETURNING *;
 
--- name: UpsertAgentOperationalStatus :one
-INSERT INTO agent_operational_statuses (
-    cluster_id, agent_id, installed_agent_version, desired_agent_version,
-    protocol_version, protocol_compatible, authentication_state,
-    registration_state, credential_state, credential_expires_at, upgrade_state,
-    audit_ingestion_state, metrics_ingestion_state, state_ingestion_state,
-    pending_command_count, failed_command_count, expired_command_count,
-    downstream_api_reachable, downstream_api_reported_at, owning_server_replica,
-    last_successful_connection_at, last_status_at
-) VALUES (
-    sqlc.arg(cluster_id), sqlc.arg(agent_id), sqlc.arg(installed_agent_version),
-    sqlc.arg(desired_agent_version), sqlc.arg(protocol_version),
-    sqlc.narg(protocol_compatible), sqlc.arg(authentication_state),
-    sqlc.arg(registration_state), sqlc.arg(credential_state),
-    sqlc.narg(credential_expires_at), sqlc.arg(upgrade_state),
-    sqlc.arg(audit_ingestion_state), sqlc.arg(metrics_ingestion_state),
-    sqlc.arg(state_ingestion_state), sqlc.arg(pending_command_count),
-    sqlc.arg(failed_command_count), sqlc.arg(expired_command_count),
-    sqlc.narg(downstream_api_reachable), sqlc.narg(downstream_api_reported_at),
-    sqlc.arg(owning_server_replica), sqlc.narg(last_successful_connection_at),
-    sqlc.arg(last_status_at)
-)
-ON CONFLICT (cluster_id) DO UPDATE SET
-    agent_id = EXCLUDED.agent_id,
-    installed_agent_version = EXCLUDED.installed_agent_version,
-    desired_agent_version = EXCLUDED.desired_agent_version,
-    protocol_version = EXCLUDED.protocol_version,
-    protocol_compatible = EXCLUDED.protocol_compatible,
-    authentication_state = EXCLUDED.authentication_state,
-    registration_state = EXCLUDED.registration_state,
-    credential_state = EXCLUDED.credential_state,
-    credential_expires_at = EXCLUDED.credential_expires_at,
-    upgrade_state = EXCLUDED.upgrade_state,
-    audit_ingestion_state = EXCLUDED.audit_ingestion_state,
-    metrics_ingestion_state = EXCLUDED.metrics_ingestion_state,
-    state_ingestion_state = EXCLUDED.state_ingestion_state,
-    pending_command_count = EXCLUDED.pending_command_count,
-    failed_command_count = EXCLUDED.failed_command_count,
-    expired_command_count = EXCLUDED.expired_command_count,
-    downstream_api_reachable = EXCLUDED.downstream_api_reachable,
-    downstream_api_reported_at = EXCLUDED.downstream_api_reported_at,
-    owning_server_replica = EXCLUDED.owning_server_replica,
-    last_successful_connection_at = EXCLUDED.last_successful_connection_at,
-    last_status_at = EXCLUDED.last_status_at,
-    updated_at = now()
-RETURNING *;
-
 -- name: RecordAgentConnectionEvent :one
 INSERT INTO agent_connection_events (
     cluster_id, connection_id, event_type, reason_code, agent_id,
@@ -66,14 +19,6 @@ INSERT INTO agent_connection_events (
     sqlc.arg(reason_code), sqlc.arg(agent_id), sqlc.arg(agent_version),
     sqlc.arg(protocol_version), sqlc.arg(server_replica), sqlc.arg(metadata),
     sqlc.arg(occurred_at)
-) RETURNING *;
-
--- name: RecordTunnelLocatorEvent :one
-INSERT INTO tunnel_locator_events (
-    connection_id, cluster_id, event_type, reason_code, server_replica, occurred_at
-) VALUES (
-    sqlc.arg(connection_id), sqlc.narg(cluster_id), sqlc.arg(event_type),
-    sqlc.arg(reason_code), sqlc.arg(server_replica), sqlc.arg(occurred_at)
 ) RETURNING *;
 
 -- name: CharlieClusterAgentSummary :one
@@ -315,44 +260,6 @@ SET active = false,
 WHERE active = true
   AND id <> sqlc.arg(id);
 
--- name: CompareAndSetCharlieMode :one
-UPDATE charlie_connections
-SET requested_mode = sqlc.arg(requested_mode),
-    verified_mode = sqlc.arg(verified_mode),
-    verified_mode_revision = sqlc.arg(next_revision),
-    disclosure_digest = sqlc.arg(disclosure_digest),
-    last_verified_at = now(),
-    updated_at = now()
-WHERE id = sqlc.arg(id)
-  AND active = true
-  AND verified_mode_revision = sqlc.arg(expected_revision)
-  AND emergency_disabled = false
-RETURNING *;
-
--- name: SetCharlieEmergencyDisabled :one
-UPDATE charlie_connections
-SET emergency_disabled = true,
-    emergency_disabled_by_id = sqlc.arg(actor_id),
-    emergency_disabled_at = now(),
-    requested_mode = 'disabled',
-    updated_at = now()
-WHERE id = sqlc.arg(id) AND active = true
-RETURNING *;
-
--- name: ClearCharlieEmergencyDisabled :one
-UPDATE charlie_connections
-SET emergency_disabled = false,
-    emergency_disabled_by_id = NULL,
-    emergency_disabled_at = NULL,
-    requested_mode = 'disabled',
-    verified_mode = 'disabled',
-    updated_at = now()
-WHERE id = sqlc.arg(id)
-  AND active = true
-  AND emergency_disabled = true
-  AND verified_mode = 'disabled'
-RETURNING *;
-
 -- name: UpdateCharlieAgentStatus :one
 UPDATE charlie_connections
 SET leader_instance_id = sqlc.arg(leader_instance_id),
@@ -491,17 +398,9 @@ WHERE authorization_hash = $1
   AND revoked_at IS NULL
   AND expires_at > now();
 
--- name: RevokeCharlieDelegation :execrows
-UPDATE charlie_delegations SET revoked_at = now()
-WHERE id = $1 AND revoked_at IS NULL;
-
 -- name: RevokeCharlieDelegationsForSession :execrows
 UPDATE charlie_delegations SET revoked_at = now()
 WHERE session_id = $1 AND revoked_at IS NULL;
-
--- name: RevokeCharlieDelegationsForPrincipal :execrows
-UPDATE charlie_delegations SET revoked_at = now()
-WHERE principal_id = $1 AND revoked_at IS NULL;
 
 -- name: RevokeExpiredCharlieDelegations :execrows
 UPDATE charlie_delegations SET revoked_at = now()
@@ -626,12 +525,6 @@ WHERE id = sqlc.arg(id)
   AND lease_owner = sqlc.arg(lease_owner)
   AND fencing_epoch = sqlc.arg(fencing_epoch)
 RETURNING *;
-
--- name: ListCharlieAmbiguousReceipts :many
-SELECT * FROM charlie_action_receipts
-WHERE state IN ('dispatched', 'ambiguous', 'verifying')
-ORDER BY updated_at, id
-LIMIT $1;
 
 -- name: ClaimCharlieAmbiguousReceipt :one
 WITH candidate AS (
@@ -806,9 +699,6 @@ SELECT * FROM charlie_trigger_rules WHERE connection_id = $1 AND enabled = true 
 -- name: GetCharlieTriggerRule :one
 SELECT * FROM charlie_trigger_rules WHERE id = $1;
 
--- name: SetCharlieTriggerRuleEnabled :one
-UPDATE charlie_trigger_rules SET enabled = $2, updated_at = now() WHERE id = $1 RETURNING *;
-
 -- name: ListCharlieTriggerRules :many
 SELECT * FROM charlie_trigger_rules WHERE connection_id = $1 ORDER BY name, id;
 
@@ -827,28 +717,6 @@ SET name = sqlc.arg(name),
     mode_ceiling = sqlc.arg(mode_ceiling),
     updated_at = now()
 WHERE id = sqlc.arg(id) AND connection_id = sqlc.arg(connection_id)
-RETURNING *;
-
--- name: CreateCharlieTriggerEvent :one
-INSERT INTO charlie_trigger_events (
-    rule_id, source, event_type, resource_type, resource_id, fingerprint,
-    summary_metadata, state, next_attempt_at, first_occurred_at,
-    last_occurred_at, origin_resource_ref, origin_event_ref
-) VALUES (
-    sqlc.arg(rule_id), sqlc.arg(source), sqlc.arg(event_type),
-    sqlc.arg(resource_type), sqlc.arg(resource_id), sqlc.arg(fingerprint),
-    sqlc.arg(summary_metadata), 'pending', sqlc.arg(next_attempt_at),
-    sqlc.arg(occurred_at), sqlc.arg(occurred_at), sqlc.arg(origin_resource_ref),
-    sqlc.arg(origin_event_ref)
-)
-ON CONFLICT (rule_id, fingerprint) WHERE state IN ('pending', 'dispatching', 'dispatched', 'retry')
-DO UPDATE SET
-    repeat_count = charlie_trigger_events.repeat_count + 1,
-    last_occurred_at = GREATEST(charlie_trigger_events.last_occurred_at, EXCLUDED.last_occurred_at),
-    summary_metadata = EXCLUDED.summary_metadata,
-    origin_resource_ref = EXCLUDED.origin_resource_ref,
-    origin_event_ref = EXCLUDED.origin_event_ref,
-    updated_at = now()
 RETURNING *;
 
 -- name: CreateCharlieTriggerEventWithOutbox :one
@@ -896,18 +764,11 @@ WITH event AS (
 )
 SELECT event.* FROM event CROSS JOIN outbox;
 
--- name: ClaimDueCharlieTriggerEvents :many
-WITH due AS (
-    SELECT id FROM charlie_trigger_events
-    WHERE state IN ('pending', 'retry') AND next_attempt_at <= now()
-    ORDER BY next_attempt_at, created_at
-    FOR UPDATE SKIP LOCKED
-    LIMIT sqlc.arg(batch_size)
-)
-UPDATE charlie_trigger_events e
-SET state = 'dispatching', attempt_count = attempt_count + 1, updated_at = now()
-FROM due WHERE e.id = due.id
-RETURNING e.*;
+-- name: GetCharlieTriggerEventForAdmin :one
+SELECT e.*
+FROM charlie_trigger_events e
+JOIN charlie_trigger_rules r ON r.id = e.rule_id
+WHERE e.id = sqlc.arg(id) AND r.connection_id = sqlc.arg(connection_id);
 
 -- name: GetCharlieTriggerEvent :one
 SELECT * FROM charlie_trigger_events WHERE id = $1;
@@ -969,8 +830,21 @@ WITH source AS (
         last_error = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.last_error ELSE '' END,
         updated_at = now()
     RETURNING id
+), audit AS (
+    INSERT INTO audit_outbox (
+        id, dedupe_key, event_created_at, schema_version, user_id,
+        action, resource_type, resource_id, http_method, path, status_code,
+        request_id, detail, source, action_class, max_attempts
+    )
+    SELECT gen_random_uuid(), 'charlie-trigger-retry:' || event.id::text, now(), 'audit-v1', sqlc.arg(actor_id),
+           'admin.charlie.trigger.retry', 'charlie_trigger_event', event.id::text, 'POST',
+           '/api/v1/admin/charlie/trigger-events/{event_id}/retry/', 202,
+           event.id::text, '{"outcome_code":"authorized"}'::jsonb, 'service', 'mutation', 20
+    FROM event
+    ON CONFLICT (dedupe_key) DO UPDATE SET dedupe_key = EXCLUDED.dedupe_key
+    RETURNING id
 )
-SELECT event.* FROM event CROSS JOIN outbox;
+SELECT event.* FROM event CROSS JOIN outbox CROSS JOIN audit;
 
 -- name: ClaimCharlieTriggerEvent :one
 UPDATE charlie_trigger_events

@@ -16,6 +16,7 @@ import (
 )
 
 type clusterRegistryTestQuerier struct {
+	fakeOperationIdempotencyStore
 	deletedRegistryConfigFor uuid.UUID
 	deleteRegistryConfigErr  error
 	auditRows                []sqlc.CreateAuditLogV1Params

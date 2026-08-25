@@ -13,6 +13,88 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimImageVulnerabilityRescanOperation = `-- name: ClaimImageVulnerabilityRescanOperation :one
+UPDATE workload_operations
+SET status = 'running',
+    attempt_count = attempt_count + 1,
+    started_at = now(),
+    completed_at = NULL,
+    error_message = '',
+    updated_at = now()
+WHERE id = $1
+  AND operation_type = 'vulnerability_rescan'
+  AND (
+      status IN ('pending', 'retrying')
+      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '3 minutes'))
+  )
+RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
+`
+
+// The 3-minute stale lease exceeds the task's 2-minute hard timeout, so a
+// healthy execution cannot be reclaimed concurrently. Retrying rows are
+// reclaimable by Asynq retry; stale running rows recover after process loss.
+func (q *Queries) ClaimImageVulnerabilityRescanOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error) {
+	row := q.db.QueryRow(ctx, claimImageVulnerabilityRescanOperation, id)
+	var i WorkloadOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TargetType,
+		&i.TargetKey,
+		&i.OperationType,
+		&i.Payload,
+		&i.Status,
+		&i.AttemptCount,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const claimPodDeleteOperation = `-- name: ClaimPodDeleteOperation :one
+UPDATE workload_operations
+SET status = 'running',
+    attempt_count = attempt_count + 1,
+    started_at = now(),
+    completed_at = NULL,
+    error_message = '',
+    updated_at = now()
+WHERE id = $1
+  AND operation_type = 'delete_pod'
+  AND (
+      status IN ('pending', 'retrying')
+      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '3 minutes'))
+  )
+RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
+`
+
+// The stale lease exceeds the task's 2-minute hard timeout. Retrying attempts
+// are reclaimable by bounded Asynq retry; stale running rows recover after a
+// tunnel worker exits after claiming but before recording the outcome.
+func (q *Queries) ClaimPodDeleteOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error) {
+	row := q.db.QueryRow(ctx, claimPodDeleteOperation, id)
+	var i WorkloadOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TargetType,
+		&i.TargetKey,
+		&i.OperationType,
+		&i.Payload,
+		&i.Status,
+		&i.AttemptCount,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createWorkloadOperation = `-- name: CreateWorkloadOperation :one
 INSERT INTO workload_operations (
     target_type,
@@ -132,6 +214,7 @@ func (q *Queries) GetWorkloadOperation(ctx context.Context, id uuid.UUID) (Workl
 const listPendingWorkloadOperations = `-- name: ListPendingWorkloadOperations :many
 SELECT id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at FROM workload_operations
 WHERE status IN ('pending', 'running')
+  AND operation_type IN ('scale', 'restart', 'delete')
 ORDER BY created_at ASC
 LIMIT $1
 `
@@ -273,11 +356,18 @@ SET
     error_message = '',
     updated_at = now()
 WHERE id = $1
+  AND attempt_count = $2
+  AND status = 'running'
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
 `
 
-func (q *Queries) MarkWorkloadOperationCompleted(ctx context.Context, id uuid.UUID) (WorkloadOperation, error) {
-	row := q.db.QueryRow(ctx, markWorkloadOperationCompleted, id)
+type MarkWorkloadOperationCompletedParams struct {
+	ID           uuid.UUID `json:"id"`
+	AttemptCount int32     `json:"attempt_count"`
+}
+
+func (q *Queries) MarkWorkloadOperationCompleted(ctx context.Context, arg MarkWorkloadOperationCompletedParams) (WorkloadOperation, error) {
+	row := q.db.QueryRow(ctx, markWorkloadOperationCompleted, arg.ID, arg.AttemptCount)
 	var i WorkloadOperation
 	err := row.Scan(
 		&i.ID,
@@ -302,19 +392,62 @@ UPDATE workload_operations
 SET
     status = 'failed',
     completed_at = now(),
-    error_message = $2,
+    error_message = $3,
     updated_at = now()
 WHERE id = $1
+  AND attempt_count = $2
+  AND status = 'running'
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
 `
 
 type MarkWorkloadOperationFailedParams struct {
 	ID           uuid.UUID `json:"id"`
+	AttemptCount int32     `json:"attempt_count"`
 	ErrorMessage string    `json:"error_message"`
 }
 
 func (q *Queries) MarkWorkloadOperationFailed(ctx context.Context, arg MarkWorkloadOperationFailedParams) (WorkloadOperation, error) {
-	row := q.db.QueryRow(ctx, markWorkloadOperationFailed, arg.ID, arg.ErrorMessage)
+	row := q.db.QueryRow(ctx, markWorkloadOperationFailed, arg.ID, arg.AttemptCount, arg.ErrorMessage)
+	var i WorkloadOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TargetType,
+		&i.TargetKey,
+		&i.OperationType,
+		&i.Payload,
+		&i.Status,
+		&i.AttemptCount,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const markWorkloadOperationRetrying = `-- name: MarkWorkloadOperationRetrying :one
+UPDATE workload_operations
+SET
+    status = 'retrying',
+    completed_at = NULL,
+    error_message = $3,
+    updated_at = now()
+WHERE id = $1
+  AND attempt_count = $2
+  AND status = 'running'
+RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
+`
+
+type MarkWorkloadOperationRetryingParams struct {
+	ID           uuid.UUID `json:"id"`
+	AttemptCount int32     `json:"attempt_count"`
+	ErrorMessage string    `json:"error_message"`
+}
+
+func (q *Queries) MarkWorkloadOperationRetrying(ctx context.Context, arg MarkWorkloadOperationRetryingParams) (WorkloadOperation, error) {
+	row := q.db.QueryRow(ctx, markWorkloadOperationRetrying, arg.ID, arg.AttemptCount, arg.ErrorMessage)
 	var i WorkloadOperation
 	err := row.Scan(
 		&i.ID,

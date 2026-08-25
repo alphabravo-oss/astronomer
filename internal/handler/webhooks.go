@@ -30,6 +30,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/compliance"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -68,6 +69,17 @@ type WebhookQuerier interface {
 	GetComplianceBaseline(ctx context.Context, id uuid.UUID) (sqlc.ComplianceBaseline, error)
 }
 
+type WebhookMutationTx interface {
+	audit.OutboxQuerier
+	CreateWebhookSubscription(context.Context, sqlc.CreateWebhookSubscriptionParams) (sqlc.WebhookSubscription, error)
+	UpdateWebhookSubscription(context.Context, sqlc.UpdateWebhookSubscriptionParams) (sqlc.WebhookSubscription, error)
+	DeleteWebhookSubscription(context.Context, uuid.UUID) error
+	InsertWebhookDelivery(context.Context, sqlc.InsertWebhookDeliveryParams) (sqlc.WebhookDelivery, error)
+	RetryWebhookDelivery(context.Context, sqlc.RetryWebhookDeliveryParams) error
+}
+
+type webhookRunTxFunc func(context.Context, func(WebhookMutationTx) error) error
+
 // WebhookTapInvalidator is the cache hook on the bus tap. Wired by the
 // server so a CRUD operation reflects on the next event. Optional.
 type WebhookTapInvalidator interface {
@@ -87,6 +99,7 @@ type WebhookHandler struct {
 	// webhook that the active compliance baseline marks required
 	// (T6.064 deletion guard). nil → guard always enforced.
 	override BaselineOverrideChecker
+	runTx    webhookRunTxFunc
 }
 
 // NewWebhookHandler builds a usable handler.
@@ -104,6 +117,44 @@ func NewWebhookHandler(queries WebhookQuerier, encryptor *auth.Encryptor, log *s
 // SetAuditWriter wires the audit log writer. Required for admin actions
 // to leave an audit_log row.
 func (h *WebhookHandler) SetAuditWriter(a AuthAuditWriter) { h.audit = a }
+
+func (h *WebhookHandler) SetRunTx(runTx webhookRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *WebhookHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
+
+func executeWebhookMutation[T any](r *http.Request, h *WebhookHandler, mutate func(WebhookMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("webhook handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q WebhookMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			if event.action == "" {
+				return nil
+			}
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.audit, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
+}
 
 // SetTap wires the bus-tap cache invalidator. Optional.
 func (h *WebhookHandler) SetTap(t WebhookTapInvalidator) { h.tap = t }
@@ -220,7 +271,7 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 	filtersJSON, _ := json.Marshal(merged.EventFilters)
 	headersJSON, _ := json.Marshal(merged.ExtraHeaders)
 
-	saved, err := h.queries.CreateWebhookSubscription(r.Context(), sqlc.CreateWebhookSubscriptionParams{
+	params := sqlc.CreateWebhookSubscriptionParams{
 		Name:            merged.Name,
 		Url:             merged.URL,
 		SecretEncrypted: secretEnc,
@@ -231,20 +282,28 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 		MaxRetries:      int32(merged.MaxRetries),
 		TimeoutSeconds:  int32(merged.TimeoutSeconds),
 		CreatedBy:       currentUserUUID(r),
-	})
+	}
+	saved, err := executeWebhookMutation(r, h,
+		func(q WebhookMutationTx) (sqlc.WebhookSubscription, error) {
+			return q.CreateWebhookSubscription(r.Context(), params)
+		},
+		func() (sqlc.WebhookSubscription, error) {
+			return h.queries.CreateWebhookSubscription(r.Context(), params)
+		},
+		func(saved sqlc.WebhookSubscription) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.webhook.created", resourceType: "webhook_subscription", resourceID: saved.ID.String(), resourceName: saved.Name,
+				status: http.StatusCreated,
+				detail: map[string]any{"url": saved.Url, "event_filters": merged.EventFilters, "enabled": saved.Enabled, "max_retries": saved.MaxRetries},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to create webhook subscription")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to create webhook subscription")
 		return
 	}
 	if h.tap != nil {
 		h.tap.Invalidate()
 	}
-	recordAudit(r, h.audit, "admin.webhook.created", "webhook_subscription", saved.ID.String(), saved.Name, map[string]any{
-		"url":           saved.Url,
-		"event_filters": merged.EventFilters,
-		"enabled":       saved.Enabled,
-		"max_retries":   saved.MaxRetries,
-	})
 	RespondJSON(w, http.StatusCreated, toSubscriptionResponse(saved))
 }
 
@@ -323,7 +382,7 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 	filtersJSON, _ := json.Marshal(merged.EventFilters)
 	headersJSON, _ := json.Marshal(merged.ExtraHeaders)
 
-	saved, err := h.queries.UpdateWebhookSubscription(r.Context(), sqlc.UpdateWebhookSubscriptionParams{
+	params := sqlc.UpdateWebhookSubscriptionParams{
 		ID:              id,
 		Name:            merged.Name,
 		Url:             merged.URL,
@@ -334,19 +393,27 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Enabled:         merged.Enabled,
 		MaxRetries:      int32(merged.MaxRetries),
 		TimeoutSeconds:  int32(merged.TimeoutSeconds),
-	})
+	}
+	saved, err := executeWebhookMutation(r, h,
+		func(q WebhookMutationTx) (sqlc.WebhookSubscription, error) {
+			return q.UpdateWebhookSubscription(r.Context(), params)
+		},
+		func() (sqlc.WebhookSubscription, error) {
+			return h.queries.UpdateWebhookSubscription(r.Context(), params)
+		},
+		func(saved sqlc.WebhookSubscription) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.webhook.updated", resourceType: "webhook_subscription", resourceID: saved.ID.String(), resourceName: saved.Name,
+				status: http.StatusOK, detail: map[string]any{"url": saved.Url, "event_filters": merged.EventFilters, "enabled": saved.Enabled},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to update webhook subscription")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to update webhook subscription")
 		return
 	}
 	if h.tap != nil {
 		h.tap.Invalidate()
 	}
-	recordAudit(r, h.audit, "admin.webhook.updated", "webhook_subscription", saved.ID.String(), saved.Name, map[string]any{
-		"url":           saved.Url,
-		"event_filters": merged.EventFilters,
-		"enabled":       saved.Enabled,
-	})
 	RespondJSON(w, http.StatusOK, toSubscriptionResponse(saved))
 }
 
@@ -384,14 +451,26 @@ func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("compliance deletion guard overridden",
 			slog.String("webhook", existing.Name), slog.String("baseline", slug))
 	}
-	if err := h.queries.DeleteWebhookSubscription(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to delete webhook subscription")
+	_, err = executeWebhookMutation(r, h,
+		func(q WebhookMutationTx) (sqlc.WebhookSubscription, error) {
+			return existing, q.DeleteWebhookSubscription(r.Context(), id)
+		},
+		func() (sqlc.WebhookSubscription, error) {
+			return existing, h.queries.DeleteWebhookSubscription(r.Context(), id)
+		},
+		func(existing sqlc.WebhookSubscription) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.webhook.deleted", resourceType: "webhook_subscription", resourceID: id.String(), resourceName: existing.Name,
+				status: http.StatusNoContent,
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to delete webhook subscription")
 		return
 	}
 	if h.tap != nil {
 		h.tap.Invalidate()
 	}
-	recordAudit(r, h.audit, "admin.webhook.deleted", "webhook_subscription", id.String(), existing.Name, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -407,6 +486,13 @@ func (h *WebhookHandler) Test(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid subscription id")
+		return
+	}
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Durable webhook delivery storage is unavailable")
 		return
 	}
 	sub, err := h.queries.GetWebhookSubscription(r.Context(), id)
@@ -428,7 +514,7 @@ func (h *WebhookHandler) Test(w http.ResponseWriter, r *http.Request) {
 			"triggered_by": callerUsername(r),
 		},
 	})
-	row, err := h.queries.InsertWebhookDelivery(r.Context(), sqlc.InsertWebhookDeliveryParams{
+	params := sqlc.InsertWebhookDeliveryParams{
 		SubscriptionID: sub.ID,
 		EventName:      "webhook.test_ping",
 		EventID:        uuid.New().String(),
@@ -436,17 +522,64 @@ func (h *WebhookHandler) Test(w http.ResponseWriter, r *http.Request) {
 		PayloadSize:    int32(len(payload)),
 		Status:         "queued",
 		NextAttemptAt:  pgtype.Timestamptz{Time: now, Valid: true},
-	})
+	}
+	idemContext := withOperationIdempotency(r, "admin-webhook-test")
+	result, err := executeWebhookMutation(r, h,
+		func(q WebhookMutationTx) (webhookDeliveryMutationResult, error) {
+			idempotencyQ, ok := q.(resourceOperationIdempotencyQuerier)
+			if !ok {
+				return webhookDeliveryMutationResult{}, errors.New("durable webhook idempotency storage is unavailable")
+			}
+			deliveryQ, ok := q.(interface {
+				GetWebhookDelivery(context.Context, uuid.UUID) (sqlc.WebhookDelivery, error)
+			})
+			if !ok {
+				return webhookDeliveryMutationResult{}, errors.New("durable webhook delivery storage is unavailable")
+			}
+			existingID, replay, claimErr := claimResourceOperation(idemContext, idempotencyQ, "webhook_deliveries")
+			if claimErr != nil {
+				return webhookDeliveryMutationResult{}, claimErr
+			}
+			if replay {
+				row, getErr := deliveryQ.GetWebhookDelivery(r.Context(), existingID)
+				if getErr != nil {
+					return webhookDeliveryMutationResult{}, getErr
+				}
+				if row.SubscriptionID != sub.ID || row.EventName != "webhook.test_ping" {
+					return webhookDeliveryMutationResult{}, errOperationIdempotencyConflict
+				}
+				return webhookDeliveryMutationResult{delivery: row, replay: true}, nil
+			}
+			row, insertErr := q.InsertWebhookDelivery(r.Context(), params)
+			if insertErr != nil {
+				return webhookDeliveryMutationResult{}, insertErr
+			}
+			if attachErr := attachResourceOperation(idemContext, idempotencyQ, "webhook_deliveries", row.ID, toDeliveryResponse(row)); attachErr != nil {
+				return webhookDeliveryMutationResult{}, attachErr
+			}
+			return webhookDeliveryMutationResult{delivery: row}, nil
+		},
+		func() (webhookDeliveryMutationResult, error) {
+			return webhookDeliveryMutationResult{}, errors.New("durable webhook transaction is unavailable")
+		},
+		func(result webhookDeliveryMutationResult) clusterAuditEvent {
+			if result.replay {
+				return clusterAuditEvent{}
+			}
+			return clusterAuditEvent{
+				action: "admin.webhook.test_queued", resourceType: "webhook_subscription", resourceID: sub.ID.String(), resourceName: sub.Name,
+				status: http.StatusAccepted, detail: map[string]any{"delivery_id": result.delivery.ID.String()},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to enqueue test delivery")
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different webhook delivery")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to enqueue test delivery")
 		return
 	}
-	RespondJSONUnwrapped(w, http.StatusAccepted, map[string]any{
-		"delivery_id":     row.ID.String(),
-		"subscription_id": sub.ID.String(),
-		"queued_at":       now.Format(time.RFC3339),
-		"message":         "Test ping queued. The dispatcher will pick it up on the next tick (within 15s).",
-	})
+	RespondAcceptedOperation(w, webhookDeliveryLocation(sub.ID, result.delivery.ID), toDeliveryResponse(result.delivery))
 }
 
 // deliveryResponse is one row in the deliveries audit view.
@@ -463,6 +596,11 @@ type deliveryResponse struct {
 	DeliveredAt    *string `json:"delivered_at"`
 	NextAttemptAt  *string `json:"next_attempt_at"`
 	CreatedAt      string  `json:"created_at"`
+}
+
+type webhookDeliveryMutationResult struct {
+	delivery sqlc.WebhookDelivery
+	replay   bool
 }
 
 // Deliveries handles GET /api/v1/admin/webhooks/{id}/deliveries/.
@@ -499,6 +637,34 @@ func (h *WebhookHandler) Deliveries(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func webhookDeliveryLocation(subscriptionID, deliveryID uuid.UUID) string {
+	return "/api/v1/admin/webhooks/" + subscriptionID.String() + "/deliveries/" + deliveryID.String() + "/"
+}
+
+// GetDelivery returns the exact durable delivery receipt used by test and retry.
+func (h *WebhookHandler) GetDelivery(w http.ResponseWriter, r *http.Request) {
+	if err := h.requireSuperuser(r); err != nil {
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		return
+	}
+	subID, subOK := parseUUIDParam(r, "id")
+	deliveryID, deliveryOK := parseUUIDParam(r, "delivery_id")
+	if !subOK || !deliveryOK {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid subscription or delivery id")
+		return
+	}
+	row, err := h.queries.GetWebhookDelivery(r.Context(), deliveryID)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && row.SubscriptionID != subID) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Delivery not found")
+		return
+	}
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read delivery")
+		return
+	}
+	RespondJSON(w, http.StatusOK, toDeliveryResponse(row))
+}
+
 // RetryDelivery handles POST /api/v1/admin/webhooks/{id}/deliveries/{delivery_id}/retry/.
 func (h *WebhookHandler) RetryDelivery(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
@@ -513,6 +679,9 @@ func (h *WebhookHandler) RetryDelivery(w http.ResponseWriter, r *http.Request) {
 	delID, ok := parseUUIDParam(r, "delivery_id")
 	if !ok {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid delivery id")
+		return
+	}
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	row, err := h.queries.GetWebhookDelivery(r.Context(), delID)
@@ -531,17 +700,74 @@ func (h *WebhookHandler) RetryDelivery(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Delivery does not belong to this subscription")
 		return
 	}
-	if err := h.queries.RetryWebhookDelivery(r.Context(), sqlc.RetryWebhookDeliveryParams{
-		ID:            delID,
-		NextAttemptAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
-	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to mark delivery for retry")
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Durable webhook delivery storage is unavailable")
 		return
 	}
-	RespondJSONUnwrapped(w, http.StatusAccepted, map[string]any{
-		"delivery_id": delID.String(),
-		"message":     "Delivery re-queued. The dispatcher will pick it up on the next tick (within 15s).",
-	})
+	params := sqlc.RetryWebhookDeliveryParams{
+		ID:            delID,
+		NextAttemptAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	}
+	idemContext := withOperationIdempotency(r, "admin-webhook-delivery-retry")
+	result, err := executeWebhookMutation(r, h,
+		func(q WebhookMutationTx) (webhookDeliveryMutationResult, error) {
+			idempotencyQ, ok := q.(resourceOperationIdempotencyQuerier)
+			if !ok {
+				return webhookDeliveryMutationResult{}, errors.New("durable webhook idempotency storage is unavailable")
+			}
+			deliveryQ, ok := q.(interface {
+				GetWebhookDelivery(context.Context, uuid.UUID) (sqlc.WebhookDelivery, error)
+			})
+			if !ok {
+				return webhookDeliveryMutationResult{}, errors.New("durable webhook delivery storage is unavailable")
+			}
+			existingID, replay, claimErr := claimResourceOperation(idemContext, idempotencyQ, "webhook_deliveries")
+			if claimErr != nil {
+				return webhookDeliveryMutationResult{}, claimErr
+			}
+			if replay {
+				existing, getErr := deliveryQ.GetWebhookDelivery(r.Context(), existingID)
+				if getErr != nil {
+					return webhookDeliveryMutationResult{}, getErr
+				}
+				if existing.ID != delID || existing.SubscriptionID != subID {
+					return webhookDeliveryMutationResult{}, errOperationIdempotencyConflict
+				}
+				return webhookDeliveryMutationResult{delivery: existing, replay: true}, nil
+			}
+			if retryErr := q.RetryWebhookDelivery(r.Context(), params); retryErr != nil {
+				return webhookDeliveryMutationResult{}, retryErr
+			}
+			updated, getErr := deliveryQ.GetWebhookDelivery(r.Context(), delID)
+			if getErr != nil {
+				return webhookDeliveryMutationResult{}, getErr
+			}
+			if attachErr := attachResourceOperation(idemContext, idempotencyQ, "webhook_deliveries", updated.ID, toDeliveryResponse(updated)); attachErr != nil {
+				return webhookDeliveryMutationResult{}, attachErr
+			}
+			return webhookDeliveryMutationResult{delivery: updated}, nil
+		},
+		func() (webhookDeliveryMutationResult, error) {
+			return webhookDeliveryMutationResult{}, errors.New("durable webhook transaction is unavailable")
+		},
+		func(result webhookDeliveryMutationResult) clusterAuditEvent {
+			if result.replay {
+				return clusterAuditEvent{}
+			}
+			return clusterAuditEvent{
+				action: "admin.webhook.delivery.retry", resourceType: "webhook_delivery", resourceID: result.delivery.ID.String(),
+				status: http.StatusAccepted, detail: map[string]any{"subscription_id": result.delivery.SubscriptionID.String()},
+			}
+		})
+	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different webhook delivery")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to mark delivery for retry")
+		return
+	}
+	RespondAcceptedOperation(w, webhookDeliveryLocation(subID, result.delivery.ID), toDeliveryResponse(result.delivery))
 }
 
 // mergedSettings is the validated, all-pointers-resolved view used by

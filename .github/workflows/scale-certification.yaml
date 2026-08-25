@@ -1,0 +1,255 @@
+name: Scale certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Estate profile
+        required: true
+        type: choice
+        options:
+          - estate-100
+          - estate-500
+          - estate-1000
+          - estate-1000-soak
+          - estate-2000-lab
+      drill_evidence_artifact:
+        description: Name of a retained artifact containing one passing JSON file per required day-2 drill
+        required: true
+        type: string
+      drill_evidence_run_id:
+        description: Actions run ID that produced the retained drill evidence artifact
+        required: true
+        type: string
+      drill_evidence_source_ref:
+        description: Exact trusted ref used by the day-2 qualification workflow (refs/heads/main or a v* tag)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: scale-certification-${{ inputs.profile }}
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    environment: scale-certification
+    runs-on: [self-hosted, linux, x64, astronomer-scale]
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify drill source run and artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRILL_RUN_ID: ${{ inputs.drill_evidence_run_id }}
+          DRILL_ARTIFACT: ${{ inputs.drill_evidence_artifact }}
+          SOURCE_REF: ${{ inputs.drill_evidence_source_ref }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          case "$SOURCE_REF" in refs/heads/main|refs/tags/v[0-9]*) ;; *) echo "untrusted drill evidence ref: $SOURCE_REF" >&2; exit 1;; esac
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${DRILL_RUN_ID}")"
+          jq -e \
+            --arg workflow ".github/workflows/day2-drill-qualification.yaml" \
+            --arg commit "$EXPECTED_COMMIT" \
+            '.path == $workflow and .head_sha == $commit and .conclusion == "success" and .status == "completed"' \
+            <<<"$run_json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${DRILL_RUN_ID}/artifacts" \
+            | jq -e --arg artifact "$DRILL_ARTIFACT" \
+              '[.artifacts[] | select(.name == $artifact and .expired == false)] | length == 1'
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.drill_evidence_artifact }}
+          path: scale-evidence/drills
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.drill_evidence_run_id }}
+
+      - name: Verify signed drill evidence manifest and file digests
+        env:
+          DRILL_RUN_ID: ${{ inputs.drill_evidence_run_id }}
+          DRILL_ARTIFACT: ${{ inputs.drill_evidence_artifact }}
+          SOURCE_REF: ${{ inputs.drill_evidence_source_ref }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          CERTIFICATE_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/day2-drill-qualification.yaml@${{ inputs.drill_evidence_source_ref }}
+        run: |
+          manifest=scale-evidence/drills/drill-evidence-manifest.json
+          bundle=scale-evidence/drills/drill-evidence-manifest.sigstore.json
+          test -s "$manifest" && test -s "$bundle"
+          cosign verify-blob \
+            --bundle "$bundle" \
+            --certificate-identity "$CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$manifest"
+          jq -e \
+            --arg workflow ".github/workflows/day2-drill-qualification.yaml" \
+            --arg run_id "$DRILL_RUN_ID" \
+            --arg commit "$EXPECTED_COMMIT" \
+            --arg artifact "$DRILL_ARTIFACT" '
+              .schema_version == "astronomer-day2-drill-manifest-v1" and
+              .qualification_workflow == $workflow and .qualification_run_id == $run_id and
+              .qualification_conclusion == "success" and .qualification_commit == $commit and
+              .raw_execution_workflow == ".github/workflows/day2-drill-execution.yaml" and
+              .raw_execution_conclusion == "success" and .raw_execution_commit == $commit and
+              .raw_execution_event == "workflow_dispatch" and
+              .artifact == $artifact and (.files | length > 0)
+            ' "$manifest"
+          raw_run_id="$(jq -r '.raw_execution_run_id' "$manifest")"
+          [[ "$raw_run_id" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${raw_run_id}" \
+            | jq -e --arg commit "$EXPECTED_COMMIT" --arg workflow ".github/workflows/day2-drill-execution.yaml" '
+                .path == $workflow and .event == "workflow_dispatch" and .head_sha == $commit and
+                .status == "completed" and .conclusion == "success"
+              '
+          while IFS=$'\t' read -r relative expected; do
+            [[ "$relative" =~ ^[A-Za-z0-9_.-]+\.(json|log)$ ]]
+            test "$relative" != "drill-evidence-manifest.json"
+            test "$(sha256sum "scale-evidence/drills/$relative" | cut -d' ' -f1)" = "$expected"
+          done < <(jq -r '.files[] | [.path,.sha256] | @tsv' "$manifest")
+          echo "LOADTEST_DRILL_EVIDENCE_MANIFEST_SHA256=$(sha256sum "$manifest" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "LOADTEST_DRILL_EVIDENCE_WORKFLOW=.github/workflows/day2-drill-qualification.yaml" >> "$GITHUB_ENV"
+          echo "LOADTEST_DRILL_EVIDENCE_CONCLUSION=success" >> "$GITHUB_ENV"
+
+      - name: Validate drill evidence provenance
+        env:
+          LOADTEST_PROFILE: scripts/loadtest/profiles/${{ inputs.profile }}.yaml
+          LOADTEST_DRILL_EVIDENCE_DIR: scale-evidence/drills
+          LOADTEST_COMMIT: ${{ github.sha }}
+          LOADTEST_RUN_ID: ${{ github.run_id }}
+          LOADTEST_DRILL_EVIDENCE_RUN_ID: ${{ inputs.drill_evidence_run_id }}
+          LOADTEST_ENVIRONMENT: scale-certification
+          LOADTEST_IMAGES: ${{ vars.SCALE_RELEASE_MANIFEST_DIGEST }}
+          LOADTEST_CHART_VALUES: ${{ vars.SCALE_CHART_VALUES_DIGEST }}
+          LOADTEST_KUBERNETES_VERSION: ${{ vars.SCALE_KUBERNETES_VERSION }}
+          LOADTEST_POSTGRES_VERSION: ${{ vars.SCALE_POSTGRES_VERSION }}
+          LOADTEST_REDIS_VERSION: ${{ vars.SCALE_REDIS_VERSION }}
+          LOADTEST_HARDWARE: ${{ vars.SCALE_HARDWARE }}
+          LOADTEST_COMPONENT_REPLICAS: ${{ vars.SCALE_COMPONENT_REPLICAS_JSON }}
+        run: go run ./scripts/loadtest -validate-drill-evidence
+
+      - name: Bind rendered deployment values
+        env:
+          RENDERED_VALUES: ${{ vars.SCALE_RENDERED_VALUES }}
+          EXPECTED_VALUES_SHA256: ${{ vars.SCALE_CHART_VALUES_DIGEST }}
+        run: |
+          test -n "$RENDERED_VALUES"
+          test -n "$EXPECTED_VALUES_SHA256"
+          printf '%s' "$RENDERED_VALUES" > scale-evidence/rendered-values.yaml
+          test "$(sha256sum scale-evidence/rendered-values.yaml | cut -d' ' -f1)" = "$EXPECTED_VALUES_SHA256"
+
+      - name: Prepare short-lived API token
+        env:
+          SCALE_API_TOKEN: ${{ secrets.SCALE_API_TOKEN }}
+          SCALE_AUDIT_OBSERVER_DATABASE_URL: ${{ secrets.SCALE_AUDIT_OBSERVER_DATABASE_URL }}
+        run: |
+          printf '%s' "$SCALE_API_TOKEN" > "$RUNNER_TEMP/astronomer-scale-token"
+          chmod 0600 "$RUNNER_TEMP/astronomer-scale-token"
+          test -n "$SCALE_AUDIT_OBSERVER_DATABASE_URL"
+          printf '%s' "$SCALE_AUDIT_OBSERVER_DATABASE_URL" > "$RUNNER_TEMP/astronomer-scale-audit-observer-dsn"
+          chmod 0600 "$RUNNER_TEMP/astronomer-scale-audit-observer-dsn"
+
+      - name: Run certification profile
+        env:
+          LOADTEST_SERVER: ${{ vars.SCALE_SERVER_URL }}
+          LOADTEST_TOKEN: ${{ runner.temp }}/astronomer-scale-token
+          LOADTEST_AUDIT_OBSERVER_DATABASE_URL_FILE: ${{ runner.temp }}/astronomer-scale-audit-observer-dsn
+          LOADTEST_PROFILE: scripts/loadtest/profiles/${{ inputs.profile }}.yaml
+          LOADTEST_OUT: scale-evidence/${{ inputs.profile }}.md
+          LOADTEST_CERTIFICATION: "true"
+          LOADTEST_DRILL_EVIDENCE_DIR: scale-evidence/drills
+          LOADTEST_COMMIT: ${{ github.sha }}
+          LOADTEST_RUN_ID: ${{ github.run_id }}
+          LOADTEST_DRILL_EVIDENCE_RUN_ID: ${{ inputs.drill_evidence_run_id }}
+          LOADTEST_ENVIRONMENT: scale-certification
+          LOADTEST_IMAGES: ${{ vars.SCALE_RELEASE_MANIFEST_DIGEST }}
+          LOADTEST_CHART_VALUES: ${{ vars.SCALE_CHART_VALUES_DIGEST }}
+          LOADTEST_KUBERNETES_VERSION: ${{ vars.SCALE_KUBERNETES_VERSION }}
+          LOADTEST_POSTGRES_VERSION: ${{ vars.SCALE_POSTGRES_VERSION }}
+          LOADTEST_REDIS_VERSION: ${{ vars.SCALE_REDIS_VERSION }}
+          LOADTEST_HARDWARE: ${{ vars.SCALE_HARDWARE }}
+          LOADTEST_COMPONENT_REPLICAS: ${{ vars.SCALE_COMPONENT_REPLICAS_JSON }}
+        run: go run ./scripts/loadtest
+
+      - name: Verify report integrity and verdict
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+          EXPECTED_PROFILE: ${{ inputs.profile }}
+          EXPECTED_RUN_ID: ${{ github.run_id }}
+          EXPECTED_DRILL_RUN_ID: ${{ inputs.drill_evidence_run_id }}
+          EXPECTED_IMAGES: ${{ vars.SCALE_RELEASE_MANIFEST_DIGEST }}
+          EXPECTED_ENVIRONMENT: scale-certification
+        run: |
+          cd scale-evidence
+          [[ "$EXPECTED_IMAGES" =~ ^sha256:[a-f0-9]{64}$ ]]
+          sha256sum --check "${{ inputs.profile }}.md.sha256"
+          grep -q '^VERDICT: pass$' "${{ inputs.profile }}.md"
+          jq -e \
+            --arg commit "$EXPECTED_COMMIT" \
+            --arg profile "$EXPECTED_PROFILE" \
+            --arg run_id "$EXPECTED_RUN_ID" \
+            --arg drill_run_id "$EXPECTED_DRILL_RUN_ID" \
+            --arg images "$EXPECTED_IMAGES" \
+            --arg environment "$EXPECTED_ENVIRONMENT" '
+              .schema_version == "astronomer-scale-report-v2" and
+              .verdict == "pass" and .certification == true and
+              .profile == $profile and .metadata.commit == $commit and
+              .metadata.run_id == $run_id and
+              .metadata.drill_evidence_run_id == $drill_run_id and
+              .metadata.drill_evidence_workflow == ".github/workflows/day2-drill-qualification.yaml" and
+              .metadata.drill_evidence_conclusion == "success" and
+              (.metadata.drill_evidence_manifest_sha256 | test("^[0-9a-f]{64}$")) and
+              .metadata.images == $images and
+              .metadata.environment == $environment and
+              .mandatory_audit.intent_observer == "read-only-postgresql-audit_outbox" and
+              .mandatory_audit.accepted > 0 and
+              .mandatory_audit.accepted == .mandatory_audit.intents_observed and
+              .mandatory_audit.accepted == .mandatory_audit.canonical_rows and
+              .mandatory_audit.reconciled == true and
+              ((.generated_at | fromdateiso8601) <= (now + 300)) and
+              ((.generated_at | fromdateiso8601) >= (now - 19800))
+            ' "${{ inputs.profile }}.md.json"
+
+      - name: Build canonical evidence manifest
+        run: |
+          install -d scale-evidence/raw
+          jq '{schema_version,generated_at,profile,verdict,traffic,scenarios,resource_cardinality,state_events_emitted,mandatory_audit,audit_metrics,component_metrics,leak_evidence,scrape_series}' \
+            "scale-evidence/${{ inputs.profile }}.md.json" > scale-evidence/raw/qualification.json
+          python3 scripts/build-scale-evidence.py \
+            --evidence-dir scale-evidence \
+            --profile "${{ inputs.profile }}"
+
+      - name: Keyless sign and verify evidence manifest
+        env:
+          COSIGN_CERTIFICATE_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/scale-certification.yaml@${{ github.ref }}
+        run: |
+          cosign sign-blob --yes \
+            --bundle scale-evidence/evidence-manifest.sigstore.json \
+            scale-evidence/evidence-manifest.json
+          cosign verify-blob \
+            --bundle scale-evidence/evidence-manifest.sigstore.json \
+            --certificate-identity "$COSIGN_CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            scale-evidence/evidence-manifest.json
+
+      - name: Retain certification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scale-certification-${{ inputs.profile }}-${{ github.run_id }}
+          path: scale-evidence/
+          if-no-files-found: error
+          retention-days: 90

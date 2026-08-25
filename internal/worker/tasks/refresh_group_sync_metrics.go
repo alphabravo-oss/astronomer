@@ -25,11 +25,10 @@ func NewRefreshGroupSyncMetricsTask() *asynq.Task {
 // values.
 func HandleRefreshGroupSyncMetrics(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, RefreshGroupSyncMetricsType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "group-sync metrics: runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("group-sync metrics runtime is not configured")
 		}
-		counter, ok := runtimeDeps.Queries.(auth.GroupSyncBindingsCounter)
+		counter, ok := runtimeDependencies(ctx).Queries.(auth.GroupSyncBindingsCounter)
 		if !ok {
 			return fmt.Errorf("group-sync metrics: runtime querier does not implement GroupSyncBindingsCounter")
 		}

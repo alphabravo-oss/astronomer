@@ -26,11 +26,10 @@ func NewCleanupAlertEventsTask() *asynq.Task {
 // window. Cron: daily at 02:00 UTC.
 func HandleCleanupAlertEvents(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, CleanupOldAlertEventsType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "alert event cleanup runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("alert event cleanup runtime is not configured")
 		}
-		q, ok := runtimeDeps.Queries.(interface {
+		q, ok := runtimeDependencies(ctx).Queries.(interface {
 			DeleteAlertEventsOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
 		})
 		if !ok {
@@ -41,7 +40,7 @@ func HandleCleanupAlertEvents(ctx context.Context, _ *asynq.Task) error {
 		if err != nil {
 			return fmt.Errorf("delete alert events: %w", err)
 		}
-		runtimeLogger().InfoContext(ctx, "removed expired alert events", "rows", rows, "cutoff", cutoff.Format(time.RFC3339))
+		runtimeLogger(ctx).InfoContext(ctx, "removed expired alert events", "rows", rows, "cutoff", cutoff.Format(time.RFC3339))
 		return nil
 	})
 }

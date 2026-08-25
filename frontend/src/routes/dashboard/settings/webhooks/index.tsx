@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/webhooks — webhook subscriptions index.
  *
@@ -6,30 +6,24 @@ import { createFileRoute } from '@tanstack/react-router';
  * toggle so on/off doesn't require entering the detail view. Last-delivery
  * status / time come from the backend joined to the subscription row.
  */
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { useRouter } from '@/lib/navigation';
-import {
-  ArrowLeft,
-  Plus,
-  Trash2,
-  Webhook,
-} from 'lucide-react';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ActionButton } from '@/components/ui/action-button';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { cn, formatRelativeTime } from '@/lib/utils';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { useRouter } from "@/lib/navigation";
+import { ArrowLeft, Plus, Trash2, Webhook } from "lucide-react";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ActionButton } from "@/components/ui/action-button";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { cn, formatRelativeTime } from "@/lib/utils";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import {
   useDeleteWebhook,
   useUpdateWebhook,
   useWebhooks,
-} from '@/components/settings/hooks';
-import type { WebhookSubscription } from '@/lib/api/settings';
+} from "@/components/settings/hooks";
+import type { WebhookSubscriptionView } from "@/lib/api/settings";
 
-function EnabledToggle({ row }: { row: WebhookSubscription }) {
+function EnabledToggle({ row }: { row: WebhookSubscriptionView }) {
   const update = useUpdateWebhook();
   return (
     <button
@@ -40,15 +34,15 @@ function EnabledToggle({ row }: { row: WebhookSubscription }) {
       }}
       disabled={update.isPending}
       className={cn(
-        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-        row.enabled ? 'bg-status-success' : 'bg-muted',
+        "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+        row.enabled ? "bg-status-success" : "bg-muted",
       )}
-      title={row.enabled ? 'Disable' : 'Enable'}
+      title={row.enabled ? "Disable" : "Enable"}
     >
       <span
         className={cn(
-          'inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform',
-          row.enabled ? 'translate-x-5' : 'translate-x-1',
+          "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
+          row.enabled ? "translate-x-5" : "translate-x-1",
         )}
       />
     </button>
@@ -59,25 +53,28 @@ function WebhooksList() {
   const router = useRouter();
   const { data, isLoading } = useWebhooks();
   const del = useDeleteWebhook();
-  const [confirmDelete, setConfirmDelete] = useState<WebhookSubscription | null>(null);
+  const [confirmDelete, setConfirmDelete] =
+    useState<WebhookSubscriptionView | null>(null);
 
-  const columns: Column<WebhookSubscription>[] = [
+  const columns: Column<WebhookSubscriptionView>[] = [
     {
-      key: 'name',
-      header: 'Name',
+      key: "name",
+      header: "Name",
       accessor: (row) => (
         <div className="flex items-center gap-2">
           <Webhook className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="font-medium text-foreground">{row.name}</p>
-            <p className="text-2xs font-mono text-muted-foreground uppercase">{row.template}</p>
+            <p className="text-2xs font-mono text-muted-foreground uppercase">
+              {row.template}
+            </p>
           </div>
         </div>
       ),
     },
     {
-      key: 'url',
-      header: 'URL',
+      key: "url",
+      header: "URL",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono truncate max-w-[360px] block">
           {row.url}
@@ -86,40 +83,24 @@ function WebhooksList() {
       sortable: false,
     },
     {
-      key: 'enabled',
-      header: 'Enabled',
-      align: 'center',
+      key: "enabled",
+      header: "Enabled",
+      align: "center",
       sortable: false,
       accessor: (row) => <EnabledToggle row={row} />,
     },
     {
-      key: 'lastDeliveryStatus',
-      header: 'Last delivery',
-      accessor: (row) => {
-        if (!row.lastDeliveryStatus) {
-          return <span className="text-xs text-muted-foreground">Never delivered</span>;
-        }
-        return (
-          <StatusBadge
-            status={row.lastDeliveryStatus === 'success' ? 'active' : 'error'}
-            label={row.lastDeliveryStatus}
-            size="sm"
-          />
-        );
-      },
-    },
-    {
-      key: 'lastDeliveryAt',
-      header: 'When',
+      key: "updatedAt",
+      header: "Updated",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {row.lastDeliveryAt ? formatRelativeTime(row.lastDeliveryAt) : '--'}
+          {formatRelativeTime(row.updatedAt)}
         </span>
       ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       sortable: false,
       accessor: (row) => (
         <button
@@ -144,7 +125,9 @@ function WebhooksList() {
         columns={columns}
         keyExtractor={(row) => row.id}
         loading={isLoading}
-        onRowClick={(row) => router.push(`/dashboard/settings/webhooks/${row.id}`)}
+        onRowClick={(row) =>
+          router.push(`/dashboard/settings/webhooks/${row.id}`)
+        }
         emptyMessage="No webhooks configured"
         searchPlaceholder="Search webhooks..."
       />
@@ -182,7 +165,11 @@ function WebhooksPage() {
           title="Webhooks"
           description="Outbound HTTP subscribers for platform events. Slack / PagerDuty / generic JSON."
           actions={
-            <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => router.push('/dashboard/settings/webhooks/new')}>
+            <ActionButton
+              intent="primary"
+              icon={<Plus className="h-4 w-4" />}
+              onClick={() => router.push("/dashboard/settings/webhooks/new")}
+            >
               New webhook
             </ActionButton>
           }
@@ -193,6 +180,6 @@ function WebhooksPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/webhooks/')({
+export const Route = createFileRoute("/dashboard/settings/webhooks/")({
   component: WebhooksPage,
 });

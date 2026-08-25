@@ -6,10 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"sync"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -34,35 +32,12 @@ type CharlieAlertReconciler interface {
 	Reconcile(context.Context) error
 }
 
-var (
-	charlieAlertMu         sync.RWMutex
-	charlieAlertQueries    CharlieAlertDispatchQuerier
-	charlieAlertWriteFence *charlie.WriteFence
-	charlieAlertReconciler CharlieAlertReconciler
-)
-
-func ConfigureCharlieAlertDispatch(queries CharlieAlertDispatchQuerier, writeFence *charlie.WriteFence) {
-	charlieAlertMu.Lock()
-	defer charlieAlertMu.Unlock()
-	charlieAlertQueries = queries
-	charlieAlertWriteFence = writeFence
-}
-
-func ConfigureCharlieAlertReconciler(reconciler CharlieAlertReconciler) {
-	charlieAlertMu.Lock()
-	defer charlieAlertMu.Unlock()
-	charlieAlertReconciler = reconciler
-}
-
-func HandleCharlieAlertReconcile(ctx context.Context, _ *asynq.Task) error {
+func (runtime CharlieAlertRuntime) HandleCharlieAlertReconcile(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, CharlieAlertReconcileType, func() error {
-		charlieAlertMu.RLock()
-		reconciler := charlieAlertReconciler
-		charlieAlertMu.RUnlock()
-		if reconciler == nil {
-			return nil
+		if runtime.Reconciler == nil {
+			return codedCharlieAlertError("reconcile_unavailable")
 		}
-		if err := reconciler.Reconcile(ctx); err != nil {
+		if err := runtime.Reconciler.Reconcile(ctx); err != nil {
 			return codedCharlieAlertError("reconcile_unavailable")
 		}
 		return nil
@@ -72,11 +47,9 @@ func HandleCharlieAlertReconcile(ctx context.Context, _ *asynq.Task) error {
 // HandleCharlieAlertDispatch owns notification delivery only. It rechecks the
 // durable finding and local channel, and has no approval, capability, or action
 // dispatcher dependency.
-func HandleCharlieAlertDispatch(ctx context.Context, task *asynq.Task) error {
-	charlieAlertMu.RLock()
-	queries := charlieAlertQueries
-	writeFence := charlieAlertWriteFence
-	charlieAlertMu.RUnlock()
+func (runtime CharlieAlertRuntime) HandleCharlieAlertDispatch(ctx context.Context, task *asynq.Task) error {
+	queries := runtime.Queries
+	writeFence := runtime.WriteFence
 	if queries == nil || writeFence == nil {
 		return codedCharlieAlertError("dispatcher_unavailable")
 	}

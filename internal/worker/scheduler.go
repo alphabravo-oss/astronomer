@@ -5,292 +5,58 @@ import (
 	"log/slog"
 
 	"github.com/hibiken/asynq"
-
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
-// Scheduler manages periodic tasks, replacing Celery Beat.
+// Scheduler manages all periodic task producers from the same typed registry
+// used to construct worker muxes. This prevents a scheduled task from drifting
+// onto a queue whose owning process cannot execute it.
 type Scheduler struct {
 	scheduler *asynq.Scheduler
 	log       *slog.Logger
+	features  SchedulerFeatures
 }
 
-// NewScheduler creates a new periodic task scheduler.
-//
-// As with NewWorker, an invalid REDIS_URL is fail-fast — silent localhost
-// fallback was a production footgun.
-func NewScheduler(redisURL string, log *slog.Logger) (*Scheduler, error) {
+type SchedulerFeatures struct {
+	CRDOwnership bool
+}
+
+func NewScheduler(redisURL string, log *slog.Logger, configured ...SchedulerFeatures) (*Scheduler, error) {
 	redisOpt, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
 	}
-
-	s := asynq.NewScheduler(redisOpt, nil)
-
-	return &Scheduler{
-		scheduler: s,
-		log:       log,
-	}, nil
+	features := SchedulerFeatures{}
+	if len(configured) > 0 {
+		features = configured[0]
+	}
+	return &Scheduler{scheduler: asynq.NewScheduler(redisOpt, nil), log: log, features: features}, nil
 }
 
-// RegisterPeriodicTasks sets up all cron-based tasks matching the Python Celery Beat schedule.
 func (s *Scheduler) RegisterPeriodicTasks() error {
-	entries := []struct {
-		cron     string
-		taskType string
-		desc     string
-	}{
-		{"@every 60s", TypeHealthCheck, "cluster health check"},
-		// Sprint 086 — cluster-condition remediation reconciler. 30s
-		// cadence so a transient agent disconnect gets a re-pair token
-		// minted promptly; per-condition exponential backoff stops
-		// stuck clusters from tight-looping.
-		{"@every 30s", tasks.ClusterConditionReconcileType, "cluster-condition remediation"},
-		{"@every 60s", TypeAlertEvaluation, "alert rule evaluation"},
-		{"@every 60s", TypeCharlieAlertReconcile, "Charlie alert delivery reconciliation"},
-		{"@every 5s", tasks.DeliveryRolloutReconcileType, "Flux-native delivery rollout reconciliation"},
-		{"@every 15s", tasks.DeliverySourceResolutionType, "immutable delivery source resolution sweep"},
-		{"@every 5s", tasks.DeliverySystemRolloutReconcileType, "signed agent and Flux system rollout reconciliation"},
-		{"@every 6h", TypeCatalogSync, "catalog sync"},
-		{"@every 5m", TypeMetricsAggregation, "metrics aggregation"},
-		{"@every 2m", TypeMonitoringReconcile, "monitoring reconciliation"},
-		{"@every 6h", TypeCleanupExpiredRegistrationTokens, "cleanup expired registration tokens"},
-		{"0 2 * * *", TypeCleanupOldAlertEvents, "cleanup old alert events (daily 02:00)"},
-		{"0 1 * * *", TypeEnsureAuditLogPartitions, "ensure audit_log monthly partitions (daily 01:00)"},
-		{"30 1 * * *", TypeEnforceAuditLogRetention, "enforce audit_log retention (daily 01:30)"},
-		{"45 1 * * *", tasks.ApiserverAuditRetentionType, "enforce apiserver_audit_events retention (daily 01:45)"},
-		{"@every 1h", TypeRunScheduledBackups, "run scheduled backups"},
-		{"0 3 * * *", TypeEnforceBackupRetention, "enforce backup retention (daily 03:00)"},
-		// The recompute handler is registered in the mux (worker.go) but had no
-		// schedule entry, so recommendations never refreshed. Off-peak, offset
-		// from the 03:00 retention task.
-		{"30 3 * * *", tasks.ChartRecommendationsRecomputeType, "chart recommendations recompute (daily 03:30)"},
-		// Phase B3: re-apply project ResourceQuota / LimitRange / NetworkPolicy
-		// across every project_namespaces row. The handler also enqueues a
-		// per-namespace reconcile on AddNamespace; this sweep covers drift
-		// and missed-delivery cases.
-		{"@every 5m", TypeProjectReconcileAll, "project enforcement sweep"},
-		// NOTE: cluster:decommission_all is scheduled separately below, to the
-		// "tunnel" queue, because its managed-side cleanup phase needs the hub
-		// (server pod). Scheduling it here (default queue) would run it on the
-		// standalone worker, which has no hub.
-		// Recompute the auth_group_bindings gauge so it doesn't go
-		// stale between SSO login runs. Cheap — three COUNT(*)s.
-		{"@every 5m", tasks.RefreshGroupSyncMetricsType, "refresh group-sync binding gauge"},
-		// Backstop for agent upgrades whose replacement agent never reconnected.
-		// The success edge is a heartbeat from the new agent and the normal
-		// failure edge is the rolled-back agent reporting in; this catches the
-		// case where the cluster went dark and neither will ever arrive.
-		{"@every 5m", tasks.AgentUpgradeStuckSweepType, "fail stuck agent upgrade operations"},
-		// Opt-in telemetry POST (migration 046). Daily at 02:30 UTC.
-		// Handler short-circuits when telemetry.enabled is false.
-		{"30 2 * * *", tasks.TelemetrySendType, "telemetry send (daily 02:30)"},
-		// Migration 047: drain email_messages queued/failed rows into
-		// real SMTP sends. 30s cadence.
-		{"@every 30s", tasks.EmailDispatchType, "email dispatch (smtp drain)"},
-		// Email retention sweep — daily at 03:30 (offset from the
-		// 03:00 backup-retention task to spread DB load).
-		{"30 3 * * *", tasks.EmailCleanupOldType, "email retention sweep (90d)"},
-		// Migration 048: drain pending webhook_deliveries into HMAC-signed
-		// HTTP POSTs. 15s cadence — the bus tap enqueues with next_attempt_at=now
-		// so this tick is the SLA between event-fire and webhook receipt.
-		{"@every 15s", tasks.WebhookDispatchType, "webhook dispatch (outbound POST drain)"},
-		// Webhook delivery retention sweep — daily at 04:00 (offset from
-		// the email-retention task to spread DB load).
-		{"0 4 * * *", tasks.WebhookCleanupOldType, "webhook delivery retention sweep (30d)"},
-		// Cluster tombstone retention (plan 005): hard-delete decommissioned
-		// cluster rows once past the retention window AND every archived
-		// audit row for the cluster is self-describing (archived_cluster_name
-		// backfilled by migration 139). Daily at 05:00 — next free slot after
-		// the 04:xx retention sweeps.
-		{"0 5 * * *", tasks.ClusterTombstoneRetentionType, "cluster tombstone retention sweep (90d default)"},
-		// Cluster template drift sweep (migration 049). Hourly cadence —
-		// the per-cluster drift check is cheap (two JSONB diffs against
-		// the snapshot) and the result feeds a UI badge, not an
-		// auto-correct path.
-		// cluster_template:drift_check is registered separately below so
-		// it can route to the tunnel-only asynq queue.
-		// Migration 050: drift sweep for cluster registry configs.
-		// Re-applies every cluster_registry_configs row so a new
-		// project namespace, an accidental Secret deletion, or a
-		// worker restart mid-apply self-heals. The SSA on the Secret
-		// is a no-op when state already matches, so this is cheap.
-		{"@every 30m", tasks.ClusterRegistryDriftReconcileType, "cluster registry drift reconcile"},
-		// Migration 052: per-cluster Velero snapshot lifecycle.
-		//   - Poll: every 30s, mirror Velero status into the snapshot/restore rows.
-		//   - Dispatch: every 1m, fire any scheduled snapshot whose cron has elapsed.
-		//   - Cleanup: daily, drop expired terminal rows (Velero owns object-store TTL).
-		{"@every 30s", tasks.ClusterSnapshotPollType, "cluster snapshot poll"},
-		{"@every 1m", tasks.ClusterSnapshotDispatchScheduledType, "cluster snapshot scheduled dispatcher"},
-		{"15 4 * * *", tasks.ClusterSnapshotCleanupExpiredType, "cluster snapshot expired cleanup (daily 04:15)"},
-		// Control-plane (etcd) DR snapshot sweep (migration 125). Reconciles
-		// in-flight snapshot Jobs to a terminal state and, when the operator
-		// opts in, auto-schedules rolling snapshots. No-op until the handler
-		// wires it (control_plane_snapshots_enabled), so this entry is inert
-		// by default.
-		{"@every 1m", tasks.ControlPlaneSnapshotSweepType, "control-plane (etcd) snapshot sweep"},
-		// Migration 053: drift sweep for cloud-credential materializations.
-		// Walks every row whose status != 'applied' and retries — the
-		// Secret SSA is idempotent so converged rows fast-fail through
-		// the apply path without a wire write.
-		{"@every 30m", tasks.CloudCredentialDriftReconcileType, "cloud credentials drift reconcile"},
-		{"@every 6h", tasks.PlaintextCredentialMigrationType, "plaintext credential migration"},
-		// Migration 055: SIEM forwarder dispatch + retention.
-		//   - Dispatch: every 2s drains every enabled forwarder's queue
-		//     into the configured transport. The 2s cadence is the SLA
-		//     between event-fire and SIEM receipt; the per-forwarder
-		//     flush_interval_ms column further throttles batches.
-		//   - Cleanup: daily at 04:30 prunes queue rows older than 7
-		//     days regardless of forwarder status.
-		{"@every 2s", tasks.SIEMDispatchType, "siem dispatch (forwarder queue drain)"},
-		{"30 4 * * *", tasks.SIEMCleanupOldType, "siem queue retention sweep (7d)"},
-		// Task A2: durable agent-token rotation policy sweep. Hourly —
-		// reads each cluster's token_rotation_days policy and flags
-		// rotation_pending_at on tokens older than the policy. The grace
-		// rotation itself happens on the agent's next connect, so an hourly
-		// cadence is plenty (rotation_days is measured in days).
-		{"@every 1h", tasks.AgentTokenRotateSweepType, "durable agent-token rotation policy sweep"},
-		// Migration 057: maintenance-window deferred-op dispatcher.
-		// 60s cadence — the dispatcher pulls rows whose deferred_until
-		// has elapsed and re-fires the queued operation through the
-		// per-op-type replayer registered at server start.
-		{"@every 60s", tasks.DispatchDeferredType, "maintenance dispatch deferred operations"},
-		// Migration 092: durable task outbox dispatcher. Drains committed
-		// Postgres task intents into Redis/Asynq and retries transient Redis
-		// delivery failures with DB-backed state.
-		{"@every 15s", tasks.TaskOutboxDispatchType, "task outbox dispatch"},
-		// Migration 060: GitOps cluster registration sync. 60s cadence
-		// matches the schema default sync_interval_seconds; per-source
-		// last_synced_at gates whether each row actually executes on
-		// this tick. The same handler runs the tombstone reaper at the
-		// end of every successful tick.
-		{"@every 60s", tasks.GitOpsSyncType, "gitops cluster registration sync"},
-		// Migration 065 / sprint 17: in-browser kubectl shell reaper.
-		// 60s cadence — idle (30m), hard cap (4h), and orphan-pod sweep
-		// in one tick. Handler exits early when the feature is disabled
-		// so the cron entry is cheap to leave registered always.
-		{"@every 60s", tasks.KubectlSessionReapType, "kubectl shell session reaper"},
-		// Migration 068 / sprint 18: NetworkPolicy template reconciler.
-		// 5m apply cadence — drains pending/failed/drifting rows via
-		// the existing tunnel K8sRequester. SSA is idempotent so
-		// converged rows fast-fail through the apply path.
-		{"@every 5m", tasks.NetworkPolicyApplyType, "network policy apply reconciler"},
-		// 30m drift sweep — GETs the live NetworkPolicy and marks
-		// 'drifting' when the managed-by label is missing or mismatched.
-		// The next apply tick re-stamps the object.
-		{"@every 30m", tasks.NetworkPolicyDriftCheckType, "network policy drift sweep"},
-		// Sprint 069: CRD-mirror v2 stale-row prune.
-		{"@every 30m", tasks.CrdMirrorPruneStaleType, "CRD mirror v2 stale-row prune"},
-		// T6.069: CRD-mirror v2 gauge populator (every minute).
-		{"@every 1m", tasks.CrdMirrorGaugePopulateType, "CRD mirror v2 gauge populator"},
-		// CRD ownership drift check. Surfaces CRD-owned DB rows whose
-		// Kubernetes external_ref disappeared after a restore or manual delete.
-		{"@every 5m", tasks.CRDOwnershipDriftCheckType, "CRD ownership drift check"},
-		// Sprint 072: anomaly baseline recompute every 5m.
-		{"@every 5m", tasks.AnomalyBaselineRecomputeType, "anomaly baseline recompute"},
-		// P1 item 5/22: cross-cluster ("fleet-wide") anomaly baseline
-		// recompute. Runs after the per-cluster pass has had a chance
-		// to refresh; reads the per-cluster means and flags outliers.
-		{"@every 5m", tasks.XClusterAnomalyRecomputeType, "cross-cluster anomaly baseline recompute"},
-		// Migration 070: apiserver allow-list reconciler. Every 15m
-		// the sweep walks every active (mode != 'disabled') row and
-		// drives per-cluster reconcile (GetEffective → diff → optional
-		// Apply on enforce, snapshot, stamp sync_status). 04:45 daily
-		// the snapshot retention sweep prunes rows older than 90 days
-		// (offset from the email/webhook/siem cleanup tasks to spread
-		// DB load).
-		{"@every 15m", tasks.ApiserverAllowlistReconcileAllType, "apiserver allowlist reconcile sweep"},
-		{"45 4 * * *", tasks.ApiserverAllowlistCleanupSnapshotsType, "apiserver allowlist snapshots retention (daily 04:45)"},
+	if err := ValidateTaskRegistry(); err != nil {
+		return fmt.Errorf("validate task registry before scheduling: %w", err)
 	}
-
-	for _, e := range entries {
-		task := asynq.NewTask(e.taskType, nil)
-		entryID, err := s.scheduler.Register(e.cron, task)
+	for _, spec := range scheduledTaskSpecsForFeatures(s.features) {
+		task := asynq.NewTask(spec.TaskType, nil)
+		options := []asynq.Option{}
+		if spec.Queue != "default" {
+			options = append(options, asynq.Queue(spec.Queue))
+		}
+		entryID, err := s.scheduler.Register(spec.Cron, task, options...)
 		if err != nil {
-			s.log.Error("failed to register periodic task", "task", e.taskType, "error", err)
+			s.log.Error("failed to register periodic task", "task", spec.TaskType, "owner", spec.Owner, "queue", spec.Queue, "error", err)
 			return err
 		}
-		s.log.Info("registered periodic task", "task", e.desc, "schedule", e.cron, "entry_id", entryID)
+		s.log.Info("registered periodic task", "task", spec.Description, "task_type", spec.TaskType, "owner", spec.Owner, "queue", spec.Queue, "schedule", spec.Cron, "entry_id", entryID)
 	}
-
-	// Tunnel-routed periodic tasks. These must land on the server pod
-	// (where the tunnel hub lives) because their handler enqueues helm
-	// commands at the registered agent. Registered outside the loop so
-	// the entries struct stays a flat 3-field positional literal.
-	{
-		task := asynq.NewTask(tasks.ClusterTemplateDriftCheckType, nil)
-		entryID, err := s.scheduler.Register("@every 1h", task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
-		if err != nil {
-			s.log.Error("failed to register periodic task", "task", tasks.ClusterTemplateDriftCheckType, "error", err)
-			return err
-		}
-		s.log.Info("registered periodic task", "task", "cluster template drift sweep (tunnel queue)", "schedule", "@every 1h", "entry_id", entryID)
-	}
-	{
-		// Decommission sweep — tunnel queue so it runs on the server pod and
-		// its managed-side cleanup phase can reach a connected agent.
-		task := asynq.NewTask(tasks.ClusterDecommissionAllType, nil)
-		entryID, err := s.scheduler.Register("@every 1m", task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
-		if err != nil {
-			s.log.Error("failed to register periodic task", "task", tasks.ClusterDecommissionAllType, "error", err)
-			return err
-		}
-		s.log.Info("registered periodic task", "task", "cluster decommission sweep (tunnel queue)", "schedule", "@every 1m", "entry_id", entryID)
-	}
-	{
-		task := asynq.NewTask(tasks.MeshDetectType, nil)
-		entryID, err := s.scheduler.Register("@every 5m", task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
-		if err != nil {
-			s.log.Error("failed to register periodic task", "task", tasks.MeshDetectType, "error", err)
-			return err
-		}
-		s.log.Info("registered periodic task", "task", "service mesh detection sweep (tunnel queue)", "schedule", "@every 5m", "entry_id", entryID)
-	}
-	{
-		// Gatekeeper policy bundle delivery — tunnel queue (needs the agent
-		// K8sRequester). Applies the starter ConstraintTemplates/Constraints to
-		// clusters that have Gatekeeper installed; idempotent + skips the rest.
-		task := asynq.NewTask(tasks.GatekeeperPolicyApplyType, nil)
-		entryID, err := s.scheduler.Register("@every 5m", task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
-		if err != nil {
-			s.log.Error("failed to register periodic task", "task", tasks.GatekeeperPolicyApplyType, "error", err)
-			return err
-		}
-		s.log.Info("registered periodic task", "task", "gatekeeper policy apply (tunnel queue)", "schedule", "@every 5m", "entry_id", entryID)
-	}
-	{
-		task := asynq.NewTask(tasks.ClusterGroupMetricsRefreshType, nil)
-		entryID, err := s.scheduler.Register("@every 5m", task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
-		if err != nil {
-			s.log.Error("failed to register periodic task", "task", tasks.ClusterGroupMetricsRefreshType, "error", err)
-			return err
-		}
-		s.log.Info("registered periodic task", "task", "cluster group metrics refresh (tunnel queue)", "schedule", "@every 5m", "entry_id", entryID)
-	}
-	{
-		// P1 item 16/22: tool drift reconciliation sweep — tunnel queue
-		// (needs the agent WS for helm Status). Hourly cadence; each row is
-		// one helm Status RPC and the result feeds a UI drift badge, not an
-		// auto-correct path. Mirrors cluster_template:drift_check.
-		task := asynq.NewTask(tasks.ToolDriftSweepType, nil)
-		entryID, err := s.scheduler.Register("@every 1h", task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
-		if err != nil {
-			s.log.Error("failed to register periodic task", "task", tasks.ToolDriftSweepType, "error", err)
-			return err
-		}
-		s.log.Info("registered periodic task", "task", "tool drift sweep (tunnel queue)", "schedule", "@every 1h", "entry_id", entryID)
-	}
-
 	return nil
 }
 
-// Start begins the scheduler. This blocks until Shutdown is called.
 func (s *Scheduler) Start() error {
 	s.log.Info("starting scheduler")
 	return s.scheduler.Start()
 }
 
-// Shutdown stops the scheduler.
 func (s *Scheduler) Shutdown() {
 	s.log.Info("shutting down scheduler")
 	s.scheduler.Shutdown()

@@ -1,15 +1,24 @@
-import api from '@/lib/api';
-import type { APIResponse } from '@/types';
-
-export interface ExtensionCSP {
-  scriptSrc?: string[];
-  connectSrc?: string[];
-  frameSrc?: string[];
-  imageSrc?: string[];
-}
+import {
+  getExtensions,
+  getExtensionsMounts,
+  getExtensionsSampleManifest,
+  postExtensions,
+  postExtensionsByNameDataByDataSourceId,
+  postExtensionsByNameDisable,
+  postExtensionsByNameEnable,
+  postExtensionsByNameToken,
+  postExtensionsValidate,
+} from "@/lib/api/generated/client";
+import type {
+  ExtensionCSP as ExtensionCSPWire,
+  ExtensionManifest as ExtensionManifestWire,
+  ExtensionMount as ExtensionMountWire,
+  ExtensionRecord as ExtensionRecordWire,
+  ExtensionValidation as ExtensionValidationWire,
+} from "@/types/openapi.generated";
 
 export interface ExtensionManifest {
-  apiVersion: string;
+  apiVersion: "extensions.astronomer.io/v1alpha1";
   name: string;
   displayName?: string;
   version: string;
@@ -17,7 +26,7 @@ export interface ExtensionManifest {
   entry: string;
   permissions: string[];
   backendApiScopes?: string[];
-  csp?: ExtensionCSP;
+  csp?: ExtensionCSPWire;
   extensionPoints: {
     sidebar?: Array<{ label: string; path: string }>;
     widgets?: Array<{ id: string; title: string }>;
@@ -33,18 +42,13 @@ export interface ExtensionManifest {
 // browser-visible projection: the /mounts/ endpoint never leaks upstream paths,
 // so DataSourceRef here exposes only id + shape (NOT proxy/path/rbac/query).
 
-export type ExtensionPointKind = 'sidebar' | 'dashboardWidget' | 'clusterTab' | 'settingsPage';
+export type ExtensionPointKind =
+  "sidebar" | "dashboardWidget" | "clusterTab" | "settingsPage";
 
-export type DeclarativeKind = 'table' | 'chart' | 'stat' | 'form';
+export type DeclarativeKind = "table" | "chart" | "stat" | "form";
 export type FieldFormat =
-  | 'text'
-  | 'number'
-  | 'bytes'
-  | 'datetime'
-  | 'duration'
-  | 'badge'
-  | 'currency';
-export type DataShape = 'list' | 'object' | 'series';
+  "text" | "number" | "bytes" | "datetime" | "duration" | "badge" | "currency";
+export type DataShape = "list" | "object" | "series";
 
 export interface FieldBinding {
   path: string;
@@ -53,7 +57,7 @@ export interface FieldBinding {
 }
 
 export interface ChartSpec {
-  type: 'line' | 'bar' | 'area';
+  type: "line" | "bar" | "area";
   x: string;
   y: string[];
 }
@@ -67,7 +71,7 @@ export interface StatSpec {
 export interface FormInput {
   name: string;
   label: string;
-  type: 'text' | 'number' | 'select' | 'toggle';
+  type: "text" | "number" | "select" | "toggle";
   options?: string[];
   maxLength?: number;
   required: boolean;
@@ -98,7 +102,7 @@ export interface BundleDescriptor {
   entry: string;
   sandboxOrigin: string;
   component: string;
-  csp?: ExtensionCSP;
+  csp?: ExtensionCSPWire;
   // Browser sees ds ids + shapes only (the handshake allowlist), never paths.
   dataSources?: ExtensionDataSourceMeta[];
 }
@@ -174,13 +178,13 @@ export interface ExtensionBridgeToken {
 
 export interface ExtensionFinding {
   field?: string;
-  severity: 'error' | 'warning' | string;
+  severity: "error" | "warning" | string;
   message: string;
 }
 
 export interface ExtensionValidationResponse {
   valid: boolean;
-  compatibilityStatus: 'compatible' | 'incompatible' | 'unknown' | string;
+  compatibilityStatus: "compatible" | "incompatible" | "unknown" | string;
   checksum: string;
   manifest: ExtensionManifest;
   warnings: ExtensionFinding[];
@@ -195,7 +199,7 @@ export interface ExtensionRecord {
   source: string;
   checksum: string;
   enabled: boolean;
-  compatibilityStatus: 'compatible' | 'incompatible' | 'unknown' | string;
+  compatibilityStatus: "compatible" | "incompatible" | "unknown" | string;
   manifest: ExtensionManifest;
   installedAt: string;
   updatedAt: string;
@@ -206,49 +210,196 @@ export interface ExtensionListResponse {
   sampleManifest: ExtensionManifest;
 }
 
-export async function listExtensions(): Promise<ExtensionListResponse> {
-  const res = await api.get<APIResponse<ExtensionListResponse>>('/extensions/');
-  return res.data.data;
+export interface ExtensionRequestOptions {
+  signal?: AbortSignal;
 }
 
-export async function getSampleExtensionManifest(): Promise<ExtensionManifest> {
-  const res = await api.get<APIResponse<ExtensionManifest>>('/extensions/sample-manifest/');
-  return res.data.data;
+function requireExtensionManifest(
+  wire: ExtensionManifestWire | undefined,
+): ExtensionManifest {
+  if (
+    !wire?.name ||
+    !wire.version ||
+    !wire.compatibleAstronomer ||
+    !wire.entry ||
+    !wire.extensionPoints
+  ) {
+    throw new Error("Extension manifest response is incomplete");
+  }
+  return {
+    apiVersion: wire.apiVersion,
+    name: wire.name,
+    displayName: wire.displayName,
+    version: wire.version,
+    compatibleAstronomer: wire.compatibleAstronomer,
+    entry: wire.entry,
+    permissions: wire.permissions,
+    backendApiScopes: wire.backendApiScopes,
+    csp: wire.csp,
+    extensionPoints:
+      wire.extensionPoints as ExtensionManifest["extensionPoints"],
+  };
+}
+
+function toExtensionManifestWire(
+  manifest: ExtensionManifest,
+): ExtensionManifestWire {
+  if (manifest.apiVersion !== "extensions.astronomer.io/v1alpha1") {
+    throw new Error(`Unsupported extension apiVersion: ${manifest.apiVersion}`);
+  }
+  return {
+    ...manifest,
+    apiVersion: manifest.apiVersion,
+    extensionPoints: manifest.extensionPoints,
+  };
+}
+
+function mapExtensionRecord(
+  wire: ExtensionRecordWire | undefined,
+): ExtensionRecord {
+  if (
+    !wire?.id ||
+    !wire.name ||
+    !wire.version ||
+    !wire.checksum ||
+    !wire.manifest ||
+    !wire.installed_at ||
+    !wire.updated_at
+  ) {
+    throw new Error("Extension record response is incomplete");
+  }
+  return {
+    id: wire.id,
+    name: wire.name,
+    displayName: wire.display_name ?? wire.name,
+    version: wire.version,
+    source: wire.source ?? "",
+    checksum: wire.checksum,
+    enabled: wire.enabled ?? false,
+    compatibilityStatus: wire.compatibility_status ?? "unknown",
+    manifest: requireExtensionManifest(wire.manifest),
+    installedAt: wire.installed_at,
+    updatedAt: wire.updated_at,
+  };
+}
+
+function mapFinding(value: Record<string, unknown>): ExtensionFinding {
+  return {
+    field: typeof value.field === "string" ? value.field : undefined,
+    severity: typeof value.severity === "string" ? value.severity : "warning",
+    message: typeof value.message === "string" ? value.message : "",
+  };
+}
+
+function mapExtensionValidation(
+  wire: ExtensionValidationWire | undefined,
+): ExtensionValidationResponse {
+  if (!wire?.manifest || typeof wire.valid !== "boolean") {
+    throw new Error("Extension validation response is incomplete");
+  }
+  return {
+    valid: wire.valid,
+    compatibilityStatus: wire.compatibility_status ?? "unknown",
+    checksum: wire.checksum ?? "",
+    manifest: requireExtensionManifest(wire.manifest),
+    warnings: (wire.warnings ?? []).map(mapFinding),
+    errors: (wire.errors ?? []).map(mapFinding),
+  };
+}
+
+function mapExtensionMount(wire: ExtensionMountWire): ExtensionMount {
+  if (
+    !wire.extension ||
+    !wire.point ||
+    !wire.pointId ||
+    (wire.tier !== 1 && wire.tier !== 2)
+  ) {
+    throw new Error("Extension mount response is incomplete");
+  }
+  const render = (wire.render ?? {}) as ExtensionRender;
+  return {
+    extension: wire.extension,
+    displayName: wire.displayName ?? wire.extension,
+    point: wire.point,
+    pointId: wire.pointId,
+    tier: wire.tier,
+    render,
+    dataSources: (wire.dataSources ?? []).flatMap((source) =>
+      source.id && source.shape
+        ? [{ id: source.id, shape: source.shape as DataShape }]
+        : [],
+    ),
+    label: wire.title,
+    path: wire.point === "sidebar" ? wire.pointId : undefined,
+  };
+}
+
+export async function listExtensions(
+  options: ExtensionRequestOptions = {},
+): Promise<ExtensionListResponse> {
+  const response = await getExtensions({ signal: options.signal });
+  return {
+    items: (response.data?.items ?? []).map(mapExtensionRecord),
+    sampleManifest: requireExtensionManifest(response.data?.sample_manifest),
+  };
+}
+
+export async function getSampleExtensionManifest(
+  options: ExtensionRequestOptions = {},
+): Promise<ExtensionManifest> {
+  const response = await getExtensionsSampleManifest({
+    signal: options.signal,
+  });
+  return requireExtensionManifest(response.data);
 }
 
 export async function validateExtensionManifest(
   manifest: ExtensionManifest,
+  options: ExtensionRequestOptions = {},
 ): Promise<ExtensionValidationResponse> {
-  const res = await api.post<APIResponse<ExtensionValidationResponse>>('/extensions/validate/', {
-    manifest,
+  const response = await postExtensionsValidate({
+    body: { manifest: toExtensionManifestWire(manifest) },
+    signal: options.signal,
   });
-  return res.data.data;
+  return mapExtensionValidation(response.data);
 }
 
 export async function installExtension(
   manifest: ExtensionManifest,
   opts?: { source?: string; enable?: boolean },
+  options: ExtensionRequestOptions = {},
 ): Promise<ExtensionRecord> {
-  const res = await api.post<APIResponse<ExtensionRecord>>('/extensions/', {
-    manifest,
-    source: opts?.source,
-    enable: opts?.enable ?? false,
+  const response = await postExtensions({
+    body: {
+      manifest: toExtensionManifestWire(manifest),
+      source: opts?.source,
+      enable: opts?.enable ?? false,
+    },
+    signal: options.signal,
   });
-  return res.data.data;
+  return mapExtensionRecord(response.data);
 }
 
-export async function enableExtension(name: string): Promise<ExtensionRecord> {
-  const res = await api.post<APIResponse<ExtensionRecord>>(
-    `/extensions/${encodeURIComponent(name)}/enable/`,
-  );
-  return res.data.data;
+export async function enableExtension(
+  name: string,
+  options: ExtensionRequestOptions = {},
+): Promise<ExtensionRecord> {
+  const response = await postExtensionsByNameEnable({
+    path: { name },
+    signal: options.signal,
+  });
+  return mapExtensionRecord(response.data);
 }
 
-export async function disableExtension(name: string): Promise<ExtensionRecord> {
-  const res = await api.post<APIResponse<ExtensionRecord>>(
-    `/extensions/${encodeURIComponent(name)}/disable/`,
-  );
-  return res.data.data;
+export async function disableExtension(
+  name: string,
+  options: ExtensionRequestOptions = {},
+): Promise<ExtensionRecord> {
+  const response = await postExtensionsByNameDisable({
+    path: { name },
+    signal: options.signal,
+  });
+  return mapExtensionRecord(response.data);
 }
 
 // ============================================================
@@ -259,14 +410,16 @@ export async function disableExtension(name: string): Promise<ExtensionRecord> {
 // enabled+compatible (and, for Tier 2, bundle_verified) extension mount. The
 // server normalizes the four buckets; we backfill missing buckets to empty
 // arrays so callers never have to null-check.
-export async function getExtensionMounts(): Promise<ExtensionMountsResponse> {
-  const res = await api.get<APIResponse<Partial<ExtensionMountsResponse>>>('/extensions/mounts/');
-  const data = res.data.data ?? {};
+export async function getExtensionMounts(
+  options: ExtensionRequestOptions = {},
+): Promise<ExtensionMountsResponse> {
+  const response = await getExtensionsMounts({ signal: options.signal });
+  const data = response.data ?? {};
   return {
-    sidebar: data.sidebar ?? [],
-    dashboardWidgets: data.dashboardWidgets ?? [],
-    clusterTabs: data.clusterTabs ?? [],
-    settings: data.settings ?? [],
+    sidebar: (data.sidebar ?? []).map(mapExtensionMount),
+    dashboardWidgets: (data.dashboardWidgets ?? []).map(mapExtensionMount),
+    clusterTabs: (data.clusterTabs ?? []).map(mapExtensionMount),
+    settings: (data.settings ?? []).map(mapExtensionMount),
   };
 }
 
@@ -277,12 +430,45 @@ export async function fetchExtensionData<T = unknown>(
   name: string,
   dataSourceId: string,
   req: ExtensionDataRequest = {},
+  options: ExtensionRequestOptions = {},
 ): Promise<ExtensionDataResponse<T>> {
-  const res = await api.post<APIResponse<ExtensionDataResponse<T>>>(
-    `/extensions/${encodeURIComponent(name)}/data/${encodeURIComponent(dataSourceId)}/`,
-    req,
-  );
-  return res.data.data;
+  const response = await postExtensionsByNameDataByDataSourceId({
+    path: { name, dataSourceId },
+    body: {
+      context: req.context
+        ? {
+            clusterId: req.context.clusterId ?? undefined,
+            projectId: req.context.projectId ?? undefined,
+            namespace: req.context.namespace ?? undefined,
+          }
+        : undefined,
+      pathParams: req.pathParams,
+      query: req.query,
+      body: req.body as Record<string, unknown> | undefined,
+    },
+    signal: options.signal,
+  });
+  const wire = response.data;
+  if (!wire?.shape) throw new Error("Extension data response is incomplete");
+  const meta = wire.meta ?? {};
+  return {
+    data: wire.data as T,
+    shape: wire.shape,
+    meta: {
+      dataSourceId:
+        typeof meta.dataSourceId === "string"
+          ? meta.dataSourceId
+          : dataSourceId,
+      rows: typeof meta.rows === "number" ? meta.rows : undefined,
+      rbacScope:
+        typeof meta.rbacScope === "string" ? meta.rbacScope : undefined,
+      cached: typeof meta.cached === "boolean" ? meta.cached : undefined,
+      ttlSeconds:
+        typeof meta.ttlSeconds === "number" ? meta.ttlSeconds : undefined,
+      truncated:
+        typeof meta.truncated === "boolean" ? meta.truncated : undefined,
+    },
+  };
 }
 
 // POST /extensions/{name}/token/ — §BridgeProtocol ticket issuance backing
@@ -293,10 +479,30 @@ export async function requestExtensionBridgeToken(
   name: string,
   dataSourceId: string,
   context?: ExtensionContext,
+  options: ExtensionRequestOptions = {},
 ): Promise<ExtensionBridgeToken> {
-  const res = await api.post<APIResponse<ExtensionBridgeToken>>(
-    `/extensions/${encodeURIComponent(name)}/token/`,
-    { dataSource: dataSourceId, context },
-  );
-  return res.data.data;
+  const response = await postExtensionsByNameToken({
+    path: { name },
+    body: {
+      dataSource: dataSourceId,
+      context: context
+        ? {
+            clusterId: context.clusterId ?? undefined,
+            projectId: context.projectId ?? undefined,
+            namespace: context.namespace ?? undefined,
+          }
+        : undefined,
+    },
+    signal: options.signal,
+  });
+  const wire = response.data;
+  if (!wire?.token || !wire.dataSource || !wire.expiresAt || !wire.scope) {
+    throw new Error("Extension bridge token response is incomplete");
+  }
+  return {
+    token: wire.token,
+    dataSource: wire.dataSource,
+    expiresAt: wire.expiresAt,
+    scope: wire.scope,
+  };
 }

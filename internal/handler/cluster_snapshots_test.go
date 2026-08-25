@@ -39,12 +39,19 @@ import (
 // construction time, plus an optional second cluster via the
 // AddCluster helper (used by the cross-cluster restore test).
 type fakeSnapshotQuerier struct {
-	mu        sync.Mutex
-	clusters  map[uuid.UUID]sqlc.Cluster
-	snapshots map[uuid.UUID]sqlc.ClusterSnapshot
-	restores  map[uuid.UUID]sqlc.ClusterRestore
-	schedules map[uuid.UUID]sqlc.ClusterSnapshotSchedule
-	audits    []sqlc.CreateAuditLogV1Params
+	mu             sync.Mutex
+	clusters       map[uuid.UUID]sqlc.Cluster
+	snapshots      map[uuid.UUID]sqlc.ClusterSnapshot
+	restores       map[uuid.UUID]sqlc.ClusterRestore
+	schedules      map[uuid.UUID]sqlc.ClusterSnapshotSchedule
+	audits         []sqlc.CreateAuditLogV1Params
+	taskOutbox     []sqlc.UpsertTaskOutboxParams
+	auditOutbox    []sqlc.UpsertAuditOutboxParams
+	idempotency    map[string]sqlc.OperationIdempotencyKey
+	taskOutboxErr  error
+	auditOutboxErr error
+	snapshotLocks  int
+	scheduleLocks  int
 }
 
 func newFakeSnapshotQuerier(clusterID uuid.UUID, name string) *fakeSnapshotQuerier {
@@ -52,10 +59,40 @@ func newFakeSnapshotQuerier(clusterID uuid.UUID, name string) *fakeSnapshotQueri
 		clusters: map[uuid.UUID]sqlc.Cluster{
 			clusterID: {ID: clusterID, Name: name},
 		},
-		snapshots: map[uuid.UUID]sqlc.ClusterSnapshot{},
-		restores:  map[uuid.UUID]sqlc.ClusterRestore{},
-		schedules: map[uuid.UUID]sqlc.ClusterSnapshotSchedule{},
+		snapshots:   map[uuid.UUID]sqlc.ClusterSnapshot{},
+		restores:    map[uuid.UUID]sqlc.ClusterRestore{},
+		schedules:   map[uuid.UUID]sqlc.ClusterSnapshotSchedule{},
+		idempotency: map[string]sqlc.OperationIdempotencyKey{},
 	}
+}
+
+func operationIdempotencyMapKey(scope, key string) string { return scope + "\x00" + key }
+
+func (f *fakeSnapshotQuerier) ReserveOperationIdempotencyKey(_ context.Context, arg sqlc.ReserveOperationIdempotencyKeyParams) (sqlc.OperationIdempotencyKey, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := operationIdempotencyMapKey(arg.Scope, arg.IdempotencyKey)
+	row, ok := f.idempotency[key]
+	if !ok {
+		row = sqlc.OperationIdempotencyKey{Scope: arg.Scope, IdempotencyKey: arg.IdempotencyKey}
+		f.idempotency[key] = row
+	}
+	return row, nil
+}
+
+func (f *fakeSnapshotQuerier) AttachOperationIdempotencyKey(_ context.Context, arg sqlc.AttachOperationIdempotencyKeyParams) (sqlc.OperationIdempotencyKey, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := operationIdempotencyMapKey(arg.Scope, arg.IdempotencyKey)
+	row := f.idempotency[key]
+	if row.OperationID.Valid && uuid.UUID(row.OperationID.Bytes) != arg.OperationID {
+		return sqlc.OperationIdempotencyKey{}, pgx.ErrNoRows
+	}
+	row.OperationTable = arg.OperationTable
+	row.OperationID = pgtype.UUID{Bytes: arg.OperationID, Valid: true}
+	row.Response = append(json.RawMessage(nil), arg.Response...)
+	f.idempotency[key] = row
+	return row, nil
 }
 
 // AddCluster registers an additional cluster so the cross-cluster
@@ -354,6 +391,9 @@ func snapshotReq(t *testing.T, method, url string, body []byte, params map[strin
 	} else {
 		req = httptest.NewRequest(method, url, nil)
 	}
+	if method == http.MethodPost {
+		req.Header.Set("Idempotency-Key", uuid.NewString())
+	}
 	rctx := chi.NewRouteContext()
 	for k, v := range params {
 		rctx.URLParams.Add(k, v)
@@ -504,6 +544,7 @@ func TestRestore_CreatesVeleroRestoreCRD(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeSnapshotQuerier(clusterID, "prod-cluster")
 	h := NewClusterSnapshotsHandler(q)
+	h.SetRunTx(fakeClusterSnapshotRunTx(q))
 	req := newFakeSnapshotRequester()
 	h.SetRequester(req)
 
@@ -537,33 +578,17 @@ func TestRestore_CreatesVeleroRestoreCRD(t *testing.T) {
 	if resp.SnapshotID != snap.ID {
 		t.Fatalf("snapshot_id mismatch")
 	}
-	restoreAudit := q.auditRowAt(t, 0)
+	if len(q.auditOutbox) != 1 {
+		t.Fatalf("audit outbox rows=%d, want 1", len(q.auditOutbox))
+	}
+	restoreAudit := q.auditOutbox[0]
 	if restoreAudit.Action != "cluster.snapshot.restore_requested" || restoreAudit.ResourceType != "cluster_restore" || restoreAudit.ResourceID != resp.ID.String() || restoreAudit.ResourceName != "prod-cluster" {
 		t.Fatalf("restore audit row=%+v, want cluster.snapshot.restore_requested on restore %s", restoreAudit, resp.ID)
 	}
 	assertAuditDetail(t, restoreAudit.Detail, "snapshot_id", snap.ID.String())
 
-	calls := req.snapshot()
-	if len(calls) != 1 {
-		t.Fatalf("expected 1 tunnel call, got %d", len(calls))
-	}
-	if !strings.Contains(calls[0].Path, "/apis/velero.io/v1/namespaces/velero/restores") {
-		t.Fatalf("expected POST to Restores endpoint, got %q", calls[0].Path)
-	}
-	var crd map[string]any
-	if err := json.Unmarshal(calls[0].Body, &crd); err != nil {
-		t.Fatalf("decode crd: %v", err)
-	}
-	if crd["kind"] != "Restore" {
-		t.Fatalf("kind=%v", crd["kind"])
-	}
-	spec, _ := crd["spec"].(map[string]any)
-	if spec["backupName"] != snap.VeleroName {
-		t.Fatalf("Restore spec.backupName=%v want %q", spec["backupName"], snap.VeleroName)
-	}
-	mapping, _ := spec["namespaceMapping"].(map[string]any)
-	if mapping["observability"] != "observability-restored" {
-		t.Fatalf("namespaceMapping not propagated: %+v", spec)
+	if calls := req.snapshot(); len(calls) != 0 {
+		t.Fatalf("HTTP request must only queue durable restore intent, got %d remote calls", len(calls))
 	}
 }
 
@@ -574,6 +599,7 @@ func TestRestore_CrossClusterTarget(t *testing.T) {
 	q.AddCluster(sqlc.Cluster{ID: targetID, Name: "dr-cluster"})
 
 	h := NewClusterSnapshotsHandler(q)
+	h.SetRunTx(fakeClusterSnapshotRunTx(q))
 	req := newFakeSnapshotRequester()
 	// Target cluster has a BSL → pre-flight passes.
 	req.setResponse(

@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 /**
  * Admin → User detail. Lists the four security-sensitive actions a superuser
@@ -15,12 +15,12 @@ import { createFileRoute } from '@tanstack/react-router';
  *     the source of truth — but the UI hides them by default.
  */
 
-import { useMemo, useState } from 'react';
-import { Link } from '@/lib/link';
-import { useParams, useRouter } from '@/lib/navigation';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import { PageHeader, PageShell } from '@/components/ui/page';
+import { useMemo, useState } from "react";
+import { Link } from "@/lib/link";
+import { useParams, useRouter } from "@/lib/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   ShieldOff,
   Unlock,
@@ -32,8 +32,8 @@ import {
   Clock,
   Users,
   ShieldCheck,
-} from 'lucide-react';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
+} from "lucide-react";
+import { formatDate, formatRelativeTime } from "@/lib/utils";
 import {
   getAdminUser,
   adminUnlockUser,
@@ -41,13 +41,13 @@ import {
   adminDisableUserTotp,
   adminResyncUserGroups,
   type AdminUserDetail,
-} from '@/lib/api/account-security';
-import { useCurrentUser } from '@/lib/hooks';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+} from "@/lib/api/account-security";
+import { useCurrentUser } from "@/lib/hooks";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
-const userKey = (id: string) => ['admin', 'users', id] as const;
+const userKey = (id: string) => ["admin", "users", id] as const;
 
-type ActionKey = 'unlock' | 'force-logout' | 'disable-totp' | 'resync-groups';
+type ActionKey = "unlock" | "force-logout" | "disable-totp" | "resync-groups";
 
 interface ActionDef {
   key: ActionKey;
@@ -55,7 +55,7 @@ interface ActionDef {
   icon: typeof Unlock;
   description: string;
   confirmText: string;
-  variant?: 'destructive';
+  variant?: "destructive";
   /** Only render this button when the predicate matches the current state. */
   available: (u: AdminUserDetail) => boolean;
   run: (id: string) => Promise<void>;
@@ -63,44 +63,44 @@ interface ActionDef {
 
 const ACTIONS: ActionDef[] = [
   {
-    key: 'unlock',
-    label: 'Unlock account',
+    key: "unlock",
+    label: "Unlock account",
     icon: Unlock,
     description:
-      'Clears the active account lockout. The user can sign in again immediately; the failed-login counter resets to zero.',
-    confirmText: 'Unlock',
+      "Clears the active account lockout. The user can sign in again immediately; the failed-login counter resets to zero.",
+    confirmText: "Unlock",
     available: (u) => !!u.lockedUntil,
     run: adminUnlockUser,
   },
   {
-    key: 'force-logout',
-    label: 'Force logout',
+    key: "force-logout",
+    label: "Force logout",
     icon: LogOut,
     description:
-      'Invalidates every active JWT for this user. They will be signed out of all sessions immediately and must log in again.',
-    confirmText: 'Sign user out',
-    variant: 'destructive',
+      "Invalidates every active JWT for this user. They will be signed out of all sessions immediately and must log in again.",
+    confirmText: "Sign user out",
+    variant: "destructive",
     available: () => true,
     run: adminForceLogoutUser,
   },
   {
-    key: 'disable-totp',
-    label: 'Disable 2FA',
+    key: "disable-totp",
+    label: "Disable 2FA",
     icon: ShieldOff,
     description:
       "Force-removes the user's TOTP secret and recovery codes. Use only when the user has lost their authenticator and cannot self-recover.",
-    confirmText: 'Disable 2FA',
-    variant: 'destructive',
+    confirmText: "Disable 2FA",
+    variant: "destructive",
     available: (u) => !!u.totpEnrolled,
     run: adminDisableUserTotp,
   },
   {
-    key: 'resync-groups',
-    label: 'Re-sync groups',
+    key: "resync-groups",
+    label: "Re-sync groups",
     icon: RefreshCcw,
     description:
       "Re-evaluates the group-sync rules against the user's last claims snapshot. Use after editing group-mapping rules.",
-    confirmText: 'Re-sync',
+    confirmText: "Re-sync",
     available: () => true,
     run: adminResyncUserGroups,
   },
@@ -108,7 +108,7 @@ const ACTIONS: ActionDef[] = [
 
 function AdminUserDetailPage() {
   const params = useParams();
-  const id = String(params?.id ?? '');
+  const id = String(params?.id ?? "");
   const router = useRouter();
   const qc = useQueryClient();
 
@@ -118,9 +118,11 @@ function AdminUserDetailPage() {
       !!(
         // The backend may surface admin status either as an explicit
         // is_superuser flag or as a role in `globalRoles`; handle both.
-        (me as unknown as { is_superuser?: boolean; isSuperuser?: boolean })?.is_superuser ||
-        (me as unknown as { is_superuser?: boolean; isSuperuser?: boolean })?.isSuperuser ||
-        me?.globalRoles?.some((r) => r === 'admin' || r === 'superuser')
+        (me as unknown as { is_superuser?: boolean; isSuperuser?: boolean })
+          ?.is_superuser ||
+        (me as unknown as { is_superuser?: boolean; isSuperuser?: boolean })
+          ?.isSuperuser ||
+        me?.globalRoles?.some((r) => r === "admin" || r === "superuser")
       ),
     [me],
   );
@@ -140,7 +142,7 @@ function AdminUserDetailPage() {
       setPending(null);
     },
     onError: (err: Error) => {
-      toastApiError('', err, 'Action failed');
+      toastApiError("", err, "Action failed");
       setPending(null);
     },
   });
@@ -195,8 +197,8 @@ function AdminUserDetailPage() {
           </div>
           {isSuperuser && (
             <button
-              onClick={() => setPending('unlock')}
-              className="inline-flex items-center gap-2 h-8 px-3 rounded text-sm font-medium bg-status-error text-white hover:bg-status-error/90 flex-shrink-0"
+              onClick={() => setPending("unlock")}
+              className="inline-flex items-center gap-2 h-8 px-3 rounded text-sm font-medium bg-status-error text-background hover:bg-status-error/90 flex-shrink-0"
             >
               <Unlock className="h-3.5 w-3.5" />
               Unlock now
@@ -213,7 +215,8 @@ function AdminUserDetailPage() {
               Tokens invalidated {formatRelativeTime(user.tokensInvalidatedAt)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              User must re-login. Any sessions opened before this time have been revoked.
+              User must re-login. Any sessions opened before this time have been
+              revoked.
             </p>
           </div>
         </div>
@@ -224,8 +227,8 @@ function AdminUserDetailPage() {
         <FactCard
           icon={<ShieldCheck className="h-4 w-4" />}
           label="2FA"
-          value={user.totpEnrolled ? 'Enrolled' : 'Off'}
-          tone={user.totpEnrolled ? 'success' : 'muted'}
+          value={user.totpEnrolled ? "Enrolled" : "Off"}
+          tone={user.totpEnrolled ? "success" : "muted"}
         />
         <FactCard
           icon={<Users className="h-4 w-4" />}
@@ -235,19 +238,21 @@ function AdminUserDetailPage() {
         <FactCard
           icon={<Clock className="h-4 w-4" />}
           label="Last sign-in"
-          value={user.lastLogin ? formatRelativeTime(user.lastLogin) : 'Never'}
+          value={user.lastLogin ? formatRelativeTime(user.lastLogin) : "Never"}
         />
         <FactCard
           icon={<Users className="h-4 w-4" />}
           label="Enabled"
-          value={user.enabled ? 'Yes' : 'No'}
-          tone={user.enabled ? 'success' : 'danger'}
+          value={user.enabled ? "Yes" : "No"}
+          tone={user.enabled ? "success" : "danger"}
         />
       </div>
 
       {/* Actions */}
       <div className="space-y-2">
-        <h2 className="text-sm font-medium text-foreground">Security actions</h2>
+        <h2 className="text-sm font-medium text-foreground">
+          Security actions
+        </h2>
         {!isSuperuser ? (
           <p className="text-xs text-muted-foreground">
             Sign in as a superuser to access these actions.
@@ -268,7 +273,9 @@ function AdminUserDetailPage() {
                       <Icon className="h-4 w-4 text-foreground" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground">{a.label}</p>
+                      <p className="text-sm font-medium text-foreground">
+                        {a.label}
+                      </p>
                       <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                         {a.description}
                       </p>
@@ -285,9 +292,9 @@ function AdminUserDetailPage() {
         open={!!activeAction}
         onClose={() => setPending(null)}
         onConfirm={() => activeAction && mut.mutate(activeAction)}
-        title={activeAction?.label || ''}
-        description={activeAction?.description || ''}
-        confirmText={activeAction?.confirmText || 'Confirm'}
+        title={activeAction?.label || ""}
+        description={activeAction?.description || ""}
+        confirmText={activeAction?.confirmText || "Confirm"}
         variant={activeAction?.variant}
         loading={mut.isPending}
       />
@@ -299,19 +306,19 @@ function FactCard({
   icon,
   label,
   value,
-  tone = 'muted',
+  tone = "muted",
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
-  tone?: 'muted' | 'success' | 'danger';
+  tone?: "muted" | "success" | "danger";
 }) {
   const toneColor =
-    tone === 'success'
-      ? 'text-status-success'
-      : tone === 'danger'
-        ? 'text-status-error'
-        : 'text-foreground';
+    tone === "success"
+      ? "text-status-success"
+      : tone === "danger"
+        ? "text-status-error"
+        : "text-foreground";
   return (
     <div className="rounded-lg border border-border bg-card p-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -323,6 +330,6 @@ function FactCard({
   );
 }
 
-export const Route = createFileRoute('/dashboard/admin/users/$id/')({
+export const Route = createFileRoute("/dashboard/admin/users/$id/")({
   component: AdminUserDetailPage,
 });

@@ -1,11 +1,11 @@
-import { Lock, Pencil, RotateCcw, Trash2 } from 'lucide-react';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { Badge } from '@/components/ui/badge';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { useRouter } from '@/lib/navigation';
-import { formatRelativeTime } from '@/lib/utils';
-import type { User } from '@/types';
-import { adminUserHref, isUserLocked } from './-utils';
+import { Lock, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { useRouter } from "@/lib/navigation";
+import { formatRelativeTime } from "@/lib/utils";
+import type { User } from "@/types";
+import { adminUserHref, isUserLocked } from "./-utils";
 
 interface UsersTabProps {
   users: User[];
@@ -30,30 +30,34 @@ export function UsersTab({
 
   const userColumns: Column<User>[] = [
     {
-      key: 'name',
-      header: 'User',
+      key: "name",
+      header: "User",
       accessor: (row) => (
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-800 flex items-center justify-center flex-shrink-0">
             <span className="text-xs font-medium text-zinc-300">
-              {(row.displayName || row.username || '?').charAt(0).toUpperCase()}
+              {(row.displayName || row.username || "?").charAt(0).toUpperCase()}
             </span>
           </div>
           <div>
-            <p className="font-medium text-foreground">{row.displayName || row.username}</p>
+            <p className="font-medium text-foreground">
+              {row.displayName || row.username}
+            </p>
             <p className="text-xs text-muted-foreground">{row.username}</p>
           </div>
         </div>
       ),
     },
     {
-      key: 'email',
-      header: 'Email',
-      accessor: (row) => <span className="text-sm text-muted-foreground">{row.email}</span>,
+      key: "email",
+      header: "Email",
+      accessor: (row) => (
+        <span className="text-sm text-muted-foreground">{row.email}</span>
+      ),
     },
     {
-      key: 'provider',
-      header: 'Provider',
+      key: "provider",
+      header: "Provider",
       accessor: (row) => (
         <Badge variant="secondary" className="capitalize">
           {row.provider}
@@ -61,8 +65,8 @@ export function UsersTab({
       ),
     },
     {
-      key: 'roles',
-      header: 'Global Roles',
+      key: "roles",
+      header: "Global Roles",
       accessor: (row) => (
         <div className="flex flex-wrap gap-1">
           {row.isSuperuser && <Badge variant="warning">Superuser</Badge>}
@@ -78,29 +82,40 @@ export function UsersTab({
       ),
     },
     {
-      key: 'enabled',
-      header: 'Status',
+      key: "enabled",
+      header: "Status",
       accessor: (row) => (
         <div className="flex items-center gap-1.5">
-          <StatusBadge status={row.enabled ? 'active' : 'disconnected'} label={row.enabled ? 'Enabled' : 'Disabled'} />
+          <StatusBadge
+            status={row.enabled ? "active" : "disconnected"}
+            label={row.enabled ? "Enabled" : "Disabled"}
+          />
           {isUserLocked(row) && (
             <span title="Account is locked out — open the user to unlock">
-              <StatusBadge status="error" label="Locked" icon={<Lock className="h-3 w-3" />} />
+              <StatusBadge
+                status="error"
+                label="Locked"
+                icon={<Lock className="h-3 w-3" />}
+              />
             </span>
           )}
         </div>
       ),
     },
     {
-      key: 'lastLogin',
-      header: 'Last Login',
-      accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.lastLogin)}</span>,
+      key: "lastLogin",
+      header: "Last Login",
+      accessor: (row) => (
+        <span className="text-xs text-muted-foreground">
+          {formatRelativeTime(row.lastLogin)}
+        </span>
+      ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       accessor: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
           <button
             onClick={() => onEdit(row)}
             className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"

@@ -134,7 +134,7 @@ var (
 )
 
 // metricsRegistered guards against double-registration when both the
-// server and a unit test ConfigureRuntime in the same process. The init
+// server and a unit test construct independent task runtimes. The init
 // function is unconditional — every linkage of this package gets the
 // metrics for free; sub-package init order doesn't matter.
 var metricsRegistered = false

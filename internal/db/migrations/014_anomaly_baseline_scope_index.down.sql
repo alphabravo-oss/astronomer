@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS public.anomaly_baselines_cluster_updated_id_idx;

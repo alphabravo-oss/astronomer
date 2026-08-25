@@ -9,8 +9,62 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const batchUpsertPlatformSettings = `-- name: BatchUpsertPlatformSettings :many
+WITH input AS (
+    SELECT x
+    FROM jsonb_to_recordset($2::jsonb)
+        AS x(key text, value jsonb, description text)
+)
+INSERT INTO platform_settings (key, value, description, updated_by, updated_at)
+SELECT key, value, description, $1::uuid, now()
+FROM input
+ON CONFLICT (key) DO UPDATE SET
+    value       = EXCLUDED.value,
+    description = CASE WHEN EXCLUDED.description = '' THEN platform_settings.description ELSE EXCLUDED.description END,
+    updated_by  = EXCLUDED.updated_by,
+    updated_at  = now()
+RETURNING key, value, description, updated_by, updated_at, created_at
+`
+
+type BatchUpsertPlatformSettingsParams struct {
+	UpdatedBy uuid.UUID       `json:"updated_by"`
+	Payload   json.RawMessage `json:"payload"`
+}
+
+// Apply a validated settings form as one PostgreSQL statement. The handler
+// passes a JSON array of {key,value,description} records only after every
+// entry has passed the registry/type checks, so one bad write can never leave
+// an operator with a partially saved configuration.
+func (q *Queries) BatchUpsertPlatformSettings(ctx context.Context, arg BatchUpsertPlatformSettingsParams) ([]PlatformSetting, error) {
+	rows, err := q.db.Query(ctx, batchUpsertPlatformSettings, arg.UpdatedBy, arg.Payload)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlatformSetting{}
+	for rows.Next() {
+		var i PlatformSetting
+		if err := rows.Scan(
+			&i.Key,
+			&i.Value,
+			&i.Description,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const deletePlatformSetting = `-- name: DeletePlatformSetting :exec
 DELETE FROM platform_settings WHERE key = $1

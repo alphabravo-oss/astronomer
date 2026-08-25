@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -36,7 +37,8 @@ const catalogMaxVersionsPerChart = catalog.MaxIndexVersionsPerChart
 
 // CatalogSyncPayload contains parameters for catalog sync.
 type CatalogSyncPayload struct {
-	RepositoryURL string `json:"repository_url,omitempty"` // empty = sync all repos
+	RepositoryID  string `json:"repository_id,omitempty"`  // preferred stable, content-free target
+	RepositoryURL string `json:"repository_url,omitempty"` // legacy compatibility; empty targets the estate sweep
 }
 
 // NewCatalogSyncTask creates a new catalog sync task.
@@ -50,26 +52,35 @@ func NewCatalogSyncTask(payload CatalogSyncPayload) (*asynq.Task, error) {
 
 // HandleCatalogSync syncs Helm repositories and updates chart listings.
 func HandleCatalogSync(ctx context.Context, t *asynq.Task) error {
-	return runPeriodicTaskWithLeader(ctx, "catalog:sync", func() error {
-		var p CatalogSyncPayload
-		if len(t.Payload()) > 0 {
-			if err := json.Unmarshal(t.Payload(), &p); err != nil {
-				return fmt.Errorf("unmarshal catalog sync payload: %w", err)
-			}
+	var p CatalogSyncPayload
+	if len(t.Payload()) > 0 {
+		if err := json.Unmarshal(t.Payload(), &p); err != nil {
+			return fmt.Errorf("unmarshal catalog sync payload: %w", err)
 		}
+	}
+	var targetID uuid.UUID
+	if p.RepositoryID != "" {
+		parsed, err := uuid.Parse(p.RepositoryID)
+		if err != nil || parsed == uuid.Nil {
+			return errors.New("catalog sync repository_id must be a non-zero UUID")
+		}
+		targetID = parsed
+	}
 
-		if p.RepositoryURL != "" {
-			slog.InfoContext(ctx, "syncing catalog repository", "url", p.RepositoryURL)
+	run := func() error {
+		if targetID != uuid.Nil {
+			slog.InfoContext(ctx, "syncing catalog repository", "repository_id", targetID)
+		} else if p.RepositoryURL != "" {
+			slog.InfoContext(ctx, "syncing catalog repository from legacy URL target")
 		} else {
 			slog.InfoContext(ctx, "syncing all catalog repositories")
 		}
 
-		if runtimeDeps.Queries == nil {
-			slog.InfoContext(ctx, "catalog sync runtime not configured, skipping repository sync")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("catalog sync runtime is not configured")
 		}
 
-		repos, err := runtimeDeps.Queries.ListEnabledHelmRepositories(ctx)
+		repos, err := runtimeDependencies(ctx).Queries.ListEnabledHelmRepositories(ctx)
 		if err != nil {
 			return err
 		}
@@ -79,6 +90,7 @@ func HandleCatalogSync(ctx context.Context, t *asynq.Task) error {
 			failed      int
 			unsupported int
 			aborted     bool
+			matched     bool
 		)
 		for _, repoRecord := range repos {
 			// Worker shutdown / task deadline. Stop instead of walking the
@@ -90,9 +102,13 @@ func HandleCatalogSync(ctx context.Context, t *asynq.Task) error {
 				aborted = true
 				break
 			}
-			if p.RepositoryURL != "" && repoRecord.Url != p.RepositoryURL {
+			if targetID != uuid.Nil && repoRecord.ID != targetID {
 				continue
 			}
+			if targetID == uuid.Nil && p.RepositoryURL != "" && repoRecord.Url != p.RepositoryURL {
+				continue
+			}
+			matched = true
 			// Per-repo isolation: one repository's failure is recorded
 			// against THAT repository and the sweep carries on. Before this,
 			// every failure path here was `return err`, so a single 401,
@@ -121,6 +137,9 @@ func HandleCatalogSync(ctx context.Context, t *asynq.Task) error {
 			}
 			synced++
 		}
+		if (targetID != uuid.Nil || p.RepositoryURL != "") && !matched {
+			return errors.New("targeted catalog repository was not found or is disabled")
+		}
 
 		if len(failures) > 0 {
 			// A partial sweep must not look like a clean one: returning the
@@ -143,7 +162,16 @@ func HandleCatalogSync(ctx context.Context, t *asynq.Task) error {
 		}
 		slog.InfoContext(ctx, "catalog sync complete", "synced", synced, "unsupported", unsupported)
 		return nil
-	})
+	}
+	// A repository-specific task is a unique operator request from the durable
+	// task outbox. It must execute on whichever worker receives it: treating it
+	// like one replica of a duplicated periodic schedule would let a non-leader
+	// acknowledge and permanently discard it. Only the empty-payload estate
+	// sweep is leader-deduplicated.
+	if targetID != uuid.Nil || p.RepositoryURL != "" {
+		return run()
+	}
+	return runPeriodicTaskWithLeader(ctx, "catalog:sync", run)
 }
 
 // ociIngest is the OCI ingest entry point, indirected so tests can substitute
@@ -182,7 +210,7 @@ func syncOneRepository(ctx context.Context, repoRecord sqlc.HelmRepository) erro
 		// A correct OCI GC needs IngestOCIRepo to distinguish "saw no tags"
 		// from "could not ask", which is a change to that function's contract
 		// and out of scope for this item.
-		if _, _, err := ociIngest(ctx, runtimeDeps.Queries, repoRecord, runtimeDeps.CatalogDecryptor, runtimeLogger()); err != nil {
+		if _, _, err := ociIngest(ctx, runtimeDependencies(ctx).Queries, repoRecord, runtimeDependencies(ctx).CatalogDecryptor, runtimeLogger(ctx)); err != nil {
 			return err
 		}
 	case catalog.IsGitRepo(repoRecord):
@@ -206,7 +234,7 @@ func syncOneRepository(ctx context.Context, repoRecord sqlc.HelmRepository) erro
 			return err
 		}
 	}
-	return runtimeDeps.Queries.UpdateHelmRepositoryLastSynced(ctx, repoRecord.ID)
+	return runtimeDependencies(ctx).Queries.UpdateHelmRepositoryLastSynced(ctx, repoRecord.ID)
 }
 
 // repositorySyncFailureRecorder is the optional sub-interface satisfied by the
@@ -249,7 +277,7 @@ func recordRepositorySyncFailure(ctx context.Context, repoRecord sqlc.HelmReposi
 		"repo_type", repoRecord.RepoType,
 		"error", msg,
 	)
-	if recorder, ok := runtimeDeps.Queries.(repositorySyncFailureRecorder); ok {
+	if recorder, ok := runtimeDependencies(ctx).Queries.(repositorySyncFailureRecorder); ok {
 		if err := recorder.UpdateHelmRepositorySyncFailure(ctx, sqlc.UpdateHelmRepositorySyncFailureParams{
 			ID:            repoRecord.ID,
 			LastSyncError: msg,
@@ -266,7 +294,7 @@ func recordRepositorySyncFailure(ctx context.Context, repoRecord sqlc.HelmReposi
 	if err != nil {
 		return
 	}
-	_ = runtimeDeps.Queries.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
+	_ = runtimeDependencies(ctx).Queries.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
 		Source:       "worker",
 		Action:       "catalog.repo.sync_failed",
 		ResourceType: "helm_repository",
@@ -296,7 +324,7 @@ func fetchRepositoryIndex(ctx context.Context, client *http.Client, indexURL str
 	// private ChartMuseum/Artifactory/Nexus repo answers the unattended sweep
 	// with a 401 forever while its Sync button works, which reads as "the
 	// scheduler is broken" rather than "the scheduler never authenticated".
-	catalog.ApplyIndexAuth(req, repoRecord, runtimeDeps.CatalogDecryptor, runtimeLogger())
+	catalog.ApplyIndexAuth(req, repoRecord, runtimeDependencies(ctx).CatalogDecryptor, runtimeLogger(ctx))
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -356,7 +384,7 @@ func syncRepositoryIndex(ctx context.Context, repoRecord sqlc.HelmRepository, in
 			versions = versions[:catalogMaxVersionsPerChart]
 		}
 		seenCharts[chartName] = struct{}{}
-		chart, err := runtimeDeps.Queries.GetHelmChartByRepoAndName(ctx, sqlc.GetHelmChartByRepoAndNameParams{
+		chart, err := runtimeDependencies(ctx).Queries.GetHelmChartByRepoAndName(ctx, sqlc.GetHelmChartByRepoAndNameParams{
 			RepositoryID: repositoryID,
 			Name:         chartName,
 		})
@@ -364,7 +392,7 @@ func syncRepositoryIndex(ctx context.Context, repoRecord sqlc.HelmRepository, in
 			if err != pgx.ErrNoRows {
 				return err
 			}
-			chart, err = runtimeDeps.Queries.CreateHelmChart(ctx, sqlc.CreateHelmChartParams{
+			chart, err = runtimeDependencies(ctx).Queries.CreateHelmChart(ctx, sqlc.CreateHelmChartParams{
 				RepositoryID: repositoryID,
 				Name:         chartName,
 				DisplayName:  chartName,
@@ -386,7 +414,7 @@ func syncRepositoryIndex(ctx context.Context, repoRecord sqlc.HelmRepository, in
 				continue
 			}
 			seenVersions[version.Version] = struct{}{}
-			if _, err := runtimeDeps.Queries.GetHelmChartVersion(ctx, sqlc.GetHelmChartVersionParams{
+			if _, err := runtimeDependencies(ctx).Queries.GetHelmChartVersion(ctx, sqlc.GetHelmChartVersionParams{
 				ChartID: chart.ID,
 				Version: version.Version,
 			}); err == nil {
@@ -398,7 +426,7 @@ func syncRepositoryIndex(ctx context.Context, repoRecord sqlc.HelmRepository, in
 			// the YAML editor (default values) and the README. Best-effort:
 			// a chart that won't fetch still lands as a card + installable version.
 			defaultValues, valuesSchema, readme := fetchChartAssets(ctx, repoRecord, version.URLs)
-			if _, err := runtimeDeps.Queries.CreateHelmChartVersion(ctx, sqlc.CreateHelmChartVersionParams{
+			if _, err := runtimeDependencies(ctx).Queries.CreateHelmChartVersion(ctx, sqlc.CreateHelmChartVersionParams{
 				ChartID:       chart.ID,
 				Version:       version.Version,
 				AppVersion:    version.AppVersion,
@@ -419,7 +447,7 @@ func syncRepositoryIndex(ctx context.Context, repoRecord sqlc.HelmRepository, in
 		// advance OFFSET while deleting — deletes compact the list and a
 		// naive offset+=pageSize leaves orphans past the first page.
 		if err := gcPagedOrphans(catalogGCPageSize, func(limit, offset int32) (int, int, error) {
-			existingVersions, err := runtimeDeps.Queries.ListChartVersions(ctx, sqlc.ListChartVersionsParams{
+			existingVersions, err := runtimeDependencies(ctx).Queries.ListChartVersions(ctx, sqlc.ListChartVersionsParams{
 				ChartID: chart.ID,
 				Limit:   limit,
 				Offset:  offset,
@@ -432,7 +460,7 @@ func syncRepositoryIndex(ctx context.Context, repoRecord sqlc.HelmRepository, in
 				if _, ok := seenVersions[existing.Version]; ok {
 					continue
 				}
-				if err := runtimeDeps.Queries.DeleteHelmChartVersion(ctx, existing.ID); err != nil {
+				if err := runtimeDependencies(ctx).Queries.DeleteHelmChartVersion(ctx, existing.ID); err != nil {
 					return 0, 0, err
 				}
 				deleted++
@@ -444,7 +472,7 @@ func syncRepositoryIndex(ctx context.Context, repoRecord sqlc.HelmRepository, in
 	}
 	// CORR-R04: GC charts removed from the index (same offset-stable algorithm).
 	if err := gcPagedOrphans(catalogGCPageSize, func(limit, offset int32) (int, int, error) {
-		existingCharts, err := runtimeDeps.Queries.ListChartsByRepository(ctx, sqlc.ListChartsByRepositoryParams{
+		existingCharts, err := runtimeDependencies(ctx).Queries.ListChartsByRepository(ctx, sqlc.ListChartsByRepositoryParams{
 			RepositoryID: repositoryID,
 			Limit:        limit,
 			Offset:       offset,
@@ -457,7 +485,7 @@ func syncRepositoryIndex(ctx context.Context, repoRecord sqlc.HelmRepository, in
 			if _, ok := seenCharts[existing.Name]; ok {
 				continue
 			}
-			if err := runtimeDeps.Queries.DeleteHelmChart(ctx, existing.ID); err != nil {
+			if err := runtimeDependencies(ctx).Queries.DeleteHelmChart(ctx, existing.ID); err != nil {
 				return 0, 0, err
 			}
 			deleted++
@@ -543,7 +571,7 @@ func fetchChartAssets(ctx context.Context, repoRecord sqlc.HelmRepository, urls 
 	// handler's lazy-hydrate path guards on the same shared helper so the two
 	// chart-asset fetches cannot drift apart on this rule again.
 	if catalog.SameHost(repoRecord.Url, chartURL) {
-		catalog.ApplyIndexAuth(req, repoRecord, runtimeDeps.CatalogDecryptor, runtimeLogger())
+		catalog.ApplyIndexAuth(req, repoRecord, runtimeDependencies(ctx).CatalogDecryptor, runtimeLogger(ctx))
 	}
 	resp, err := httpclient.SafeClient(catalogFetchTimeout).Do(req)
 	if err != nil {

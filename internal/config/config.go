@@ -161,6 +161,12 @@ type Config struct {
 	// self-managed clusters, so it stays fully off (routes unregistered, worker
 	// sweep inert) until an operator opts in.
 	ControlPlaneSnapshotsEnabled bool `mapstructure:"control_plane_snapshots_enabled"`
+	// ManagementBackupEnabled gates the management-plane backup mutation API
+	// and the standalone worker consumers as one fail-closed capability.
+	ManagementBackupEnabled bool `mapstructure:"management_backup_enabled"`
+	// CRDEnabled gates the management CRD controller and its ownership-drift
+	// task as one deployment capability.
+	CRDEnabled bool `mapstructure:"crd_enabled"`
 	// NativeRBACEnabled gates the native per-CRD RBAC allow layer. Default
 	// false: when off the k8s-proxy authz hook is byte-for-byte unchanged
 	// (no native authorizer injected) and the rule-authoring API is
@@ -315,6 +321,8 @@ func Load() (*Config, error) {
 		"kubectl_shell_idle_timeout_minutes",
 		"kubectl_shell_session_hard_cap_hours",
 		"control_plane_snapshots_enabled",
+		"management_backup_enabled",
+		"crd_enabled",
 		"native_rbac_enabled",
 		"namespace_scoped_rbac_enabled",
 		"manifest_signing_secret",
@@ -361,6 +369,8 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "totp_require", Value: false},
 		envconfig.Default{Key: "kubectl_shell_enabled", Value: false},
 		envconfig.Default{Key: "control_plane_snapshots_enabled", Value: false},
+		envconfig.Default{Key: "management_backup_enabled", Value: false},
+		envconfig.Default{Key: "crd_enabled", Value: false},
 		envconfig.Default{Key: "native_rbac_enabled", Value: false},
 		// Default ON: a project-scoped grant that resolves to nothing is the
 		// parity bug, not the safe state. Set NAMESPACE_SCOPED_RBAC_ENABLED=false

@@ -64,6 +64,76 @@ type Service struct {
 	metrics MetricsHook
 }
 
+type bufferedPublishEvent struct {
+	eventType string
+	data      any
+}
+
+type bufferedPhaseMetric struct {
+	clusterID string
+	from      string
+	to        string
+}
+
+type bufferedDurationMetric struct {
+	clusterID string
+	outcome   string
+	baseline  bool
+	seconds   float64
+}
+
+// bufferedSideEffects captures process-local SSE and metrics effects while a
+// caller executes registration writes inside a database transaction. Flush is
+// called only after commit, so a rolled-back transition cannot leak a phase or
+// timeline event to clients.
+type bufferedSideEffects struct {
+	pub       Publisher
+	metrics   MetricsHook
+	events    []bufferedPublishEvent
+	phases    []bufferedPhaseMetric
+	durations []bufferedDurationMetric
+}
+
+func (b *bufferedSideEffects) Publish(eventType string, data any) {
+	b.events = append(b.events, bufferedPublishEvent{eventType: eventType, data: data})
+}
+
+func (b *bufferedSideEffects) RecordPhaseTransition(clusterID, from, to string) {
+	b.phases = append(b.phases, bufferedPhaseMetric{clusterID: clusterID, from: from, to: to})
+}
+
+func (b *bufferedSideEffects) RecordDuration(clusterID, outcome string, baseline bool, seconds float64) {
+	b.durations = append(b.durations, bufferedDurationMetric{clusterID: clusterID, outcome: outcome, baseline: baseline, seconds: seconds})
+}
+
+func (b *bufferedSideEffects) flush() {
+	if b.pub != nil {
+		for _, event := range b.events {
+			b.pub.Publish(event.eventType, event.data)
+		}
+	}
+	if b.metrics != nil {
+		for _, phase := range b.phases {
+			b.metrics.RecordPhaseTransition(phase.clusterID, phase.from, phase.to)
+		}
+		for _, duration := range b.durations {
+			b.metrics.RecordDuration(duration.clusterID, duration.outcome, duration.baseline, duration.seconds)
+		}
+	}
+}
+
+// Buffered returns a transaction-scoped service that uses q for every read and
+// write and buffers non-database effects. The returned flush function must be
+// called exactly once after the surrounding transaction commits; it is safe to
+// discard on rollback.
+func (s *Service) Buffered(q Querier) (*Service, func()) {
+	if s == nil {
+		return New(q, nil), func() {}
+	}
+	buffer := &bufferedSideEffects{pub: s.pub, metrics: s.metrics}
+	return &Service{q: q, pub: buffer, metrics: buffer}, buffer.flush
+}
+
 // MetricsHook is the bridge to Prometheus. The handler / wiring layer
 // implements this in the metrics package; declared here as an
 // interface to avoid a transitive import cycle (the metrics package
@@ -299,22 +369,28 @@ func (s *Service) Advance(ctx context.Context, clusterID uuid.UUID, ev Event, op
 	if !o.skipAutoStep {
 		switch ev {
 		case EventAgentConnected:
-			_, _ = s.WriteStep(ctx, clusterID, StepInput{
+			if _, stepErr := s.WriteStep(ctx, clusterID, StepInput{
 				StepName: "agent_connected",
 				Status:   "success",
 				Detail:   o.detail,
-			})
+			}); stepErr != nil {
+				return record, fmt.Errorf("write agent-connected registration step: %w", stepErr)
+			}
 		case EventNoProvisioning:
-			_, _ = s.WriteStep(ctx, clusterID, StepInput{
+			if _, stepErr := s.WriteStep(ctx, clusterID, StepInput{
 				StepName: "no_provisioning",
 				Status:   "skipped",
-			})
+			}); stepErr != nil {
+				return record, fmt.Errorf("write no-provisioning registration step: %w", stepErr)
+			}
 		case EventCancel:
-			_, _ = s.WriteStep(ctx, clusterID, StepInput{
+			if _, stepErr := s.WriteStep(ctx, clusterID, StepInput{
 				StepName:     "cancelled",
 				Status:       "failed",
 				ErrorMessage: o.errorMessage,
-			})
+			}); stepErr != nil {
+				return record, fmt.Errorf("write cancelled registration step: %w", stepErr)
+			}
 		}
 	}
 

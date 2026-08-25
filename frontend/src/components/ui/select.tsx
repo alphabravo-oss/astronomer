@@ -1,6 +1,6 @@
-import { forwardRef, type SelectHTMLAttributes } from 'react';
-import { cn } from '@/lib/utils';
-import { controlClassName } from '@/components/ui/input';
+import { forwardRef, type SelectHTMLAttributes } from "react";
+import { cn } from "@/lib/utils";
+import { controlClassName } from "@/components/ui/input";
 
 export type SelectProps = SelectHTMLAttributes<HTMLSelectElement>;
 
@@ -12,4 +12,4 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ),
 );
 
-Select.displayName = 'Select';
+Select.displayName = "Select";

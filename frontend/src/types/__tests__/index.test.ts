@@ -29,34 +29,34 @@ import type {
   APIToken,
   AuditLogEntry,
   ActivityEvent,
-} from '@/types/index';
+} from "@/types/index";
 
 // ---------------------------------------------------------------------------
 // API response types
 // ---------------------------------------------------------------------------
 
-describe('API Response types', () => {
-  it('APIResponse can be created', () => {
+describe("API Response types", () => {
+  it("APIResponse can be created", () => {
     const response: APIResponse<string> = {
-      data: 'hello',
+      data: "hello",
       status: 200,
     };
-    expect(response.data).toBe('hello');
+    expect(response.data).toBe("hello");
     expect(response.status).toBe(200);
   });
 
-  it('APIResponse with optional message', () => {
+  it("APIResponse with optional message", () => {
     const response: APIResponse<number> = {
       data: 42,
       status: 200,
-      message: 'Success',
+      message: "Success",
     };
-    expect(response.message).toBe('Success');
+    expect(response.message).toBe("Success");
   });
 
-  it('PaginatedResponse can be created', () => {
+  it("PaginatedResponse can be created", () => {
     const response: PaginatedResponse<string> = {
-      data: ['a', 'b'],
+      data: ["a", "b"],
       total: 10,
       page: 1,
       pageSize: 2,
@@ -66,10 +66,10 @@ describe('API Response types', () => {
     expect(response.totalPages).toBe(5);
   });
 
-  it('APIError can be created', () => {
+  it("APIError can be created", () => {
     const error: APIError = {
-      message: 'Not found',
-      code: 'NOT_FOUND',
+      message: "Not found",
+      code: "NOT_FOUND",
       status: 404,
     };
     expect(error.status).toBe(404);
@@ -80,23 +80,23 @@ describe('API Response types', () => {
 // Cluster types
 // ---------------------------------------------------------------------------
 
-describe('Cluster types', () => {
-  it('Cluster object satisfies interface', () => {
-    const cluster: Cluster = {
-      id: 'c-1',
-      name: 'prod-us-east',
-      displayName: 'Production US East',
-      status: 'active',
+describe("Cluster types", () => {
+  it("Cluster object satisfies interface", () => {
+    const cluster = {
+      id: "c-1",
+      name: "prod-us-east",
+      displayName: "Production US East",
+      status: "active",
       health: {
-        status: 'active',
-        lastCheck: '2024-01-01T00:00:00Z',
+        status: "active",
+        lastCheck: "2024-01-01T00:00:00Z",
         components: [],
       },
-      provider: 'aws',
-      distribution: 'eks',
-      environment: 'production',
-      region: 'us-east-1',
-      kubernetesVersion: '1.28.3',
+      provider: "aws",
+      distribution: "eks",
+      environment: "production",
+      region: "us-east-1",
+      kubernetesVersion: "1.28.3",
       nodeCount: 5,
       podCount: 100,
       namespaceCount: 10,
@@ -106,55 +106,95 @@ describe('Cluster types', () => {
       memoryCapacity: 64000000000,
       memoryUsage: 32000000000,
       memoryPercentage: 50,
-      labels: { env: 'prod' },
+      labels: { env: "prod" },
       annotations: {},
-      agentVersion: '0.1.0',
-      lastHeartbeat: '2024-01-01T00:00:00Z',
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z',
-    };
-    expect(cluster.id).toBe('c-1');
-    expect(cluster.provider).toBe('aws');
+      agentVersion: "0.1.0",
+      lastHeartbeat: "2024-01-01T00:00:00Z",
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-01T00:00:00Z",
+    } satisfies Pick<
+      Cluster,
+      | "id"
+      | "name"
+      | "displayName"
+      | "status"
+      | "health"
+      | "provider"
+      | "distribution"
+      | "environment"
+      | "region"
+      | "kubernetesVersion"
+      | "nodeCount"
+      | "podCount"
+      | "namespaceCount"
+      | "cpuCapacity"
+      | "cpuUsage"
+      | "cpuPercentage"
+      | "memoryCapacity"
+      | "memoryUsage"
+      | "memoryPercentage"
+      | "labels"
+      | "annotations"
+      | "agentVersion"
+      | "lastHeartbeat"
+      | "createdAt"
+      | "updatedAt"
+    >;
+    expect(cluster.id).toBe("c-1");
+    expect(cluster.provider).toBe("aws");
   });
 
-  it('ClusterStatus accepts all valid values', () => {
+  it("ClusterStatus accepts all valid values", () => {
     const statuses: ClusterStatus[] = [
-      'active', 'connecting', 'warning', 'error', 'disconnected', 'provisioning',
+      "active",
+      "connecting",
+      "warning",
+      "error",
+      "disconnected",
+      "provisioning",
     ];
     expect(statuses).toHaveLength(6);
   });
 
-  it('ClusterProvider accepts all valid values', () => {
+  it("ClusterProvider accepts all valid values", () => {
     const providers: ClusterProvider[] = [
-      'aws', 'gcp', 'azure', 'on-prem', 'digitalocean', 'other',
+      "aws",
+      "gcp",
+      "azure",
+      "on-prem",
+      "digitalocean",
+      "other",
     ];
     expect(providers).toHaveLength(6);
   });
 
-  it('ClusterEnvironment accepts all valid values', () => {
+  it("ClusterEnvironment accepts all valid values", () => {
     const envs: ClusterEnvironment[] = [
-      'production', 'staging', 'development', 'testing',
+      "production",
+      "staging",
+      "development",
+      "testing",
     ];
     expect(envs).toHaveLength(4);
   });
 
-  it('ClusterHealthComponent can be created', () => {
+  it("ClusterHealthComponent can be created", () => {
     const component: ClusterHealthComponent = {
-      name: 'api-server',
-      status: 'healthy',
+      name: "api-server",
+      status: "healthy",
     };
-    expect(component.name).toBe('api-server');
+    expect(component.name).toBe("api-server");
   });
 
-  it('ClusterNode can be created', () => {
+  it("ClusterNode can be created", () => {
     const node: ClusterNode = {
-      name: 'node-1',
-      status: 'Ready',
-      roles: ['master'],
-      kubernetesVersion: '1.28.3',
-      os: 'linux',
-      architecture: 'amd64',
-      containerRuntime: 'containerd://1.7.0',
+      name: "node-1",
+      status: "Ready",
+      roles: ["master"],
+      kubernetesVersion: "1.28.3",
+      os: "linux",
+      architecture: "amd64",
+      containerRuntime: "containerd://1.7.0",
       cpuCapacity: 4000,
       cpuUsage: 1500,
       memoryCapacity: 16000000000,
@@ -162,10 +202,10 @@ describe('Cluster types', () => {
       podCapacity: 110,
       podCount: 42,
       conditions: [],
-      createdAt: '2024-01-01T00:00:00Z',
+      createdAt: "2024-01-01T00:00:00Z",
     };
-    expect(node.name).toBe('node-1');
-    expect(node.status).toBe('Ready');
+    expect(node.name).toBe("node-1");
+    expect(node.status).toBe("Ready");
   });
 });
 
@@ -173,60 +213,65 @@ describe('Cluster types', () => {
 // Workload types
 // ---------------------------------------------------------------------------
 
-describe('Workload types', () => {
-  it('Workload object satisfies interface', () => {
+describe("Workload types", () => {
+  it("Workload object satisfies interface", () => {
     const workload: Workload = {
-      name: 'nginx',
-      namespace: 'default',
-      kind: 'Deployment',
-      clusterId: 'c-1',
-      clusterName: 'prod',
-      status: 'Running',
-      ready: '3/3',
+      name: "nginx",
+      namespace: "default",
+      kind: "Deployment",
+      clusterId: "c-1",
+      clusterName: "prod",
+      status: "Running",
+      ready: "3/3",
       upToDate: 3,
       available: 3,
       replicas: 3,
       desiredReplicas: 3,
-      images: ['nginx:latest'],
+      images: ["nginx:latest"],
       labels: {},
       annotations: {},
-      createdAt: '2024-01-01T00:00:00Z',
-      age: '30d',
+      createdAt: "2024-01-01T00:00:00Z",
+      age: "30d",
     };
-    expect(workload.kind).toBe('Deployment');
+    expect(workload.kind).toBe("Deployment");
   });
 
-  it('WorkloadKind accepts all valid values', () => {
+  it("WorkloadKind accepts all valid values", () => {
     const kinds: WorkloadKind[] = [
-      'Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob', 'ReplicaSet',
+      "Deployment",
+      "StatefulSet",
+      "DaemonSet",
+      "Job",
+      "CronJob",
+      "ReplicaSet",
     ];
     expect(kinds).toHaveLength(6);
   });
 
-  it('Pod object satisfies interface', () => {
+  it("Pod object satisfies interface", () => {
     const pod: Pod = {
-      name: 'nginx-abc123',
-      namespace: 'default',
-      clusterId: 'c-1',
-      phase: 'Running',
-      status: 'Running',
-      ready: '1/1',
+      name: "nginx-abc123",
+      namespace: "default",
+      clusterId: "c-1",
+      phase: "Running",
+      status: "Running",
+      ready: "1/1",
       restarts: 0,
-      node: 'node-1',
-      ip: '10.0.0.5',
+      node: "node-1",
+      ip: "10.0.0.5",
       containers: [],
       conditions: [],
-      createdAt: '2024-01-01T00:00:00Z',
-      age: '5d',
+      createdAt: "2024-01-01T00:00:00Z",
+      age: "5d",
     };
-    expect(pod.phase).toBe('Running');
+    expect(pod.phase).toBe("Running");
   });
 
-  it('Container can be created', () => {
+  it("Container can be created", () => {
     const container: Container = {
-      name: 'nginx',
-      image: 'nginx:latest',
-      status: 'running',
+      name: "nginx",
+      image: "nginx:latest",
+      status: "running",
       ready: true,
       restartCount: 0,
     };
@@ -238,39 +283,39 @@ describe('Workload types', () => {
 // RBAC types
 // ---------------------------------------------------------------------------
 
-describe('RBAC types', () => {
-  it('User object satisfies interface', () => {
+describe("RBAC types", () => {
+  it("User object satisfies interface", () => {
     const user: User = {
-      id: 'u-1',
-      username: 'admin',
-      email: 'admin@example.com',
-      displayName: 'Admin User',
-      provider: 'local',
-      globalRoles: ['admin'],
+      id: "u-1",
+      username: "admin",
+      email: "admin@example.com",
+      displayName: "Admin User",
+      provider: "local",
+      globalRoles: ["admin"],
       enabled: true,
-      lastLogin: '2024-01-01T00:00:00Z',
-      createdAt: '2024-01-01T00:00:00Z',
+      lastLogin: "2024-01-01T00:00:00Z",
+      createdAt: "2024-01-01T00:00:00Z",
     };
-    expect(user.username).toBe('admin');
+    expect(user.username).toBe("admin");
   });
 
-  it('PolicyRule can be created', () => {
+  it("PolicyRule can be created", () => {
     const rule: PolicyRule = {
-      apiGroups: [''],
-      resources: ['pods'],
-      verbs: ['get', 'list', 'watch'],
+      apiGroups: [""],
+      resources: ["pods"],
+      verbs: ["get", "list", "watch"],
     };
-    expect(rule.verbs).toContain('get');
+    expect(rule.verbs).toContain("get");
   });
 
-  it('RoleBinding can be created', () => {
+  it("RoleBinding can be created", () => {
     const binding: RoleBinding = {
-      id: 'rb-1',
-      name: 'admin-binding',
-      roleType: 'global',
-      roleName: 'admin',
-      subjects: [{ kind: 'User', name: 'admin' }],
-      createdAt: '2024-01-01T00:00:00Z',
+      id: "rb-1",
+      name: "admin-binding",
+      roleType: "global",
+      roleName: "admin",
+      subjects: [{ kind: "User", name: "admin" }],
+      createdAt: "2024-01-01T00:00:00Z",
     };
     expect(binding.subjects).toHaveLength(1);
   });
@@ -280,16 +325,16 @@ describe('RBAC types', () => {
 // Metrics types
 // ---------------------------------------------------------------------------
 
-describe('Metrics types', () => {
-  it('TimeSeriesPoint can be created', () => {
+describe("Metrics types", () => {
+  it("TimeSeriesPoint can be created", () => {
     const point: TimeSeriesPoint = {
-      timestamp: '2024-01-01T00:00:00Z',
+      timestamp: "2024-01-01T00:00:00Z",
       value: 42.5,
     };
     expect(point.value).toBe(42.5);
   });
 
-  it('MetricsSummary can be created', () => {
+  it("MetricsSummary can be created", () => {
     const summary: MetricsSummary = {
       cpuUsage: 8000,
       cpuCapacity: 20000,
@@ -313,54 +358,55 @@ describe('Metrics types', () => {
 // Settings types
 // ---------------------------------------------------------------------------
 
-describe('Settings types', () => {
-  it('SSOProvider can be created', () => {
+describe("Settings types", () => {
+  it("SSOProvider can be created", () => {
     const provider: SSOProvider = {
-      id: 'sso-1',
-      provider: 'corporate-sso',
-      type: 'oidc',
-      name: 'Corporate SSO',
+      id: "sso-1",
+      provider: "corporate-sso",
+      type: "oidc",
+      name: "Corporate SSO",
       enabled: true,
-      config: { issuer: 'https://auth.example.com' },
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z',
+      config: { issuer: "https://auth.example.com" },
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-01T00:00:00Z",
     };
-    expect(provider.type).toBe('oidc');
+    expect(provider.type).toBe("oidc");
   });
 
-  it('APIToken can be created', () => {
+  it("APIToken can be created", () => {
     const token: APIToken = {
-      id: 'tok-1',
-      name: 'CI Token',
-      prefix: 'ast_',
-      createdBy: 'admin',
-      createdAt: '2024-01-01T00:00:00Z',
+      id: "tok-1",
+      name: "CI Token",
+      prefix: "ast_",
+      isRevoked: false,
+      createdAt: "2024-01-01T00:00:00Z",
+      scopes: ["read"],
     };
-    expect(token.prefix).toBe('ast_');
+    expect(token.prefix).toBe("ast_");
   });
 
-  it('AuditLogEntry can be created', () => {
+  it("AuditLogEntry can be created", () => {
     const entry: AuditLogEntry = {
-      id: 'log-1',
-      action: 'create',
-      resourceType: 'cluster',
-      resourceName: 'prod-east',
-      user: 'admin',
-      sourceIP: '10.0.0.1',
-      status: 'success',
-      timestamp: '2024-01-01T00:00:00Z',
+      id: "log-1",
+      action: "create",
+      resourceType: "cluster",
+      resourceName: "prod-east",
+      user: "admin",
+      sourceIP: "10.0.0.1",
+      status: "success",
+      timestamp: "2024-01-01T00:00:00Z",
     };
-    expect(entry.action).toBe('create');
+    expect(entry.action).toBe("create");
   });
 
-  it('ActivityEvent can be created', () => {
+  it("ActivityEvent can be created", () => {
     const event: ActivityEvent = {
-      id: 'evt-1',
-      type: 'cluster',
-      action: 'connected',
-      message: 'Cluster prod-east connected',
-      timestamp: '2024-01-01T00:00:00Z',
+      id: "evt-1",
+      type: "cluster",
+      action: "connected",
+      message: "Cluster prod-east connected",
+      timestamp: "2024-01-01T00:00:00Z",
     };
-    expect(event.type).toBe('cluster');
+    expect(event.type).toBe("cluster");
   });
 });

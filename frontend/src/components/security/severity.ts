@@ -9,33 +9,39 @@
  * `HIGH`, etc.); we lower-case before lookup so callers don't have to.
  */
 
-import type { CISFindingSeverity, CISFindingStatus } from '@/types';
+import type { CISFindingSeverity, CISFindingStatus } from "@/types";
 
 /** Tailwind class fragments for severity badges. */
 export const severityBadge: Record<string, string> = {
-  critical: 'bg-status-error/10 text-status-error border border-status-error/20',
-  high: 'bg-status-high/10 text-status-high border border-status-high/20',
-  medium: 'bg-status-warning/10 text-status-warning border border-status-warning/20',
-  low: 'bg-status-info/10 text-status-info border border-status-info/20',
-  info: 'bg-muted text-muted-foreground border border-border',
+  critical:
+    "bg-status-error/10 text-status-error border border-status-error/20",
+  high: "bg-status-high/10 text-status-high border border-status-high/20",
+  medium:
+    "bg-status-warning/10 text-status-warning border border-status-warning/20",
+  low: "bg-status-info/10 text-status-info border border-status-info/20",
+  info: "bg-muted text-muted-foreground border border-border",
 };
 
 /** Tailwind class fragments for finding status badges. */
 export const findingStatusBadge: Record<string, string> = {
-  pass: 'bg-status-success/10 text-status-success',
-  fail: 'bg-status-error/10 text-status-error',
-  warn: 'bg-status-warning/10 text-status-warning',
-  skip: 'bg-muted text-muted-foreground',
-  info: 'bg-status-info/10 text-status-info',
+  pass: "bg-status-success/10 text-status-success",
+  fail: "bg-status-error/10 text-status-error",
+  warn: "bg-status-warning/10 text-status-warning",
+  skip: "bg-muted text-muted-foreground",
+  info: "bg-status-info/10 text-status-info",
 };
 
-export function severityClass(s: CISFindingSeverity | undefined | null): string {
-  const key = String(s ?? '').toLowerCase();
+export function severityClass(
+  s: CISFindingSeverity | undefined | null,
+): string {
+  const key = String(s ?? "").toLowerCase();
   return severityBadge[key] ?? severityBadge.info;
 }
 
-export function findingStatusClass(s: CISFindingStatus | undefined | null): string {
-  const key = String(s ?? '').toLowerCase();
+export function findingStatusClass(
+  s: CISFindingStatus | undefined | null,
+): string {
+  const key = String(s ?? "").toLowerCase();
   return findingStatusBadge[key] ?? findingStatusBadge.info;
 }
 
@@ -51,12 +57,22 @@ export function severityRank(s: CISFindingSeverity | undefined | null): number {
     low: 3,
     info: 4,
   };
-  const key = String(s ?? '').toLowerCase();
+  const key = String(s ?? "").toLowerCase();
   return map[key] ?? 5;
 }
 
 /** All known severities in display order. */
-export const SEVERITY_ORDER: CISFindingSeverity[] = ['critical', 'high', 'medium', 'low'];
+export const SEVERITY_ORDER: CISFindingSeverity[] = [
+  "critical",
+  "high",
+  "medium",
+  "low",
+];
 
 /** All filterable finding statuses in display order. */
-export const STATUS_ORDER: CISFindingStatus[] = ['fail', 'warn', 'pass', 'skip'];
+export const STATUS_ORDER: CISFindingStatus[] = [
+  "fail",
+  "warn",
+  "pass",
+  "skip",
+];

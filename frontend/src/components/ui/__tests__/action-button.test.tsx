@@ -1,18 +1,18 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { Trash2 } from 'lucide-react';
-import { ActionButton } from '@/components/ui/action-button';
+import { fireEvent, render, screen } from "@testing-library/react";
+import { Trash2 } from "lucide-react";
+import { ActionButton } from "@/components/ui/action-button";
 
-describe('ActionButton', () => {
-  it('renders an enabled action and invokes clicks', () => {
+describe("ActionButton", () => {
+  it("renders an enabled action and invokes clicks", () => {
     const onClick = vi.fn();
 
     render(<ActionButton onClick={onClick}>Run action</ActionButton>);
-    fireEvent.click(screen.getByRole('button', { name: 'Run action' }));
+    fireEvent.click(screen.getByRole("button", { name: "Run action" }));
 
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it('blocks clicks while loading and shows loading copy', () => {
+  it("blocks clicks while loading and shows loading copy", () => {
     const onClick = vi.fn();
 
     render(
@@ -21,27 +21,35 @@ describe('ActionButton', () => {
       </ActionButton>,
     );
 
-    const button = screen.getByRole('button', { name: /deleting/i });
+    const button = screen.getByRole("button", { name: /deleting/i });
     expect(button).toBeDisabled();
     fireEvent.click(button);
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('uses disabled reasons as button titles', () => {
+  it("uses disabled reasons as button titles", () => {
     render(
       <ActionButton disabled disabledReason="requires clusters:update">
         Apply
       </ActionButton>,
     );
 
-    expect(screen.getByRole('button', { name: 'Apply' })).toHaveAttribute('title', 'requires clusters:update');
+    expect(screen.getByRole("button", { name: "Apply" })).toHaveAttribute(
+      "title",
+      "requires clusters:update",
+    );
   });
 
-  it('supports icon-only destructive actions', () => {
+  it("supports icon-only destructive actions", () => {
     render(
-      <ActionButton intent="destructive" size="icon" icon={<Trash2 className="h-4 w-4" />} aria-label="Delete" />,
+      <ActionButton
+        intent="destructive"
+        size="icon"
+        icon={<Trash2 className="h-4 w-4" />}
+        aria-label="Delete"
+      />,
     );
 
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
 });

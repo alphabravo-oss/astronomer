@@ -5,6 +5,13 @@ exact tagged v1 release. The supported path is ordinary Helm ownership of the
 dependency-free management-plane chart. Flux controllers remain agent-managed
 inside managed clusters and are unaffected by a management-plane chart upgrade.
 
+Use the [production installation runbook](runbooks/production-installation.md)
+for a new environment and complete the backup/decrypt proof in the
+[management backup runbook](runbooks/management-backup-and-restore.md) before
+approving an upgrade. Disconnected environments additionally follow the
+[air-gapped procedure](airgapped-install.md); they do not substitute an
+unverified local chart or mutable image.
+
 ## Boundaries
 
 - A pre-v1 installation is not upgradeable to v1. Install v1 with a new Helm
@@ -21,6 +28,9 @@ inside managed clusters and are unaffected by a management-plane chart upgrade.
 ## Fast path
 
 ```bash
+export KUBE_CONTEXT=astronomer-production
+export EXPECTED_KUBE_API_SERVER=https://kubernetes.example.com:6443
+
 # Back up and render the exact signed release without changing the cluster.
 ./scripts/upgrade-release.sh v1.0.1
 
@@ -35,6 +45,11 @@ curl --fail https://astronomer.example.com/readyz
 The first command is intentionally non-mutating. It verifies release assets and
 images, captures recovery material, backs up bundled PostgreSQL (or requires
 external-backup confirmation), and runs a server-side Helm dry run.
+Every invocation requires an explicit kubeconfig context and its exact expected
+HTTPS API-server identity; the helper never uses an ambient current context.
+For an unpublished RC, set `RELEASE_ARTIFACT_DIR` to the downloaded Actions
+artifact directory containing the chart, checksums, release manifest, and
+Sigstore bundle. Published and pre-promotion paths execute the same checks.
 
 ## What the helper enforces
 
@@ -47,13 +62,21 @@ The helper fails closed unless all of these are true:
 3. the configured minimum number of schedulable nodes are Ready and every
    selected PodDisruptionBudget permits at least one disruption;
 4. the backup filesystem has at least `MIN_BACKUP_FREE_KIB` free;
-5. the release chart checksum and GitHub provenance attestation verify;
+5. the release chart and release-manifest checksums, GitHub provenance
+   attestation, and Sigstore bundle verify for the exact target tag;
 6. all six first-party image references are digest-pinned and their keyless
    signatures match the tagged release workflow identity;
 7. the OCI chart is byte-for-byte identical to the verified release asset;
-8. bundled PostgreSQL has exactly one clean migration row at version 1, or the
-   operator confirms an external v1 schema and backup; and
+8. bundled PostgreSQL has exactly one clean migration row inside the target
+   chart's declared `minimum_upgrade_schema`–`target_schema` range, or the
+   operator confirms the external schema version and backup; and
 9. Helm's server-side dry run accepts the preserved values and v1 preflight.
+
+The exact signed manifest is passed with `--set-file release.manifest=...`.
+Its immutable ConfigMap is content-addressed, so upgrades never patch an
+immutable fixed-name object. A digest-only, closed-schema report is written to
+`SANITIZED_EVIDENCE_DIR`; Secrets, database dumps, Helm values, and raw API
+identity remain only in the owner-readable recovery directory.
 
 The live operation uses:
 
@@ -127,8 +150,12 @@ kubectl -n astronomer top pods  # when Metrics Server is available
 
 ## Database safety
 
-For bundled PostgreSQL, the helper queries `schema_migrations`, requires the
-exact clean v1 state, then captures a custom-format `pg_dump`.
+For bundled PostgreSQL, the helper queries `schema_migrations`, requires one
+clean row inside the target chart's supported range, then captures a
+custom-format `pg_dump`. It validates the archive with `pg_restore --list`,
+restores it into a temporary database, compares the restored schema state with
+the source, drops the temporary database, and records checksums for all recovery
+artifacts before Helm may mutate the release.
 
 For managed PostgreSQL, create and verify a provider snapshot or PITR restore
 point. Independently query:
@@ -138,11 +165,12 @@ SELECT count(*), max(version), bool_or(dirty)
 FROM schema_migrations;
 ```
 
-The expected result is one row, version `1`, dirty `false`. Then invoke:
+The expected result is one row, a version supported by the target chart, and
+`dirty=false`. Then invoke with the observed integer version:
 
 ```bash
 EXTERNAL_DB_BACKUP_CONFIRMED=1 \
-EXTERNAL_DB_V1_SCHEMA_CONFIRMED=1 \
+EXTERNAL_DB_SCHEMA_VERSION=14 \
 ./scripts/upgrade-release.sh v1.0.1
 ```
 
@@ -185,10 +213,12 @@ without displaying the interactive handoff message:
 ./scripts/upgrade-release.sh --yes v1.0.1
 ```
 
-Do not run two release operations concurrently. Watch the command until it
-prints the final exact tag and backup directory. Helm waits for the preflight,
-migration, workloads, and jobs; its atomic mode restores the prior Helm revision
-if the upgrade itself fails.
+Do not run two release operations concurrently. The migration image serializes
+duplicate init-container installers per database and is tested with concurrent
+installers, but it does not make two independent Helm release operations safe.
+Watch the command until it prints the final exact tag and backup directory. Helm
+waits for the preflight, migration, workloads, and jobs; its atomic mode restores
+the prior Helm revision if the upgrade itself fails.
 
 For a slow but healthy environment, increase the bound explicitly:
 

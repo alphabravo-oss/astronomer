@@ -60,9 +60,8 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 			slog.InfoContext(ctx, "evaluating all alert rules")
 		}
 
-		if runtimeDeps.Queries == nil {
-			slog.InfoContext(ctx, "alert evaluation runtime not configured, skipping DB evaluation")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("alert evaluation runtime is not configured")
 		}
 
 		rules, err := alertRulesForEvaluation(ctx, p.RuleID)
@@ -155,9 +154,9 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 // not returned: a single channel/enqueue failure must not abort the
 // evaluation loop for the remaining rules.
 func dispatchAlertNotifications(ctx context.Context, rule sqlc.AlertRule, event sqlc.AlertEvent, subject, body string, resolved bool) {
-	channels, err := runtimeDeps.Queries.ListChannelsForAlertRule(ctx, rule.ID)
+	channels, err := runtimeDependencies(ctx).Queries.ListChannelsForAlertRule(ctx, rule.ID)
 	if err != nil {
-		runtimeLogger().ErrorContext(ctx, "failed to list channels for alert rule",
+		runtimeLogger(ctx).ErrorContext(ctx, "failed to list channels for alert rule",
 			"event_id", event.ID.String(), "rule_id", rule.ID.String(), "error", err)
 		return
 	}
@@ -190,27 +189,27 @@ func dispatchAlertNotifications(ctx context.Context, rule sqlc.AlertRule, event 
 			Resolved:  resolved,
 		})
 		if err != nil || task == nil {
-			runtimeLogger().ErrorContext(ctx, "failed to build alert notification task",
+			runtimeLogger(ctx).ErrorContext(ctx, "failed to build alert notification task",
 				"event_id", event.ID.String(),
 				"channel_id", channel.ID.String(),
 				"error", err)
 			continue
 		}
-		if runtimeDeps.Enqueuer == nil {
-			runtimeLogger().WarnContext(ctx, "alert notification not delivered: enqueuer not configured",
+		if runtimeDependencies(ctx).Enqueuer == nil {
+			runtimeLogger(ctx).WarnContext(ctx, "alert notification not delivered: enqueuer not configured",
 				"event_id", event.ID.String(),
 				"channel_id", channel.ID.String())
 			continue
 		}
-		if _, enqErr := runtimeDeps.Enqueuer.Enqueue(task); enqErr != nil {
-			runtimeLogger().ErrorContext(ctx, "failed to enqueue alert notification",
+		if _, enqErr := runtimeDependencies(ctx).Enqueuer.Enqueue(task); enqErr != nil {
+			runtimeLogger(ctx).ErrorContext(ctx, "failed to enqueue alert notification",
 				"event_id", event.ID.String(),
 				"channel_id", channel.ID.String(),
 				"channel_type", channel.ChannelType,
 				"error", enqErr)
 			continue
 		}
-		runtimeLogger().InfoContext(ctx, "enqueued alert notification",
+		runtimeLogger(ctx).InfoContext(ctx, "enqueued alert notification",
 			"event_id", event.ID.String(),
 			"channel_id", channel.ID.String(),
 			"channel_type", channel.ChannelType,
@@ -232,7 +231,7 @@ const alertEvalSweepPageSize int32 = 500
 func listAllAlertRules(ctx context.Context) ([]sqlc.AlertRule, error) {
 	var all []sqlc.AlertRule
 	for offset := int32(0); ; offset += alertEvalSweepPageSize {
-		page, err := runtimeDeps.Queries.ListAlertRules(ctx, sqlc.ListAlertRulesParams{Limit: alertEvalSweepPageSize, Offset: offset})
+		page, err := runtimeDependencies(ctx).Queries.ListAlertRules(ctx, sqlc.ListAlertRulesParams{Limit: alertEvalSweepPageSize, Offset: offset})
 		if err != nil {
 			return nil, err
 		}
@@ -253,7 +252,7 @@ func listAllAlertRules(ctx context.Context) ([]sqlc.AlertRule, error) {
 func listActiveSilences(ctx context.Context) ([]sqlc.AlertSilence, error) {
 	var all []sqlc.AlertSilence
 	for offset := int32(0); ; offset += alertEvalSweepPageSize {
-		page, err := runtimeDeps.Queries.ListAlertSilences(ctx, sqlc.ListAlertSilencesParams{Limit: alertEvalSweepPageSize, Offset: offset})
+		page, err := runtimeDependencies(ctx).Queries.ListAlertSilences(ctx, sqlc.ListAlertSilencesParams{Limit: alertEvalSweepPageSize, Offset: offset})
 		if err != nil {
 			return nil, err
 		}
@@ -280,7 +279,7 @@ func listActiveSilences(ctx context.Context) ([]sqlc.AlertSilence, error) {
 func listAllAlertEventsByRule(ctx context.Context, ruleID uuid.UUID) ([]sqlc.AlertEvent, error) {
 	var all []sqlc.AlertEvent
 	for offset := int32(0); ; offset += alertEvalSweepPageSize {
-		page, err := runtimeDeps.Queries.ListAlertEventsByRule(ctx, sqlc.ListAlertEventsByRuleParams{
+		page, err := runtimeDependencies(ctx).Queries.ListAlertEventsByRule(ctx, sqlc.ListAlertEventsByRuleParams{
 			RuleID: ruleID,
 			Limit:  alertEvalSweepPageSize,
 			Offset: offset,
@@ -335,12 +334,12 @@ type ruleClusterEval struct {
 // half of the P4.9 alerting publisher (the API-side CRUD half lives in
 // internal/handler/alerting.go). In the dedicated worker process the bus is
 // Redis-attached and fans out to the server pods' SSE relays. Nil-safe.
-func publishAlertEventChanged(clusterID pgtype.UUID, eventID uuid.UUID) {
+func publishAlertEventChanged(ctx context.Context, clusterID pgtype.UUID, eventID uuid.UUID) {
 	cid := ""
 	if clusterID.Valid {
 		cid = uuid.UUID(clusterID.Bytes).String()
 	}
-	events.PublishChanged(runtimeDeps.Bus, "alerting", cid, eventID.String(), map[string]any{"kind": "event"})
+	events.PublishChanged(runtimeDependencies(ctx).Bus, "alerting", cid, eventID.String(), map[string]any{"kind": "event"})
 }
 
 // processRuleEvaluation applies a single (rule, cluster) evaluation: it
@@ -358,14 +357,14 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 	activeEvents := filterActiveEventsForCluster(existingEvents, targetClusterID)
 	if !eval.triggered {
 		for _, event := range activeEvents {
-			if err := runtimeDeps.Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
+			if err := runtimeDependencies(ctx).Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
 				ID:         event.ID,
 				Status:     "resolved",
 				ResolvedAt: pgTime(time.Now()),
 			}); err != nil {
 				return err
 			}
-			publishAlertEventChanged(event.ClusterID, event.ID)
+			publishAlertEventChanged(ctx, event.ClusterID, event.ID)
 			// Only "firing"/"acknowledged" events represent an
 			// alert that actually paged someone; "silenced" ones
 			// never notified on trigger, so we don't notify on
@@ -382,22 +381,22 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 			if event.Status == "silenced" {
 				continue
 			}
-			if err := runtimeDeps.Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
+			if err := runtimeDependencies(ctx).Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
 				ID:     event.ID,
 				Status: "silenced",
 			}); err != nil {
 				return err
 			}
-			publishAlertEventChanged(event.ClusterID, event.ID)
+			publishAlertEventChanged(ctx, event.ClusterID, event.ID)
 		}
 		return nil
 	}
 	if len(activeEvents) > 0 {
-		runtimeLogger().InfoContext(ctx, "alert already active, skipping duplicate event", "rule_id", rule.ID.String())
+		runtimeLogger(ctx).InfoContext(ctx, "alert already active, skipping duplicate event", "rule_id", rule.ID.String())
 		return nil
 	}
 	if !cooldownElapsed(rule, existingEvents, targetClusterID) {
-		runtimeLogger().InfoContext(ctx, "alert cooldown active, skipping event", "rule_id", rule.ID.String())
+		runtimeLogger(ctx).InfoContext(ctx, "alert cooldown active, skipping event", "rule_id", rule.ID.String())
 		return nil
 	}
 	// P-03 inhibition: if a currently-firing source alert matches an enabled
@@ -408,7 +407,7 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 	// alerts already skip dispatch, so inhibition only applies to the firing
 	// path.
 	if silence == nil && alertInhibited(inhibitions, firing, alertLabelSet(rule, eval)) {
-		runtimeLogger().InfoContext(ctx, "alert suppressed by inhibition rule", "rule_id", rule.ID.String())
+		runtimeLogger(ctx).InfoContext(ctx, "alert suppressed by inhibition rule", "rule_id", rule.ID.String())
 		return nil
 	}
 	status := "firing"
@@ -420,7 +419,7 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 		details, _ = json.Marshal(detailMap)
 		message = fmt.Sprintf("%s (silenced: %s)", message, silence.Reason)
 	}
-	event, err := runtimeDeps.Queries.CreateAlertEvent(ctx, sqlc.CreateAlertEventParams{
+	event, err := runtimeDependencies(ctx).Queries.CreateAlertEvent(ctx, sqlc.CreateAlertEventParams{
 		RuleID:    rule.ID,
 		ClusterID: targetClusterID,
 		Status:    status,
@@ -430,9 +429,9 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 	if err != nil {
 		return err
 	}
-	publishAlertEventChanged(event.ClusterID, event.ID)
+	publishAlertEventChanged(ctx, event.ClusterID, event.ID)
 	if silence != nil {
-		runtimeLogger().InfoContext(ctx, "alert matched active silence", "event_id", event.ID.String(), "rule_id", rule.ID.String())
+		runtimeLogger(ctx).InfoContext(ctx, "alert matched active silence", "event_id", event.ID.String(), "rule_id", rule.ID.String())
 		return nil
 	}
 	dispatchAlertNotifications(ctx, rule, event, "Astronomer alert: "+rule.Name, message, false)
@@ -459,11 +458,11 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule, fleet *fleetHealthSn
 	}
 	if rule.ClusterID.Valid {
 		details := baseRuleDetails(rule, config)
-		cluster, err := runtimeDeps.Queries.GetClusterByID(ctx, uuid.UUID(rule.ClusterID.Bytes))
+		cluster, err := runtimeDependencies(ctx).Queries.GetClusterByID(ctx, uuid.UUID(rule.ClusterID.Bytes))
 		if err != nil {
 			return nil, err
 		}
-		health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
+		health, healthErr := runtimeDependencies(ctx).Queries.GetClusterHealthStatus(ctx, cluster.ID)
 		healthKnown := healthErr == nil
 		if healthErr != nil {
 			health = sqlc.ClusterHealthStatus{}
@@ -506,7 +505,7 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule, fleet *fleetHealthSn
 		// the fleet inline, then fan out the per-cluster evaluation the same way.
 		var clusters []sqlc.Cluster
 		for offset := int32(0); ; offset += alertEvalSweepPageSize {
-			page, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
+			page, err := runtimeDependencies(ctx).Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
 			if err != nil {
 				return nil, err
 			}
@@ -520,7 +519,7 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule, fleet *fleetHealthSn
 		}
 		evaluations, allFailed = evaluateGlobalRuleClusters(ctx, rule, config, clusters,
 			func(ctx context.Context, c sqlc.Cluster) (sqlc.ClusterHealthStatus, bool) {
-				health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, c.ID)
+				health, healthErr := runtimeDependencies(ctx).Queries.GetClusterHealthStatus(ctx, c.ID)
 				return health, healthErr == nil
 			})
 	}
@@ -612,7 +611,7 @@ func evaluateGlobalRuleClusters(
 			health, known := healthFor(cctx, cluster)
 			eval, err := evaluateGlobalClusterRow(cctx, rule, config, cluster, health, known)
 			if err != nil {
-				runtimeLogger().WarnContext(cctx, "alert global-rule cluster evaluation failed, skipping",
+				runtimeLogger(ctx).WarnContext(cctx, "alert global-rule cluster evaluation failed, skipping",
 					"rule_id", rule.ID.String(), "cluster_id", cluster.ID.String(), "error", err)
 				return nil // never bubble — skip this cluster, keep the sweep alive
 			}
@@ -657,7 +656,7 @@ func buildFleetHealthSnapshot(ctx context.Context) (*fleetHealthSnapshot, error)
 		known:  map[uuid.UUID]bool{},
 	}
 	for offset := int32(0); ; offset += alertEvalSweepPageSize {
-		clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
+		clusters, err := runtimeDependencies(ctx).Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
 		if err != nil {
 			return nil, err
 		}
@@ -666,7 +665,7 @@ func buildFleetHealthSnapshot(ctx context.Context) (*fleetHealthSnapshot, error)
 		}
 		for _, cluster := range clusters {
 			snap.clusters = append(snap.clusters, cluster)
-			health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
+			health, healthErr := runtimeDependencies(ctx).Queries.GetClusterHealthStatus(ctx, cluster.ID)
 			if healthErr != nil {
 				snap.health[cluster.ID] = sqlc.ClusterHealthStatus{}
 				snap.known[cluster.ID] = false
@@ -744,10 +743,10 @@ type inhibitionMatcher struct {
 // A nil runtime querier (unconfigured worker) yields no inhibitions so the
 // suppression path is simply inert.
 func listEnabledInhibitions(ctx context.Context) ([]sqlc.AlertInhibition, error) {
-	if runtimeDeps.Queries == nil {
+	if runtimeDependencies(ctx).Queries == nil {
 		return nil, nil
 	}
-	return runtimeDeps.Queries.ListEnabledAlertInhibitions(ctx)
+	return runtimeDependencies(ctx).Queries.ListEnabledAlertInhibitions(ctx)
 }
 
 // alertLabelSet builds the label set an inhibition matcher evaluates a firing
@@ -1219,18 +1218,18 @@ func evaluatePromQLRule(ctx context.Context, rule sqlc.AlertRule, config map[str
 }
 
 func monitoringClientForCluster(ctx context.Context, clusterID uuid.UUID) (*imonitoring.Client, monitoringSelector, bool, error) {
-	if runtimeDeps.Queries == nil {
+	if runtimeDependencies(ctx).Queries == nil {
 		return nil, monitoringSelector{}, false, nil
 	}
-	if joined, err := runtimeDeps.Queries.GetClusterMonitoringContext(ctx, clusterID); err == nil {
+	if joined, err := runtimeDependencies(ctx).Queries.GetClusterMonitoringContext(ctx, clusterID); err == nil {
 		client, err := imonitoring.NewClient(imonitoring.BackendConfig{
 			QueryURL:            joined.QueryUrl,
 			TenantID:            joined.TenantID,
 			AuthType:            joined.AuthType,
 			AuthConfig:          joined.AuthConfig,
 			AuthConfigEncrypted: joined.AuthConfigEncrypted,
-			Decryptor:           monitoringDecryptor(),
-			Logger:              runtimeLogger(),
+			Decryptor:           monitoringDecryptor(ctx),
+			Logger:              runtimeLogger(ctx),
 			DefaultStepSeconds:  joined.DefaultStepSeconds,
 			TimeoutSeconds:      joined.TimeoutSeconds,
 		})
@@ -1244,7 +1243,7 @@ func monitoringClientForCluster(ctx context.Context, clusterID uuid.UUID) (*imon
 	} else if err != pgx.ErrNoRows {
 		return nil, monitoringSelector{}, false, err
 	}
-	backend, err := runtimeDeps.Queries.GetDefaultMonitoringBackend(ctx)
+	backend, err := runtimeDependencies(ctx).Queries.GetDefaultMonitoringBackend(ctx)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, monitoringSelector{}, false, nil
@@ -1257,8 +1256,8 @@ func monitoringClientForCluster(ctx context.Context, clusterID uuid.UUID) (*imon
 		AuthType:            backend.AuthType,
 		AuthConfig:          backend.AuthConfig,
 		AuthConfigEncrypted: backend.AuthConfigEncrypted,
-		Decryptor:           monitoringDecryptor(),
-		Logger:              runtimeLogger(),
+		Decryptor:           monitoringDecryptor(ctx),
+		Logger:              runtimeLogger(ctx),
 		DefaultStepSeconds:  backend.DefaultStepSeconds,
 		TimeoutSeconds:      backend.TimeoutSeconds,
 	})

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 )
@@ -201,6 +202,10 @@ func TestPlannerRejectsStalePreviewTargetRaceAndRollsBackFailure(t *testing.T) {
 		{"transaction append failure", func(_ *PlanningSnapshot, _ *CreateRequest, store *memoryPlanningStore) {
 			store.failEvent = errors.New("event storage unavailable")
 		}, ""},
+		{"transaction audit failure", func(_ *PlanningSnapshot, request *CreateRequest, store *memoryPlanningStore) {
+			store.auditErr = errors.New("audit storage unavailable")
+			request.Audit = audit.Intent{Event: audit.Event{Action: "delivery.rollout.created", ResourceType: "delivery_rollout"}, DedupeKey: "audit:v1:test"}
+		}, ""},
 	}
 	for _, test := range tests {
 		test := test
@@ -214,7 +219,7 @@ func TestPlannerRejectsStalePreviewTargetRaceAndRollsBackFailure(t *testing.T) {
 			if err == nil || (test.code != "" && !HasCode(err, test.code)) {
 				t.Fatalf("Create() error = %v, want %s", err, test.code)
 			}
-			if len(store.plans) != 0 || store.insertCount != 0 || store.eventCount != 0 || store.enqueueCount != 0 {
+			if len(store.plans) != 0 || store.insertCount != 0 || store.eventCount != 0 || store.enqueueCount != 0 || store.auditCount != 0 {
 				t.Fatalf("failed transaction leaked effects: %+v", store)
 			}
 		})
@@ -396,7 +401,9 @@ type memoryPlanningStore struct {
 	insertCount  int
 	eventCount   int
 	enqueueCount int
+	auditCount   int
 	failEvent    error
+	auditErr     error
 }
 
 func newMemoryPlanningStore(snapshot PlanningSnapshot) *memoryPlanningStore {
@@ -407,14 +414,15 @@ func (store *memoryPlanningStore) InTransaction(ctx context.Context, fn func(Pla
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	stage := &memoryPlanningStore{snapshot: store.snapshot, plans: make(map[string]FrozenRollout, len(store.plans)),
-		insertCount: store.insertCount, eventCount: store.eventCount, enqueueCount: store.enqueueCount, failEvent: store.failEvent}
+		insertCount: store.insertCount, eventCount: store.eventCount, enqueueCount: store.enqueueCount,
+		auditCount: store.auditCount, failEvent: store.failEvent, auditErr: store.auditErr}
 	for key, plan := range store.plans {
 		stage.plans[key] = plan
 	}
 	if err := fn(stage); err != nil {
 		return err
 	}
-	store.plans, store.insertCount, store.eventCount, store.enqueueCount = stage.plans, stage.insertCount, stage.eventCount, stage.enqueueCount
+	store.plans, store.insertCount, store.eventCount, store.enqueueCount, store.auditCount = stage.plans, stage.insertCount, stage.eventCount, stage.enqueueCount, stage.auditCount
 	return nil
 }
 
@@ -436,6 +444,14 @@ func (store *memoryPlanningStore) InsertRollout(_ context.Context, plan FrozenRo
 	}
 	store.plans[key] = plan
 	store.insertCount++
+	return nil
+}
+
+func (store *memoryPlanningStore) RecordAuditIntent(context.Context, audit.Intent) error {
+	if store.auditErr != nil {
+		return store.auditErr
+	}
+	store.auditCount++
 	return nil
 }
 

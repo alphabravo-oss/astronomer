@@ -1,17 +1,17 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 // Cluster adoption timeline on cluster detail.
 //
 // Mirrors the registration wizard's progress page but uses product language
 // that matches Astronomer's scope: adopting existing clusters and applying
 // optional baselines, not provisioning infrastructure.
 
-import { useParams } from '@/lib/navigation';
-import { Activity } from 'lucide-react';
-import { RegistrationTimeline } from '@/components/clusters/registration-timeline';
+import { useParams } from "@/lib/navigation";
+import { Activity } from "lucide-react";
+import { RegistrationTimeline } from "@/components/clusters/registration-timeline";
 
 function ClusterAdoptionPage() {
   const params = useParams();
-  const clusterId = String(params?.id ?? '');
+  const clusterId = String(params?.id ?? "");
 
   return (
     <div className="p-4 space-y-4">
@@ -21,8 +21,9 @@ function ClusterAdoptionPage() {
           Adoption
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Step-by-step record of how this existing cluster was registered, connected, and brought
-          under optional baseline management. Updates live as new steps land.
+          Step-by-step record of how this existing cluster was registered,
+          connected, and brought under optional baseline management. Updates
+          live as new steps land.
         </p>
       </div>
       <RegistrationTimeline clusterId={clusterId} embedded />
@@ -30,6 +31,6 @@ function ClusterAdoptionPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id/adoption/')({
+export const Route = createFileRoute("/dashboard/clusters/$id/adoption/")({
   component: ClusterAdoptionPage,
 });

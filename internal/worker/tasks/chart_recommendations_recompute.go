@@ -44,11 +44,10 @@ type chartRecommendationsQuerier interface {
 // state.
 func HandleChartRecommendationsRecompute(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ChartRecommendationsRecomputeType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "chart recommendations runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("chart recommendations runtime is not configured")
 		}
-		q, ok := runtimeDeps.Queries.(chartRecommendationsQuerier)
+		q, ok := runtimeDependencies(ctx).Queries.(chartRecommendationsQuerier)
 		if !ok {
 			return fmt.Errorf("chart recommendations not supported by runtime querier")
 		}
@@ -58,7 +57,7 @@ func HandleChartRecommendationsRecompute(ctx context.Context, _ *asynq.Task) err
 		if err := catalog.RecomputeAllAggregates(ctx, q); err != nil {
 			return fmt.Errorf("recompute aggregates: %w", err)
 		}
-		runtimeLogger().InfoContext(ctx, "chart recommendations recompute completed")
+		runtimeLogger(ctx).InfoContext(ctx, "chart recommendations recompute completed")
 		return nil
 	})
 }

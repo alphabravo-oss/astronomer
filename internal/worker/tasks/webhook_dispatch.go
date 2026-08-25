@@ -54,21 +54,11 @@ type WebhookQuerier interface {
 	DeleteWebhookDeliveriesOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
-// WebhookDeps is the dependency bag the dispatcher reads. Wired by
-// NewApp at server startup; stays in a package-level var so the
-// asynq HandleFunc signature can stay standard.
+// WebhookDeps is the webhook dispatcher's explicit dependency set.
 type WebhookDeps struct {
 	Queries   WebhookQuerier
 	Sender    WebhookSender
 	Encryptor *auth.Encryptor
-}
-
-var webhookDeps WebhookDeps
-
-// ConfigureWebhook wires the dispatcher's dependencies. Safe to call
-// multiple times (last call wins).
-func ConfigureWebhook(deps WebhookDeps) {
-	webhookDeps = deps
 }
 
 // HandleWebhookDispatch is the periodic task that drains pending
@@ -83,14 +73,13 @@ func ConfigureWebhook(deps WebhookDeps) {
 // "1-3 subscriptions × tens of events" and per-row lookups keep the
 // failure isolation simple. If a single subscription's row is broken,
 // only its deliveries fail; the rest of the batch still ships.
-func HandleWebhookDispatch(ctx context.Context, _ *asynq.Task) error {
+func (runtime DispatchRuntime) HandleWebhookDispatch(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, WebhookDispatchType, func() error {
-		if webhookDeps.Queries == nil || webhookDeps.Sender == nil {
-			runtimeLogger().InfoContext(ctx, "webhook dispatcher not configured, skipping")
-			return nil
+		if runtime.Webhook.Queries == nil || runtime.Webhook.Sender == nil {
+			return fmt.Errorf("webhook dispatcher runtime is not configured")
 		}
 		now := time.Now().UTC()
-		rows, err := webhookDeps.Queries.ListPendingWebhookDeliveries(ctx, sqlc.ListPendingWebhookDeliveriesParams{
+		rows, err := runtime.Webhook.Queries.ListPendingWebhookDeliveries(ctx, sqlc.ListPendingWebhookDeliveriesParams{
 			NextAttemptAt: pgtype.Timestamptz{Time: now, Valid: true},
 			Limit:         webhookDispatchBatchSize,
 		})
@@ -110,15 +99,15 @@ func HandleWebhookDispatch(ctx context.Context, _ *asynq.Task) error {
 			}
 			sub, ok := cache[row.SubscriptionID]
 			if !ok {
-				loaded, err := loadSubscription(ctx, row.SubscriptionID)
+				loaded, err := runtime.loadWebhookSubscription(ctx, row.SubscriptionID)
 				if err != nil {
-					runtimeLogger().WarnContext(ctx, "webhook dispatcher: load subscription failed",
+					runtimeLogger(ctx).WarnContext(ctx, "webhook dispatcher: load subscription failed",
 						"subscription_id", row.SubscriptionID.String(), "error", err)
 					// Mark the delivery dropped with the load failure so
 					// the operator can spot it on the recent-deliveries
 					// view. Don't keep trying — re-loading on the next
 					// tick will hit the same error.
-					_ = webhookDeps.Queries.MarkWebhookDeliveryDropped(ctx, sqlc.MarkWebhookDeliveryDroppedParams{
+					_ = runtime.Webhook.Queries.MarkWebhookDeliveryDropped(ctx, sqlc.MarkWebhookDeliveryDroppedParams{
 						ID:        row.ID,
 						Attempts:  row.Attempts + 1,
 						LastError: truncateDispatchLastError("subscription load failed: "+err.Error(), 1024),
@@ -129,7 +118,7 @@ func HandleWebhookDispatch(ctx context.Context, _ *asynq.Task) error {
 				cache[row.SubscriptionID] = loaded
 				sub = loaded
 			}
-			dispatchOne(ctx, row, sub)
+			runtime.dispatchWebhook(ctx, row, sub)
 		}
 		return nil
 	})
@@ -137,10 +126,10 @@ func HandleWebhookDispatch(ctx context.Context, _ *asynq.Task) error {
 
 // dispatchOne is the per-row sender + status writeback. We capture the
 // elapsed time for the metrics histogram regardless of outcome.
-func dispatchOne(ctx context.Context, row sqlc.WebhookDelivery, sub webhook.Subscription) {
+func (runtime DispatchRuntime) dispatchWebhook(ctx context.Context, row sqlc.WebhookDelivery, sub webhook.Subscription) {
 	event := buildEventFromRow(row)
 	start := time.Now()
-	outcome, _, err := webhookDeps.Sender.Send(ctx, sub, event)
+	outcome, _, err := runtime.Webhook.Sender.Send(ctx, sub, event)
 	elapsed := time.Since(start).Seconds()
 	now := time.Now().UTC()
 
@@ -149,7 +138,7 @@ func dispatchOne(ctx context.Context, row sqlc.WebhookDelivery, sub webhook.Subs
 		// oversized payload). Treat as dropped; the row will not be
 		// retried because the failure is deterministic.
 		webhook.RecordOutcome("dropped", elapsed)
-		_ = webhookDeps.Queries.MarkWebhookDeliveryDropped(ctx, sqlc.MarkWebhookDeliveryDroppedParams{
+		_ = runtime.Webhook.Queries.MarkWebhookDeliveryDropped(ctx, sqlc.MarkWebhookDeliveryDroppedParams{
 			ID:        row.ID,
 			Attempts:  row.Attempts + 1,
 			LastError: truncateDispatchLastError(err.Error(), 1024),
@@ -159,7 +148,7 @@ func dispatchOne(ctx context.Context, row sqlc.WebhookDelivery, sub webhook.Subs
 
 	if outcome.IsSuccess() {
 		webhook.RecordOutcome("delivered", elapsed)
-		_ = webhookDeps.Queries.MarkWebhookDeliveryDelivered(ctx, sqlc.MarkWebhookDeliveryDeliveredParams{
+		_ = runtime.Webhook.Queries.MarkWebhookDeliveryDelivered(ctx, sqlc.MarkWebhookDeliveryDeliveredParams{
 			ID:             row.ID,
 			Attempts:       row.Attempts + 1,
 			ResponseStatus: int32(outcome.Status),
@@ -179,7 +168,7 @@ func dispatchOne(ctx context.Context, row sqlc.WebhookDelivery, sub webhook.Subs
 	if !outcome.IsRetryable() || int(nextAttempts) >= maxRetries {
 		// Either a 4xx (operator must fix it) or retry budget exhausted.
 		webhook.RecordOutcome("dropped", elapsed)
-		_ = webhookDeps.Queries.MarkWebhookDeliveryDropped(ctx, sqlc.MarkWebhookDeliveryDroppedParams{
+		_ = runtime.Webhook.Queries.MarkWebhookDeliveryDropped(ctx, sqlc.MarkWebhookDeliveryDroppedParams{
 			ID:             row.ID,
 			Attempts:       nextAttempts,
 			ResponseStatus: int32(outcome.Status),
@@ -191,7 +180,7 @@ func dispatchOne(ctx context.Context, row sqlc.WebhookDelivery, sub webhook.Subs
 
 	backoff := webhook.NextBackoff(int(nextAttempts))
 	webhook.RecordOutcome("failed", elapsed)
-	_ = webhookDeps.Queries.MarkWebhookDeliveryFailed(ctx, sqlc.MarkWebhookDeliveryFailedParams{
+	_ = runtime.Webhook.Queries.MarkWebhookDeliveryFailed(ctx, sqlc.MarkWebhookDeliveryFailedParams{
 		ID:             row.ID,
 		Attempts:       nextAttempts,
 		ResponseStatus: int32(outcome.Status),
@@ -204,17 +193,17 @@ func dispatchOne(ctx context.Context, row sqlc.WebhookDelivery, sub webhook.Subs
 // loadSubscription pulls the row + decrypts the secret + decodes the
 // JSONB extra_headers. The decrypted plaintext lives only in the
 // returned struct; the dispatcher discards it after Send completes.
-func loadSubscription(ctx context.Context, id uuid.UUID) (webhook.Subscription, error) {
-	row, err := webhookDeps.Queries.GetWebhookSubscription(ctx, id)
+func (runtime DispatchRuntime) loadWebhookSubscription(ctx context.Context, id uuid.UUID) (webhook.Subscription, error) {
+	row, err := runtime.Webhook.Queries.GetWebhookSubscription(ctx, id)
 	if err != nil {
 		return webhook.Subscription{}, fmt.Errorf("get subscription: %w", err)
 	}
 	secret := ""
 	if row.SecretEncrypted != "" {
-		if webhookDeps.Encryptor == nil {
+		if runtime.Webhook.Encryptor == nil {
 			return webhook.Subscription{}, fmt.Errorf("encryptor unavailable; cannot decrypt secret")
 		}
-		plain, err := webhookDeps.Encryptor.Decrypt(row.SecretEncrypted)
+		plain, err := runtime.Webhook.Encryptor.Decrypt(row.SecretEncrypted)
 		if err != nil {
 			return webhook.Subscription{}, fmt.Errorf("decrypt secret: %w", err)
 		}
@@ -289,18 +278,17 @@ func truncateDispatchLastError(s string, n int) string {
 
 // HandleWebhookCleanupOld deletes webhook_deliveries rows older than
 // the retention window. Daily cadence; cooperative DB lease.
-func HandleWebhookCleanupOld(ctx context.Context, _ *asynq.Task) error {
+func (runtime DispatchRuntime) HandleWebhookCleanupOld(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, WebhookCleanupOldType, func() error {
-		if webhookDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "webhook cleanup not configured, skipping")
-			return nil
+		if runtime.Webhook.Queries == nil {
+			return fmt.Errorf("webhook cleanup runtime is not configured")
 		}
 		cutoff := time.Now().UTC().Add(-webhookRetention)
-		removed, err := webhookDeps.Queries.DeleteWebhookDeliveriesOlderThan(ctx, cutoff)
+		removed, err := runtime.Webhook.Queries.DeleteWebhookDeliveriesOlderThan(ctx, cutoff)
 		if err != nil {
 			return fmt.Errorf("delete old webhook deliveries: %w", err)
 		}
-		runtimeLogger().InfoContext(ctx, "webhook retention sweep",
+		runtimeLogger(ctx).InfoContext(ctx, "webhook retention sweep",
 			"deliveries_deleted", removed,
 			"cutoff", cutoff.Format(time.RFC3339),
 		)

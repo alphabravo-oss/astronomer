@@ -1,5 +1,5 @@
-import { forwardRef, type ComponentPropsWithoutRef } from 'react';
-import { Link as RouterLink } from '@tanstack/react-router';
+import { forwardRef, type ComponentPropsWithoutRef } from "react";
+import { Link as RouterLink } from "@tanstack/react-router";
 
 export interface LinkLocation {
   to: string;
@@ -7,7 +7,10 @@ export interface LinkLocation {
   hash?: string;
 }
 
-function splitOnce(value: string, separator: string): [string, string | undefined] {
+function splitOnce(
+  value: string,
+  separator: string,
+): [string, string | undefined] {
   const index = value.indexOf(separator);
   if (index === -1) return [value, undefined];
   return [value.slice(0, index), value.slice(index + 1)];
@@ -21,16 +24,16 @@ function splitOnce(value: string, separator: string): [string, string | undefine
  * the destination URL, matching Next.js string-href semantics.
  */
 export function hrefToLocation(href: string): LinkLocation {
-  const [withoutHash, hash] = splitOnce(href, '#');
-  const [to, query] = splitOnce(withoutHash, '?');
+  const [withoutHash, hash] = splitOnce(href, "#");
+  const [to, query] = splitOnce(withoutHash, "?");
   const search: Record<string, string> = {};
-  for (const [key, value] of new URLSearchParams(query ?? '')) {
+  for (const [key, value] of new URLSearchParams(query ?? "")) {
     search[key] = value;
   }
   return hash ? { to, search, hash } : { to, search };
 }
 
-export interface LinkProps extends Omit<ComponentPropsWithoutRef<'a'>, 'href'> {
+export interface LinkProps extends Omit<ComponentPropsWithoutRef<"a">, "href"> {
   href: string;
 }
 

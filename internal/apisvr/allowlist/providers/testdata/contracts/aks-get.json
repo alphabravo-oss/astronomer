@@ -1,0 +1,13 @@
+{
+  "id": "/subscriptions/fixture-sub/resourceGroups/fixture-rg/providers/Microsoft.ContainerService/managedClusters/fixture-aks",
+  "name": "fixture-aks",
+  "type": "Microsoft.ContainerService/managedClusters",
+  "location": "eastus",
+  "properties": {
+    "provisioningState": "Succeeded",
+    "fqdn": "fixture-aks.invalid",
+    "apiServerAccessProfile": {
+      "authorizedIPRanges": ["10.0.0.0/8"]
+    }
+  }
+}

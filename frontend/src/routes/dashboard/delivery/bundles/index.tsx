@@ -46,7 +46,7 @@ export function BundlesPage() {
     queryKey: queryKeys.delivery.bundles(projectId, params),
     queryFn: ({ signal }) => {
       signal.throwIfAborted();
-      return listComponentBundles(projectId, params);
+      return listComponentBundles(projectId, params, signal);
     },
     enabled: Boolean(projectId && allowed),
     refetchInterval: liveFallback(30_000),
@@ -158,9 +158,7 @@ function CreateBundleDialog({
       });
       toastSuccess("Component bundle created");
       onClose();
-      router.push(
-        entityHref("bundles", bundle.id),
-      );
+      router.push(entityHref("bundles", bundle.id));
     },
   });
   const submit = (event: FormEvent<HTMLFormElement>) => {

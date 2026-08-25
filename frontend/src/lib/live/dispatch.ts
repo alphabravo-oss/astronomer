@@ -9,10 +9,10 @@
  * produced query key through the central paced invalidator.
  */
 
-import type { QueryClient } from '@tanstack/react-query';
-import { parseFrame } from './envelope';
-import { pacedInvalidate } from './paced-invalidate';
-import { resolveEventRoute, type LiveEventData } from './routes';
+import type { QueryClient } from "@tanstack/react-query";
+import { parseFrame } from "./envelope";
+import { pacedInvalidate } from "./paced-invalidate";
+import { resolveEventRoute, type LiveEventData } from "./routes";
 
 /**
  * Handle one raw SSE frame. `target` is the stream's fan-out EventTarget;
@@ -31,7 +31,7 @@ export function dispatchLiveFrame(
   // the cluster-metrics merger) by envelope type, plus a `*` wildcard so
   // "subscribe to everything" consumers don't have to enumerate types.
   target.dispatchEvent(new CustomEvent(detail.type, { detail }));
-  target.dispatchEvent(new CustomEvent('*', { detail }));
+  target.dispatchEvent(new CustomEvent("*", { detail }));
 
   if (!queryClient) return;
   const route = resolveEventRoute(detail.type);

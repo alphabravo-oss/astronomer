@@ -122,6 +122,12 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	// after at most one interval instead of the entire stream lifetime.
 	bindings, restricted := h.snapshotStreamBindings(r.Context(), userID)
 
+	// Subscribe before acknowledging the stream. Browser clients treat the
+	// first flushed response as proof that mutations may safely begin; if the
+	// subscription is installed after that flush, an event published in the
+	// gap is permanently lost because the in-memory bus has no replay buffer.
+	ch := h.bus.Subscribe(r.Context())
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -145,8 +151,8 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	defer keepalive.Stop()
 
 	// T5 (D10): re-snapshot the caller's RBAC bindings every 5 minutes so a
-	// revocation mid-stream takes effect within one interval. On a refresh
-	// error the previous snapshot stays in force until the next tick.
+	// revocation mid-stream takes effect within one interval. Refresh failures
+	// replace the prior snapshot with an empty restricted one and fail closed.
 	refreshInterval := h.bindingRefreshInterval
 	if refreshInterval <= 0 {
 		refreshInterval = 5 * time.Minute
@@ -154,15 +160,15 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	bindingRefresh := time.NewTicker(refreshInterval)
 	defer bindingRefresh.Stop()
 
-	ch := h.bus.Subscribe(r.Context())
 	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case <-bindingRefresh.C:
-			if b, r2 := h.snapshotStreamBindings(r.Context(), userID); r2 || !restricted {
-				bindings, restricted = b, r2
-			}
+			// Refresh both grants and superuser state. Lookup failures return an
+			// empty restricted snapshot, so a control-plane outage fails closed
+			// until the next successful refresh.
+			bindings, restricted = h.snapshotStreamBindings(r.Context(), userID)
 		case <-keepalive.C:
 			ping, err := json.Marshal(struct {
 				Type string    `json:"type"`
@@ -210,17 +216,30 @@ func entityIDFromEventData(data any) (uuid.UUID, bool) {
 }
 
 // snapshotStreamBindings loads the caller's RBAC bindings for SEC-R07
-// per-event filtering. Returns restricted=false for superusers/unrestricted
-// principals (authz not wired, dev connections) or when the binding load
-// fails — callers on the refresh path must then keep the previous snapshot
-// rather than fail open.
+// per-event filtering. Returns restricted=false only for a verified active
+// superuser or an intentionally unwired development principal. User/binding
+// lookup failures return an empty restricted snapshot and therefore fail
+// closed until the next refresh.
 func (h *EventStreamHandler) snapshotStreamBindings(ctx context.Context, userID uuid.UUID) ([]rbac.RoleBinding, bool) {
 	if h.authz.engine == nil || h.authz.querier == nil || userID == uuid.Nil {
 		return nil, false
 	}
+	// Role bindings are intentionally bypassed for a current, active
+	// superuser—the same authority model used by ordinary HTTP middleware.
+	// Without this lookup, bootstrap and other superusers have an empty binding
+	// set and every cluster event is silently filtered from their SSE stream.
+	if h.queries != nil {
+		user, err := h.queries.GetUserByID(ctx, userID)
+		if err != nil || !user.IsActive {
+			return nil, true
+		}
+		if user.IsSuperuser {
+			return nil, false
+		}
+	}
 	b, err := h.authz.querier.GetUserBindings(ctx, userID.String())
 	if err != nil {
-		return nil, false
+		return nil, true
 	}
 	return b, true
 }

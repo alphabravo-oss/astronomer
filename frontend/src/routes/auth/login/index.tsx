@@ -1,23 +1,34 @@
 // Route files are the eslint-exempted surface for direct router imports.
-import { createFileRoute } from '@tanstack/react-router';
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { useRouter } from '@/lib/navigation';
-import { sanitizeReturnTo } from '@/lib/auth/session';
-import { Orbit, Github, Chrome, KeyRound, Eye, EyeOff, Loader2, ArrowRight, Shield, ArrowLeft } from 'lucide-react';
-import { useAuthStore } from '@/lib/store';
-import { useSSOProviders } from '@/lib/hooks';
-import { useAppForm, useStore } from '@/lib/form';
+import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { useRouter } from "@/lib/navigation";
+import { sanitizeReturnTo } from "@/lib/auth/session";
+import {
+  Orbit,
+  Github,
+  Chrome,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Loader2,
+  ArrowRight,
+  Shield,
+  ArrowLeft,
+} from "lucide-react";
+import { useAuthStore } from "@/lib/store";
+import { useSSOProviders } from "@/lib/hooks";
+import { useAppForm, useStore } from "@/lib/form";
 import {
   loginWithCredentialsChallengeAware,
   verifyTotpChallenge,
   type TotpChallenge,
-} from '@/lib/api/account-security';
-import type { SSOProvider, User } from '@/types';
-import { toastApiError, toastError } from '@/lib/toast';
-import { ActionButton } from '@/components/ui/action-button';
+} from "@/lib/api/account-security";
+import type { SSOProvider, User } from "@/types";
+import { toastApiError, toastError } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
 
-export const Route = createFileRoute('/auth/login/')({
+export const Route = createFileRoute("/auth/login/")({
   // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
   validateSearch: (search: Record<string, unknown>) =>
     search as { returnTo?: string } & Record<string, unknown>,
@@ -41,35 +52,47 @@ function LoginPage() {
   // On error the query data is undefined → we fall back to an empty list, the
   // same behavior the old imperative fetch had.
   const { data: ssoProvidersData } = useSSOProviders();
-  const ssoProviders = (ssoProvidersData ?? []).filter((provider) => provider.enabled);
+  const ssoProviders = (ssoProvidersData ?? []).filter(
+    (provider) => provider.enabled,
+  );
 
   const form = useAppForm({
-    defaultValues: { email: '', password: '' },
+    defaultValues: { email: "", password: "" },
     validators: {
       // Old check (imperative, pre-submit): `if (!form.email || !form.password)`
       // → ported 1:1 as a form-level onSubmit validator.
       onSubmit: ({ value }) =>
-        !value.email || !value.password ? 'Please enter your email address and password' : undefined,
+        !value.email || !value.password
+          ? "Please enter your email address and password"
+          : undefined,
     },
     // Same UX as before: the failed check surfaces as a toast, not inline.
-    onSubmitInvalid: () => toastError('Please enter your email address and password'),
+    onSubmitInvalid: () =>
+      toastError("Please enter your email address and password"),
     onSubmit: async ({ value }) => {
       try {
-        const result = await loginWithCredentialsChallengeAware(value.email, value.password);
-        if (result.kind === 'challenge') {
+        const result = await loginWithCredentialsChallengeAware(
+          value.email,
+          value.password,
+        );
+        if (result.kind === "challenge") {
           setChallenge(result.challenge);
           return;
         }
         login(result.user);
         router.push(sanitizeReturnTo(returnTo));
       } catch (error) {
-        toastApiError('', error, 'Login failed');
+        toastApiError("", error, "Login failed");
       }
     },
   });
   const loading = useStore(form.store, (state) => state.isSubmitting);
 
-  const completeTotp = (_token: string, _refresh: string | undefined, user: User) => {
+  const completeTotp = (
+    _token: string,
+    _refresh: string | undefined,
+    user: User,
+  ) => {
     login(user);
     router.push(sanitizeReturnTo(returnTo));
   };
@@ -84,11 +107,11 @@ function LoginPage() {
     }
   };
 
-  const providerIcon = (type: SSOProvider['type']) => {
+  const providerIcon = (type: SSOProvider["type"]) => {
     switch (type) {
-      case 'github':
+      case "github":
         return <Github className="h-4 w-4" />;
-      case 'google':
+      case "google":
         return <Chrome className="h-4 w-4" />;
       default:
         return <KeyRound className="h-4 w-4" />;
@@ -103,8 +126,18 @@ function LoginPage() {
         <div className="absolute inset-0 opacity-[0.03]">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
             <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="0.5" />
+              <pattern
+                id="grid"
+                width="40"
+                height="40"
+                patternUnits="userSpaceOnUse"
+              >
+                <path
+                  d="M 40 0 L 0 0 0 40"
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="0.5"
+                />
               </pattern>
             </defs>
             <rect width="100%" height="100%" fill="url(#grid)" />
@@ -121,8 +154,12 @@ function LoginPage() {
               <Orbit className="h-5 w-5 text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xl font-semibold text-white tracking-tight leading-tight">Astronomer</span>
-              <span className="text-[11px] text-zinc-500 leading-tight">by AlphaBravo</span>
+              <span className="text-xl font-semibold text-white tracking-tight leading-tight">
+                Astronomer
+              </span>
+              <span className="text-[11px] text-zinc-500 leading-tight">
+                by AlphaBravo
+              </span>
             </div>
           </div>
         </div>
@@ -155,8 +192,13 @@ function LoginPage() {
             </div>
           </div>
           <p className="text-xs text-zinc-600">
-            Developed by{' '}
-            <a href="https://alphabravo.io" target="_blank" rel="noopener noreferrer" className="text-zinc-500 hover:text-zinc-300 transition-colors">
+            Developed by{" "}
+            <a
+              href="https://alphabravo.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
               AlphaBravo
             </a>
           </p>
@@ -172,8 +214,12 @@ function LoginPage() {
               <Orbit className="h-5 w-5 text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xl font-semibold text-foreground tracking-tight leading-tight">Astronomer</span>
-              <span className="text-[11px] text-muted-foreground leading-tight">by AlphaBravo</span>
+              <span className="text-xl font-semibold text-foreground tracking-tight leading-tight">
+                Astronomer
+              </span>
+              <span className="text-[11px] text-muted-foreground leading-tight">
+                by AlphaBravo
+              </span>
             </div>
           </div>
 
@@ -218,108 +264,122 @@ function LoginPage() {
 
           {/* Divider */}
           {!challenge && (
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="px-3 bg-background text-muted-foreground">
+                  {ssoProviders.length > 0
+                    ? "or continue with password"
+                    : "continue with password"}
+                </span>
+              </div>
             </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="px-3 bg-background text-muted-foreground">
-                {ssoProviders.length > 0 ? 'or continue with password' : 'continue with password'}
-              </span>
-            </div>
-          </div>
           )}
 
           {/* Login Form */}
           {!challenge && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void form.handleSubmit();
-            }}
-            className="space-y-4"
-          >
-            <form.Field name="email">
-              {(field) => (
-                <div className="space-y-1.5">
-                  <label htmlFor="identifier" className="text-sm font-medium text-foreground">
-                    Email
-                  </label>
-                  <input
-                    id="identifier"
-                    type="email"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    placeholder="you@example.com"
-                    className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                      text-foreground placeholder:text-muted-foreground
-                      focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
-                      transition-colors"
-                    autoComplete="email"
-                    autoFocus
-                  />
-                </div>
-              )}
-            </form.Field>
-
-            <form.Field name="password">
-              {(field) => (
-                <div className="space-y-1.5">
-                  <label htmlFor="password" className="text-sm font-medium text-foreground">
-                    Password
-                  </label>
-                  <div className="relative">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void form.handleSubmit();
+              }}
+              className="space-y-4"
+            >
+              <form.Field name="email">
+                {(field) => (
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="identifier"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Email
+                    </label>
                     <input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
+                      id="identifier"
+                      type="email"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
-                      placeholder="Enter your password"
-                      className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm
+                      placeholder="you@example.com"
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                      text-foreground placeholder:text-muted-foreground
+                      focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
+                      transition-colors"
+                      autoComplete="email"
+                      data-initial-focus
+                    />
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="password">
+                {(field) => (
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="password"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder="Enter your password"
+                        className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm
                         text-foreground placeholder:text-muted-foreground
                         focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
                         transition-colors"
-                      autoComplete="current-password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
+                        autoComplete="current-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </form.Field>
+                )}
+              </form.Field>
 
-            <ActionButton
-              type="submit"
-              intent="primary"
-              className="w-full"
-              disabled={loading}
-              loading={loading}
-              loadingLabel="Sign in"
-            >
-              Sign in
-              <ArrowRight className="h-4 w-4" />
-            </ActionButton>
-
-            <div className="text-center">
-              <Link
-                href="/auth/login/forgot-password"
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              <ActionButton
+                type="submit"
+                intent="primary"
+                className="w-full"
+                disabled={loading}
+                loading={loading}
+                loadingLabel="Sign in"
               >
-                Forgot your password?
-              </Link>
-            </div>
-          </form>
+                Sign in
+                <ArrowRight className="h-4 w-4" />
+              </ActionButton>
+
+              <div className="text-center">
+                <Link
+                  href="/auth/login/forgot-password"
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
+            </form>
           )}
 
           <p className="text-xs text-center text-muted-foreground">
-            By signing in, you agree to the Astronomer terms of service and privacy policy.
+            By signing in, you agree to the Astronomer terms of service and
+            privacy policy.
           </p>
         </div>
       </div>
@@ -352,36 +412,43 @@ function TotpChallengeForm({
   const [useRecovery, setUseRecovery] = useState(false);
 
   const form = useAppForm({
-    defaultValues: { code: '' },
+    defaultValues: { code: "" },
     validators: {
       // Old checks (imperative): `if (!code) return` in submit plus the
       // disabled-button gate requiring 6 digits in authenticator mode —
       // ported 1:1 as a form-level onSubmit validator.
       onSubmit: ({ value }) =>
-        !value.code || (!useRecovery && value.code.length !== 6) ? 'Enter your code' : undefined,
+        !value.code || (!useRecovery && value.code.length !== 6)
+          ? "Enter your code"
+          : undefined,
     },
     onSubmit: async ({ value }) => {
       try {
-        const data = await verifyTotpChallenge(challenge.challengeToken, value.code);
+        const data = await verifyTotpChallenge(
+          challenge.challengeToken,
+          value.code,
+        );
         onSuccess(data.token, data.refresh, data.user);
       } catch (err) {
-        toastApiError('', err, 'Invalid code');
+        toastApiError("", err, "Invalid code");
       }
     },
   });
   const code = useStore(form.store, (state) => state.values.code);
   const busy = useStore(form.store, (state) => state.isSubmitting);
 
-  if (challenge.error === 'totp_enrollment_required') {
+  if (challenge.error === "totp_enrollment_required") {
     return (
       <div className="rounded-lg border border-status-warning/40 bg-status-warning/10 p-4 space-y-3">
         <div className="flex items-start gap-3">
           <Shield className="h-5 w-5 text-status-warning flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-foreground">2FA setup is required</p>
+            <p className="text-sm font-medium text-foreground">
+              2FA setup is required
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Your administrator requires two-factor authentication for all accounts. Set up an
-              authenticator app to continue.
+              Your administrator requires two-factor authentication for all
+              accounts. Set up an authenticator app to continue.
             </p>
           </div>
         </div>
@@ -418,12 +485,13 @@ function TotpChallengeForm({
       <div className="flex items-start gap-3 p-3 rounded-md border border-border bg-card">
         <Shield className="h-4 w-4 text-foreground flex-shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground">
-          Enter the {useRecovery ? 'recovery code' : 'six-digit code'} from your authenticator.
+          Enter the {useRecovery ? "recovery code" : "six-digit code"} from your
+          authenticator.
         </p>
       </div>
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">
-          {useRecovery ? 'Recovery code' : 'Authenticator code'}
+          {useRecovery ? "Recovery code" : "Authenticator code"}
         </label>
         <form.Field name="code">
           {(field) =>
@@ -434,7 +502,7 @@ function TotpChallengeForm({
                 onChange={(e) => field.handleChange(e.target.value.trim())}
                 onBlur={field.handleBlur}
                 placeholder="xxxx-xxxx-xxxx"
-                autoFocus
+                data-initial-focus
                 autoComplete="off"
                 className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
@@ -445,9 +513,13 @@ function TotpChallengeForm({
                 pattern="[0-9]*"
                 maxLength={6}
                 value={field.state.value}
-                autoFocus
+                data-initial-focus
                 autoComplete="one-time-code"
-                onChange={(e) => field.handleChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) =>
+                  field.handleChange(
+                    e.target.value.replace(/\D/g, "").slice(0, 6),
+                  )
+                }
                 onBlur={field.handleBlur}
                 placeholder="123 456"
                 className="w-full h-12 px-3 rounded-md border border-border bg-background text-center text-2xl font-mono tracking-[0.4em] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
@@ -479,11 +551,11 @@ function TotpChallengeForm({
           type="button"
           onClick={() => {
             setUseRecovery((v) => !v);
-            form.setFieldValue('code', '');
+            form.setFieldValue("code", "");
           }}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
-          {useRecovery ? 'Use authenticator code' : 'Use recovery code instead'}
+          {useRecovery ? "Use authenticator code" : "Use recovery code instead"}
         </button>
       </div>
     </form>

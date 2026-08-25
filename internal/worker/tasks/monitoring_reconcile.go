@@ -37,16 +37,15 @@ func HandleMonitoringReconcile(ctx context.Context, t *asynq.Task) error {
 			}
 		}
 
-		if runtimeDeps.Queries == nil {
-			slog.InfoContext(ctx, "monitoring reconcile runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("monitoring reconcile runtime is not configured")
 		}
 
-		backend, err := runtimeDeps.Queries.GetDefaultMonitoringBackend(ctx)
+		backend, err := runtimeDependencies(ctx).Queries.GetDefaultMonitoringBackend(ctx)
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				slog.InfoContext(ctx, "default monitoring backend not configured, skipping reconcile")
-				return nil
+				return ErrPeriodicTaskSkipped
 			}
 			return fmt.Errorf("load monitoring backend: %w", err)
 		}
@@ -56,11 +55,10 @@ func HandleMonitoringReconcile(ctx context.Context, t *asynq.Task) error {
 			return err
 		}
 		if client == nil {
-			slog.InfoContext(ctx, "monitoring backend query URL not configured, skipping cluster reconciliation")
-			return nil
+			return fmt.Errorf("default monitoring backend has no query URL")
 		}
 
-		clusters, err := listAllClustersPaged(ctx, runtimeDeps.Queries.ListClusters)
+		clusters, err := listAllClustersPaged(ctx, runtimeDependencies(ctx).Queries.ListClusters)
 		if err != nil {
 			return fmt.Errorf("list clusters: %w", err)
 		}
@@ -73,14 +71,14 @@ func HandleMonitoringReconcile(ctx context.Context, t *asynq.Task) error {
 					continue
 				}
 				if err := reconcileClusterMonitoring(ctx, client, cluster, backend, backendHealthy); err != nil {
-					runtimeLogger().WarnContext(ctx, "cluster monitoring reconcile failed", "cluster_id", cluster.ID.String(), "error", err)
+					runtimeLogger(ctx).WarnContext(ctx, "cluster monitoring reconcile failed", "cluster_id", cluster.ID.String(), "error", err)
 				}
 			}
 			return nil
 		}
 		fanOutClusters(ctx, clusters, 30*time.Second, func(ctx context.Context, cluster sqlc.Cluster) {
 			if err := reconcileClusterMonitoring(ctx, client, cluster, backend, backendHealthy); err != nil {
-				runtimeLogger().WarnContext(ctx, "cluster monitoring reconcile failed", "cluster_id", cluster.ID.String(), "error", err)
+				runtimeLogger(ctx).WarnContext(ctx, "cluster monitoring reconcile failed", "cluster_id", cluster.ID.String(), "error", err)
 			}
 		})
 
@@ -122,10 +120,10 @@ func reconcileMonitoringBackend(ctx context.Context, backend sqlc.MonitoringBack
 	// "degraded" — we cannot write it without re-sealing a document we could
 	// not read. The per-cluster configs still converge to "degraded" below,
 	// which is where an operator looks, and the error log line names the key.
-	full, err := imonitoring.ResolveAuthConfig(backend.AuthConfigEncrypted, backend.AuthConfig, monitoringDecryptor())
+	full, err := imonitoring.ResolveAuthConfig(backend.AuthConfigEncrypted, backend.AuthConfig, monitoringDecryptor(ctx))
 	credentialUnavailable := err != nil
 	if credentialUnavailable {
-		runtimeLogger().ErrorContext(ctx, "monitoring backend credential could not be decrypted: skipping the status write to avoid persisting a document with the credential missing",
+		runtimeLogger(ctx).ErrorContext(ctx, "monitoring backend credential could not be decrypted: skipping the status write to avoid persisting a document with the credential missing",
 			"backend_id", backend.ID.String(), "error", err)
 	}
 	authCfg := decodeJSONMapLocal(full)
@@ -140,8 +138,8 @@ func reconcileMonitoringBackend(ctx context.Context, backend sqlc.MonitoringBack
 			AuthType:            backend.AuthType,
 			AuthConfig:          backend.AuthConfig,
 			AuthConfigEncrypted: backend.AuthConfigEncrypted,
-			Decryptor:           monitoringDecryptor(),
-			Logger:              runtimeLogger(),
+			Decryptor:           monitoringDecryptor(ctx),
+			Logger:              runtimeLogger(ctx),
 			DefaultStepSeconds:  backend.DefaultStepSeconds,
 			TimeoutSeconds:      backend.TimeoutSeconds,
 		})
@@ -151,7 +149,7 @@ func reconcileMonitoringBackend(ctx context.Context, backend sqlc.MonitoringBack
 			client = c
 			if err := client.HealthCheck(ctx); err != nil {
 				status = "degraded"
-				runtimeLogger().WarnContext(ctx, "monitoring backend health check failed", "query_url", backend.QueryUrl, "error", err)
+				runtimeLogger(ctx).WarnContext(ctx, "monitoring backend health check failed", "query_url", backend.QueryUrl, "error", err)
 			} else {
 				status = "healthy"
 			}
@@ -183,10 +181,10 @@ func reconcileMonitoringBackend(ctx context.Context, backend sqlc.MonitoringBack
 			TimeoutSeconds:     backend.TimeoutSeconds,
 			CreatedByID:        backend.CreatedByID,
 		}
-		if err := imonitoring.SealInto(&params, authCfg, monitoringEncryptor()); err != nil {
+		if err := imonitoring.SealInto(&params, authCfg, monitoringEncryptor(ctx)); err != nil {
 			return backend, client, status == "healthy", err
 		}
-		updated, err := runtimeDeps.Queries.UpsertDefaultMonitoringBackend(ctx, params)
+		updated, err := runtimeDependencies(ctx).Queries.UpsertDefaultMonitoringBackend(ctx, params)
 		if err != nil {
 			return backend, client, status == "healthy", fmt.Errorf("persist monitoring backend status: %w", err)
 		}
@@ -197,7 +195,7 @@ func reconcileMonitoringBackend(ctx context.Context, backend sqlc.MonitoringBack
 }
 
 func reconcileClusterMonitoring(ctx context.Context, client *imonitoring.Client, cluster sqlc.Cluster, backend sqlc.MonitoringBackend, backendHealthy bool) error {
-	cfg, err := runtimeDeps.Queries.GetClusterMonitoringConfig(ctx, cluster.ID)
+	cfg, err := runtimeDependencies(ctx).Queries.GetClusterMonitoringConfig(ctx, cluster.ID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil
@@ -222,14 +220,14 @@ func reconcileClusterMonitoring(ctx context.Context, client *imonitoring.Client,
 		}
 		upCount, err := client.QueryScalar(ctx, fmt.Sprintf(`count(up{%s="%s"})`, label, escapePromLabelLocal(value)))
 		if err != nil {
-			runtimeLogger().WarnContext(ctx, "cluster metrics query failed", "cluster_id", cluster.ID.String(), "error", err)
+			runtimeLogger(ctx).WarnContext(ctx, "cluster metrics query failed", "cluster_id", cluster.ID.String(), "error", err)
 		} else if upCount > 0 {
 			status = "healthy"
 			lastHealthyAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
 		}
 	}
 
-	_, err = runtimeDeps.Queries.UpsertClusterMonitoringConfig(ctx, sqlc.UpsertClusterMonitoringConfigParams{
+	_, err = runtimeDependencies(ctx).Queries.UpsertClusterMonitoringConfig(ctx, sqlc.UpsertClusterMonitoringConfigParams{
 		ClusterID:               cfg.ClusterID,
 		BackendID:               backend.ID,
 		ClusterLabel:            cfg.ClusterLabel,

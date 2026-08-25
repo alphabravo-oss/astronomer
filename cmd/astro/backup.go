@@ -109,11 +109,11 @@ func newBackupListCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		params := &astroclient.GetApiV1BackupsParams{
+		params := &astroclient.GetBackupsParams{
 			Limit:  bkPageParam(cmd, "limit", limit),
 			Offset: bkPageParam(cmd, "offset", offset),
 		}
-		resp, err := client.GetApiV1BackupsWithResponse(cmd.Context(), params)
+		resp, err := client.GetBackupsWithResponse(cmd.Context(), params)
 		if err != nil {
 			return err
 		}
@@ -139,7 +139,7 @@ func newBackupGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1BackupsIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetBackupsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -189,7 +189,7 @@ func newBackupCreateCmd() *cobra.Command {
 			if len(excludedNamespaces) > 0 {
 				body.ExcludedNamespaces = &excludedNamespaces
 			}
-			resp, err := client.PostApiV1BackupsWithResponse(cmd.Context(), body)
+			resp, err := client.PostBackupsWithResponse(cmd.Context(), body)
 			if err != nil {
 				return err
 			}
@@ -222,7 +222,7 @@ func newBackupDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1BackupsIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteBackupsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -261,7 +261,7 @@ func newBackupRestoreCmd() *cobra.Command {
 			if len(namespaceMapping) > 0 {
 				body.NamespaceMapping = &namespaceMapping
 			}
-			resp, err := client.PostApiV1BackupsIdRestoreWithResponse(cmd.Context(), id, body)
+			resp, err := client.PostBackupsByIdRestoreWithResponse(cmd.Context(), id, body)
 			if err != nil {
 				return err
 			}
@@ -288,11 +288,11 @@ func newBackupRunsCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		params := &astroclient.GetApiV1BackupsRunsParams{
+		params := &astroclient.GetBackupsRunsParams{
 			Limit:  bkPageParam(cmd, "limit", limit),
 			Offset: bkPageParam(cmd, "offset", offset),
 		}
-		resp, err := client.GetApiV1BackupsRunsWithResponse(cmd.Context(), params)
+		resp, err := client.GetBackupsRunsWithResponse(cmd.Context(), params)
 		if err != nil {
 			return err
 		}
@@ -316,11 +316,11 @@ func newBackupRestoresCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		params := &astroclient.GetApiV1BackupsRestoresParams{
+		params := &astroclient.GetBackupsRestoresParams{
 			Limit:  bkPageParam(cmd, "limit", limit),
 			Offset: bkPageParam(cmd, "offset", offset),
 		}
-		resp, err := client.GetApiV1BackupsRestoresWithResponse(cmd.Context(), params)
+		resp, err := client.GetBackupsRestoresWithResponse(cmd.Context(), params)
 		if err != nil {
 			return err
 		}
@@ -365,11 +365,11 @@ func newScheduleListCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		params := &astroclient.GetApiV1BackupsSchedulesParams{
+		params := &astroclient.GetBackupsSchedulesParams{
 			Limit:  bkPageParam(cmd, "limit", limit),
 			Offset: bkPageParam(cmd, "offset", offset),
 		}
-		resp, err := client.GetApiV1BackupsSchedulesWithResponse(cmd.Context(), params)
+		resp, err := client.GetBackupsSchedulesWithResponse(cmd.Context(), params)
 		if err != nil {
 			return err
 		}
@@ -395,7 +395,7 @@ func newScheduleGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1BackupsSchedulesIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetBackupsSchedulesByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -496,7 +496,7 @@ func newScheduleCreateCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		resp, err := client.PostApiV1BackupsSchedulesWithResponse(cmd.Context(), body)
+		resp, err := client.PostBackupsSchedulesWithResponse(cmd.Context(), body)
 		if err != nil {
 			return err
 		}
@@ -528,7 +528,7 @@ func newScheduleUpdateCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		resp, err := client.PutApiV1BackupsSchedulesIdWithResponse(cmd.Context(), id, body)
+		resp, err := client.PutBackupsSchedulesByIdWithResponse(cmd.Context(), id, body)
 		if err != nil {
 			return err
 		}
@@ -555,7 +555,7 @@ func newScheduleDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1BackupsSchedulesIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteBackupsSchedulesByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -584,7 +584,7 @@ func newScheduleTriggerCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1BackupsSchedulesIdTriggerNowWithResponse(cmd.Context(), id)
+			resp, err := client.PostBackupsSchedulesByIdTriggerNowWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -629,11 +629,11 @@ func newStorageListCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		params := &astroclient.GetApiV1BackupsStorageParams{
+		params := &astroclient.GetBackupsStorageParams{
 			Limit:  bkPageParam(cmd, "limit", limit),
 			Offset: bkPageParam(cmd, "offset", offset),
 		}
-		resp, err := client.GetApiV1BackupsStorageWithResponse(cmd.Context(), params)
+		resp, err := client.GetBackupsStorageWithResponse(cmd.Context(), params)
 		if err != nil {
 			return err
 		}
@@ -659,7 +659,7 @@ func newStorageGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1BackupsStorageIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetBackupsStorageByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -761,7 +761,7 @@ func newStorageCreateCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		resp, err := client.PostApiV1BackupsStorageWithResponse(cmd.Context(), body)
+		resp, err := client.PostBackupsStorageWithResponse(cmd.Context(), body)
 		if err != nil {
 			return err
 		}
@@ -793,7 +793,7 @@ func newStorageUpdateCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		resp, err := client.PutApiV1BackupsStorageIdWithResponse(cmd.Context(), id, body)
+		resp, err := client.PutBackupsStorageByIdWithResponse(cmd.Context(), id, body)
 		if err != nil {
 			return err
 		}
@@ -820,7 +820,7 @@ func newStorageDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1BackupsStorageIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteBackupsStorageByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -853,7 +853,7 @@ func newStorageTestCmd() *cobra.Command {
 				return err
 			}
 			if useTestConnection {
-				resp, err := client.PostApiV1BackupsStorageIdTestConnectionWithResponse(cmd.Context(), id)
+				resp, err := client.PostBackupsStorageByIdTestConnectionWithResponse(cmd.Context(), id)
 				if err != nil {
 					return err
 				}
@@ -862,7 +862,7 @@ func newStorageTestCmd() *cobra.Command {
 				}
 				return renderSDK(cmd, resp.JSON200.Data)
 			}
-			resp, err := client.PostApiV1BackupsStorageIdTestWithResponse(cmd.Context(), id)
+			resp, err := client.PostBackupsStorageByIdTestWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -908,11 +908,11 @@ func newStorageConfigsListCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		params := &astroclient.GetApiV1BackupsStorageConfigsParams{
+		params := &astroclient.GetBackupsStorageConfigsParams{
 			Limit:  bkPageParam(cmd, "limit", limit),
 			Offset: bkPageParam(cmd, "offset", offset),
 		}
-		resp, err := client.GetApiV1BackupsStorageConfigsWithResponse(cmd.Context(), params)
+		resp, err := client.GetBackupsStorageConfigsWithResponse(cmd.Context(), params)
 		if err != nil {
 			return err
 		}
@@ -938,7 +938,7 @@ func newStorageConfigsGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1BackupsStorageConfigsIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetBackupsStorageConfigsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -967,7 +967,7 @@ func newStorageConfigsCreateCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		resp, err := client.PostApiV1BackupsStorageConfigsWithResponse(cmd.Context(), body)
+		resp, err := client.PostBackupsStorageConfigsWithResponse(cmd.Context(), body)
 		if err != nil {
 			return err
 		}
@@ -999,7 +999,7 @@ func newStorageConfigsUpdateCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		resp, err := client.PutApiV1BackupsStorageConfigsIdWithResponse(cmd.Context(), id, body)
+		resp, err := client.PutBackupsStorageConfigsByIdWithResponse(cmd.Context(), id, body)
 		if err != nil {
 			return err
 		}
@@ -1026,7 +1026,7 @@ func newStorageConfigsDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1BackupsStorageConfigsIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteBackupsStorageConfigsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -1055,7 +1055,7 @@ func newStorageConfigsTestConnCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1BackupsStorageConfigsIdTestConnectionWithResponse(cmd.Context(), id)
+			resp, err := client.PostBackupsStorageConfigsByIdTestConnectionWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -1082,7 +1082,7 @@ func newBackupControllerStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1BackupsControllerStatusWithResponse(cmd.Context())
+			resp, err := client.GetBackupsControllerStatusWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}

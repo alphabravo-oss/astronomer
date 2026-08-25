@@ -856,10 +856,14 @@ func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) 
 	logsConsumer.SetAuth(jwtMgr, nil)
 	shellHandler := handler.NewKubectlShellHandler(routeSecurityShellQuerier{}, nil, rbac.NewEngine(), kubectl.Deps{})
 	shellHandler.SetStreamAuth(jwtMgr, nil)
+	rbacEngine := rbac.NewEngine()
+	rbacQueries := routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}
+	clusterTemplates := handler.NewClusterTemplateHandler(nil)
+	clusterTemplates.SetAuthorization(rbacEngine, rbacQueries)
 	return RouterDependencies{
 		JWT:                 jwtMgr,
-		RBACEngine:          rbac.NewEngine(),
-		RBACQueries:         routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
+		RBACEngine:          rbacEngine,
+		RBACQueries:         rbacQueries,
 		Clusters:            handler.NewClusterHandler(routeSecurityClusterQuerier{}),
 		ClusterRegistration: handler.NewClusterRegistrationHandler(nil, events.NewBus()),
 		Auth:                handler.NewAuthHandler(nil, jwtMgr),
@@ -889,7 +893,7 @@ func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) 
 		ClusterAgent:        handler.NewClusterAgentHandler(nil),
 		ApiserverAudit:      handler.NewApiserverAuditHandler(nil),
 		ApiserverAllowlist:  handler.NewApiserverAllowlistHandler(nil),
-		ClusterTemplates:    handler.NewClusterTemplateHandler(nil),
+		ClusterTemplates:    clusterTemplates,
 		// Wired so the monitoring surface — including the /settings/monitoring
 		// routes that answered unauthenticated reads until the 2026-07-28 fix —
 		// is visible to the registry-driven route security tests at all.
@@ -919,6 +923,10 @@ func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) 
 		Alerting:          handler.NewAlertingHandler(nil),
 		Anomaly:           handler.NewAnomalyHandler(nil),
 		ChartRatings:      handler.NewChartRatingsHandler(nil),
+		AdminQueues:       handler.NewAdminQueuesHandler(nil, nil),
+		AdminTaskOutbox:   handler.NewAdminTaskOutboxHandler(nil),
+		AdminDrill:        handler.NewAdminDrillHandler(nil),
+		GroupMappings:     handler.NewGroupMappingsHandler(nil),
 		CharlieOnboarding: handler.NewCharlieOnboardingHandler(nil),
 		CharlieAdmin:      handler.NewCharlieAdminHandler(nil, nil),
 		CharlieSessions:   handler.NewCharlieSessionHandler(nil, nil),
@@ -943,6 +951,7 @@ func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) 
 		SCIM:              handler.NewSCIMHandler(nil),
 		SSOPresets:        handler.NewSSOPresetsHandler(),
 		Security:          handler.NewSecurityHandler(nil),
+		SIEMForwarders:    handler.NewSIEMHandler(nil, nil, slog.Default()),
 		StreamTickets:     handler.NewStreamTicketHandler(nil),
 		SupportBundle:     handler.NewSupportBundleHandler(nil, nil, ""),
 		Tools:             handler.NewToolHandler(nil),
@@ -997,9 +1006,7 @@ var routeSecurityRouterOptionalDeps = map[string]bool{
 	// Encryptor-dependent admin surfaces: constructing them with a nil
 	// encryptor would register routes that cannot exist in a real deployment
 	// without one.
-	"SIEMForwarders":        true,
 	"NotificationTemplates": true,
-	"GroupMappings":         true,
 	// Serve the embedded OpenAPI spec / Swagger UI and the platform Helm repo:
 	// static asset surfaces with no authz to audit.
 	"Docs":           true,
@@ -1010,9 +1017,6 @@ var routeSecurityRouterOptionalDeps = map[string]bool{
 	// Remaining unmounted admin/platform surfaces. Wiring these is the next
 	// increment of the same cleanup; they are listed explicitly so the gap is
 	// visible rather than implied by a nil field.
-	"AdminDrill":               true,
-	"AdminQueues":              true,
-	"AdminTaskOutbox":          true,
 	"ComplianceBaselines":      true,
 	"EventStream":              true,
 	"License":                  true,
@@ -1024,30 +1028,21 @@ var routeSecurityRouterOptionalDeps = map[string]bool{
 	"SSO":                      true,
 }
 
-func TestAdminRouteRegistrationsAreAuthProtected(t *testing.T) {
-	src, err := os.ReadFile("routes.go")
+// registerProtectedRoutes and the route modules it owns inherit JWT
+// authentication from the authenticated subrouter. registerAPIEntryRoutes is
+// deliberately mounted before that subrouter so it can host login and other
+// public entry points; every /admin registration in that file must therefore
+// carry requireAuth on the registration itself.
+func TestAPIEntryAdminRouteRegistrationsAreAuthProtected(t *testing.T) {
+	const routeFile = "routes_api_entry.go"
+	src, err := os.ReadFile(routeFile)
 	if err != nil {
-		t.Fatalf("read routes.go: %v", err)
+		t.Fatalf("read %s: %v", routeFile, err)
 	}
 	lines := strings.Split(string(src), "\n")
-	inProtectedRoutes := false
-	protectedDepth := 0
 	checked := 0
 
 	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "func registerProtectedRoutes(") {
-			inProtectedRoutes = true
-			protectedDepth = strings.Count(line, "{") - strings.Count(line, "}")
-			continue
-		}
-		if inProtectedRoutes {
-			protectedDepth += strings.Count(line, "{") - strings.Count(line, "}")
-			if protectedDepth <= 0 {
-				inProtectedRoutes = false
-			}
-		}
-
 		if !strings.Contains(line, `"/admin/`) {
 			continue
 		}
@@ -1055,17 +1050,14 @@ func TestAdminRouteRegistrationsAreAuthProtected(t *testing.T) {
 			continue
 		}
 		checked++
-		if inProtectedRoutes {
-			continue
-		}
 		if strings.Contains(line, "requireAuth(") {
 			continue
 		}
-		t.Fatalf("routes.go:%d registers an /admin/ route without requireAuth and outside registerProtectedRoutes: %s", i+1, strings.TrimSpace(line))
+		t.Fatalf("%s:%d registers a pre-authentication /admin/ route without requireAuth: %s", routeFile, i+1, strings.TrimSpace(line))
 	}
 
 	if checked == 0 {
-		t.Fatal("no /admin/ route registrations found")
+		t.Fatalf("no /admin/ route registrations found in %s", routeFile)
 	}
 }
 
@@ -1715,6 +1707,7 @@ func TestNamedResourceRoutesRequireCanonicalRBAC(t *testing.T) {
 			})
 			deniedReq := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
 			deniedReq.Header.Set("Authorization", "Bearer "+token)
+			deniedReq.Header.Set("Idempotency-Key", "route-rbac-test")
 			deniedRec := httptest.NewRecorder()
 			deniedRouter.ServeHTTP(deniedRec, deniedReq)
 			if deniedRec.Code != http.StatusForbidden {
@@ -1729,10 +1722,11 @@ func TestNamedResourceRoutesRequireCanonicalRBAC(t *testing.T) {
 			})
 			allowedReq := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
 			allowedReq.Header.Set("Authorization", "Bearer "+token)
+			allowedReq.Header.Set("Idempotency-Key", "route-rbac-test")
 			allowedRec := httptest.NewRecorder()
 			allowedRouter.ServeHTTP(allowedRec, allowedReq)
-			if allowedRec.Code != http.StatusOK {
-				t.Fatalf("allowed status = %d, want handler %d; body=%s", allowedRec.Code, http.StatusOK, allowedRec.Body.String())
+			if allowedRec.Code != http.StatusServiceUnavailable {
+				t.Fatalf("allowed status = %d, want durable-handler fail-closed %d; body=%s", allowedRec.Code, http.StatusServiceUnavailable, allowedRec.Body.String())
 			}
 		})
 	}
@@ -1746,6 +1740,22 @@ func TestNodeRoutesRequireNodeRBAC(t *testing.T) {
 		t.Fatalf("generate token: %v", err)
 	}
 	clusterID := uuid.New()
+	key, err := auth.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodeEncryptor, err := auth.NewEncryptor(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newNodeHandler := func() *handler.ResourceHandler {
+		h := handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{})
+		h.SetEncryptor(nodeEncryptor)
+		h.SetNodeMutationRunTx(func(ctx context.Context, fn func(handler.NodeMutationTx) error) error {
+			return fn(routeSecurityNodeMutationTx{})
+		})
+		return h
+	}
 
 	tests := []struct {
 		name          string
@@ -1777,7 +1787,7 @@ func TestNodeRoutesRequireNodeRBAC(t *testing.T) {
 			path:          "/api/v1/nodes/" + clusterID.String() + "/node-1/cordon/",
 			deniedRules:   routeSecurityBindings(rbac.ResourceClusters, rbac.VerbUpdate),
 			allowRules:    routeSecurityBindings(rbac.ResourceNodes, rbac.VerbUpdate),
-			allowedStatus: http.StatusOK,
+			allowedStatus: http.StatusAccepted,
 		},
 		{
 			name:          "drain requires nodes manage",
@@ -1795,7 +1805,7 @@ func TestNodeRoutesRequireNodeRBAC(t *testing.T) {
 				JWT:         jwtMgr,
 				RBACEngine:  rbac.NewEngine(),
 				RBACQueries: routeSecurityRBACQuerier{bindings: tt.deniedRules},
-				Resources:   handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{}),
+				Resources:   newNodeHandler(),
 				Workloads:   handler.NewWorkloadHandlerWithRequester(routeSecurityGenericResourceRequester{}),
 			})
 			deniedReq := httptest.NewRequest(tt.method, tt.path, nil)
@@ -1810,11 +1820,18 @@ func TestNodeRoutesRequireNodeRBAC(t *testing.T) {
 				JWT:         jwtMgr,
 				RBACEngine:  rbac.NewEngine(),
 				RBACQueries: routeSecurityRBACQuerier{bindings: tt.allowRules},
-				Resources:   handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{}),
+				Resources:   newNodeHandler(),
 				Workloads:   handler.NewWorkloadHandlerWithRequester(routeSecurityGenericResourceRequester{}),
 			})
-			allowedReq := httptest.NewRequest(tt.method, tt.path, nil)
+			body := strings.NewReader("")
+			if tt.name == "drain requires nodes manage" {
+				body = strings.NewReader(`{}`)
+			}
+			allowedReq := httptest.NewRequest(tt.method, tt.path, body)
 			allowedReq.Header.Set("Authorization", "Bearer "+token)
+			if tt.method == http.MethodPost {
+				allowedReq.Header.Set("Idempotency-Key", "route-node-once")
+			}
 			allowedRec := httptest.NewRecorder()
 			allowedRouter.ServeHTTP(allowedRec, allowedReq)
 			if allowedRec.Code != tt.allowedStatus {
@@ -1822,6 +1839,27 @@ func TestNodeRoutesRequireNodeRBAC(t *testing.T) {
 			}
 		})
 	}
+}
+
+type routeSecurityNodeMutationTx struct{}
+
+func (routeSecurityNodeMutationTx) CreateNodeOperationIdempotent(_ context.Context, arg sqlc.CreateNodeOperationIdempotentParams) (sqlc.NodeOperation, error) {
+	now := time.Now().UTC()
+	return sqlc.NodeOperation{
+		ID: uuid.New(), IdempotencyScope: arg.IdempotencyScope, IdempotencyKey: arg.IdempotencyKey,
+		RequestDigest: arg.RequestDigest, ClusterID: arg.ClusterID, NodeName: arg.NodeName,
+		Action: arg.Action, ParametersEncrypted: arg.ParametersEncrypted, Generation: 1,
+		Status: "pending", Progress: json.RawMessage(`{}`), CreatedByID: arg.CreatedByID,
+		CreatedAt: now, UpdatedAt: now,
+	}, nil
+}
+
+func (routeSecurityNodeMutationTx) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	return sqlc.TaskOutbox{ID: uuid.New(), TaskType: arg.TaskType, Payload: arg.Payload}, nil
+}
+
+func (routeSecurityNodeMutationTx) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
 }
 
 func TestK8sProxyMutationsAreAudited(t *testing.T) {
@@ -1848,11 +1886,18 @@ func TestK8sProxyMutationsAreAudited(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want proxy handler %d; body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
 	}
-	if len(audit.rows) != 1 {
-		t.Fatalf("audit rows = %d, want 1", len(audit.rows))
+	if len(audit.rows) != 2 {
+		t.Fatalf("audit rows = %d, want intent + outcome", len(audit.rows))
 	}
-	if audit.rows[0].Action != "cluster.k8s_proxy.forwarded" {
+	if audit.rows[0].Action != "cluster.k8s_proxy.intent" {
 		t.Fatalf("audit action = %q", audit.rows[0].Action)
+	}
+	if audit.rows[1].Action != "cluster.k8s_proxy.outcome" || audit.rows[1].StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("outcome audit = action %q status %d", audit.rows[1].Action, audit.rows[1].StatusCode)
+	}
+	if audit.rows[0].RequestID == "" || audit.rows[0].RequestID != audit.rows[1].RequestID || audit.rows[0].CorrelationID != audit.rows[1].CorrelationID {
+		t.Fatalf("intent/outcome identity mismatch: request=%q/%q correlation=%q/%q",
+			audit.rows[0].RequestID, audit.rows[1].RequestID, audit.rows[0].CorrelationID, audit.rows[1].CorrelationID)
 	}
 	if audit.rows[0].ResourceID != clusterID.String() {
 		t.Fatalf("audit resource id = %q, want %q", audit.rows[0].ResourceID, clusterID.String())

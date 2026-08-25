@@ -83,36 +83,50 @@
       ]
     },
     {
-      "title": "Agent connections (0 = disconnected)",
+      "title": "Transactional audit outbox age by status",
       "type": "timeseries",
       "gridPos": {"x": 0, "y": 28, "w": 12, "h": 8},
+      "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 300}]}}},
+      "targets": [{"expr": "max by (status) (astronomer_audit_outbox_oldest_seconds)", "legendFormat": "{{status}}", "refId": "A"}]
+    },
+    {
+      "title": "Transactional audit outbox rows by status",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 28, "w": 12, "h": 8},
+      "fieldConfig": {"defaults": {"decimals": 0, "min": 0}},
+      "targets": [{"expr": "sum by (status) (astronomer_audit_outbox_rows)", "legendFormat": "{{status}}", "refId": "A"}]
+    },
+    {
+      "title": "Agent connections (0 = disconnected)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 36, "w": 12, "h": 8},
       "fieldConfig": {"defaults": {"min": 0, "max": 1}},
       "targets": [{"expr": "astronomer_agent_connections", "legendFormat": "{{cluster_name}}", "refId": "A"}]
     },
     {
       "title": "Agent reconnect rate",
       "type": "timeseries",
-      "gridPos": {"x": 12, "y": 28, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 36, "w": 12, "h": 8},
       "targets": [{"expr": "sum by (cluster_id) (rate(astronomer_agent_reconnects_total[5m]))", "legendFormat": "{{cluster_id}}", "refId": "A"}]
     },
     {
       "title": "Management backup — hours since last success",
       "type": "stat",
-      "gridPos": {"x": 0, "y": 36, "w": 8, "h": 4},
+      "gridPos": {"x": 0, "y": 44, "w": 8, "h": 4},
       "fieldConfig": {"defaults": {"unit": "h", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 26}]}}},
       "targets": [{"expr": "(time() - max(kube_job_status_completion_time{job_name=~\".*-management-backup-.*\"} and on(job_name) kube_job_status_succeeded{job_name=~\".*-management-backup-.*\"} > 0)) / 3600", "refId": "A"}]
     },
     {
       "title": "Restore drill — days since last success",
       "type": "stat",
-      "gridPos": {"x": 8, "y": 36, "w": 8, "h": 4},
+      "gridPos": {"x": 8, "y": 44, "w": 8, "h": 4},
       "fieldConfig": {"defaults": {"unit": "d", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 14}]}}},
       "targets": [{"expr": "(time() - max(kube_job_status_completion_time{job_name=~\".*-restore-drill-.*\"} and on(job_name) kube_job_status_succeeded{job_name=~\".*-restore-drill-.*\"} > 0)) / 86400", "refId": "A"}]
     },
     {
       "title": "Backup / restore-drill failures (24h)",
       "type": "stat",
-      "gridPos": {"x": 16, "y": 36, "w": 8, "h": 4},
+      "gridPos": {"x": 16, "y": 44, "w": 8, "h": 4},
       "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}},
       "targets": [{"expr": "sum(increase(kube_job_status_failed{job_name=~\".*-management-backup-.*|.*-restore-drill-.*\"}[24h]))", "refId": "A"}]
     }

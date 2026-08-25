@@ -80,6 +80,30 @@ func (q *catalogSweepQuerier) CreateHelmChartVersion(_ context.Context, arg sqlc
 	return sqlc.HelmChartVersion{ID: uuid.New(), ChartID: arg.ChartID, Version: arg.Version}, nil
 }
 
+func TestTargetedCatalogSyncExecutesOnNonLeaderWorker(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
+
+	server, _ := indexServer(t, http.StatusOK)
+	repo := sqlc.HelmRepository{ID: uuid.New(), Name: "targeted", Url: server.URL, RepoType: "helm"}
+	q := &catalogSweepQuerier{repos: []sqlc.HelmRepository{repo}}
+	leader := &fakeLeader{held: false}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, Leader: leader, Log: slog.Default()})
+	task, err := NewCatalogSyncTask(CatalogSyncPayload{RepositoryID: repo.ID.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := HandleCatalogSync(ctx, task); err != nil {
+		t.Fatalf("targeted sync: %v", err)
+	}
+	if !q.syncedContains(repo.ID) {
+		t.Fatal("targeted durable task was acknowledged without syncing on a non-leader worker")
+	}
+	if leader.releaseCalled {
+		t.Fatal("targeted task unexpectedly entered the periodic leader-election path")
+	}
+}
+
 func (q *catalogSweepQuerier) ListChartVersions(context.Context, sqlc.ListChartVersionsParams) ([]sqlc.HelmChartVersion, error) {
 	return nil, nil
 }
@@ -175,8 +199,6 @@ func chartAssetServer(t *testing.T) (*httptest.Server, func(path string) []*http
 // Pre-fix this failed at the first assertion — the sweep returned on repo 2
 // and repos 3/4 were never fetched.
 func TestHandleCatalogSyncIsolatesPerRepoFailure(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
 	defer httpclient.DisableGuardForTest()()
 
 	good1, _ := indexServer(t, http.StatusOK)
@@ -191,9 +213,9 @@ func TestHandleCatalogSyncIsolatesPerRepoFailure(t *testing.T) {
 		{ID: uuid.New(), Name: "four", Url: good3.URL, RepoType: "helm"},
 	}
 	q := &catalogSweepQuerier{repos: repos}
-	runtimeDeps = RuntimeDependencies{Queries: q, Log: slog.Default()}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, Log: slog.Default()})
 
-	err := HandleCatalogSync(context.Background(), &asynq.Task{})
+	err := HandleCatalogSync(ctx, &asynq.Task{})
 
 	for _, idx := range []int{0, 2, 3} {
 		if !q.syncedContains(repos[idx].ID) {
@@ -242,9 +264,8 @@ func TestHandleCatalogSyncIsolatesPerRepoFailure(t *testing.T) {
 // rejected it, and the whole sweep aborted — the OCI ingest was never called
 // even once, from the scheduler, ever.
 func TestHandleCatalogSyncIngestsOCIRepos(t *testing.T) {
-	saved := runtimeDeps
 	savedIngest := ociIngest
-	t.Cleanup(func() { runtimeDeps = saved; ociIngest = savedIngest })
+	t.Cleanup(func() { ociIngest = savedIngest })
 	defer httpclient.DisableGuardForTest()()
 
 	http1, _ := indexServer(t, http.StatusOK)
@@ -258,7 +279,7 @@ func TestHandleCatalogSyncIngestsOCIRepos(t *testing.T) {
 	helmRepo := sqlc.HelmRepository{ID: uuid.New(), Name: "plain", Url: http1.URL, RepoType: "helm"}
 
 	q := &catalogSweepQuerier{repos: []sqlc.HelmRepository{ociRepo, helmRepo}}
-	runtimeDeps = RuntimeDependencies{Queries: q, Log: slog.Default()}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, Log: slog.Default()})
 
 	var ingested []string
 	ociIngest = func(_ context.Context, _ catalog.OCIQuerier, repo sqlc.HelmRepository, _ catalog.Decryptor, _ *slog.Logger) (int, int, error) {
@@ -266,7 +287,7 @@ func TestHandleCatalogSyncIngestsOCIRepos(t *testing.T) {
 		return 1, 3, nil
 	}
 
-	if err := HandleCatalogSync(context.Background(), &asynq.Task{}); err != nil {
+	if err := HandleCatalogSync(ctx, &asynq.Task{}); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
 	if len(ingested) != 1 || ingested[0] != ociRepo.Url {
@@ -300,8 +321,6 @@ func TestHandleCatalogSyncIngestsOCIRepos(t *testing.T) {
 // durable fix is rejecting git at create (P3
 // `git-backed-chart-repos-accepted-never-synced`).
 func TestHandleCatalogSyncGitRepoIsReportedNotSilentlyStale(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
 	defer httpclient.DisableGuardForTest()()
 
 	good, _ := indexServer(t, http.StatusOK)
@@ -309,9 +328,9 @@ func TestHandleCatalogSyncGitRepoIsReportedNotSilentlyStale(t *testing.T) {
 	helmRepo := sqlc.HelmRepository{ID: uuid.New(), Name: "plain", Url: good.URL, RepoType: "helm"}
 
 	q := &catalogSweepQuerier{repos: []sqlc.HelmRepository{gitRepo, helmRepo}}
-	runtimeDeps = RuntimeDependencies{Queries: q, Log: slog.Default()}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, Log: slog.Default()})
 
-	if err := HandleCatalogSync(context.Background(), &asynq.Task{}); err != nil {
+	if err := HandleCatalogSync(ctx, &asynq.Task{}); err != nil {
 		t.Fatalf("an unimplemented repo_type must not fail the task (permanently red reconciler): %v", err)
 	}
 	failure, ok := q.failureFor(gitRepo.ID)
@@ -340,8 +359,6 @@ func TestHandleCatalogSyncGitRepoIsReportedNotSilentlyStale(t *testing.T) {
 // control_plane_snapshot.go) stops the sweep instead, and the returned message
 // says "aborted" so the count is not read as broken repos.
 func TestHandleCatalogSyncStopsOnCancelledContext(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
 	defer httpclient.DisableGuardForTest()()
 
 	srv, seen := indexServer(t, http.StatusOK)
@@ -350,9 +367,9 @@ func TestHandleCatalogSyncStopsOnCancelledContext(t *testing.T) {
 		repos = append(repos, sqlc.HelmRepository{ID: uuid.New(), Name: string(rune('a' + i)), Url: srv.URL, RepoType: "helm"})
 	}
 	q := &catalogSweepQuerier{repos: repos}
-	runtimeDeps = RuntimeDependencies{Queries: q, Log: slog.Default()}
+	baseCtx := testRuntimeContext(RuntimeDependencies{Queries: q, Log: slog.Default()})
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(baseCtx)
 	cancel()
 
 	err := HandleCatalogSync(ctx, &asynq.Task{})
@@ -377,8 +394,6 @@ func TestHandleCatalogSyncStopsOnCancelledContext(t *testing.T) {
 // Pre-fix the Authorization header was absent: the worker built the request
 // itself and never touched auth_config.
 func TestHandleCatalogSyncAppliesRepoAuth(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
 	defer httpclient.DisableGuardForTest()()
 
 	basicSrv, basicSeen := indexServer(t, http.StatusOK)
@@ -393,9 +408,9 @@ func TestHandleCatalogSyncAppliesRepoAuth(t *testing.T) {
 		{ID: uuid.New(), Name: "public", Url: anonSrv.URL, RepoType: "helm"},
 	}
 	q := &catalogSweepQuerier{repos: repos}
-	runtimeDeps = RuntimeDependencies{Queries: q, Log: slog.Default()}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, Log: slog.Default()})
 
-	if err := HandleCatalogSync(context.Background(), &asynq.Task{}); err != nil {
+	if err := HandleCatalogSync(ctx, &asynq.Task{}); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
 
@@ -429,8 +444,6 @@ func TestHandleCatalogSyncAppliesRepoAuth(t *testing.T) {
 // This gap only became reachable when the index fetch learned to authenticate;
 // before that the 401 on index.yaml aborted the sweep before any row existed.
 func TestHandleCatalogSyncAppliesRepoAuthToChartAssets(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
 	defer httpclient.DisableGuardForTest()()
 
 	srv, requestsFor := chartAssetServer(t)
@@ -439,9 +452,9 @@ func TestHandleCatalogSyncAppliesRepoAuthToChartAssets(t *testing.T) {
 		AuthType: "basic", AuthConfig: json.RawMessage(`{"username":"u","password":"p"}`),
 	}
 	q := &catalogSweepQuerier{repos: []sqlc.HelmRepository{repoRecord}}
-	runtimeDeps = RuntimeDependencies{Queries: q, Log: slog.Default()}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, Log: slog.Default()})
 
-	if err := HandleCatalogSync(context.Background(), &asynq.Task{}); err != nil {
+	if err := HandleCatalogSync(ctx, &asynq.Task{}); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
 

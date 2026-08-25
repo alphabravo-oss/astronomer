@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,10 +18,15 @@ import (
 )
 
 type fakeAdminTaskOutboxQuerier struct {
-	users   map[uuid.UUID]sqlc.User
-	rows    []sqlc.TaskOutbox
-	retried []sqlc.RetryTaskOutboxParams
-	audits  int
+	fakeOperationIdempotencyStore
+	mutationMu sync.Mutex
+	users      map[uuid.UUID]sqlc.User
+	rows       []sqlc.TaskOutbox
+	retried    []sqlc.RetryTaskOutboxParams
+	audits     int
+	auditRows  []sqlc.UpsertAuditOutboxParams
+	auditErr   error
+	rowLocks   int
 }
 
 func (f *fakeAdminTaskOutboxQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.User, error) {
@@ -68,11 +74,25 @@ func (f *fakeAdminTaskOutboxQuerier) GetTaskOutbox(_ context.Context, id uuid.UU
 	return sqlc.TaskOutbox{}, pgx.ErrNoRows
 }
 
+func (f *fakeAdminTaskOutboxQuerier) GetTaskOutboxForUpdate(ctx context.Context, id uuid.UUID) (sqlc.TaskOutbox, error) {
+	f.rowLocks++
+	return f.GetTaskOutbox(ctx, id)
+}
+
+func (f *fakeAdminTaskOutboxQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	if f.auditErr != nil {
+		return sqlc.AuditOutbox{}, f.auditErr
+	}
+	f.auditRows = append(f.auditRows, arg)
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action, Detail: arg.Detail}, nil
+}
+
 func (f *fakeAdminTaskOutboxQuerier) RetryTaskOutbox(_ context.Context, arg sqlc.RetryTaskOutboxParams) (sqlc.TaskOutbox, error) {
 	f.retried = append(f.retried, arg)
 	for i, row := range f.rows {
 		if row.ID == arg.ID {
 			f.rows[i].Status = "pending"
+			f.rows[i].AttemptCount = 0
 			if arg.NextAttemptAt.Valid {
 				f.rows[i].NextAttemptAt = arg.NextAttemptAt.Time
 			}
@@ -85,6 +105,9 @@ func (f *fakeAdminTaskOutboxQuerier) RetryTaskOutbox(_ context.Context, arg sqlc
 
 func makeAdminTaskOutboxRequest(method, path string, callerID uuid.UUID) *http.Request {
 	req := httptest.NewRequest(method, path, nil)
+	if method != http.MethodGet {
+		req.Header.Set("Idempotency-Key", "task-outbox-test")
+	}
 	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
 		ID:    callerID.String(),
 		Email: "admin@example.com",
@@ -93,9 +116,15 @@ func makeAdminTaskOutboxRequest(method, path string, callerID uuid.UUID) *http.R
 }
 
 func adminTaskOutboxRouter(h *AdminTaskOutboxHandler) *chi.Mux {
+	if h.runTx == nil {
+		if q, ok := h.queries.(*fakeAdminTaskOutboxQuerier); ok {
+			h.SetRunTx(fakeAdminTaskOutboxRunTx(q))
+		}
+	}
 	r := chi.NewRouter()
 	r.Get("/api/v1/admin/task-outbox/", h.List)
 	r.Get("/api/v1/admin/task-outbox/dead/", h.ListDead)
+	r.Get("/api/v1/admin/task-outbox/{id}/", h.Get)
 	r.Post("/api/v1/admin/task-outbox/{id}/retry/", h.Retry)
 	return r
 }
@@ -221,8 +250,8 @@ func TestAdminTaskOutboxRetryMovesRowPending(t *testing.T) {
 	if len(q.retried) != 1 || q.retried[0].ID != row.ID {
 		t.Fatalf("retried = %+v", q.retried)
 	}
-	if q.audits != 1 {
-		t.Fatalf("audits = %d, want 1", q.audits)
+	if len(q.auditRows) != 1 {
+		t.Fatalf("audit rows = %d, want 1", len(q.auditRows))
 	}
 }
 

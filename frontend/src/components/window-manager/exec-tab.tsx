@@ -1,9 +1,13 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { PodTerminal, type PodTerminalActions, type TerminalConnectionStatus } from '@/components/workloads/pod-terminal';
-import { Eraser, RefreshCw } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useEffect, useRef, useState } from "react";
+import {
+  PodTerminal,
+  type PodTerminalActions,
+  type TerminalConnectionStatus,
+} from "@/components/workloads/pod-terminal";
+import { Eraser, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ExecTabProps {
   clusterId: string;
@@ -25,7 +29,7 @@ export function ExecTab({
   visible,
   onStatusChange,
 }: ExecTabProps) {
-  const [status, setStatus] = useState<TerminalConnectionStatus>('connecting');
+  const [status, setStatus] = useState<TerminalConnectionStatus>("connecting");
   // Bumping this remounts PodTerminal, which reliably reopens its WS — far
   // simpler than imperatively exposing reconnect() through a ref.
   const [reconnectNonce, setReconnectNonce] = useState(0);
@@ -50,19 +54,24 @@ export function ExecTab({
   return (
     <div
       className="flex flex-col h-full bg-background"
-      style={{ display: visible ? 'flex' : 'none' }}
+      style={{ display: visible ? "flex" : "none" }}
     >
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-muted/40 border-b border-border">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="font-mono truncate max-w-[280px]" title={`${namespace}/${pod}`}>
+          <span
+            className="font-mono truncate max-w-[280px]"
+            title={`${namespace}/${pod}`}
+          >
             {namespace}/{pod}
           </span>
           {container && (
             <span className="font-mono text-foreground/80">· {container}</span>
           )}
           <div className="flex items-center gap-1.5 ml-2">
-            <span className={cn('h-2 w-2 rounded-full', statusPillBg(status))} />
+            <span
+              className={cn("h-2 w-2 rounded-full", statusPillBg(status))}
+            />
             <span className="text-2xs">{statusLabel(status)}</span>
           </div>
         </div>
@@ -76,7 +85,7 @@ export function ExecTab({
               // would otherwise miss the shell.
               termActionsRef.current?.focus();
             }}
-            disabled={status !== 'connected'}
+            disabled={status !== "connected"}
             className="inline-flex items-center gap-1 h-6 px-2 rounded text-2xs
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors
               disabled:opacity-40 disabled:cursor-not-allowed"
@@ -85,7 +94,7 @@ export function ExecTab({
             <Eraser className="h-3 w-3" />
             <span className="hidden sm:inline">Clear</span>
           </button>
-          {(status === 'disconnected' || status === 'error') && (
+          {(status === "disconnected" || status === "error") && (
             <button
               onClick={() => setReconnectNonce((n) => n + 1)}
               className="inline-flex items-center gap-1 h-6 px-2 rounded text-2xs
@@ -106,7 +115,7 @@ export function ExecTab({
           clusterId={clusterId}
           namespace={namespace}
           pod={pod}
-          container={container || ''}
+          container={container || ""}
           embedded
           onStatusChange={setStatus}
           actionsRef={termActionsRef}
@@ -118,28 +127,28 @@ export function ExecTab({
 
 function statusPillBg(s: TerminalConnectionStatus): string {
   switch (s) {
-    case 'connected':
-      return 'bg-status-success';
-    case 'connecting':
-      return 'bg-status-warning';
-    case 'error':
-      return 'bg-status-error';
-    case 'disconnected':
+    case "connected":
+      return "bg-status-success";
+    case "connecting":
+      return "bg-status-warning";
+    case "error":
+      return "bg-status-error";
+    case "disconnected":
     default:
-      return 'bg-status-neutral';
+      return "bg-status-neutral";
   }
 }
 
 function statusLabel(s: TerminalConnectionStatus): string {
   switch (s) {
-    case 'connected':
-      return 'Connected';
-    case 'connecting':
-      return 'Connecting...';
-    case 'error':
-      return 'Error';
-    case 'disconnected':
+    case "connected":
+      return "Connected";
+    case "connecting":
+      return "Connecting...";
+    case "error":
+      return "Error";
+    case "disconnected":
     default:
-      return 'Disconnected';
+      return "Disconnected";
   }
 }

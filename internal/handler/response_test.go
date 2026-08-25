@@ -65,6 +65,28 @@ func TestRespondError(t *testing.T) {
 	}
 }
 
+func TestRespondAcceptedOperation(t *testing.T) {
+	w := httptest.NewRecorder()
+	RespondAcceptedOperation(w, "/api/v1/tools/operations/op-1/", map[string]any{"id": "op-1"})
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusAccepted)
+	}
+	if got := w.Header().Get("Location"); got != "/api/v1/tools/operations/op-1/" {
+		t.Fatalf("Location = %q", got)
+	}
+	if got := w.Header().Get("Retry-After"); got != "2" {
+		t.Fatalf("Retry-After = %q", got)
+	}
+	var body struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil || body.Data.ID != "op-1" {
+		t.Fatalf("accepted operation envelope id=%q err=%v", body.Data.ID, err)
+	}
+}
+
 func TestRespondRequestErrorIncludesRequestID(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

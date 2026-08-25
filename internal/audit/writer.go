@@ -27,13 +27,12 @@ type BatchQuerier interface {
 	BatchInsertAuditLog(ctx context.Context, rows []sqlc.CreateAuditLogV1Params) error
 }
 
-// Writer is the async batched audit-log writer. It owns a single bounded
-// channel of pending events and a single background goroutine that drains
-// the channel into multi-row INSERTs.
+// Writer is the async batched writer for ordinary sampled read events only.
+// Mandatory mutation/auth/system and sensitive-read events bypass it in
+// Record and synchronously enter PostgreSQL.
 //
-// Crash-safety: events live in an in-process channel; if the process exits
-// uncleanly between Enqueue and the next flush, those events are LOST.
-// The trade-off vs the per-request synchronous insert it replaces is:
+// Crash-safety: sampled reads in this channel may be lost on an unclean exit.
+// They are explicitly outside the mandatory compliance path. The trade-off is:
 //
 //   - per-request latency: one DB round-trip removed from every mutating
 //     handler's critical path.
@@ -47,11 +46,7 @@ type BatchQuerier interface {
 //     first drop is logged in full and every 1000th drop thereafter
 //     to avoid log spam.
 //
-// This is a deliberate weakening of audit durability — auditing what an
-// HTTP request did is valuable, but blocking the request on an extra DB
-// round-trip just to record the fact is not. Operators who need stronger
-// durability should either turn the writer off (Record falls back to the
-// per-request sync insert) or shrink the flush interval/batch size.
+// Mandatory evidence must never be passed directly to Enqueue.
 type Writer struct {
 	q   BatchQuerier
 	log *slog.Logger

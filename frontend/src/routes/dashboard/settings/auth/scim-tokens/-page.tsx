@@ -5,9 +5,9 @@
  * /scim/v2/* provisioning chain. The plaintext token is shown exactly once,
  * immediately after creation; list rows only ever carry metadata.
  */
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { useAppForm, useStore } from '@/lib/form';
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { useAppForm, useStore } from "@/lib/form";
 import {
   ArrowLeft,
   Plus,
@@ -16,18 +16,22 @@ import {
   Copy,
   Check,
   ShieldAlert,
-} from 'lucide-react';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
-import { formatRelativeTime } from '@/lib/utils';
-import { toastSuccess } from '@/lib/toast';
-import type { SCIMToken, SCIMTokenCreated } from '@/types';
-import { useSCIMTokens, useCreateSCIMToken, useRevokeSCIMToken } from './-hooks';
+} from "lucide-react";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { formatRelativeTime } from "@/lib/utils";
+import { toastSuccess } from "@/lib/toast";
+import type { SCIMToken, SCIMTokenCreated } from "@/types";
+import {
+  useSCIMTokens,
+  useCreateSCIMToken,
+  useRevokeSCIMToken,
+} from "./-hooks";
 
 function SCIMTokensList() {
   const { data, isLoading, isError, refetch } = useSCIMTokens();
@@ -39,8 +43,8 @@ function SCIMTokensList() {
 
   const columns: Column<SCIMToken>[] = [
     {
-      key: 'name',
-      header: 'Name',
+      key: "name",
+      header: "Name",
       accessor: (row) => (
         <div className="flex items-center gap-2">
           <KeyRound className="h-4 w-4 text-muted-foreground" />
@@ -49,30 +53,36 @@ function SCIMTokensList() {
       ),
     },
     {
-      key: 'prefix',
-      header: 'Token',
+      key: "prefix",
+      header: "Token",
       accessor: (row) => (
-        <span className="text-xs font-mono text-muted-foreground">{row.prefix}…</span>
+        <span className="text-xs font-mono text-muted-foreground">
+          {row.prefix}…
+        </span>
       ),
       sortable: false,
     },
     {
-      key: 'lastUsedAt',
-      header: 'Last used',
+      key: "lastUsedAt",
+      header: "Last used",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {row.lastUsedAt ? formatRelativeTime(row.lastUsedAt) : 'Never'}
+          {row.lastUsedAt ? formatRelativeTime(row.lastUsedAt) : "Never"}
         </span>
       ),
     },
     {
-      key: 'createdAt',
-      header: 'Created',
-      accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+      key: "createdAt",
+      header: "Created",
+      accessor: (row) => (
+        <span className="text-xs text-muted-foreground">
+          {formatRelativeTime(row.createdAt)}
+        </span>
+      ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       sortable: false,
       accessor: (row) => (
         <button
@@ -92,7 +102,11 @@ function SCIMTokensList() {
   return (
     <>
       <div className="flex items-center justify-end">
-        <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>
+        <ActionButton
+          intent="primary"
+          icon={<Plus className="h-4 w-4" />}
+          onClick={() => setShowCreate(true)}
+        >
           Mint Token
         </ActionButton>
       </div>
@@ -118,7 +132,9 @@ function SCIMTokensList() {
         />
       )}
 
-      {created && <RevealTokenModal created={created} onClose={() => setCreated(null)} />}
+      {created && (
+        <RevealTokenModal created={created} onClose={() => setCreated(null)} />
+      )}
 
       <ConfirmDialog
         open={!!revokeTarget}
@@ -149,7 +165,7 @@ function CreateSCIMTokenModal({
   const create = useCreateSCIMToken();
 
   const form = useAppForm({
-    defaultValues: { name: '' },
+    defaultValues: { name: "" },
     onSubmit: async ({ value }) => {
       try {
         const t = await create.mutateAsync(value.name.trim());
@@ -182,35 +198,48 @@ function CreateSCIMTokenModal({
         </>
       }
     >
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Name</label>
-            <form.Field name="name">
-              {(field) => (
-                <Input
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  placeholder="okta-provisioning"
-                  autoFocus
-                />
-              )}
-            </form.Field>
-            <p className="text-2xs text-muted-foreground">
-              A label to recognize this token. The secret is shown once on the next screen.
-            </p>
-          </div>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-aa359e33-186"
+        >
+          Name
+        </label>
+        <form.Field name="name">
+          {(field) => (
+            <Input
+              id="field-aa359e33-186"
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="okta-provisioning"
+              data-initial-focus
+            />
+          )}
+        </form.Field>
+        <p className="text-2xs text-muted-foreground">
+          A label to recognize this token. The secret is shown once on the next
+          screen.
+        </p>
+      </div>
     </ModalShell>
   );
 }
 
-function RevealTokenModal({ created, onClose }: { created: SCIMTokenCreated; onClose: () => void }) {
+function RevealTokenModal({
+  created,
+  onClose,
+}: {
+  created: SCIMTokenCreated;
+  onClose: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(created.token);
       setCopied(true);
-      toastSuccess('Token copied to clipboard');
+      toastSuccess("Token copied to clipboard");
       setTimeout(() => setCopied(false), 2000);
     } catch {
       /* clipboard blocked — operator can select the text manually */
@@ -229,27 +258,35 @@ function RevealTokenModal({ created, onClose }: { created: SCIMTokenCreated; onC
         </ActionButton>
       }
     >
-          <div className="flex items-start gap-2 rounded-lg border border-status-warning/30 bg-status-warning/10 p-3">
-            <ShieldAlert className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-foreground">
-              Copy this token now — it is shown <b>only once</b>. Only its hash is stored; it cannot be
-              recovered later.
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">{created.name}</label>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 px-3 py-2 rounded-md border border-border bg-background text-xs font-mono text-foreground break-all">
-                {created.token}
-              </code>
-              <ActionButton
-                onClick={copy}
-                size="icon"
-                title="Copy token"
-                icon={copied ? <Check className="h-4 w-4 text-status-success" /> : <Copy className="h-4 w-4" />}
-              />
-            </div>
-          </div>
+      <div className="flex items-start gap-2 rounded-lg border border-status-warning/30 bg-status-warning/10 p-3">
+        <ShieldAlert className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-foreground">
+          Copy this token now — it is shown <b>only once</b>. Only its hash is
+          stored; it cannot be recovered later.
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-foreground">
+          {created.name}
+        </label>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 px-3 py-2 rounded-md border border-border bg-background text-xs font-mono text-foreground break-all">
+            {created.token}
+          </code>
+          <ActionButton
+            onClick={copy}
+            size="icon"
+            title="Copy token"
+            icon={
+              copied ? (
+                <Check className="h-4 w-4 text-status-success" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )
+            }
+          />
+        </div>
+      </div>
     </ModalShell>
   );
 }
@@ -270,8 +307,10 @@ export default function SCIMTokensPage() {
           title="SCIM Provisioning Tokens"
           description={
             <>
-              Bearer tokens that authenticate your IdP&apos;s SCIM 2.0 provisioning requests to
-              <code className="mx-1 text-2xs font-mono">/scim/v2</code>. Mint one per IdP; revoke to cut off provisioning.
+              Bearer tokens that authenticate your IdP&apos;s SCIM 2.0
+              provisioning requests to
+              <code className="mx-1 text-2xs font-mono">/scim/v2</code>. Mint
+              one per IdP; revoke to cut off provisioning.
             </>
           }
         />

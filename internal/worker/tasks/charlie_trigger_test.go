@@ -21,11 +21,11 @@ func (f *charlieTriggerDispatcherFake) Dispatch(_ context.Context, eventID uuid.
 
 func TestCharlieTriggerTaskDispatchesExactDurableEvent(t *testing.T) {
 	fake := &charlieTriggerDispatcherFake{}
-	ConfigureCharlieTriggerDispatcher(fake)
-	t.Cleanup(func() { ConfigureCharlieTriggerDispatcher(nil) })
+	runtime := &CharlieTriggerRuntime{}
+	runtime.SetDispatcher(fake)
 	eventID := uuid.New()
 	task := asynq.NewTask(CharlieTriggerDispatchType, []byte(`{"event_id":"`+eventID.String()+`"}`))
-	if err := HandleCharlieTriggerDispatch(context.Background(), task); err != nil {
+	if err := runtime.HandleCharlieTriggerDispatch(context.Background(), task); err != nil {
 		t.Fatal(err)
 	}
 	if fake.calls != 1 || fake.eventID != eventID {
@@ -34,19 +34,18 @@ func TestCharlieTriggerTaskDispatchesExactDurableEvent(t *testing.T) {
 }
 
 func TestCharlieTriggerTaskFailsClosedOnInvalidPayloadOrInactiveRuntime(t *testing.T) {
-	ConfigureCharlieTriggerDispatcher(nil)
-	if err := HandleCharlieTriggerDispatch(context.Background(), asynq.NewTask(CharlieTriggerDispatchType, []byte(`{"event_id":"`+uuid.NewString()+`"}`))); err == nil {
+	runtime := &CharlieTriggerRuntime{}
+	if err := runtime.HandleCharlieTriggerDispatch(context.Background(), asynq.NewTask(CharlieTriggerDispatchType, []byte(`{"event_id":"`+uuid.NewString()+`"}`))); err == nil {
 		t.Fatal("inactive Charlie dispatcher accepted task")
 	}
 	fake := &charlieTriggerDispatcherFake{}
-	ConfigureCharlieTriggerDispatcher(fake)
-	t.Cleanup(func() { ConfigureCharlieTriggerDispatcher(nil) })
+	runtime.SetDispatcher(fake)
 	for _, payload := range [][]byte{
 		[]byte(`{"event_id":"not-a-uuid"}`),
 		[]byte(`{"event_id":"` + uuid.NewString() + `","prompt":"secret"}`),
 		[]byte(`{"event_id":"` + uuid.NewString() + `"} {}`),
 	} {
-		if err := HandleCharlieTriggerDispatch(context.Background(), asynq.NewTask(CharlieTriggerDispatchType, payload)); err == nil {
+		if err := runtime.HandleCharlieTriggerDispatch(context.Background(), asynq.NewTask(CharlieTriggerDispatchType, payload)); err == nil {
 			t.Fatalf("invalid payload accepted: %s", payload)
 		}
 	}

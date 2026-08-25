@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -78,9 +79,9 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 	// In-memory short-TTL idempotency guard for the resource/workload/node
 	// mutations below. Self-skips reads, so applying it to these groups
 	// covers every POST/PUT/PATCH/DELETE without per-route tagging. These
-	// typed verbs are NOT on the DB-backed operation-idempotency path (that
-	// covers tools/catalog/clusters/cluster agents/backups), so there is no double
-	// dedup. Janitor lifetime is process-scoped, matching the rate limiter.
+	// The durable operation-backed handlers also use the DB ledger; this local
+	// layer absorbs fast same-replica retries while the DB layer provides the
+	// cross-replica/restart guarantee. Janitor lifetime is process-scoped.
 	idem := appmiddleware.Idempotency(context.Background())
 
 	if deps.Resources != nil {
@@ -101,11 +102,22 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 				requireGenericResourceListPermission(deps.RBACEngine, deps.RBACQueries),
 				auditGenericSecretList(deps.AuditWriter),
 			).Get("/clusters/{cluster_id}/resources/generic/{resource_type}/", deps.Resources.ListGenericResources)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).
+				Get("/clusters/{cluster_id}/resources/discovery/", deps.Resources.GetResourceDiscovery)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).
+				Get("/clusters/{cluster_id}/resources/schema/", deps.Resources.GetResourceSchema)
+			// Authorization is operation-dependent: the handler binds the opaque ID
+			// to this cluster, then rechecks the stored originating resource verb or
+			// cluster:read for support access.
+			r.Get("/clusters/{cluster_id}/resources/operations/{id}/", deps.Resources.GetResourceOperation)
 			r.Get("/settings/", deps.Resources.GetGeneralSettings)
 			// Per-resource REST verbs (Python: /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}/).
 			r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "type", rbac.VerbRead)).
 				Get("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.Resources.GetNamedResource)
-			r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "type", rbac.VerbUpdate)).
+			r.With(
+				requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "type", rbac.VerbUpdate),
+				requireNamedResourceForcePermission(deps.RBACEngine, deps.RBACQueries, "type"),
+			).
 				Put("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.Resources.UpdateNamedResource)
 			r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "type", rbac.VerbDelete)).
 				Delete("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.Resources.DeleteNamedResourceREST)
@@ -119,6 +131,9 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/annotations/remove/", deps.Resources.RemoveNodeAnnotation)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/taints/", deps.Resources.AddNodeTaint)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/taints/remove/", deps.Resources.RemoveNodeTaint)
+			// The handler performs an action-aware current-permission check after
+			// loading and route-binding the receipt (read OR its mutation verb).
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/nodes/{cluster_id}/{node_name}/operations/{id}/", deps.Resources.GetNodeOperation)
 			// User CRUD (List/Get already wired above; add Create/Update/Delete + reset-password).
 			// These identity-plane mutations require both users:* RBAC and an
 			// admin-scoped API token when token auth is used. Browser sessions rely
@@ -149,7 +164,9 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 			r.Use(idem)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/workloads/controller/status/", deps.Workloads.ControllerStatus)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/workloads/operations/", deps.Workloads.ListOperations)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/workloads/operations/{id}/", deps.Workloads.GetOperation)
+			// Receipt authorization is row-aware: creators may poll their own
+			// mutation receipts, while support readers retain scoped access.
+			r.Get("/workloads/operations/{id}/", deps.Workloads.GetOperation)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbUpdate)).Post("/workloads/operations/{id}/retry/", deps.Workloads.RetryOperation)
 			r.With(requireListPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbList, deps.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/workloads/", deps.Workloads.List)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/", deps.Workloads.Get)
@@ -178,4 +195,20 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 		).Handle("/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", deps.ServiceProxy)
 	}
 
+}
+
+// requireNamedResourceForcePermission adds a second, stronger permission check
+// only when a caller explicitly asks server-side apply to take conflicting
+// field ownership. Ordinary updates continue to require update.
+func requireNamedResourceForcePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, routeParam string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !strings.EqualFold(r.URL.Query().Get("force"), "true") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			resource, _ := namedResourcePermission(chi.URLParam(r, routeParam), rbac.VerbManage)
+			requirePermission(engine, querier, resource, rbac.VerbManage)(next).ServeHTTP(w, r)
+		})
+	}
 }

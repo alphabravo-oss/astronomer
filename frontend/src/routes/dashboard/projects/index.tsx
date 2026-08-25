@@ -1,30 +1,25 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useState } from 'react';
-import { useRouter } from '@/lib/navigation';
+import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { useRouter } from "@/lib/navigation";
 import {
   useProjects,
   useCreateProject,
   useDeleteProject,
   useClusters,
   useClusterNamespaces,
-} from '@/lib/hooks';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { formatRelativeTime, cn } from '@/lib/utils';
-import type { Project } from '@/types';
-import {
-  FolderKanban,
-  Plus,
-  Trash2,
-  Users,
-} from 'lucide-react';
-import { toastError } from '@/lib/toast';
-import { useAppForm, useStore } from '@/lib/form';
+} from "@/lib/hooks";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { formatRelativeTime, cn } from "@/lib/utils";
+import type { Project } from "@/types";
+import { FolderKanban, Plus, Trash2, Users } from "lucide-react";
+import { toastError } from "@/lib/toast";
+import { useAppForm, useStore } from "@/lib/form";
 
 function ProjectsPage() {
   const router = useRouter();
@@ -64,40 +59,42 @@ function ProjectsPage() {
 
   const projectColumns: Column<Project>[] = [
     {
-      key: 'name',
-      header: 'Project',
+      key: "name",
+      header: "Project",
       accessor: (row) => (
         <div className="flex items-center gap-2">
           <FolderKanban className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="font-medium text-foreground">{row.displayName}</p>
-            <p className="text-xs text-muted-foreground font-mono">{row.name}</p>
+            <p className="text-xs text-muted-foreground font-mono">
+              {row.name}
+            </p>
           </div>
         </div>
       ),
     },
     {
-      key: 'description',
-      header: 'Description',
+      key: "description",
+      header: "Description",
       accessor: (row) => (
         <span className="text-sm text-muted-foreground truncate max-w-[300px] block">
-          {row.description || '--'}
+          {row.description || "--"}
         </span>
       ),
       sortable: false,
     },
     {
-      key: 'cluster',
-      header: 'Cluster',
+      key: "cluster",
+      header: "Cluster",
       accessor: (row) => {
         // The Go backend returns cluster_id (singular). The legacy
         // TypeScript type carries an optional clusterIds[] array from
         // an earlier multi-cluster design — handle both gracefully so
         // this column works against whichever shape the API ships.
-        const ids: string[] =
-          (row as unknown as { cluster_id?: string }).cluster_id
-            ? [(row as unknown as { cluster_id: string }).cluster_id]
-            : row.clusterIds || (row.clusterId ? [row.clusterId] : []);
+        const ids: string[] = (row as unknown as { cluster_id?: string })
+          .cluster_id
+          ? [(row as unknown as { cluster_id: string }).cluster_id]
+          : row.clusterIds || (row.clusterId ? [row.clusterId] : []);
         if (ids.length === 0) {
           return <span className="text-xs text-muted-foreground">—</span>;
         }
@@ -121,16 +118,17 @@ function ProjectsPage() {
         );
       },
       sortAccessor: (row) => {
-        const cid = (row as unknown as { cluster_id?: string }).cluster_id
-          || row.clusterId
-          || (row.clusterIds && row.clusterIds[0])
-          || '';
-        return clusterById.get(cid) || '';
+        const cid =
+          (row as unknown as { cluster_id?: string }).cluster_id ||
+          row.clusterId ||
+          (row.clusterIds && row.clusterIds[0]) ||
+          "";
+        return clusterById.get(cid) || "";
       },
     },
     {
-      key: 'namespaces',
-      header: 'Namespaces',
+      key: "namespaces",
+      header: "Namespaces",
       accessor: (row) => {
         const namespaces = row.namespaces ?? [];
         return (
@@ -140,7 +138,10 @@ function ProjectsPage() {
             ) : (
               <>
                 {namespaces.slice(0, 3).map((ns) => (
-                  <span key={ns} className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">
+                  <span
+                    key={ns}
+                    className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+                  >
                     {ns}
                   </span>
                 ))}
@@ -157,40 +158,49 @@ function ProjectsPage() {
       sortable: false,
     },
     {
-      key: 'members',
-      header: 'Members',
+      key: "members",
+      header: "Members",
       accessor: (row) => {
         const count = row.members?.length;
         return (
           <div className="flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="tabular-nums text-sm">{count == null ? '—' : count}</span>
+            <span className="tabular-nums text-sm">
+              {count == null ? "—" : count}
+            </span>
           </div>
         );
       },
       sortAccessor: (row) => row.members?.length ?? -1,
-      align: 'center',
+      align: "center",
     },
     {
-      key: 'resourceQuota',
-      header: 'Resource Quota',
+      key: "resourceQuota",
+      header: "Resource Quota",
       accessor: (row) => {
         const extra = row as Project & {
           resourceQuotaCpuLimit?: string;
           resourceQuotaMemoryLimit?: string;
         };
         const cpu = row.resourceQuota?.cpuLimit || extra.resourceQuotaCpuLimit;
-        const mem = row.resourceQuota?.memoryLimit || extra.resourceQuotaMemoryLimit;
+        const mem =
+          row.resourceQuota?.memoryLimit || extra.resourceQuotaMemoryLimit;
         if (!cpu && !mem) {
-          return <span className="text-xs text-muted-foreground">No quota</span>;
+          return (
+            <span className="text-xs text-muted-foreground">No quota</span>
+          );
         }
         return (
           <div className="flex flex-wrap gap-1">
             {cpu ? (
-              <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">CPU: {cpu}</span>
+              <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                CPU: {cpu}
+              </span>
             ) : null}
             {mem ? (
-              <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">Mem: {mem}</span>
+              <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                Mem: {mem}
+              </span>
             ) : null}
           </div>
         );
@@ -198,17 +208,19 @@ function ProjectsPage() {
       sortable: false,
     },
     {
-      key: 'created',
-      header: 'Created',
+      key: "created",
+      header: "Created",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>
+        <span className="text-xs text-muted-foreground">
+          {formatRelativeTime(row.createdAt)}
+        </span>
       ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       accessor: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
           <button
             onClick={() => setDeleteTarget(row)}
             className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
@@ -228,7 +240,11 @@ function ProjectsPage() {
         title="Projects"
         description="Organize clusters and namespaces into logical projects"
         actions={
-          <ActionButton intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreateModal(true)}>
+          <ActionButton
+            intent="primary"
+            icon={<Plus className="h-4 w-4" />}
+            onClick={() => setShowCreateModal(true)}
+          >
             Create Project
           </ActionButton>
         }
@@ -278,21 +294,23 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
 
   const form = useAppForm({
     defaultValues: {
-      name: '',
-      displayName: '',
-      description: '',
-      clusterId: '',
+      name: "",
+      displayName: "",
+      description: "",
+      clusterId: "",
       namespaces: [] as string[],
     },
     validators: {
       // Old check (imperative, pre-submit): name + display name required →
       // ported 1:1 as a form-level onSubmit validator; same message.
       onSubmit: ({ value }) =>
-        !value.name || !value.displayName ? 'Name and display name are required' : undefined,
+        !value.name || !value.displayName
+          ? "Name and display name are required"
+          : undefined,
     },
     // Same UX as before: the failed check surfaces as a toast, not inline.
     onSubmitInvalid: ({ formApi }) => {
-      const err = formApi.state.errors.find((e) => typeof e === 'string');
+      const err = formApi.state.errors.find((e) => typeof e === "string");
       if (err) toastError(err);
     },
     onSubmit: async ({ value }) => {
@@ -321,7 +339,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
 
   const toggleNamespace = (ns: string) => {
     form.setFieldValue(
-      'namespaces',
+      "namespaces",
       selectedNamespaces.includes(ns)
         ? selectedNamespaces.filter((n) => n !== ns)
         : [...selectedNamespaces, ns],
@@ -348,109 +366,147 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
         </>
       }
     >
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Name</label>
-              <form.Field name="name">
-                {(field) => (
-                  <Input
-                    type="text"
-                    value={field.state.value}
-                    onChange={(e) =>
-                      field.handleChange(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))
-                    }
-                    onBlur={field.handleBlur}
-                    placeholder="project-name"
-                  />
-                )}
-              </form.Field>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Display Name</label>
-              <form.Field name="displayName">
-                {(field) => (
-                  <Input
-                    type="text"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    placeholder="My Project"
-                  />
-                )}
-              </form.Field>
-            </div>
-          </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-7e87cd12-353"
+          >
+            Name
+          </label>
+          <form.Field name="name">
+            {(field) => (
+              <Input
+                id="field-7e87cd12-353"
+                type="text"
+                value={field.state.value}
+                onChange={(e) =>
+                  field.handleChange(
+                    e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+                  )
+                }
+                onBlur={field.handleBlur}
+                placeholder="project-name"
+              />
+            )}
+          </form.Field>
+        </div>
+        <div className="space-y-1.5">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-7e87cd12-369"
+          >
+            Display Name
+          </label>
+          <form.Field name="displayName">
+            {(field) => (
+              <Input
+                id="field-7e87cd12-369"
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="My Project"
+              />
+            )}
+          </form.Field>
+        </div>
+      </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Description</label>
-            <form.Field name="description">
-              {(field) => (
-                <Input
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  placeholder="Describe this project's purpose"
-                />
-              )}
-            </form.Field>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Cluster</label>
-            <form.Field name="clusterId">
-              {(field) => (
-                <Select
-                  value={field.state.value}
-                  onChange={(e) => {
-                    field.handleChange(e.target.value);
-                    form.setFieldValue('namespaces', []);
-                  }}
-                  onBlur={field.handleBlur}
-                >
-                  <option value="">Select a cluster</option>
-                  {clusters.map((cluster) => (
-                    <option key={cluster.id} value={cluster.id}>
-                      {cluster.displayName}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </form.Field>
-          </div>
-
-          {clusterId && (
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Namespaces</label>
-              <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-2 rounded-md border border-border bg-background">
-                {namespaces.length === 0 ? (
-                  <span className="text-xs text-muted-foreground">Loading namespaces...</span>
-                ) : (
-                  namespaces.map((ns) => (
-                    <button
-                      key={ns.name}
-                      onClick={() => toggleNamespace(ns.name)}
-                      className={cn(
-                        'px-2.5 py-1 rounded text-xs font-medium transition-colors',
-                        selectedNamespaces.includes(ns.name)
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:text-foreground'
-                      )}
-                    >
-                      {ns.name}
-                    </button>
-                  ))
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {selectedNamespaces.length} namespace{selectedNamespaces.length !== 1 ? 's' : ''} selected
-              </p>
-            </div>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-7e87cd12-385"
+        >
+          Description
+        </label>
+        <form.Field name="description">
+          {(field) => (
+            <Input
+              id="field-7e87cd12-385"
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="Describe this project's purpose"
+            />
           )}
+        </form.Field>
+      </div>
+
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-7e87cd12-400"
+        >
+          Cluster
+        </label>
+        <form.Field name="clusterId">
+          {(field) => (
+            <Select
+              id="field-7e87cd12-400"
+              value={field.state.value}
+              onChange={(e) => {
+                field.handleChange(e.target.value);
+                form.setFieldValue("namespaces", []);
+              }}
+              onBlur={field.handleBlur}
+            >
+              <option value="">Select a cluster</option>
+              {clusters.map((cluster) => (
+                <option key={cluster.id} value={cluster.id}>
+                  {cluster.displayName}
+                </option>
+              ))}
+            </Select>
+          )}
+        </form.Field>
+      </div>
+
+      {clusterId && (
+        <div className="space-y-1.5">
+          <span
+            id="project-namespaces-label"
+            className="text-sm font-medium text-foreground"
+          >
+            Namespaces
+          </span>
+          <div
+            role="group"
+            aria-labelledby="project-namespaces-label"
+            className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-2 rounded-md border border-border bg-background"
+          >
+            {namespaces.length === 0 ? (
+              <span className="text-xs text-muted-foreground">
+                Loading namespaces...
+              </span>
+            ) : (
+              namespaces.map((ns) => (
+                <button
+                  key={ns.name}
+                  onClick={() => toggleNamespace(ns.name)}
+                  className={cn(
+                    "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                    selectedNamespaces.includes(ns.name)
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {ns.name}
+                </button>
+              ))
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {selectedNamespaces.length} namespace
+            {selectedNamespaces.length !== 1 ? "s" : ""} selected
+          </p>
+        </div>
+      )}
     </ModalShell>
   );
 }
 
-export const Route = createFileRoute('/dashboard/projects/')({
+export const Route = createFileRoute("/dashboard/projects/")({
   component: ProjectsPage,
 });

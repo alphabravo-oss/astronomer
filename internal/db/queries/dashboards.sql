@@ -104,10 +104,11 @@ RETURNING id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, u
 
 -- name: UpdatePrometheusDatasource :one
 UPDATE prometheus_datasources
-SET url             = $2,
-    auth_encrypted  = $3,
-    tls_skip_verify = $4,
-    enabled         = $5,
+SET name            = $2,
+    url             = $3,
+    auth_encrypted  = $4,
+    tls_skip_verify = $5,
+    enabled         = $6,
     updated_at      = now()
 WHERE id = $1
 RETURNING id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at;

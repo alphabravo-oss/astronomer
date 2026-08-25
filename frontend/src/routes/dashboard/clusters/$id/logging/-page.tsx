@@ -1,20 +1,27 @@
-import { useState } from 'react';
-import { Plus, Ship } from 'lucide-react';
-import { useParams } from '@/lib/navigation';
-import { Link } from '@/lib/link';
-import { ActionButton } from '@/components/ui/action-button';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { useAttachAstronomerLogs, useCluster, useLoggingAttachStatus } from '@/lib/hooks';
-import { usePermissionDecision } from '@/lib/permission-hooks';
-import { PipelinesTab } from '@/routes/dashboard/logging/-pipelines-tab';
-import { CreatePipelineModal } from '@/routes/dashboard/logging/-pipeline-modal';
+import { useState } from "react";
+import { Plus, Ship } from "lucide-react";
+import { useParams } from "@/lib/navigation";
+import { Link } from "@/lib/link";
+import { ActionButton } from "@/components/ui/action-button";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import {
+  useAttachAstronomerLogs,
+  useCluster,
+  useLoggingAttachStatus,
+} from "@/lib/hooks";
+import { usePermissionDecision } from "@/lib/permission-hooks";
+import { PipelinesTab } from "@/routes/dashboard/logging/-pipelines-tab";
+import { CreatePipelineModal } from "@/routes/dashboard/logging/-pipeline-modal";
 
 export function ClusterLoggingPage() {
   const params = useParams();
   const clusterId = params.id as string;
   const { data: cluster } = useCluster(clusterId);
   const [showPipelineModal, setShowPipelineModal] = useState(false);
-  const canCreate = usePermissionDecision('logging', 'create', { type: 'cluster', id: clusterId });
+  const canCreate = usePermissionDecision("logging", "create", {
+    type: "cluster",
+    id: clusterId,
+  });
   const attachStatus = useLoggingAttachStatus(clusterId);
   const attach = useAttachAstronomerLogs(clusterId);
   const ingestPublic = Boolean(attachStatus.data?.ingestPublic);
@@ -25,7 +32,7 @@ export function ClusterLoggingPage() {
     <PageShell>
       <PageHeader
         title="Logging"
-        description={`Log pipelines for ${cluster?.displayName || cluster?.name || 'this cluster'}`}
+        description={`Log pipelines for ${cluster?.displayName || cluster?.name || "this cluster"}`}
         actions={
           <div className="flex items-center gap-2">
             <Link
@@ -43,7 +50,9 @@ export function ClusterLoggingPage() {
                 onClick={() => attach.mutate(false)}
                 data-testid="attach-astronomer-logs"
               >
-                {attached ? 'Astronomer logs attached' : 'Ship logs to Astronomer'}
+                {attached
+                  ? "Astronomer logs attached"
+                  : "Ship logs to Astronomer"}
               </ActionButton>
             ) : null}
             <ActionButton
@@ -58,7 +67,10 @@ export function ClusterLoggingPage() {
       />
 
       {showAttach && !attached ? (
-        <p className="text-sm text-muted-foreground" data-testid="attach-astronomer-disclaimer">
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="attach-astronomer-disclaimer"
+        >
           Astronomer logs is convenience, not compliance. Hosted Loki is a
           fail-closed warehouse; BYO destinations remain first-class.
         </p>

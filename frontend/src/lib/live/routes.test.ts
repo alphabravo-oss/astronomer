@@ -73,7 +73,7 @@ const livenessKeys = [
   qk.agents.all,
   qk.clusters.detail(CID),
 ];
-const fleetLivenessKeys = [...livenessKeys, qk.delivery.fleet];
+const estateLivenessKeys = [...livenessKeys, qk.delivery.estate];
 const conditionsKeys = [
   qk.clusters.conditions(CID),
   qk.clusters.conditionRemediation(CID),
@@ -81,8 +81,8 @@ const conditionsKeys = [
 
 /** Expected keys per event type, built exclusively from the factory. */
 const EVENT_CASES: Record<string, QueryKey[]> = {
-  "cluster.connected": fleetLivenessKeys,
-  "cluster.disconnected": fleetLivenessKeys,
+  "cluster.connected": estateLivenessKeys,
+  "cluster.disconnected": estateLivenessKeys,
   // Heartbeat also refreshes the conditions surface (P4.9).
   "cluster.heartbeat": [...livenessKeys, ...conditionsKeys],
   // Merger-owned for list/detail rows (patched in place); conditions +
@@ -91,9 +91,9 @@ const EVENT_CASES: Record<string, QueryKey[]> = {
   "cluster.metrics": [qk.clusters.metricsAll(CID)],
   "cluster.created": [qk.clusters.listAll],
   "cluster.updated": [qk.clusters.listAll, qk.clusters.detail(CID)],
-  "cluster.deleted": fleetLivenessKeys,
+  "cluster.deleted": estateLivenessKeys,
   "agent.reconnecting": livenessKeys,
-  "agent.failed": fleetLivenessKeys,
+  "agent.failed": estateLivenessKeys,
   "cluster.k8s_changed": [
     qk.clusters.podsAll(CID),
     qk.workloads.byCluster(CID),
@@ -121,7 +121,7 @@ const EVENT_CASES: Record<string, QueryKey[]> = {
   "siem_forwarder.changed": [qk.siemForwarders.all],
   "cluster_agents.changed": [
     qk.agents.all,
-    qk.delivery.fleet,
+    qk.delivery.estate,
     qk.agents.operations(CID),
   ],
   "delivery_source.changed": [qk.delivery.sourcesAll(PID)],
@@ -130,11 +130,11 @@ const EVENT_CASES: Record<string, QueryKey[]> = {
   "delivery_rollout.changed": [
     qk.delivery.rolloutsAll(PID),
     qk.delivery.deploymentsAll(PID),
-    qk.delivery.fleet,
+    qk.delivery.estate,
   ],
   "cluster_deployment.changed": [
     qk.delivery.deploymentsAll(PID),
-    qk.delivery.fleet,
+    qk.delivery.estate,
     qk.delivery.clusterInventory(PID, CID),
   ],
   "template_binding.changed": [qk.clusterPages.templateBinding(CID)],
@@ -274,7 +274,9 @@ describe("EVENT_ROUTES", () => {
 
   it("routes alerting.changed per payload kind (P4.9)", () => {
     const route = EVENT_ROUTES["alerting.changed"];
-    expect(route({ ...fixture(), kind: "rule" })).toEqual([qk.alerting.rulesAll]);
+    expect(route({ ...fixture(), kind: "rule" })).toEqual([
+      qk.alerting.rulesAll,
+    ]);
     expect(route({ ...fixture(), kind: "event" })).toEqual([
       qk.alerting.eventsAll,
     ]);

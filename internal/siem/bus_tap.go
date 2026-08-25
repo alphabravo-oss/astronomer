@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
@@ -41,6 +42,7 @@ const EnqueueBufferSize = 2048
 type TapQuerier interface {
 	ListEnabledSIEMForwarders(ctx context.Context) ([]sqlc.SiemForwarder, error)
 	EnqueueSIEMEvent(ctx context.Context, arg sqlc.EnqueueSIEMEventParams) (sqlc.SiemForwardQueue, error)
+	EnqueueSIEMEventDeduped(ctx context.Context, arg sqlc.EnqueueSIEMEventDedupedParams) (sqlc.SiemForwardQueue, error)
 	CountSIEMQueueByForwarder(ctx context.Context, forwarderID uuid.UUID) (int64, error)
 	ListOldestSIEMQueue(ctx context.Context, arg sqlc.ListOldestSIEMQueueParams) ([]int64, error)
 	DeleteSIEMQueueByIDs(ctx context.Context, ids []int64) error
@@ -84,6 +86,7 @@ type enqueueJob struct {
 	eventName   string
 	payload     []byte
 	severity    string
+	dedupeKey   string
 }
 
 // NewBusTap wires the dependencies. matcher is required (webhook.MatchFilters
@@ -170,9 +173,18 @@ func (t *BusTap) HandleEvent(ctx context.Context, ev events.Event) {
 		return
 	}
 	eventName := string(ev.Type)
+	stableAuditID := stableAuditEventID(eventName, ev.Data)
+	if stableAuditID != "" {
+		// Transactional audit delivery already inserted every matching SIEM
+		// receipt in DeliverAuditOutbox's PostgreSQL statement. Re-enqueuing the
+		// local bus copy is unnecessary and, under queue pressure, could evict an
+		// older mandatory receipt before the dedupe conflict is observed.
+		return
+	}
+	envelopeID := fmt.Sprintf("%d", ev.ID)
 	payload, err := json.Marshal(eventEnvelope{
 		EventName: eventName,
-		EventID:   fmt.Sprintf("%d", ev.ID),
+		EventID:   envelopeID,
 		Timestamp: ev.Time,
 		Detail:    events.RawJSON(ev.Data),
 	})
@@ -201,6 +213,7 @@ func (t *BusTap) HandleEvent(ctx context.Context, ev events.Event) {
 			eventName:   eventName,
 			payload:     payload,
 			severity:    severityForEvent(eventName, ev.Data),
+			dedupeKey:   "",
 		}:
 		default:
 			RecordDropped(sub.Name, "tap_buffer_full", 1)
@@ -273,15 +286,42 @@ func (t *BusTap) insertOne(ctx context.Context, job enqueueJob) {
 			}
 		}
 	}
-	if _, err := t.q.EnqueueSIEMEvent(ctx, sqlc.EnqueueSIEMEventParams{
-		ForwarderID: job.forwarderID,
-		EventName:   job.eventName,
-		Payload:     job.payload,
-		Severity:    job.severity,
-	}); err != nil {
-		t.log.WarnContext(ctx, "siem tap: enqueue failed",
-			"forwarder_id", job.forwarderID.String(), "event", job.eventName, "error", err)
+	var enqueueErr error
+	if job.dedupeKey != "" {
+		_, enqueueErr = t.q.EnqueueSIEMEventDeduped(ctx, sqlc.EnqueueSIEMEventDedupedParams{
+			ForwarderID: job.forwarderID, EventName: job.eventName,
+			Payload: job.payload, Severity: job.severity,
+			DedupeKey: pgtype.Text{String: job.dedupeKey, Valid: true},
+		})
+	} else {
+		_, enqueueErr = t.q.EnqueueSIEMEvent(ctx, sqlc.EnqueueSIEMEventParams{
+			ForwarderID: job.forwarderID, EventName: job.eventName,
+			Payload: job.payload, Severity: job.severity,
+		})
 	}
+	if enqueueErr != nil {
+		t.log.WarnContext(ctx, "siem tap: enqueue failed",
+			"forwarder_id", job.forwarderID.String(), "event", job.eventName, "error", enqueueErr)
+	}
+}
+
+func stableAuditEventID(eventName string, data any) string {
+	if !stringHasPrefix(eventName, "audit.") {
+		return ""
+	}
+	values, ok := data.(map[string]any)
+	if !ok {
+		return ""
+	}
+	raw, ok := values["event_id"].(string)
+	if !ok {
+		return ""
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil || id == uuid.Nil {
+		return ""
+	}
+	return "audit:" + id.String()
 }
 
 // subscriptions returns the cached enabled-forwarders list, refetching

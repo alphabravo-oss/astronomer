@@ -149,6 +149,27 @@ type scimGroupMember struct {
 	Display string `json:"display,omitempty"`
 }
 
+// openapi:request SCIMGroupCreateRequest
+type scimGroupCreateRequest struct {
+	DisplayName string            `json:"displayName"`
+	Members     []scimGroupMember `json:"members"`
+	// RoleID is an Astronomer extension selecting the mapped global role. When
+	// omitted, the handler chooses the built-in read-only role.
+	RoleID string `json:"roleId,omitempty"`
+}
+
+// openapi:request SCIMGroupPatchRequest
+type scimGroupPatchRequest struct {
+	Schemas    []string                  `json:"schemas"`
+	Operations []scimGroupPatchOperation `json:"Operations"`
+}
+
+type scimGroupPatchOperation struct {
+	Op    string          `json:"op"`
+	Path  string          `json:"path"`
+	Value json.RawMessage `json:"value"`
+}
+
 type scimGroup struct {
 	Schemas     []string          `json:"schemas"`
 	ID          string            `json:"id"`
@@ -393,6 +414,7 @@ func (h *SCIMHandler) PutUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // scimPatchRequest is the RFC 7644 §3.5.2 PatchOp envelope.
+// openapi:request-operation patchScimUsersById
 type scimPatchRequest struct {
 	Schemas    []string      `json:"schemas"`
 	Operations []scimPatchOp `json:"Operations"`
@@ -688,13 +710,7 @@ func (h *SCIMHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 // visible to List/Get and to SSO group sync. Optional members[] are
 // written into user_idp_groups.
 func (h *SCIMHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		DisplayName string            `json:"displayName"`
-		Members     []scimGroupMember `json:"members"`
-		// Optional extension: role_id of a global role to map. When empty we
-		// pick the built-in Auditor role (read-only default).
-		RoleID string `json:"roleId,omitempty"`
-	}
+	var body scimGroupCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.scimError(w, http.StatusBadRequest, "invalid JSON body")
 		return
@@ -736,14 +752,7 @@ func (h *SCIMHandler) PatchGroup(w http.ResponseWriter, r *http.Request) {
 		h.scimError(w, http.StatusNotFound, "group not found")
 		return
 	}
-	var body struct {
-		Schemas    []string `json:"schemas"`
-		Operations []struct {
-			Op    string          `json:"op"`
-			Path  string          `json:"path"`
-			Value json.RawMessage `json:"value"`
-		} `json:"Operations"`
-	}
+	var body scimGroupPatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.scimError(w, http.StatusBadRequest, "invalid JSON body")
 		return
@@ -902,9 +911,9 @@ func (h *SCIMHandler) addUserToSCIMGroup(ctx context.Context, userIDStr, groupNa
 	groups = append(groups, groupName)
 	raw, _ := json.Marshal(groups)
 	_, err = h.queries.UpsertUserIDPGroups(ctx, sqlc.UpsertUserIDPGroupsParams{
-		UserID:    uid,
-		Groups:    raw,
-		SyncedAt:  time.Now().UTC(),
+		UserID:   uid,
+		Groups:   raw,
+		SyncedAt: time.Now().UTC(),
 	})
 	return err
 }
@@ -1070,7 +1079,7 @@ func (h *SCIMHandler) ServiceProviderConfig(w http.ResponseWriter, r *http.Reque
 		"bulk":             map[string]any{"supported": false, "maxOperations": 0, "maxPayloadSize": 0},
 		// We only implement `userName eq "x"`, but filter is advertised as
 		// supported because IdPs gate the pre-create lookup on this flag.
-		"filter":         map[string]any{"supported": true, "maxResults": scimMaxListResult},
+		"filter": map[string]any{"supported": true, "maxResults": scimMaxListResult},
 		// DIR-03: Groups support create + patch (membership / displayName).
 		"changePassword": map[string]any{"supported": false},
 		"sort":           map[string]any{"supported": false},

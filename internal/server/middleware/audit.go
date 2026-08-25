@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net"
 	"net/http"
@@ -176,6 +177,21 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 				return
 			}
 
+			// Reserve content-free compliance evidence before invoking any
+			// mutating handler. If PostgreSQL cannot accept the intent, fail
+			// closed: allowing the side effect would create an unaudited success.
+			resourceType, resourceID := parsePathResource(r.URL.Path)
+			if err := writeMandatoryAuditIntent(r, writer, resourceType, resourceID); err != nil {
+				log.ErrorContext(r.Context(), "mandatory audit intent persistence failed",
+					"method", r.Method, "resource_type", resourceType,
+					"request_id", GetRequestID(r.Context()), "error", err)
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Retry-After", "1")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`{"error":{"code":"audit_unavailable","message":"Mandatory audit storage is unavailable"}}`))
+				return
+			}
+
 			start := time.Now()
 			sw := &statusWriter{ResponseWriter: w}
 			next.ServeHTTP(sw, r)
@@ -199,8 +215,6 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 			// Dropping 4xx (401/403/409) / 5xx here would leave DENIED/FAILED
 			// mutations invisible in the audit log — a compliance blind spot.
 			// The status is carried through so the outcome is auditable.
-			resourceType, resourceID := parsePathResource(r.URL.Path)
-
 			log.Info("audit",
 				"method", r.Method,
 				"path", r.URL.Path,
@@ -214,6 +228,31 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 			writeAuditLog(r, sw.status, writer, resourceType, resourceID, start)
 		})
 	}
+}
+
+func writeMandatoryAuditIntent(r *http.Request, writer any, resourceType, resourceID string) error {
+	writerV1, ok := writer.(AuditWriterV1)
+	if !ok || writerV1 == nil || r == nil {
+		return nil
+	}
+	action := "request." + strings.ToLower(r.Method) + ".intent"
+	path := r.URL.Path
+	detail := json.RawMessage(`{"phase":"reserved"}`)
+	if isCharlieAPIPath(path) {
+		action = "charlie.http.mutation.intent"
+		resourceType = "charlie_http_request"
+		resourceID = ""
+		path = ""
+		detail = json.RawMessage(`{}`)
+	}
+	return writerV1.CreateAuditLogV1(r.Context(), sqlc.CreateAuditLogV1Params{
+		Source: "http", CorrelationID: GetCorrelationID(r.Context()),
+		UserID: AuthenticatedUserUUID(r.Context()), ActorAuthMethod: authMethod(r.Context()),
+		Action: action, ResourceType: resourceType, ResourceID: resourceID,
+		HTTPMethod: r.Method, Path: path, StatusCode: http.StatusProcessing,
+		RequestID: GetRequestID(r.Context()), IpAddress: RemoteIPAddr(r),
+		UserAgent: r.UserAgent(), Detail: detail, ActionClass: audit.ClassMutation,
+	})
 }
 
 func isCharlieAPIPath(path string) bool {

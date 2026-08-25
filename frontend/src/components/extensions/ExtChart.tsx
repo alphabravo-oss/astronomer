@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // §Schema Tier-1 — chart renderer. Series rows -> first-party SVG bars/areas.
 // Runs no third-party JS and no charting library: geometry comes from the pure
@@ -6,9 +6,14 @@
 // x labels as text nodes. A hostile manifest can only influence bar heights and
 // label text — never markup.
 
-import { cn } from '@/lib/utils';
-import { buildChartSeries, chartMax, formatValue, type ProxyRow } from './declarative';
-import type { ChartSpec } from '@/lib/api/extensions';
+import { cn } from "@/lib/utils";
+import {
+  buildChartSeries,
+  chartMax,
+  formatValue,
+  type ProxyRow,
+} from "./declarative";
+import type { ChartSpec } from "@/lib/api/extensions";
 
 export interface ExtChartProps {
   rows: ProxyRow[];
@@ -19,10 +24,10 @@ export interface ExtChartProps {
 // Fixed palette indexed by series position. Closed set so the manifest cannot
 // name an arbitrary color string.
 const SERIES_COLORS = [
-  'var(--primary)',
-  'var(--status-info)',
-  'var(--status-warning)',
-  'var(--status-success)',
+  "var(--primary)",
+  "var(--status-info)",
+  "var(--status-warning)",
+  "var(--status-success)",
 ];
 
 const CHART_H = 160;
@@ -35,7 +40,7 @@ export function ExtChart({ rows, spec, emptyText }: ExtChartProps) {
   if (points.length === 0) {
     return (
       <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-        {emptyText || 'No data'}
+        {emptyText || "No data"}
       </p>
     );
   }
@@ -59,7 +64,7 @@ export function ExtChart({ rows, spec, emptyText }: ExtChartProps) {
             const groupW = colW / Math.max(1, spec.y.length);
             const x = i * colW + s * groupW;
             const color = SERIES_COLORS[s % SERIES_COLORS.length];
-            if (spec.type === 'bar') {
+            if (spec.type === "bar") {
               return (
                 <rect
                   key={`${i}-${s}`}
@@ -74,11 +79,17 @@ export function ExtChart({ rows, spec, emptyText }: ExtChartProps) {
             }
             // line/area: draw a marker per point; the connecting polyline below.
             return (
-              <circle key={`${i}-${s}`} cx={x + groupW / 2} cy={CHART_H - h} r={2} fill={color} />
+              <circle
+                key={`${i}-${s}`}
+                cx={x + groupW / 2}
+                cy={CHART_H - h}
+                r={2}
+                fill={color}
+              />
             );
           }),
         )}
-        {(spec.type === 'line' || spec.type === 'area') &&
+        {(spec.type === "line" || spec.type === "area") &&
           spec.y.map((_, s) => {
             const color = SERIES_COLORS[s % SERIES_COLORS.length];
             const coords = points
@@ -86,7 +97,7 @@ export function ExtChart({ rows, spec, emptyText }: ExtChartProps) {
                 const h = (p.values[s] / denom) * CHART_H;
                 return `${i * colW + colW / 2},${CHART_H - h}`;
               })
-              .join(' ');
+              .join(" ");
             return (
               <polyline
                 key={`series-${s}`}
@@ -103,7 +114,7 @@ export function ExtChart({ rows, spec, emptyText }: ExtChartProps) {
             x={i * colW + colW / 2}
             y={CHART_H + 16}
             textAnchor="middle"
-            className={cn('fill-muted-foreground text-[10px]')}
+            className={cn("fill-muted-foreground text-[10px]")}
           >
             {p.x}
           </text>
@@ -111,12 +122,15 @@ export function ExtChart({ rows, spec, emptyText }: ExtChartProps) {
       </svg>
       <div className="mt-1 flex flex-wrap gap-3 px-2">
         {spec.y.map((y, s) => (
-          <span key={y} className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span
+            key={y}
+            className="flex items-center gap-1 text-xs text-muted-foreground"
+          >
             <span
               className="inline-block h-2 w-2 rounded-sm"
               style={{ background: SERIES_COLORS[s % SERIES_COLORS.length] }}
             />
-            {formatValue(y, 'text')}
+            {formatValue(y, "text")}
           </span>
         ))}
       </div>

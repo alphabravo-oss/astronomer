@@ -16,15 +16,17 @@ package handler
 
 import (
 	"context"
+	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // VeleroDriverAdapter implements tasks.VeleroSnapshotDriver against the
-// handler's K8sRequester. Production wiring constructs a single
-// instance + passes it through ConfigureClusterSnapshotTasks.
+// handler's K8sRequester. Production wiring passes a single instance into
+// tasks.ClusterSnapshotRuntime.
 type VeleroDriverAdapter struct {
 	Requester K8sRequester
 }
@@ -92,10 +94,55 @@ func (a *VeleroDriverAdapter) GetRestore(ctx context.Context, clusterID, namespa
 	return out, nil
 }
 
-// PostBackup creates a Velero Backup CR on the named cluster. Used by
-// the scheduled dispatcher when firing a cron-driven snapshot.
-func (a *VeleroDriverAdapter) PostBackup(ctx context.Context, clusterID string, body map[string]any) error {
-	return createVeleroBackupCRD(ctx, a.Requester, clusterID, body)
+// CreateSnapshot renders the committed desired-state row and idempotently
+// creates its Velero Backup. The row ID is carried as an ownership label.
+func (a *VeleroDriverAdapter) CreateSnapshot(ctx context.Context, row sqlc.ClusterSnapshot) error {
+	spec := decodeSpec(row.Spec)
+	body := renderPerClusterBackup(PerClusterSnapshotRender{
+		Name: row.VeleroName, Namespace: row.VeleroNamespace,
+		IncludedNamespaces: spec.IncludedNamespaces, ExcludedNamespaces: spec.ExcludedNamespaces,
+		IncludedResources: spec.IncludedResources, ExcludedResources: spec.ExcludedResources,
+		LabelSelector: spec.LabelSelector, SnapshotVolumes: spec.SnapshotVolumes, TTL: spec.TTL,
+		StorageLocation: spec.StorageLocation, VolumeSnapshotLocations: spec.VolumeSnapshotLocations,
+		SnapshotID: row.ID.String(),
+	})
+	return createVeleroBackupCRD(ctx, a.Requester, row.ClusterID.String(), body)
+}
+
+// CreateRestore renders a committed restore intent. A repeated POST after a
+// worker crash is safe because the Velero helper treats AlreadyExists as the
+// successful observation of the same immutable operation.
+func (a *VeleroDriverAdapter) CreateRestore(ctx context.Context, row sqlc.ClusterRestore, snapshot sqlc.ClusterSnapshot) error {
+	spec := decodeRestoreSpec(row.Spec)
+	body := renderPerClusterRestore(PerClusterRestoreRender{
+		Name: row.VeleroName, Namespace: row.VeleroNamespace, BackupName: snapshot.VeleroName,
+		IncludedNamespaces: spec.IncludedNamespaces, ExcludedNamespaces: spec.ExcludedNamespaces,
+		NamespaceMapping: spec.NamespaceMapping, LabelSelector: spec.LabelSelector,
+		RestorePVs: spec.RestorePVs, RestoreID: row.ID.String(), SnapshotID: row.SnapshotID.String(),
+	})
+	return createVeleroRestoreCRD(ctx, a.Requester, row.TargetClusterID.String(), body)
+}
+
+// DeleteSnapshot uses a deterministic request name derived from the immutable
+// snapshot ID. This is the idempotency fence for replay after an uncertain
+// remote result.
+func (a *VeleroDriverAdapter) DeleteSnapshot(ctx context.Context, clusterID, namespace, backupName, operationID string) error {
+	requestName := deterministicDeleteBackupRequestName(backupName, operationID)
+	body := renderDeleteBackupRequest(requestName, namespace, backupName)
+	return createVeleroDeleteBackupRequest(ctx, a.Requester, clusterID, body)
+}
+
+func deterministicDeleteBackupRequestName(backupName, operationID string) string {
+	suffix := "-delete-" + sanitizeForName(operationID)
+	maxPrefix := 253 - len(suffix)
+	prefix := sanitizeForName(backupName)
+	if len(prefix) > maxPrefix {
+		prefix = strings.TrimRight(prefix[:maxPrefix], "-")
+	}
+	if prefix == "" {
+		prefix = "snapshot"
+	}
+	return prefix + suffix
 }
 
 // parseRFC3339IfNonEmpty parses a Velero status timestamp string. An

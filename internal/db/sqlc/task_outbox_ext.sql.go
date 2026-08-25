@@ -163,6 +163,18 @@ func (q *Queries) GetTaskOutbox(ctx context.Context, id uuid.UUID) (TaskOutbox, 
 	return scanTaskOutboxRow(q.db.QueryRow(ctx, getTaskOutbox, id))
 }
 
+const getTaskOutboxForUpdate = `-- name: GetTaskOutboxForUpdate :one
+SELECT ` + taskOutboxSelectColumns + `
+FROM task_outbox
+WHERE id = $1
+FOR UPDATE`
+
+// GetTaskOutboxForUpdate serializes the administrative retry decision with
+// dispatcher delivery. It must be called through a transaction-bound Queries.
+func (q *Queries) GetTaskOutboxForUpdate(ctx context.Context, id uuid.UUID) (TaskOutbox, error) {
+	return scanTaskOutboxRow(q.db.QueryRow(ctx, getTaskOutboxForUpdate, id))
+}
+
 const claimDueTaskOutbox = `-- name: ClaimDueTaskOutbox :many
 WITH picked AS (
     SELECT id
@@ -252,8 +264,10 @@ func (q *Queries) MarkTaskOutboxFailed(ctx context.Context, arg MarkTaskOutboxFa
 const retryTaskOutbox = `-- name: RetryTaskOutbox :one
 UPDATE task_outbox
 SET status = 'pending',
+    attempt_count = 0,
     next_attempt_at = $2,
     locked_until = NULL,
+    delivered_at = NULL,
     last_error = '',
     updated_at = now()
 WHERE id = $1

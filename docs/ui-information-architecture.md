@@ -38,7 +38,7 @@ Delivery:
 
 Agents:
 
-- Purpose: agent fleet health, capabilities, diagnostics, compatibility, upgrade plans, self-tests, and offline behavior.
+- Purpose: agent estate health, capabilities, diagnostics, compatibility, upgrade plans, self-tests, and offline behavior.
 - Primary users: platform operators and support engineers.
 - Interaction standard: disconnected/offline states must explain which actions are blocked, queue-safe, or stale.
 

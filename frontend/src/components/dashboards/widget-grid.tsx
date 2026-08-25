@@ -19,15 +19,25 @@
  *   - grafana_panel: sandboxed iframe at the templated URL.
  *   - url_iframe: same as grafana_panel but no panel-id postfix.
  */
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
-import type { RenderedWidget, WidgetSpec } from '@/lib/api/dashboards';
+import { useEffect, useRef, useState } from "react";
+import { Loader2, AlertCircle } from "lucide-react";
+import type { RenderedWidget, WidgetSpec } from "@/lib/api/dashboards";
 
 export type WidgetFetcher = () => Promise<RenderedWidget[]>;
 
-export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty, title }: { fetcher: WidgetFetcher; emptyHint?: string; hideWhenEmpty?: boolean; title?: string }) {
+export function WidgetGrid({
+  fetcher,
+  emptyHint,
+  hideWhenEmpty,
+  title,
+}: {
+  fetcher: WidgetFetcher;
+  emptyHint?: string;
+  hideWhenEmpty?: boolean;
+  title?: string;
+}) {
   const [widgets, setWidgets] = useState<RenderedWidget[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,7 +117,7 @@ export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty, title }: { fetch
     if (hideWhenEmpty) return null;
     return (
       <div className="text-sm text-muted-foreground py-4">
-        {emptyHint ?? 'No widgets configured. Add one in Settings → Widgets.'}
+        {emptyHint ?? "No widgets configured. Add one in Settings → Widgets."}
       </div>
     );
   }
@@ -115,24 +125,26 @@ export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty, title }: { fetch
   return (
     <section className="space-y-2">
       {title ? (
-        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">{title}</h3>
+        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          {title}
+        </h3>
       ) : null}
       <div className="grid grid-cols-12 gap-3 auto-rows-[80px]">
-      {widgets.map((w) => (
-        <div
-          key={w.id}
-          className="border border-border rounded-lg bg-card p-3 overflow-hidden flex flex-col"
-          style={{
-            gridColumn: `span ${Math.min(12, Math.max(1, w.grid.w))}`,
-            gridRow: `span ${Math.max(1, w.grid.h)}`,
-          }}
-        >
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1 truncate">
-            {w.name}
+        {widgets.map((w) => (
+          <div
+            key={w.id}
+            className="border border-border rounded-lg bg-card p-3 overflow-hidden flex flex-col"
+            style={{
+              gridColumn: `span ${Math.min(12, Math.max(1, w.grid.w))}`,
+              gridRow: `span ${Math.max(1, w.grid.h)}`,
+            }}
+          >
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1 truncate">
+              {w.name}
+            </div>
+            <WidgetBody widget={w} />
           </div>
-          <WidgetBody widget={w} />
-        </div>
-      ))}
+        ))}
       </div>
     </section>
   );
@@ -144,13 +156,15 @@ function WidgetBody({ widget }: { widget: RenderedWidget }) {
     return (
       <div className="flex-1 text-xs text-status-warning flex items-center gap-1">
         <AlertCircle className="h-3 w-3" />
-        <span className="truncate" title={data.error}>{data.error}</span>
+        <span className="truncate" title={data.error}>
+          {data.error}
+        </span>
       </div>
     );
   }
   switch (widget.widgetType) {
-    case 'prom_sparkline': {
-      const svg = data.sparklineSvg ?? data.sparkline_svg ?? '';
+    case "prom_sparkline": {
+      const svg = data.sparklineSvg ?? "";
       return (
         <div className="flex-1 flex items-center text-foreground/80">
           {svg ? (
@@ -166,23 +180,30 @@ function WidgetBody({ widget }: { widget: RenderedWidget }) {
         </div>
       );
     }
-    case 'prom_stat': {
-      const ok = data.statOk ?? data.stat_ok ?? false;
-      const value = data.statValue ?? data.stat_value ?? 0;
-      const unit = data.statUnit ?? data.stat_unit ?? '';
-      const format = data.statFormat ?? data.stat_format ?? '';
+    case "prom_stat": {
+      const ok = data.statOk ?? false;
+      const value = data.statValue ?? 0;
+      const unit = data.statUnit ?? "";
+      const format = data.statFormat ?? "";
       return (
         <div className="flex-1 flex items-center">
           <div className="text-2xl font-semibold text-foreground">
-            {ok ? formatStat(value, format) : '—'}
-            {ok && unit ? <span className="text-sm text-muted-foreground ml-1">{unit}</span> : null}
+            {ok ? formatStat(value, format) : "—"}
+            {ok && unit ? (
+              <span className="text-sm text-muted-foreground ml-1">{unit}</span>
+            ) : null}
           </div>
         </div>
       );
     }
-    case 'grafana_panel': {
+    case "grafana_panel": {
       const url = grafanaIframeURL(widget.specResolved);
-      if (!url) return <div className="text-xs text-muted-foreground">Missing base_url / dashboard_uid</div>;
+      if (!url)
+        return (
+          <div className="text-xs text-muted-foreground">
+            Missing base_url / dashboard_uid
+          </div>
+        );
       return (
         <iframe
           className="flex-1 w-full h-full border-0"
@@ -195,9 +216,10 @@ function WidgetBody({ widget }: { widget: RenderedWidget }) {
         />
       );
     }
-    case 'url_iframe': {
-      const url = widget.specResolved?.url ?? '';
-      if (!url) return <div className="text-xs text-muted-foreground">Missing url</div>;
+    case "url_iframe": {
+      const url = widget.specResolved?.url ?? "";
+      if (!url)
+        return <div className="text-xs text-muted-foreground">Missing url</div>;
       return (
         <iframe
           className="flex-1 w-full h-full border-0"
@@ -209,7 +231,11 @@ function WidgetBody({ widget }: { widget: RenderedWidget }) {
       );
     }
     default:
-      return <div className="text-xs text-muted-foreground">Unsupported widget type</div>;
+      return (
+        <div className="text-xs text-muted-foreground">
+          Unsupported widget type
+        </div>
+      );
   }
 }
 
@@ -222,17 +248,17 @@ function formatStat(value: number, format: string): string {
 }
 
 function grafanaIframeURL(spec: WidgetSpec | undefined): string {
-  if (!spec || !spec.base_url || !spec.dashboard_uid) return '';
-  const base = String(spec.base_url).replace(/\/$/, '');
+  if (!spec || !spec.base_url || !spec.dashboard_uid) return "";
+  const base = String(spec.base_url).replace(/\/$/, "");
   const path = `/d-solo/${encodeURIComponent(spec.dashboard_uid)}`;
   const qs = new URLSearchParams();
-  if (spec.panel_id !== undefined) qs.set('panelId', String(spec.panel_id));
-  if (spec.vars && typeof spec.vars === 'object') {
+  if (spec.panel_id !== undefined) qs.set("panelId", String(spec.panel_id));
+  if (spec.vars && typeof spec.vars === "object") {
     for (const [k, v] of Object.entries(spec.vars as Record<string, string>)) {
       qs.set(`var-${k}`, String(v));
     }
   }
   // Theme dark fits the SPA shell; operators can override via vars.
-  if (!qs.has('theme')) qs.set('theme', 'dark');
+  if (!qs.has("theme")) qs.set("theme", "dark");
   return `${base}${path}?${qs.toString()}`;
 }

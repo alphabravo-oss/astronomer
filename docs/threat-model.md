@@ -390,6 +390,10 @@ Controls:
 - Delivery bundle versions resolve to immutable commits/digests and preserve
   verification evidence before rollout.
 - High-risk routes are tracked in `docs/security-sensitive-routes.json`.
+- The ten-control review for every delivery wave, including explicit live
+  release-qualification blockers, is tracked in
+  `docs/security-wave-review.json` and checked by
+  `scripts/security-wave-review.mjs`.
 
 Review checks:
 

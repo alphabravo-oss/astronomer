@@ -129,8 +129,8 @@ func TestBuildAssignmentGoldenVariants(t *testing.T) {
 	}{
 		{name: "git-kustomize-auth-trust", assignment: gitAssignment(), wantSource: "GitRepository", wantRender: "Kustomization", wantCount: 8, wantHash: "8733bbfb0fe1f50c6bd05c29f0366b7b31f4eeaaf5b2f1772ea46fa6a4a8e09a"},
 		{name: "oci-kustomize-keyless", assignment: ociAssignment(), wantSource: "OCIRepository", wantRender: "Kustomization", wantCount: 6, wantHash: "21072323c036cb95d15d2891ca5f73c65a15bbad5a5c573d1bf087a2d5992ab3"},
-		{name: "helm-http-auth", assignment: helmHTTPAssignment(), wantSource: "HelmRepository", wantRender: "HelmRelease", wantCount: 7, wantHash: "20378af400822bdb954c71ee1cd004f9dde142e39b95196ac85b8ca4a5f6a125"},
-		{name: "helm-oci-platform-trust", assignment: helmOCIAssignment(), wantSource: "OCIRepository", wantRender: "HelmRelease", wantCount: 6, wantHash: "b611a91e51347d3bbae5027d05fd6ee1765702b15e30aa497a15c4b994f76ccc"},
+		{name: "helm-http-auth", assignment: helmHTTPAssignment(), wantSource: "HelmRepository", wantRender: "HelmRelease", wantCount: 7, wantHash: "0363d80bc914014f8a3f92edb17e9b826df51d055b81b89e1f20b347b3437a2b"},
+		{name: "helm-oci-platform-trust", assignment: helmOCIAssignment(), wantSource: "OCIRepository", wantRender: "HelmRelease", wantCount: 6, wantHash: "44c9b3d576d1770f7816e90a500c292b271a839155c4b5dd6f4c9491844ac9db"},
 	}
 	for _, test := range tests {
 		test := test
@@ -152,6 +152,9 @@ func TestBuildAssignmentGoldenVariants(t *testing.T) {
 			if test.wantRender == "HelmRelease" {
 				if _, found, _ := unstructured.NestedFieldNoCopy(materialization.Objects[len(materialization.Objects)-1].Object, "spec", "retryInterval"); found {
 					t.Fatal("HelmRelease must not set spec.retryInterval; Flux v2 rejects that field")
+				}
+				if createNamespace, _, _ := unstructured.NestedBool(materialization.Objects[len(materialization.Objects)-1].Object, "spec", "install", "createNamespace"); !createNamespace {
+					t.Fatal("HelmRelease must create its validated target namespace")
 				}
 			}
 			encoded, err := json.Marshal(materialization.Objects)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 )
@@ -123,6 +124,7 @@ type CreateRequest struct {
 	Strategy                 model.RolloutStrategy
 	Actor                    string
 	IdempotencyKey           string
+	Audit                    audit.Intent
 }
 
 // PlanningStore supplies an actual database transaction. The callback must be
@@ -137,6 +139,7 @@ type PlanningTransaction interface {
 	InsertRollout(context.Context, FrozenRollout) error
 	AppendRolloutCreated(context.Context, FrozenRollout) error
 	EnqueueRollout(context.Context, uuid.UUID) error
+	RecordAuditIntent(context.Context, audit.Intent) error
 }
 
 // IDGenerator is injectable so retries and concurrency behavior can be tested

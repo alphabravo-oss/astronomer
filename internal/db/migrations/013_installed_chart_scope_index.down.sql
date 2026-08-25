@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS public.installed_charts_cluster_created_id_idx;

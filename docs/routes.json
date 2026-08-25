@@ -29,6 +29,14 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/backup-drill"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/backup-drill/history"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/charlie/access"
   },
   {
@@ -90,6 +98,10 @@
   {
     "method": "GET",
     "pattern": "/api/v1/admin/charlie/trigger-events"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/charlie/trigger-events/{event_id}"
   },
   {
     "method": "POST",
@@ -177,7 +189,55 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/group-mappings"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/group-mappings"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/group-mappings/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/group-mappings/{id}"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/key-status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/management-backup"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/management-backup/destinations"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/management-backup/destinations/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/management-backup/destinations/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/management-backup/destinations/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/management-backup/destinations/{id}/run"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/management-backup/destinations/{id}/test"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/management-backup/operations/{id}"
   },
   {
     "method": "GET",
@@ -221,6 +281,26 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/queues"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/queues/operations/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/queues/{queue}/dlq"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/queues/{queue}/dlq/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/queues/{queue}/dlq/{id}/retry"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/quota-plans"
   },
   {
@@ -260,6 +340,10 @@
     "pattern": "/api/v1/admin/settings"
   },
   {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/settings"
+  },
+  {
     "method": "DELETE",
     "pattern": "/api/v1/admin/settings/{key}"
   },
@@ -281,6 +365,38 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/siem-forwarders"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/siem-forwarders"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/siem-forwarders/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/siem-forwarders/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/siem-forwarders/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/siem-forwarders/{id}/status"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/siem-forwarders/{id}/test"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/siem-forwarders/{id}/test-operations/{operation_id}"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/smtp"
   },
   {
@@ -292,12 +408,32 @@
     "pattern": "/api/v1/admin/smtp/test"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/admin/task-outbox"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/task-outbox/dead"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/task-outbox/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/task-outbox/{id}/retry"
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/admin/users/{id}/disable-totp"
   },
   {
     "method": "POST",
     "pattern": "/api/v1/admin/users/{id}/force-logout"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/users/{id}/resync-groups"
   },
   {
     "method": "POST",
@@ -354,6 +490,10 @@
   {
     "method": "GET",
     "pattern": "/api/v1/admin/webhooks/{id}/deliveries"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/webhooks/{id}/deliveries/{delivery_id}"
   },
   {
     "method": "POST",
@@ -512,6 +652,10 @@
     "pattern": "/api/v1/auth/dex/connectors/{id}"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/auth/dex/operations/{operation_id}"
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/auth/dex/register-as-sso"
   },
@@ -610,6 +754,10 @@
   {
     "method": "GET",
     "pattern": "/api/v1/backups/restores"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/backups/restores/{id}"
   },
   {
     "method": "GET",
@@ -1021,6 +1169,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/cluster-templates/{id}/clusters"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/clusters"
   },
   {
@@ -1273,11 +1425,23 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/resources/discovery"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/resources/generic/{resource_type}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/resources/operations/{id}"
   },
   {
     "method": "DELETE",
     "pattern": "/api/v1/clusters/{cluster_id}/resources/persistentvolumes/{name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/resources/schema"
   },
   {
     "method": "GET",
@@ -1302,6 +1466,10 @@
   {
     "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/security/scans/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/security/scans/{id}/cancel"
   },
   {
     "method": "GET",
@@ -1525,6 +1693,10 @@
   },
   {
     "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/generate-direct-kubeconfig"
+  },
+  {
+    "method": "POST",
     "pattern": "/api/v1/clusters/{id}/generate-kubeconfig"
   },
   {
@@ -1542,6 +1714,18 @@
   {
     "method": "GET",
     "pattern": "/api/v1/clusters/{id}/kubeconfig-preview"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/logging/outputs/attach-astronomer"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/logging/outputs/attach-astronomer"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/logging/outputs/{output_id}/rotate-token"
   },
   {
     "method": "GET",
@@ -1777,6 +1961,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/delivery/estate"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/delivery/fleet"
   },
   {
@@ -1973,6 +2161,10 @@
   },
   {
     "method": "POST",
+    "pattern": "/api/v1/logging/outputs/{id}/rotate-token"
+  },
+  {
+    "method": "POST",
     "pattern": "/api/v1/logging/outputs/{id}/test"
   },
   {
@@ -2002,6 +2194,22 @@
   {
     "method": "GET",
     "pattern": "/api/v1/logging/pipelines/{id}/fluentbit-config"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/logging/saved-searches"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/logging/saved-searches"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/logging/saved-searches/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/logging/saved-searches/{id}"
   },
   {
     "method": "GET",
@@ -2076,6 +2284,10 @@
     "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/labels/remove"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/operations/{id}"
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/taints"
   },
@@ -2086,6 +2298,22 @@
   {
     "method": "POST",
     "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/uncordon"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/observability/grafana-ticket"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/observability/grafana-ticket"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/observability/grafana-ticket/redeem"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/observability/grafana-ticket/redeem"
   },
   {
     "method": "GET",
@@ -2516,6 +2744,54 @@
     "pattern": "/api/v1/settings/monitoring/backend"
   },
   {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/grafana/install"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/grafana/preview"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/grafana/replace"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/grafana/status"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/settings/monitoring/grafana/uninstall"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/settings/monitoring/grafana/upgrade"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/loki/install"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/loki/preview"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/loki/replace"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/loki/status"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/settings/monitoring/loki/uninstall"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/settings/monitoring/loki/upgrade"
+  },
+  {
     "method": "GET",
     "pattern": "/api/v1/settings/monitoring/operations"
   },
@@ -2526,6 +2802,10 @@
   {
     "method": "POST",
     "pattern": "/api/v1/settings/monitoring/operations/{id}/retry"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/sizer"
   },
   {
     "method": "POST",

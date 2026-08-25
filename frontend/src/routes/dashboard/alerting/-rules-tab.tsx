@@ -1,12 +1,12 @@
-import { useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
-import { useAlertRules, useDeleteAlertRule } from '@/lib/hooks';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { ActionButton } from '@/components/ui/action-button';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { cn, statusBgColor } from '@/lib/utils';
-import type { AlertRule } from '@/types';
+import { useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
+import { useAlertRules, useDeleteAlertRule } from "@/lib/hooks/alerting";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ActionButton } from "@/components/ui/action-button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { cn, statusBgColor } from "@/lib/utils";
+import type { AlertRule } from "@/types";
 
 export function RulesTab({
   onEdit,
@@ -17,24 +17,28 @@ export function RulesTab({
 }) {
   const { data: rules, isLoading, isError, refetch } = useAlertRules(clusterId);
   const deleteRule = useDeleteAlertRule();
-  const [deleteRuleTarget, setDeleteRuleTarget] = useState<AlertRule | null>(null);
+  const [deleteRuleTarget, setDeleteRuleTarget] = useState<AlertRule | null>(
+    null,
+  );
 
   const columns: Column<AlertRule>[] = [
     {
-      key: 'name',
-      header: 'Rule',
+      key: "name",
+      header: "Rule",
       accessor: (row) => (
         <div>
           <p className="font-medium text-foreground">{row.name}</p>
           {row.description && (
-            <p className="text-xs text-muted-foreground truncate max-w-[300px]">{row.description}</p>
+            <p className="text-xs text-muted-foreground truncate max-w-[300px]">
+              {row.description}
+            </p>
           )}
         </div>
       ),
     },
     {
-      key: 'type',
-      header: 'Type',
+      key: "type",
+      header: "Type",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">
           {row.type}
@@ -42,49 +46,65 @@ export function RulesTab({
       ),
     },
     {
-      key: 'severity',
-      header: 'Severity',
+      key: "severity",
+      header: "Severity",
       accessor: (row) => (
-        <span className={cn('text-xs px-2 py-0.5 rounded capitalize font-medium', statusBgColor(row.severity))}>
+        <span
+          className={cn(
+            "text-xs px-2 py-0.5 rounded capitalize font-medium",
+            statusBgColor(row.severity),
+          )}
+        >
           {row.severity}
         </span>
       ),
     },
     ...(clusterId
       ? []
-      : [{
-          key: 'cluster',
-          header: 'Cluster',
-          accessor: (row: AlertRule) => (
-            <span className="text-sm text-muted-foreground">{row.clusterName || 'All'}</span>
-          ),
-        } as Column<AlertRule>]),
+      : [
+          {
+            key: "cluster",
+            header: "Cluster",
+            accessor: (row: AlertRule) => (
+              <span className="text-sm text-muted-foreground">
+                {row.clusterName || "All"}
+              </span>
+            ),
+          } as Column<AlertRule>,
+        ]),
     {
-      key: 'status',
-      header: 'Status',
+      key: "status",
+      header: "Status",
       accessor: (row) => (
         <StatusBadge
-          status={row.enabled ? 'active' : 'disconnected'}
-          label={row.enabled ? 'Enabled' : 'Disabled'}
+          status={row.enabled ? "active" : "disconnected"}
+          label={row.enabled ? "Enabled" : "Disabled"}
         />
       ),
     },
     {
-      key: 'activeAlerts',
-      header: 'Active',
+      key: "activeAlerts",
+      header: "Active",
       accessor: (row) => (
-        <span className={cn('tabular-nums text-sm font-medium', row.activeAlerts > 0 ? 'text-status-error' : 'text-muted-foreground')}>
+        <span
+          className={cn(
+            "tabular-nums text-sm font-medium",
+            row.activeAlerts > 0
+              ? "text-status-error"
+              : "text-muted-foreground",
+          )}
+        >
           {row.activeAlerts}
         </span>
       ),
       sortAccessor: (row) => row.activeAlerts,
-      align: 'center',
+      align: "center",
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       accessor: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
           <ActionButton
             size="icon"
             intent="ghost"

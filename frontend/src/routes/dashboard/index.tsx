@@ -1,15 +1,28 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useClusters, useActivityFeed, useAlertEvents, useTools, queryKeys } from '@/lib/hooks';
-import { useLatestBackupDrill } from '@/components/settings/hooks';
-import { useLiveQueryInvalidation } from '@/lib/live/hooks';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { formatRelativeTime, cn } from '@/lib/utils';
-import { WidgetGrid } from '@/components/dashboards/widget-grid';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { ExtensionSlot } from '@/components/extensions/ExtensionSlot';
-import { renderGlobal } from '@/lib/api/dashboards';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  useClusters,
+  useActivityFeed,
+  queryKeys,
+} from "@/lib/hooks";
+import { useAlertEvents } from "@/lib/hooks/alerting";
+import { useTools } from "@/lib/hooks/tools";
+import { useLatestBackupDrill } from "@/components/settings/hooks";
+import { useLiveQueryInvalidation } from "@/lib/live/hooks";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { formatRelativeTime, cn } from "@/lib/utils";
+import { WidgetGrid } from "@/components/dashboards/widget-grid";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { ExtensionSlot } from "@/components/extensions/ExtensionSlot";
+import { renderGlobal } from "@/lib/api/dashboards";
 import {
   Server,
   Activity,
@@ -24,13 +37,16 @@ import {
   ShieldCheck,
   Package,
   Layers,
-} from 'lucide-react';
-import { Link } from '@/lib/link';
+} from "lucide-react";
+import { Link } from "@/lib/link";
 
 function DashboardPage() {
-  const { data: clustersData, isLoading: clustersLoading } = useClusters({ pageSize: 100 });
-  const { data: activityData, isLoading: activityLoading } = useActivityFeed(10);
-  const { data: alertEventsData } = useAlertEvents({ status: 'firing' });
+  const { data: clustersData, isLoading: clustersLoading } = useClusters({
+    pageSize: 100,
+  });
+  const { data: activityData, isLoading: activityLoading } =
+    useActivityFeed(10);
+  const { data: alertEventsData } = useAlertEvents({ status: "firing" });
   const { data: toolsData } = useTools();
   // T7.3 — backup-drill health row. The CronJob writes one row
   // per drill run; useLatestBackupDrill returns the most recent.
@@ -38,14 +54,14 @@ function DashboardPage() {
 
   useLiveQueryInvalidation(
     [
-      'cluster.connected',
-      'cluster.disconnected',
-      'cluster.created',
-      'cluster.updated',
-      'cluster.deleted',
-      'cluster.status_changed',
-      'agent.reconnecting',
-      'agent.failed',
+      "cluster.connected",
+      "cluster.disconnected",
+      "cluster.created",
+      "cluster.updated",
+      "cluster.deleted",
+      "cluster.status_changed",
+      "agent.reconnecting",
+      "agent.failed",
     ],
     [queryKeys.clusters.all, queryKeys.activity()],
   );
@@ -55,13 +71,19 @@ function DashboardPage() {
   const alertEvents = alertEventsData ?? [];
   const tools = toolsData || [];
 
-  const activeClusters = clusters.filter((c) => c.status === 'active').length;
-  const warningClusters = clusters.filter((c) => c.status === 'warning').length;
-  const errorClusters = clusters.filter((c) => c.status === 'error' || c.status === 'disconnected').length;
+  const activeClusters = clusters.filter((c) => c.status === "active").length;
+  const warningClusters = clusters.filter((c) => c.status === "warning").length;
+  const errorClusters = clusters.filter(
+    (c) => c.status === "error" || c.status === "disconnected",
+  ).length;
   const totalNodes = clusters.reduce((acc, c) => acc + c.nodeCount, 0);
   const totalPods = clusters.reduce((acc, c) => acc + c.podCount, 0);
-  const criticalAlerts = alertEvents.filter((e) => e.severity === 'critical').length;
-  const warningAlerts = alertEvents.filter((e) => e.severity === 'warning').length;
+  const criticalAlerts = alertEvents.filter(
+    (e) => e.severity === "critical",
+  ).length;
+  const warningAlerts = alertEvents.filter(
+    (e) => e.severity === "warning",
+  ).length;
   const totalTools = Array.isArray(tools) ? tools.length : 0;
 
   return (
@@ -87,7 +109,7 @@ function DashboardPage() {
           value={warningClusters}
           sublabel="needs attention"
           icon={<AlertTriangle className="h-4 w-4" />}
-          tone={warningClusters > 0 ? 'warning' : 'default'}
+          tone={warningClusters > 0 ? "warning" : "default"}
         />
         <MetricTile
           href="/dashboard/clusters?status=disconnected"
@@ -95,19 +117,27 @@ function DashboardPage() {
           value={errorClusters}
           sublabel="agent offline"
           icon={<WifiOff className="h-4 w-4" />}
-          tone={errorClusters > 0 ? 'error' : 'default'}
+          tone={errorClusters > 0 ? "error" : "default"}
         />
         <MetricTile
           href="/dashboard/alerting"
           label="Open Alerts"
           value={alertEvents.length}
           sublabel={
-            criticalAlerts > 0 ? `${criticalAlerts} critical`
-            : warningAlerts > 0 ? `${warningAlerts} warning`
-            : 'all clear'
+            criticalAlerts > 0
+              ? `${criticalAlerts} critical`
+              : warningAlerts > 0
+                ? `${warningAlerts} warning`
+                : "all clear"
           }
           icon={<Bell className="h-4 w-4" />}
-          tone={criticalAlerts > 0 ? 'error' : warningAlerts > 0 ? 'warning' : 'default'}
+          tone={
+            criticalAlerts > 0
+              ? "error"
+              : warningAlerts > 0
+                ? "warning"
+                : "default"
+          }
         />
         <MetricTile
           href="/dashboard/clusters"
@@ -167,7 +197,9 @@ function DashboardPage() {
         ) : clusters.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 rounded-lg border border-dashed border-border">
             <Server className="h-8 w-8 text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground mb-3">No clusters registered yet</p>
+            <p className="text-sm text-muted-foreground mb-3">
+              No clusters registered yet
+            </p>
             <Link
               href="/dashboard/clusters/register"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
@@ -180,18 +212,35 @@ function DashboardPage() {
             <Table className="w-full text-sm">
               <TableHeader className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
                 <TableRow>
-                  <TableHead className="text-left px-4 py-2 font-medium">Name</TableHead>
-                  <TableHead className="text-left px-4 py-2 font-medium">Status</TableHead>
-                  <TableHead className="text-left px-4 py-2 font-medium">Version</TableHead>
-                  <TableHead className="text-right px-4 py-2 font-medium">Nodes</TableHead>
-                  <TableHead className="text-right px-4 py-2 font-medium">Pods</TableHead>
-                  <TableHead className="text-right px-4 py-2 font-medium">CPU</TableHead>
-                  <TableHead className="text-right px-4 py-2 font-medium">Memory</TableHead>
+                  <TableHead className="text-left px-4 py-2 font-medium">
+                    Name
+                  </TableHead>
+                  <TableHead className="text-left px-4 py-2 font-medium">
+                    Status
+                  </TableHead>
+                  <TableHead className="text-left px-4 py-2 font-medium">
+                    Version
+                  </TableHead>
+                  <TableHead className="text-right px-4 py-2 font-medium">
+                    Nodes
+                  </TableHead>
+                  <TableHead className="text-right px-4 py-2 font-medium">
+                    Pods
+                  </TableHead>
+                  <TableHead className="text-right px-4 py-2 font-medium">
+                    CPU
+                  </TableHead>
+                  <TableHead className="text-right px-4 py-2 font-medium">
+                    Memory
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className="divide-y divide-border">
                 {clusters.map((cluster) => (
-                  <TableRow key={cluster.id} className="hover:bg-muted/30 transition-colors">
+                  <TableRow
+                    key={cluster.id}
+                    className="hover:bg-muted/30 transition-colors"
+                  >
                     <TableCell className="px-4 py-2">
                       <Link
                         href={`/dashboard/clusters/${cluster.id}`}
@@ -204,19 +253,41 @@ function DashboardPage() {
                       <StatusBadge status={cluster.status} />
                     </TableCell>
                     <TableCell className="px-4 py-2 text-muted-foreground font-mono text-xs">
-                      {cluster.kubernetesVersion || '—'}
+                      {cluster.kubernetesVersion || "—"}
                     </TableCell>
-                    <TableCell className="px-4 py-2 text-right font-mono text-xs">{cluster.nodeCount}</TableCell>
-                    <TableCell className="px-4 py-2 text-right font-mono text-xs">{cluster.podCount}</TableCell>
-                    <TableCell className={cn('px-4 py-2 text-right font-mono text-xs',
-                      cluster.cpuPercentage >= 90 ? 'text-status-error' :
-                      cluster.cpuPercentage >= 75 ? 'text-status-warning' : 'text-muted-foreground')}>
-                      {cluster.cpuPercentage != null ? `${cluster.cpuPercentage.toFixed(0)}%` : '—'}
+                    <TableCell className="px-4 py-2 text-right font-mono text-xs">
+                      {cluster.nodeCount}
                     </TableCell>
-                    <TableCell className={cn('px-4 py-2 text-right font-mono text-xs',
-                      cluster.memoryPercentage >= 90 ? 'text-status-error' :
-                      cluster.memoryPercentage >= 75 ? 'text-status-warning' : 'text-muted-foreground')}>
-                      {cluster.memoryPercentage != null ? `${cluster.memoryPercentage.toFixed(0)}%` : '—'}
+                    <TableCell className="px-4 py-2 text-right font-mono text-xs">
+                      {cluster.podCount}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "px-4 py-2 text-right font-mono text-xs",
+                        cluster.cpuPercentage >= 90
+                          ? "text-status-error"
+                          : cluster.cpuPercentage >= 75
+                            ? "text-status-warning"
+                            : "text-muted-foreground",
+                      )}
+                    >
+                      {cluster.cpuPercentage != null
+                        ? `${cluster.cpuPercentage.toFixed(0)}%`
+                        : "—"}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "px-4 py-2 text-right font-mono text-xs",
+                        cluster.memoryPercentage >= 90
+                          ? "text-status-error"
+                          : cluster.memoryPercentage >= 75
+                            ? "text-status-warning"
+                            : "text-muted-foreground",
+                      )}
+                    >
+                      {cluster.memoryPercentage != null
+                        ? `${cluster.memoryPercentage.toFixed(0)}%`
+                        : "—"}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -229,7 +300,9 @@ function DashboardPage() {
       {/* Two-column: Recent Activity (wider) + Platform health (signals) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <section className="lg:col-span-2 space-y-3">
-          <h2 className="text-lg font-medium text-foreground">Recent Activity</h2>
+          <h2 className="text-lg font-medium text-foreground">
+            Recent Activity
+          </h2>
           <div className="rounded-lg border border-border overflow-hidden">
             {activityLoading ? (
               <div className="flex items-center justify-center h-48">
@@ -243,26 +316,33 @@ function DashboardPage() {
             ) : (
               <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
                 {activity.map((event) => (
-                  <div key={event.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                  <div
+                    key={event.id}
+                    className="px-4 py-3 hover:bg-muted/30 transition-colors"
+                  >
                     <div className="flex items-start gap-3">
                       <div
                         className={`mt-0.5 h-2 w-2 rounded-full flex-shrink-0 ${
-                          event.type === 'cluster'
-                            ? 'bg-status-info'
-                            : event.type === 'workload'
-                              ? 'bg-status-success'
-                              : event.type === 'deployment'
-                                ? 'bg-violet-400'
-                                : event.type === 'rbac'
-                                  ? 'bg-status-warning'
-                                  : 'bg-zinc-400'
+                          event.type === "cluster"
+                            ? "bg-status-info"
+                            : event.type === "workload"
+                              ? "bg-status-success"
+                              : event.type === "deployment"
+                                ? "bg-violet-400"
+                                : event.type === "rbac"
+                                  ? "bg-status-warning"
+                                  : "bg-zinc-400"
                         }`}
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground leading-snug">{event.message}</p>
+                        <p className="text-sm text-foreground leading-snug">
+                          {event.message}
+                        </p>
                         <div className="flex items-center gap-2 mt-1">
                           {event.user && (
-                            <span className="text-xs text-muted-foreground">{event.user}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {event.user}
+                            </span>
                           )}
                           <span className="text-xs text-muted-foreground/60">
                             {formatRelativeTime(event.timestamp)}
@@ -279,23 +359,37 @@ function DashboardPage() {
 
         {/* Platform health — at-a-glance signals + drill-down links */}
         <section className="space-y-3">
-          <h2 className="text-lg font-medium text-foreground">Platform Health</h2>
+          <h2 className="text-lg font-medium text-foreground">
+            Platform Health
+          </h2>
           <div className="rounded-lg border border-border bg-card divide-y divide-border">
             <HealthRow
               href="/dashboard/alerting"
               icon={<Bell className="h-4 w-4" />}
               label="Firing alerts"
               value={alertEvents.length}
-              tone={criticalAlerts > 0 ? 'error' : warningAlerts > 0 ? 'warning' : 'success'}
-              hint={criticalAlerts > 0 ? `${criticalAlerts} critical` : warningAlerts > 0 ? `${warningAlerts} warning` : 'All clear'}
+              tone={
+                criticalAlerts > 0
+                  ? "error"
+                  : warningAlerts > 0
+                    ? "warning"
+                    : "success"
+              }
+              hint={
+                criticalAlerts > 0
+                  ? `${criticalAlerts} critical`
+                  : warningAlerts > 0
+                    ? `${warningAlerts} warning`
+                    : "All clear"
+              }
             />
             <HealthRow
               href="/dashboard/clusters?status=disconnected"
               icon={<WifiOff className="h-4 w-4" />}
               label="Agent offline"
               value={errorClusters}
-              tone={errorClusters > 0 ? 'error' : 'success'}
-              hint={errorClusters > 0 ? 'reconnect needed' : 'all reachable'}
+              tone={errorClusters > 0 ? "error" : "success"}
+              hint={errorClusters > 0 ? "reconnect needed" : "all reachable"}
             />
             <HealthRow
               href="/dashboard/tools"
@@ -309,20 +403,20 @@ function DashboardPage() {
               href="/dashboard/settings/backup"
               icon={<ShieldCheck className="h-4 w-4" />}
               label="Astronomer backup"
-              value={latestDrill?.latest?.status ?? '—'}
+              value={latestDrill?.latest?.status ?? "—"}
               tone={
-                latestDrill?.latest?.status === 'success'
-                  ? 'success'
-                  : latestDrill?.latest?.status === 'failure'
-                    ? 'error'
-                    : latestDrill?.latest?.status === 'partial'
-                      ? 'warning'
-                      : 'default'
+                latestDrill?.latest?.status === "success"
+                  ? "success"
+                  : latestDrill?.latest?.status === "failure"
+                    ? "error"
+                    : latestDrill?.latest?.status === "partial"
+                      ? "warning"
+                      : "default"
               }
               hint={
                 latestDrill?.latest?.finishedAt
                   ? `last drill ${formatRelativeTime(latestDrill.latest.finishedAt)}`
-                  : 'drill never run'
+                  : "drill never run"
               }
             />
           </div>
@@ -366,21 +460,25 @@ function MetricTile({
   value: string | number;
   sublabel?: string;
   icon: React.ReactNode;
-  tone: 'default' | 'warning' | 'error';
+  tone: "default" | "warning" | "error";
 }) {
   const toneRing =
-    tone === 'error' ? 'ring-status-error/20 hover:ring-status-error/40' :
-    tone === 'warning' ? 'ring-status-warning/20 hover:ring-status-warning/40' :
-    'ring-transparent';
+    tone === "error"
+      ? "ring-status-error/20 hover:ring-status-error/40"
+      : tone === "warning"
+        ? "ring-status-warning/20 hover:ring-status-warning/40"
+        : "ring-transparent";
   const toneValue =
-    tone === 'error' ? 'text-status-error' :
-    tone === 'warning' ? 'text-status-warning' :
-    'text-foreground';
+    tone === "error"
+      ? "text-status-error"
+      : tone === "warning"
+        ? "text-status-warning"
+        : "text-foreground";
   return (
     <Link
       href={href}
       className={cn(
-        'block rounded-lg border border-border bg-card p-3 hover:bg-card/80 transition-all ring-2 ring-inset',
+        "block rounded-lg border border-border bg-card p-3 hover:bg-card/80 transition-all ring-2 ring-inset",
         toneRing,
       )}
     >
@@ -388,8 +486,14 @@ function MetricTile({
         {icon}
         <span>{label}</span>
       </div>
-      <div className={cn('mt-1 text-2xl font-semibold tabular-nums', toneValue)}>{value}</div>
-      {sublabel && <div className="text-xs text-muted-foreground mt-0.5">{sublabel}</div>}
+      <div
+        className={cn("mt-1 text-2xl font-semibold tabular-nums", toneValue)}
+      >
+        {value}
+      </div>
+      {sublabel && (
+        <div className="text-xs text-muted-foreground mt-0.5">{sublabel}</div>
+      )}
     </Link>
   );
 }
@@ -418,7 +522,9 @@ function ActionCard({
           <p className="text-sm font-medium text-foreground">{title}</p>
           <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{description}</p>
+        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+          {description}
+        </p>
       </div>
     </Link>
   );
@@ -436,32 +542,37 @@ function HealthRow({
   icon: React.ReactNode;
   label: string;
   value: string | number;
-  tone: 'default' | 'warning' | 'error' | 'success';
+  tone: "default" | "warning" | "error" | "success";
   hint?: string;
 }) {
   const dot =
-    tone === 'error' ? 'bg-status-error' :
-    tone === 'warning' ? 'bg-status-warning' :
-    tone === 'success' ? 'bg-status-success' :
-    'bg-zinc-400';
+    tone === "error"
+      ? "bg-status-error"
+      : tone === "warning"
+        ? "bg-status-warning"
+        : tone === "success"
+          ? "bg-status-success"
+          : "bg-zinc-400";
   return (
     <Link
       href={href}
       className="flex items-center justify-between px-3 py-2.5 hover:bg-muted/30 transition-colors"
     >
       <div className="flex items-center gap-2 min-w-0">
-        <span className={cn('h-2 w-2 rounded-full flex-shrink-0', dot)} />
+        <span className={cn("h-2 w-2 rounded-full flex-shrink-0", dot)} />
         <span className="text-muted-foreground flex-shrink-0">{icon}</span>
         <span className="text-sm text-foreground truncate">{label}</span>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
-        <span className="text-sm font-medium tabular-nums text-foreground">{value}</span>
+        <span className="text-sm font-medium tabular-nums text-foreground">
+          {value}
+        </span>
       </div>
     </Link>
   );
 }
 
-export const Route = createFileRoute('/dashboard/')({
+export const Route = createFileRoute("/dashboard/")({
   component: DashboardPage,
 });

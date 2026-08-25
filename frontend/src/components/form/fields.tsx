@@ -8,20 +8,20 @@
  * generated `id` + `htmlFor`, `aria-invalid` when errored, and the error
  * `<p>` wired via `aria-describedby`.
  */
-import { useId, useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useFieldContext, useFormContext } from '@/lib/form';
-import { Input, controlClassName } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { ActionButton } from '@/components/ui/action-button';
+import { useId, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useFieldContext, useFormContext } from "@/lib/form";
+import { Input, controlClassName } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { ActionButton } from "@/components/ui/action-button";
 
 /** @deprecated Use `controlClassName` from `@/components/ui/input`. */
 export const inputClassName = controlClassName;
 
-const SECRET_PLACEHOLDER = '••••••••';
+const SECRET_PLACEHOLDER = "••••••••";
 
 interface CommonFieldProps {
   label: string;
@@ -36,10 +36,10 @@ interface CommonFieldProps {
 
 function firstError(meta: { errors: unknown[] }): string | undefined {
   for (const e of meta.errors) {
-    if (typeof e === 'string' && e) return e;
-    if (e && typeof e === 'object') {
+    if (typeof e === "string" && e) return e;
+    if (e && typeof e === "object") {
       const msg = (e as { message?: unknown }).message;
-      if (typeof msg === 'string' && msg) return msg;
+      if (typeof msg === "string" && msg) return msg;
     }
   }
   return undefined;
@@ -81,8 +81,8 @@ function FieldShell({
 
 function ariaProps(id: string, error: string | undefined) {
   return {
-    'aria-invalid': error ? true : undefined,
-    'aria-describedby': error ? `${id}-error` : undefined,
+    "aria-invalid": error ? true : undefined,
+    "aria-describedby": error ? `${id}-error` : undefined,
   };
 }
 
@@ -93,11 +93,11 @@ export function TextField({
   disabled,
   placeholder,
   className,
-  type = 'text',
+  type = "text",
   autoComplete,
   transform,
 }: CommonFieldProps & {
-  type?: 'text' | 'email' | 'url';
+  type?: "text" | "email" | "url";
   autoComplete?: string;
   /** Normalize keystrokes before they hit form state (e.g. slug-casing a name). */
   transform?: (value: string) => string;
@@ -106,12 +106,22 @@ export function TextField({
   const id = useId();
   const error = firstError(field.state.meta);
   return (
-    <FieldShell id={id} label={label} helper={helper} required={required} error={error}>
+    <FieldShell
+      id={id}
+      label={label}
+      helper={helper}
+      required={required}
+      error={error}
+    >
       <Input
         id={id}
         type={type}
-        value={field.state.value ?? ''}
-        onChange={(e) => field.handleChange(transform ? transform(e.target.value) : e.target.value)}
+        value={field.state.value ?? ""}
+        onChange={(e) =>
+          field.handleChange(
+            transform ? transform(e.target.value) : e.target.value,
+          )
+        }
         onBlur={field.handleBlur}
         placeholder={placeholder}
         disabled={disabled}
@@ -138,11 +148,17 @@ export function NumberField({
   const id = useId();
   const error = firstError(field.state.meta);
   return (
-    <FieldShell id={id} label={label} helper={helper} required={required} error={error}>
+    <FieldShell
+      id={id}
+      label={label}
+      helper={helper}
+      required={required}
+      error={error}
+    >
       <Input
         id={id}
         type="number"
-        value={field.state.value ?? ''}
+        value={field.state.value ?? ""}
         onChange={(e) => field.handleChange(Number(e.target.value))}
         onBlur={field.handleBlur}
         placeholder={placeholder}
@@ -170,11 +186,17 @@ export function PasswordField({
   const id = useId();
   const error = firstError(field.state.meta);
   return (
-    <FieldShell id={id} label={label} helper={helper} required={required} error={error}>
+    <FieldShell
+      id={id}
+      label={label}
+      helper={helper}
+      required={required}
+      error={error}
+    >
       <Input
         id={id}
         type="password"
-        value={field.state.value ?? ''}
+        value={field.state.value ?? ""}
         onChange={(e) => field.handleChange(e.target.value)}
         onBlur={field.handleBlur}
         placeholder={placeholder}
@@ -203,7 +225,7 @@ export function SecretField({
   className,
   stored,
   revealable,
-  autoComplete = 'new-password',
+  autoComplete = "new-password",
 }: CommonFieldProps & {
   stored: boolean;
   /** Adds the eye toggle that flips the input to plain text (credential-form pattern). */
@@ -219,14 +241,14 @@ export function SecretField({
   const input = (
     <Input
       id={id}
-      type={revealable && reveal ? 'text' : 'password'}
-      value={field.state.value ?? ''}
+      type={revealable && reveal ? "text" : "password"}
+      value={field.state.value ?? ""}
       placeholder={showStored ? SECRET_PLACEHOLDER : placeholder}
       onChange={(e) => field.handleChange(e.target.value)}
       onBlur={field.handleBlur}
       disabled={disabled}
       autoComplete={autoComplete}
-      className={cn(revealable && 'pr-9', className)}
+      className={cn(revealable && "pr-9", className)}
       {...ariaProps(id, error)}
     />
   );
@@ -234,7 +256,7 @@ export function SecretField({
     <FieldShell
       id={id}
       label={label}
-      helper={showStored ? 'Stored — type a new value to rotate' : helper}
+      helper={showStored ? "Stored — type a new value to rotate" : helper}
       required={required}
       error={error}
     >
@@ -245,9 +267,13 @@ export function SecretField({
             type="button"
             onClick={() => setReveal((prev) => !prev)}
             className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-            title={reveal ? 'Hide' : 'Show'}
+            title={reveal ? "Hide" : "Show"}
           >
-            {reveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {reveal ? (
+              <EyeOff className="h-3.5 w-3.5" />
+            ) : (
+              <Eye className="h-3.5 w-3.5" />
+            )}
           </button>
         </div>
       ) : (
@@ -274,10 +300,16 @@ export function TextareaField({
   const id = useId();
   const error = firstError(field.state.meta);
   return (
-    <FieldShell id={id} label={label} helper={helper} required={required} error={error}>
+    <FieldShell
+      id={id}
+      label={label}
+      helper={helper}
+      required={required}
+      error={error}
+    >
       <Textarea
         id={id}
-        value={field.state.value ?? ''}
+        value={field.state.value ?? ""}
         onChange={(e) => field.handleChange(e.target.value)}
         onBlur={field.handleBlur}
         placeholder={placeholder}
@@ -298,15 +330,21 @@ export function SelectField({
   disabled,
   className,
   children,
-}: Omit<CommonFieldProps, 'placeholder'> & { children: React.ReactNode }) {
+}: Omit<CommonFieldProps, "placeholder"> & { children: React.ReactNode }) {
   const field = useFieldContext<string>();
   const id = useId();
   const error = firstError(field.state.meta);
   return (
-    <FieldShell id={id} label={label} helper={helper} required={required} error={error}>
+    <FieldShell
+      id={id}
+      label={label}
+      helper={helper}
+      required={required}
+      error={error}
+    >
       <Select
         id={id}
-        value={field.state.value ?? ''}
+        value={field.state.value ?? ""}
         onChange={(e) => field.handleChange(e.target.value)}
         onBlur={field.handleBlur}
         disabled={disabled}
@@ -325,7 +363,7 @@ export function SwitchField({
   label,
   helper,
   disabled,
-}: Omit<CommonFieldProps, 'placeholder' | 'required'>) {
+}: Omit<CommonFieldProps, "placeholder" | "required">) {
   const field = useFieldContext<boolean>();
   const id = useId();
   const checked = Boolean(field.state.value);
@@ -353,7 +391,7 @@ export function CheckboxField({
   label,
   helper,
   disabled,
-}: Omit<CommonFieldProps, 'placeholder' | 'required'>) {
+}: Omit<CommonFieldProps, "placeholder" | "required">) {
   const field = useFieldContext<boolean>();
   const id = useId();
   return (
@@ -371,7 +409,9 @@ export function CheckboxField({
         <label htmlFor={id} className="text-foreground font-medium">
           {label}
         </label>
-        {helper && <div className="text-xs text-muted-foreground">{helper}</div>}
+        {helper && (
+          <div className="text-xs text-muted-foreground">{helper}</div>
+        )}
       </div>
     </div>
   );
@@ -381,9 +421,16 @@ export function CheckboxField({
 export function SubmitButton({ children }: { children: React.ReactNode }) {
   const form = useFormContext();
   return (
-    <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting] as const}>
+    <form.Subscribe
+      selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+    >
       {([canSubmit, isSubmitting]) => (
-        <ActionButton type="submit" intent="primary" disabled={!canSubmit} loading={isSubmitting}>
+        <ActionButton
+          type="submit"
+          intent="primary"
+          disabled={!canSubmit}
+          loading={isSubmitting}
+        >
           {children}
         </ActionButton>
       )}

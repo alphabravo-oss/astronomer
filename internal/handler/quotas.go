@@ -5,7 +5,7 @@
 // Motivation mirrors Rancher's project / resource-quota tab: an
 // operator running shared infrastructure needs a single place to
 // reshape the catalog of caps (free vs team vs enterprise) AND see
-// fleet-wide consumption against those caps.
+// estate-wide consumption against those caps.
 //
 // Endpoints (all under /api/v1):
 //
@@ -15,7 +15,7 @@
 //	PUT    /admin/quota-plans/{name}/    — update (audit emitted)
 //	DELETE /admin/quota-plans/{name}/    — delete; 409 if in-use
 //
-//	GET    /admin/quota-usage/           — fleet-wide snapshot:
+//	GET    /admin/quota-usage/           — estate-wide snapshot:
 //	                                       totals + offenders at >=80%
 //
 //	GET    /projects/{id}/quota/         — project-scoped usage
@@ -36,12 +36,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
@@ -54,6 +56,7 @@ type QuotaQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	ListQuotaPlans(ctx context.Context) ([]sqlc.QuotaPlan, error)
 	GetQuotaPlan(ctx context.Context, name string) (sqlc.QuotaPlan, error)
+	GetQuotaPlanForUpdate(ctx context.Context, name string) (sqlc.QuotaPlan, error)
 	UpsertQuotaPlan(ctx context.Context, arg sqlc.UpsertQuotaPlanParams) (sqlc.QuotaPlan, error)
 	DeleteQuotaPlan(ctx context.Context, name string) error
 	CountProjectsUsingQuotaPlan(ctx context.Context, plan string) (int64, error)
@@ -73,10 +76,46 @@ type QuotaQuerier interface {
 	ListUserQuotaSnapshots(ctx context.Context, arg sqlc.ListUserQuotaSnapshotsParams) ([]sqlc.UserQuotaSnapshotRow, error)
 }
 
+type QuotaMutationTx interface {
+	QuotaQuerier
+	audit.OutboxQuerier
+}
+
+type quotaRunTxFunc func(context.Context, func(QuotaMutationTx) error) error
+
+func executeQuotaMutation(r *http.Request, h *QuotaHandler, mutate func(QuotaQuerier) (sqlc.QuotaPlan, error), describe func(sqlc.QuotaPlan) clusterAuditEvent) (sqlc.QuotaPlan, error) {
+	if h.runTx != nil {
+		var plan sqlc.QuotaPlan
+		err := h.runTx(r.Context(), func(q QuotaMutationTx) error {
+			var mutationErr error
+			plan, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(plan)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return plan, err
+	}
+	plan, err := mutate(h.queries)
+	if err != nil {
+		return sqlc.QuotaPlan{}, err
+	}
+	event := describe(plan)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return plan, nil
+}
+
+var (
+	errQuotaPlanInUse      = errors.New("quota plan is in use")
+	errQuotaReferenceCount = errors.New("quota plan reference count failed")
+)
+
 // QuotaHandler owns /api/v1/admin/quota-plans/* and the two
 // tenant-scoped /quota/ readers.
 type QuotaHandler struct {
 	queries QuotaQuerier
+	runTx   quotaRunTxFunc
 }
 
 // NewQuotaHandler wires a new handler. queries may be nil for
@@ -84,6 +123,14 @@ type QuotaHandler struct {
 func NewQuotaHandler(queries QuotaQuerier) *QuotaHandler {
 	return &QuotaHandler{queries: queries}
 }
+
+func (h *QuotaHandler) SetRunTx(runTx quotaRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *QuotaHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // gate is the superuser gate, mirroring platform_settings.gate.
 func (h *QuotaHandler) gate(w http.ResponseWriter, r *http.Request) bool {
@@ -130,6 +177,7 @@ func planToResponse(p sqlc.QuotaPlan) quotaPlanResponse {
 }
 
 // quotaPlanRequest is the body shape accepted by POST + PUT.
+// openapi:request QuotaPlanRequest
 type quotaPlanRequest struct {
 	Name                    string `json:"name"`
 	Enforcement             string `json:"enforcement"`
@@ -162,7 +210,8 @@ func (h *QuotaHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
 	for _, p := range rows {
 		out = append(out, planToResponse(p))
 	}
-	RespondJSON(w, http.StatusOK, out)
+	page, pagination := pageWindow(r, out)
+	RespondList(w, page, pagination)
 }
 
 // GetPlan handles GET /api/v1/admin/quota-plans/{name}/.
@@ -208,17 +257,16 @@ func (h *QuotaHandler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "enforcement must be 'soft' or 'hard'")
 		return
 	}
-	p, err := h.queries.UpsertQuotaPlan(r.Context(), upsertParamsFromRequest(req))
+	p, err := executeQuotaMutation(r, h,
+		func(q QuotaQuerier) (sqlc.QuotaPlan, error) {
+			return q.UpsertQuotaPlan(r.Context(), upsertParamsFromRequest(req))
+		},
+		quotaPlanAuditEvent("quota.plan_create", http.StatusCreated),
+	)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create quota plan")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create quota plan")
 		return
 	}
-	recordAudit(r, h.queries, "quota.plan_create", "quota_plan", p.Name, p.Name, map[string]any{
-		"enforcement":              p.Enforcement,
-		"max_clusters_per_project": p.MaxClustersPerProject,
-		"max_projects_per_user":    p.MaxProjectsPerUser,
-		"max_tokens_per_user":      p.MaxTokensPerUser,
-	})
 	w.Header().Set("Location", "/api/v1/admin/quota-plans/"+p.Name+"/")
 	RespondJSON(w, http.StatusCreated, planToResponse(p))
 }
@@ -247,27 +295,25 @@ func (h *QuotaHandler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "enforcement must be 'soft' or 'hard'")
 		return
 	}
-	// Pre-check exists so the operator gets a clean 404 instead of an
-	// upsert insert silently materializing a new row.
-	if _, err := h.queries.GetQuotaPlan(r.Context(), name); err != nil {
+	p, err := executeQuotaMutation(r, h,
+		func(q QuotaQuerier) (sqlc.QuotaPlan, error) {
+			// Keep the existence decision and upsert in the same transaction so a
+			// concurrent delete cannot turn an update into an implicit create.
+			if _, getErr := q.GetQuotaPlanForUpdate(r.Context(), name); getErr != nil {
+				return sqlc.QuotaPlan{}, getErr
+			}
+			return q.UpsertQuotaPlan(r.Context(), upsertParamsFromRequest(req))
+		},
+		quotaPlanAuditEvent("quota.plan_update", http.StatusOK),
+	)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Quota plan not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to fetch quota plan")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update quota plan")
 		return
 	}
-	p, err := h.queries.UpsertQuotaPlan(r.Context(), upsertParamsFromRequest(req))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update quota plan")
-		return
-	}
-	recordAudit(r, h.queries, "quota.plan_update", "quota_plan", p.Name, p.Name, map[string]any{
-		"enforcement":              p.Enforcement,
-		"max_clusters_per_project": p.MaxClustersPerProject,
-		"max_projects_per_user":    p.MaxProjectsPerUser,
-		"max_tokens_per_user":      p.MaxTokensPerUser,
-	})
 	RespondJSON(w, http.StatusOK, planToResponse(p))
 }
 
@@ -292,28 +338,54 @@ func (h *QuotaHandler) DeletePlan(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusConflict, apierror.PlanIsReserved, "The 'free' and 'global' quota plans are reserved and cannot be deleted")
 		return
 	}
-	projCount, err := h.queries.CountProjectsUsingQuotaPlan(r.Context(), name)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count plan references")
-		return
-	}
-	userCount, err := h.queries.CountUsersUsingQuotaPlan(r.Context(), name)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count plan references")
-		return
-	}
-	if projCount > 0 || userCount > 0 {
+	_, err := executeQuotaMutation(r, h,
+		func(q QuotaQuerier) (sqlc.QuotaPlan, error) {
+			plan, getErr := q.GetQuotaPlanForUpdate(r.Context(), name)
+			if getErr != nil {
+				return sqlc.QuotaPlan{}, getErr
+			}
+			projCount, countErr := q.CountProjectsUsingQuotaPlan(r.Context(), name)
+			if countErr != nil {
+				return sqlc.QuotaPlan{}, fmt.Errorf("%w: %v", errQuotaReferenceCount, countErr)
+			}
+			userCount, countErr := q.CountUsersUsingQuotaPlan(r.Context(), name)
+			if countErr != nil {
+				return sqlc.QuotaPlan{}, fmt.Errorf("%w: %v", errQuotaReferenceCount, countErr)
+			}
+			if projCount > 0 || userCount > 0 {
+				return sqlc.QuotaPlan{}, errQuotaPlanInUse
+			}
+			return plan, q.DeleteQuotaPlan(r.Context(), name)
+		},
+		quotaPlanAuditEvent("quota.plan_delete", http.StatusNoContent),
+	)
+	if errors.Is(err, errQuotaPlanInUse) {
 		RespondRequestError(w, r, http.StatusConflict, apierror.PlanInUse,
 			"Quota plan is still referenced by at least one project or user; reassign them first")
-
 		return
 	}
-	if err := h.queries.DeleteQuotaPlan(r.Context(), name); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete quota plan")
+	if errors.Is(err, errQuotaReferenceCount) {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count plan references")
 		return
 	}
-	recordAudit(r, h.queries, "quota.plan_delete", "quota_plan", name, name, nil)
+	if errors.Is(err, pgx.ErrNoRows) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Quota plan not found")
+		return
+	}
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete quota plan")
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func quotaPlanAuditEvent(action string, status int) func(sqlc.QuotaPlan) clusterAuditEvent {
+	return func(plan sqlc.QuotaPlan) clusterAuditEvent {
+		return clusterAuditEvent{
+			action: action, resourceType: "quota_plan", resourceID: plan.Name, resourceName: plan.Name, status: status,
+			detail: map[string]any{"enforcement": plan.Enforcement, "max_clusters_per_project": plan.MaxClustersPerProject, "max_projects_per_user": plan.MaxProjectsPerUser, "max_tokens_per_user": plan.MaxTokensPerUser},
+		}
+	}
 }
 
 func upsertParamsFromRequest(req quotaPlanRequest) sqlc.UpsertQuotaPlanParams {
@@ -332,7 +404,7 @@ func upsertParamsFromRequest(req quotaPlanRequest) sqlc.UpsertQuotaPlanParams {
 	}
 }
 
-// ─── Fleet-wide quota usage snapshot ──────────────────────────────────
+// ─── Estate-wide quota usage snapshot ──────────────────────────────────
 
 // usageThresholdPct is the cutoff at which a tenant counts as a
 // "top offender" worth surfacing on the admin dashboard. 80% mirrors
@@ -378,31 +450,81 @@ func (h *QuotaHandler) FleetUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var resp quotaUsageResponse
+	resp.ProjectOffenders = []projectOffenderRow{}
+	resp.UserOffenders = []userOffenderRow{}
 
-	if plan, err := h.queries.GetQuotaPlan(r.Context(), "global"); err == nil {
-		resp.Global.MaxTotalClusters = plan.MaxTotalClusters
-		resp.Global.MaxTotalUsers = plan.MaxTotalUsers
+	plan, err := h.queries.GetQuotaPlan(r.Context(), "global")
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load global quota plan")
+		return
 	}
-	if c, err := h.queries.CountTotalClusters(r.Context()); err == nil {
-		resp.Global.TotalClusters = c
+	resp.Global.MaxTotalClusters = plan.MaxTotalClusters
+	resp.Global.MaxTotalUsers = plan.MaxTotalUsers
+	clusters, err := h.queries.CountTotalClusters(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
+		return
 	}
-	if c, err := h.queries.CountTotalActiveUsers(r.Context()); err == nil {
-		resp.Global.TotalUsers = c
+	resp.Global.TotalClusters = clusters
+	users, err := h.queries.CountTotalActiveUsers(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count active users")
+		return
 	}
+	resp.Global.TotalUsers = users
 
 	// Project offenders. We page through the snapshot table because
 	// the offender filter is in Go (the SQL view can't cheaply express
-	// "max == 0 means unlimited"). 500 rows is a comfortable ceiling
-	// for a fleet of any size we target.
-	projRows, err := h.queries.ListProjectQuotaSnapshots(r.Context(), sqlc.ListProjectQuotaSnapshotsParams{Limit: 500, Offset: 0})
-	if err == nil {
-		resp.ProjectOffenders = collectProjectOffenders(projRows)
+	// "max == 0 means unlimited"). Read every page: silently ignoring tenants
+	// after the first batch would make the fleet dashboard incorrect precisely
+	// at enterprise scale.
+	projRows, err := h.listAllProjectQuotaSnapshots(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project quota usage")
+		return
 	}
-	userRows, err := h.queries.ListUserQuotaSnapshots(r.Context(), sqlc.ListUserQuotaSnapshotsParams{Limit: 500, Offset: 0})
-	if err == nil {
-		resp.UserOffenders = collectUserOffenders(userRows)
+	resp.ProjectOffenders = collectProjectOffenders(projRows)
+	userRows, err := h.listAllUserQuotaSnapshots(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list user quota usage")
+		return
 	}
+	resp.UserOffenders = collectUserOffenders(userRows)
 	RespondJSON(w, http.StatusOK, resp)
+}
+
+const quotaSnapshotBatchSize int32 = 500
+
+func (h *QuotaHandler) listAllProjectQuotaSnapshots(ctx context.Context) ([]sqlc.ProjectQuotaSnapshotRow, error) {
+	all := []sqlc.ProjectQuotaSnapshotRow{}
+	for offset := int32(0); ; offset += quotaSnapshotBatchSize {
+		page, err := h.queries.ListProjectQuotaSnapshots(ctx, sqlc.ListProjectQuotaSnapshotsParams{
+			Limit: quotaSnapshotBatchSize, Offset: offset,
+		})
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, page...)
+		if len(page) < int(quotaSnapshotBatchSize) {
+			return all, nil
+		}
+	}
+}
+
+func (h *QuotaHandler) listAllUserQuotaSnapshots(ctx context.Context) ([]sqlc.UserQuotaSnapshotRow, error) {
+	all := []sqlc.UserQuotaSnapshotRow{}
+	for offset := int32(0); ; offset += quotaSnapshotBatchSize {
+		page, err := h.queries.ListUserQuotaSnapshots(ctx, sqlc.ListUserQuotaSnapshotsParams{
+			Limit: quotaSnapshotBatchSize, Offset: offset,
+		})
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, page...)
+		if len(page) < int(quotaSnapshotBatchSize) {
+			return all, nil
+		}
+	}
 }
 
 func collectProjectOffenders(rows []sqlc.ProjectQuotaSnapshotRow) []projectOffenderRow {
@@ -485,9 +607,21 @@ func (h *QuotaHandler) ProjectQuota(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to load project quota")
 		return
 	}
-	clusters, _ := h.queries.CountClustersInProject(r.Context(), projectID)
-	namespaces, _ := h.queries.CountNamespacesInProject(r.Context(), projectID)
-	members, _ := h.queries.CountMembersInProject(r.Context(), projectID)
+	clusters, err := h.queries.CountClustersInProject(r.Context(), projectID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count project clusters")
+		return
+	}
+	namespaces, err := h.queries.CountNamespacesInProject(r.Context(), projectID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count project namespaces")
+		return
+	}
+	members, err := h.queries.CountMembersInProject(r.Context(), projectID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count project members")
+		return
+	}
 
 	limits := map[string]int32{
 		"max_clusters_per_project":   plan.MaxClustersPerProject,
@@ -536,8 +670,16 @@ func (h *QuotaHandler) MyQuota(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to load user quota")
 		return
 	}
-	projects, _ := h.queries.CountProjectsForUser(r.Context(), userID)
-	tokens, _ := h.queries.CountActiveTokensForUser(r.Context(), userID)
+	projects, err := h.queries.CountProjectsForUser(r.Context(), userID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count user projects")
+		return
+	}
+	tokens, err := h.queries.CountActiveTokensForUser(r.Context(), userID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count active API tokens")
+		return
+	}
 	limits := map[string]int32{
 		"max_projects_per_user": plan.MaxProjectsPerUser,
 		"max_tokens_per_user":   plan.MaxTokensPerUser,

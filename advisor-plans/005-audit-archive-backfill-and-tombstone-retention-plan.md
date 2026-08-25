@@ -100,8 +100,8 @@ row that merely references the cluster. Writing the cluster name into their
 ### Step 2 — populate it going forward
 
 `internal/db/queries/cluster_decommission.sql` → `ArchiveAndPurgeAuditLogsForCluster`
-(the live one, used by the decommission `archive_audit` phase; the older
-`ArchiveAuditLogsForCluster` is also present). Add `archived_cluster_name` to the
+(the sole atomic query used by the decommission `archive_audit` phase; the
+older split archive/delete queries have been removed). Add `archived_cluster_name` to the
 INSERT column list and select it from `clusters` joined on the cluster_id arg.
 
 Preserve the existing single-snapshot semantics — the `to_archive` CTE pins the

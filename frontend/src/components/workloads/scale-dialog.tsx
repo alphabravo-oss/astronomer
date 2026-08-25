@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { Loader2, Minus, Plus } from 'lucide-react';
-import { ModalShell } from '@/components/ui/modal-shell';
+import { useState, useEffect } from "react";
+import { Loader2, Minus, Plus } from "lucide-react";
+import { ModalShell } from "@/components/ui/modal-shell";
 
 interface ScaleDialogProps {
   open: boolean;
@@ -36,7 +36,7 @@ export function ScaleDialog({
       size="sm"
       panelClassName="max-w-sm"
       bodyClassName="space-y-0"
-      footer={(
+      footer={
         <div className="flex items-center justify-end gap-2">
           <button
             onClick={onClose}
@@ -57,15 +57,17 @@ export function ScaleDialog({
             Scale
           </button>
         </div>
-      )}
+      }
     >
       <p className="text-sm text-muted-foreground">
-        Set the desired number of replicas for{' '}
+        Set the desired number of replicas for{" "}
         <span className="font-mono text-foreground">{workloadName}</span>
       </p>
 
       <div className="mt-5 flex items-center justify-center gap-4">
         <button
+          type="button"
+          aria-label="Decrease desired replicas"
           onClick={() => setReplicas(Math.max(0, replicas - 1))}
           className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border
             text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -75,15 +77,20 @@ export function ScaleDialog({
 
         <input
           type="number"
+          aria-label="Desired replicas"
           min={0}
           max={100}
           value={replicas}
-          onChange={(e) => setReplicas(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+          onChange={(e) =>
+            setReplicas(Math.max(0, Math.min(100, Number(e.target.value) || 0)))
+          }
           className="h-10 w-20 text-center text-lg font-medium tabular-nums rounded border border-border
             bg-background focus:outline-none focus:ring-1 focus:ring-ring"
         />
 
         <button
+          type="button"
+          aria-label="Increase desired replicas"
           onClick={() => setReplicas(Math.min(100, replicas + 1))}
           className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border
             text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -93,7 +100,7 @@ export function ScaleDialog({
       </div>
 
       <p className="mt-2 text-center text-xs text-muted-foreground">
-        Current: {currentReplicas} replica{currentReplicas !== 1 ? 's' : ''}
+        Current: {currentReplicas} replica{currentReplicas !== 1 ? "s" : ""}
       </p>
     </ModalShell>
   );

@@ -112,9 +112,9 @@ func HandleNotificationSend(ctx context.Context, t *asynq.Task) error {
 	if p.FiredAt == "" {
 		p.FiredAt = time.Now().UTC().Format(time.RFC3339)
 	}
-	client := runtimeDeps.HTTPClient
+	client := runtimeDependencies(ctx).HTTPClient
 	if client == nil {
-		client = runtimeHTTPClient()
+		client = runtimeHTTPClient(ctx)
 	}
 
 	slog.InfoContext(ctx, "sending notification",
@@ -155,7 +155,7 @@ func HandleNotificationSend(ctx context.Context, t *asynq.Task) error {
 		// writes a row there separately; this dispatcher just
 		// acknowledges the notification:send task so the asynq queue
 		// stays clean.
-		runtimeLogger().InfoContext(ctx, "email channel handled by smtp dispatcher", "subject", p.Subject)
+		runtimeLogger(ctx).InfoContext(ctx, "email channel handled by smtp dispatcher", "subject", p.Subject)
 	default:
 		return fmt.Errorf("unsupported notification channel %q", p.Channel)
 	}
@@ -402,7 +402,7 @@ func postJSON(ctx context.Context, client *http.Client, url string, body any, ac
 		return errors.New("notification destination is not a permitted public address")
 	}
 	if client == nil {
-		client = runtimeHTTPClient()
+		client = runtimeHTTPClient(ctx)
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {

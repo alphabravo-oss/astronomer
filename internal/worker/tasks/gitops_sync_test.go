@@ -8,10 +8,12 @@ package tasks
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +28,53 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/gitops"
 )
+
+type rejectingGitOpsDecryptor struct{}
+
+func (rejectingGitOpsDecryptor) Decrypt(string) (string, error) {
+	return "", errors.New("no matching key")
+}
+
+func TestGitOpsSourceSyncTaskCarriesOnlySourceID(t *testing.T) {
+	sourceID := uuid.New()
+	task, err := NewGitOpsSourceSyncTask(sourceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Type() != GitOpsSyncType {
+		t.Fatalf("task type=%q", task.Type())
+	}
+	parsed, err := parseGitOpsSourceSyncPayload(task.Payload())
+	if err != nil || parsed != sourceID {
+		t.Fatalf("parsed source ID=%s err=%v", parsed, err)
+	}
+	if strings.Contains(string(task.Payload()), "repo") || strings.Contains(string(task.Payload()), "auth") {
+		t.Fatalf("task payload contains repository or credential material: %s", task.Payload())
+	}
+	if _, err := NewGitOpsSourceSyncTask(uuid.Nil); err == nil {
+		t.Fatal("nil source ID accepted")
+	}
+}
+
+func TestGitOpsAuthRejectsUndecryptableFernetButRetainsLegacyPlaintext(t *testing.T) {
+	tokenBytes := make([]byte, 57)
+	tokenBytes[0] = 0x80
+	fernetShaped := base64.URLEncoding.EncodeToString(tokenBytes)
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Decryptor: rejectingGitOpsDecryptor{}}}
+
+	method, err := runtime.buildGitAuth(sqlc.GitopsRegistrationSource{
+		Name: "broken", AuthMode: "https_token", AuthEncrypted: fernetShaped,
+	})
+	if err == nil || method != nil || !strings.Contains(err.Error(), "decrypt source") {
+		t.Fatalf("undecryptable Fernet method/error=%T/%v", method, err)
+	}
+	method, err = runtime.buildGitAuth(sqlc.GitopsRegistrationSource{
+		Name: "legacy", AuthMode: "https_token", AuthEncrypted: "legacy-plaintext-token",
+	})
+	if err != nil || method == nil {
+		t.Fatalf("legacy plaintext compatibility method/error=%T/%v", method, err)
+	}
+}
 
 // ----- fake querier -------------------------------------------------
 
@@ -426,8 +475,6 @@ func clusterRegistrationYAML(name string, labels map[string]string) string {
 // ----- tests --------------------------------------------------------
 
 func TestSync_RegistersNewCluster(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml", clusterRegistrationYAML("prod-east", map[string]string{"tier": "prod"}), "add prod"); err != nil {
@@ -438,13 +485,13 @@ func TestSync_RegistersNewCluster(t *testing.T) {
 	}
 
 	src := setupSource(t, q, bare, "log", "interval")
-	ConfigureGitOps(GitOpsDeps{
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{
 		Queries:   q,
 		CloneRoot: t.TempDir(),
 		Now:       func() time.Time { return time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC) },
-	})
+	}}
 
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("SyncSource: %v", err)
 	}
 	if len(q.clusters) != 1 {
@@ -464,8 +511,6 @@ func TestSync_RegistersNewCluster(t *testing.T) {
 }
 
 func TestSync_NoOpsOnConvergedSha(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml", clusterRegistrationYAML("prod-east", nil), "add prod"); err != nil {
@@ -475,8 +520,8 @@ func TestSync_NoOpsOnConvergedSha(t *testing.T) {
 		t.Fatalf("push: %v", err)
 	}
 	src := setupSource(t, q, bare, "log", "interval")
-	ConfigureGitOps(GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now})
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now}}
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("first sync: %v", err)
 	}
 	// Mutate cluster locally so we can detect any further updates.
@@ -485,7 +530,7 @@ func TestSync_NoOpsOnConvergedSha(t *testing.T) {
 	c.DisplayName = "marker"
 	q.clusters[id] = c
 
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("second sync: %v", err)
 	}
 	if q.clusters[id].DisplayName != "marker" {
@@ -494,8 +539,6 @@ func TestSync_NoOpsOnConvergedSha(t *testing.T) {
 }
 
 func TestSync_UpdatesLabelsOnYAMLChange(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml", clusterRegistrationYAML("prod-east", map[string]string{"tier": "prod"}), "add"); err != nil {
@@ -505,8 +548,8 @@ func TestSync_UpdatesLabelsOnYAMLChange(t *testing.T) {
 		t.Fatalf("push1: %v", err)
 	}
 	src := setupSource(t, q, bare, "log", "interval")
-	ConfigureGitOps(GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now})
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now}}
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync1: %v", err)
 	}
 
@@ -517,7 +560,7 @@ func TestSync_UpdatesLabelsOnYAMLChange(t *testing.T) {
 	if err := pushBranchAsMain(t, work); err != nil {
 		t.Fatalf("push2: %v", err)
 	}
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync2: %v", err)
 	}
 	id := q.byName["prod-east"]
@@ -527,8 +570,6 @@ func TestSync_UpdatesLabelsOnYAMLChange(t *testing.T) {
 }
 
 func TestSync_LogsMissingUnderLogPolicy(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml", clusterRegistrationYAML("prod-east", nil), "add"); err != nil {
@@ -538,8 +579,8 @@ func TestSync_LogsMissingUnderLogPolicy(t *testing.T) {
 		t.Fatalf("push1: %v", err)
 	}
 	src := setupSource(t, q, bare, "log", "interval")
-	ConfigureGitOps(GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now})
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now}}
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync1: %v", err)
 	}
 	// Remove the file.
@@ -550,7 +591,7 @@ func TestSync_LogsMissingUnderLogPolicy(t *testing.T) {
 		t.Fatalf("push2: %v", err)
 	}
 	q.auditRows = nil
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync2: %v", err)
 	}
 	// link row remains (log policy doesn't tombstone)
@@ -563,8 +604,6 @@ func TestSync_LogsMissingUnderLogPolicy(t *testing.T) {
 }
 
 func TestSync_TombstonesUnderTombstonePolicy(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml", clusterRegistrationYAML("prod-east", nil), "add"); err != nil {
@@ -574,8 +613,8 @@ func TestSync_TombstonesUnderTombstonePolicy(t *testing.T) {
 		t.Fatalf("push1: %v", err)
 	}
 	src := setupSource(t, q, bare, "tombstone", "interval")
-	ConfigureGitOps(GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now})
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now}}
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync1: %v", err)
 	}
 	if err := removeAndCommit(t, work, "clusters/prod-east.yaml"); err != nil {
@@ -584,7 +623,7 @@ func TestSync_TombstonesUnderTombstonePolicy(t *testing.T) {
 	if err := pushBranchAsMain(t, work); err != nil {
 		t.Fatalf("push2: %v", err)
 	}
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync2: %v", err)
 	}
 	id := q.byName["prod-east"]
@@ -594,8 +633,6 @@ func TestSync_TombstonesUnderTombstonePolicy(t *testing.T) {
 }
 
 func TestSync_DecommissionsAfterGrace(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml", clusterRegistrationYAML("prod-east", nil), "add"); err != nil {
@@ -608,15 +645,15 @@ func TestSync_DecommissionsAfterGrace(t *testing.T) {
 	enq := &fakeEnqueuer{}
 	t0 := time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC)
 	currentTime := t0
-	ConfigureGitOps(GitOpsDeps{
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{
 		Queries:   q,
 		Enqueuer:  enq,
 		CloneRoot: t.TempDir(),
 		Now:       func() time.Time { return currentTime },
-	})
+	}}
 
 	// Tick 1: register.
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync1: %v", err)
 	}
 	// Remove the file.
@@ -626,14 +663,14 @@ func TestSync_DecommissionsAfterGrace(t *testing.T) {
 	if err := pushBranchAsMain(t, work); err != nil {
 		t.Fatalf("push2: %v", err)
 	}
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync2: %v", err)
 	}
 	// Advance the clock past the grace window and run the global tick.
 	currentTime = t0.Add(GitOpsTombstoneGrace + time.Minute)
 	// Re-stamp last_synced_at into the past so the reaper picks it up
 	// (the reaper runs at end of HandleGitOpsSync, not SyncSource).
-	if err := HandleGitOpsSync(context.Background(), nil); err != nil {
+	if err := runtime.HandleGitOpsSync(context.Background(), nil); err != nil {
 		t.Fatalf("HandleGitOpsSync: %v", err)
 	}
 	if len(enq.tasks) == 0 {
@@ -645,8 +682,6 @@ func TestSync_DecommissionsAfterGrace(t *testing.T) {
 }
 
 func TestSync_DecommissionsImmediatelyUnderDecommissionPolicy(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml", clusterRegistrationYAML("prod-east", nil), "add"); err != nil {
@@ -667,8 +702,8 @@ func TestSync_DecommissionsImmediatelyUnderDecommissionPolicy(t *testing.T) {
 	}
 	src := setupSource(t, q, bare, "decommission", "interval")
 	enq := &fakeEnqueuer{}
-	ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now}}
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync1: %v", err)
 	}
 	if err := removeAndCommit(t, work, "clusters/prod-east.yaml"); err != nil {
@@ -677,7 +712,7 @@ func TestSync_DecommissionsImmediatelyUnderDecommissionPolicy(t *testing.T) {
 	if err := pushBranchAsMain(t, work); err != nil {
 		t.Fatalf("push2: %v", err)
 	}
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync2: %v", err)
 	}
 	if len(enq.tasks) != 1 || enq.tasks[0].Type() != "cluster:decommission" {
@@ -686,20 +721,18 @@ func TestSync_DecommissionsImmediatelyUnderDecommissionPolicy(t *testing.T) {
 }
 
 func TestGitOpsDecommissionWritesTaskOutboxBeforeDirectEnqueue(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	clusterID := uuid.New()
 	outbox := &fakeTaskOutboxWriter{}
 	enq := &fakeEnqueuer{}
-	ConfigureGitOps(GitOpsDeps{
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{
 		Queries:    q,
 		Enqueuer:   enq,
 		TaskOutbox: outbox,
 		Now:        time.Now,
-	})
+	}}
 
-	if err := enqueueDecommission(context.Background(), clusterID, "prod-east"); err != nil {
+	if err := runtime.enqueueDecommission(context.Background(), clusterID, "prod-east"); err != nil {
 		t.Fatalf("enqueueDecommission: %v", err)
 	}
 	if len(q.createdDecoms) != 1 {
@@ -729,8 +762,6 @@ func TestGitOpsDecommissionWritesTaskOutboxBeforeDirectEnqueue(t *testing.T) {
 }
 
 func TestSync_RestoreFromTombstone(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml", clusterRegistrationYAML("prod-east", nil), "add"); err != nil {
@@ -740,8 +771,8 @@ func TestSync_RestoreFromTombstone(t *testing.T) {
 		t.Fatalf("push1: %v", err)
 	}
 	src := setupSource(t, q, bare, "tombstone", "interval")
-	ConfigureGitOps(GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now})
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now}}
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync1: %v", err)
 	}
 	if err := removeAndCommit(t, work, "clusters/prod-east.yaml"); err != nil {
@@ -750,7 +781,7 @@ func TestSync_RestoreFromTombstone(t *testing.T) {
 	if err := pushBranchAsMain(t, work); err != nil {
 		t.Fatalf("push2: %v", err)
 	}
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync2: %v", err)
 	}
 	id := q.byName["prod-east"]
@@ -764,7 +795,7 @@ func TestSync_RestoreFromTombstone(t *testing.T) {
 	if err := pushBranchAsMain(t, work); err != nil {
 		t.Fatalf("push3: %v", err)
 	}
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("sync3: %v", err)
 	}
 	if q.links[id].Status != "active" {
@@ -776,8 +807,6 @@ func TestSync_RestoreFromTombstone(t *testing.T) {
 }
 
 func TestSync_ManualMode_DoesNotRunOnSchedule(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml", clusterRegistrationYAML("prod-east", nil), "add"); err != nil {
@@ -787,8 +816,8 @@ func TestSync_ManualMode_DoesNotRunOnSchedule(t *testing.T) {
 		t.Fatalf("push: %v", err)
 	}
 	setupSource(t, q, bare, "log", "manual")
-	ConfigureGitOps(GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now})
-	if err := HandleGitOpsSync(context.Background(), nil); err != nil {
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now}}
+	if err := runtime.HandleGitOpsSync(context.Background(), nil); err != nil {
 		t.Fatalf("HandleGitOpsSync: %v", err)
 	}
 	if len(q.clusters) != 0 {
@@ -797,8 +826,6 @@ func TestSync_ManualMode_DoesNotRunOnSchedule(t *testing.T) {
 }
 
 func TestPreview_DryRunNoWrites(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml", clusterRegistrationYAML("prod-east", map[string]string{"tier": "prod"}), "add"); err != nil {
@@ -808,8 +835,8 @@ func TestPreview_DryRunNoWrites(t *testing.T) {
 		t.Fatalf("push: %v", err)
 	}
 	src := setupSource(t, q, bare, "log", "interval")
-	ConfigureGitOps(GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now})
-	res, err := PreviewSource(context.Background(), src.ID)
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now}}
+	res, err := runtime.PreviewSource(context.Background(), src.ID)
 	if err != nil {
 		t.Fatalf("PreviewSource: %v", err)
 	}
@@ -876,7 +903,7 @@ func contains(haystack, needle string) bool {
 // non-YAML keep file (so the clusters/ dir survives even when every
 // registration is later removed), runs one successful sync to establish
 // the per-cluster links, and returns the source + working clone path.
-func seedDecommissionFleet(t *testing.T, q *fakeGitOpsQuerier, onDelete string, n int) (sqlc.GitopsRegistrationSource, string) {
+func seedDecommissionFleet(t *testing.T, runtime GitOpsRuntime, q *fakeGitOpsQuerier, onDelete string, n int) (sqlc.GitopsRegistrationSource, string) {
 	t.Helper()
 	bare, work := makeBareRepo(t)
 	for i := 0; i < n; i++ {
@@ -889,7 +916,7 @@ func seedDecommissionFleet(t *testing.T, q *fakeGitOpsQuerier, onDelete string, 
 		t.Fatalf("push: %v", err)
 	}
 	src := setupSource(t, q, bare, onDelete, "interval")
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("seed sync: %v", err)
 	}
 	if got := len(q.links); got != n {
@@ -901,18 +928,16 @@ func seedDecommissionFleet(t *testing.T, q *fakeGitOpsQuerier, onDelete string, 
 // (a) Bad path_prefix / missing walkRoot fails the sync hard and enqueues
 // ZERO decommissions — the swallow-os.IsNotExist footgun is closed.
 func TestSync_BadPathPrefix_FailsSyncZeroDecom(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	enq := &fakeEnqueuer{}
-	ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now}}
 
-	src, _ := seedDecommissionFleet(t, q, "decommission", 1)
+	src, _ := seedDecommissionFleet(t, runtime, q, "decommission", 1)
 	// Re-point at a non-existent subpath: a typo'd prefix.
 	src.PathPrefix = "does-not-exist"
 	q.sources[src.ID] = src
 
-	err := SyncSource(context.Background(), src.ID)
+	err := runtime.SyncSource(context.Background(), src.ID)
 	if err == nil {
 		t.Fatalf("expected hard sync error for bad path_prefix")
 	}
@@ -939,13 +964,11 @@ func TestSync_BadPathPrefix_FailsSyncZeroDecom(t *testing.T) {
 // (b) Empty parsedDocs under decommission is blocked: zero enqueued, loud
 // audit, source error stamped, last_synced NOT advanced.
 func TestSync_EmptyParsedDocs_Blocked(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	enq := &fakeEnqueuer{}
-	ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now}}
 
-	src, work := seedDecommissionFleet(t, q, "decommission", 1)
+	src, work := seedDecommissionFleet(t, runtime, q, "decommission", 1)
 	syncedBefore := q.stampedSyncedAt[src.ID]
 
 	// Remove the only registration; the .gitkeep keeps clusters/ alive so the
@@ -957,7 +980,7 @@ func TestSync_EmptyParsedDocs_Blocked(t *testing.T) {
 		t.Fatalf("push: %v", err)
 	}
 
-	err := SyncSource(context.Background(), src.ID)
+	err := runtime.SyncSource(context.Background(), src.ID)
 	if err == nil || !contains(err.Error(), "mass-decommission blocked") {
 		t.Fatalf("expected mass-decommission blocked error, got %v", err)
 	}
@@ -981,13 +1004,11 @@ func TestSync_EmptyParsedDocs_Blocked(t *testing.T) {
 // (c) A legitimate single-cluster removal among many does NOT trip the
 // guard — exactly that one cluster is decommissioned.
 func TestSync_SingleRemovalAmongMany_NotBlocked(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	enq := &fakeEnqueuer{}
-	ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now}}
 
-	src, work := seedDecommissionFleet(t, q, "decommission", 4)
+	src, work := seedDecommissionFleet(t, runtime, q, "decommission", 4)
 
 	// Drop exactly one of four — missing=1, threshold=max(ceil(0.5*4),3)=3.
 	if err := removeAndCommit(t, work, "clusters/cluster-a.yaml"); err != nil {
@@ -997,7 +1018,7 @@ func TestSync_SingleRemovalAmongMany_NotBlocked(t *testing.T) {
 		t.Fatalf("push: %v", err)
 	}
 
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("SyncSource: %v", err)
 	}
 	if len(q.createdDecoms) != 1 {
@@ -1017,13 +1038,11 @@ func TestSync_SingleRemovalAmongMany_NotBlocked(t *testing.T) {
 // (d) The explicit override lets an operator proceed with a genuine mass
 // removal — and the override self-disarms after one honored sync.
 func TestSync_MassRemoval_OverrideHonoredAndDisarmed(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	enq := &fakeEnqueuer{}
-	ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now}}
 
-	src, work := seedDecommissionFleet(t, q, "decommission", 4)
+	src, work := seedDecommissionFleet(t, runtime, q, "decommission", 4)
 
 	// Operator arms the one-shot override.
 	src.AllowMassDecommission = true
@@ -1039,7 +1058,7 @@ func TestSync_MassRemoval_OverrideHonoredAndDisarmed(t *testing.T) {
 		t.Fatalf("push: %v", err)
 	}
 
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("SyncSource with override armed: %v", err)
 	}
 	if len(q.createdDecoms) != 4 {
@@ -1061,13 +1080,11 @@ func TestSync_MassRemoval_OverrideHonoredAndDisarmed(t *testing.T) {
 // FUTURE bad sync. The benign sync proceeds normally (one removal), no override
 // audit (it wasn't honored), but the arm is gone afterward.
 func TestSync_StaleOverride_DisarmedOnBenignSync(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	enq := &fakeEnqueuer{}
-	ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now}}
 
-	src, work := seedDecommissionFleet(t, q, "decommission", 4)
+	src, work := seedDecommissionFleet(t, runtime, q, "decommission", 4)
 	src.AllowMassDecommission = true // operator armed it, but the next sync is benign
 	q.sources[src.ID] = src
 
@@ -1078,7 +1095,7 @@ func TestSync_StaleOverride_DisarmedOnBenignSync(t *testing.T) {
 	if err := pushBranchAsMain(t, work); err != nil {
 		t.Fatalf("push: %v", err)
 	}
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("SyncSource: %v", err)
 	}
 	if len(q.createdDecoms) != 1 {
@@ -1098,13 +1115,11 @@ func TestSync_StaleOverride_DisarmedOnBenignSync(t *testing.T) {
 func TestSync_MassDeletion_NonDestructivePoliciesUnaffected(t *testing.T) {
 	for _, policy := range []string{"log", "tombstone"} {
 		t.Run(policy, func(t *testing.T) {
-			ResetGitOps()
-			defer ResetGitOps()
 			q := newFakeQuerier()
 			enq := &fakeEnqueuer{}
-			ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
+			runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now}}
 
-			src, work := seedDecommissionFleet(t, q, policy, 4)
+			src, work := seedDecommissionFleet(t, runtime, q, policy, 4)
 			for _, c := range []string{"a", "b", "c", "d"} {
 				if err := removeAndCommit(t, work, "clusters/cluster-"+c+".yaml"); err != nil {
 					t.Fatalf("rm %s: %v", c, err)
@@ -1114,7 +1129,7 @@ func TestSync_MassDeletion_NonDestructivePoliciesUnaffected(t *testing.T) {
 				t.Fatalf("push: %v", err)
 			}
 
-			if err := SyncSource(context.Background(), src.ID); err != nil {
+			if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 				t.Fatalf("SyncSource (%s): %v", policy, err)
 			}
 			if len(q.createdDecoms) != 0 {

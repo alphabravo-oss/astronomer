@@ -37,6 +37,14 @@ func (f *triggerAdminFake) ListCharlieTriggerEventsForAdmin(_ context.Context, a
 	f.list = arg
 	return f.rows, nil
 }
+func (f *triggerAdminFake) GetCharlieTriggerEventForAdmin(_ context.Context, arg sqlc.GetCharlieTriggerEventForAdminParams) (sqlc.CharlieTriggerEvent, error) {
+	for _, row := range f.rows {
+		if row.ID == arg.ID {
+			return row, nil
+		}
+	}
+	return sqlc.CharlieTriggerEvent{}, errors.New("not found")
+}
 func (f *triggerAdminFake) RetryDeadCharlieTriggerEventWithOutbox(_ context.Context, arg sqlc.RetryDeadCharlieTriggerEventWithOutboxParams) (sqlc.RetryDeadCharlieTriggerEventWithOutboxRow, error) {
 	f.retry = arg
 	source := f.rows[0]

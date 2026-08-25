@@ -5,121 +5,132 @@
  * and CSS class application.
  */
 
-import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { StatusBadge } from '@/components/ui/status-badge';
+import React from "react";
+import { render, screen } from "@testing-library/react";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
 
-describe('StatusBadge', () => {
+describe("StatusBadge", () => {
+  it("renders partial controller payloads as unknown instead of crashing", () => {
+    render(<StatusBadge status={undefined} />);
+    expect(screen.getByText("Unknown")).toBeInTheDocument();
+  });
+
   it('renders with "active" status', () => {
     render(<StatusBadge status="active" />);
-    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
   });
 
   it('renders with "error" status', () => {
     render(<StatusBadge status="error" />);
-    expect(screen.getByText('Error')).toBeInTheDocument();
+    expect(screen.getByText("Error")).toBeInTheDocument();
   });
 
   it('renders with "warning" status', () => {
     render(<StatusBadge status="warning" />);
-    expect(screen.getByText('Warning')).toBeInTheDocument();
+    expect(screen.getByText("Warning")).toBeInTheDocument();
   });
 
   it('renders with "pending" status', () => {
     render(<StatusBadge status="pending" />);
-    expect(screen.getByText('Pending')).toBeInTheDocument();
+    expect(screen.getByText("Pending")).toBeInTheDocument();
   });
 
   it('renders with "disconnected" status', () => {
     render(<StatusBadge status="disconnected" />);
-    expect(screen.getByText('Disconnected')).toBeInTheDocument();
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
   });
 
-  it('renders custom label when provided', () => {
+  it("renders custom label when provided", () => {
     render(<StatusBadge status="active" label="Online" />);
-    expect(screen.getByText('Online')).toBeInTheDocument();
+    expect(screen.getByText("Online")).toBeInTheDocument();
   });
 
-  it('capitalizes first letter of status as default label', () => {
+  it("capitalizes first letter of status as default label", () => {
     render(<StatusBadge status="running" />);
-    expect(screen.getByText('Running')).toBeInTheDocument();
+    expect(screen.getByText("Running")).toBeInTheDocument();
   });
 
   // ---------------------------------------------------------------------------
   // CSS classes
   // ---------------------------------------------------------------------------
 
-  it('applies success background class for active status', () => {
+  it("applies success background class for active status", () => {
     const { container } = render(<StatusBadge status="active" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('bg-status-success');
+    expect(badge.className).toContain("bg-status-success");
   });
 
-  it('applies error background class for error status', () => {
+  it("applies error background class for error status", () => {
     const { container } = render(<StatusBadge status="error" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('bg-status-error');
+    expect(badge.className).toContain("bg-status-error");
   });
 
-  it('applies warning background class for warning status', () => {
+  it("applies warning background class for warning status", () => {
     const { container } = render(<StatusBadge status="warning" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('bg-status-warning');
+    expect(badge.className).toContain("bg-status-warning");
   });
 
-  it('applies info background class for pending status', () => {
+  it("applies info background class for pending status", () => {
     const { container } = render(<StatusBadge status="pending" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('bg-status-info');
+    expect(badge.className).toContain("bg-status-info");
   });
 
-  it('normalizes sync and drift-style statuses', () => {
+  it("normalizes sync and drift-style statuses", () => {
     const { container } = render(<StatusBadge status="OutOfSync" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('bg-status-warning');
+    expect(badge.className).toContain("bg-status-warning");
   });
 
-  it('applies permission denial status as error', () => {
-    const { container } = render(<StatusBadge status="denied" label="Denied" />);
+  it("applies permission denial status as error", () => {
+    const { container } = render(
+      <StatusBadge status="denied" label="Denied" />,
+    );
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('bg-status-error');
+    expect(badge.className).toContain("bg-status-error");
   });
 
-  it('applies custom className', () => {
-    const { container } = render(<StatusBadge status="active" className="my-custom-class" />);
+  it("applies custom className", () => {
+    const { container } = render(
+      <StatusBadge status="active" className="my-custom-class" />,
+    );
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('my-custom-class');
+    expect(badge.className).toContain("my-custom-class");
   });
 
   // ---------------------------------------------------------------------------
   // Dot indicator
   // ---------------------------------------------------------------------------
 
-  it('shows dot indicator by default', () => {
+  it("shows dot indicator by default", () => {
     const { container } = render(<StatusBadge status="active" />);
-    const dots = container.querySelectorAll('.rounded-full');
+    const dots = container.querySelectorAll(".rounded-full");
     expect(dots.length).toBeGreaterThan(0);
   });
 
-  it('hides dot indicator when showDot is false', () => {
-    const { container } = render(<StatusBadge status="active" showDot={false} />);
+  it("hides dot indicator when showDot is false", () => {
+    const { container } = render(
+      <StatusBadge status="active" showDot={false} />,
+    );
     // Without the dot, there should be no nested span with rounded-full for the dot
     const badge = container.firstChild as HTMLElement;
-    const nestedSpans = badge.querySelectorAll('span > span');
+    const nestedSpans = badge.querySelectorAll("span > span");
     // Should only be the text, no dot container
     expect(nestedSpans.length).toBe(0);
   });
 
-  it('renders a custom icon instead of the dot indicator', () => {
+  it("renders a custom icon instead of the dot indicator", () => {
     const { container } = render(
-      <StatusBadge status="synced" icon={<svg data-testid="badge-icon" />} />
+      <StatusBadge status="synced" icon={<svg data-testid="badge-icon" />} />,
     );
-    expect(screen.getByTestId('badge-icon')).toBeInTheDocument();
-    const dots = container.querySelectorAll('.animate-pulse-dot');
+    expect(screen.getByTestId("badge-icon")).toBeInTheDocument();
+    const dots = container.querySelectorAll(".animate-pulse-dot");
     expect(dots.length).toBe(0);
   });
 
@@ -127,44 +138,44 @@ describe('StatusBadge', () => {
   // Size variants
   // ---------------------------------------------------------------------------
 
-  it('renders with small size', () => {
+  it("renders with small size", () => {
     const { container } = render(<StatusBadge status="active" size="sm" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('text-[10px]');
+    expect(badge.className).toContain("text-[10px]");
   });
 
-  it('renders with medium size (default)', () => {
+  it("renders with medium size (default)", () => {
     const { container } = render(<StatusBadge status="active" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('text-xs');
+    expect(badge.className).toContain("text-xs");
   });
 
-  it('renders with large size', () => {
+  it("renders with large size", () => {
     const { container } = render(<StatusBadge status="active" size="lg" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('text-sm');
+    expect(badge.className).toContain("text-sm");
   });
 
   // ---------------------------------------------------------------------------
   // Pulse behavior
   // ---------------------------------------------------------------------------
 
-  it('shows pulse animation for active statuses', () => {
+  it("shows pulse animation for active statuses", () => {
     const { container } = render(<StatusBadge status="active" />);
-    const pulseElement = container.querySelector('.animate-pulse-dot');
+    const pulseElement = container.querySelector(".animate-pulse-dot");
     expect(pulseElement).not.toBeNull();
   });
 
-  it('shows pulse animation for ready and completed statuses', () => {
+  it("shows pulse animation for ready and completed statuses", () => {
     const { container: ready } = render(<StatusBadge status="ready" />);
-    expect(ready.querySelector('.animate-pulse-dot')).not.toBeNull();
+    expect(ready.querySelector(".animate-pulse-dot")).not.toBeNull();
     const { container: completed } = render(<StatusBadge status="completed" />);
-    expect(completed.querySelector('.animate-pulse-dot')).not.toBeNull();
+    expect(completed.querySelector(".animate-pulse-dot")).not.toBeNull();
   });
 
-  it('shows pulse when explicitly set via pulse prop', () => {
+  it("shows pulse when explicitly set via pulse prop", () => {
     const { container } = render(<StatusBadge status="error" pulse={true} />);
-    const pulseElement = container.querySelector('.animate-pulse-dot');
+    const pulseElement = container.querySelector(".animate-pulse-dot");
     expect(pulseElement).not.toBeNull();
   });
 });

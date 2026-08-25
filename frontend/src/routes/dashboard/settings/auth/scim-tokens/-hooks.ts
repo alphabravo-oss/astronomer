@@ -5,10 +5,10 @@
  * wave. The plaintext token surfaces only in the create mutation's result and
  * is never cached.
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import * as api from '@/lib/api';
-import { queryKeys } from '@/lib/query-keys';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import * as api from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 
 export function useSCIMTokens() {
   return useQuery({
@@ -23,9 +23,9 @@ export function useCreateSCIMToken() {
     mutationFn: (name: string) => api.createSCIMToken(name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.scimTokens });
-      toastSuccess('SCIM token created');
+      toastSuccess("SCIM token created");
     },
-    onError: (err: Error) => toastApiError('Failed to create SCIM token', err),
+    onError: (err: Error) => toastApiError("Failed to create SCIM token", err),
   });
 }
 
@@ -35,8 +35,8 @@ export function useRevokeSCIMToken() {
     mutationFn: (id: string) => api.deleteSCIMToken(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.scimTokens });
-      toastSuccess('SCIM token revoked');
+      toastSuccess("SCIM token revoked");
     },
-    onError: (err: Error) => toastApiError('Failed to revoke SCIM token', err),
+    onError: (err: Error) => toastApiError("Failed to revoke SCIM token", err),
   });
 }

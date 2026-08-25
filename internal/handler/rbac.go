@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
@@ -53,6 +55,30 @@ type RBACQuerier interface {
 	DeleteProjectRoleBinding(ctx context.Context, id uuid.UUID) error
 }
 
+// RBACMutationTx is the transaction-bound write surface for privilege
+// changes. Production passes sqlc.New(tx), making the role/binding mutation
+// and its sanitized audit intent one commit decision.
+type RBACMutationTx interface {
+	audit.OutboxQuerier
+	CreateGlobalRole(context.Context, sqlc.CreateGlobalRoleParams) (sqlc.GlobalRole, error)
+	CreateClusterRole(context.Context, sqlc.CreateClusterRoleParams) (sqlc.ClusterRole, error)
+	CreateProjectRole(context.Context, sqlc.CreateProjectRoleParams) (sqlc.ProjectRole, error)
+	UpdateGlobalRole(context.Context, sqlc.UpdateGlobalRoleParams) (sqlc.GlobalRole, error)
+	UpdateClusterRole(context.Context, sqlc.UpdateClusterRoleParams) (sqlc.ClusterRole, error)
+	UpdateProjectRole(context.Context, sqlc.UpdateProjectRoleParams) (sqlc.ProjectRole, error)
+	DeleteGlobalRole(context.Context, uuid.UUID) error
+	DeleteClusterRole(context.Context, uuid.UUID) error
+	DeleteProjectRole(context.Context, uuid.UUID) error
+	CreateGlobalRoleBinding(context.Context, sqlc.CreateGlobalRoleBindingParams) (sqlc.GlobalRoleBinding, error)
+	CreateClusterRoleBinding(context.Context, sqlc.CreateClusterRoleBindingParams) (sqlc.ClusterRoleBinding, error)
+	CreateProjectRoleBinding(context.Context, sqlc.CreateProjectRoleBindingParams) (sqlc.ProjectRoleBinding, error)
+	DeleteGlobalRoleBinding(context.Context, uuid.UUID) error
+	DeleteClusterRoleBinding(context.Context, uuid.UUID) error
+	DeleteProjectRoleBinding(context.Context, uuid.UUID) error
+}
+
+type rbacRunTxFunc func(context.Context, func(RBACMutationTx) error) error
+
 type RBACHandler struct {
 	queries  RBACQuerier
 	engine   *rbac.Engine
@@ -66,10 +92,68 @@ type RBACHandler struct {
 	// so a misconfigured deploy notices instead of silently returning
 	// an empty list.
 	templates *rbac.Catalog
+	runTx     rbacRunTxFunc
 }
 
 func NewRBACHandler(queries RBACQuerier) *RBACHandler {
 	return &RBACHandler{queries: queries}
+}
+
+// SetRunTx enables the production atomic RBAC-mutation + audit-intent path.
+func (h *RBACHandler) SetRunTx(runTx rbacRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *RBACHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
+}
+
+type rbacAuditEvent struct {
+	action       string
+	resourceType string
+	resourceID   string
+	resourceName string
+	status       int
+	detail       map[string]any
+}
+
+// executeRBACMutation keeps the compatibility fallback used by narrow unit
+// fakes, while production always executes mutate and RecordOutbox through the
+// same transaction-bound sqlc query object.
+func executeRBACMutation[T any](
+	r *http.Request,
+	h *RBACHandler,
+	mutate func(RBACMutationTx) (T, error),
+	fallback func() (T, error),
+	describe func(T) rbacAuditEvent,
+) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, fmt.Errorf("rbac handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q RBACMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 // SetAuthorization wires the RBAC engine and binding lookup used by my-roles endpoints.
@@ -152,10 +236,6 @@ func (h *RBACHandler) lookupProjectBindingUserID(ctx context.Context, id uuid.UU
 }
 
 // openapi:request RBACRoleRequest
-// openapi:request-allow description  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow displayName  camelCase alias the Next.js frontend still sends (resolveDisplayName); display_name is the documented spelling
-// openapi:request-allow permissions  DEBT: legacy column written beside rules; accepted and persisted, undocumented
-// openapi:request-allow scope  DEBT: documented in the body but taken from the route (global-/cluster-/project-roles); never decoded
 type roleRequest struct {
 	Name           string          `json:"name" validate:"required"`
 	DisplayName    string          `json:"display_name"`
@@ -163,6 +243,9 @@ type roleRequest struct {
 	Description    string          `json:"description"`
 	Permissions    json.RawMessage `json:"permissions"`
 	Rules          json.RawMessage `json:"rules"`
+	// Scope is path-implied and ignored, but remains accepted so clients built
+	// from the original v1 schema do not fail during the sunset window.
+	Scope string `json:"scope,omitempty"`
 	// No IsBuiltin. is_builtin is migration-owned (see rejectBuiltinRoleWrite):
 	// it now freezes a row against update AND delete, so honouring it from a
 	// request body would let anyone holding rbac:create mint a role that not
@@ -181,23 +264,29 @@ func (req *roleRequest) resolveDisplayName() string {
 }
 
 // openapi:request RBACBindingRequest
+type globalRoleBindingRequest struct {
+	UserID string `json:"user_id"`
+	Group  string `json:"group"`
+	RoleID string `json:"role_id"`
+}
+
 // openapi:request RBACClusterBindingRequest
-// openapi:request RBACProjectBindingRequest
-// openapi:request-allow RBACBindingRequest.cluster_id  one struct decodes all three binding routes; CreateGlobalRoleBinding ignores this key
-// openapi:request-allow RBACBindingRequest.project_id  one struct decodes all three binding routes; CreateGlobalRoleBinding ignores this key
-// openapi:request-allow RBACBindingRequest.namespace  one struct decodes all three binding routes; CreateGlobalRoleBinding ignores this key
-// openapi:request-allow RBACClusterBindingRequest.project_id  one struct decodes all three binding routes; CreateClusterRoleBinding ignores this key
-// openapi:request-allow RBACProjectBindingRequest.cluster_id  one struct decodes all three binding routes; CreateProjectRoleBinding ignores this key
-// openapi:request-allow RBACProjectBindingRequest.namespace  one struct decodes all three binding routes; CreateProjectRoleBinding ignores this key
-type roleBindingRequest struct {
+type clusterRoleBindingRequest struct {
 	UserID    string `json:"user_id"`
 	Group     string `json:"group"`
 	RoleID    string `json:"role_id"`
 	ClusterID string `json:"cluster_id"`
-	ProjectID string `json:"project_id"`
 	// Namespace optionally narrows a cluster binding to one Kubernetes
 	// namespace. Empty means the binding applies to the full cluster scope.
 	Namespace string `json:"namespace"`
+}
+
+// openapi:request RBACProjectBindingRequest
+type projectRoleBindingRequest struct {
+	UserID    string `json:"user_id"`
+	Group     string `json:"group"`
+	RoleID    string `json:"role_id"`
+	ProjectID string `json:"project_id"`
 }
 
 func (h *RBACHandler) ListGlobalRoles(w http.ResponseWriter, r *http.Request) {
@@ -224,21 +313,26 @@ func (h *RBACHandler) CreateGlobalRole(w http.ResponseWriter, r *http.Request) {
 	if rejectGlobalCRDGrants(w, r, defaultJSON(req.Rules)) {
 		return
 	}
-	role, err := h.queries.CreateGlobalRole(r.Context(), sqlc.CreateGlobalRoleParams{
+	params := sqlc.CreateGlobalRoleParams{
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
 		Description: req.Description,
 		Permissions: defaultJSON(req.Permissions),
 		Rules:       defaultJSON(req.Rules),
-	})
+	}
+	role, err := executeRBACMutation(r, h,
+		func(q RBACMutationTx) (sqlc.GlobalRole, error) { return q.CreateGlobalRole(r.Context(), params) },
+		func() (sqlc.GlobalRole, error) { return h.queries.CreateGlobalRole(r.Context(), params) },
+		func(role sqlc.GlobalRole) rbacAuditEvent {
+			return rbacAuditEvent{
+				action: "role.create", resourceType: "global_role", resourceID: role.ID.String(), resourceName: role.Name,
+				status: http.StatusCreated, detail: map[string]any{"scope": "global", "is_builtin": role.IsBuiltin},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create global role")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create global role")
 		return
 	}
-	recordAudit(r, h.queries, "role.create", "global_role", role.ID.String(), role.Name, map[string]any{
-		"scope":      "global",
-		"is_builtin": role.IsBuiltin,
-	})
 	w.Header().Set("Location", "/api/v1/rbac/global-roles/"+role.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, role)
 }
@@ -267,23 +361,28 @@ func (h *RBACHandler) UpdateGlobalRole(w http.ResponseWriter, r *http.Request) {
 	if !h.guardGlobalRoleRules(w, r, id, defaultJSON(req.Rules)) {
 		return
 	}
-	role, err := h.queries.UpdateGlobalRole(r.Context(), sqlc.UpdateGlobalRoleParams{
+	params := sqlc.UpdateGlobalRoleParams{
 		ID:          id,
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
 		Description: req.Description,
 		Permissions: defaultJSON(req.Permissions),
 		Rules:       defaultJSON(req.Rules),
-	})
+	}
+	role, err := executeRBACMutation(r, h,
+		func(q RBACMutationTx) (sqlc.GlobalRole, error) { return q.UpdateGlobalRole(r.Context(), params) },
+		func() (sqlc.GlobalRole, error) { return h.queries.UpdateGlobalRole(r.Context(), params) },
+		func(role sqlc.GlobalRole) rbacAuditEvent {
+			return rbacAuditEvent{action: "role.update", resourceType: "global_role", resourceID: role.ID.String(), resourceName: role.Name, status: http.StatusOK, detail: map[string]any{"scope": "global"}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update global role")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update global role")
 		return
 	}
 	// Role rules are denormalised into every cached binding for every user
 	// bound to this role. Without a reverse index we can't target the affected
 	// users, so dump the whole cache; refill cost is one query per active user.
 	h.invalidateAll()
-	recordAudit(r, h.queries, "role.update", "global_role", role.ID.String(), role.Name, map[string]any{"scope": "global"})
 	RespondJSON(w, http.StatusOK, role)
 }
 
@@ -297,21 +396,26 @@ func (h *RBACHandler) DeleteGlobalRole(w http.ResponseWriter, r *http.Request) {
 	// an error in Postgres, so the old path answered 204 for an unknown ID).
 	existing, err := h.queries.GetGlobalRoleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Global role not found")
 		return
 	}
 	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
 		return
 	}
 	roleName := existing.Name
-	if err := h.queries.DeleteGlobalRole(r.Context(), id); err != nil {
+	_, err = executeRBACMutation(r, h,
+		func(q RBACMutationTx) (struct{}, error) { return struct{}{}, q.DeleteGlobalRole(r.Context(), id) },
+		func() (struct{}, error) { return struct{}{}, h.queries.DeleteGlobalRole(r.Context(), id) },
+		func(struct{}) rbacAuditEvent {
+			return rbacAuditEvent{action: "role.delete", resourceType: "global_role", resourceID: id.String(), resourceName: roleName, status: http.StatusNoContent, detail: map[string]any{"scope": "global"}}
+		})
+	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role not found")
 		return
 	}
 	// ON DELETE CASCADE on global_role_bindings means every binding for this
 	// role just vanished too — invalidate broadly.
 	h.invalidateAll()
-	recordAudit(r, h.queries, "role.delete", "global_role", id.String(), roleName, map[string]any{"scope": "global"})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -336,21 +440,26 @@ func (h *RBACHandler) CreateClusterRole(w http.ResponseWriter, r *http.Request) 
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
-	role, err := h.queries.CreateClusterRole(r.Context(), sqlc.CreateClusterRoleParams{
+	params := sqlc.CreateClusterRoleParams{
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
 		Description: req.Description,
 		Permissions: defaultJSON(req.Permissions),
 		Rules:       defaultJSON(req.Rules),
-	})
+	}
+	role, err := executeRBACMutation(r, h,
+		func(q RBACMutationTx) (sqlc.ClusterRole, error) { return q.CreateClusterRole(r.Context(), params) },
+		func() (sqlc.ClusterRole, error) { return h.queries.CreateClusterRole(r.Context(), params) },
+		func(role sqlc.ClusterRole) rbacAuditEvent {
+			return rbacAuditEvent{
+				action: "role.create", resourceType: "cluster_role", resourceID: role.ID.String(), resourceName: role.Name,
+				status: http.StatusCreated, detail: map[string]any{"scope": "cluster", "is_builtin": role.IsBuiltin},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster role")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster role")
 		return
 	}
-	recordAudit(r, h.queries, "role.create", "cluster_role", role.ID.String(), role.Name, map[string]any{
-		"scope":      "cluster",
-		"is_builtin": role.IsBuiltin,
-	})
 	w.Header().Set("Location", "/api/v1/rbac/cluster-roles/"+role.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, role)
 }
@@ -381,20 +490,25 @@ func (h *RBACHandler) UpdateClusterRole(w http.ResponseWriter, r *http.Request) 
 	if !h.guardClusterRoleRules(w, r, id, defaultJSON(req.Rules)) {
 		return
 	}
-	role, err := h.queries.UpdateClusterRole(r.Context(), sqlc.UpdateClusterRoleParams{
+	params := sqlc.UpdateClusterRoleParams{
 		ID:          id,
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
 		Description: req.Description,
 		Permissions: defaultJSON(req.Permissions),
 		Rules:       defaultJSON(req.Rules),
-	})
+	}
+	role, err := executeRBACMutation(r, h,
+		func(q RBACMutationTx) (sqlc.ClusterRole, error) { return q.UpdateClusterRole(r.Context(), params) },
+		func() (sqlc.ClusterRole, error) { return h.queries.UpdateClusterRole(r.Context(), params) },
+		func(role sqlc.ClusterRole) rbacAuditEvent {
+			return rbacAuditEvent{action: "role.update", resourceType: "cluster_role", resourceID: role.ID.String(), resourceName: role.Name, status: http.StatusOK, detail: map[string]any{"scope": "cluster"}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update cluster role")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update cluster role")
 		return
 	}
 	h.invalidateAll()
-	recordAudit(r, h.queries, "role.update", "cluster_role", role.ID.String(), role.Name, map[string]any{"scope": "cluster"})
 	RespondJSON(w, http.StatusOK, role)
 }
 
@@ -405,19 +519,24 @@ func (h *RBACHandler) DeleteClusterRole(w http.ResponseWriter, r *http.Request) 
 	}
 	existing, err := h.queries.GetClusterRoleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
 		return
 	}
 	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
 		return
 	}
 	roleName := existing.Name
-	if err := h.queries.DeleteClusterRole(r.Context(), id); err != nil {
+	_, err = executeRBACMutation(r, h,
+		func(q RBACMutationTx) (struct{}, error) { return struct{}{}, q.DeleteClusterRole(r.Context(), id) },
+		func() (struct{}, error) { return struct{}{}, h.queries.DeleteClusterRole(r.Context(), id) },
+		func(struct{}) rbacAuditEvent {
+			return rbacAuditEvent{action: "role.delete", resourceType: "cluster_role", resourceID: id.String(), resourceName: roleName, status: http.StatusNoContent, detail: map[string]any{"scope": "cluster"}}
+		})
+	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
 		return
 	}
 	h.invalidateAll()
-	recordAudit(r, h.queries, "role.delete", "cluster_role", id.String(), roleName, map[string]any{"scope": "cluster"})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -442,21 +561,26 @@ func (h *RBACHandler) CreateProjectRole(w http.ResponseWriter, r *http.Request) 
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
-	role, err := h.queries.CreateProjectRole(r.Context(), sqlc.CreateProjectRoleParams{
+	params := sqlc.CreateProjectRoleParams{
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
 		Description: req.Description,
 		Permissions: defaultJSON(req.Permissions),
 		Rules:       defaultJSON(req.Rules),
-	})
+	}
+	role, err := executeRBACMutation(r, h,
+		func(q RBACMutationTx) (sqlc.ProjectRole, error) { return q.CreateProjectRole(r.Context(), params) },
+		func() (sqlc.ProjectRole, error) { return h.queries.CreateProjectRole(r.Context(), params) },
+		func(role sqlc.ProjectRole) rbacAuditEvent {
+			return rbacAuditEvent{
+				action: "role.create", resourceType: "project_role", resourceID: role.ID.String(), resourceName: role.Name,
+				status: http.StatusCreated, detail: map[string]any{"scope": "project", "is_builtin": role.IsBuiltin},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create project role")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create project role")
 		return
 	}
-	recordAudit(r, h.queries, "role.create", "project_role", role.ID.String(), role.Name, map[string]any{
-		"scope":      "project",
-		"is_builtin": role.IsBuiltin,
-	})
 	w.Header().Set("Location", "/api/v1/rbac/project-roles/"+role.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, role)
 }
@@ -487,20 +611,25 @@ func (h *RBACHandler) UpdateProjectRole(w http.ResponseWriter, r *http.Request) 
 	if !h.guardProjectRoleRules(w, r, id, defaultJSON(req.Rules)) {
 		return
 	}
-	role, err := h.queries.UpdateProjectRole(r.Context(), sqlc.UpdateProjectRoleParams{
+	params := sqlc.UpdateProjectRoleParams{
 		ID:          id,
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
 		Description: req.Description,
 		Permissions: defaultJSON(req.Permissions),
 		Rules:       defaultJSON(req.Rules),
-	})
+	}
+	role, err := executeRBACMutation(r, h,
+		func(q RBACMutationTx) (sqlc.ProjectRole, error) { return q.UpdateProjectRole(r.Context(), params) },
+		func() (sqlc.ProjectRole, error) { return h.queries.UpdateProjectRole(r.Context(), params) },
+		func(role sqlc.ProjectRole) rbacAuditEvent {
+			return rbacAuditEvent{action: "role.update", resourceType: "project_role", resourceID: role.ID.String(), resourceName: role.Name, status: http.StatusOK, detail: map[string]any{"scope": "project"}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project role")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project role")
 		return
 	}
 	h.invalidateAll()
-	recordAudit(r, h.queries, "role.update", "project_role", role.ID.String(), role.Name, map[string]any{"scope": "project"})
 	RespondJSON(w, http.StatusOK, role)
 }
 
@@ -511,19 +640,24 @@ func (h *RBACHandler) DeleteProjectRole(w http.ResponseWriter, r *http.Request) 
 	}
 	existing, err := h.queries.GetProjectRoleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Project role not found")
 		return
 	}
 	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
 		return
 	}
 	roleName := existing.Name
-	if err := h.queries.DeleteProjectRole(r.Context(), id); err != nil {
+	_, err = executeRBACMutation(r, h,
+		func(q RBACMutationTx) (struct{}, error) { return struct{}{}, q.DeleteProjectRole(r.Context(), id) },
+		func() (struct{}, error) { return struct{}{}, h.queries.DeleteProjectRole(r.Context(), id) },
+		func(struct{}) rbacAuditEvent {
+			return rbacAuditEvent{action: "role.delete", resourceType: "project_role", resourceID: id.String(), resourceName: roleName, status: http.StatusNoContent, detail: map[string]any{"scope": "project"}}
+		})
+	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role not found")
 		return
 	}
 	h.invalidateAll()
-	recordAudit(r, h.queries, "role.delete", "project_role", id.String(), roleName, map[string]any{"scope": "project"})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -535,19 +669,18 @@ func (h *RBACHandler) ListGlobalRoleBindings(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list global role bindings")
 		return
 	}
-	// TODO(total): no COUNT query for global role bindings; use page length.
-	RespondList(w, bindingListResponse(items), NewPagination(len(items), int(limit), int(offset), len(items)))
+	RespondList(w, bindingListResponse(items), NewPaginationFromPage(int(limit), int(offset), len(items)))
 }
 
 func (h *RBACHandler) CreateGlobalRoleBinding(w http.ResponseWriter, r *http.Request) {
-	var req roleBindingRequest
+	var req globalRoleBindingRequest
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
-	if rejectGroupBinding(w, r, req) {
+	if rejectGroupBinding(w, r, req.UserID, req.Group) {
 		return
 	}
-	roleID, userID, ok := parseBindingRefs(w, r, req)
+	roleID, userID, ok := parseBindingRefs(w, r, req.RoleID, req.UserID)
 	if !ok {
 		return
 	}
@@ -556,13 +689,24 @@ func (h *RBACHandler) CreateGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 	if !h.guardGlobalBinding(w, r, roleID) {
 		return
 	}
-	binding, err := h.queries.CreateGlobalRoleBinding(r.Context(), sqlc.CreateGlobalRoleBindingParams{
+	params := sqlc.CreateGlobalRoleBindingParams{
 		UserID: userID,
 		Group:  req.Group,
 		RoleID: roleID,
-	})
+	}
+	binding, err := executeRBACMutation(r, h,
+		func(q RBACMutationTx) (sqlc.GlobalRoleBinding, error) {
+			return q.CreateGlobalRoleBinding(r.Context(), params)
+		},
+		func() (sqlc.GlobalRoleBinding, error) { return h.queries.CreateGlobalRoleBinding(r.Context(), params) },
+		func(binding sqlc.GlobalRoleBinding) rbacAuditEvent {
+			return rbacAuditEvent{
+				action: "binding.create", resourceType: "global_role_binding", resourceID: binding.ID.String(), status: http.StatusCreated,
+				detail: map[string]any{"scope": "global", "role_id": roleID.String(), "user_id": req.UserID, "group": req.Group},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create global role binding")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create global role binding")
 		return
 	}
 	// Targeted invalidation when this is a user-scoped binding. Group-scoped
@@ -572,12 +716,6 @@ func (h *RBACHandler) CreateGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 	// TODO(rbac-invalidation): expand on group→users membership when groups
 	// become first-class.
 	h.invalidateUser(req.UserID)
-	recordAudit(r, h.queries, "binding.create", "global_role_binding", binding.ID.String(), "", map[string]any{
-		"scope":   "global",
-		"role_id": roleID.String(),
-		"user_id": req.UserID,
-		"group":   req.Group,
-	})
 	w.Header().Set("Location", "/api/v1/rbac/global-role-bindings/"+binding.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, bindingResponse(binding))
 }
@@ -589,12 +727,19 @@ func (h *RBACHandler) DeleteGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 	}
 	// Look up the affected user before deleting so we can invalidate after.
 	affectedUserID := h.lookupGlobalBindingUserID(r.Context(), id)
-	if err := h.queries.DeleteGlobalRoleBinding(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role binding not found")
+	_, err := executeRBACMutation(r, h,
+		func(q RBACMutationTx) (struct{}, error) {
+			return struct{}{}, q.DeleteGlobalRoleBinding(r.Context(), id)
+		},
+		func() (struct{}, error) { return struct{}{}, h.queries.DeleteGlobalRoleBinding(r.Context(), id) },
+		func(struct{}) rbacAuditEvent {
+			return rbacAuditEvent{action: "binding.delete", resourceType: "global_role_binding", resourceID: id.String(), status: http.StatusNoContent, detail: map[string]any{"scope": "global"}}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Global role binding not found")
 		return
 	}
 	h.invalidateUser(affectedUserID)
-	recordAudit(r, h.queries, "binding.delete", "global_role_binding", id.String(), "", map[string]any{"scope": "global"})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -624,19 +769,18 @@ func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Req
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster role bindings")
 		return
 	}
-	// TODO(total): no COUNT query for cluster role bindings; use page length.
-	RespondList(w, bindingListResponse(items), NewPagination(len(items), int(limit), int(offset), len(items)))
+	RespondList(w, bindingListResponse(items), NewPaginationFromPage(int(limit), int(offset), len(items)))
 }
 
 func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Request) {
-	var req roleBindingRequest
+	var req clusterRoleBindingRequest
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
-	if rejectGroupBinding(w, r, req) {
+	if rejectGroupBinding(w, r, req.UserID, req.Group) {
 		return
 	}
-	roleID, userID, ok := parseBindingRefs(w, r, req)
+	roleID, userID, ok := parseBindingRefs(w, r, req.RoleID, req.UserID)
 	if !ok {
 		return
 	}
@@ -660,26 +804,34 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
 	if !h.guardClusterBinding(w, r, roleID, clusterID, req.Namespace) {
 		return
 	}
-	binding, err := h.queries.CreateClusterRoleBinding(r.Context(), sqlc.CreateClusterRoleBindingParams{
+	params := sqlc.CreateClusterRoleBindingParams{
 		UserID:    userID,
 		Group:     req.Group,
 		RoleID:    roleID,
 		ClusterID: clusterID,
 		Namespace: req.Namespace,
-	})
+	}
+	binding, err := executeRBACMutation(r, h,
+		func(q RBACMutationTx) (sqlc.ClusterRoleBinding, error) {
+			return q.CreateClusterRoleBinding(r.Context(), params)
+		},
+		func() (sqlc.ClusterRoleBinding, error) {
+			return h.queries.CreateClusterRoleBinding(r.Context(), params)
+		},
+		func(binding sqlc.ClusterRoleBinding) rbacAuditEvent {
+			return rbacAuditEvent{
+				action: "binding.create", resourceType: "cluster_role_binding", resourceID: binding.ID.String(), status: http.StatusCreated,
+				detail: map[string]any{
+					"scope": "cluster", "role_id": roleID.String(), "user_id": req.UserID, "group": req.Group,
+					"cluster_id": clusterID.String(), "namespace": req.Namespace,
+				},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster role binding")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster role binding")
 		return
 	}
 	h.invalidateUser(req.UserID)
-	recordAudit(r, h.queries, "binding.create", "cluster_role_binding", binding.ID.String(), "", map[string]any{
-		"scope":      "cluster",
-		"role_id":    roleID.String(),
-		"user_id":    req.UserID,
-		"group":      req.Group,
-		"cluster_id": clusterID.String(),
-		"namespace":  req.Namespace,
-	})
 	w.Header().Set("Location", "/api/v1/rbac/cluster-role-bindings/"+binding.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, bindingResponse(binding))
 }
@@ -690,12 +842,19 @@ func (h *RBACHandler) DeleteClusterRoleBinding(w http.ResponseWriter, r *http.Re
 		return
 	}
 	affectedUserID := h.lookupClusterBindingUserID(r.Context(), id)
-	if err := h.queries.DeleteClusterRoleBinding(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role binding not found")
+	_, err := executeRBACMutation(r, h,
+		func(q RBACMutationTx) (struct{}, error) {
+			return struct{}{}, q.DeleteClusterRoleBinding(r.Context(), id)
+		},
+		func() (struct{}, error) { return struct{}{}, h.queries.DeleteClusterRoleBinding(r.Context(), id) },
+		func(struct{}) rbacAuditEvent {
+			return rbacAuditEvent{action: "binding.delete", resourceType: "cluster_role_binding", resourceID: id.String(), status: http.StatusNoContent, detail: map[string]any{"scope": "cluster"}}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Cluster role binding not found")
 		return
 	}
 	h.invalidateUser(affectedUserID)
-	recordAudit(r, h.queries, "binding.delete", "cluster_role_binding", id.String(), "", map[string]any{"scope": "cluster"})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -725,19 +884,18 @@ func (h *RBACHandler) ListProjectRoleBindings(w http.ResponseWriter, r *http.Req
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project role bindings")
 		return
 	}
-	// TODO(total): no COUNT query for project role bindings; use page length.
-	RespondList(w, bindingListResponse(items), NewPagination(len(items), int(limit), int(offset), len(items)))
+	RespondList(w, bindingListResponse(items), NewPaginationFromPage(int(limit), int(offset), len(items)))
 }
 
 func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Request) {
-	var req roleBindingRequest
+	var req projectRoleBindingRequest
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
-	if rejectGroupBinding(w, r, req) {
+	if rejectGroupBinding(w, r, req.UserID, req.Group) {
 		return
 	}
-	roleID, userID, ok := parseBindingRefs(w, r, req)
+	roleID, userID, ok := parseBindingRefs(w, r, req.RoleID, req.UserID)
 	if !ok {
 		return
 	}
@@ -779,24 +937,33 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	binding, err := h.queries.CreateProjectRoleBinding(r.Context(), sqlc.CreateProjectRoleBindingParams{
+	params := sqlc.CreateProjectRoleBindingParams{
 		UserID:    userID,
 		Group:     req.Group,
 		RoleID:    roleID,
 		ProjectID: projectID,
-	})
+	}
+	binding, err := executeRBACMutation(r, h,
+		func(q RBACMutationTx) (sqlc.ProjectRoleBinding, error) {
+			return q.CreateProjectRoleBinding(r.Context(), params)
+		},
+		func() (sqlc.ProjectRoleBinding, error) {
+			return h.queries.CreateProjectRoleBinding(r.Context(), params)
+		},
+		func(binding sqlc.ProjectRoleBinding) rbacAuditEvent {
+			return rbacAuditEvent{
+				action: "binding.create", resourceType: "project_role_binding", resourceID: binding.ID.String(), status: http.StatusCreated,
+				detail: map[string]any{
+					"scope": "project", "role_id": roleID.String(), "user_id": req.UserID,
+					"group": req.Group, "project_id": projectID.String(),
+				},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create project role binding")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create project role binding")
 		return
 	}
 	h.invalidateUser(req.UserID)
-	recordAudit(r, h.queries, "binding.create", "project_role_binding", binding.ID.String(), "", map[string]any{
-		"scope":      "project",
-		"role_id":    roleID.String(),
-		"user_id":    req.UserID,
-		"group":      req.Group,
-		"project_id": projectID.String(),
-	})
 	w.Header().Set("Location", "/api/v1/rbac/project-role-bindings/"+binding.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, bindingResponse(binding))
 }
@@ -807,12 +974,19 @@ func (h *RBACHandler) DeleteProjectRoleBinding(w http.ResponseWriter, r *http.Re
 		return
 	}
 	affectedUserID := h.lookupProjectBindingUserID(r.Context(), id)
-	if err := h.queries.DeleteProjectRoleBinding(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role binding not found")
+	_, err := executeRBACMutation(r, h,
+		func(q RBACMutationTx) (struct{}, error) {
+			return struct{}{}, q.DeleteProjectRoleBinding(r.Context(), id)
+		},
+		func() (struct{}, error) { return struct{}{}, h.queries.DeleteProjectRoleBinding(r.Context(), id) },
+		func(struct{}) rbacAuditEvent {
+			return rbacAuditEvent{action: "binding.delete", resourceType: "project_role_binding", resourceID: id.String(), status: http.StatusNoContent, detail: map[string]any{"scope": "project"}}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Project role binding not found")
 		return
 	}
 	h.invalidateUser(affectedUserID)
-	recordAudit(r, h.queries, "binding.delete", "project_role_binding", id.String(), "", map[string]any{"scope": "project"})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1186,8 +1360,8 @@ func defaultJSON(raw json.RawMessage) json.RawMessage {
 //
 // Returns true (and writes the 400) when the request must be rejected;
 // false means the binding carries a concrete user_id and may proceed.
-func rejectGroupBinding(w http.ResponseWriter, r *http.Request, req roleBindingRequest) bool {
-	if strings.TrimSpace(req.UserID) == "" || strings.TrimSpace(req.Group) != "" {
+func rejectGroupBinding(w http.ResponseWriter, r *http.Request, userID, group string) bool {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(group) != "" {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
 			"group bindings are managed via identity group mappings, not the manual binding API")
 		return true
@@ -1195,16 +1369,16 @@ func rejectGroupBinding(w http.ResponseWriter, r *http.Request, req roleBindingR
 	return false
 }
 
-func parseBindingRefs(w http.ResponseWriter, r *http.Request, req roleBindingRequest) (uuid.UUID, pgtype.UUID, bool) {
-	roleID, err := uuid.Parse(req.RoleID)
+func parseBindingRefs(w http.ResponseWriter, r *http.Request, roleIDValue, userIDValue string) (uuid.UUID, pgtype.UUID, bool) {
+	roleID, err := uuid.Parse(roleIDValue)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Role ID is required")
 		return uuid.UUID{}, pgtype.UUID{}, false
 	}
-	if req.UserID == "" {
+	if userIDValue == "" {
 		return roleID, pgtype.UUID{}, true
 	}
-	userID, err := uuid.Parse(req.UserID)
+	userID, err := uuid.Parse(userIDValue)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
 		return uuid.UUID{}, pgtype.UUID{}, false

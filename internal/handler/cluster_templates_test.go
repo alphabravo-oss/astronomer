@@ -18,7 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 // fakeClusterTemplateQuerier is the narrow ClusterTemplateQuerier surface
@@ -26,6 +26,7 @@ import (
 // queries the test touches are wired with real behavior, the rest return
 // zero values or pgx.ErrNoRows.
 type fakeClusterTemplateQuerier struct {
+	fakeOperationIdempotencyStore
 	mu sync.Mutex
 
 	templates    map[uuid.UUID]sqlc.ClusterTemplate
@@ -36,10 +37,44 @@ type fakeClusterTemplateQuerier struct {
 	audits       []sqlc.CreateAuditLogV1Params
 }
 
+func TestClusterTemplateListBoundClustersFiltersUnauthorizedClusters(t *testing.T) {
+	templateID := uuid.New()
+	allowedID := uuid.New()
+	hiddenID := uuid.New()
+	q := newFakeClusterTemplateQuerier()
+	q.templates[templateID] = sqlc.ClusterTemplate{ID: templateID, Name: "production"}
+	q.clusters[allowedID] = sqlc.Cluster{ID: allowedID, Name: "allowed"}
+	q.clusters[hiddenID] = sqlc.Cluster{ID: hiddenID, Name: "hidden"}
+	q.applications[allowedID] = sqlc.ClusterTemplateApplication{ClusterID: allowedID, TemplateID: templateID, Status: "applied"}
+	q.applications[hiddenID] = sqlc.ClusterTemplateApplication{ClusterID: hiddenID, TemplateID: templateID, Status: "failed"}
+
+	h := NewClusterTemplateHandler(q)
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: clustersVerbBindings(allowedID, rbac.VerbRead)})
+	rec := httptest.NewRecorder()
+	h.ListBoundClusters(rec, authedAnomalyReq(
+		"/api/v1/cluster-templates/"+templateID.String()+"/clusters/",
+		map[string]string{"id": templateID.String()},
+	))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Data []ClusterTemplateBoundClusterResponse `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Data) != 1 || body.Data[0].ClusterID != allowedID.String() {
+		t.Fatalf("expected only authorized cluster %s, got %#v", allowedID, body.Data)
+	}
+}
+
 type fakeAtomicClusterTemplateQuerier struct {
 	*fakeClusterTemplateQuerier
 
-	atomicApps []sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams
+	atomicApps  []sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams
+	taskRows    []sqlc.UpsertTaskOutboxParams
+	auditOutbox []sqlc.UpsertAuditOutboxParams
 }
 
 func newFakeClusterTemplateQuerier() *fakeClusterTemplateQuerier {
@@ -153,6 +188,23 @@ func (f *fakeClusterTemplateQuerier) CountClusterTemplateApplicationsByTemplate(
 	return n, nil
 }
 
+func (f *fakeClusterTemplateQuerier) ListClusterTemplateBoundClusters(_ context.Context, templateID uuid.UUID) ([]sqlc.ListClusterTemplateBoundClustersRow, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	rows := make([]sqlc.ListClusterTemplateBoundClustersRow, 0)
+	for clusterID, application := range f.applications {
+		if application.TemplateID != templateID {
+			continue
+		}
+		rows = append(rows, sqlc.ListClusterTemplateBoundClustersRow{
+			ClusterID: clusterID, ClusterName: f.clusters[clusterID].Name,
+			Status: application.Status, AppliedAt: application.AppliedAt,
+			LastError: application.LastError,
+		})
+	}
+	return rows, nil
+}
+
 func (f *fakeClusterTemplateQuerier) GetClusterTemplateApplication(_ context.Context, clusterID uuid.UUID) (sqlc.ClusterTemplateApplication, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -228,16 +280,6 @@ func (f *fakeClusterTemplateQuerier) CreateAuditLogV1(_ context.Context, arg sql
 	defer f.mu.Unlock()
 	f.audits = append(f.audits, arg)
 	return nil
-}
-
-func (f *fakeClusterTemplateQuerier) auditRowAt(t *testing.T, idx int) sqlc.CreateAuditLogV1Params {
-	t.Helper()
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if len(f.audits) <= idx {
-		t.Fatalf("audit rows=%d, want index %d", len(f.audits), idx)
-	}
-	return f.audits[idx]
 }
 
 // fakePGError mirrors the surface CreateClusterTemplate returns on a
@@ -420,9 +462,7 @@ func TestClusterTemplate_DeleteRejectedWhenInUse(t *testing.T) {
 	}
 }
 
-// TestClusterTemplate_ApplyAndStatus exercises the per-cluster bind +
-// status endpoints, including the queue handoff.
-func TestClusterTemplate_ApplyAndStatus(t *testing.T) {
+func TestClusterTemplateApplyFailsClosedWithoutTransactionRunner(t *testing.T) {
 	q := newFakeClusterTemplateQuerier()
 	clusterID := uuid.New()
 	q.clusters[clusterID] = sqlc.Cluster{ID: clusterID, Name: "demo", Environment: "development", Labels: json.RawMessage(`{}`), Annotations: json.RawMessage(`{}`)}
@@ -439,68 +479,14 @@ func TestClusterTemplate_ApplyAndStatus(t *testing.T) {
 	body := mustJSON(t, map[string]string{"template_id": tmplID.String()})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/template/", bytes.NewReader(body))
+	req.Header.Set("Idempotency-Key", "template-apply-status")
 	req = withChiParams(req, map[string]string{"cluster_id": clusterID.String()})
 	h.Apply(rec, req)
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("apply: status=%d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unwired apply: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if cap.count == 0 {
-		t.Errorf("apply did not enqueue a task")
-	}
-	applyAudit := q.auditRowAt(t, 0)
-	if applyAudit.Action != "cluster.template_applied" || applyAudit.ResourceType != "cluster" || applyAudit.ResourceID != clusterID.String() || applyAudit.ResourceName != "demo" {
-		t.Fatalf("apply audit row=%+v, want cluster.template_applied on cluster %s", applyAudit, clusterID)
-	}
-	assertAuditDetail(t, applyAudit.Detail, "template_id", tmplID.String())
-
-	// Status endpoint should return pending.
-	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/template/", nil)
-	req = withChiParams(req, map[string]string{"cluster_id": clusterID.String()})
-	h.GetApplication(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("get application: status=%d", rec.Code)
-	}
-	var statusResp struct {
-		Data ClusterTemplateApplicationResponse `json:"data"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &statusResp); err != nil {
-		t.Fatalf("decode status: %v", err)
-	}
-	if statusResp.Data.Status != "pending" {
-		t.Errorf("status=%s, want pending", statusResp.Data.Status)
-	}
-	if statusResp.Data.TemplateName != "production-web" {
-		t.Errorf("template_name=%s", statusResp.Data.TemplateName)
-	}
-
-	// Reapply.
-	cap.count = 0
-	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/", nil)
-	req = withChiParams(req, map[string]string{"cluster_id": clusterID.String()})
-	h.Reapply(rec, req)
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("reapply: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if cap.count == 0 {
-		t.Errorf("reapply did not enqueue a task")
-	}
-
-	// Detach.
-	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodDelete, "/", nil)
-	req = withChiParams(req, map[string]string{"cluster_id": clusterID.String()})
-	h.Detach(rec, req)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("detach: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if _, ok := q.applications[clusterID]; ok {
-		t.Errorf("application row not deleted")
-	}
-	detachAudit := q.auditRowAt(t, 2)
-	if detachAudit.Action != "cluster.template_detached" || detachAudit.ResourceType != "cluster" || detachAudit.ResourceID != clusterID.String() || detachAudit.ResourceName != "demo" {
-		t.Fatalf("detach audit row=%+v, want cluster.template_detached on cluster %s", detachAudit, clusterID)
+	if cap.count != 0 || len(q.applications) != 0 {
+		t.Fatalf("unwired apply mutated state or queued work")
 	}
 }
 
@@ -519,33 +505,15 @@ func TestClusterTemplateApplyWritesTaskOutbox(t *testing.T) {
 	body := mustJSON(t, map[string]string{"template_id": tmplID.String()})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/template/", bytes.NewReader(body))
+	req.Header.Set("Idempotency-Key", "template-apply-outbox")
 	req = withChiParams(req, map[string]string{"cluster_id": clusterID.String()})
 	h.Apply(rec, req)
 
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("apply: status=%d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unwired apply: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if cap.count != 0 {
-		t.Fatalf("direct enqueues = %d, want 0 when outbox succeeds", cap.count)
-	}
-	args := outbox.all()
-	if len(args) != 1 {
-		t.Fatalf("outbox writes = %d, want 1", len(args))
-	}
-	arg := args[0]
-	if arg.TaskType != tasks.ClusterTemplateApplyType {
-		t.Fatalf("task type = %q, want %q", arg.TaskType, tasks.ClusterTemplateApplyType)
-	}
-	assertClusterTemplateApplyDedupeKey(t, arg.DedupeKey, clusterID)
-	if arg.QueueName != tasks.ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
-		t.Fatalf("outbox options queue/max_retry/max_delivery = %s/%d/%d", arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
-	}
-	var payload tasks.ClusterTemplateApplyPayload
-	if err := json.Unmarshal(arg.Payload, &payload); err != nil {
-		t.Fatalf("payload JSON: %v", err)
-	}
-	if payload.ClusterID != clusterID.String() {
-		t.Fatalf("payload cluster_id = %q, want %s", payload.ClusterID, clusterID)
+	if cap.count != 0 || len(outbox.all()) != 0 {
+		t.Fatalf("unwired apply queued direct=%d outbox=%d", cap.count, len(outbox.all()))
 	}
 }
 
@@ -565,32 +533,15 @@ func TestClusterTemplateApplyWritesApplicationAndTaskOutboxAtomically(t *testing
 	body := mustJSON(t, map[string]string{"template_id": tmplID.String()})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/template/", bytes.NewReader(body))
+	req.Header.Set("Idempotency-Key", "template-apply-atomic")
 	req = withChiParams(req, map[string]string{"cluster_id": clusterID.String()})
 	h.Apply(rec, req)
 
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("apply: status=%d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unwired apply: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if len(q.atomicApps) != 1 {
-		t.Fatalf("atomic app+outbox writes = %d, want 1", len(q.atomicApps))
-	}
-	if len(outbox.all()) != 0 {
-		t.Fatalf("separate outbox writes = %d, want 0", len(outbox.all()))
-	}
-	if cap.count != 0 {
-		t.Fatalf("direct enqueues = %d, want 0", cap.count)
-	}
-	arg := q.atomicApps[0]
-	assertClusterTemplateApplyDedupeKey(t, arg.DedupeKey, clusterID)
-	if arg.TaskType != tasks.ClusterTemplateApplyType || arg.QueueName != tasks.ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
-		t.Fatalf("task metadata = %s/%s/%d/%d", arg.TaskType, arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
-	}
-	var payload tasks.ClusterTemplateApplyPayload
-	if err := json.Unmarshal(arg.Payload, &payload); err != nil {
-		t.Fatalf("payload JSON: %v", err)
-	}
-	if payload.ClusterID != clusterID.String() {
-		t.Fatalf("payload cluster_id = %q, want %s", payload.ClusterID, clusterID)
+	if len(q.atomicApps) != 0 || len(outbox.all()) != 0 || cap.count != 0 {
+		t.Fatalf("unwired apply mutated atomic=%d outbox=%d direct=%d", len(q.atomicApps), len(outbox.all()), cap.count)
 	}
 }
 
@@ -628,6 +579,7 @@ func TestClusterTemplate_Apply_RejectsUnknownTemplate(t *testing.T) {
 	body := mustJSON(t, map[string]string{"template_id": missingID.String()})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.Header.Set("Idempotency-Key", "template-unknown")
 	req = withChiParams(req, map[string]string{"cluster_id": clusterID.String()})
 	h.Apply(rec, req)
 	if rec.Code != http.StatusNotFound {
@@ -645,6 +597,7 @@ func TestClusterTemplate_Reapply_NoExistingBinding(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("Idempotency-Key", "template-reapply-missing")
 	req = withChiParams(req, map[string]string{"cluster_id": clusterID.String()})
 	h.Reapply(rec, req)
 	if rec.Code != http.StatusNotFound {

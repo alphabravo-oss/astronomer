@@ -108,17 +108,16 @@ const ccrDailyCap = 12
 // fail the tick.
 func HandleClusterConditionReconcile(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ClusterConditionReconcileType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "cluster_condition reconcile runtime not configured, skipping sweep")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("cluster condition reconcile runtime is not configured")
 		}
-		rows, err := runtimeDeps.Queries.ListClusterConditionsByStatus(ctx, ccrStatusFalse)
+		rows, err := runtimeDependencies(ctx).Queries.ListClusterConditionsByStatus(ctx, ccrStatusFalse)
 		if err != nil {
 			return fmt.Errorf("list false conditions: %w", err)
 		}
 		for _, row := range rows {
 			if err := reconcileOneCondition(ctx, row); err != nil {
-				runtimeLogger().WarnContext(ctx, "cluster condition reconcile failed",
+				runtimeLogger(ctx).WarnContext(ctx, "cluster condition reconcile failed",
 					"cluster_id", row.ClusterID.String(),
 					"type", row.Type,
 					"error", err,
@@ -134,7 +133,7 @@ func HandleClusterConditionReconcile(ctx context.Context, _ *asynq.Task) error {
 		// forever. Scan the True set too, but dispatch ONLY the types whose
 		// True state is remediable so a Connected=True (healthy) row isn't
 		// mistakenly routed into the connectivity remedy.
-		trueRows, err := runtimeDeps.Queries.ListClusterConditionsByStatus(ctx, ccrStatusTrue)
+		trueRows, err := runtimeDependencies(ctx).Queries.ListClusterConditionsByStatus(ctx, ccrStatusTrue)
 		if err != nil {
 			return fmt.Errorf("list true conditions: %w", err)
 		}
@@ -143,7 +142,7 @@ func HandleClusterConditionReconcile(ctx context.Context, _ *asynq.Task) error {
 				continue
 			}
 			if err := reconcileOneCondition(ctx, row); err != nil {
-				runtimeLogger().WarnContext(ctx, "cluster condition reconcile failed",
+				runtimeLogger(ctx).WarnContext(ctx, "cluster condition reconcile failed",
 					"cluster_id", row.ClusterID.String(),
 					"type", row.Type,
 					"error", err,
@@ -171,7 +170,7 @@ func reconcileOneCondition(ctx context.Context, row sqlc.ClusterCondition) error
 	// Daily cap check first — it's the hard ceiling, no point evaluating
 	// backoff if we've already exhausted the budget today.
 	since := time.Now().UTC().Add(-24 * time.Hour)
-	count, err := runtimeDeps.Queries.CountClusterConditionRemediationSinceForType(ctx,
+	count, err := runtimeDependencies(ctx).Queries.CountClusterConditionRemediationSinceForType(ctx,
 		sqlc.CountClusterConditionRemediationSinceForTypeParams{
 			ClusterID:     row.ClusterID,
 			ConditionType: row.Type,
@@ -195,7 +194,7 @@ func reconcileOneCondition(ctx context.Context, row sqlc.ClusterCondition) error
 	// non-skip attempt — NOT the latest row — because the reconciler writes an
 	// in-backoff skip row on every sweep; measuring from those would reset the
 	// interval to ~0 and defeat the exponential backoff entirely.
-	lastReal, err := runtimeDeps.Queries.GetLatestNonSkipClusterConditionRemediation(ctx,
+	lastReal, err := runtimeDependencies(ctx).Queries.GetLatestNonSkipClusterConditionRemediation(ctx,
 		sqlc.GetLatestNonSkipClusterConditionRemediationParams{
 			ClusterID:     row.ClusterID,
 			ConditionType: row.Type,
@@ -239,11 +238,11 @@ func reconcileOneCondition(ctx context.Context, row sqlc.ClusterCondition) error
 // asynq enqueuer here (which would couple the reconciler to the
 // tunnel-queue config). Idempotent.
 func remediateTemplateApplyStuck(ctx context.Context, row sqlc.ClusterCondition) error {
-	app, err := runtimeDeps.Queries.GetClusterTemplateApplication(ctx, row.ClusterID)
+	app, err := runtimeDependencies(ctx).Queries.GetClusterTemplateApplication(ctx, row.ClusterID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// No application row — condition is stale. Clear it.
-			_, _ = runtimeDeps.Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
+			_, _ = runtimeDependencies(ctx).Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
 				ClusterID: row.ClusterID,
 				Type:      ConditionTemplateApplyStuck,
 				Status:    "False",
@@ -258,7 +257,7 @@ func remediateTemplateApplyStuck(ctx context.Context, row sqlc.ClusterCondition)
 	}
 	if app.Status != "applying" {
 		// Already moved on — clear the condition.
-		_, _ = runtimeDeps.Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
+		_, _ = runtimeDependencies(ctx).Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
 			ClusterID: row.ClusterID,
 			Type:      ConditionTemplateApplyStuck,
 			Status:    "False",
@@ -270,7 +269,7 @@ func remediateTemplateApplyStuck(ctx context.Context, row sqlc.ClusterCondition)
 			"advanced":        true,
 		})
 	}
-	_, err = runtimeDeps.Queries.MarkClusterTemplateApplicationStatus(ctx, sqlc.MarkClusterTemplateApplicationStatusParams{
+	_, err = runtimeDependencies(ctx).Queries.MarkClusterTemplateApplicationStatus(ctx, sqlc.MarkClusterTemplateApplicationStatusParams{
 		ClusterID: row.ClusterID,
 		Status:    "failed",
 		LastError: "stuck in 'applying' beyond reconciler threshold; reset by cluster_condition_reconcile",
@@ -279,7 +278,7 @@ func remediateTemplateApplyStuck(ctx context.Context, row sqlc.ClusterCondition)
 		return insertAttempt(ctx, row, ccrActionApplyResetToFailed, ccrOutcomeFail, "mark_failed: "+err.Error(), nil)
 	}
 	// Clear the condition so the next tick doesn't loop.
-	_, _ = runtimeDeps.Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
+	_, _ = runtimeDependencies(ctx).Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
 		ClusterID: row.ClusterID,
 		Type:      ConditionTemplateApplyStuck,
 		Status:    "False",
@@ -291,7 +290,7 @@ func remediateTemplateApplyStuck(ctx context.Context, row sqlc.ClusterCondition)
 	}); err != nil {
 		return err
 	}
-	if w, ok := any(runtimeDeps.Queries).(auditWriterV1ForReconciler); ok && w != nil {
+	if w, ok := any(runtimeDependencies(ctx).Queries).(auditWriterV1ForReconciler); ok && w != nil {
 		audit.Record(ctx, w, audit.Event{
 			Source:       "worker",
 			Action:       "cluster.condition.remediation_attempted",
@@ -319,7 +318,7 @@ func remediateConnectedFalse(ctx context.Context, row sqlc.ClusterCondition) err
 	// agent has reconnected (a heartbeat within the freshness window) the
 	// tunnel is back and reissuing a token would be wasted, confusing
 	// traffic. Skip and record it so the next tick re-evaluates cheaply.
-	cluster, err := runtimeDeps.Queries.GetClusterByID(ctx, row.ClusterID)
+	cluster, err := runtimeDependencies(ctx).Queries.GetClusterByID(ctx, row.ClusterID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Cluster gone — condition is stale, nothing to remediate.
@@ -344,10 +343,10 @@ func remediateConnectedFalse(ctx context.Context, row sqlc.ClusterCondition) err
 	}
 	tokenStr := base64.URLEncoding.EncodeToString(tokenBytes)
 
-	token, err := runtimeDeps.Queries.CreateClusterRegistrationToken(ctx, sqlc.CreateClusterRegistrationTokenParams{
+	token, err := runtimeDependencies(ctx).Queries.CreateClusterRegistrationToken(ctx, sqlc.CreateClusterRegistrationTokenParams{
 		ClusterID: row.ClusterID,
 		TokenHash: auth.HashOpaqueToken(tokenStr),
-		ExpiresAt: time.Now().UTC().Add(time.Duration(runtimeDeps.RegistrationTokenTTLHours) * time.Hour),
+		ExpiresAt: time.Now().UTC().Add(time.Duration(runtimeDependencies(ctx).RegistrationTokenTTLHours) * time.Hour),
 	})
 	if err != nil {
 		return insertAttempt(ctx, row, ccrActionTokenReissued, ccrOutcomeFail, "create_token: "+err.Error(), nil)
@@ -366,7 +365,7 @@ func remediateConnectedFalse(ctx context.Context, row sqlc.ClusterCondition) err
 	}
 
 	// Audit so the on-call trail picks it up.
-	if w, ok := any(runtimeDeps.Queries).(auditWriterV1ForReconciler); ok && w != nil {
+	if w, ok := any(runtimeDependencies(ctx).Queries).(auditWriterV1ForReconciler); ok && w != nil {
 		audit.Record(ctx, w, audit.Event{
 			Source:       "worker",
 			Action:       "cluster.condition.remediation_attempted",
@@ -416,7 +415,7 @@ func insertAttempt(ctx context.Context, row sqlc.ClusterCondition, action, outco
 	if len(detailJSON) == 0 {
 		detailJSON = []byte("{}")
 	}
-	_, err := runtimeDeps.Queries.InsertClusterConditionRemediation(ctx, sqlc.InsertClusterConditionRemediationParams{
+	_, err := runtimeDependencies(ctx).Queries.InsertClusterConditionRemediation(ctx, sqlc.InsertClusterConditionRemediationParams{
 		ClusterID:     row.ClusterID,
 		ConditionType: row.Type,
 		Action:        action,
@@ -425,7 +424,7 @@ func insertAttempt(ctx context.Context, row sqlc.ClusterCondition, action, outco
 		Detail:        detailJSON,
 	})
 	if err != nil {
-		runtimeLogger().WarnContext(ctx, "failed to insert remediation attempt",
+		runtimeLogger(ctx).WarnContext(ctx, "failed to insert remediation attempt",
 			"cluster_id", row.ClusterID.String(),
 			"type", row.Type,
 			"error", err,
@@ -442,7 +441,7 @@ func insertAttemptResult(ctx context.Context, row sqlc.ClusterCondition, action,
 	if jerr != nil {
 		detailJSON = []byte("{}")
 	}
-	_, err := runtimeDeps.Queries.InsertClusterConditionRemediation(ctx, sqlc.InsertClusterConditionRemediationParams{
+	_, err := runtimeDependencies(ctx).Queries.InsertClusterConditionRemediation(ctx, sqlc.InsertClusterConditionRemediationParams{
 		ClusterID:     row.ClusterID,
 		ConditionType: row.Type,
 		Action:        action,

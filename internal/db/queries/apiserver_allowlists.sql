@@ -10,6 +10,13 @@ SELECT cluster_id, cidrs, mode, detected_provider, last_reconciled_at,
 FROM apiserver_allowlists
 WHERE cluster_id = $1;
 
+-- name: GetApiserverAllowlistForUpdate :one
+SELECT cluster_id, cidrs, mode, detected_provider, last_reconciled_at,
+       sync_status, last_error, effective_cidrs, created_at, updated_at
+FROM apiserver_allowlists
+WHERE cluster_id = $1
+FOR UPDATE;
+
 -- name: ListActiveApiserverAllowlists :many
 -- "active" == mode != 'disabled' — the rows the reconciler walks every tick.
 SELECT cluster_id, cidrs, mode, detected_provider, last_reconciled_at,

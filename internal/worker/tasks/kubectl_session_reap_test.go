@@ -114,10 +114,9 @@ func (f *fakeReapQuerier) CountKubectlSessionCommands(_ context.Context, _ uuid.
 	return 0, nil
 }
 
-func TestKubectlReaper_HandleNoopWhenUnconfigured(t *testing.T) {
-	ResetKubectlSessionReap()
-	if err := HandleKubectlSessionReap(context.Background(), NewKubectlSessionReapTask()); err != nil {
-		t.Fatalf("expected nil when unconfigured, got %v", err)
+func TestKubectlReaper_DisabledFeatureIsARecordedSkip(t *testing.T) {
+	if err := (KubectlSessionReapRuntime{}).HandleKubectlSessionReap(context.Background(), NewKubectlSessionReapTask()); err != nil {
+		t.Fatalf("disabled optional feature should not retry: %v", err)
 	}
 }
 
@@ -135,12 +134,9 @@ func TestKubectlReaper_ExpiresAndDeletesPods(t *testing.T) {
 		PodName:      "astro-shell-reap1",
 		PodNamespace: "kube-system",
 	}
-	ConfigureKubectlSessionReap(KubectlSessionReapDeps{
-		Deps: kubectl.Deps{Queries: q, Requester: r},
-	})
-	defer ResetKubectlSessionReap()
+	runtime := KubectlSessionReapRuntime{Deps: kubectl.Deps{Queries: q, Requester: r}}
 
-	if err := HandleKubectlSessionReap(context.Background(), NewKubectlSessionReapTask()); err != nil {
+	if err := runtime.HandleKubectlSessionReap(context.Background(), NewKubectlSessionReapTask()); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 	q.mu.Lock()
@@ -174,9 +170,6 @@ func TestKubectlReaper_ExpiresAndDeletesPods(t *testing.T) {
 // session left active). Removing the runPeriodicTaskWithLeader wrapper makes
 // this fail.
 func TestKubectlReaper_GatedByLeader(t *testing.T) {
-	defer resetRuntime()
-	ConfigureRuntime(RuntimeDependencies{Leader: &fakeLeader{held: false}})
-
 	q := newFakeReapQuerier()
 	r := &fakeReapRequester{}
 
@@ -190,12 +183,12 @@ func TestKubectlReaper_GatedByLeader(t *testing.T) {
 		PodName:      "astro-shell-gated",
 		PodNamespace: "kube-system",
 	}
-	ConfigureKubectlSessionReap(KubectlSessionReapDeps{
-		Deps: kubectl.Deps{Queries: q, Requester: r},
-	})
-	defer ResetKubectlSessionReap()
+	runtime := KubectlSessionReapRuntime{
+		Deps:   kubectl.Deps{Queries: q, Requester: r},
+		Leader: &fakeLeader{held: false},
+	}
 
-	if err := HandleKubectlSessionReap(context.Background(), NewKubectlSessionReapTask()); err != nil {
+	if err := runtime.HandleKubectlSessionReap(context.Background(), NewKubectlSessionReapTask()); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 
@@ -237,12 +230,9 @@ func TestKubectlReaper_OrphanPodSweep(t *testing.T) {
 	})
 	r.listBody = listBody
 
-	ConfigureKubectlSessionReap(KubectlSessionReapDeps{
-		Deps: kubectl.Deps{Queries: q, Requester: r},
-	})
-	defer ResetKubectlSessionReap()
+	runtime := KubectlSessionReapRuntime{Deps: kubectl.Deps{Queries: q, Requester: r}}
 
-	if err := HandleKubectlSessionReap(context.Background(), NewKubectlSessionReapTask()); err != nil {
+	if err := runtime.HandleKubectlSessionReap(context.Background(), NewKubectlSessionReapTask()); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 

@@ -1,22 +1,31 @@
-import { ModalShell } from '@/components/ui/modal-shell';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
-import { toastError } from '@/lib/toast';
-import { useAppForm, useStore } from '@/lib/form';
+import { ModalShell } from "@/components/ui/modal-shell";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { toastError } from "@/lib/toast";
+import { useAppForm, useStore } from "@/lib/form";
 import {
   useClusterRoles,
-  useClusters,
   useCreateAccessBinding,
   useGlobalRoles,
   useProjectRoles,
-  useProjects,
-  useUsers,
-} from '@/lib/hooks';
-import { clusterLabel, isValidNamespace, projectLabel, roleTitle, userLabel } from './-utils';
+} from "@/lib/hooks/rbac";
+import { useClusters, useProjects } from "@/lib/hooks";
+import { useUsers } from "@/lib/hooks/user-settings";
+import {
+  clusterLabel,
+  isValidNamespace,
+  projectLabel,
+  roleTitle,
+  userLabel,
+} from "./-utils";
 
-export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) {
+export function CreateClusterBindingModal({
+  onClose,
+}: {
+  onClose: () => void;
+}) {
   const { data: usersData } = useUsers({ pageSize: 200 });
   const { data: globalRoles } = useGlobalRoles();
   const { data: clusterRoles } = useClusterRoles();
@@ -31,29 +40,32 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
 
   const form = useAppForm({
     defaultValues: {
-      scope: 'cluster' as 'global' | 'cluster' | 'project',
-      userId: '',
-      roleId: '',
-      clusterId: '',
-      projectId: '',
-      namespace: '',
+      scope: "cluster" as "global" | "cluster" | "project",
+      userId: "",
+      roleId: "",
+      clusterId: "",
+      projectId: "",
+      namespace: "",
     },
     validators: {
       onSubmit: ({ value }) => {
         if (!value.userId || !value.roleId) {
-          return 'Select a user and a role';
+          return "Select a user and a role";
         }
-        if (value.scope === 'cluster' && (!value.clusterId || !isValidNamespace(value.namespace.trim()))) {
-          return 'Select a cluster; namespace must be a valid label';
+        if (
+          value.scope === "cluster" &&
+          (!value.clusterId || !isValidNamespace(value.namespace.trim()))
+        ) {
+          return "Select a cluster; namespace must be a valid label";
         }
-        if (value.scope === 'project' && !value.projectId) {
-          return 'Select a project';
+        if (value.scope === "project" && !value.projectId) {
+          return "Select a project";
         }
         return undefined;
       },
     },
     onSubmitInvalid: ({ formApi }) => {
-      const err = formApi.state.errors.find((e) => typeof e === 'string');
+      const err = formApi.state.errors.find((e) => typeof e === "string");
       if (err) toastError(err);
     },
     onSubmit: async ({ value }) => {
@@ -74,18 +86,26 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
   });
 
   const scope = useStore(form.store, (s) => s.values.scope);
-  const namespaceValid = useStore(form.store, (s) => isValidNamespace(s.values.namespace.trim()));
+  const namespaceValid = useStore(form.store, (s) =>
+    isValidNamespace(s.values.namespace.trim()),
+  );
   const canSubmit = useStore(form.store, (s) => {
     if (!s.values.userId || !s.values.roleId) return false;
-    if (s.values.scope === 'cluster') {
-      return !!s.values.clusterId && isValidNamespace(s.values.namespace.trim());
+    if (s.values.scope === "cluster") {
+      return (
+        !!s.values.clusterId && isValidNamespace(s.values.namespace.trim())
+      );
     }
-    if (s.values.scope === 'project') return !!s.values.projectId;
+    if (s.values.scope === "project") return !!s.values.projectId;
     return true;
   });
 
   const roles =
-    scope === 'global' ? globalRoles || [] : scope === 'project' ? projectRoles || [] : clusterRoles || [];
+    scope === "global"
+      ? globalRoles || []
+      : scope === "project"
+        ? projectRoles || []
+        : clusterRoles || [];
 
   return (
     <ModalShell
@@ -108,14 +128,22 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
       }
     >
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Scope</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-b53e75b3-111"
+        >
+          Scope
+        </label>
         <form.Field name="scope">
           {(field) => (
             <Select
+              id="field-b53e75b3-111"
               value={field.state.value}
               onChange={(e) => {
-                field.handleChange(e.target.value as 'global' | 'cluster' | 'project');
-                form.setFieldValue('roleId', '');
+                field.handleChange(
+                  e.target.value as "global" | "cluster" | "project",
+                );
+                form.setFieldValue("roleId", "");
               }}
               onBlur={field.handleBlur}
             >
@@ -128,10 +156,16 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">User</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-b53e75b3-131"
+        >
+          User
+        </label>
         <form.Field name="userId">
           {(field) => (
             <Select
+              id="field-b53e75b3-131"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -148,10 +182,16 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Role</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-b53e75b3-151"
+        >
+          Role
+        </label>
         <form.Field name="roleId">
           {(field) => (
             <Select
+              id="field-b53e75b3-151"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -167,13 +207,19 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
         </form.Field>
       </div>
 
-      {scope === 'cluster' && (
+      {scope === "cluster" && (
         <>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Cluster</label>
+            <label
+              className="text-sm font-medium text-foreground"
+              htmlFor="field-b53e75b3-173"
+            >
+              Cluster
+            </label>
             <form.Field name="clusterId">
               {(field) => (
                 <Select
+                  id="field-b53e75b3-173"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
@@ -190,34 +236,50 @@ export function CreateClusterBindingModal({ onClose }: { onClose: () => void }) 
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Namespace</label>
+            <label
+              className="text-sm font-medium text-foreground"
+              htmlFor="field-b53e75b3-193"
+            >
+              Namespace
+            </label>
             <form.Field name="namespace">
               {(field) => (
                 <Input
+                  id="field-b53e75b3-193"
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   placeholder="leave blank for cluster-wide"
-                  className={cn('font-mono', namespaceValid ? undefined : 'border-status-error')}
+                  className={cn(
+                    "font-mono",
+                    namespaceValid ? undefined : "border-status-error",
+                  )}
                 />
               )}
             </form.Field>
             {!namespaceValid && (
               <p className="text-xs text-status-error">
-                Must be a valid Kubernetes namespace (lowercase alphanumeric and dashes, ≤63 chars).
+                Must be a valid Kubernetes namespace (lowercase alphanumeric and
+                dashes, ≤63 chars).
               </p>
             )}
           </div>
         </>
       )}
 
-      {scope === 'project' && (
+      {scope === "project" && (
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Project</label>
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-b53e75b3-217"
+          >
+            Project
+          </label>
           <form.Field name="projectId">
             {(field) => (
               <Select
+                id="field-b53e75b3-217"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}

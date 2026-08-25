@@ -1,20 +1,19 @@
 package handler
 
-// Tests for the sprint 075 platform-baseline coverage endpoint.
+// Tests for the catalog-defined platform-baseline coverage endpoint.
 //
 // Coverage matrix:
-//   - TestPlatformBaselineCoverage_AllResolved — all seven slugs resolve;
+//   - TestPlatformBaselineCoverage_AllResolved — every default-enabled catalog slug resolves;
 //     missing_slugs is empty; each entry has chart_id + repository.
-//   - TestPlatformBaselineCoverage_SomeMissing — three slugs are absent;
-//     missing_slugs lists them in canonical order; resolved[] still has
-//     all seven entries with found=false for the missing ones.
+//   - TestPlatformBaselineCoverage_SomeMissing — one catalog slug is absent;
+//     missing_slugs and resolved[] preserve catalog order.
 //   - TestPlatformBaselineCoverage_RequiresSuperuser — a non-superuser
 //     caller receives 403 with code=forbidden; no DB resolve calls are
 //     made (gate runs first).
 //   - TestPlatformBaselineCoverage_LookupErrorTreatedAsMissing — a non-
 //     pgx error from ResolveChartByName (e.g. DB outage on a single
 //     row) surfaces as not-resolved, not a 500, so the operator banner
-//     can render "X/7 — catalog unreachable?" instead of crashing.
+//     can render a partial coverage result instead of crashing.
 
 import (
 	"context"
@@ -22,10 +21,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
+	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -72,19 +75,26 @@ func decodeCoverage(t *testing.T, body []byte) coverageResponse {
 }
 
 func TestPlatformBaselineCoverage_AllResolved(t *testing.T) {
+	catalog, err := builtinbundles.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSlugs := make([]string, 0, len(catalog.Components))
+	resolutions := make(map[string]sqlc.ChartResolution)
+	for _, component := range catalog.Components {
+		if !component.DefaultEnabled {
+			continue
+		}
+		wantSlugs = append(wantSlugs, component.Slug)
+		resolutions[component.Slug] = sqlc.ChartResolution{ChartID: uuid.New(), Repository: "embedded-catalog"}
+	}
+	if len(wantSlugs) == 0 {
+		t.Fatal("embedded catalog has no default-enabled components")
+	}
 	callerID := uuid.New()
-	trivyID, ksmID, neID, fbID, ingressID, cmID, gatekeeperID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	q := &fakeCoverageQuerier{
-		user: sqlc.User{ID: callerID, IsSuperuser: true},
-		slugs: map[string]sqlc.ChartResolution{
-			"trivy-operator":           {ChartID: trivyID, Repository: "aqua"},
-			"kube-state-metrics":       {ChartID: ksmID, Repository: "prometheus-community"},
-			"prometheus-node-exporter": {ChartID: neID, Repository: "prometheus-community"},
-			"fluent-bit":               {ChartID: fbID, Repository: "fluent"},
-			"ingress-nginx":            {ChartID: ingressID, Repository: "ingress-nginx"},
-			"cert-manager":             {ChartID: cmID, Repository: "jetstack"},
-			"gatekeeper":               {ChartID: gatekeeperID, Repository: "open-policy-agent"},
-		},
+		user:  sqlc.User{ID: callerID, IsSuperuser: true},
+		slugs: resolutions,
 	}
 	h := NewPlatformBaselineCoverageHandler(q)
 
@@ -96,10 +106,10 @@ func TestPlatformBaselineCoverage_AllResolved(t *testing.T) {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
 	}
 	resp := decodeCoverage(t, w.Body.Bytes())
-	if got, want := len(resp.ExpectedSlugs), 7; got != want {
-		t.Fatalf("expected_slugs len = %d, want %d", got, want)
+	if !reflect.DeepEqual(resp.ExpectedSlugs, wantSlugs) {
+		t.Fatalf("expected_slugs = %v, want catalog defaults %v", resp.ExpectedSlugs, wantSlugs)
 	}
-	if got, want := len(resp.Resolved), 7; got != want {
+	if got, want := len(resp.Resolved), len(wantSlugs); got != want {
 		t.Fatalf("resolved len = %d, want %d", got, want)
 	}
 	if got, want := len(resp.MissingSlugs), 0; got != want {
@@ -117,23 +127,28 @@ func TestPlatformBaselineCoverage_AllResolved(t *testing.T) {
 			t.Errorf("resolved[%d] (%s) repository empty", i, e.Slug)
 		}
 	}
-	if q.resolveHits != 7 {
-		t.Errorf("resolveHits = %d, want 7", q.resolveHits)
+	if q.resolveHits != len(wantSlugs) {
+		t.Errorf("resolveHits = %d, want %d", q.resolveHits, len(wantSlugs))
 	}
 }
 
 func TestPlatformBaselineCoverage_SomeMissing(t *testing.T) {
+	expectedSlugs, err := loadDefaultBaselineSlugs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(expectedSlugs) < 2 {
+		t.Fatalf("need at least two default-enabled catalog components, got %v", expectedSlugs)
+	}
+	missingSlug := expectedSlugs[len(expectedSlugs)-1]
 	callerID := uuid.New()
-	// Only four of the seven slugs are present. Node-exporter, fluent-bit,
-	// and Gatekeeper are deliberately omitted to exercise missing_slugs.
+	resolutions := make(map[string]sqlc.ChartResolution, len(expectedSlugs)-1)
+	for _, slug := range expectedSlugs[:len(expectedSlugs)-1] {
+		resolutions[slug] = sqlc.ChartResolution{ChartID: uuid.New(), Repository: "embedded-catalog"}
+	}
 	q := &fakeCoverageQuerier{
-		user: sqlc.User{ID: callerID, IsSuperuser: true},
-		slugs: map[string]sqlc.ChartResolution{
-			"trivy-operator":     {ChartID: uuid.New(), Repository: "aqua"},
-			"kube-state-metrics": {ChartID: uuid.New(), Repository: "prometheus-community"},
-			"ingress-nginx":      {ChartID: uuid.New(), Repository: "ingress-nginx"},
-			"cert-manager":       {ChartID: uuid.New(), Repository: "jetstack"},
-		},
+		user:  sqlc.User{ID: callerID, IsSuperuser: true},
+		slugs: resolutions,
 	}
 	h := NewPlatformBaselineCoverageHandler(q)
 
@@ -146,46 +161,32 @@ func TestPlatformBaselineCoverage_SomeMissing(t *testing.T) {
 	}
 	resp := decodeCoverage(t, w.Body.Bytes())
 
-	// missing_slugs must contain exactly the omitted names, in the
-	// canonical order of defaultBaselineSlugs (node-exporter then
-	// fluent-bit then Gatekeeper). The order matters for stable frontend rendering.
-	wantMissing := []string{"prometheus-node-exporter", "fluent-bit", "gatekeeper"}
-	if len(resp.MissingSlugs) != len(wantMissing) {
-		t.Fatalf("missing_slugs = %v, want %v", resp.MissingSlugs, wantMissing)
-	}
-	for i, s := range wantMissing {
-		if resp.MissingSlugs[i] != s {
-			t.Errorf("missing_slugs[%d] = %q, want %q", i, resp.MissingSlugs[i], s)
-		}
+	if !reflect.DeepEqual(resp.MissingSlugs, []string{missingSlug}) {
+		t.Fatalf("missing_slugs = %v, want [%s]", resp.MissingSlugs, missingSlug)
 	}
 
-	// resolved still has all seven — the missing entries are found=false.
-	if len(resp.Resolved) != 7 {
-		t.Fatalf("resolved len = %d, want 7", len(resp.Resolved))
+	if len(resp.Resolved) != len(expectedSlugs) {
+		t.Fatalf("resolved len = %d, want %d", len(resp.Resolved), len(expectedSlugs))
 	}
 	gotFound := map[string]bool{}
 	for _, e := range resp.Resolved {
 		gotFound[e.Slug] = e.Found
 	}
-	for _, s := range []string{"trivy-operator", "kube-state-metrics", "ingress-nginx", "cert-manager"} {
+	for _, s := range expectedSlugs[:len(expectedSlugs)-1] {
 		if !gotFound[s] {
 			t.Errorf("resolved[%s] found=false, want true", s)
 		}
 	}
-	for _, s := range wantMissing {
-		if gotFound[s] {
-			t.Errorf("resolved[%s] found=true, want false", s)
-		}
+	if gotFound[missingSlug] {
+		t.Errorf("resolved[%s] found=true, want false", missingSlug)
 	}
 }
 
 func TestPlatformBaselineCoverage_RequiresSuperuser(t *testing.T) {
 	callerID := uuid.New()
 	q := &fakeCoverageQuerier{
-		user: sqlc.User{ID: callerID, IsSuperuser: false}, // ← not superuser
-		slugs: map[string]sqlc.ChartResolution{
-			"trivy-operator": {ChartID: uuid.New(), Repository: "aqua"},
-		},
+		user:  sqlc.User{ID: callerID, IsSuperuser: false}, // ← not superuser
+		slugs: map[string]sqlc.ChartResolution{},
 	}
 	h := NewPlatformBaselineCoverageHandler(q)
 
@@ -207,18 +208,23 @@ func TestPlatformBaselineCoverage_LookupErrorTreatedAsMissing(t *testing.T) {
 	// rather than crashing the whole endpoint with a 500 — the operator
 	// banner is meant to be a robust diagnostic.
 	callerID := uuid.New()
+	expectedSlugs, err := loadDefaultBaselineSlugs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(expectedSlugs) == 0 {
+		t.Fatal("embedded catalog has no default-enabled components")
+	}
+	failedSlug := expectedSlugs[0]
+	resolutions := make(map[string]sqlc.ChartResolution, len(expectedSlugs)-1)
+	for _, slug := range expectedSlugs[1:] {
+		resolutions[slug] = sqlc.ChartResolution{ChartID: uuid.New(), Repository: "embedded-catalog"}
+	}
 	q := &fakeCoverageQuerier{
-		user: sqlc.User{ID: callerID, IsSuperuser: true},
-		slugs: map[string]sqlc.ChartResolution{
-			"trivy-operator":           {ChartID: uuid.New(), Repository: "aqua"},
-			"kube-state-metrics":       {ChartID: uuid.New(), Repository: "prometheus-community"},
-			"prometheus-node-exporter": {ChartID: uuid.New(), Repository: "prometheus-community"},
-			"ingress-nginx":            {ChartID: uuid.New(), Repository: "ingress-nginx"},
-			"cert-manager":             {ChartID: uuid.New(), Repository: "jetstack"},
-			"gatekeeper":               {ChartID: uuid.New(), Repository: "open-policy-agent"},
-		},
+		user:  sqlc.User{ID: callerID, IsSuperuser: true},
+		slugs: resolutions,
 		errSlugs: map[string]error{
-			"fluent-bit": errors.New("connection refused"),
+			failedSlug: errors.New("connection refused"),
 		},
 	}
 	h := NewPlatformBaselineCoverageHandler(q)
@@ -231,7 +237,23 @@ func TestPlatformBaselineCoverage_LookupErrorTreatedAsMissing(t *testing.T) {
 		t.Fatalf("status = %d, want 200 (best-effort); body=%s", w.Code, w.Body.String())
 	}
 	resp := decodeCoverage(t, w.Body.Bytes())
-	if len(resp.MissingSlugs) != 1 || resp.MissingSlugs[0] != "fluent-bit" {
-		t.Fatalf("missing_slugs = %v, want [fluent-bit]", resp.MissingSlugs)
+	if len(resp.MissingSlugs) != 1 || resp.MissingSlugs[0] != failedSlug {
+		t.Fatalf("missing_slugs = %v, want [%s]", resp.MissingSlugs, failedSlug)
+	}
+}
+
+func TestPlatformBaselineCoverageSourceDoesNotOwnLegacyMembership(t *testing.T) {
+	source, err := os.ReadFile("platform_baseline_coverage.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	for _, forbidden := range []string{"defaultBaselineSlugs", "trivy-operator", "fluent-bit", "cert-manager", "ingress-nginx", "gatekeeper"} {
+		if strings.Contains(text, forbidden) {
+			t.Errorf("coverage handler still hard-codes legacy baseline member %q", forbidden)
+		}
+	}
+	if !strings.Contains(text, "builtinbundles.Load()") || !strings.Contains(text, "component.DefaultEnabled") {
+		t.Fatal("coverage handler must derive membership from default-enabled embedded catalog components")
 	}
 }

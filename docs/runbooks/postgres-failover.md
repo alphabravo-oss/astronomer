@@ -57,6 +57,61 @@ the dirty-state recovery procedure first, then bring up the app.
 - `astronomer_db_query_duration_seconds_count{operation="select"}` rate
   matches pre-incident baseline
 
+Before a release, rehearse the fail-closed mutation contract with the
+repository-owned disposable PostgreSQL 16 drill:
+
+```bash
+make test-postgres-outage-qualification
+```
+
+The drill exercises every transaction interface wired through the production
+server adapter, compliance-baseline apply/revert, delivery planning, rollout
+control and approval, deployment control, system rollout, credential-returning
+authentication, an SMTP configuration test, and the raw Kubernetes pre-effect
+audit boundary. It stops and restores only its labelled disposable container,
+then checks that no unaudited intent, remote effect, response credential, or
+secret-bearing audit detail escaped.
+Set `POSTGRES_OUTAGE_QUALIFICATION_RACE=1` for race instrumentation.
+
+Certify the recovery objective separately with the disposable physical-
+replication lane:
+
+```bash
+make test-postgres-failover-certification
+```
+
+This starts a real PostgreSQL 16 primary and physical streaming standby,
+enables synchronous acknowledgement, commits Astronomer persistence canaries,
+and keeps the production database pool alive behind a stable writer endpoint.
+It kills the primary with `SIGKILL`, requires `/readyz` to return 503, promotes
+the standby with `pg_ctl promote`, redirects the endpoint, and requires both
+readiness and a durable write/read to recover. The default release thresholds
+are zero acknowledged rows lost and 30 seconds from fault injection through
+successful persistence recovery. Override them only for an explicitly approved
+environment-specific objective:
+
+```bash
+POSTGRES_FAILOVER_RPO_MAX_ROWS=0 \
+POSTGRES_FAILOVER_RTO_MAX_SECONDS=30 \
+POSTGRES_FAILOVER_ARTIFACT_DIR=/secure/release-evidence/postgres-failover \
+make test-postgres-failover-certification
+```
+
+The retained directory contains `evidence.json` using schema
+`astronomer-postgres-failover-certification/v1`, primary/replica logs and
+inspection metadata, base-backup and migration logs, and the test transcript.
+The evidence records source/workflow/image provenance, UTC event timestamps,
+the commit LSN, row RPO, RTO, promotion time, readiness failure-detection time,
+thresholds, and residual scope. Missing or malformed evidence, a non-zero RPO,
+an over-budget RTO, readiness that does not fail closed, or a failed recovered
+write blocks the lane.
+
+The deterministic TCP endpoint models the stable writer endpoint supplied by a
+managed HA service. The recorded RTO intentionally excludes that provider's
+control-plane/DNS detection time; production release evidence must add the
+provider's measured component rather than presenting this local value as an
+end-to-end managed-service RTO.
+
 ## Prevention
 
 - Use multi-AZ managed Postgres (RDS Multi-AZ / Aurora)

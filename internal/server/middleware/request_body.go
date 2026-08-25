@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -29,7 +30,15 @@ func BoundRequestBodies(maximum int64, timeout time.Duration) func(http.Handler)
 				return
 			}
 			if r.ContentLength > maximum {
-				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				errorObject := map[string]string{
+					"code": "request_body_too_large", "message": "Request body exceeds the configured limit",
+				}
+				if requestID := GetRequestID(r.Context()); requestID != "" {
+					errorObject["request_id"] = requestID
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusRequestEntityTooLarge)
+				_ = json.NewEncoder(w).Encode(map[string]any{"error": errorObject})
 				return
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, maximum)

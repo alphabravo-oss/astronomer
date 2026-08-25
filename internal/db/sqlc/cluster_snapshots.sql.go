@@ -248,6 +248,41 @@ func (q *Queries) GetClusterSnapshotByID(ctx context.Context, id uuid.UUID) (Clu
 	return i, err
 }
 
+const getClusterSnapshotForUpdate = `-- name: GetClusterSnapshotForUpdate :one
+SELECT id, cluster_id, velero_name, velero_namespace, source, spec, phase,
+       start_time, completion_time, expires_at,
+       warnings_count, errors_count, last_poll_at, last_poll_error,
+       created_by, created_at, updated_at
+FROM cluster_snapshots
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetClusterSnapshotForUpdate(ctx context.Context, id uuid.UUID) (ClusterSnapshot, error) {
+	row := q.db.QueryRow(ctx, getClusterSnapshotForUpdate, id)
+	var i ClusterSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.VeleroName,
+		&i.VeleroNamespace,
+		&i.Source,
+		&i.Spec,
+		&i.Phase,
+		&i.StartTime,
+		&i.CompletionTime,
+		&i.ExpiresAt,
+		&i.WarningsCount,
+		&i.ErrorsCount,
+		&i.LastPollAt,
+		&i.LastPollError,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getClusterSnapshotScheduleByID = `-- name: GetClusterSnapshotScheduleByID :one
 SELECT id, cluster_id, name, cron_schedule, spec, enabled,
        last_run_at, last_run_status, created_by, created_at, updated_at
@@ -257,6 +292,33 @@ WHERE id = $1
 
 func (q *Queries) GetClusterSnapshotScheduleByID(ctx context.Context, id uuid.UUID) (ClusterSnapshotSchedule, error) {
 	row := q.db.QueryRow(ctx, getClusterSnapshotScheduleByID, id)
+	var i ClusterSnapshotSchedule
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.Name,
+		&i.CronSchedule,
+		&i.Spec,
+		&i.Enabled,
+		&i.LastRunAt,
+		&i.LastRunStatus,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getClusterSnapshotScheduleForUpdate = `-- name: GetClusterSnapshotScheduleForUpdate :one
+SELECT id, cluster_id, name, cron_schedule, spec, enabled,
+       last_run_at, last_run_status, created_by, created_at, updated_at
+FROM cluster_snapshot_schedules
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetClusterSnapshotScheduleForUpdate(ctx context.Context, id uuid.UUID) (ClusterSnapshotSchedule, error) {
+	row := q.db.QueryRow(ctx, getClusterSnapshotScheduleForUpdate, id)
 	var i ClusterSnapshotSchedule
 	err := row.Scan(
 		&i.ID,

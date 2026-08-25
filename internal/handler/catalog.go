@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -19,15 +20,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -117,6 +121,43 @@ type CatalogQuerier interface {
 	GetProjectByID(ctx context.Context, id uuid.UUID) (sqlc.Project, error)
 }
 
+type installedChartScopedPager interface {
+	ListInstalledChartsForScopes(ctx context.Context, arg sqlc.ListInstalledChartsForScopesParams) ([]sqlc.InstalledChart, error)
+	CountInstalledChartsForScopes(ctx context.Context, clusterIDs []uuid.UUID) (int64, error)
+}
+
+type catalogOperationPager interface {
+	CountCatalogOperations(ctx context.Context, arg sqlc.CountCatalogOperationsParams) (int64, error)
+	ListCatalogOperationsForScopes(ctx context.Context, arg sqlc.ListCatalogOperationsForScopesParams) ([]sqlc.CatalogOperation, error)
+	CountCatalogOperationsForScopes(ctx context.Context, arg sqlc.CountCatalogOperationsForScopesParams) (int64, error)
+}
+
+// CatalogMutationTx is the transaction-bound write surface for repository and
+// installed-chart lifecycle changes. Production supplies sqlc.New(tx), so the
+// domain row, durable operation intent, and mandatory audit intent share one
+// commit decision.
+type CatalogMutationTx interface {
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+	CreateHelmRepository(context.Context, sqlc.CreateHelmRepositoryParams) (sqlc.HelmRepository, error)
+	UpdateHelmRepository(context.Context, sqlc.UpdateHelmRepositoryParams) (sqlc.HelmRepository, error)
+	DeleteHelmRepository(context.Context, uuid.UUID) error
+	CreateInstalledChart(context.Context, sqlc.CreateInstalledChartParams) (sqlc.InstalledChart, error)
+	UpdateInstalledChartStatus(context.Context, sqlc.UpdateInstalledChartStatusParams) error
+	UpdateInstalledChartValues(context.Context, sqlc.UpdateInstalledChartValuesParams) (sqlc.InstalledChart, error)
+	CreateCatalogOperation(context.Context, sqlc.CreateCatalogOperationParams) (sqlc.CatalogOperation, error)
+	CreateCatalogOperationIdempotent(context.Context, sqlc.CreateCatalogOperationIdempotentParams) (sqlc.CatalogOperation, error)
+	CreateCatalogOperationIdempotentWithDisposition(context.Context, sqlc.CreateCatalogOperationIdempotentWithDispositionParams) (sqlc.CreateCatalogOperationIdempotentWithDispositionRow, error)
+	RequeueCatalogOperation(context.Context, uuid.UUID) (sqlc.CatalogOperation, error)
+}
+
+type catalogRunTxFunc func(context.Context, func(CatalogMutationTx) error) error
+
+type catalogMutationResult[T any] struct {
+	row T
+	op  sqlc.CatalogOperation
+}
+
 // CatalogHandler handles catalog endpoints (helm repositories, charts, installations).
 type CatalogHandler struct {
 	queries CatalogQuerier
@@ -140,11 +181,47 @@ type CatalogHandler struct {
 	vaultResolver *avault.Resolver
 	bus           *events.Bus
 	// encryptor seals/unseals helm_repositories.auth_config (migration 145).
-	// Optional only in development: config.ValidateProductionSecurity refuses
-	// to start a production server without one. When nil, credentials are
-	// written to the plaintext JSONB column exactly as they were before 145,
-	// which is the row shape the resolver's legacy branch already handles.
+	// Legacy plaintext rows remain readable for migration, but every new
+	// credential-bearing write fails closed when this dependency is absent.
 	encryptor *auth.Encryptor
+	runTx     catalogRunTxFunc
+}
+
+// SetRunTx wires the production transaction boundary used for catalog state,
+// operation intent, and mandatory audit intent.
+func (h *CatalogHandler) SetRunTx(runTx catalogRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *CatalogHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
+
+func executeCatalogMutation[T any](r *http.Request, h *CatalogHandler, mutate func(CatalogMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("catalog handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q CatalogMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 // SetEncryptor wires the Fernet encryptor used for chart-repository
@@ -308,10 +385,9 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project catalogs")
 			return
 		}
-		// TODO(total): ListCatalogsForProject returns the full unpaged set;
-		// no COUNT query exists, so total is the returned length.
+		// ListCatalogsForProject returns the full authorized set.
 		RespondList(w, helmRepositoriesToResponse(h.redactHelmRepositories(rows), h.chartCountsFor(r.Context(), rows)),
-			NewPagination(len(rows), int(limit), int(offset), len(rows)))
+			NewPagination(len(rows), len(rows), 0, len(rows)))
 		return
 	}
 
@@ -357,6 +433,10 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateRepoRequest represents the request body for creating a helm repository.
+// openapi:request-operation postCatalogRepositories
+// openapi:request-allow username decoded solely to reject misplaced top-level credentials with a clear 400 response
+// openapi:request-allow password decoded solely to reject misplaced top-level credentials with a clear 400 response
+// openapi:request-allow token decoded solely to reject misplaced top-level credentials with a clear 400 response
 type CreateRepoRequest struct {
 	Name        string          `json:"name" validate:"required"`
 	URL         string          `json:"url" validate:"required"`
@@ -416,6 +496,29 @@ func valueOr[T any](p *T, stored T) T {
 	return *p
 }
 
+// validateCatalogRepositoryURL prevents credentials from bypassing the
+// encrypted auth_config field and leaking into operation/task payloads, audit
+// detail, or logs. Repository URLs are identifiers, not secret containers.
+func validateCatalogRepositoryURL(raw string) (string, error) {
+	clean := strings.TrimSpace(raw)
+	if clean == "" {
+		return "", errors.New("repository URL is required")
+	}
+	// Git's conventional SCP-like transport is not RFC 3986, but contains no
+	// credential beyond the fixed transport username.
+	if strings.HasPrefix(clean, "git@") && !strings.ContainsAny(clean, "?#") {
+		return clean, nil
+	}
+	parsed, err := url.Parse(clean)
+	if err != nil {
+		return "", errors.New("repository URL is invalid")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("repository URL must not contain credentials, query parameters, or fragments; use auth_config")
+	}
+	return clean, nil
+}
+
 // CreateRepo handles POST /api/v1/catalog/repositories/.
 func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	var req CreateRepoRequest
@@ -429,6 +532,12 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	if req.AuthConfig == nil {
 		req.AuthConfig = json.RawMessage(`{}`)
 	}
+	cleanURL, err := validateCatalogRepositoryURL(req.URL)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		return
+	}
+	req.URL = cleanURL
 
 	// Auto-detect OCI URLs so the UI can render the correct icon and the
 	// reconciler can dispatch to the OCI ingest path even when the operator
@@ -454,6 +563,10 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 
 	// Migration 145: the credential goes to the database as a Fernet envelope;
 	// only the non-secret projection stays in the JSONB column.
+	if h.sealer() == nil && catalog.HasAuthConfigSecret(req.AuthConfig) {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.CryptoError, "Repository credential encryption is unavailable")
+		return
+	}
 	sealed, publicCfg, err := catalog.SealAuthConfig(req.AuthConfig, h.sealer())
 	if err != nil {
 		h.log.Error("encrypt chart repository credential", "repository", req.Name, "error", err)
@@ -466,7 +579,7 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		enabled = *req.Enabled
 	}
 
-	repo, err := h.queries.CreateHelmRepository(r.Context(), sqlc.CreateHelmRepositoryParams{
+	params := sqlc.CreateHelmRepositoryParams{
 		Name:                req.Name,
 		Url:                 req.URL,
 		RepoType:            req.RepoType,
@@ -476,17 +589,21 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		AuthConfig:          publicCfg,
 		AuthConfigEncrypted: sealed,
 		Enabled:             enabled,
-	})
+	}
+	repo, err := executeCatalogMutation(r, h,
+		func(q CatalogMutationTx) (sqlc.HelmRepository, error) {
+			return q.CreateHelmRepository(r.Context(), params)
+		},
+		func() (sqlc.HelmRepository, error) { return h.queries.CreateHelmRepository(r.Context(), params) },
+		func(row sqlc.HelmRepository) clusterAuditEvent {
+			return clusterAuditEvent{action: "catalog.repo.create", resourceType: "helm_repository", resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated, detail: map[string]any{
+				"repo_type": row.RepoType, "auth_type": row.AuthType,
+			}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create repository")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create repository")
 		return
 	}
-
-	recordAudit(r, h.queries, "catalog.repo.create", "helm_repository", repo.ID.String(), repo.Name, map[string]any{
-		"url":       repo.Url,
-		"repo_type": repo.RepoType,
-		"auth_type": repo.AuthType,
-	})
 
 	w.Header().Set("Location", "/api/v1/catalog/repositories/"+repo.ID.String()+"/")
 	// A repository has ingested nothing at the instant it is created, so the
@@ -522,6 +639,10 @@ func (h *CatalogHandler) GetRepo(w http.ResponseWriter, r *http.Request) {
 // normalised from nil to `{}` before the merge — erased the credential.
 // The credential case is the dangerous one: the operator renames a repo and
 // discovers days later that the nightly sync has been 401ing ever since.
+// openapi:request-operation putCatalogRepositoriesById
+// openapi:request-allow username decoded solely to reject misplaced top-level credentials with a clear 400 response
+// openapi:request-allow password decoded solely to reject misplaced top-level credentials with a clear 400 response
+// openapi:request-allow token decoded solely to reject misplaced top-level credentials with a clear 400 response
 type UpdateRepoRequest struct {
 	Name        *string          `json:"name"`
 	URL         *string          `json:"url"`
@@ -593,6 +714,10 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 	if authType == "" {
 		authType = catalog.InferAuthType(authConfig)
 	}
+	if h.sealer() == nil && catalog.HasAuthConfigSecret(authConfig) {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.CryptoError, "Repository credential encryption is unavailable")
+		return
+	}
 
 	sealed, publicCfg, err := catalog.SealAuthConfig(authConfig, h.sealer())
 	if err != nil {
@@ -601,7 +726,7 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repo, err := h.queries.UpdateHelmRepository(r.Context(), sqlc.UpdateHelmRepositoryParams{
+	params := sqlc.UpdateHelmRepositoryParams{
 		ID:                  id,
 		Name:                name,
 		Url:                 valueOr(req.URL, existing.Url),
@@ -612,17 +737,27 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 		AuthConfig:          publicCfg,
 		AuthConfigEncrypted: sealed,
 		Enabled:             valueOr(req.Enabled, existing.Enabled),
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update repository")
+	}
+	cleanURL, urlErr := validateCatalogRepositoryURL(params.Url)
+	if urlErr != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, urlErr.Error())
 		return
 	}
-
-	recordAudit(r, h.queries, "catalog.repo.update", "helm_repository", repo.ID.String(), repo.Name, map[string]any{
-		"url":       repo.Url,
-		"enabled":   repo.Enabled,
-		"auth_type": repo.AuthType,
-	})
+	params.Url = cleanURL
+	repo, err := executeCatalogMutation(r, h,
+		func(q CatalogMutationTx) (sqlc.HelmRepository, error) {
+			return q.UpdateHelmRepository(r.Context(), params)
+		},
+		func() (sqlc.HelmRepository, error) { return h.queries.UpdateHelmRepository(r.Context(), params) },
+		func(row sqlc.HelmRepository) clusterAuditEvent {
+			return clusterAuditEvent{action: "catalog.repo.update", resourceType: "helm_repository", resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusOK, detail: map[string]any{
+				"enabled": row.Enabled, "auth_type": row.AuthType,
+			}}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update repository")
+		return
+	}
 
 	RespondJSON(w, http.StatusOK, helmRepositoryToResponse(h.redactHelmRepository(repo),
 		h.chartCountsFor(r.Context(), []sqlc.HelmRepository{repo})[repo.ID]))
@@ -640,12 +775,16 @@ func (h *CatalogHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 	if existing, lookupErr := h.queries.GetHelmRepositoryByID(r.Context(), id); lookupErr == nil {
 		repoName = existing.Name
 	}
-	if err := h.queries.DeleteHelmRepository(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete repository")
+	_, err = executeCatalogMutation(r, h,
+		func(q CatalogMutationTx) (uuid.UUID, error) { return id, q.DeleteHelmRepository(r.Context(), id) },
+		func() (uuid.UUID, error) { return id, h.queries.DeleteHelmRepository(r.Context(), id) },
+		func(rowID uuid.UUID) clusterAuditEvent {
+			return clusterAuditEvent{action: "catalog.repo.delete", resourceType: "helm_repository", resourceID: rowID.String(), resourceName: repoName, status: http.StatusNoContent}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete repository")
 		return
 	}
-
-	recordAudit(r, h.queries, "catalog.repo.delete", "helm_repository", id.String(), repoName, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -658,6 +797,9 @@ func (h *CatalogHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 // install. Errors from the network or DB bubble up as a 502 — last_synced_at
 // is only stamped on successful ingest.
 func (h *CatalogHandler) SyncRepo(w http.ResponseWriter, r *http.Request) {
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid repository ID")
@@ -668,31 +810,72 @@ func (h *CatalogHandler) SyncRepo(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Repository not found")
 		return
 	}
-	var chartCount, versionCount int
-	if isOCIRepoSpec(repo) {
-		chartCount, versionCount, err = h.fetchAndIngestOCIRepo(r.Context(), repo)
-	} else {
-		chartCount, versionCount, err = h.fetchAndIngestRepoIndex(r.Context(), repo)
-	}
+	r = r.WithContext(withOperationIdempotency(r, "catalog_repository_sync"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		Action       string `json:"action"`
+		RepositoryID string `json:"repository_id"`
+	}{Action: "sync", RepositoryID: id.String()})
 	if err != nil {
-		h.log.Warn("catalog sync failed", "repo", repo.Url, "error", err)
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.SyncError, fmt.Sprintf("Failed to sync repository: %v", err))
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode repository sync request")
 		return
 	}
-	if err := h.queries.UpdateHelmRepositoryLastSynced(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, "Failed to update repository sync timestamp")
+	if h.runTx != nil {
+		task, taskErr := tasks.NewCatalogSyncTask(tasks.CatalogSyncPayload{RepositoryID: repo.ID.String()})
+		if taskErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to build repository sync request")
+			return
+		}
+		requestKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+		dedupeKey := "catalog-sync:" + audit.MutationDedupeKey(requestKey, "catalog.repo.sync_requested", "helm_repository", repo.ID.String())
+		var outbox sqlc.TaskOutbox
+		var receipt CatalogRepositorySyncReceipt
+		err = h.runTx(r.Context(), func(q CatalogMutationTx) error {
+			idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+			if !ok {
+				return errors.New("catalog sync idempotency store is not configured")
+			}
+			_, stored, replay, claimErr := claimOperationReceipt[CatalogRepositorySyncReceipt](r.Context(), idemQ, "catalog_repository_syncs", digest)
+			if claimErr != nil {
+				return claimErr
+			}
+			if replay {
+				receipt = stored
+				return nil
+			}
+			var mutationErr error
+			outbox, mutationErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{
+				DedupeKey: dedupeKey, QueueName: "default", MaxRetry: 25,
+				Timeout: 30 * time.Minute, Unique: 10 * time.Minute, MaxDeliveryAttempts: 20,
+			})
+			if mutationErr != nil {
+				return mutationErr
+			}
+			receipt = CatalogRepositorySyncReceipt{RepositoryID: repo.ID.String(), TaskID: outbox.ID.String(), Status: outbox.Status}
+			if auditErr := recordAuditOutbox(r, q, "catalog.repo.sync_requested", "helm_repository", repo.ID.String(), repo.Name, http.StatusAccepted, map[string]any{
+				"repo_type": repo.RepoType, "task_outbox_id": outbox.ID.String(),
+			}); auditErr != nil {
+				return auditErr
+			}
+			return attachOperationReceipt(r.Context(), idemQ, "catalog_repository_syncs", outbox.ID, digest, receipt)
+		})
+		if err != nil {
+			if errors.Is(err, errOperationIdempotencyConflict) {
+				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different catalog repository sync")
+				return
+			}
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue repository sync")
+			return
+		}
+		RespondAcceptedOperation(w, "/api/v1/catalog/repositories/"+receipt.RepositoryID+"/", receipt)
 		return
 	}
-	recordAudit(r, h.queries, "catalog.repo.sync", "helm_repository", repo.ID.String(), repo.Name, map[string]any{
-		"charts":   chartCount,
-		"versions": versionCount,
-	})
-	RespondJSON(w, http.StatusOK, map[string]any{
-		"success":  true,
-		"message":  "Repository sync completed",
-		"charts":   chartCount,
-		"versions": versionCount,
-	})
+	RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Catalog sync transaction runner is not configured")
+}
+
+type CatalogRepositorySyncReceipt struct {
+	RepositoryID string `json:"repository_id"`
+	TaskID       string `json:"task_id"`
+	Status       string `json:"status"`
 }
 
 // helmIndexFile mirrors the relevant fields of a Helm repo index.yaml. We use
@@ -1112,8 +1295,7 @@ func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list chart versions")
 		return
 	}
-	// TODO(total): no COUNT query for chart versions; infer has_more from a
-	// full page since this runs a real LIMIT/OFFSET query.
+	// No exact total is available; infer has_more from a full SQL page.
 	RespondList(w, versions, NewPaginationFromPage(limit, offset, len(versions)))
 }
 
@@ -1264,11 +1446,6 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		params.PresetUsed = pgtype.Text{String: req.PresetUsed, Valid: true}
 	}
 
-	installation, err := h.queries.CreateInstalledChart(r.Context(), params)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create installation")
-		return
-	}
 	// Migration 067 — the values blob keeps its ${vault://...} markers in
 	// both the installed_charts row AND the enqueued operation payload.
 	// Resolution happens at execution time inside the reconciler
@@ -1279,36 +1456,51 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 	// segment) require the operator to use the explicit
 	// "${vault://<connection>/...}" form; the reconciler fails the
 	// operation clearly when a reference is unresolvable.
-	op, err := h.enqueueOperation(withOperationIdempotency(r, "catalog"), "installed_chart", installation.ID.String(), "install", catalogOperationEnvelope{
-		InstalledChartID: installation.ID.String(),
-		ClusterID:        clusterID.String(),
-		ReleaseName:      installation.ReleaseName,
-		Namespace:        installation.Namespace,
-		ChartVersionID:   req.ChartVersionID,
-		ChartName:        chart.Name,
-		RepoURL:          repo.Url,
-		Version:          version.Version,
-		// The marker-bearing blob flows to the reconciler unchanged; it
-		// resolves ${vault://...} in-memory right before shipping to the
-		// cluster (see sendHelm).
-		ValuesOverride: installation.ValuesOverride,
-		Notes:          installation.Notes,
-	}, currentUserUUID(r))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue installation")
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
+	opCtx := withOperationIdempotency(r, "catalog")
+	result, err := executeCatalogMutation(r, h,
+		func(q CatalogMutationTx) (catalogMutationResult[sqlc.InstalledChart], error) {
+			installation, mutationErr := q.CreateInstalledChart(r.Context(), params)
+			if mutationErr != nil {
+				return catalogMutationResult[sqlc.InstalledChart]{}, mutationErr
+			}
+			op, mutationErr := createCatalogOperation(opCtx, q, "installed_chart", installation.ID.String(), "install", catalogOperationEnvelope{
+				InstalledChartID: installation.ID.String(), ClusterID: clusterID.String(), ReleaseName: installation.ReleaseName,
+				Namespace: installation.Namespace, ChartVersionID: req.ChartVersionID, ChartName: chart.Name, RepoURL: repo.Url,
+				Version: version.Version, ValuesOverride: installation.ValuesOverride, Notes: installation.Notes,
+			}, currentUserUUID(r))
+			return catalogMutationResult[sqlc.InstalledChart]{row: installation, op: op}, mutationErr
+		},
+		func() (catalogMutationResult[sqlc.InstalledChart], error) {
+			installation, mutationErr := h.queries.CreateInstalledChart(r.Context(), params)
+			if mutationErr != nil {
+				return catalogMutationResult[sqlc.InstalledChart]{}, mutationErr
+			}
+			op, mutationErr := h.enqueueOperation(opCtx, "installed_chart", installation.ID.String(), "install", catalogOperationEnvelope{
+				InstalledChartID: installation.ID.String(), ClusterID: clusterID.String(), ReleaseName: installation.ReleaseName,
+				Namespace: installation.Namespace, ChartVersionID: req.ChartVersionID, ChartName: chart.Name, RepoURL: repo.Url,
+				Version: version.Version, ValuesOverride: installation.ValuesOverride, Notes: installation.Notes,
+			}, currentUserUUID(r))
+			return catalogMutationResult[sqlc.InstalledChart]{row: installation, op: op}, mutationErr
+		},
+		func(m catalogMutationResult[sqlc.InstalledChart]) clusterAuditEvent {
+			return clusterAuditEvent{action: "catalog.installation.create", resourceType: "installed_chart", resourceID: m.row.ID.String(), resourceName: m.row.ReleaseName, status: http.StatusAccepted, detail: map[string]any{
+				"cluster_id": m.row.ClusterID.String(), "namespace": m.row.Namespace, "chart_version_id": req.ChartVersionID,
+				"chart_name": chart.Name, "repository_id": repo.ID.String(), "version": version.Version, "operation_id": m.op.ID.String(),
+			}}
+		})
+	if err != nil {
+		respondCatalogMutationError(w, r, err, apierror.EnqueueError, "Failed to create and enqueue installation")
+		return
+	}
+	installation, op := result.row, result.op
+	if h.runTx != nil {
+		h.TriggerReconcile()
+	}
 	h.publishCatalogReleaseChanged(clusterID.String(), installation.ID.String())
-	recordAudit(r, h.queries, "catalog.installation.create", "installed_chart", installation.ID.String(), installation.ReleaseName, map[string]any{
-		"cluster_id":       installation.ClusterID.String(),
-		"namespace":        installation.Namespace,
-		"chart_version_id": req.ChartVersionID,
-		"chart_name":       chart.Name,
-		"repo_url":         repo.Url,
-		"version":          version.Version,
-		"operation_id":     op.ID.String(),
-	})
-	RespondJSON(w, http.StatusAccepted, map[string]any{
+	RespondAcceptedOperation(w, "/api/v1/catalog/operations/"+op.ID.String()+"/", map[string]any{
 		"installation": installation,
 		"operation":    catalogOperationResponse(op),
 	})
@@ -1333,31 +1525,46 @@ func (h *CatalogHandler) DeleteInstallation(w http.ResponseWriter, r *http.Reque
 	if blocked := h.checkCatalogMaintenanceWindow(w, r, installation.ClusterID, "helm.uninstall"); blocked {
 		return
 	}
-	if err := h.queries.UpdateInstalledChartStatus(r.Context(), sqlc.UpdateInstalledChartStatusParams{
+	statusParams := sqlc.UpdateInstalledChartStatusParams{
 		ID:       installation.ID,
 		Status:   "pending_uninstall",
 		Revision: installation.Revision,
-	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to mark installation for deletion")
+	}
+	envelope := catalogOperationEnvelope{InstalledChartID: installation.ID.String(), ClusterID: installation.ClusterID.String(), ReleaseName: installation.ReleaseName, Namespace: installation.Namespace}
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
-	op, err := h.enqueueOperation(withOperationIdempotency(r, "catalog"), "installed_chart", installation.ID.String(), "uninstall", catalogOperationEnvelope{
-		InstalledChartID: installation.ID.String(),
-		ClusterID:        installation.ClusterID.String(),
-		ReleaseName:      installation.ReleaseName,
-		Namespace:        installation.Namespace,
-	}, currentUserUUID(r))
+	opCtx := withOperationIdempotency(r, "catalog")
+	result, err := executeCatalogMutation(r, h,
+		func(q CatalogMutationTx) (catalogMutationResult[sqlc.InstalledChart], error) {
+			if mutationErr := q.UpdateInstalledChartStatus(r.Context(), statusParams); mutationErr != nil {
+				return catalogMutationResult[sqlc.InstalledChart]{}, mutationErr
+			}
+			op, mutationErr := createCatalogOperation(opCtx, q, "installed_chart", installation.ID.String(), "uninstall", envelope, currentUserUUID(r))
+			return catalogMutationResult[sqlc.InstalledChart]{row: installation, op: op}, mutationErr
+		},
+		func() (catalogMutationResult[sqlc.InstalledChart], error) {
+			if mutationErr := h.queries.UpdateInstalledChartStatus(r.Context(), statusParams); mutationErr != nil {
+				return catalogMutationResult[sqlc.InstalledChart]{}, mutationErr
+			}
+			op, mutationErr := h.enqueueOperation(opCtx, "installed_chart", installation.ID.String(), "uninstall", envelope, currentUserUUID(r))
+			return catalogMutationResult[sqlc.InstalledChart]{row: installation, op: op}, mutationErr
+		},
+		func(m catalogMutationResult[sqlc.InstalledChart]) clusterAuditEvent {
+			return clusterAuditEvent{action: "catalog.installation.delete", resourceType: "installed_chart", resourceID: m.row.ID.String(), resourceName: m.row.ReleaseName, status: http.StatusAccepted, detail: map[string]any{
+				"cluster_id": m.row.ClusterID.String(), "namespace": m.row.Namespace, "operation_id": m.op.ID.String(),
+			}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue uninstall")
+		respondCatalogMutationError(w, r, err, apierror.EnqueueError, "Failed to stage and enqueue uninstall")
 		return
+	}
+	op := result.op
+	if h.runTx != nil {
+		h.TriggerReconcile()
 	}
 	h.publishCatalogReleaseChanged(installation.ClusterID.String(), installation.ID.String())
-	recordAudit(r, h.queries, "catalog.installation.delete", "installed_chart", installation.ID.String(), installation.ReleaseName, map[string]any{
-		"cluster_id":   installation.ClusterID.String(),
-		"namespace":    installation.Namespace,
-		"operation_id": op.ID.String(),
-	})
-	RespondJSON(w, http.StatusAccepted, catalogOperationResponse(op))
+	RespondAcceptedOperation(w, "/api/v1/catalog/operations/"+op.ID.String()+"/", catalogOperationResponse(op))
 }
 
 // ListInstalledCharts handles GET /api/v1/catalog/installed/.
@@ -1370,35 +1577,45 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	rows, err := h.queries.ListInstalledCharts(r.Context(), sqlc.ListInstalledChartsParams{
-		Limit:  int32(queryLimit(r, 20)),
-		Offset: int32(queryInt(r, "offset", 0)),
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list installed charts")
-		return
-	}
-	// Fleet-wide unscoped listing: filter to clusters the caller can read
-	// (superuser/unrestricted sees all) and never emit values_override in a
-	// list projection — it carries secrets and is only exposed, gated, via
-	// GetInstalledChartValues.
-	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
+	// Resolve the authorized cluster set before the database page boundary.
+	// The list projection never exposes values_override; that secret-bearing
+	// field remains available only through the separately gated detail route.
+	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceCatalog, rbac.VerbRead, rbac.NarrowedClustersWiden)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
-	items := make([]map[string]any, 0, len(rows))
-	for _, ic := range rows {
-		if restricted && !h.authz.allowsCluster(bindings, ic.ClusterID, rbac.ResourceCatalog, rbac.VerbRead) {
-			continue
-		}
-		items = append(items, installedChartListItem(ic))
-	}
-	// TODO(total): list is RBAC-filtered in-Go; no COUNT matches the visible
-	// set, so use the post-filter page length.
 	limit := queryLimit(r, 20)
 	offset := queryInt(r, "offset", 0)
-	RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
+	var rows []sqlc.InstalledChart
+	var total int64
+	if all {
+		rows, err = h.queries.ListInstalledCharts(r.Context(), sqlc.ListInstalledChartsParams{Limit: int32(limit), Offset: int32(offset)})
+		if err == nil {
+			total, err = h.queries.CountInstalledCharts(r.Context())
+		}
+	} else {
+		pager, ok := h.queries.(installedChartScopedPager)
+		if !ok {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Scoped installed-chart pagination is unavailable")
+			return
+		}
+		rows, err = pager.ListInstalledChartsForScopes(r.Context(), sqlc.ListInstalledChartsForScopesParams{
+			ClusterIds: clusterIDs, QueryLimit: int32(limit), QueryOffset: int32(offset),
+		})
+		if err == nil {
+			total, err = pager.CountInstalledChartsForScopes(r.Context(), clusterIDs)
+		}
+	}
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list installed charts")
+		return
+	}
+	items := make([]map[string]any, 0, len(rows))
+	for _, ic := range rows {
+		items = append(items, installedChartListItem(ic))
+	}
+	RespondList(w, items, NewPagination(int(total), limit, offset, len(rows)))
 }
 
 // installedChartListItem projects an installed_charts row for the fleet list.
@@ -1424,12 +1641,30 @@ func installedChartListItem(ic sqlc.InstalledChart) map[string]any {
 
 // CreateInstalledChart handles POST /api/v1/catalog/installed/.
 func (h *CatalogHandler) CreateInstalledChart(w http.ResponseWriter, r *http.Request) {
+	// openapi:request-operation postCatalogInstalled
 	var req struct {
 		ClusterID string `json:"cluster_id"`
 		CreateInstallationRequest
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		return
+	}
+	clusterID, err := uuid.Parse(req.ClusterID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+	// Gate before adapting to the legacy path-based handler. The adapter body
+	// intentionally omits cluster_id, which would make a deferred replay of the
+	// public /catalog/installed/ endpoint incomplete.
+	fullBody, err := json.Marshal(req)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		return
+	}
+	r.Body = io.NopCloser(bytes.NewReader(fullBody))
+	if h.checkCatalogMaintenanceWindow(w, r, clusterID, maintenance.OpHelmInstall) {
 		return
 	}
 	ctx := chi.NewRouteContext()
@@ -1453,10 +1688,14 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid installed chart ID")
 		return
 	}
+	// openapi:request-operation putCatalogInstalledByIdUpgrade
 	var req struct {
-		ValuesOverride string `json:"values_override"`
+		ChartVersionID string  `json:"chart_version_id"`
+		ValuesOverride *string `json:"values_override"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
 	installed, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Installed chart not found")
@@ -1470,46 +1709,89 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve installed chart release")
 		return
 	}
-	updated, err := h.queries.UpdateInstalledChartValues(r.Context(), sqlc.UpdateInstalledChartValuesParams{
+	targetVersionID := installed.ChartVersionID
+	valuesOverride := installed.ValuesOverride
+	if req.ValuesOverride != nil {
+		valuesOverride = *req.ValuesOverride
+	}
+	if req.ChartVersionID != "" {
+		requestedID, parseErr := uuid.Parse(req.ChartVersionID)
+		if parseErr != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_version_id must be a UUID")
+			return
+		}
+		requestedVersion, lookupErr := h.queries.GetHelmChartVersionByID(r.Context(), requestedID)
+		if lookupErr != nil {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart version not found")
+			return
+		}
+		if requestedVersion.ChartID != chart.ID {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "chart_version_id must belong to the installed chart")
+			return
+		}
+		version = requestedVersion
+		targetVersionID = pgtype.UUID{Bytes: requestedID, Valid: true}
+	}
+	updateParams := sqlc.UpdateInstalledChartValuesParams{
 		ID:             id,
-		ValuesOverride: req.ValuesOverride,
+		ChartVersionID: targetVersionID,
+		ValuesOverride: valuesOverride,
 		Status:         "pending_upgrade",
 		Revision:       installed.Revision,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to stage installed chart upgrade")
-		return
 	}
 	// The values blob keeps its ${vault://...} markers here and in the
 	// persisted installed_charts row; the reconciler (sendHelm) resolves
 	// them in-memory at execution time. Without that, the upgrade path
 	// previously shipped the literal placeholder straight to Helm.
-	op, err := h.enqueueOperation(withOperationIdempotency(r, "catalog"), "installed_chart", installed.ID.String(), "upgrade", catalogOperationEnvelope{
+	envelope := catalogOperationEnvelope{
 		InstalledChartID: installed.ID.String(),
 		ClusterID:        installed.ClusterID.String(),
 		ReleaseName:      installed.ReleaseName,
 		Namespace:        installed.Namespace,
-		ChartVersionID:   uuidFromPg(installed.ChartVersionID),
+		ChartVersionID:   uuidFromPg(targetVersionID),
 		ChartName:        chart.Name,
 		RepoURL:          repo.Url,
 		Version:          version.Version,
-		ValuesOverride:   req.ValuesOverride,
+		ValuesOverride:   valuesOverride,
 		Notes:            installed.Notes,
-	}, currentUserUUID(r))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue installed chart upgrade")
+	}
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
+	opCtx := withOperationIdempotency(r, "catalog")
+	result, err := executeCatalogMutation(r, h,
+		func(q CatalogMutationTx) (catalogMutationResult[sqlc.InstalledChart], error) {
+			updated, mutationErr := q.UpdateInstalledChartValues(r.Context(), updateParams)
+			if mutationErr != nil {
+				return catalogMutationResult[sqlc.InstalledChart]{}, mutationErr
+			}
+			op, mutationErr := createCatalogOperation(opCtx, q, "installed_chart", installed.ID.String(), "upgrade", envelope, currentUserUUID(r))
+			return catalogMutationResult[sqlc.InstalledChart]{row: updated, op: op}, mutationErr
+		},
+		func() (catalogMutationResult[sqlc.InstalledChart], error) {
+			updated, mutationErr := h.queries.UpdateInstalledChartValues(r.Context(), updateParams)
+			if mutationErr != nil {
+				return catalogMutationResult[sqlc.InstalledChart]{}, mutationErr
+			}
+			op, mutationErr := h.enqueueOperation(opCtx, "installed_chart", installed.ID.String(), "upgrade", envelope, currentUserUUID(r))
+			return catalogMutationResult[sqlc.InstalledChart]{row: updated, op: op}, mutationErr
+		},
+		func(m catalogMutationResult[sqlc.InstalledChart]) clusterAuditEvent {
+			return clusterAuditEvent{action: "catalog.installation.upgrade", resourceType: "installed_chart", resourceID: installed.ID.String(), resourceName: installed.ReleaseName, status: http.StatusAccepted, detail: map[string]any{
+				"cluster_id": installed.ClusterID.String(), "namespace": installed.Namespace, "chart_name": chart.Name,
+				"repository_id": repo.ID.String(), "version": version.Version, "operation_id": m.op.ID.String(),
+			}}
+		})
+	if err != nil {
+		respondCatalogMutationError(w, r, err, apierror.EnqueueError, "Failed to stage and enqueue installed chart upgrade")
+		return
+	}
+	updated, op := result.row, result.op
+	if h.runTx != nil {
+		h.TriggerReconcile()
+	}
 	h.publishCatalogReleaseChanged(installed.ClusterID.String(), installed.ID.String())
-	recordAudit(r, h.queries, "catalog.installation.upgrade", "installed_chart", installed.ID.String(), installed.ReleaseName, map[string]any{
-		"cluster_id":   installed.ClusterID.String(),
-		"namespace":    installed.Namespace,
-		"chart_name":   chart.Name,
-		"repo_url":     repo.Url,
-		"version":      version.Version,
-		"operation_id": op.ID.String(),
-	})
-	RespondJSON(w, http.StatusAccepted, map[string]any{
+	RespondAcceptedOperation(w, "/api/v1/catalog/operations/"+op.ID.String()+"/", map[string]any{
 		"installation": updated,
 		"operation":    catalogOperationResponse(op),
 	})
@@ -1534,6 +1816,7 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 	// ANY prior revision (parity with `helm rollback <name> <revision>`), not
 	// just the immediately preceding one. An empty body — or a non-positive
 	// revision — falls back to the previous revision.
+	// openapi:request-operation postCatalogInstalledByIdRollback
 	var req struct {
 		Revision int `json:"revision,omitempty"`
 	}
@@ -1544,33 +1827,57 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 	if req.Revision > 0 {
 		targetRevision = req.Revision
 	}
-	if err := h.queries.UpdateInstalledChartStatus(r.Context(), sqlc.UpdateInstalledChartStatusParams{
+	if targetRevision >= int(current.Revision) {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "revision must be lower than the current revision")
+		return
+	}
+	statusParams := sqlc.UpdateInstalledChartStatusParams{
 		ID:       id,
 		Status:   "pending_rollback",
 		Revision: current.Revision,
-	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RollbackError, "Failed to rollback installed chart")
-		return
 	}
-	op, err := h.enqueueOperation(withOperationIdempotency(r, "catalog"), "installed_chart", current.ID.String(), "rollback", catalogOperationEnvelope{
+	envelope := catalogOperationEnvelope{
 		InstalledChartID: current.ID.String(),
 		ClusterID:        current.ClusterID.String(),
 		ReleaseName:      current.ReleaseName,
 		Namespace:        current.Namespace,
 		RollbackRevision: targetRevision,
-	}, currentUserUUID(r))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue rollback")
+	}
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
+	opCtx := withOperationIdempotency(r, "catalog")
+	result, err := executeCatalogMutation(r, h,
+		func(q CatalogMutationTx) (catalogMutationResult[sqlc.InstalledChart], error) {
+			if mutationErr := q.UpdateInstalledChartStatus(r.Context(), statusParams); mutationErr != nil {
+				return catalogMutationResult[sqlc.InstalledChart]{}, mutationErr
+			}
+			op, mutationErr := createCatalogOperation(opCtx, q, "installed_chart", current.ID.String(), "rollback", envelope, currentUserUUID(r))
+			return catalogMutationResult[sqlc.InstalledChart]{row: current, op: op}, mutationErr
+		},
+		func() (catalogMutationResult[sqlc.InstalledChart], error) {
+			if mutationErr := h.queries.UpdateInstalledChartStatus(r.Context(), statusParams); mutationErr != nil {
+				return catalogMutationResult[sqlc.InstalledChart]{}, mutationErr
+			}
+			op, mutationErr := h.enqueueOperation(opCtx, "installed_chart", current.ID.String(), "rollback", envelope, currentUserUUID(r))
+			return catalogMutationResult[sqlc.InstalledChart]{row: current, op: op}, mutationErr
+		},
+		func(m catalogMutationResult[sqlc.InstalledChart]) clusterAuditEvent {
+			return clusterAuditEvent{action: "catalog.installation.rollback", resourceType: "installed_chart", resourceID: current.ID.String(), resourceName: current.ReleaseName, status: http.StatusAccepted, detail: map[string]any{
+				"cluster_id": current.ClusterID.String(), "namespace": current.Namespace,
+				"rollback_revision": targetRevision, "operation_id": m.op.ID.String(),
+			}}
+		})
+	if err != nil {
+		respondCatalogMutationError(w, r, err, apierror.EnqueueError, "Failed to stage and enqueue rollback")
+		return
+	}
+	op := result.op
+	if h.runTx != nil {
+		h.TriggerReconcile()
+	}
 	h.publishCatalogReleaseChanged(current.ClusterID.String(), current.ID.String())
-	recordAudit(r, h.queries, "catalog.installation.rollback", "installed_chart", current.ID.String(), current.ReleaseName, map[string]any{
-		"cluster_id":        current.ClusterID.String(),
-		"namespace":         current.Namespace,
-		"rollback_revision": targetRevision,
-		"operation_id":      op.ID.String(),
-	})
-	RespondJSON(w, http.StatusAccepted, catalogOperationResponse(op))
+	RespondAcceptedOperation(w, "/api/v1/catalog/operations/"+op.ID.String()+"/", catalogOperationResponse(op))
 }
 
 // DeleteInstalledChart is a compatibility alias for DeleteInstallation.
@@ -1580,6 +1887,23 @@ func (h *CatalogHandler) DeleteInstalledChart(w http.ResponseWriter, r *http.Req
 
 // TestRepoConnection handles POST /api/v1/catalog/repositories/{id}/test-connection/.
 // Probes the repository's index.yaml endpoint to verify reachability.
+func (h *CatalogHandler) respondRepoConnectionResult(w http.ResponseWriter, r *http.Request, repo sqlc.HelmRepository, status int, success bool, message string, upstreamStatus int) {
+	detail := map[string]any{"success": success, "repo_type": repo.RepoType}
+	if upstreamStatus > 0 {
+		detail["upstream_status"] = upstreamStatus
+	}
+	if h.runTx != nil {
+		if err := recordMandatoryAudit(r, h.queries, "catalog.repo.test_connection", "helm_repository", repo.ID.String(), repo.Name, detail); err != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+				"Mandatory audit storage is unavailable; the connection result was not returned")
+			return
+		}
+	} else {
+		recordAudit(r, h.queries, "catalog.repo.test_connection", "helm_repository", repo.ID.String(), repo.Name, detail)
+	}
+	RespondJSON(w, status, map[string]any{"success": success, "message": message})
+}
+
 func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -1597,7 +1921,7 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 		// (401 here still proves the host is a registry).
 		host, _, err := splitOCIURL(repo.Url)
 		if err != nil {
-			RespondJSON(w, http.StatusBadGateway, map[string]any{"success": false, "message": err.Error()})
+			h.respondRepoConnectionResult(w, r, repo, http.StatusBadGateway, false, "Stored OCI repository URL is invalid.", 0)
 			return
 		}
 		pingURL := "https://" + host + "/v2/"
@@ -1623,10 +1947,7 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			h.log.Error("test connection: chart repository credential could not be decrypted",
 				"repository", repo.Name, "error", err)
-			RespondJSON(w, http.StatusOK, map[string]any{
-				"success": false,
-				"message": "Stored credentials could not be decrypted; check the platform encryption key.",
-			})
+			h.respondRepoConnectionResult(w, r, repo, http.StatusOK, false, "Stored credentials could not be decrypted; check the platform encryption key.", 0)
 			return
 		}
 		if cfg.Username != "" || cfg.Password != "" {
@@ -1634,17 +1955,17 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 		}
 		resp, err := client.Do(req)
 		if err != nil {
-			RespondJSON(w, http.StatusBadGateway, map[string]any{"success": false, "message": err.Error()})
+			h.respondRepoConnectionResult(w, r, repo, http.StatusBadGateway, false, "Repository connection failed.", 0)
 			return
 		}
 		defer func() {
 			_ = resp.Body.Close()
 		}()
 		if resp.StatusCode >= 200 && resp.StatusCode < 500 {
-			RespondJSON(w, http.StatusOK, map[string]any{"success": true, "message": fmt.Sprintf("OCI registry reachable (status %d).", resp.StatusCode)})
+			h.respondRepoConnectionResult(w, r, repo, http.StatusOK, true, fmt.Sprintf("OCI registry reachable (status %d).", resp.StatusCode), resp.StatusCode)
 			return
 		}
-		RespondJSON(w, http.StatusBadGateway, map[string]any{"success": false, "message": fmt.Sprintf("registry returned status %d", resp.StatusCode)})
+		h.respondRepoConnectionResult(w, r, repo, http.StatusBadGateway, false, fmt.Sprintf("Registry returned status %d.", resp.StatusCode), resp.StatusCode)
 		return
 	}
 	url := strings.TrimRight(repo.Url, "/") + "/index.yaml"
@@ -1672,29 +1993,23 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		h.log.Error("test connection: chart repository credential could not be decrypted",
 			"repository", repo.Name, "error", err)
-		RespondJSON(w, http.StatusOK, map[string]any{
-			"success": false,
-			"message": "Stored credentials could not be decrypted; check the platform encryption key.",
-		})
+		h.respondRepoConnectionResult(w, r, repo, http.StatusOK, false, "Stored credentials could not be decrypted; check the platform encryption key.", 0)
 		return
 	}
 	catalog.SetIndexAuthHeader(req, repo.AuthType, authCfg)
 	resp, err := client.Do(req)
 	if err != nil {
-		RespondJSON(w, http.StatusBadGateway, map[string]any{"success": false, "message": err.Error()})
+		h.respondRepoConnectionResult(w, r, repo, http.StatusBadGateway, false, "Repository connection failed.", 0)
 		return
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode >= http.StatusBadRequest {
-		RespondJSON(w, http.StatusBadGateway, map[string]any{
-			"success": false,
-			"message": fmt.Sprintf("repository returned status %d", resp.StatusCode),
-		})
+		h.respondRepoConnectionResult(w, r, repo, http.StatusBadGateway, false, fmt.Sprintf("Repository returned status %d.", resp.StatusCode), resp.StatusCode)
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Connection successful."})
+	h.respondRepoConnectionResult(w, r, repo, http.StatusOK, true, "Connection successful.", resp.StatusCode)
 }
 
 // redactHelmRepository strips secret fields from auth_config for API responses
@@ -1979,29 +2294,49 @@ func (h *CatalogHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 	if v := strings.TrimSpace(r.URL.Query().Get("status")); v != "" {
 		arg.Status = pgtype.Text{String: v, Valid: true}
 	}
-	ops, err := h.queries.ListCatalogOperations(r.Context(), arg)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list catalog operations")
-		return
-	}
-	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
+	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceCatalog, rbac.VerbRead, rbac.NarrowedClustersWiden)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
+	var ops []sqlc.CatalogOperation
+	var total int64
+	pager, hasPager := h.queries.(catalogOperationPager)
+	if all {
+		ops, err = h.queries.ListCatalogOperations(r.Context(), arg)
+		if err == nil && hasPager {
+			total, err = pager.CountCatalogOperations(r.Context(), sqlc.CountCatalogOperationsParams{
+				TargetType: arg.TargetType, TargetKey: arg.TargetKey, Status: arg.Status,
+			})
+		}
+	} else {
+		if !hasPager {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Scoped catalog-operation pagination is unavailable")
+			return
+		}
+		ops, err = pager.ListCatalogOperationsForScopes(r.Context(), sqlc.ListCatalogOperationsForScopesParams{
+			TargetType: arg.TargetType, TargetKey: arg.TargetKey, Status: arg.Status,
+			ClusterIds: clusterIDs, QueryLimit: int32(limit), QueryOffset: int32(offset),
+		})
+		if err == nil {
+			total, err = pager.CountCatalogOperationsForScopes(r.Context(), sqlc.CountCatalogOperationsForScopesParams{
+				TargetType: arg.TargetType, TargetKey: arg.TargetKey, Status: arg.Status, ClusterIds: clusterIDs,
+			})
+		}
+	}
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list catalog operations")
+		return
+	}
 	items := make([]map[string]any, 0, len(ops))
 	for _, op := range ops {
-		if restricted {
-			clusterID, err := catalogOperationClusterID(op)
-			if err != nil || !h.authz.allowsCluster(bindings, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
-				continue
-			}
-		}
 		items = append(items, catalogOperationResponse(op))
 	}
-	// TODO(total): list is filtered in-Go by RBAC; no COUNT matches the
-	// visible set, so use the post-filter page length.
-	RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
+	if !hasPager {
+		RespondList(w, items, NewPaginationFromPage(limit, offset, len(ops)))
+		return
+	}
+	RespondList(w, items, NewPagination(int(total), limit, offset, len(ops)))
 }
 
 func (h *CatalogHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
@@ -2052,17 +2387,25 @@ func (h *CatalogHandler) RetryOperation(w http.ResponseWriter, r *http.Request) 
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
 		return
 	}
-	requeued, err := h.queries.RequeueCatalogOperation(r.Context(), id)
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	requeued, err := executeCatalogMutation(r, h,
+		func(q CatalogMutationTx) (sqlc.CatalogOperation, error) {
+			return q.RequeueCatalogOperation(r.Context(), id)
+		},
+		func() (sqlc.CatalogOperation, error) { return h.queries.RequeueCatalogOperation(r.Context(), id) },
+		func(row sqlc.CatalogOperation) clusterAuditEvent {
+			return clusterAuditEvent{action: "catalog.operation.retry", resourceType: "catalog_operation", resourceID: id.String(), resourceName: op.TargetKey, status: http.StatusAccepted, detail: map[string]any{
+				"target_type": op.TargetType, "previous_status": op.Status,
+			}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, "Failed to retry catalog operation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.RetryError, "Failed to retry catalog operation")
 		return
 	}
 	h.TriggerReconcile()
-	recordAudit(r, h.queries, "catalog.operation.retry", "catalog_operation", id.String(), op.TargetKey, map[string]any{
-		"target_type":     op.TargetType,
-		"previous_status": op.Status,
-	})
-	RespondJSON(w, http.StatusAccepted, catalogOperationResponse(requeued))
+	RespondAcceptedOperation(w, "/api/v1/catalog/operations/"+requeued.ID.String()+"/", catalogOperationResponse(requeued))
 }
 
 func catalogOperationClusterID(op sqlc.CatalogOperation) (uuid.UUID, error) {
@@ -2127,7 +2470,30 @@ func (h *CatalogHandler) controllerSummary(ctx context.Context) (map[string]any,
 	}, nil
 }
 
-func (h *CatalogHandler) enqueueOperation(ctx context.Context, targetType, targetKey, operationType string, env catalogOperationEnvelope, userID pgtype.UUID) (sqlc.CatalogOperation, error) {
+type catalogOperationCreator interface {
+	CreateCatalogOperation(context.Context, sqlc.CreateCatalogOperationParams) (sqlc.CatalogOperation, error)
+}
+
+type idempotentCatalogOperationCreator interface {
+	CreateCatalogOperationIdempotent(context.Context, sqlc.CreateCatalogOperationIdempotentParams) (sqlc.CatalogOperation, error)
+}
+
+type dispositionCatalogOperationCreator interface {
+	CreateCatalogOperationIdempotentWithDisposition(context.Context, sqlc.CreateCatalogOperationIdempotentWithDispositionParams) (sqlc.CreateCatalogOperationIdempotentWithDispositionRow, error)
+}
+
+var errCatalogOperationIdempotencyConflict = errors.New("catalog operation idempotency key already identifies a committed operation")
+
+func respondCatalogMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackCode, fallbackMessage string) {
+	if errors.Is(err, errCatalogOperationIdempotencyConflict) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+			"Idempotency-Key already identifies a catalog operation; retrieve the existing operation instead of restaging it")
+		return
+	}
+	respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, fallbackCode, fallbackMessage)
+}
+
+func createCatalogOperation(ctx context.Context, q catalogOperationCreator, targetType, targetKey, operationType string, env catalogOperationEnvelope, userID pgtype.UUID) (sqlc.CatalogOperation, error) {
 	payload, err := json.Marshal(env)
 	if err != nil {
 		return sqlc.CatalogOperation{}, err
@@ -2142,9 +2508,19 @@ func (h *CatalogHandler) enqueueOperation(ctx context.Context, targetType, targe
 	}
 	var op sqlc.CatalogOperation
 	if idem, ok := operationIdempotencyFromContext(ctx); ok {
-		if creator, ok := h.queries.(interface {
-			CreateCatalogOperationIdempotent(context.Context, sqlc.CreateCatalogOperationIdempotentParams) (sqlc.CatalogOperation, error)
-		}); ok {
+		if creator, ok := q.(dispositionCatalogOperationCreator); ok {
+			result, createErr := creator.CreateCatalogOperationIdempotentWithDisposition(ctx, sqlc.CreateCatalogOperationIdempotentWithDispositionParams{
+				Scope: idem.scope, IdempotencyKey: idem.key, TargetType: params.TargetType, TargetKey: params.TargetKey,
+				OperationType: params.OperationType, Payload: params.Payload, Status: params.Status, CreatedByID: params.CreatedByID,
+			})
+			if createErr != nil {
+				return sqlc.CatalogOperation{}, createErr
+			}
+			if !result.Inserted {
+				return sqlc.CatalogOperation{}, errCatalogOperationIdempotencyConflict
+			}
+			op = result.CatalogOperation
+		} else if creator, ok := q.(idempotentCatalogOperationCreator); ok {
 			op, err = creator.CreateCatalogOperationIdempotent(ctx, sqlc.CreateCatalogOperationIdempotentParams{
 				Scope:          idem.scope,
 				IdempotencyKey: idem.key,
@@ -2155,11 +2531,19 @@ func (h *CatalogHandler) enqueueOperation(ctx context.Context, targetType, targe
 				Status:         params.Status,
 				CreatedByID:    params.CreatedByID,
 			})
+			if err == nil && op.ID != uuid.Nil && (op.TargetType != params.TargetType || op.TargetKey != params.TargetKey || op.OperationType != params.OperationType || !bytes.Equal(op.Payload, params.Payload)) {
+				return sqlc.CatalogOperation{}, errCatalogOperationIdempotencyConflict
+			}
 		}
 	}
 	if op.ID == uuid.Nil && err == nil {
-		op, err = h.queries.CreateCatalogOperation(ctx, params)
+		op, err = q.CreateCatalogOperation(ctx, params)
 	}
+	return op, err
+}
+
+func (h *CatalogHandler) enqueueOperation(ctx context.Context, targetType, targetKey, operationType string, env catalogOperationEnvelope, userID pgtype.UUID) (sqlc.CatalogOperation, error) {
+	op, err := createCatalogOperation(ctx, h.queries, targetType, targetKey, operationType, env, userID)
 	if err == nil {
 		h.TriggerReconcile()
 	}

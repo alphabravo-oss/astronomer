@@ -4,21 +4,21 @@
 // so in-flight ops keep an info/progress tone. `failed`/`superseded` → error.
 export function mapLoggingOperationStatus(s: string): string {
   switch (s) {
-    case 'completed':
-      return 'completed';
-    case 'running':
-      return 'progressing';
-    case 'pending':
-      return 'pending';
-    case 'failed':
-    case 'superseded':
-      return 'error';
+    case "completed":
+      return "completed";
+    case "running":
+      return "progressing";
+    case "pending":
+      return "pending";
+    case "failed":
+    case "superseded":
+      return "error";
     default:
-      return 'unknown';
+      return "unknown";
   }
 }
 
 export function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
-  return s.slice(0, max - 1) + '…';
+  return s.slice(0, max - 1) + "…";
 }

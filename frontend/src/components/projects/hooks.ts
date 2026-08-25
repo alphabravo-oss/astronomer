@@ -11,39 +11,51 @@
  * cache key in a stable factory, toast on success/error for mutations,
  * invalidate the relevant query on success.
  */
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import * as api from '@/lib/api/project-detail';
-import { queryKeys } from '@/lib/hooks';
-import { can } from '@/lib/permissions';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import * as api from "@/lib/api/project-detail";
+import { queryKeys } from "@/lib/hooks";
+import { can } from "@/lib/permissions";
 import type {
   ProjectPolicyPatch,
   CloudCredentialWriteRequest,
   ClusterTemplateWriteRequest,
-} from '@/lib/api/project-detail';
+} from "@/lib/api/project-detail";
 
 // ============================================================
 // Query keys
 // ============================================================
 
 export const projectDetailKeys = {
-  policy: (projectId: string) => ['projects', 'detail', projectId, 'policy'] as const,
-  quotaUsage: (projectId: string) => ['projects', 'detail', projectId, 'quota-usage'] as const,
-  effectiveQuota: (projectId: string) => ['projects', 'detail', projectId, 'quota'] as const,
+  policy: (projectId: string) =>
+    ["projects", "detail", projectId, "policy"] as const,
+  quotaUsage: (projectId: string) =>
+    ["projects", "detail", projectId, "quota-usage"] as const,
+  effectiveQuota: (projectId: string) =>
+    ["projects", "detail", projectId, "quota"] as const,
   cloudCredentials: (projectId: string) =>
-    ['projects', 'detail', projectId, 'cloud-credentials'] as const,
+    ["projects", "detail", projectId, "cloud-credentials"] as const,
   cloudCredential: (projectId: string, credentialId: string) =>
-    ['projects', 'detail', projectId, 'cloud-credentials', credentialId] as const,
-  cloudCredentialProviders: ['cloud-credentials', 'providers'] as const,
+    [
+      "projects",
+      "detail",
+      projectId,
+      "cloud-credentials",
+      credentialId,
+    ] as const,
+  cloudCredentialProviders: ["cloud-credentials", "providers"] as const,
   // BYO catalogs (migration 061).
-  catalogs: (projectId: string) => ['projects', 'detail', projectId, 'catalogs'] as const,
+  catalogs: (projectId: string) =>
+    ["projects", "detail", projectId, "catalogs"] as const,
 };
 
 export const clusterTemplateKeys = {
-  all: ['cluster-templates'] as const,
-  list: (params?: Record<string, unknown>) => ['cluster-templates', 'list', params] as const,
-  detail: (id: string) => ['cluster-templates', 'detail', id] as const,
-  boundClusters: (id: string) => ['cluster-templates', 'detail', id, 'clusters'] as const,
+  all: ["cluster-templates"] as const,
+  list: (params?: Record<string, unknown>) =>
+    ["cluster-templates", "list", params] as const,
+  detail: (id: string) => ["cluster-templates", "detail", id] as const,
+  boundClusters: (id: string) =>
+    ["cluster-templates", "detail", id, "clusters"] as const,
 };
 
 // ============================================================
@@ -61,17 +73,18 @@ export function useProjectPolicy(projectId: string) {
 export function useUpdateProjectPolicy(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (patch: ProjectPolicyPatch) => api.updateProjectPolicy(projectId, patch),
+    mutationFn: (patch: ProjectPolicyPatch) =>
+      api.updateProjectPolicy(projectId, patch),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: projectDetailKeys.policy(projectId) });
       // The project resource itself embeds resourceQuota; invalidate so the
       // list page reflects the new caps when the user navigates back.
       qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.projects.all });
-      toastSuccess('Project policy updated');
+      toastSuccess("Project policy updated");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to update policy', err);
+      toastApiError("Failed to update policy", err);
     },
   });
 }
@@ -95,14 +108,15 @@ export function useUpdateProjectPolicy(projectId: string) {
 export function useAddProjectNamespace(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (namespace: string) => api.addProjectNamespace(projectId, namespace),
+    mutationFn: (namespace: string) =>
+      api.addProjectNamespace(projectId, namespace),
     onSuccess: (_data, namespace) => {
       qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.projects.all });
       toastSuccess(`Namespace ${namespace} added to project`);
     },
     onError: (err: Error) => {
-      toastApiError('Failed to add namespace', err);
+      toastApiError("Failed to add namespace", err);
     },
   });
 }
@@ -110,14 +124,15 @@ export function useAddProjectNamespace(projectId: string) {
 export function useRemoveProjectNamespace(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (namespace: string) => api.removeProjectNamespace(projectId, namespace),
+    mutationFn: (namespace: string) =>
+      api.removeProjectNamespace(projectId, namespace),
     onSuccess: (_data, namespace) => {
       qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.projects.all });
       toastSuccess(`Namespace ${namespace} removed from project`);
     },
     onError: (err: Error) => {
-      toastApiError('Failed to remove namespace', err);
+      toastApiError("Failed to remove namespace", err);
     },
   });
 }
@@ -169,10 +184,14 @@ export function useProjectCloudCredentials(projectId: string) {
   });
 }
 
-export function useProjectCloudCredential(projectId: string, credentialId: string | undefined) {
+export function useProjectCloudCredential(
+  projectId: string,
+  credentialId: string | undefined,
+) {
   return useQuery({
-    queryKey: projectDetailKeys.cloudCredential(projectId, credentialId || ''),
-    queryFn: () => api.getProjectCloudCredential(projectId, credentialId as string),
+    queryKey: projectDetailKeys.cloudCredential(projectId, credentialId || ""),
+    queryFn: () =>
+      api.getProjectCloudCredential(projectId, credentialId as string),
     enabled: !!projectId && !!credentialId,
   });
 }
@@ -183,11 +202,13 @@ export function useCreateCloudCredential(projectId: string) {
     mutationFn: (body: CloudCredentialWriteRequest) =>
       api.createProjectCloudCredential(projectId, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: projectDetailKeys.cloudCredentials(projectId) });
-      toastSuccess('Cloud credential created');
+      qc.invalidateQueries({
+        queryKey: projectDetailKeys.cloudCredentials(projectId),
+      });
+      toastSuccess("Cloud credential created");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to create credential', err);
+      toastApiError("Failed to create credential", err);
     },
   });
 }
@@ -203,14 +224,19 @@ export function useUpdateCloudCredential(projectId: string) {
       body: Partial<CloudCredentialWriteRequest>;
     }) => api.updateProjectCloudCredential(projectId, credentialId, body),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: projectDetailKeys.cloudCredentials(projectId) });
       qc.invalidateQueries({
-        queryKey: projectDetailKeys.cloudCredential(projectId, vars.credentialId),
+        queryKey: projectDetailKeys.cloudCredentials(projectId),
       });
-      toastSuccess('Cloud credential updated');
+      qc.invalidateQueries({
+        queryKey: projectDetailKeys.cloudCredential(
+          projectId,
+          vars.credentialId,
+        ),
+      });
+      toastSuccess("Cloud credential updated");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to update credential', err);
+      toastApiError("Failed to update credential", err);
     },
   });
 }
@@ -221,11 +247,13 @@ export function useDeleteCloudCredential(projectId: string) {
     mutationFn: (credentialId: string) =>
       api.deleteProjectCloudCredential(projectId, credentialId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: projectDetailKeys.cloudCredentials(projectId) });
-      toastSuccess('Cloud credential deleted');
+      qc.invalidateQueries({
+        queryKey: projectDetailKeys.cloudCredentials(projectId),
+      });
+      toastSuccess("Cloud credential deleted");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to delete credential', err);
+      toastApiError("Failed to delete credential", err);
     },
   });
 }
@@ -256,7 +284,7 @@ export function useClusterTemplates(params?: {
 
 export function useClusterTemplate(id: string | undefined) {
   return useQuery({
-    queryKey: clusterTemplateKeys.detail(id || ''),
+    queryKey: clusterTemplateKeys.detail(id || ""),
     queryFn: () => api.getClusterTemplate(id as string),
     enabled: !!id,
   });
@@ -264,7 +292,7 @@ export function useClusterTemplate(id: string | undefined) {
 
 export function useClusterTemplateBoundClusters(id: string | undefined) {
   return useQuery({
-    queryKey: clusterTemplateKeys.boundClusters(id || ''),
+    queryKey: clusterTemplateKeys.boundClusters(id || ""),
     queryFn: () => api.getClusterTemplateBoundClusters(id as string),
     enabled: !!id,
   });
@@ -273,13 +301,14 @@ export function useClusterTemplateBoundClusters(id: string | undefined) {
 export function useCreateClusterTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: ClusterTemplateWriteRequest) => api.createClusterTemplate(body),
+    mutationFn: (body: ClusterTemplateWriteRequest) =>
+      api.createClusterTemplate(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: clusterTemplateKeys.all });
-      toastSuccess('Cluster template created');
+      toastSuccess("Cluster template created");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to create template', err);
+      toastApiError("Failed to create template", err);
     },
   });
 }
@@ -287,15 +316,20 @@ export function useCreateClusterTemplate() {
 export function useUpdateClusterTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: Partial<ClusterTemplateWriteRequest> }) =>
-      api.updateClusterTemplate(id, body),
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: Partial<ClusterTemplateWriteRequest>;
+    }) => api.updateClusterTemplate(id, body),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: clusterTemplateKeys.all });
       qc.invalidateQueries({ queryKey: clusterTemplateKeys.detail(vars.id) });
-      toastSuccess('Cluster template updated');
+      toastSuccess("Cluster template updated");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to update template', err);
+      toastApiError("Failed to update template", err);
     },
   });
 }
@@ -306,10 +340,10 @@ export function useDeleteClusterTemplate() {
     mutationFn: (id: string) => api.deleteClusterTemplate(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: clusterTemplateKeys.all });
-      toastSuccess('Cluster template deleted');
+      toastSuccess("Cluster template deleted");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to delete template', err);
+      toastApiError("Failed to delete template", err);
     },
   });
 }
@@ -326,7 +360,7 @@ type RoleHolder = Parameters<typeof can>[0];
  * string includes. Server remains source of truth for mutations.
  */
 export function canEditProject(user: RoleHolder): boolean {
-  return can(user, 'projects', 'update');
+  return can(user, "projects", "update");
 }
 
 /**
@@ -336,15 +370,21 @@ export function canEditProject(user: RoleHolder): boolean {
  * showing them a control that always 403s.
  */
 export function canAssignProjectNamespaces(user: RoleHolder): boolean {
-  return can(user, 'clusters', 'update');
+  return can(user, "clusters", "update");
 }
 
 export function canReadClusterTemplates(user: RoleHolder): boolean {
-  return can(user, 'cluster_templates', 'read') || can(user, 'cluster_templates', 'update');
+  return (
+    can(user, "cluster_templates", "read") ||
+    can(user, "cluster_templates", "update")
+  );
 }
 
 export function canWriteClusterTemplates(user: RoleHolder): boolean {
-  return can(user, 'cluster_templates', 'update') || can(user, 'cluster_templates', 'create');
+  return (
+    can(user, "cluster_templates", "update") ||
+    can(user, "cluster_templates", "create")
+  );
 }
 
 // ============================================================
@@ -366,10 +406,10 @@ export function useCreateProjectCatalog(projectId: string) {
       api.createProjectCatalog(projectId, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: projectDetailKeys.catalogs(projectId) });
-      toastSuccess('Catalog created');
+      toastSuccess("Catalog created");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to create catalog', err);
+      toastApiError("Failed to create catalog", err);
     },
   });
 }
@@ -377,13 +417,14 @@ export function useCreateProjectCatalog(projectId: string) {
 export function useSubscribeProjectCatalog(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (catalogId: string) => api.subscribeProjectCatalog(projectId, catalogId),
+    mutationFn: (catalogId: string) =>
+      api.subscribeProjectCatalog(projectId, catalogId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: projectDetailKeys.catalogs(projectId) });
-      toastSuccess('Subscribed to catalog');
+      toastSuccess("Subscribed to catalog");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to subscribe', err);
+      toastApiError("Failed to subscribe", err);
     },
   });
 }
@@ -391,13 +432,14 @@ export function useSubscribeProjectCatalog(projectId: string) {
 export function useDeleteProjectCatalog(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (catalogId: string) => api.deleteProjectCatalog(projectId, catalogId),
+    mutationFn: (catalogId: string) =>
+      api.deleteProjectCatalog(projectId, catalogId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: projectDetailKeys.catalogs(projectId) });
-      toastSuccess('Catalog unsubscribed');
+      toastSuccess("Catalog unsubscribed");
     },
     onError: (err: Error) => {
-      toastApiError('Failed to unsubscribe', err);
+      toastApiError("Failed to unsubscribe", err);
     },
   });
 }

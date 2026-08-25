@@ -26,6 +26,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -34,9 +35,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -62,30 +65,62 @@ type GitOpsQuerier interface {
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
 }
 
-// GitOpsSyncRunner is the worker contract for manual sync + preview.
+type GitOpsMutationTx interface {
+	GitOpsQuerier
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+}
+
+type gitOpsRunTxFunc func(context.Context, func(GitOpsMutationTx) error) error
+
+func executeGitOpsMutation[T any](r *http.Request, h *GitOpsHandler, mutate func(GitOpsMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("gitops handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q GitOpsMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	auditor := any(h.audit)
+	if h.audit == nil {
+		auditor = h.queries
+	}
+	recordAudit(r, auditor, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
+}
+
+// GitOpsSyncRunner is retained as the preview-only worker adapter name for
+// compatibility. Mutating sync requests must use the durable task outbox and
+// cannot call the worker implementation inline.
 type GitOpsSyncRunner interface {
-	SyncSource(ctx context.Context, sourceID uuid.UUID) error
 	PreviewSource(ctx context.Context, sourceID uuid.UUID) (tasks.PreviewResult, error)
 }
 
-// defaultSyncRunner adapts the package-level tasks functions to the
-// GitOpsSyncRunner interface so production wiring is a one-liner.
-type defaultSyncRunner struct{}
-
-func (defaultSyncRunner) SyncSource(ctx context.Context, id uuid.UUID) error {
-	return tasks.SyncSource(ctx, id)
-}
-func (defaultSyncRunner) PreviewSource(ctx context.Context, id uuid.UUID) (tasks.PreviewResult, error) {
-	return tasks.PreviewSource(ctx, id)
-}
-
-// DefaultGitOpsSyncRunner returns the production runner that calls into
-// the worker-task package's SyncSource / PreviewSource entry points.
-func DefaultGitOpsSyncRunner() GitOpsSyncRunner { return defaultSyncRunner{} }
+// DefaultGitOpsSyncRunner returns the explicitly composed preview runtime. The
+// API and worker processes own independent values, so preview cannot overwrite
+// the worker's dependencies in a shared package global.
+func DefaultGitOpsSyncRunner(runtime tasks.GitOpsRuntime) GitOpsSyncRunner { return runtime }
 
 // GitOpsHandler owns /api/v1/admin/gitops-sources/*. Superuser-gated.
 type GitOpsHandler struct {
 	queries       GitOpsQuerier
+	runTx         gitOpsRunTxFunc
+	taskOutbox    tasks.TaskOutboxWriter
 	runner        GitOpsSyncRunner
 	log           *slog.Logger
 	audit         AuthAuditWriter
@@ -93,11 +128,23 @@ type GitOpsHandler struct {
 	webhookSecret string
 }
 
-// SetEncryptor wires the Fernet encryptor for gitops auth blobs
-// (T6 item 060). When nil, auth_encrypted is stored in plaintext —
-// the column name is still appropriate because operators can layer
-// at-rest encryption at the storage tier, but if a Fernet key is
-// available we layer application-level encryption on top.
+func (h *GitOpsHandler) SetRunTx(runTx gitOpsRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *GitOpsHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
+
+func (h *GitOpsHandler) SetTaskOutbox(writer tasks.TaskOutboxWriter) {
+	if h != nil {
+		h.taskOutbox = writer
+	}
+}
+
+// SetEncryptor wires the Fernet encryptor for GitOps auth blobs. Credentialed
+// writes fail closed when it is absent; plaintext is never accepted for the
+// auth_encrypted column.
 func (h *GitOpsHandler) SetEncryptor(e *auth.Encryptor) {
 	if h == nil {
 		return
@@ -105,8 +152,8 @@ func (h *GitOpsHandler) SetEncryptor(e *auth.Encryptor) {
 	h.encryptor = e
 }
 
-// NewGitOpsHandler builds a handler. runner may be nil — when nil, the
-// manual sync / preview endpoints return 503 service_unavailable.
+// NewGitOpsHandler builds a handler. runner may be nil; only preview requires
+// it. Manual/webhook sync requires the durable task-outbox transaction path.
 func NewGitOpsHandler(q GitOpsQuerier, runner GitOpsSyncRunner, log *slog.Logger) *GitOpsHandler {
 	if log == nil {
 		log = slog.Default()
@@ -181,6 +228,7 @@ func toGitOpsSourceResponse(row sqlc.GitopsRegistrationSource) gitopsSourceRespo
 
 // Request body for Create / Update -----------------------------------
 
+// openapi:request GitOpsSourceRequest
 type gitopsSourceRequest struct {
 	Name                string `json:"name"`
 	RepoURL             string `json:"repo_url"`
@@ -196,6 +244,16 @@ type gitopsSourceRequest struct {
 	// (E3/H10). *bool (mirroring Enabled) so an unrelated PUT preserves
 	// the armed state. The worker consumes/disarms it on the next sync.
 	AllowMassDecommission *bool `json:"allow_mass_decommission,omitempty"`
+}
+
+type gitOpsUpdateMutationResult struct {
+	row           sqlc.GitopsRegistrationSource
+	overrideArmed bool
+}
+
+type gitOpsSyncMutationResult struct {
+	row  sqlc.GitopsRegistrationSource
+	task sqlc.TaskOutbox
 }
 
 // gate enforces superuser. Same shape as the SIEM / admin handlers.
@@ -221,7 +279,8 @@ func (h *GitOpsHandler) List(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		out = append(out, toGitOpsSourceResponse(row))
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"sources": out})
+	page, pagination := pageWindow(r, out)
+	RespondList(w, page, pagination)
 }
 
 // Create handles POST /api/v1/admin/gitops-sources/.
@@ -238,16 +297,19 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
-	// auth blob: when a Fernet encryptor is wired (the production path),
-	// we wrap the raw token before writing it. The column stays named
-	// auth_encrypted; only the contents flip from plaintext to a
-	// Fernet token. Decrypt happens lazily inside the sync worker.
+	// Auth material is Fernet-sealed before opening the mutation transaction.
+	// Decrypt happens only inside the sync worker; an unwired encryptor fails
+	// closed instead of writing a misleading plaintext auth_encrypted value.
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
 	authBlob := req.Auth
-	if h.encryptor != nil && authBlob != "" {
+	if authBlob != "" {
+		if h.encryptor == nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "GitOps credential encryption is not configured")
+			return
+		}
 		ct, encErr := h.encryptor.Encrypt(authBlob)
 		if encErr != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt gitops auth blob")
@@ -255,7 +317,7 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 		authBlob = ct
 	}
-	row, err := h.queries.CreateGitOpsSource(r.Context(), sqlc.CreateGitOpsSourceParams{
+	params := sqlc.CreateGitOpsSourceParams{
 		Name:                req.Name,
 		RepoUrl:             req.RepoURL,
 		Branch:              gitopsDefaultString(req.Branch, "main"),
@@ -267,17 +329,26 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		OnDelete:            gitopsDefaultString(req.OnDelete, "log"),
 		Enabled:             enabled,
 		CreatedBy:           currentUserUUID(r),
-	})
+	}
+	row, err := executeGitOpsMutation(r, h,
+		func(q GitOpsMutationTx) (sqlc.GitopsRegistrationSource, error) {
+			return q.CreateGitOpsSource(r.Context(), params)
+		},
+		func() (sqlc.GitopsRegistrationSource, error) {
+			return h.queries.CreateGitOpsSource(r.Context(), params)
+		},
+		func(row sqlc.GitopsRegistrationSource) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.gitops_source.created", resourceType: "gitops_source",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated,
+				detail: gitOpsSourceAuditDetail(row),
+			}
+		})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create gitops source")
 		return
 	}
 	h.warnLargeBlastRadius(r.Context(), row)
-	recordAudit(r, h.queries, "admin.gitops_source.created", "gitops_source", row.ID.String(), row.Name, map[string]any{
-		"repo_url":  row.RepoUrl,
-		"branch":    row.Branch,
-		"on_delete": row.OnDelete,
-	})
 	w.Header().Set("Location", "/api/v1/admin/gitops-sources/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, toGitOpsSourceResponse(row))
 }
@@ -314,15 +385,6 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid source ID")
 		return
 	}
-	existing, err := h.queries.GetGitOpsSource(r.Context(), id)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "GitOps source not found")
-			return
-		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load gitops source")
-		return
-	}
 	var req gitopsSourceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
@@ -338,55 +400,78 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// silently persist the new credential in PLAINTEXT in auth_encrypted
 	// (the sync worker's decryptGitAuth() falls back to the raw value on a
 	// Fernet-decrypt miss, so the leak is invisible at runtime).
-	authBlob := req.Auth
-	if authBlob == GitOpsAuthSentinel || authBlob == "" {
-		authBlob = existing.AuthEncrypted
-	} else if h.encryptor != nil {
-		ct, encErr := h.encryptor.Encrypt(authBlob)
+	replaceAuth := req.Auth != GitOpsAuthSentinel && req.Auth != ""
+	var replacementAuth string
+	if replaceAuth {
+		if h.encryptor == nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "GitOps credential encryption is not configured")
+			return
+		}
+		ct, encErr := h.encryptor.Encrypt(req.Auth)
 		if encErr != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt gitops auth blob")
 			return
 		}
-		authBlob = ct
+		replacementAuth = ct
 	}
-	enabled := existing.Enabled
-	if req.Enabled != nil {
-		enabled = *req.Enabled
+	updateSource := func(q GitOpsQuerier) (gitOpsUpdateMutationResult, error) {
+		existing, getErr := q.GetGitOpsSource(r.Context(), id)
+		if getErr != nil {
+			return gitOpsUpdateMutationResult{}, getErr
+		}
+		authBlob := existing.AuthEncrypted
+		if replaceAuth {
+			authBlob = replacementAuth
+		}
+		enabled := existing.Enabled
+		if req.Enabled != nil {
+			enabled = *req.Enabled
+		}
+		allowMass := existing.AllowMassDecommission
+		if req.AllowMassDecommission != nil {
+			allowMass = *req.AllowMassDecommission
+		}
+		row, updateErr := q.UpdateGitOpsSource(r.Context(), sqlc.UpdateGitOpsSourceParams{
+			ID:                    id,
+			Name:                  gitopsDefaultString(req.Name, existing.Name),
+			RepoUrl:               gitopsDefaultString(req.RepoURL, existing.RepoUrl),
+			Branch:                gitopsDefaultString(req.Branch, existing.Branch),
+			PathPrefix:            req.PathPrefix,
+			AuthMode:              gitopsDefaultString(req.AuthMode, existing.AuthMode),
+			AuthEncrypted:         authBlob,
+			SyncMode:              gitopsDefaultString(req.SyncMode, existing.SyncMode),
+			SyncIntervalSeconds:   defaultIntervalSecondsOr(req.SyncIntervalSeconds, existing.SyncIntervalSeconds),
+			OnDelete:              gitopsDefaultString(req.OnDelete, existing.OnDelete),
+			Enabled:               enabled,
+			AllowMassDecommission: allowMass,
+		})
+		return gitOpsUpdateMutationResult{
+			row: row, overrideArmed: req.AllowMassDecommission != nil &&
+				*req.AllowMassDecommission && !existing.AllowMassDecommission,
+		}, updateErr
 	}
-	allowMass := existing.AllowMassDecommission
-	if req.AllowMassDecommission != nil {
-		allowMass = *req.AllowMassDecommission
-	}
-	row, err := h.queries.UpdateGitOpsSource(r.Context(), sqlc.UpdateGitOpsSourceParams{
-		ID:                    id,
-		Name:                  gitopsDefaultString(req.Name, existing.Name),
-		RepoUrl:               gitopsDefaultString(req.RepoURL, existing.RepoUrl),
-		Branch:                gitopsDefaultString(req.Branch, existing.Branch),
-		PathPrefix:            req.PathPrefix,
-		AuthMode:              gitopsDefaultString(req.AuthMode, existing.AuthMode),
-		AuthEncrypted:         authBlob,
-		SyncMode:              gitopsDefaultString(req.SyncMode, existing.SyncMode),
-		SyncIntervalSeconds:   defaultIntervalSecondsOr(req.SyncIntervalSeconds, existing.SyncIntervalSeconds),
-		OnDelete:              gitopsDefaultString(req.OnDelete, existing.OnDelete),
-		Enabled:               enabled,
-		AllowMassDecommission: allowMass,
-	})
+	result, err := executeGitOpsMutation(r, h,
+		func(q GitOpsMutationTx) (gitOpsUpdateMutationResult, error) { return updateSource(q) },
+		func() (gitOpsUpdateMutationResult, error) { return updateSource(h.queries) },
+		func(result gitOpsUpdateMutationResult) clusterAuditEvent {
+			detail := gitOpsSourceAuditDetail(result.row)
+			detail["mass_decommission_override_armed"] = result.overrideArmed
+			return clusterAuditEvent{
+				action: "admin.gitops_source.updated", resourceType: "gitops_source",
+				resourceID: result.row.ID.String(), resourceName: result.row.Name,
+				status: http.StatusOK, detail: detail,
+			}
+		})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "GitOps source not found")
+			return
+		}
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update gitops source")
 		return
 	}
+	row := result.row
 	h.warnLargeBlastRadius(r.Context(), row)
-	recordAudit(r, h.queries, "admin.gitops_source.updated", "gitops_source", row.ID.String(), row.Name, map[string]any{
-		"repo_url":  row.RepoUrl,
-		"branch":    row.Branch,
-		"on_delete": row.OnDelete,
-		// Surface arming/disarming the one-shot mass-decommission override (a
-		// dangerous kill-switch on the H10 guard) so it is visible in the audit
-		// trail rather than buried in a generic source edit.
-		"allow_mass_decommission": row.AllowMassDecommission,
-		"mass_decommission_override_armed": req.AllowMassDecommission != nil &&
-			*req.AllowMassDecommission && !existing.AllowMassDecommission,
-	})
 	RespondJSON(w, http.StatusOK, toGitOpsSourceResponse(row))
 }
 
@@ -400,22 +485,34 @@ func (h *GitOpsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid source ID")
 		return
 	}
-	existing, err := h.queries.GetGitOpsSource(r.Context(), id)
+	deleteSource := func(q GitOpsQuerier) (sqlc.GitopsRegistrationSource, error) {
+		existing, getErr := q.GetGitOpsSource(r.Context(), id)
+		if getErr != nil {
+			return sqlc.GitopsRegistrationSource{}, getErr
+		}
+		if deleteErr := q.DeleteGitOpsSource(r.Context(), id); deleteErr != nil {
+			return sqlc.GitopsRegistrationSource{}, deleteErr
+		}
+		return existing, nil
+	}
+	_, err = executeGitOpsMutation(r, h,
+		func(q GitOpsMutationTx) (sqlc.GitopsRegistrationSource, error) { return deleteSource(q) },
+		func() (sqlc.GitopsRegistrationSource, error) { return deleteSource(h.queries) },
+		func(existing sqlc.GitopsRegistrationSource) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.gitops_source.deleted", resourceType: "gitops_source",
+				resourceID: existing.ID.String(), resourceName: existing.Name,
+				status: http.StatusNoContent, detail: gitOpsSourceAuditDetail(existing),
+			}
+		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "GitOps source not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load gitops source")
-		return
-	}
-	if err := h.queries.DeleteGitOpsSource(r.Context(), id); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete gitops source")
 		return
 	}
-	recordAudit(r, h.queries, "admin.gitops_source.deleted", "gitops_source", id.String(), existing.Name, map[string]any{
-		"repo_url": existing.RepoUrl,
-	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -424,37 +521,77 @@ func (h *GitOpsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	if !h.gate(w, r) {
 		return
 	}
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid source ID")
 		return
 	}
-	if h.runner == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "GitOps sync runner not configured")
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "GitOps transaction runner not configured")
 		return
 	}
-	row, err := h.queries.GetGitOpsSource(r.Context(), id)
+	r = r.WithContext(withOperationIdempotency(r, "admin_gitops_source_sync"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		Action   string `json:"action"`
+		SourceID string `json:"source_id"`
+	}{Action: "sync", SourceID: id.String()})
 	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode GitOps sync request")
+		return
+	}
+	var receipt GitOpsSyncReceipt
+	err = h.runTx(r.Context(), func(q GitOpsMutationTx) error {
+		idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+		if !ok {
+			return errors.New("GitOps sync idempotency store is not configured")
+		}
+		_, stored, replay, claimErr := claimOperationReceipt[GitOpsSyncReceipt](r.Context(), idemQ, "gitops_source_syncs", digest)
+		if claimErr != nil {
+			return claimErr
+		}
+		if replay {
+			receipt = stored
+			return nil
+		}
+		result, enqueueErr := enqueueGitOpsSourceSync(r, q, q, id)
+		if enqueueErr != nil {
+			return enqueueErr
+		}
+		receipt = GitOpsSyncReceipt{SourceID: result.row.ID.String(), TaskID: result.task.ID.String(), Status: "queued"}
+		if auditErr := recordAuditOutbox(r, q, "admin.gitops_source.sync_requested", "gitops_source", result.row.ID.String(), result.row.Name, http.StatusAccepted, map[string]any{
+			"trigger": "manual", "task_id": result.task.ID.String(),
+		}); auditErr != nil {
+			return auditErr
+		}
+		return attachOperationReceipt(r.Context(), idemQ, "gitops_source_syncs", result.task.ID, digest, receipt)
+	})
+	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different GitOps source sync")
+			return
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "GitOps source not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load gitops source")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, "Failed to queue GitOps source sync")
 		return
 	}
-	if err := h.runner.SyncSource(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, err.Error())
-		return
-	}
-	recordAudit(r, h.queries, "admin.gitops_source.synced", "gitops_source", id.String(), row.Name, map[string]any{
-		"trigger": "manual",
-	})
-	RespondJSON(w, http.StatusOK, map[string]any{"status": "synced"})
+	RespondAcceptedOperation(w, "/api/v1/admin/gitops-sources/"+receipt.SourceID+"/", receipt)
+}
+
+type GitOpsSyncReceipt struct {
+	SourceID string `json:"source_id"`
+	TaskID   string `json:"task_id"`
+	Status   string `json:"status"`
 }
 
 // Webhook handles POST /api/v1/gitops/sources/{id}/webhook/. It lets a git
-// provider (GitHub/GitLab push hook, or a CI job) trigger an immediate
-// SyncSource so merge-to-deploy no longer waits for the interval tick.
+// provider (GitHub/GitLab push hook, or a CI job) durably queue an immediate
+// source sync so merge-to-deploy no longer waits for the interval tick.
 //
 // Unlike the /admin/ routes this is NOT superuser-JWT gated — the caller is
 // an external system, not a console user — so it authenticates on a shared
@@ -479,27 +616,33 @@ func (h *GitOpsHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid source ID")
 		return
 	}
-	if h.runner == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "GitOps sync runner not configured")
+	if h.runTx == nil && h.taskOutbox == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "GitOps task outbox not configured")
 		return
 	}
-	row, err := h.queries.GetGitOpsSource(r.Context(), id)
+	result, err := executeGitOpsMutation(r, h,
+		func(q GitOpsMutationTx) (gitOpsSyncMutationResult, error) {
+			return enqueueGitOpsSourceSync(r, q, q, id)
+		},
+		func() (gitOpsSyncMutationResult, error) {
+			return enqueueGitOpsSourceSync(r, h.queries, h.taskOutbox, id)
+		},
+		func(result gitOpsSyncMutationResult) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.gitops_source.sync_requested", resourceType: "gitops_source",
+				resourceID: result.row.ID.String(), resourceName: result.row.Name,
+				status: http.StatusAccepted, detail: map[string]any{"trigger": "webhook", "task_id": result.task.ID.String()},
+			}
+		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "GitOps source not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load gitops source")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, "Failed to queue GitOps source sync")
 		return
 	}
-	if err := h.runner.SyncSource(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, err.Error())
-		return
-	}
-	recordAudit(r, h.queries, "admin.gitops_source.synced", "gitops_source", id.String(), row.Name, map[string]any{
-		"trigger": "webhook",
-	})
-	RespondJSON(w, http.StatusOK, map[string]any{"status": "synced"})
+	RespondJSON(w, http.StatusAccepted, map[string]any{"status": "queued", "task_id": result.task.ID.String()})
 }
 
 // Preview handles GET /api/v1/admin/gitops-sources/{id}/preview/.
@@ -575,10 +718,88 @@ func (h *GitOpsHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, entry)
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"clusters": out})
+	page, pagination := pageWindow(r, out)
+	RespondList(w, page, pagination)
 }
 
 // Helpers -------------------------------------------------------------
+
+func enqueueGitOpsSourceSync(r *http.Request, q GitOpsQuerier, outbox tasks.TaskOutboxWriter, sourceID uuid.UUID) (gitOpsSyncMutationResult, error) {
+	if q == nil || outbox == nil {
+		return gitOpsSyncMutationResult{}, errors.New("GitOps task outbox is unavailable")
+	}
+	row, err := q.GetGitOpsSource(r.Context(), sourceID)
+	if err != nil {
+		return gitOpsSyncMutationResult{}, err
+	}
+	task, err := tasks.NewGitOpsSourceSyncTask(sourceID)
+	if err != nil {
+		return gitOpsSyncMutationResult{}, err
+	}
+	requestID := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if requestID == "" {
+		requestID = middleware.GetRequestID(r.Context())
+	}
+	intent, err := tasks.EnqueueTaskOutbox(r.Context(), outbox, task, tasks.TaskOutboxOptions{
+		DedupeKey: "gitops:sync:" + audit.MutationDedupeKey(requestID, "sync", "gitops_source", sourceID.String()),
+		QueueName: "default", MaxRetry: 10, Timeout: 30 * time.Minute,
+		Unique: 30 * time.Second,
+	})
+	if err != nil {
+		return gitOpsSyncMutationResult{}, err
+	}
+	return gitOpsSyncMutationResult{row: row, task: intent}, nil
+}
+
+func gitOpsSourceAuditDetail(row sqlc.GitopsRegistrationSource) map[string]any {
+	return map[string]any{
+		"branch":                      row.Branch,
+		"on_delete":                   row.OnDelete,
+		"auth_mode":                   row.AuthMode,
+		"auth_configured":             row.AuthEncrypted != "",
+		"enabled":                     row.Enabled,
+		"allow_mass_decommission":     row.AllowMassDecommission,
+		"sync_interval_seconds":       row.SyncIntervalSeconds,
+		"repository_location_omitted": true,
+	}
+}
+
+func validateGitOpsRepositoryURL(raw string) (string, error) {
+	clean := strings.TrimSpace(raw)
+	if clean == "" {
+		return "", errors.New("repo_url is required")
+	}
+	if strings.HasPrefix(clean, "git@") {
+		hostAndPath := strings.TrimPrefix(clean, "git@")
+		if strings.ContainsAny(hostAndPath, "?#") || !strings.Contains(hostAndPath, ":") || strings.HasPrefix(hostAndPath, ":") {
+			return "", errors.New("repo_url is invalid")
+		}
+		return clean, nil
+	}
+	parsed, err := url.Parse(clean)
+	if err != nil || parsed.Host == "" {
+		return "", errors.New("repo_url is invalid")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("repo_url must not contain query parameters or fragments")
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+		if parsed.User != nil {
+			return "", errors.New("repo_url must not contain credentials; use the auth field")
+		}
+	case "ssh":
+		if parsed.User != nil {
+			_, hasPassword := parsed.User.Password()
+			if hasPassword || parsed.User.Username() != "git" {
+				return "", errors.New("SSH repo_url may contain only the fixed git username; use the auth field for credentials")
+			}
+		}
+	default:
+		return "", errors.New("repo_url scheme must be http, https, or ssh")
+	}
+	return clean, nil
+}
 
 func validateGitOpsRequest(req *gitopsSourceRequest, requireFields bool) error {
 	if requireFields {
@@ -588,6 +809,13 @@ func validateGitOpsRequest(req *gitopsSourceRequest, requireFields bool) error {
 		if req.RepoURL == "" {
 			return errors.New("repo_url is required")
 		}
+	}
+	if req.RepoURL != "" {
+		cleanURL, err := validateGitOpsRepositoryURL(req.RepoURL)
+		if err != nil {
+			return err
+		}
+		req.RepoURL = cleanURL
 	}
 	if req.AuthMode != "" && !validGitOpsAuthModes[req.AuthMode] {
 		return errors.New("auth_mode must be one of: none, https_token, ssh_key")

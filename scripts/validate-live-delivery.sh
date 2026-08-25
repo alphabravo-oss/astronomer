@@ -24,7 +24,8 @@
 
 set -euo pipefail
 
-readonly SCRIPT_NAME="$(basename "$0")"
+SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_NAME
 readonly MAX_RESPONSE_BYTES=$((4 * 1024 * 1024))
 readonly DEFAULT_STEP_TIMEOUT=30
 readonly REQUIRED_COVERAGE_CSV='source.git,source.oci_artifact,source.helm_http,source.helm_oci,renderer.kustomize,renderer.helm,auth.none,auth.basic,auth.bearer,auth.ssh,auth.workload_identity,trust.unsigned,trust.cosign_key,trust.cosign_keyless,trust.git_signature,trust.verification_failure,path.online,path.air_gap,placement.cluster,placement.group,placement.label,placement.change,strategy.all_at_once,strategy.rolling,strategy.canary,strategy.partitioned,gate.approval,gate.maintenance_window,control.pause,control.resume,control.abort,control.retry,control.rollback,resilience.drift_detect,resilience.drift_repair,resilience.disconnect,resilience.reconnect,resilience.controller_restart,resilience.controller_upgrade,resilience.controller_rollback,resilience.credential_rotation,resilience.credential_revocation,lifecycle.delete,lifecycle.orphan,authorization.project_denial,backup.restore,surface.ui,surface.cli,surface.sse,surface.metrics,surface.alerts,surface.runbook'
@@ -286,7 +287,7 @@ run_cli_step() {
   [[ "${#argv[@]}" -gt 1 && "${argv[0]}" == "delivery" ]] || return 97
   local i
   for i in "${!argv[@]}"; do
-    argv[$i]="$(render_text "${argv[$i]}")" || return 97
+    argv[i]="$(render_text "${argv[i]}")" || return 97
   done
   output_file="${STATE_DIR}/cli.json"
   : >"${output_file}"

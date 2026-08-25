@@ -8,24 +8,24 @@
  * label/value editor, extended with a per-matcher regex toggle to match the
  * P-03 contract.
  */
-import { useState } from 'react';
-import { useAppForm, useStore } from '@/lib/form';
-import { Plus, X, Trash2, Pencil } from 'lucide-react';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { formatRelativeTime } from '@/lib/utils';
-import type { AlertInhibition, InhibitionMatcher } from '@/types';
-import { toInhibitionWriteRequest } from '@/lib/api/alerting-inhibitions';
+import { useState } from "react";
+import { useAppForm, useStore } from "@/lib/form";
+import { Plus, X, Trash2, Pencil } from "lucide-react";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { formatRelativeTime } from "@/lib/utils";
+import type { AlertInhibition, InhibitionMatcher } from "@/types";
+import { toInhibitionWriteRequest } from "@/lib/api/alerting-inhibitions";
 import {
   useInhibitions,
   useCreateInhibition,
   useUpdateInhibition,
   useDeleteInhibition,
-} from './-inhibition-hooks';
+} from "./-inhibition-hooks";
 
 function MatcherChips({ matchers }: { matchers: InhibitionMatcher[] }) {
   if (!matchers || matchers.length === 0) {
@@ -39,7 +39,7 @@ function MatcherChips({ matchers }: { matchers: InhibitionMatcher[] }) {
           className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
         >
           {m.label}
-          {m.isRegex ? '=~' : '='}
+          {m.isRegex ? "=~" : "="}
           {m.value}
         </span>
       ))}
@@ -53,35 +53,42 @@ export function InhibitionPanel() {
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<AlertInhibition | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<AlertInhibition | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AlertInhibition | null>(
+    null,
+  );
 
   const columns: Column<AlertInhibition>[] = [
     {
-      key: 'name',
-      header: 'Name',
-      accessor: (row) => <span className="font-medium text-foreground">{row.name}</span>,
+      key: "name",
+      header: "Name",
+      accessor: (row) => (
+        <span className="font-medium text-foreground">{row.name}</span>
+      ),
     },
     {
-      key: 'source',
-      header: 'Source matchers',
+      key: "source",
+      header: "Source matchers",
       sortable: false,
       accessor: (row) => <MatcherChips matchers={row.sourceMatchers} />,
     },
     {
-      key: 'target',
-      header: 'Target matchers',
+      key: "target",
+      header: "Target matchers",
       sortable: false,
       accessor: (row) => <MatcherChips matchers={row.targetMatchers} />,
     },
     {
-      key: 'equal',
-      header: 'Equal labels',
+      key: "equal",
+      header: "Equal labels",
       sortable: false,
       accessor: (row) =>
         row.equalLabels && row.equalLabels.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {row.equalLabels.map((l) => (
-              <span key={l} className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">
+              <span
+                key={l}
+                className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+              >
                 {l}
               </span>
             ))}
@@ -91,28 +98,32 @@ export function InhibitionPanel() {
         ),
     },
     {
-      key: 'enabled',
-      header: 'Status',
+      key: "enabled",
+      header: "Status",
       accessor: (row) => (
         <StatusBadge
-          status={row.enabled ? 'active' : 'disconnected'}
-          label={row.enabled ? 'Enabled' : 'Disabled'}
+          status={row.enabled ? "active" : "disconnected"}
+          label={row.enabled ? "Enabled" : "Disabled"}
           size="sm"
         />
       ),
-      sortAccessor: (row) => (row.enabled ? '1' : '0'),
+      sortAccessor: (row) => (row.enabled ? "1" : "0"),
     },
     {
-      key: 'updated',
-      header: 'Updated',
-      accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.updatedAt)}</span>,
+      key: "updated",
+      header: "Updated",
+      accessor: (row) => (
+        <span className="text-xs text-muted-foreground">
+          {formatRelativeTime(row.updatedAt)}
+        </span>
+      ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       sortable: false,
       accessor: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
           <ActionButton
             size="icon"
             intent="ghost"
@@ -211,14 +222,19 @@ function MatcherEditor({
   matchers: DraftMatcher[];
   onChange: (next: DraftMatcher[]) => void;
 }) {
-  const [draft, setDraft] = useState<DraftMatcher>({ label: '', value: '', isRegex: false });
+  const [draft, setDraft] = useState<DraftMatcher>({
+    label: "",
+    value: "",
+    isRegex: false,
+  });
 
   const add = () => {
     if (!draft.label || !draft.value) return;
     onChange([...matchers, draft]);
-    setDraft({ label: '', value: '', isRegex: false });
+    setDraft({ label: "", value: "", isRegex: false });
   };
-  const remove = (idx: number) => onChange(matchers.filter((_, i) => i !== idx));
+  const remove = (idx: number) =>
+    onChange(matchers.filter((_, i) => i !== idx));
 
   return (
     <div className="space-y-2">
@@ -244,8 +260,8 @@ function MatcherEditor({
           onClick={() => setDraft((d) => ({ ...d, isRegex: !d.isRegex }))}
           className={`h-8 px-2.5 rounded border text-xs font-mono transition-colors ${
             draft.isRegex
-              ? 'border-primary bg-primary/10 text-primary'
-              : 'border-border text-muted-foreground hover:text-foreground'
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border text-muted-foreground hover:text-foreground"
           }`}
           title="Treat value as a regular expression"
         >
@@ -268,9 +284,13 @@ function MatcherEditor({
               className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
             >
               {m.label}
-              {m.isRegex ? '=~' : '='}
+              {m.isRegex ? "=~" : "="}
               {m.value}
-              <button type="button" onClick={() => remove(i)} className="hover:text-foreground">
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                className="hover:text-foreground"
+              >
                 <X className="h-3 w-3" />
               </button>
             </span>
@@ -294,15 +314,15 @@ function InhibitionModal({
 
   const form = useAppForm({
     defaultValues: {
-      name: inhibition?.name ?? '',
+      name: inhibition?.name ?? "",
       enabled: inhibition?.enabled ?? true,
       sourceMatchers: (inhibition?.sourceMatchers ?? []) as DraftMatcher[],
       targetMatchers: (inhibition?.targetMatchers ?? []) as DraftMatcher[],
-      equalInput: (inhibition?.equalLabels ?? []).join(', '),
+      equalInput: (inhibition?.equalLabels ?? []).join(", "),
     },
     onSubmit: async ({ value }) => {
       const equalLabels = value.equalInput
-        .split(',')
+        .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
       const body = toInhibitionWriteRequest({
@@ -331,11 +351,12 @@ function InhibitionModal({
 
   const isPending = create.isPending || update.isPending;
   // Old disabled gate, recomputed from form state 1:1.
-  const canSave = !!name && sourceMatchers.length > 0 && targetMatchers.length > 0;
+  const canSave =
+    !!name && sourceMatchers.length > 0 && targetMatchers.length > 0;
 
   return (
     <ModalShell
-      title={isEdit ? 'Edit Inhibition Rule' : 'Create Inhibition Rule'}
+      title={isEdit ? "Edit Inhibition Rule" : "Create Inhibition Rule"}
       onClose={onClose}
       size="md"
       bodyClassName="space-y-5"
@@ -348,17 +369,23 @@ function InhibitionModal({
             disabled={!canSave}
             loading={isPending}
           >
-            {isEdit ? 'Save Changes' : 'Create Inhibition'}
+            {isEdit ? "Save Changes" : "Create Inhibition"}
           </ActionButton>
         </>
       }
       footerClassName="flex items-center justify-end gap-2"
     >
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Name</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-128ab69a-358"
+        >
+          Name
+        </label>
         <form.Field name="name">
           {(field) => (
             <Input
+              id="field-128ab69a-358"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -372,23 +399,30 @@ function InhibitionModal({
         title="Source matchers"
         hint="A firing alert matching these is the SOURCE that suppresses targets."
         matchers={sourceMatchers}
-        onChange={(next) => form.setFieldValue('sourceMatchers', next)}
+        onChange={(next) => form.setFieldValue("sourceMatchers", next)}
       />
 
       <MatcherEditor
         title="Target matchers"
         hint="Firing alerts matching these are SUPPRESSED while a source fires."
         matchers={targetMatchers}
-        onChange={(next) => form.setFieldValue('targetMatchers', next)}
+        onChange={(next) => form.setFieldValue("targetMatchers", next)}
       />
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">
-          Equal labels <span className="text-2xs text-muted-foreground font-normal">(comma-separated)</span>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-128ab69a-386"
+        >
+          Equal labels{" "}
+          <span className="text-2xs text-muted-foreground font-normal">
+            (comma-separated)
+          </span>
         </label>
         <form.Field name="equalInput">
           {(field) => (
             <Input
+              id="field-128ab69a-386"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -398,7 +432,8 @@ function InhibitionModal({
           )}
         </form.Field>
         <p className="text-2xs text-muted-foreground">
-          Source and target must share the same value on every label listed here for suppression to apply.
+          Source and target must share the same value on every label listed here
+          for suppression to apply.
         </p>
       </div>
 

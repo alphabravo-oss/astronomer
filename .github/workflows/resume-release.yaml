@@ -194,9 +194,17 @@ jobs:
             --certificate-identity "$identity" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             source-artifacts/release-manifest.json
+          cosign verify-blob \
+            --bundle source-artifacts/runtime-image-evidence.sigstore.json \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            source-artifacts/runtime-image-evidence.json
           test "$(jq -r .release.version source-artifacts/release-manifest.json)" = "$IMAGE_TAG"
           test "$(jq -r .release.source_commit source-artifacts/release-manifest.json)" = "$TAG_COMMIT"
           test "$(jq -r .astronomer.chart.reference source-artifacts/release-manifest.json)" = "$(cat source-artifacts/chart.digest)"
+          test "$(jq -r .result source-artifacts/runtime-image-evidence.json)" = passed
+          test "$(jq -r .release_version source-artifacts/runtime-image-evidence.json)" = "$IMAGE_TAG"
+          test "$(jq -r .release_manifest_sha256 source-artifacts/runtime-image-evidence.json)" = "sha256:$(sha256sum source-artifacts/release-manifest.json | awk '{print $1}')"
           for subject_file in astronomer-flux-distribution.digest astronomer-platform-bundles.digest release-manifest.digest; do
             subject="$(cat "source-artifacts/${subject_file}")"
             [[ "$subject" =~ @sha256:[a-f0-9]{64}$ ]]
@@ -207,10 +215,20 @@ jobs:
           done
 
   qualify:
-    name: install exact release on a clean cluster
+    name: install exact release on a clean cluster · Kubernetes ${{ matrix.kubernetes_minor }}
     needs: preflight
     runs-on: ubuntu-22.04
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kubernetes_minor: "1.33"
+            k3s_image: rancher/k3s:v1.33.5-k3s1
+          - kubernetes_minor: "1.34"
+            k3s_image: rancher/k3s:v1.34.1-k3s1
+          - kubernetes_minor: "1.35"
+            k3s_image: rancher/k3s:v1.35.0-k3s1
     steps:
       - name: Checkout tagged configuration
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -300,9 +318,11 @@ jobs:
           EOF
 
       - name: Create clean Kubernetes and install Gateway prerequisites
+        env:
+          K3S_IMAGE: ${{ matrix.k3s_image }}
         run: |
           k3d cluster create astronomer-release \
-            --image rancher/k3s:v1.33.5-k3s1 \
+            --image "$K3S_IMAGE" \
             --port '8080:80@loadbalancer' \
             --k3s-arg '--disable=traefik@server:*' \
             --wait
@@ -383,6 +403,7 @@ jobs:
     name: publish recovered immutable GitHub Release
     needs: [preflight, qualify]
     runs-on: ubuntu-latest
+    environment: release-production
     permissions:
       actions: read
       contents: write
@@ -401,6 +422,35 @@ jobs:
           pattern: '*-${{ needs.preflight.outputs.image-tag }}'
           merge-multiple: true
 
+      - name: Install cosign verifier for protected qualifications
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with: {cosign-release: v2.5.3}
+
+      - name: Verify protected release approval and external accessibility evidence
+        env:
+          RELEASE_APPROVAL_JSON: ${{ vars.RELEASE_APPROVAL_JSON }}
+          TAG: ${{ needs.preflight.outputs.image-tag }}
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.tag-commit }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          RUNTIME_IMAGE_EVIDENCE: runtime-image-evidence.json
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_APPROVAL_JSON"
+          umask 077
+          printf '%s' "$RELEASE_APPROVAL_JSON" > "$RUNNER_TEMP/release-approval.json"
+          python3 scripts/fetch-release-qualification-artifacts.py --approval "$RUNNER_TEMP/release-approval.json" --out "$RUNNER_TEMP/release-qualifications" --repository "$REPOSITORY" --source-commit "$SOURCE_COMMIT" --tag "$TAG"
+          q="$RUNNER_TEMP/release-qualifications"
+          python3 scripts/validate-release-approval.py "$RUNNER_TEMP/release-approval.json" \
+            --tag "$TAG" --source-commit "$SOURCE_COMMIT" --source-run-id "$SOURCE_RUN_ID" --repository "$REPOSITORY" \
+            --runtime-image-evidence "$RUNTIME_IMAGE_EVIDENCE" --runtime-image-bundle runtime-image-evidence.sigstore.json \
+            --rc-evidence "$q/rc_rehearsal/rc-rehearsal-evidence.json" --rc-bundle "$q/rc_rehearsal/rc-rehearsal-evidence.sigstore.json" \
+            --cloud-evidence "$q/cloud_acceptance/cloud-acceptance.json" --cloud-bundle "$q/cloud_acceptance/cloud-acceptance.json.sigstore.json" \
+            --scale-evidence "$q/scale_certification/certification-set.json" --scale-bundle "$q/scale_certification/certification-set.sigstore.json" \
+            --rancher-evidence "$q/rancher_benchmark/benchmark-v1.json" --rancher-bundle "$q/rancher_benchmark/benchmark-v1.sigstore.json" \
+            --accessibility-evidence "$q/accessibility/accessibility-evidence.json" --accessibility-bundle "$q/accessibility/accessibility-evidence.sigstore.json"
+
       - name: Verify downloaded artifact set
         env:
           IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
@@ -410,6 +460,9 @@ jobs:
           test -f "astronomer-${CHART_VERSION}.tgz"
           test -s release-manifest.json
           test -s release-manifest.sigstore.json
+          test -s runtime-image-evidence.json
+          test -s runtime-image-evidence.sigstore.json
+          test -s runtime-image-evidence.tar.gz
           test -s values-production.yaml
           for component in server worker agent migrate shell frontend; do
             test -s "sbom-${component}.spdx.json"
@@ -450,6 +503,7 @@ jobs:
               -name 'astronomer-*.tgz' -o -name '*.tar.gz' -o \
               -name 'sbom-*.spdx.json' -o -name 'provenance-*.slsa.json' -o \
               -name 'release-manifest.json' -o -name 'release-manifest.sigstore.json' -o \
+              -name 'runtime-image-evidence.json' -o -name 'runtime-image-evidence.sigstore.json' -o \
               -name 'values-production.yaml' -o \
               -name 'astronomer-images.txt' -o \
               -name 'RELEASE_IMAGES' -o -name 'RELEASE_SUBJECTS' \
@@ -461,5 +515,6 @@ jobs:
             --title "Astronomer ${TAG}" \
             astronomer-*.tgz *.tar.gz sbom-*.spdx.json provenance-*.slsa.json \
             release-manifest.json release-manifest.sigstore.json \
+            runtime-image-evidence.json runtime-image-evidence.sigstore.json \
             values-production.yaml astronomer-images.txt \
             RELEASE_IMAGES RELEASE_SUBJECTS SHA256SUMS

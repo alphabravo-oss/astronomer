@@ -1,0 +1,15 @@
+extends:
+  - spectral:oas
+
+rules:
+  # The management API intentionally documents local and review environments;
+  # production origins are chart/operator configuration, not a spec constant.
+  oas3-server-not-example.com: off
+  # Route tags are domain names rather than separate tag metadata objects.
+  openapi-tags: off
+  operation-tags: error
+  operation-operationId: error
+  operation-operationId-unique: error
+  path-params: error
+  duplicated-entry-in-enum: error
+  no-$ref-siblings: error

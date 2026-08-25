@@ -65,7 +65,7 @@ export function RolloutDetailPage() {
   const pageSize = 50;
   const detail = useQuery({
     queryKey: queryKeys.delivery.rollout(projectId, rolloutId),
-    queryFn: () => getDeliveryRollout(projectId, rolloutId),
+    queryFn: ({ signal }) => getDeliveryRollout(projectId, rolloutId, signal),
     enabled: Boolean(projectId && rolloutId && allowed),
     refetchInterval: (query) =>
       query.state.data && rolloutIsTerminal(query.state.data.data.rollout.state)
@@ -77,11 +77,16 @@ export function RolloutDetailPage() {
       limit: pageSize,
       offset: clusterPage * pageSize,
     }),
-    queryFn: () =>
-      listDeliveryRolloutClusters(projectId, rolloutId, {
-        limit: pageSize,
-        offset: clusterPage * pageSize,
-      }),
+    queryFn: ({ signal }) =>
+      listDeliveryRolloutClusters(
+        projectId,
+        rolloutId,
+        {
+          limit: pageSize,
+          offset: clusterPage * pageSize,
+        },
+        signal,
+      ),
     enabled: Boolean(projectId && rolloutId && allowed),
     refetchInterval: liveFallback(5_000),
   });
@@ -89,8 +94,8 @@ export function RolloutDetailPage() {
     queryKey: queryKeys.delivery.rolloutEvents(projectId, rolloutId, {
       limit: 100,
     }),
-    queryFn: () =>
-      listDeliveryRolloutEvents(projectId, rolloutId, { limit: 100 }),
+    queryFn: ({ signal }) =>
+      listDeliveryRolloutEvents(projectId, rolloutId, { limit: 100 }, signal),
     enabled: Boolean(projectId && rolloutId && allowed),
     refetchInterval: liveFallback(10_000),
   });

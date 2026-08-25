@@ -18,9 +18,9 @@
  * projects:update would render an Add box that always 403s for project owners.
  * Everyone else sees the same list read-only; the server re-checks regardless.
  */
-import { useState } from 'react';
-import { Layers, Loader2, Plus, X } from 'lucide-react';
-import { useAddProjectNamespace, useRemoveProjectNamespace } from './hooks';
+import { useState } from "react";
+import { Layers, Loader2, Plus, X } from "lucide-react";
+import { useAddProjectNamespace, useRemoveProjectNamespace } from "./hooks";
 
 /**
  * RFC 1123 label, the rule the apiserver applies to a namespace name. Checked
@@ -30,10 +30,10 @@ const NAMESPACE_PATTERN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 
 export function validateNamespaceName(raw: string): string | null {
   const name = raw.trim();
-  if (!name) return 'Enter a namespace name.';
-  if (name.length > 63) return 'A namespace name is at most 63 characters.';
+  if (!name) return "Enter a namespace name.";
+  if (name.length > 63) return "A namespace name is at most 63 characters.";
   if (!NAMESPACE_PATTERN.test(name)) {
-    return 'Use lowercase letters, digits and dashes, starting and ending with a letter or digit.';
+    return "Use lowercase letters, digits and dashes, starting and ending with a letter or digit.";
   }
   return null;
 }
@@ -47,7 +47,7 @@ export function ProjectNamespacesCard({
   namespaces: string[];
   canEdit: boolean;
 }) {
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const addMutation = useAddProjectNamespace(projectId);
   const removeMutation = useRemoveProjectNamespace(projectId);
@@ -60,11 +60,11 @@ export function ProjectNamespacesCard({
     }
     const name = draft.trim();
     if (namespaces.includes(name)) {
-      setError('That namespace is already in this project.');
+      setError("That namespace is already in this project.");
       return;
     }
     setError(null);
-    addMutation.mutate(name, { onSuccess: () => setDraft('') });
+    addMutation.mutate(name, { onSuccess: () => setDraft("") });
   };
 
   return (
@@ -75,15 +75,16 @@ export function ProjectNamespacesCard({
           Namespaces
         </h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Members of this project can read and manage workloads in these namespaces, and only
-          these. A namespace belongs to one project per cluster.
+          Members of this project can read and manage workloads in these
+          namespaces, and only these. A namespace belongs to one project per
+          cluster.
         </p>
       </header>
 
       {namespaces.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No namespaces assigned yet — this project&apos;s role bindings currently grant nothing on
-          cluster resources.
+          No namespaces assigned yet — this project&apos;s role bindings
+          currently grant nothing on cluster resources.
         </p>
       ) : (
         <ul className="flex flex-wrap gap-2">
@@ -122,7 +123,7 @@ export function ProjectNamespacesCard({
                 if (error) setError(null);
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === "Enter") {
                   e.preventDefault();
                   submit();
                 }

@@ -33,7 +33,7 @@ const diagnosticIcon: Record<string, typeof Database> = {
 export function DiagnosticsTab() {
   const q = useQuery({
     queryKey: queryKeys.charlie.adminDiagnostics,
-    queryFn: getCharlieDiagnostics,
+    queryFn: ({ signal }) => getCharlieDiagnostics(signal),
     retry: false,
     refetchInterval: 30000,
   });
@@ -55,8 +55,8 @@ export function DiagnosticsTab() {
     >
       {q.data?.overall === "inactive" && (
         <p className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
-          Charlie authority is disabled, so connectivity checks are skipped. Raise
-          mode on the Mode tab to probe the agent and Charlie.
+          Charlie authority is disabled, so connectivity checks are skipped.
+          Raise mode on the Mode tab to probe the agent and Charlie.
         </p>
       )}
       <div className="flex items-center justify-between">

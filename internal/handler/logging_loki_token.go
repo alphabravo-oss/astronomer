@@ -46,6 +46,9 @@ func (h *LoggingHandler) RotateOutputToken(w http.ResponseWriter, r *http.Reques
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbUpdate) {
 		return
 	}
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
 	if !strings.EqualFold(output.OutputType, "loki") {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Ingest tokens are only issued for Loki outputs")
 		return
@@ -65,33 +68,59 @@ func (h *LoggingHandler) RotateOutputToken(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to encrypt ingest token")
 		return
 	}
-	row, err := h.queries.UpsertLokiIngestToken(r.Context(), sqlc.UpsertLokiIngestTokenParams{
+	params := sqlc.UpsertLokiIngestTokenParams{
 		ClusterID:      clusterID,
 		TokenHash:      lokiauth.HashBearer(plaintext),
 		TokenEncrypted: sealed,
 		CreatedByID:    currentUserUUID(r),
-	})
+	}
+	mutationContext := withOperationIdempotency(r, "logging")
+	result, err := executeLoggingMutation(r, h,
+		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LokiIngestToken], error) {
+			row, storeErr := q.UpsertLokiIngestToken(r.Context(), params)
+			if storeErr != nil {
+				return loggingMutationResult[sqlc.LokiIngestToken]{}, storeErr
+			}
+			op, opErr := createLoggingOutputApplyOperation(mutationContext, q, output, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LokiIngestToken]{row: row, op: op}, opErr
+		},
+		func() (loggingMutationResult[sqlc.LokiIngestToken], error) {
+			row, storeErr := h.queries.UpsertLokiIngestToken(r.Context(), params)
+			if storeErr != nil {
+				return loggingMutationResult[sqlc.LokiIngestToken]{}, storeErr
+			}
+			op, opErr := createLoggingOutputApplyOperation(mutationContext, h.queries, output, currentUserUUID(r))
+			return loggingMutationResult[sqlc.LokiIngestToken]{row: row, op: op}, opErr
+		},
+		func(result loggingMutationResult[sqlc.LokiIngestToken]) clusterAuditEvent {
+			return clusterAuditEvent{action: "logging.loki_token.rotate", resourceType: "loki_ingest_token", resourceID: result.row.ID.String(), resourceName: output.Name, status: http.StatusAccepted, detail: map[string]any{
+				"cluster_id": clusterID.String(), "output_id": output.ID.String(), "operation_id": operationIDOrEmpty(result.op),
+			}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to store ingest token")
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to rotate ingest token")
 		return
 	}
+	row := result.row
+	h.afterLoggingOperationCommit(result.op)
 	if h.lokiIngest != nil {
 		if recErr := h.lokiIngest.ReconcileLokiIngest(r.Context()); recErr != nil && h.log != nil {
 			h.log.Warn("loki ingest reconcile after rotate failed", "error", recErr, "cluster_id", clusterID.String())
 		}
 	}
-	if _, opErr := h.enqueueOutputApply(withOperationIdempotency(r, "logging"), output, currentUserUUID(r)); opErr != nil && h.log != nil {
-		h.log.Warn("logging: failed to enqueue ingest token apply", "id", output.ID.String(), "error", opErr)
-	}
-	recordAudit(r, h.queries, "logging.loki_token.rotate", "loki_ingest_token", row.ID.String(), output.Name, map[string]any{
-		"cluster_id": clusterID.String(),
-		"output_id":  output.ID.String(),
+	RespondAcceptedOperation(w, "/api/v1/logging/operations/"+result.op.ID.String()+"/", loggingTokenRotationReceipt{
+		ClusterID: clusterID.String(),
+		Token:     plaintext,
+		RotatedAt: row.RotatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		Operation: loggingOperationResponse(result.op),
 	})
-	RespondJSON(w, http.StatusOK, map[string]any{
-		"clusterId": clusterID.String(),
-		"token":     plaintext,
-		"rotatedAt": row.RotatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-	})
+}
+
+type loggingTokenRotationReceipt struct {
+	ClusterID string         `json:"clusterId"`
+	Token     string         `json:"token"`
+	RotatedAt string         `json:"rotatedAt"`
+	Operation map[string]any `json:"operation"`
 }
 
 func clusterIDParamForRotate(r *http.Request) string {

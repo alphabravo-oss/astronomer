@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -37,10 +38,12 @@ func (s stubLoggingRBACQuerier) GetUserBindings(context.Context, string) ([]rbac
 // sufficient for the handler enqueue + reconciler tests below. We don't try
 // to model every column; we just record enough to assert state transitions.
 type loggingFakeQuerier struct {
-	outputs    map[uuid.UUID]sqlc.LoggingOutput
-	pipelines  map[uuid.UUID]sqlc.LoggingPipeline
-	operations map[uuid.UUID]sqlc.LoggingOperation
-	events     []sqlc.LoggingOperationEvent
+	outputs         map[uuid.UUID]sqlc.LoggingOutput
+	pipelines       map[uuid.UUID]sqlc.LoggingPipeline
+	pipelineOutputs map[uuid.UUID][]uuid.UUID
+	operations      map[uuid.UUID]sqlc.LoggingOperation
+	saved           map[uuid.UUID]sqlc.LoggingSavedSearch
+	events          []sqlc.LoggingOperationEvent
 	// orderedOps tracks insertion order so ListPending behaves deterministically.
 	orderedOps    []uuid.UUID
 	lokiTokens    map[uuid.UUID]sqlc.LokiIngestToken
@@ -51,13 +54,70 @@ type loggingFakeQuerier struct {
 
 func newLoggingFakeQuerier() *loggingFakeQuerier {
 	return &loggingFakeQuerier{
-		outputs:    map[uuid.UUID]sqlc.LoggingOutput{},
-		pipelines:  map[uuid.UUID]sqlc.LoggingPipeline{},
-		operations: map[uuid.UUID]sqlc.LoggingOperation{},
-		lokiTokens: map[uuid.UUID]sqlc.LokiIngestToken{},
-		installed:  map[string]sqlc.InstalledChart{},
-		tools:      map[string]sqlc.ClusterTool{},
+		outputs:         map[uuid.UUID]sqlc.LoggingOutput{},
+		pipelines:       map[uuid.UUID]sqlc.LoggingPipeline{},
+		pipelineOutputs: map[uuid.UUID][]uuid.UUID{},
+		operations:      map[uuid.UUID]sqlc.LoggingOperation{},
+		saved:           map[uuid.UUID]sqlc.LoggingSavedSearch{},
+		lokiTokens:      map[uuid.UUID]sqlc.LokiIngestToken{},
+		installed:       map[string]sqlc.InstalledChart{},
+		tools:           map[string]sqlc.ClusterTool{},
 	}
+}
+
+func (q *loggingFakeQuerier) ListLoggingSavedSearches(_ context.Context, arg sqlc.ListLoggingSavedSearchesParams) ([]sqlc.LoggingSavedSearch, error) {
+	items := make([]sqlc.LoggingSavedSearch, 0)
+	for _, row := range q.saved {
+		if row.OwnerUserID == arg.OwnerUserID && row.OutputID == arg.OutputID {
+			items = append(items, row)
+		}
+	}
+	return items, nil
+}
+
+func (q *loggingFakeQuerier) GetLoggingSavedSearchForOwner(_ context.Context, arg sqlc.GetLoggingSavedSearchForOwnerParams) (sqlc.LoggingSavedSearch, error) {
+	row, ok := q.saved[arg.ID]
+	if !ok || row.OwnerUserID != arg.OwnerUserID {
+		return sqlc.LoggingSavedSearch{}, pgx.ErrNoRows
+	}
+	return row, nil
+}
+
+func (q *loggingFakeQuerier) CreateLoggingSavedSearch(_ context.Context, arg sqlc.CreateLoggingSavedSearchParams) (sqlc.LoggingSavedSearch, error) {
+	now := time.Now().UTC()
+	row := sqlc.LoggingSavedSearch{
+		ID: uuid.New(), OutputID: arg.OutputID, OwnerUserID: arg.OwnerUserID,
+		Name: arg.Name, QueryText: arg.QueryText, Namespaces: arg.Namespaces,
+		ResultLimit: arg.ResultLimit, Direction: arg.Direction, LiveTail: arg.LiveTail,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	q.saved[row.ID] = row
+	return row, nil
+}
+
+func (q *loggingFakeQuerier) UpdateLoggingSavedSearch(_ context.Context, arg sqlc.UpdateLoggingSavedSearchParams) (sqlc.LoggingSavedSearch, error) {
+	row, ok := q.saved[arg.ID]
+	if !ok || row.OwnerUserID != arg.OwnerUserID {
+		return sqlc.LoggingSavedSearch{}, pgx.ErrNoRows
+	}
+	row.Name = arg.Name
+	row.QueryText = arg.QueryText
+	row.Namespaces = arg.Namespaces
+	row.ResultLimit = arg.ResultLimit
+	row.Direction = arg.Direction
+	row.LiveTail = arg.LiveTail
+	row.UpdatedAt = time.Now().UTC()
+	q.saved[row.ID] = row
+	return row, nil
+}
+
+func (q *loggingFakeQuerier) DeleteLoggingSavedSearch(_ context.Context, arg sqlc.DeleteLoggingSavedSearchParams) (int64, error) {
+	row, ok := q.saved[arg.ID]
+	if !ok || row.OwnerUserID != arg.OwnerUserID {
+		return 0, nil
+	}
+	delete(q.saved, arg.ID)
+	return 1, nil
 }
 
 var _ fluentBitReleaseStore = (*loggingFakeQuerier)(nil)
@@ -167,6 +227,13 @@ func (q *loggingFakeQuerier) UpdateLoggingOutput(_ context.Context, arg sqlc.Upd
 	return o, nil
 }
 func (q *loggingFakeQuerier) DeleteLoggingOutput(_ context.Context, id uuid.UUID) error {
+	for _, outputIDs := range q.pipelineOutputs {
+		for _, outputID := range outputIDs {
+			if outputID == id {
+				return &pgconn.PgError{Code: "23503", ConstraintName: "logging_pipeline_outputs_logging_output_id_fkey"}
+			}
+		}
+	}
 	delete(q.outputs, id)
 	return nil
 }
@@ -191,6 +258,23 @@ func (q *loggingFakeQuerier) GetLoggingPipelineByID(_ context.Context, id uuid.U
 		return p, nil
 	}
 	return sqlc.LoggingPipeline{}, errors.New("not found")
+}
+func (q *loggingFakeQuerier) ListLoggingPipelineOutputDetails(_ context.Context, pipelineIDs []uuid.UUID) ([]sqlc.ListLoggingPipelineOutputDetailsRow, error) {
+	rows := make([]sqlc.ListLoggingPipelineOutputDetailsRow, 0)
+	for _, pipelineID := range pipelineIDs {
+		for _, outputID := range q.pipelineOutputs[pipelineID] {
+			output, ok := q.outputs[outputID]
+			if !ok {
+				continue
+			}
+			rows = append(rows, sqlc.ListLoggingPipelineOutputDetailsRow{
+				LoggingPipelineID: pipelineID,
+				LoggingOutputID:   outputID,
+				LoggingOutputName: output.Name,
+			})
+		}
+	}
+	return rows, nil
 }
 func (q *loggingFakeQuerier) CreateLoggingPipeline(_ context.Context, arg sqlc.CreateLoggingPipelineParams) (sqlc.LoggingPipeline, error) {
 	p := sqlc.LoggingPipeline{
@@ -221,8 +305,25 @@ func (q *loggingFakeQuerier) UpdateLoggingPipeline(_ context.Context, arg sqlc.U
 	q.pipelines[arg.ID] = p
 	return p, nil
 }
+func (q *loggingFakeQuerier) ReplaceLoggingPipelineOutputs(_ context.Context, arg sqlc.ReplaceLoggingPipelineOutputsParams) (int64, error) {
+	pipeline, ok := q.pipelines[arg.LoggingPipelineID]
+	if !ok {
+		return 0, errors.New("pipeline not found")
+	}
+	accepted := make([]uuid.UUID, 0, len(arg.OutputIds))
+	for _, outputID := range arg.OutputIds {
+		output, exists := q.outputs[outputID]
+		if !exists || !output.ClusterID.Valid || uuid.UUID(output.ClusterID.Bytes) != pipeline.ClusterID {
+			continue
+		}
+		accepted = append(accepted, outputID)
+	}
+	q.pipelineOutputs[arg.LoggingPipelineID] = accepted
+	return int64(len(accepted)), nil
+}
 func (q *loggingFakeQuerier) DeleteLoggingPipeline(_ context.Context, id uuid.UUID) error {
 	delete(q.pipelines, id)
+	delete(q.pipelineOutputs, id)
 	return nil
 }
 func (q *loggingFakeQuerier) CountLoggingPipelines(context.Context) (int64, error) {
@@ -260,6 +361,44 @@ func (q *loggingFakeQuerier) ListLoggingOperations(context.Context, sqlc.ListLog
 		items = append(items, q.operations[q.orderedOps[i]])
 	}
 	return items, nil
+}
+
+func (q *loggingFakeQuerier) CountLoggingOperations(context.Context, sqlc.CountLoggingOperationsParams) (int64, error) {
+	return int64(len(q.operations)), nil
+}
+
+func (q *loggingFakeQuerier) scopedLoggingOperations(clusterIDs []uuid.UUID) []sqlc.LoggingOperation {
+	allowed := make(map[uuid.UUID]struct{}, len(clusterIDs))
+	for _, id := range clusterIDs {
+		allowed[id] = struct{}{}
+	}
+	items := make([]sqlc.LoggingOperation, 0, len(q.orderedOps))
+	for i := len(q.orderedOps) - 1; i >= 0; i-- {
+		op := q.operations[q.orderedOps[i]]
+		var env loggingOperationEnvelope
+		if json.Unmarshal(op.Payload, &env) != nil {
+			continue
+		}
+		clusterID, err := uuid.Parse(env.ClusterID)
+		if err != nil {
+			continue
+		}
+		if _, ok := allowed[clusterID]; ok {
+			items = append(items, op)
+		}
+	}
+	return items
+}
+
+func (q *loggingFakeQuerier) ListLoggingOperationsForScopes(_ context.Context, arg sqlc.ListLoggingOperationsForScopesParams) ([]sqlc.LoggingOperation, error) {
+	items := q.scopedLoggingOperations(arg.ClusterIds)
+	start := min(int(arg.QueryOffset), len(items))
+	end := min(start+int(arg.QueryLimit), len(items))
+	return items[start:end], nil
+}
+
+func (q *loggingFakeQuerier) CountLoggingOperationsForScopes(_ context.Context, arg sqlc.CountLoggingOperationsForScopesParams) (int64, error) {
+	return int64(len(q.scopedLoggingOperations(arg.ClusterIds))), nil
 }
 func (q *loggingFakeQuerier) ListPendingLoggingOperations(_ context.Context, _ int32) ([]sqlc.LoggingOperation, error) {
 	items := []sqlc.LoggingOperation{}
@@ -458,10 +597,11 @@ func TestCreateOutputEnqueuesPendingApplyOperation(t *testing.T) {
 	raw, _ := json.Marshal(body)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/logging/outputs/", bytes.NewReader(raw))
+	req.Header.Set("Idempotency-Key", "output-create-1")
 	rec := httptest.NewRecorder()
 	h.CreateOutput(rec, req)
 
-	if rec.Code != http.StatusCreated {
+	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	if len(q.operations) != 1 {
@@ -492,6 +632,83 @@ func TestCreateOutputEnqueuesPendingApplyOperation(t *testing.T) {
 	}
 }
 
+func TestCreateOutputRequiresIdempotencyKeyBeforeMutation(t *testing.T) {
+	q := newLoggingFakeQuerier()
+	clusterID := uuid.New()
+	raw, _ := json.Marshal(map[string]any{
+		"name": "primary", "output_type": "stdout", "configuration": map[string]any{},
+		"cluster_id": clusterID.String(), "enabled": true,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/logging/outputs/", bytes.NewReader(raw))
+	rec := httptest.NewRecorder()
+	NewLoggingHandler(q).CreateOutput(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(q.outputs) != 0 || len(q.operations) != 0 {
+		t.Fatalf("mutation committed without Idempotency-Key: outputs=%d operations=%d", len(q.outputs), len(q.operations))
+	}
+}
+
+func TestOutputReconciliationMutationsReturnAcceptedReceipts(t *testing.T) {
+	tests := []struct {
+		name   string
+		method string
+		body   func() []byte
+		invoke func(*LoggingHandler, http.ResponseWriter, *http.Request)
+	}{
+		{
+			name: "update", method: http.MethodPut,
+			body: func() []byte {
+				raw, _ := json.Marshal(map[string]any{
+					"name": "updated", "output_type": "stdout", "configuration": map[string]any{}, "enabled": true,
+				})
+				return raw
+			},
+			invoke: (*LoggingHandler).UpdateOutput,
+		},
+		{name: "enable", method: http.MethodPost, body: func() []byte { return nil }, invoke: (*LoggingHandler).EnableOutput},
+		{name: "disable", method: http.MethodPost, body: func() []byte { return nil }, invoke: (*LoggingHandler).DisableOutput},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q := newLoggingFakeQuerier()
+			clusterID := uuid.New()
+			output, err := q.CreateLoggingOutput(context.Background(), sqlc.CreateLoggingOutputParams{
+				Name: "primary", OutputType: "stdout", Configuration: json.RawMessage(`{}`),
+				ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true}, Enabled: tt.name != "enable",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(tt.method, "/api/v1/logging/outputs/"+output.ID.String()+"/"+tt.name+"/", bytes.NewReader(tt.body()))
+			req.Header.Set("Idempotency-Key", "output-"+tt.name+"-1")
+			routeContext := chi.NewRouteContext()
+			routeContext.URLParams.Add("id", output.ID.String())
+			req = req.WithContext(addRouteCtx(req.Context(), routeContext))
+			rec := httptest.NewRecorder()
+			tt.invoke(NewLoggingHandler(q), rec, req)
+			if rec.Code != http.StatusAccepted {
+				t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+			}
+			var envelope struct {
+				Data loggingOutputMutationReceipt `json:"data"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			operationID, _ := envelope.Data.Operation["id"].(string)
+			if envelope.Data.Output.ID != output.ID || operationID == "" {
+				t.Fatalf("receipt=%+v", envelope.Data)
+			}
+			if rec.Header().Get("Location") != "/api/v1/logging/operations/"+operationID+"/" || rec.Header().Get("Retry-After") != "2" {
+				t.Fatalf("headers=%v", rec.Header())
+			}
+		})
+	}
+}
+
 func TestDeleteOutputEnqueuesDeleteBeforeRowGone(t *testing.T) {
 	q := newLoggingFakeQuerier()
 	h := NewLoggingHandler(q)
@@ -507,6 +724,7 @@ func TestDeleteOutputEnqueuesDeleteBeforeRowGone(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/logging/outputs/"+outputID.String()+"/", nil)
+	req.Header.Set("Idempotency-Key", "output-delete-1")
 	// chi.URLParam needs a route context; install it manually.
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", outputID.String())
@@ -514,7 +732,7 @@ func TestDeleteOutputEnqueuesDeleteBeforeRowGone(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.DeleteOutput(rec, req)
 
-	if rec.Code != http.StatusNoContent {
+	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	if len(q.operations) != 1 {

@@ -13,6 +13,11 @@
 //   // openapi:request NodeDrainRequest
 //   type drainNodeRequest struct { ... }
 //
+// Inline schemas bind by their stable operationId instead:
+//
+//   // openapi:request-operation postAuthChangePassword
+//   type changePasswordRequest struct { ... }
+//
 // The marker must appear in the doc comment immediately above a
 // `type X struct {` or `var x struct {` line (a few handlers decode into an
 // anonymous struct declared in the function body). It names a schema under
@@ -54,7 +59,8 @@
 // way of escaping it is itself gated by the debt sets below:
 //   UNBOUND_REQUEST_SCHEMAS        : documented request schema with no marker
 //   PLACEHOLDER_REQUEST_SCHEMAS    : bound, but the schema declares no properties
-//   EXPECTED_INLINE_REQUEST_BODIES : requestBody with an INLINE (unnameable) schema
+//   inline schemas                  : bound through their stable operationId
+//   passthrough request bodies      : explicitly marked and restricted to proxy routes
 // Adding a new documented request body therefore forces a choice that shows up
 // in review — bind it and enumerate it, or write it down as debt. A bound schema
 // that no requestBody $refs any more fails as well, which is what catches the
@@ -65,7 +71,7 @@
 //   - field TYPES (bool vs boolean, *int64 vs integer/int64, json.RawMessage
 //     vs anything) — too many defensible spellings to judge mechanically
 //   - required/optional agreement (spec `required` vs pointer/omitempty)
-//   - inline request bodies, and query/path parameters
+//   - intentional proxy passthrough bodies, and query/path parameters
 //   - response schemas
 //
 // Modes:
@@ -99,6 +105,14 @@ const verbose = args.has('--verbose');
 // failure on a schema you are actively adding — bind it instead.
 const UNBOUND_REQUEST_SCHEMAS = new Set([]);
 
+// Route-inventory synchronization uses this explicitly provisional envelope
+// for mounted mutation routes whose domain request schema has not yet been
+// promoted. It is deliberately tracked separately from ordinary unbound debt:
+// every use is marked in OpenAPI, its operation count is ratcheted, and it may
+// never be mistaken for field-verified coverage in the report.
+const PROVISIONAL_REQUEST_SCHEMAS = new Map([
+]);
+
 // Request schemas that are bound to a Go struct but describe no properties at
 // all — `type: object` + `additionalProperties: true` placeholders carrying the
 // "Schema not yet fully enumerated" description. There is nothing to compare
@@ -109,33 +123,7 @@ const UNBOUND_REQUEST_SCHEMAS = new Set([]);
 // is to enumerate the properties from the bound Go struct (named in the report)
 // and delete the entry, at which point the field comparison starts running.
 // Adding an entry to unblock a new placeholder is going backwards.
-const PLACEHOLDER_REQUEST_SCHEMAS = new Set([
-  'AllowlistUpdateRequest',
-  'ApplyClusterTemplateRequest',
-  'ApplyNetworkPolicyRequest',
-  'ClusterRegistryRequest',
-  'CreateClusterGroupRequest',
-  'CreateClusterTemplateRequest',
-  'CreateNetworkPolicyTemplateRequest',
-  'MoveClustersRequest',
-  'UpdateClusterGroupRequest',
-  'UpdateClusterRequest',
-  'UpdateRegistryConfigRequest',
-]);
-
-// Request bodies whose schema is declared INLINE on the operation instead of
-// under components.schemas. An inline schema has no name, so it can carry no
-// marker and not one of its fields is compared — it is the cheapest way to add a
-// request body this gate never looks at, and at 70 of 141 bodies it is already
-// the majority of the surface.
-//
-// THIS IS A DEBT BUDGET, NOT AN APPROVAL. Reporting the number was not enough:
-// a number in a passing CI log is not visible, and the count could grow forever
-// without failing anything. It is pinned here so a new inline body fails and
-// has to be argued for. It also fails when the count DROPS — lower this line in
-// the same commit that promotes a body to a named schema, so the budget cannot
-// leave slack for the next unverified body to fill.
-const EXPECTED_INLINE_REQUEST_BODIES = 61;
+const PLACEHOLDER_REQUEST_SCHEMAS = new Set([]);
 
 const specPath = path.join(repoRoot, 'docs/openapi.yaml');
 const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
@@ -164,6 +152,8 @@ const staleWaivers = [];
 // affects.
 const schemaUsage = new Map(); // schemaName -> Set("METHOD /path")
 let inlineRequestBodies = 0;
+let passthroughRequestBodies = 0;
+let polymorphicRequestBodies = 0;
 let nonJSONRequestBodies = 0;
 
 for (const [pattern, item] of Object.entries(spec?.paths ?? {})) {
@@ -181,12 +171,49 @@ for (const [pattern, item] of Object.entries(spec?.paths ?? {})) {
     const schema = content[mediaType]?.schema;
     const ref = typeof schema?.$ref === 'string' ? schema.$ref : null;
     const name = ref?.startsWith('#/components/schemas/') ? ref.slice('#/components/schemas/'.length) : null;
+    const operationName = `${method.toUpperCase()} ${pattern}`;
+    const schemaStatus = op?.['x-astronomer-request-schema-status'];
     if (!name) {
+      if (schemaStatus === 'passthrough') {
+        passthroughRequestBodies += 1;
+        if (op?.['x-astronomer-route-class'] !== 'proxy') {
+          errors.push(`${operationName}: passthrough request body is only valid on a proxy route`);
+        }
+        continue;
+      }
+      if (schemaStatus === 'polymorphic') {
+        polymorphicRequestBodies += 1;
+        if (op?.['x-astronomer-route-class'] === 'proxy') {
+          errors.push(`${operationName}: polymorphic request body cannot be classified as a proxy route`);
+        }
+        continue;
+      }
       inlineRequestBodies += 1;
+      if (!op?.operationId) {
+        errors.push(`${operationName}: inline request body has no operationId for an openapi:request-operation binding`);
+        continue;
+      }
+      if (schemaStatus !== undefined) {
+        errors.push(`${operationName}: field-verifiable inline request body is incorrectly marked ${schemaStatus}`);
+      }
+      const syntheticName = `Operation_${op.operationId}`;
+      if (Object.prototype.hasOwnProperty.call(schemas, syntheticName)) {
+        errors.push(`${operationName}: synthetic inline schema name ${syntheticName} collides with components.schemas`);
+        continue;
+      }
+      schemas[syntheticName] = schema;
+      if (!schemaUsage.has(syntheticName)) schemaUsage.set(syntheticName, new Set());
+      schemaUsage.get(syntheticName).add(operationName);
       continue;
     }
+    if (PROVISIONAL_REQUEST_SCHEMAS.has(name) && schemaStatus !== 'provisional') {
+      errors.push(`${operationName}: provisional request schema ${name} is missing x-astronomer-request-schema-status: provisional`);
+    }
+    if (!PROVISIONAL_REQUEST_SCHEMAS.has(name) && schemaStatus === 'provisional') {
+      errors.push(`${operationName}: request schema ${name} is field-verifiable but is incorrectly marked provisional`);
+    }
     if (!schemaUsage.has(name)) schemaUsage.set(name, new Set());
-    schemaUsage.get(name).add(`${method.toUpperCase()} ${pattern}`);
+    schemaUsage.get(name).add(operationName);
   }
 }
 
@@ -261,8 +288,16 @@ function stripNoise(line) {
 }
 
 const MARKER_BIND = /^\/\/\s*openapi:request\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/;
+const MARKER_BIND_OPERATION = /^\/\/\s*openapi:request-operation\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/;
 const MARKER_ALLOW = /^\/\/\s*openapi:request-allow\s+([A-Za-z_][A-Za-z0-9_.]*)\s+(.*\S)\s*$/;
 const MARKER_ANY = /^\/\/\s*openapi:request(-[a-z-]+)?\b/;
+
+function boundSchemaName(marker) {
+  const named = MARKER_BIND.exec(marker);
+  if (named) return named[1];
+  const operation = MARKER_BIND_OPERATION.exec(marker);
+  return operation ? `Operation_${operation[1]}` : null;
+}
 // A named type declaration, or the anonymous `var req struct {` a handful of
 // handlers decode into. Both are explicit enough to hang a marker on.
 const STRUCT_DECL = /^(?:type|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s+struct\s*\{/;
@@ -489,13 +524,13 @@ for (const file of allFiles) {
       continue;
     }
 
-    const binds = block.filter((c) => MARKER_BIND.test(c.text));
+    const binds = block.filter((c) => MARKER_BIND.test(c.text) || MARKER_BIND_OPERATION.test(c.text));
     const allows = block.filter((c) => MARKER_ALLOW.test(c.text));
     for (const bad of block) {
-      if (!MARKER_ANY.test(bad.text) || MARKER_BIND.test(bad.text) || MARKER_ALLOW.test(bad.text)) continue;
+      if (!MARKER_ANY.test(bad.text) || MARKER_BIND.test(bad.text) || MARKER_BIND_OPERATION.test(bad.text) || MARKER_ALLOW.test(bad.text)) continue;
       errors.push(
         `${rel}:${bad.line}: unparseable marker ${JSON.stringify(bad.text)}; expected ` +
-        '"// openapi:request <SchemaName>" or "// openapi:request-allow <field> <reason>"',
+        '"// openapi:request <SchemaName>", "// openapi:request-operation <operationId>", or "// openapi:request-allow <field> <reason>"',
       );
     }
     block = [];
@@ -516,7 +551,7 @@ for (const file of allFiles) {
     }
 
     const goStruct = decl[1];
-    const boundNames = new Set(binds.map((b) => MARKER_BIND.exec(b.text)[1]));
+    const boundNames = new Set(binds.map((b) => boundSchemaName(b.text)));
     const waivers = new Map(); // token ("field" or "Schema.field") -> { reason, line, schema, field }
     for (const allow of allows) {
       const [, token, reason] = MARKER_ALLOW.exec(allow.text);
@@ -553,7 +588,7 @@ for (const file of allFiles) {
     const fields = resolveFields(members, dir, rel, goStruct);
 
     for (const bind of binds) {
-      const [, schema] = MARKER_BIND.exec(bind.text);
+      const schema = boundSchemaName(bind.text);
       bindings.push({ schema, goStruct, file: rel, line: bind.line, declLine: i + 1, fields, waivers });
     }
 
@@ -588,8 +623,8 @@ function waiverFor(binding, wire) {
 for (const binding of bindings) {
   if (!Object.prototype.hasOwnProperty.call(schemas, binding.schema)) {
     errors.push(
-      `${binding.file}:${binding.line}: openapi:request ${binding.schema} — ` +
-      'no such schema under components.schemas in docs/openapi.yaml',
+      `${binding.file}:${binding.line}: request binding ${binding.schema} — ` +
+      'no matching named schema or inline operation schema in docs/openapi.yaml',
     );
     continue;
   }
@@ -663,11 +698,18 @@ for (const name of schemaUsage.keys()) {
     if (UNBOUND_REQUEST_SCHEMAS.has(name)) staleDebt.push(name);
     continue;
   }
+  if (PROVISIONAL_REQUEST_SCHEMAS.has(name)) continue;
   if (UNBOUND_REQUEST_SCHEMAS.has(name)) continue;
   unbound.push(name);
 }
 for (const name of UNBOUND_REQUEST_SCHEMAS) {
   if (!schemaUsage.has(name)) staleDebt.push(name);
+}
+for (const [name, expectedOperations] of PROVISIONAL_REQUEST_SCHEMAS) {
+  const actualOperations = schemaUsage.get(name)?.size ?? 0;
+  if (actualOperations !== expectedOperations) {
+    errors.push(`provisional request schema ${name} is used by ${actualOperations} operation(s); expected ${expectedOperations}`);
+  }
 }
 // A marker on a schema that no requestBody $refs is the $ref-to-inline
 // conversion seen from the Go side: the struct is still bound, the endpoint no
@@ -690,17 +732,20 @@ const driftingFields = drift.reduce((n, d) => n + d.undocumented.length + d.phan
 
 console.log('OpenAPI request-schema field contract');
 console.log('=====================================');
-console.log(`named request schemas (requestBody $ref) : ${schemaUsage.size}`);
+console.log(`request shapes (named and inline)        : ${schemaUsage.size}`);
 console.log(`  bound to a Go struct                   : ${boundSchemas.size}`);
 console.log(`  unbound, on the debt list              : ${[...UNBOUND_REQUEST_SCHEMAS].filter((n) => schemaUsage.has(n)).length}`);
 console.log(`  unbound, NOT on the debt list          : ${unbound.length}`);
+console.log(`  explicitly provisional                 : ${[...PROVISIONAL_REQUEST_SCHEMAS].reduce((n, [name]) => n + (schemaUsage.has(name) ? 1 : 0), 0)}`);
 console.log(`  bound but property-less (placeholder)  : ${placeholders.length}`);
 console.log(`bindings (marker occurrences)            : ${bindings.length}`);
 console.log(`  field-comparable                       : ${bindings.length - placeholders.length}`);
 console.log(`per-field waivers                        : ${totalWaivers}`);
 console.log(`schemas with field drift                 : ${drift.length}`);
 console.log(`drifting fields                          : ${driftingFields}`);
-console.log(`inline request bodies (unverifiable)     : ${inlineRequestBodies} (budget ${EXPECTED_INLINE_REQUEST_BODIES})`);
+console.log(`inline request bodies (field-verifiable) : ${inlineRequestBodies}`);
+console.log(`proxy passthrough request bodies         : ${passthroughRequestBodies}`);
+console.log(`polymorphic Kubernetes request bodies    : ${polymorphicRequestBodies}`);
 if (boundButUnused.length > 0) {
   console.log(`bound schemas no requestBody uses        : ${boundButUnused.length}`);
 }
@@ -779,8 +824,7 @@ if (errors.length > 0) {
 }
 
 if (check && (drift.length > 0 || staleWaivers.length > 0 || unbound.length > 0
-  || staleDebt.length > 0 || newPlaceholders.length > 0 || boundButUnused.length > 0
-  || inlineRequestBodies !== EXPECTED_INLINE_REQUEST_BODIES)) {
+  || staleDebt.length > 0 || newPlaceholders.length > 0 || boundButUnused.length > 0)) {
   console.error('\nFAIL: request-schema field contract violated.');
   if (drift.length > 0) {
     console.error(`  ${driftingFields} field(s) drift across ${drift.length} schema(s) — fix docs/openapi.yaml or the Go struct,`);
@@ -790,16 +834,6 @@ if (check && (drift.length > 0 || staleWaivers.length > 0 || unbound.length > 0
   if (newPlaceholders.length > 0) {
     console.error(`  ${newPlaceholders.length} request schema(s) document no properties at all:`);
     for (const p of newPlaceholders) console.error(`    ${p.schema} — enumerate it from ${p.goStruct} (${p.file})`);
-  }
-  if (inlineRequestBodies > EXPECTED_INLINE_REQUEST_BODIES) {
-    console.error(`  ${inlineRequestBodies - EXPECTED_INLINE_REQUEST_BODIES} new inline request body/bodies ` +
-      `(${inlineRequestBodies} vs a budget of ${EXPECTED_INLINE_REQUEST_BODIES}). An inline schema cannot be`);
-    console.error('  bound, so none of its fields is checked. Move it under components.schemas, add the');
-    console.error('  `// openapi:request <Name>` marker, and leave EXPECTED_INLINE_REQUEST_BODIES alone.');
-  }
-  if (inlineRequestBodies < EXPECTED_INLINE_REQUEST_BODIES) {
-    console.error(`  inline request bodies dropped to ${inlineRequestBodies} — lower ` +
-      `EXPECTED_INLINE_REQUEST_BODIES to ${inlineRequestBodies} so the budget cannot be refilled.`);
   }
   if (boundButUnused.length > 0) {
     console.error(`  ${boundButUnused.length} bound schema(s) that no requestBody $refs: ${boundButUnused.join(', ')}.`);

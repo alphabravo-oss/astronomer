@@ -187,15 +187,12 @@ func mountSources(in []DataSourceRef) []ExtensionMountSource {
 // path) — never a URL — and supplies only context ids, declared query overrides,
 // and (for a POST form submit) a body. The proxy validates each against the
 // stored DataSourceRef and discards anything not declared.
+// openapi:request-operation postExtensionsByNameDataByDataSourceId
 type extProxyRequest struct {
-	Context struct {
-		ClusterID string `json:"clusterId"`
-		ProjectID string `json:"projectId"`
-		Namespace string `json:"namespace"`
-	} `json:"context"`
-	PathParams map[string]string `json:"pathParams"`
-	Query      map[string]string `json:"query"`
-	Body       json.RawMessage   `json:"body"`
+	Context    extensionRequestContext `json:"context"`
+	PathParams map[string]string       `json:"pathParams"`
+	Query      map[string]string       `json:"query"`
+	Body       json.RawMessage         `json:"body"`
 }
 
 type extProxyResponse struct {

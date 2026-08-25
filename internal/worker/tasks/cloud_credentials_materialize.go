@@ -98,19 +98,6 @@ type CloudCredentialMaterializeDeps struct {
 	Decryptor CloudCredentialDecryptor
 }
 
-var cloudCredentialDeps CloudCredentialMaterializeDeps
-
-// ConfigureCloudCredentialMaterialize stores the runtime deps. Called
-// from server startup; tests may swap in fakes via direct assignment.
-func ConfigureCloudCredentialMaterialize(deps CloudCredentialMaterializeDeps) {
-	cloudCredentialDeps = deps
-}
-
-// ResetCloudCredentialMaterialize clears the runtime deps (test only).
-func ResetCloudCredentialMaterialize() {
-	cloudCredentialDeps = CloudCredentialMaterializeDeps{}
-}
-
 // cloudCredentialMaterializationsTotal counts apply / delete outcomes
 // per provider. The provider label is set from the credential row;
 // outcome is success / failure.
@@ -129,10 +116,9 @@ func init() {
 
 // HandleCloudCredentialMaterialize is the asynq mux handler for a single
 // materialization request.
-func HandleCloudCredentialMaterialize(ctx context.Context, t *asynq.Task) error {
-	if cloudCredentialDeps.Queries == nil || cloudCredentialDeps.Requester == nil {
-		runtimeLogger().InfoContext(ctx, "cloud credential materialize runtime not configured, skipping")
-		return nil
+func (runtime CloudCredentialRuntime) HandleCloudCredentialMaterialize(ctx context.Context, t *asynq.Task) error {
+	if runtime.Deps.Queries == nil || runtime.Deps.Requester == nil {
+		return fmt.Errorf("cloud credential materialization runtime is not configured")
 	}
 	var p CloudCredentialMaterializePayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
@@ -158,28 +144,27 @@ func HandleCloudCredentialMaterialize(ctx context.Context, t *asynq.Task) error 
 	}
 	switch op {
 	case "delete":
-		return runCloudCredentialDelete(ctx, clusterID, p.Namespace, p.SecretName, "")
+		return runtime.runCloudCredentialDelete(ctx, clusterID, p.Namespace, p.SecretName, "")
 	default:
-		return runCloudCredentialApply(ctx, credentialID, clusterID, p.Namespace, p.SecretName)
+		return runtime.runCloudCredentialApply(ctx, credentialID, clusterID, p.Namespace, p.SecretName)
 	}
 }
 
 // HandleCloudCredentialDriftReconcile is the periodic-sweep handler. It
 // walks every materialization row not in the applied state and retries
 // — apply is idempotent (SSA), so converged rows are a no-op fast-path.
-func HandleCloudCredentialDriftReconcile(ctx context.Context, _ *asynq.Task) error {
+func (runtime CloudCredentialRuntime) HandleCloudCredentialDriftReconcile(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, CloudCredentialDriftReconcileType, func() error {
-		if cloudCredentialDeps.Queries == nil || cloudCredentialDeps.Requester == nil {
-			runtimeLogger().InfoContext(ctx, "cloud credential materialize runtime not configured, skipping drift sweep")
-			return nil
+		if runtime.Deps.Queries == nil || runtime.Deps.Requester == nil {
+			return fmt.Errorf("cloud credential materialization runtime is not configured")
 		}
-		rows, err := cloudCredentialDeps.Queries.ListAllPendingCloudCredentialMaterializations(ctx)
+		rows, err := runtime.Deps.Queries.ListAllPendingCloudCredentialMaterializations(ctx)
 		if err != nil {
 			return fmt.Errorf("list pending materializations: %w", err)
 		}
 		for _, row := range rows {
-			if err := runCloudCredentialApply(ctx, row.CredentialID, row.ClusterID, row.Namespace, row.SecretName); err != nil {
-				runtimeLogger().WarnContext(ctx, "cloud credential drift reconcile error",
+			if err := runtime.runCloudCredentialApply(ctx, row.CredentialID, row.ClusterID, row.Namespace, row.SecretName); err != nil {
+				runtimeLogger(ctx).WarnContext(ctx, "cloud credential drift reconcile error",
 					"credential_id", row.CredentialID.String(),
 					"cluster_id", row.ClusterID.String(),
 					"namespace", row.Namespace,
@@ -192,29 +177,29 @@ func HandleCloudCredentialDriftReconcile(ctx context.Context, _ *asynq.Task) err
 
 // runCloudCredentialApply is the apply-path body, shared by the per-task
 // handler and the periodic sweep.
-func runCloudCredentialApply(ctx context.Context, credentialID, clusterID uuid.UUID, namespace, secretName string) error {
-	cred, err := cloudCredentialDeps.Queries.GetCloudCredentialByID(ctx, credentialID)
+func (runtime CloudCredentialRuntime) runCloudCredentialApply(ctx context.Context, credentialID, clusterID uuid.UUID, namespace, secretName string) error {
+	cred, err := runtime.Deps.Queries.GetCloudCredentialByID(ctx, credentialID)
 	if err != nil {
 		cloudCredentialMaterializationsTotal.WithLabelValues(observability.MetricValues("apply", "", "failure")...).Inc()
 		return fmt.Errorf("load credential: %w", err)
 	}
-	matRow := findMaterializationRow(ctx, credentialID, clusterID, namespace)
+	matRow := runtime.findMaterializationRow(ctx, credentialID, clusterID, namespace)
 	provider := cred.Provider
-	clearBlob, err := decryptAndDecode(cred.DataEncrypted)
+	clearBlob, err := runtime.decryptAndDecode(cred.DataEncrypted)
 	if err != nil {
 		cloudCredentialMaterializationsTotal.WithLabelValues(observability.MetricValues("apply", provider, "failure")...).Inc()
-		_ = markMaterializationFailed(ctx, matRow, fmt.Sprintf("decrypt: %v", err))
+		_ = runtime.markMaterializationFailed(ctx, matRow, fmt.Sprintf("decrypt: %v", err))
 		return err
 	}
 	data := cloudcreds.RenderSecretData(provider, clearBlob)
-	if err := applyCloudCredentialSecret(ctx, clusterID.String(), namespace, secretName, provider, cred.ID, data); err != nil {
+	if err := runtime.applyCloudCredentialSecret(ctx, clusterID.String(), namespace, secretName, provider, cred.ID, data); err != nil {
 		cloudCredentialMaterializationsTotal.WithLabelValues(observability.MetricValues("apply", provider, "failure")...).Inc()
-		_ = markMaterializationFailed(ctx, matRow, err.Error())
+		_ = runtime.markMaterializationFailed(ctx, matRow, err.Error())
 		return err
 	}
 	cloudCredentialMaterializationsTotal.WithLabelValues(observability.MetricValues("apply", provider, "success")...).Inc()
 	if matRow != nil {
-		_ = cloudCredentialDeps.Queries.MarkCloudCredentialMaterializationApplied(ctx, matRow.ID)
+		_ = runtime.Deps.Queries.MarkCloudCredentialMaterializationApplied(ctx, matRow.ID)
 	}
 	return nil
 }
@@ -224,8 +209,8 @@ func runCloudCredentialApply(ctx context.Context, credentialID, clusterID uuid.U
 // (the handler DELETEs the row inside its synchronous response path),
 // so we don't try to mark it applied/failed; the metric label captures
 // the outcome instead.
-func runCloudCredentialDelete(ctx context.Context, clusterID uuid.UUID, namespace, secretName, provider string) error {
-	if err := deleteIfExists(ctx, cloudCredentialDeps.Requester, clusterID.String(), fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, secretName)); err != nil {
+func (runtime CloudCredentialRuntime) runCloudCredentialDelete(ctx context.Context, clusterID uuid.UUID, namespace, secretName, provider string) error {
+	if err := deleteIfExists(ctx, runtime.Deps.Requester, clusterID.String(), fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, secretName)); err != nil {
 		cloudCredentialMaterializationsTotal.WithLabelValues(observability.MetricValues("delete", provider, "failure")...).Inc()
 		return err
 	}
@@ -237,14 +222,14 @@ func runCloudCredentialDelete(ctx context.Context, clusterID uuid.UUID, namespac
 // into a map[string]string. Empty token means "no blob" (legacy rows
 // migrated from an unencrypted state); we return an empty map so the
 // apply produces an empty Secret rather than 500ing.
-func decryptAndDecode(token string) (map[string]string, error) {
+func (runtime CloudCredentialRuntime) decryptAndDecode(token string) (map[string]string, error) {
 	if strings.TrimSpace(token) == "" {
 		return map[string]string{}, nil
 	}
-	if cloudCredentialDeps.Decryptor == nil {
+	if runtime.Deps.Decryptor == nil {
 		return nil, fmt.Errorf("decryptor not configured")
 	}
-	clear, err := cloudCredentialDeps.Decryptor.Decrypt(token)
+	clear, err := runtime.Deps.Decryptor.Decrypt(token)
 	if err != nil {
 		return nil, fmt.Errorf("fernet decrypt: %w", err)
 	}
@@ -255,8 +240,8 @@ func decryptAndDecode(token string) (map[string]string, error) {
 // cluster, namespace) tuple if it exists in the DB, otherwise nil. The
 // drift sweep path always has a row (we iterate over them); the
 // handler-enqueue path may race with a fresh row not yet visible.
-func findMaterializationRow(ctx context.Context, credentialID, clusterID uuid.UUID, namespace string) *sqlc.CloudCredentialMaterialization {
-	rows, err := cloudCredentialDeps.Queries.ListCloudCredentialMaterializations(ctx, credentialID)
+func (runtime CloudCredentialRuntime) findMaterializationRow(ctx context.Context, credentialID, clusterID uuid.UUID, namespace string) *sqlc.CloudCredentialMaterialization {
+	rows, err := runtime.Deps.Queries.ListCloudCredentialMaterializations(ctx, credentialID)
 	if err != nil {
 		return nil
 	}
@@ -273,11 +258,11 @@ func findMaterializationRow(ctx context.Context, credentialID, clusterID uuid.UU
 // so the UI can show "this credential failed to materialize in cluster
 // X: <reason>". Tolerates a nil row (race with row creation) by
 // returning nil — the metric counter already captured the failure.
-func markMaterializationFailed(ctx context.Context, row *sqlc.CloudCredentialMaterialization, errMsg string) error {
+func (runtime CloudCredentialRuntime) markMaterializationFailed(ctx context.Context, row *sqlc.CloudCredentialMaterialization, errMsg string) error {
 	if row == nil {
 		return nil
 	}
-	return cloudCredentialDeps.Queries.MarkCloudCredentialMaterializationFailed(ctx, sqlc.MarkCloudCredentialMaterializationFailedParams{
+	return runtime.Deps.Queries.MarkCloudCredentialMaterializationFailed(ctx, sqlc.MarkCloudCredentialMaterializationFailedParams{
 		ID:        row.ID,
 		LastError: errMsg,
 	})
@@ -287,7 +272,7 @@ func markMaterializationFailed(ctx context.Context, row *sqlc.CloudCredentialMat
 // into the namespace. Type is "Opaque" — k8s base64-encodes the data
 // map automatically when we pass it as `stringData`, but we pre-base64
 // + use `data` to keep the SSA payload deterministic.
-func applyCloudCredentialSecret(ctx context.Context, clusterID, namespace, secretName, provider string, credentialID uuid.UUID, data map[string]string) error {
+func (runtime CloudCredentialRuntime) applyCloudCredentialSecret(ctx context.Context, clusterID, namespace, secretName, provider string, credentialID uuid.UUID, data map[string]string) error {
 	encoded := make(map[string]string, len(data))
 	for k, v := range data {
 		encoded[k] = base64.StdEncoding.EncodeToString([]byte(v))
@@ -316,7 +301,7 @@ func applyCloudCredentialSecret(ctx context.Context, clusterID, namespace, secre
 		fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, secretName),
 		kubeutil.ApplyOptions{FieldManager: cloudCredentialFieldManager, Force: true},
 	)
-	resp, err := cloudCredentialDeps.Requester.Do(ctx, clusterID, http.MethodPatch, path, body, kubeutil.ApplyPatchHeaders())
+	resp, err := runtime.Deps.Requester.Do(ctx, clusterID, http.MethodPatch, path, body, kubeutil.ApplyPatchHeaders())
 	if err != nil {
 		return fmt.Errorf("apply secret: %w", err)
 	}
@@ -325,4 +310,3 @@ func applyCloudCredentialSecret(ctx context.Context, clusterID, namespace, secre
 	}
 	return nil
 }
-

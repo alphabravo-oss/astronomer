@@ -29,18 +29,18 @@ type triggerDispatchQueries interface {
 }
 
 type BridgeInvestigationRequest struct {
-	RequestID        string          `json:"request_id"`
-	AuthorizationRef string          `json:"authorization_ref"`
-	EventType        string          `json:"event_type"`
-	ResourceType     string          `json:"resource_type"`
-	ResourceID       string          `json:"resource_id"`
-	Fingerprint      string          `json:"fingerprint"`
-	RepeatCount      int32           `json:"repeat_count"`
-	FirstOccurredAt  time.Time       `json:"first_occurred_at"`
-	LastOccurredAt   time.Time       `json:"last_occurred_at"`
-	SummaryMetadata  json.RawMessage `json:"summary_metadata"`
-	ProductVersion   string               `json:"product_version"`
-	Platforms        []PlatformAssertion  `json:"platforms"`
+	RequestID        string              `json:"request_id"`
+	AuthorizationRef string              `json:"authorization_ref"`
+	EventType        string              `json:"event_type"`
+	ResourceType     string              `json:"resource_type"`
+	ResourceID       string              `json:"resource_id"`
+	Fingerprint      string              `json:"fingerprint"`
+	RepeatCount      int32               `json:"repeat_count"`
+	FirstOccurredAt  time.Time           `json:"first_occurred_at"`
+	LastOccurredAt   time.Time           `json:"last_occurred_at"`
+	SummaryMetadata  json.RawMessage     `json:"summary_metadata"`
+	ProductVersion   string              `json:"product_version"`
+	Platforms        []PlatformAssertion `json:"platforms"`
 }
 
 type InvestigationBridge interface {

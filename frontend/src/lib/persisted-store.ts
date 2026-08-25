@@ -1,4 +1,4 @@
-import { Store } from '@tanstack/store';
+import { Store } from "@tanstack/store";
 
 export interface PersistedStoreOptions<T> {
   /** localStorage key. */
@@ -35,7 +35,7 @@ export function persistedStore<T extends Record<string, unknown>>(
         // discards the persisted state.
         state = migrate ? migrate(state, envelope.version ?? 0) : undefined;
       }
-      if (state && typeof state === 'object') {
+      if (state && typeof state === "object") {
         seed = { ...initial, ...(state as Partial<T>) };
       }
     }

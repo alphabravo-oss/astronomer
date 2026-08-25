@@ -125,6 +125,22 @@ var (
 		},
 		observability.MetricLabels("status"),
 	)
+	auditOutboxRows = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: dbMetricsNamespace,
+			Name:      "audit_outbox_rows",
+			Help:      "Number of durable transactional audit intents by delivery status.",
+		},
+		observability.MetricLabels("status"),
+	)
+	auditOutboxOldestSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: dbMetricsNamespace,
+			Name:      "audit_outbox_oldest_seconds",
+			Help:      "Age in seconds of the oldest durable transactional audit intent by delivery status.",
+		},
+		observability.MetricLabels("status"),
+	)
 )
 
 type poolMetricsSnapshot struct {
@@ -151,6 +167,14 @@ type taskOutboxStatusSnapshot struct {
 
 var taskOutboxStatuses = []string{"pending", "delivering", "failed", "dead"}
 
+type auditOutboxStatusSnapshot struct {
+	status        string
+	rows          int64
+	oldestSeconds float64
+}
+
+var auditOutboxStatuses = []string{"pending", "delivering", "failed", "dead"}
+
 func registerDBMetrics() {
 	registerDBMetricsOnce.Do(func() {
 		prometheus.MustRegister(
@@ -167,6 +191,8 @@ func registerDBMetrics() {
 			dbLongestTransactionSeconds,
 			taskOutboxRows,
 			taskOutboxOldestDueSeconds,
+			auditOutboxRows,
+			auditOutboxOldestSeconds,
 		)
 	})
 }
@@ -284,6 +310,19 @@ func updateTaskOutboxMetrics(rows []taskOutboxStatusSnapshot) {
 	}
 }
 
+func updateAuditOutboxMetrics(rows []auditOutboxStatusSnapshot) {
+	byStatus := make(map[string]auditOutboxStatusSnapshot, len(rows))
+	for _, row := range rows {
+		byStatus[row.status] = row
+	}
+	for _, status := range auditOutboxStatuses {
+		row := byStatus[status]
+		labels := observability.MetricValues(status)
+		auditOutboxRows.WithLabelValues(labels...).Set(float64(row.rows))
+		auditOutboxOldestSeconds.WithLabelValues(labels...).Set(row.oldestSeconds)
+	}
+}
+
 func snapshotDatabaseRuntimeMetrics(ctx context.Context, pool *pgxpool.Pool) (databaseRuntimeSnapshot, error) {
 	var snap databaseRuntimeSnapshot
 	err := pool.QueryRow(ctx, `
@@ -318,6 +357,35 @@ GROUP BY status
 	for rows.Next() {
 		var snap taskOutboxStatusSnapshot
 		if err := rows.Scan(&snap.status, &snap.rows, &snap.oldestDueSeconds); err != nil {
+			return nil, err
+		}
+		out = append(out, snap)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func snapshotAuditOutboxMetrics(ctx context.Context, pool *pgxpool.Pool) ([]auditOutboxStatusSnapshot, error) {
+	rows, err := pool.Query(ctx, `
+SELECT
+  status,
+  COUNT(*)::bigint,
+  COALESCE(EXTRACT(EPOCH FROM clock_timestamp() - MIN(event_created_at)), 0)::float8
+FROM audit_outbox
+WHERE status IN ('pending', 'delivering', 'failed', 'dead')
+GROUP BY status
+`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []auditOutboxStatusSnapshot{}
+	for rows.Next() {
+		var snap auditOutboxStatusSnapshot
+		if err := rows.Scan(&snap.status, &snap.rows, &snap.oldestSeconds); err != nil {
 			return nil, err
 		}
 		out = append(out, snap)
@@ -465,6 +533,17 @@ func StartMetricsReporter(ctx context.Context, pool *pgxpool.Pool, log *slog.Log
 			return
 		}
 		updateTaskOutboxMetrics(outboxRows)
+
+		auditOutboxCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		auditOutboxRows, err := snapshotAuditOutboxMetrics(auditOutboxCtx, pool)
+		cancel()
+		if err != nil {
+			if log != nil {
+				log.DebugContext(ctx, "failed to collect audit outbox metrics", "error", err)
+			}
+			return
+		}
+		updateAuditOutboxMetrics(auditOutboxRows)
 
 		deliveryCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		deliverySnapshot, err := snapshotDeliveryMetrics(deliveryCtx, pool)

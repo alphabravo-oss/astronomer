@@ -296,7 +296,7 @@ func TestReconcileProjectNamespace_AppliesQuotaAndLabelsNamespace(t *testing.T) 
 	}
 	r := &fakeProjectRequester{}
 
-	if err := reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
+	if err := (ProjectRuntime{}).reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	if q.lastMark == nil {
@@ -371,7 +371,7 @@ func TestReconcileProjectNamespace_DeletesNetworkPolicyOnNoneMode(t *testing.T) 
 		registryConfigErr: errors.New("no rows in result set"),
 	}
 	r := &fakeProjectRequester{}
-	if err := reconcileProjectNamespace(context.Background(), q, r, q.project, uuid.New(), "team-a"); err != nil {
+	if err := (ProjectRuntime{}).reconcileProjectNamespace(context.Background(), q, r, q.project, uuid.New(), "team-a"); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	hasDelete := false
@@ -452,7 +452,7 @@ func TestReconcileProjectNamespace_CapturesErrorOnApplyFailure(t *testing.T) {
 	// Wire the failure on the SECOND call by chaining a wrapper.
 	wrapper := &errOnNthCall{inner: r, n: 2}
 
-	err := reconcileProjectNamespace(context.Background(), q, wrapper, q.project, uuid.New(), "team-a")
+	err := (ProjectRuntime{}).reconcileProjectNamespace(context.Background(), q, wrapper, q.project, uuid.New(), "team-a")
 	if err == nil {
 		t.Fatalf("expected reconcile error to be returned, got nil")
 	}
@@ -482,7 +482,6 @@ func (e *errOnNthCall) Do(ctx context.Context, clusterID, method, path string, b
 // configured with a single fake row. (The full multi-pod contention is left
 // to integration; this test pins the happy-path control flow.)
 func TestHandleProjectReconcileAll_LeasesAndReconcilesOneRow(t *testing.T) {
-	defer ResetProjectReconcile()
 
 	projectID := uuid.New()
 	clusterID := uuid.New()
@@ -498,9 +497,9 @@ func TestHandleProjectReconcileAll_LeasesAndReconcilesOneRow(t *testing.T) {
 		rows: []sqlc.ProjectNamespace{{ProjectID: projectID, ClusterID: clusterID, Namespace: "team-a"}},
 	}
 	r := &fakeProjectRequester{}
-	ConfigureProjectReconcile(ProjectReconcileDeps{Queries: q, Requester: r})
+	runtime := ProjectRuntime{Deps: ProjectReconcileDeps{Queries: q, Requester: r}}
 
-	if err := HandleProjectReconcileAll(context.Background(), nil); err != nil {
+	if err := runtime.HandleProjectReconcileAll(context.Background(), nil); err != nil {
 		t.Fatalf("HandleProjectReconcileAll: %v", err)
 	}
 	if !q.claimed {
@@ -534,11 +533,9 @@ func (s *sweepFakeQuerier) ClaimProjectNamespaceReconcile(_ context.Context, arg
 
 // TestHandleProjectReconcile_RemoveOpDeletesRow checks the cleanup path.
 func TestHandleProjectReconcile_RemoveOpDeletesRow(t *testing.T) {
-	defer ResetProjectReconcile()
-
 	q := &fakeProjectQuerier{}
 	r := &fakeProjectRequester{}
-	ConfigureProjectReconcile(ProjectReconcileDeps{Queries: q, Requester: r})
+	runtime := ProjectRuntime{Deps: ProjectReconcileDeps{Queries: q, Requester: r}}
 
 	task, _ := NewProjectReconcileTask(ProjectReconcilePayload{
 		ProjectID: uuid.NewString(),
@@ -546,7 +543,7 @@ func TestHandleProjectReconcile_RemoveOpDeletesRow(t *testing.T) {
 		Namespace: "team-a",
 		Op:        "remove",
 	})
-	if err := HandleProjectReconcile(context.Background(), task); err != nil {
+	if err := runtime.HandleProjectReconcile(context.Background(), task); err != nil {
 		t.Fatalf("HandleProjectReconcile: %v", err)
 	}
 	// Three best-effort DELETE calls + a label-strip patch.
@@ -581,7 +578,7 @@ func TestReconcileProjectNamespace_PropagatesRegistrySecretAndServiceAccount(t *
 		defaultServiceAccountPullSecrets: []string{"existing-secret"},
 	}
 
-	if err := reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
+	if err := (ProjectRuntime{}).reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 
@@ -700,7 +697,7 @@ func TestReconcileProjectNamespace_AppliesPSSLabels(t *testing.T) {
 		},
 	}
 	r := &fakeProjectRequester{}
-	if err := reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
+	if err := (ProjectRuntime{}).reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 
@@ -750,7 +747,7 @@ func TestReconcileProjectNamespace_AppliesResourceQuota(t *testing.T) {
 		registryConfigErr: errors.New("no rows in result set"),
 	}
 	r := &fakeProjectRequester{}
-	if err := reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
+	if err := (ProjectRuntime{}).reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 
@@ -811,7 +808,7 @@ func TestReconcileProjectNamespace_SkipsQuotaWhenAllEmpty(t *testing.T) {
 		registryConfigErr: errors.New("no rows in result set"),
 	}
 	r := &fakeProjectRequester{}
-	if err := reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
+	if err := (ProjectRuntime{}).reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	for _, c := range r.calls {

@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * Cluster Service Mesh tab — Istio / Linkerd / Kuma / Cilium-mesh detection.
  *
@@ -13,12 +20,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * the auth gate (same as the snapshots page).
  */
 
-import { Link } from '@/lib/link';
-import { useParams } from '@/lib/navigation';
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
-import { PageHeader, PageShell } from '@/components/ui/page';
+import { Link } from "@/lib/link";
+import { useParams } from "@/lib/navigation";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -28,9 +35,9 @@ import {
   RefreshCw,
   Server,
   Shield,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { queryKeys, useCluster } from '@/lib/hooks';
+import { queryKeys, useCluster } from "@/lib/hooks";
 import {
   getServiceMeshInventory,
   getServiceMeshDetection,
@@ -40,24 +47,24 @@ import {
   type ServiceMeshInventory,
   type ServiceMeshPolicyValidation,
   type ServiceMeshKind,
-} from '@/lib/api/cluster-detail';
+} from "@/lib/api/cluster-detail";
 
 // meshLabel maps the backend enum to a human-readable string. Kept as a
 // pure mapping (no JSX) so it can be reused in headers + tile labels.
 function meshLabel(kind: ServiceMeshKind): string {
   switch (kind) {
-    case 'istio':
-      return 'Istio';
-    case 'linkerd':
-      return 'Linkerd';
-    case 'kuma':
-      return 'Kuma';
-    case 'cilium':
-      return 'Cilium Mesh';
-    case 'none':
-      return 'No mesh installed';
+    case "istio":
+      return "Istio";
+    case "linkerd":
+      return "Linkerd";
+    case "kuma":
+      return "Kuma";
+    case "cilium":
+      return "Cilium Mesh";
+    case "none":
+      return "No mesh installed";
     default:
-      return 'Detection pending';
+      return "Detection pending";
   }
 }
 
@@ -65,30 +72,39 @@ function meshLabel(kind: ServiceMeshKind): string {
 // card visually distinguishes between meshes without an icon library.
 function meshAccent(kind: ServiceMeshKind): string {
   switch (kind) {
-    case 'istio':
-      return 'text-status-info';
-    case 'linkerd':
-      return 'text-status-success';
-    case 'kuma':
-      return 'text-purple-500';
-    case 'cilium':
-      return 'text-status-warning';
-    case 'none':
-      return 'text-muted-foreground';
+    case "istio":
+      return "text-status-info";
+    case "linkerd":
+      return "text-status-success";
+    case "kuma":
+      return "text-purple-500";
+    case "cilium":
+      return "text-status-warning";
+    case "none":
+      return "text-muted-foreground";
     default:
-      return 'text-muted-foreground';
+      return "text-muted-foreground";
   }
 }
 
 // ─── Detection hero card ────────────────────────────────────────────────────
-function HeroCard({ detection, clusterId }: { detection: ServiceMeshDetection; clusterId: string }) {
-  const isInstalled = detection.detectedMesh !== 'none' && detection.detectedMesh !== 'unknown';
+function HeroCard({
+  detection,
+  clusterId,
+}: {
+  detection: ServiceMeshDetection;
+  clusterId: string;
+}) {
+  const isInstalled =
+    detection.detectedMesh !== "none" && detection.detectedMesh !== "unknown";
   return (
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-4">
           <div className="rounded-md bg-accent/30 p-2.5">
-            <Network className={`h-6 w-6 ${meshAccent(detection.detectedMesh)}`} />
+            <Network
+              className={`h-6 w-6 ${meshAccent(detection.detectedMesh)}`}
+            />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-foreground">
@@ -99,23 +115,35 @@ function HeroCard({ detection, clusterId }: { detection: ServiceMeshDetection; c
                 <>
                   {detection.detectedVersion ? (
                     <>
-                      Version <span className="font-mono">{detection.detectedVersion}</span>
+                      Version{" "}
+                      <span className="font-mono">
+                        {detection.detectedVersion}
+                      </span>
                       {detection.controlPlaneNamespace && (
                         <>
-                          {' '} at <span className="font-mono">{detection.controlPlaneNamespace}</span>
+                          {" "}
+                          at{" "}
+                          <span className="font-mono">
+                            {detection.controlPlaneNamespace}
+                          </span>
                         </>
                       )}
                     </>
                   ) : detection.controlPlaneNamespace ? (
-                    <>Control plane in <span className="font-mono">{detection.controlPlaneNamespace}</span></>
+                    <>
+                      Control plane in{" "}
+                      <span className="font-mono">
+                        {detection.controlPlaneNamespace}
+                      </span>
+                    </>
                   ) : (
-                    'Detected — version unknown'
+                    "Detected — version unknown"
                   )}
                 </>
-              ) : detection.detectedMesh === 'none' ? (
-                'No service mesh detected on this cluster.'
+              ) : detection.detectedMesh === "none" ? (
+                "No service mesh detected on this cluster."
               ) : (
-                'No detection has run yet; click Re-detect to populate.'
+                "No detection has run yet; click Re-detect to populate."
               )}
             </p>
             {detection.lastError && (
@@ -155,10 +183,16 @@ function HealthTile({
 }) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        {label}
+      </p>
       <p className="text-2xl font-semibold text-foreground mt-1">
         {value}
-        {suffix && <span className="text-sm font-normal text-muted-foreground ml-1">{suffix}</span>}
+        {suffix && (
+          <span className="text-sm font-normal text-muted-foreground ml-1">
+            {suffix}
+          </span>
+        )}
       </p>
       {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
     </div>
@@ -184,30 +218,56 @@ function InventoryPanel({
     <div className="rounded-lg border border-border bg-card overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Mesh resources</h2>
-          <p className="text-xs text-muted-foreground mt-1">{inventory.totalCount} resources tracked</p>
+          <h2 className="text-sm font-semibold text-foreground">
+            Mesh resources
+          </h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            {inventory.totalCount} resources tracked
+          </p>
         </div>
         {inventory.notice && (
-          <span className="text-xs text-status-warning text-right max-w-md">{inventory.notice}</span>
+          <span className="text-xs text-status-warning text-right max-w-md">
+            {inventory.notice}
+          </span>
         )}
       </div>
-      <div className="overflow-x-auto">
+      <div
+        className="overflow-x-auto"
+        role="region"
+        aria-label="Service mesh inventory"
+        tabIndex={0}
+      >
         <Table className="w-full text-sm">
           <TableHeader className="bg-muted/40 text-xs text-muted-foreground">
             <TableRow>
-              <TableHead className="text-left font-medium px-5 py-2.5">Kind</TableHead>
-              <TableHead className="text-left font-medium px-5 py-2.5">API</TableHead>
-              <TableHead className="text-right font-medium px-5 py-2.5">Count</TableHead>
-              <TableHead className="text-left font-medium px-5 py-2.5">Objects</TableHead>
-              <TableHead className="text-left font-medium px-5 py-2.5">Ownership</TableHead>
+              <TableHead className="text-left font-medium px-5 py-2.5">
+                Kind
+              </TableHead>
+              <TableHead className="text-left font-medium px-5 py-2.5">
+                API
+              </TableHead>
+              <TableHead className="text-right font-medium px-5 py-2.5">
+                Count
+              </TableHead>
+              <TableHead className="text-left font-medium px-5 py-2.5">
+                Objects
+              </TableHead>
+              <TableHead className="text-left font-medium px-5 py-2.5">
+                Ownership
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {inventory.resources.map((resource) => {
-              const gitOpsOwned = resource.items.filter((item) => item.readOnly).length;
+              const gitOpsOwned = resource.items.filter(
+                (item) => item.readOnly,
+              ).length;
               const preview = resource.items.slice(0, 3);
               return (
-                <TableRow key={resource.kind} className="border-t border-border">
+                <TableRow
+                  key={resource.kind}
+                  className="border-t border-border"
+                >
                   <TableCell className="px-5 py-3 font-medium text-foreground whitespace-nowrap">
                     {resource.kind}
                   </TableCell>
@@ -219,17 +279,21 @@ function InventoryPanel({
                   </TableCell>
                   <TableCell className="px-5 py-3 min-w-64">
                     {resource.count === 0 ? (
-                      <span className="text-xs text-muted-foreground">{resource.notice || 'None'}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {resource.notice || "None"}
+                      </span>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
                         {preview.map((item) => (
                           <span
-                            key={`${resource.kind}:${item.namespace || '_'}:${item.name}`}
+                            key={`${resource.kind}:${item.namespace || "_"}:${item.name}`}
                             className="inline-flex items-center rounded border border-border px-2 py-1 text-xs text-foreground"
                             title={item.reason || undefined}
                           >
                             {item.namespace && (
-                              <span className="text-muted-foreground mr-1">{item.namespace}/</span>
+                              <span className="text-muted-foreground mr-1">
+                                {item.namespace}/
+                              </span>
                             )}
                             {item.name}
                           </span>
@@ -249,7 +313,9 @@ function InventoryPanel({
                         {gitOpsOwned} GitOps owned
                       </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">Direct edit allowed</span>
+                      <span className="text-xs text-muted-foreground">
+                        Direct edit allowed
+                      </span>
                     )}
                   </TableCell>
                 </TableRow>
@@ -280,11 +346,14 @@ function PolicyValidationPanel({
     <div className="rounded-lg border border-border bg-card overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Policy validation</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            Policy validation
+          </h2>
           {result && (
             <p className="text-xs text-muted-foreground mt-1">
-              {result.kind || 'Object'} {result.namespace ? `${result.namespace}/` : ''}
-              {result.name || ''}
+              {result.kind || "Object"}{" "}
+              {result.namespace ? `${result.namespace}/` : ""}
+              {result.name || ""}
             </p>
           )}
         </div>
@@ -296,7 +365,11 @@ function PolicyValidationPanel({
             border border-border text-foreground hover:bg-accent transition-colors
             disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {validating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+          {validating ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          )}
           Validate
         </button>
       </div>
@@ -321,37 +394,43 @@ spec:
               <div
                 className={`rounded border px-3 py-2 text-xs ${
                   result.applyAllowed
-                    ? 'border-status-success/30 bg-status-success/10 text-status-success'
-                    : 'border-status-warning/30 bg-status-warning/10 text-status-warning'
+                    ? "border-status-success/30 bg-status-success/10 text-status-success"
+                    : "border-status-warning/30 bg-status-warning/10 text-status-warning"
                 }`}
               >
                 {result.applyAllowed
-                  ? 'Validation passed'
+                  ? "Validation passed"
                   : result.readOnly
-                    ? 'GitOps-owned resource'
-                    : 'Validation requires changes'}
+                    ? "GitOps-owned resource"
+                    : "Validation requires changes"}
               </div>
               {findings.length > 0 ? (
                 <div className="space-y-2">
                   {findings.map((finding, index) => (
                     <div
-                      key={`${finding.field || 'finding'}:${index}`}
+                      key={`${finding.field || "finding"}:${index}`}
                       className="rounded border border-border p-3 text-xs"
                     >
                       <div className="font-medium text-foreground">
-                        {finding.severity === 'error' ? 'Error' : 'Warning'}
-                        {finding.field ? `: ${finding.field}` : ''}
+                        {finding.severity === "error" ? "Error" : "Warning"}
+                        {finding.field ? `: ${finding.field}` : ""}
                       </div>
-                      <p className="text-muted-foreground mt-1 leading-relaxed">{finding.message}</p>
+                      <p className="text-muted-foreground mt-1 leading-relaxed">
+                        {finding.message}
+                      </p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">No validation findings.</p>
+                <p className="text-xs text-muted-foreground">
+                  No validation findings.
+                </p>
               )}
             </>
           ) : (
-            <p className="text-xs text-muted-foreground">No validation result.</p>
+            <p className="text-xs text-muted-foreground">
+              No validation result.
+            </p>
           )}
         </div>
       </div>
@@ -364,8 +443,10 @@ function ClusterServiceMeshPage() {
   const params = useParams();
   const clusterId = params.id as string;
   const queryClient = useQueryClient();
-  const [policyYaml, setPolicyYaml] = useState('');
-  const [validationResult, setValidationResult] = useState<ServiceMeshPolicyValidation | undefined>();
+  const [policyYaml, setPolicyYaml] = useState("");
+  const [validationResult, setValidationResult] = useState<
+    ServiceMeshPolicyValidation | undefined
+  >();
 
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
   const { data: detection, isLoading: detLoading } = useQuery({
@@ -390,23 +471,28 @@ function ClusterServiceMeshPage() {
   const reDetect = useMutation({
     mutationFn: () => reDetectServiceMesh(clusterId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.serviceMeshDetection(clusterId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.serviceMeshInventory(clusterId) });
-      toastSuccess('Service-mesh detection refreshed');
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.serviceMeshDetection(clusterId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.serviceMeshInventory(clusterId),
+      });
+      toastSuccess("Service-mesh detection refreshed");
     },
-    onError: (e: Error) => toastApiError('Re-detect failed', e),
+    onError: (e: Error) => toastApiError("Re-detect failed", e),
   });
   const validatePolicy = useMutation({
-    mutationFn: () => validateServiceMeshPolicy(clusterId, { yaml: policyYaml }),
+    mutationFn: () =>
+      validateServiceMeshPolicy(clusterId, { yaml: policyYaml }),
     onSuccess: (result) => {
       setValidationResult(result);
       if (result.valid) {
-        toastSuccess('Policy validation passed');
+        toastSuccess("Policy validation passed");
       } else {
-        toastWarning('Policy validation returned findings');
+        toastWarning("Policy validation returned findings");
       }
     },
-    onError: (e: Error) => toastApiError('Validation failed', e),
+    onError: (e: Error) => toastApiError("Validation failed", e),
   });
 
   if (clusterLoading) {
@@ -460,22 +546,33 @@ function ClusterServiceMeshPage() {
       ) : null}
 
       {/* Health 4-grid (Istio counts when Istio, Linkerd counts when Linkerd) */}
-      {detection && detection.detectedMesh === 'istio' && (
+      {detection && detection.detectedMesh === "istio" && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <HealthTile label="Gateways" value={detection.gatewayCount} />
-          <HealthTile label="VirtualServices" value={detection.virtualServiceCount} />
-          <HealthTile label="DestinationRules" value={detection.destinationRuleCount} />
+          <HealthTile
+            label="VirtualServices"
+            value={detection.virtualServiceCount}
+          />
+          <HealthTile
+            label="DestinationRules"
+            value={detection.destinationRuleCount}
+          />
           <HealthTile
             label="mTLS coverage"
             value={detection.mtlsCoveragePct}
             suffix="%"
-            hint={detection.peerAuthenticationCount + ' PeerAuthentication rules'}
+            hint={
+              detection.peerAuthenticationCount + " PeerAuthentication rules"
+            }
           />
         </div>
       )}
-      {detection && detection.detectedMesh === 'linkerd' && (
+      {detection && detection.detectedMesh === "linkerd" && (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          <HealthTile label="ServiceProfiles" value={detection.serviceProfileCount} />
+          <HealthTile
+            label="ServiceProfiles"
+            value={detection.serviceProfileCount}
+          />
           <HealthTile label="Servers" value={detection.serverAuthCount} />
           <HealthTile
             label="mTLS coverage"
@@ -487,51 +584,60 @@ function ClusterServiceMeshPage() {
       )}
 
       {/* mTLS breakdown link */}
-      {detection && detection.detectedMesh !== 'none' && detection.detectedMesh !== 'unknown' && (
-        <div className="rounded-lg border border-border bg-card p-4 flex items-center justify-between">
-          <div className="flex items-start gap-3">
-            <Shield className="h-5 w-5 text-status-success flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-foreground">mTLS posture</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {detection.mtlsCoveragePct}% of user namespaces covered.
-              </p>
+      {detection &&
+        detection.detectedMesh !== "none" &&
+        detection.detectedMesh !== "unknown" && (
+          <div className="rounded-lg border border-border bg-card p-4 flex items-center justify-between">
+            <div className="flex items-start gap-3">
+              <Shield className="h-5 w-5 text-status-success flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  mTLS posture
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {detection.mtlsCoveragePct}% of user namespaces covered.
+                </p>
+              </div>
             </div>
-          </div>
-          <Link
-            href={`/dashboard/clusters/${clusterId}/service-mesh/mtls/`}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
+            <Link
+              href={`/dashboard/clusters/${clusterId}/service-mesh/mtls/`}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
               border border-border text-foreground hover:bg-accent transition-colors"
-          >
-            View breakdown
-          </Link>
-        </div>
-      )}
+            >
+              View breakdown
+            </Link>
+          </div>
+        )}
 
       <InventoryPanel inventory={inventory} loading={inventoryLoading} />
 
-      {detection && detection.detectedMesh !== 'none' && detection.detectedMesh !== 'unknown' && (
-        <PolicyValidationPanel
-          value={policyYaml}
-          onChange={(value) => {
-            setPolicyYaml(value);
-            setValidationResult(undefined);
-          }}
-          result={validationResult}
-          validating={validatePolicy.isPending}
-          onValidate={() => validatePolicy.mutate()}
-        />
-      )}
+      {detection &&
+        detection.detectedMesh !== "none" &&
+        detection.detectedMesh !== "unknown" && (
+          <PolicyValidationPanel
+            value={policyYaml}
+            onChange={(value) => {
+              setPolicyYaml(value);
+              setValidationResult(undefined);
+            }}
+            result={validationResult}
+            validating={validatePolicy.isPending}
+            onValidate={() => validatePolicy.mutate()}
+          />
+        )}
 
       {/* "no mesh" install CTA already lives in HeroCard; surface a hint here too */}
-      {detection && detection.detectedMesh === 'none' && (
+      {detection && detection.detectedMesh === "none" && (
         <div className="rounded-lg border border-border bg-card p-6 flex items-start gap-3">
           <CheckCircle2 className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-foreground">No service mesh installed</p>
+            <p className="text-sm font-medium text-foreground">
+              No service mesh installed
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Use the catalog to install Istio, Linkerd, Kuma, or Cilium-mesh. The "Install a mesh"
-              button above deep-links to the catalog filtered to service-mesh charts.
+              Use the catalog to install Istio, Linkerd, Kuma, or Cilium-mesh.
+              The "Install a mesh" button above deep-links to the catalog
+              filtered to service-mesh charts.
             </p>
           </div>
         </div>
@@ -540,6 +646,6 @@ function ClusterServiceMeshPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id/service-mesh/')({
+export const Route = createFileRoute("/dashboard/clusters/$id/service-mesh/")({
   component: ClusterServiceMeshPage,
 });

@@ -185,6 +185,49 @@ func (q *Queries) ListControlPlaneSnapshotsByCluster(ctx context.Context, arg Li
 	return items, nil
 }
 
+const listPendingControlPlaneSnapshots = `-- name: ListPendingControlPlaneSnapshots :many
+SELECT id, cluster_id, name, status, location, size_bytes,
+       requested_by_id, error, created_at, completed_at
+FROM control_plane_snapshots
+WHERE status = 'pending'
+ORDER BY created_at ASC
+LIMIT $1
+`
+
+// Crash-repair source for a desired-state row committed before its targeted
+// task reached a tunnel owner. Applying by immutable snapshot ID is
+// idempotent, so the periodic sweep may safely race normal task delivery.
+func (q *Queries) ListPendingControlPlaneSnapshots(ctx context.Context, limit int32) ([]ControlPlaneSnapshot, error) {
+	rows, err := q.db.Query(ctx, listPendingControlPlaneSnapshots, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ControlPlaneSnapshot{}
+	for rows.Next() {
+		var i ControlPlaneSnapshot
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.Name,
+			&i.Status,
+			&i.Location,
+			&i.SizeBytes,
+			&i.RequestedByID,
+			&i.Error,
+			&i.CreatedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRunningControlPlaneSnapshots = `-- name: ListRunningControlPlaneSnapshots :many
 SELECT id, cluster_id, name, status, location, size_bytes,
        requested_by_id, error, created_at, completed_at

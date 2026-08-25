@@ -3,6 +3,16 @@ import react from '@vitejs/plugin-react';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
+function vendorChunk(id: string): string | undefined {
+  if (!id.includes('/node_modules/')) return undefined;
+  if (/\/(react|react-dom|scheduler)\//.test(id)) return 'vendor-react';
+  if (id.includes('/node_modules/@tanstack/')) return 'vendor-tanstack';
+  if (/\/(recharts|d3-[^/]+|victory-vendor)\//.test(id)) return 'vendor-charts';
+  if (/\/(react-markdown|remark-[^/]+|micromark[^/]*|mdast-[^/]*|unified|unist-[^/]*)\//.test(id)) return 'vendor-markdown';
+  if (/\/(lucide-react|cmdk|sonner)\//.test(id)) return 'vendor-ui';
+  return undefined;
+}
+
 export default defineConfig({
   plugins: [
     tanstackRouter({
@@ -23,5 +33,9 @@ export default defineConfig({
   preview: {
     proxy: { '/api': { target: process.env.BACKEND_URL ?? 'http://localhost:8000', ws: true } },
   },
-  build: { outDir: 'dist', chunkSizeWarningLimit: 1500 },
+  build: {
+    outDir: 'dist',
+    chunkSizeWarningLimit: 650,
+    rollupOptions: { output: { manualChunks: vendorChunk } },
+  },
 });

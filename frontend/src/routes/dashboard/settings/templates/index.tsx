@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * /dashboard/settings/templates — list of every notification template
  * registered in the Go `internal/notify` registry. Operators see a
@@ -10,15 +17,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * gated; `SettingsAuthGate` renders the same 403 placeholder the
  * other settings subpages use.
  */
-import { useEffect, useState } from 'react';
-import { Link } from '@/lib/link';
-import { ArrowLeft, Loader2 } from 'lucide-react';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
-import { PageHeader, PageShell } from '@/components/ui/page';
+import { useEffect, useState } from "react";
+import { Link } from "@/lib/link";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   listNotificationTemplates,
-  type NotificationTemplateListItem,
-} from '@/lib/api/settings';
+  type NotificationTemplateListItemView,
+} from "@/lib/api/settings";
 
 function NotificationTemplatesPage() {
   return (
@@ -29,21 +36,28 @@ function NotificationTemplatesPage() {
 }
 
 function NotificationTemplatesList() {
-  const [items, setItems] = useState<NotificationTemplateListItem[] | null>(null);
+  const [items, setItems] = useState<NotificationTemplateListItemView[] | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
     (async () => {
       try {
-        const data = await listNotificationTemplates();
+        const data = await listNotificationTemplates({
+          signal: controller.signal,
+        });
         if (!cancelled) setItems(data);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load');
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : "Failed to load");
       }
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, []);
 
@@ -77,34 +91,47 @@ function NotificationTemplatesList() {
               <TableRow>
                 <TableHead className="px-4 py-2 font-medium">Key</TableHead>
                 <TableHead className="px-4 py-2 font-medium">Channel</TableHead>
-                <TableHead className="px-4 py-2 font-medium">Description</TableHead>
-                <TableHead className="px-4 py-2 font-medium">Override</TableHead>
+                <TableHead className="px-4 py-2 font-medium">
+                  Description
+                </TableHead>
+                <TableHead className="px-4 py-2 font-medium">
+                  Override
+                </TableHead>
                 <TableHead className="px-4 py-2 font-medium" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {(items ?? []).map((t) => (
-                <TableRow key={t.key} className="border-t border-border hover:bg-muted/30">
-                  <TableCell className="px-4 py-2 font-mono text-xs">{t.key}</TableCell>
+                <TableRow
+                  key={t.key}
+                  className="border-t border-border hover:bg-muted/30"
+                >
+                  <TableCell className="px-4 py-2 font-mono text-xs">
+                    {t.key}
+                  </TableCell>
                   <TableCell className="px-4 py-2">
                     <span className="text-xs px-2 py-0.5 rounded-md bg-muted text-foreground">
                       {t.channel}
                     </span>
                   </TableCell>
-                  <TableCell className="px-4 py-2 text-muted-foreground">{t.description}</TableCell>
+                  <TableCell className="px-4 py-2 text-muted-foreground">
+                    {t.description}
+                  </TableCell>
                   <TableCell className="px-4 py-2">
                     {t.hasOverride ? (
                       <span
                         className={`text-xs px-2 py-0.5 rounded-md ${
                           t.enabled
-                            ? 'bg-status-success/15 text-status-success'
-                            : 'bg-status-warning/15 text-status-warning'
+                            ? "bg-status-success/15 text-status-success"
+                            : "bg-status-warning/15 text-status-warning"
                         }`}
                       >
-                        {t.enabled ? 'enabled' : 'disabled'}
+                        {t.enabled ? "enabled" : "disabled"}
                       </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">default</span>
+                      <span className="text-xs text-muted-foreground">
+                        default
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="px-4 py-2 text-right">
@@ -119,7 +146,10 @@ function NotificationTemplatesList() {
               ))}
               {items && items.length === 0 && (
                 <TableRow>
-                  <TableCell className="px-4 py-6 text-center text-muted-foreground" colSpan={5}>
+                  <TableCell
+                    className="px-4 py-6 text-center text-muted-foreground"
+                    colSpan={5}
+                  >
                     No templates registered.
                   </TableCell>
                 </TableRow>
@@ -132,6 +162,6 @@ function NotificationTemplatesList() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/templates/')({
+export const Route = createFileRoute("/dashboard/settings/templates/")({
   component: NotificationTemplatesPage,
 });

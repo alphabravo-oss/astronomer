@@ -85,4 +85,58 @@ func TestOperationIdempotencySQLClaimsWithAtomicUpsert(t *testing.T) {
 			}
 		})
 	}
+	for _, fragment := range []string{
+		"INSERT INTO operation_idempotency_keys (scope, idempotency_key, operation_table, operation_id)",
+		"VALUES ($1, $2, $9, gen_random_uuid())",
+	} {
+		if !strings.Contains(operationIdempotencyClaimCTE, fragment) {
+			t.Fatalf("first idempotency claim does not initialize its operation pointer; missing %q:\n%s", fragment, operationIdempotencyClaimCTE)
+		}
+	}
+}
+
+func TestCatalogOperationDispositionDistinguishesInsertFromReplay(t *testing.T) {
+	tests := map[string]struct {
+		query string
+		table string
+	}{
+		"catalog": {query: createCatalogOperationIdempotentWithDisposition, table: "catalog_operations"},
+		"logging": {query: createLoggingOperationIdempotentWithDisposition, table: "logging_operations"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			for _, fragment := range []string{
+				"true AS inserted FROM inserted",
+				"false AS inserted FROM " + tt.table,
+				"ON CONFLICT (id) DO NOTHING",
+			} {
+				if !strings.Contains(tt.query, fragment) {
+					t.Fatalf("%s idempotency disposition query is missing %q:\n%s", name, fragment, tt.query)
+				}
+			}
+		})
+	}
+}
+
+func TestSpecialOperationQueriesInitializeFirstClaim(t *testing.T) {
+	queries := map[string]struct {
+		query string
+		table string
+	}{
+		"restore":         {query: createRestoreOperationIdempotent, table: "restore_operations"},
+		"deferred":        {query: createDeferredOperationIdempotent, table: "deferred_operations"},
+		"agent lifecycle": {query: createAgentLifecycleOperationIdempotent, table: "agent_lifecycle_operations"},
+	}
+	for name, tt := range queries {
+		t.Run(name, func(t *testing.T) {
+			for _, fragment := range []string{
+				"INSERT INTO operation_idempotency_keys (scope, idempotency_key, operation_table, operation_id)",
+				"VALUES ($1, $2, '" + tt.table + "', gen_random_uuid())",
+			} {
+				if !strings.Contains(tt.query, fragment) {
+					t.Fatalf("first idempotency claim is incomplete; missing %q:\n%s", fragment, tt.query)
+				}
+			}
+		})
+	}
 }

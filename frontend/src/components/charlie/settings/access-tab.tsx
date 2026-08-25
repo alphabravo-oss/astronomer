@@ -8,7 +8,7 @@ import { GrantList, Unavailable } from "./shared";
 export function AccessTab() {
   const q = useQuery({
     queryKey: queryKeys.charlie.adminAccess,
-    queryFn: getCharlieAccess,
+    queryFn: ({ signal }) => getCharlieAccess(signal),
     retry: false,
   });
   if (q.isLoading)

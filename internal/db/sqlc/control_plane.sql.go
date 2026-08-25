@@ -207,13 +207,26 @@ func (q *Queries) DeleteAlertInhibition(ctx context.Context, id uuid.UUID) error
 	return err
 }
 
-const deleteControlPlaneSilence = `-- name: DeleteControlPlaneSilence :exec
+const deleteControlPlaneSilence = `-- name: DeleteControlPlaneSilence :one
 DELETE FROM control_plane_silences WHERE id = $1
+RETURNING id, controller, condition_type, reason, starts_at, ends_at, created_by_id, created_at, updated_at
 `
 
-func (q *Queries) DeleteControlPlaneSilence(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteControlPlaneSilence, id)
-	return err
+func (q *Queries) DeleteControlPlaneSilence(ctx context.Context, id uuid.UUID) (ControlPlaneSilence, error) {
+	row := q.db.QueryRow(ctx, deleteControlPlaneSilence, id)
+	var i ControlPlaneSilence
+	err := row.Scan(
+		&i.ID,
+		&i.Controller,
+		&i.ConditionType,
+		&i.Reason,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getActiveControlPlaneAlert = `-- name: GetActiveControlPlaneAlert :one

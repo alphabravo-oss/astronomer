@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
 /**
  * DIR-02: schema-lite form for ConfigMap create (name + data keys) as an
  * alternative to pure YAML for common day-2 edits. YAML power mode remains
  * available via CreateResourceDialog.
  */
-import { useState } from 'react';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { useK8sCreate } from '@/lib/hooks';
-import { toastApiError, toastSuccess } from '@/lib/toast';
+import { useState } from "react";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { useK8sCreate } from "@/lib/hooks";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 
 type Props = {
   open: boolean;
@@ -17,10 +17,15 @@ type Props = {
   namespace?: string;
 };
 
-export function ConfigMapFormDialog({ open, onClose, clusterId, namespace = 'default' }: Props) {
-  const [name, setName] = useState('');
-  const [key, setKey] = useState('config');
-  const [value, setValue] = useState('');
+export function ConfigMapFormDialog({
+  open,
+  onClose,
+  clusterId,
+  namespace = "default",
+}: Props) {
+  const [name, setName] = useState("");
+  const [key, setKey] = useState("config");
+  const [value, setValue] = useState("");
   const create = useK8sCreate();
 
   if (!open) return null;
@@ -28,10 +33,10 @@ export function ConfigMapFormDialog({ open, onClose, clusterId, namespace = 'def
   const submit = async () => {
     if (!name.trim()) return;
     const body = {
-      apiVersion: 'v1',
-      kind: 'ConfigMap',
+      apiVersion: "v1",
+      kind: "ConfigMap",
       metadata: { name: name.trim(), namespace },
-      data: { [key || 'config']: value },
+      data: { [key || "config"]: value },
     };
     try {
       await create.mutateAsync({
@@ -39,10 +44,10 @@ export function ConfigMapFormDialog({ open, onClose, clusterId, namespace = 'def
         path: `api/v1/namespaces/${namespace}/configmaps`,
         body,
       });
-      toastSuccess('ConfigMap created');
+      toastSuccess("ConfigMap created");
       onClose();
     } catch (e) {
-      toastApiError('ConfigMap create failed', e);
+      toastApiError("ConfigMap create failed", e);
     }
   };
 

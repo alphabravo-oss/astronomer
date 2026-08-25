@@ -45,8 +45,8 @@ func TestIsPublicIP_RejectsCGNAT(t *testing.T) {
 		{"100.64.0.0", false},
 		{"100.64.0.1", false},
 		{"100.127.255.254", false},
-		{"100.63.255.255", true},  // just below CGNAT
-		{"100.128.0.0", true},     // just above CGNAT
+		{"100.63.255.255", true}, // just below CGNAT
+		{"100.128.0.0", true},    // just above CGNAT
 		{"8.8.8.8", true},
 		{"10.0.0.1", false},
 		{"169.254.169.254", false},

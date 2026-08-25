@@ -1,0 +1,80 @@
+name: credentialed adopted-cloud acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag: {description: "Exact v1 release tag being accepted", required: true, type: string}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  acceptance:
+    name: EKS · GKE · AKS · DOKS allow-list rehearsal
+    runs-on: ubuntu-latest
+    environment: cloud-acceptance
+    timeout-minutes: 70
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+
+      - name: Enforce tag-bound producer identity
+        env:
+          TARGET_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/tags/$TARGET_TAG"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with:
+          cosign-release: v2.5.3
+
+      - name: Materialize non-secret adopted target identities
+        env:
+          TARGETS_JSON: ${{ vars.CLOUD_ACCEPTANCE_TARGETS_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "$TARGETS_JSON"
+          umask 077
+          printf '%s' "$TARGETS_JSON" > "$RUNNER_TEMP/cloud-acceptance-targets.json"
+
+      - name: Run fail-safe credentialed acceptance
+        env:
+          ASTRO_BASE_URL: ${{ vars.ASTRO_BASE_URL }}
+          ASTRO_EXPECTED_BASE_URL: ${{ vars.ASTRO_BASE_URL }}
+          ASTRO_AUTH_TOKEN: ${{ secrets.ASTRO_CLOUD_ACCEPTANCE_TOKEN }}
+          CLOUD_ACCEPTANCE_TARGETS: ${{ runner.temp }}/cloud-acceptance-targets.json
+          CLOUD_ACCEPTANCE_CIDR: ${{ secrets.CLOUD_ACCEPTANCE_TEST_CIDR }}
+          CLOUD_ACCEPTANCE_ARTIFACT_DIR: ${{ runner.temp }}/sanitized-cloud-acceptance
+          CLOUD_ACCEPTANCE_TIMEOUT_SECONDS: "600"
+          CLOUD_ACCEPTANCE_TARGET_VERSION: ${{ inputs.tag }}
+          CLOUD_ACCEPTANCE_SOURCE_COMMIT: ${{ github.sha }}
+          CLOUD_ACCEPTANCE_SOURCE_RUN_ID: ${{ github.run_id }}
+        run: ./scripts/validate-cloud-acceptance.py
+
+      - name: Sign sanitized evidence
+        if: always()
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/sanitized-cloud-acceptance/cloud-acceptance.json"
+          test -f "$evidence"
+          cosign sign-blob --yes --bundle "$evidence.sigstore.json" "$evidence"
+
+      - name: Retain sanitized evidence only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cloud-acceptance-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/sanitized-cloud-acceptance/cloud-acceptance.json
+            ${{ runner.temp }}/sanitized-cloud-acceptance/cloud-acceptance.json.sigstore.json
+          if-no-files-found: error
+          retention-days: 90

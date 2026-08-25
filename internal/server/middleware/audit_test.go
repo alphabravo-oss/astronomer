@@ -250,6 +250,26 @@ func TestAuditLogWithWriter_PersistsAuditRow(t *testing.T) {
 	}
 }
 
+func TestAuditLogWithWriter_FailsClosedBeforeMutationWhenIntentCannotPersist(t *testing.T) {
+	called := false
+	handler := AuditLogWithWriter(newTestLogger(&bytes.Buffer{}), &fakeAuditWriter{err: errors.New("database unavailable")})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/660e8400-e29b-41d4-a716-446655440000/", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if called {
+		t.Fatal("mutating handler ran without a durable audit intent")
+	}
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusServiceUnavailable)
+	}
+	if rr.Header().Get("Retry-After") == "" {
+		t.Fatal("audit outage response must be retryable")
+	}
+}
+
 func TestAuditLogWithWriter_CharlieMutationUsesContentFreeContract(t *testing.T) {
 	var buf bytes.Buffer
 	writer := &fakeAuditWriter{}

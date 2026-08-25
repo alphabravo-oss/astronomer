@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
 /**
  * Reset-password — completes a password reset using the one-time `token`
@@ -11,42 +11,50 @@ import { createFileRoute } from '@tanstack/react-router';
  *   - on success → toast + redirect to /auth/login
  */
 
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from '@/lib/navigation';
-import { Link } from '@/lib/link';
-import { Orbit, Eye, EyeOff, Check, AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import { completePasswordReset } from '@/lib/api/account-security';
-import { useAppForm, useStore } from '@/lib/form';
-import { ActionButton } from '@/components/ui/action-button';
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "@/lib/navigation";
+import { Link } from "@/lib/link";
+import {
+  Orbit,
+  Eye,
+  EyeOff,
+  Check,
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+} from "lucide-react";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import { completePasswordReset } from "@/lib/api/account-security";
+import { useAppForm, useStore } from "@/lib/form";
+import { ActionButton } from "@/components/ui/action-button";
 
 function ResetPasswordPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams?.get('token') ?? '';
+  const token = searchParams?.get("token") ?? "";
 
   const [showNext, setShowNext] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [done, setDone] = useState(false);
 
   const form = useAppForm({
-    defaultValues: { next: '', confirm: '' },
+    defaultValues: { next: "", confirm: "" },
     validators: {
       // Old imperative gate (`if (!canSubmit) return`) ported 1:1: token
       // present, new ≥ 12 chars, confirm matches. The button below is
       // additionally disabled on the same checks, exactly as before.
       onSubmit: ({ value }) =>
         !token || value.next.length < 12 || value.next !== value.confirm
-          ? 'Password requirements not met'
+          ? "Password requirements not met"
           : undefined,
     },
     onSubmit: async ({ value }) => {
       try {
         await completePasswordReset(token, value.next);
-        toastSuccess('Password reset — sign in with your new password.');
+        toastSuccess("Password reset — sign in with your new password.");
         setDone(true);
       } catch (err) {
-        toastApiError('', err, 'Reset failed. The link may have expired.');
+        toastApiError("", err, "Reset failed. The link may have expired.");
       }
     },
   });
@@ -63,7 +71,7 @@ function ResetPasswordPage() {
     if (done) {
       // Send the user to /auth/login after a brief pause so they see the
       // success banner.
-      const t = setTimeout(() => router.push('/auth/login'), 2000);
+      const t = setTimeout(() => router.push("/auth/login"), 2000);
       return () => clearTimeout(t);
     }
   }, [done, router]);
@@ -75,9 +83,12 @@ function ResetPasswordPage() {
           <Orbit className="h-8 w-8 text-foreground mx-auto" />
           <div className="rounded-lg border border-status-error/40 bg-status-error/10 p-6 space-y-3">
             <AlertTriangle className="h-6 w-6 text-status-error mx-auto" />
-            <h1 className="text-base font-semibold text-foreground">Invalid reset link</h1>
+            <h1 className="text-base font-semibold text-foreground">
+              Invalid reset link
+            </h1>
             <p className="text-sm text-muted-foreground">
-              This reset link is missing its token. Request a new one to continue.
+              This reset link is missing its token. Request a new one to
+              continue.
             </p>
             <Link
               href="/auth/login/forgot-password"
@@ -97,10 +108,12 @@ function ResetPasswordPage() {
         <div className="flex flex-col items-center gap-2 text-center">
           <Orbit className="h-8 w-8 text-foreground" />
           <h1 className="text-xl font-semibold tracking-tight">
-            {done ? 'Password updated' : 'Choose a new password'}
+            {done ? "Password updated" : "Choose a new password"}
           </h1>
           {!done && (
-            <p className="text-sm text-muted-foreground">At least 12 characters.</p>
+            <p className="text-sm text-muted-foreground">
+              At least 12 characters.
+            </p>
           )}
         </div>
 
@@ -138,13 +151,19 @@ function ResetPasswordPage() {
                   onToggleVisible={() => setShowNext((v) => !v)}
                   hint={
                     next.length === 0
-                      ? 'At least 12 characters.'
+                      ? "At least 12 characters."
                       : !longEnough
-                        ? 'Must be at least 12 characters.'
-                        : 'Looks good.'
+                        ? "Must be at least 12 characters."
+                        : "Looks good."
                   }
-                  hintTone={next.length === 0 ? 'muted' : longEnough ? 'success' : 'danger'}
-                  autoFocus
+                  hintTone={
+                    next.length === 0
+                      ? "muted"
+                      : longEnough
+                        ? "success"
+                        : "danger"
+                  }
+                  data-initial-focus
                 />
               )}
             </form.Field>
@@ -159,12 +178,18 @@ function ResetPasswordPage() {
                   onToggleVisible={() => setShowConfirm((v) => !v)}
                   hint={
                     confirm.length === 0
-                      ? ' '
+                      ? " "
                       : matches
-                        ? 'Matches.'
-                        : 'Does not match the new password.'
+                        ? "Matches."
+                        : "Does not match the new password."
                   }
-                  hintTone={confirm.length === 0 ? 'muted' : matches ? 'success' : 'danger'}
+                  hintTone={
+                    confirm.length === 0
+                      ? "muted"
+                      : matches
+                        ? "success"
+                        : "danger"
+                  }
                 />
               )}
             </form.Field>
@@ -201,7 +226,7 @@ function PasswordField({
   visible,
   onToggleVisible,
   hint,
-  hintTone = 'muted',
+  hintTone = "muted",
   autoFocus,
 }: {
   id: string;
@@ -211,7 +236,7 @@ function PasswordField({
   visible: boolean;
   onToggleVisible: () => void;
   hint?: string;
-  hintTone?: 'muted' | 'success' | 'danger';
+  hintTone?: "muted" | "success" | "danger";
   autoFocus?: boolean;
 }) {
   return (
@@ -222,11 +247,11 @@ function PasswordField({
       <div className="relative">
         <input
           id={id}
-          type={visible ? 'text' : 'password'}
+          type={visible ? "text" : "password"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           autoComplete="new-password"
-          autoFocus={autoFocus}
+          data-initial-focus={autoFocus}
           className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         />
         <button
@@ -234,19 +259,23 @@ function PasswordField({
           onClick={onToggleVisible}
           className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
           tabIndex={-1}
-          aria-label={visible ? 'Hide password' : 'Show password'}
+          aria-label={visible ? "Hide password" : "Show password"}
         >
-          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          {visible ? (
+            <EyeOff className="h-4 w-4" />
+          ) : (
+            <Eye className="h-4 w-4" />
+          )}
         </button>
       </div>
       {hint && (
         <p
           className={
-            hintTone === 'success'
-              ? 'text-xs text-status-success'
-              : hintTone === 'danger'
-                ? 'text-xs text-status-error'
-                : 'text-xs text-muted-foreground'
+            hintTone === "success"
+              ? "text-xs text-status-success"
+              : hintTone === "danger"
+                ? "text-xs text-status-error"
+                : "text-xs text-muted-foreground"
           }
         >
           {hint}
@@ -256,7 +285,7 @@ function PasswordField({
   );
 }
 
-export const Route = createFileRoute('/auth/login/reset-password/')({
+export const Route = createFileRoute("/auth/login/reset-password/")({
   // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
   validateSearch: (search: Record<string, unknown>) =>
     search as { token?: string } & Record<string, unknown>,

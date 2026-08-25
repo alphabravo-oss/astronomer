@@ -67,6 +67,12 @@ SELECT id, cluster_id, step_name, label, status, progress_pct, detail_json, star
 FROM cluster_registration_steps
 WHERE id = $1;
 
+-- name: GetClusterRegistrationStepForUpdate :one
+SELECT id, cluster_id, step_name, label, status, progress_pct, detail_json, started_at, completed_at, error_message, created_at, step_order
+FROM cluster_registration_steps
+WHERE id = $1
+FOR UPDATE;
+
 -- name: MaxStepOrderForCluster :one
 SELECT COALESCE(MAX(step_order), 0)::int
 FROM cluster_registration_steps

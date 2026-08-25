@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -23,15 +24,17 @@ import (
 
 // fakeSettingsQuerier is the in-memory PlatformSettingsQuerier used by
 // the handler tests. The map is keyed by setting key; values are raw
-// JSONB. The audit method (CreateAuditLogV1) is implemented so that
-// recordAudit doesn't no-op silently.
+// JSONB. It implements both direct and outbox audit writes so legacy-path and
+// transaction-bound tests can assert the same handler behavior.
 type fakeSettingsQuerier struct {
-	mu       sync.Mutex
-	user     sqlc.User
-	userErr  error
-	rows     map[string]sqlc.PlatformSetting
-	auditOps []string
-	auditErr error
+	mu           sync.Mutex
+	user         sqlc.User
+	userErr      error
+	rows         map[string]sqlc.PlatformSetting
+	auditOps     []string
+	auditDetails [][]byte
+	auditErr     error
+	outboxErr    error
 }
 
 type fakeCharlieSettingsLifecycle struct {
@@ -109,6 +112,26 @@ func (f *fakeSettingsQuerier) UpsertPlatformSetting(_ context.Context, arg sqlc.
 	return row, nil
 }
 
+func (f *fakeSettingsQuerier) BatchUpsertPlatformSettings(_ context.Context, arg sqlc.BatchUpsertPlatformSettingsParams) ([]sqlc.PlatformSetting, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var input []platformSettingBatchRecord
+	if err := json.Unmarshal(arg.Payload, &input); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	rows := make([]sqlc.PlatformSetting, 0, len(input))
+	for _, item := range input {
+		row := sqlc.PlatformSetting{
+			Key: item.Key, Value: item.Value, Description: item.Description,
+			UpdatedBy: pgtype.UUID{Bytes: arg.UpdatedBy, Valid: true}, UpdatedAt: now,
+		}
+		f.rows[item.Key] = row
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
 func (f *fakeSettingsQuerier) DeletePlatformSetting(_ context.Context, key string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -123,6 +146,44 @@ func (f *fakeSettingsQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.Creat
 	defer f.mu.Unlock()
 	f.auditOps = append(f.auditOps, arg.Action)
 	return f.auditErr
+}
+
+func (f *fakeSettingsQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.outboxErr != nil {
+		return sqlc.AuditOutbox{}, f.outboxErr
+	}
+	f.auditOps = append(f.auditOps, arg.Action)
+	f.auditDetails = append(f.auditDetails, append([]byte(nil), arg.Detail...))
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action, Detail: arg.Detail}, nil
+}
+
+func fakeSettingsRunTx(q *fakeSettingsQuerier) platformSettingsRunTxFunc {
+	return func(_ context.Context, fn func(PlatformSettingsMutationTx) error) error {
+		q.mu.Lock()
+		rows := make(map[string]sqlc.PlatformSetting, len(q.rows))
+		for key, row := range q.rows {
+			row.Value = append([]byte(nil), row.Value...)
+			rows[key] = row
+		}
+		auditOps := append([]string(nil), q.auditOps...)
+		auditDetails := make([][]byte, len(q.auditDetails))
+		for i := range q.auditDetails {
+			auditDetails[i] = append([]byte(nil), q.auditDetails[i]...)
+		}
+		q.mu.Unlock()
+
+		if err := fn(q); err != nil {
+			q.mu.Lock()
+			q.rows = rows
+			q.auditOps = auditOps
+			q.auditDetails = auditDetails
+			q.mu.Unlock()
+			return err
+		}
+		return nil
+	}
 }
 
 // authedRequest builds an httptest request with an injected authenticated user.
@@ -242,6 +303,174 @@ func TestSettings_GetSetDeleteCycle(t *testing.T) {
 		if q.auditOps[i] != a {
 			t.Fatalf("audit ops[%d] = %q, want %q", i, q.auditOps[i], a)
 		}
+	}
+}
+
+func TestSettings_BatchUpdateValidatesBeforeAtomicWrite(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+	h := NewPlatformSettingsHandler(q)
+
+	bad := authedRequest(http.MethodPut, "/api/v1/admin/settings/", callerID, []byte(`{
+		"updates": {
+			"branding.product_name": "Megacorp",
+			"token.max_ttl_min": 0
+		}
+	}`))
+	bw := httptest.NewRecorder()
+	h.BatchUpdate(bw, bad)
+	if bw.Code != http.StatusBadRequest {
+		t.Fatalf("invalid batch status=%d body=%s", bw.Code, bw.Body.String())
+	}
+	if len(q.rows) != 0 {
+		t.Fatalf("invalid batch partially committed rows: %+v", q.rows)
+	}
+
+	good := authedRequest(http.MethodPut, "/api/v1/admin/settings/", callerID, []byte(`{
+		"updates": {
+			"branding.product_name": "Megacorp",
+			"token.max_ttl_min": 1440
+		}
+	}`))
+	gw := httptest.NewRecorder()
+	h.BatchUpdate(gw, good)
+	if gw.Code != http.StatusOK {
+		t.Fatalf("valid batch status=%d body=%s", gw.Code, gw.Body.String())
+	}
+	if len(q.rows) != 2 {
+		t.Fatalf("valid batch wrote %d rows, want 2", len(q.rows))
+	}
+	var envelope struct {
+		Data []settingResponse `json:"data"`
+	}
+	if err := json.Unmarshal(gw.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode batch response: %v", err)
+	}
+	if len(envelope.Data) != 2 || envelope.Data[0].Key != "branding.product_name" || envelope.Data[1].Key != "token.max_ttl_min" {
+		t.Fatalf("batch response is not complete and stable: %+v", envelope.Data)
+	}
+	if len(q.auditOps) != 1 || q.auditOps[0] != "admin.platform_settings.batch_updated" {
+		t.Fatalf("batch audit ops=%v", q.auditOps)
+	}
+}
+
+func TestSettings_TransactionalAuditFailureRollsBackEveryMutation(t *testing.T) {
+	callerID := uuid.New()
+	tests := []struct {
+		name   string
+		seed   map[string]sqlc.PlatformSetting
+		invoke func(*PlatformSettingsHandler, *httptest.ResponseRecorder)
+		assert func(*testing.T, *fakeSettingsQuerier)
+	}{
+		{
+			name: "single update",
+			seed: map[string]sqlc.PlatformSetting{"branding.product_name": {Key: "branding.product_name", Value: json.RawMessage(`"Original"`)}},
+			invoke: func(h *PlatformSettingsHandler, w *httptest.ResponseRecorder) {
+				r := withURLParam(authedRequest(http.MethodPut, "/api/v1/admin/settings/branding.product_name/", callerID, []byte(`{"value":"Replacement"}`)), "key", "branding.product_name")
+				h.Update(w, r)
+			},
+			assert: func(t *testing.T, q *fakeSettingsQuerier) {
+				if got := string(q.rows["branding.product_name"].Value); got != `"Original"` {
+					t.Fatalf("rolled-back value=%s", got)
+				}
+			},
+		},
+		{
+			name: "batch update",
+			seed: map[string]sqlc.PlatformSetting{},
+			invoke: func(h *PlatformSettingsHandler, w *httptest.ResponseRecorder) {
+				r := authedRequest(http.MethodPut, "/api/v1/admin/settings/", callerID, []byte(`{"updates":{"branding.product_name":"Replacement","feature.catalog":false}}`))
+				h.BatchUpdate(w, r)
+			},
+			assert: func(t *testing.T, q *fakeSettingsQuerier) {
+				if len(q.rows) != 0 {
+					t.Fatalf("rolled-back batch retained rows: %+v", q.rows)
+				}
+			},
+		},
+		{
+			name: "reset",
+			seed: map[string]sqlc.PlatformSetting{"branding.product_name": {Key: "branding.product_name", Value: json.RawMessage(`"Original"`)}},
+			invoke: func(h *PlatformSettingsHandler, w *httptest.ResponseRecorder) {
+				r := withURLParam(authedRequest(http.MethodDelete, "/api/v1/admin/settings/branding.product_name/", callerID, nil), "key", "branding.product_name")
+				h.Delete(w, r)
+			},
+			assert: func(t *testing.T, q *fakeSettingsQuerier) {
+				if got := string(q.rows["branding.product_name"].Value); got != `"Original"` {
+					t.Fatalf("rolled-back reset value=%s", got)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+			q.rows = tc.seed
+			q.outboxErr = errors.New("audit-SENTINEL")
+			h := NewPlatformSettingsHandler(q)
+			h.SetRunTx(fakeSettingsRunTx(q))
+			w := httptest.NewRecorder()
+
+			tc.invoke(h, w)
+
+			if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "audit_unavailable") || strings.Contains(w.Body.String(), "audit-SENTINEL") {
+				t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+			}
+			tc.assert(t, q)
+			if len(q.auditOps) != 0 {
+				t.Fatalf("rolled-back audit ops=%v", q.auditOps)
+			}
+		})
+	}
+}
+
+func TestSettings_CacheInvalidatesOnlyAfterTransactionalCommit(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+	q.rows["feature.catalog"] = sqlc.PlatformSetting{Key: "feature.catalog", Value: json.RawMessage(`true`)}
+	cache := NewSettingsCache(q, time.Hour)
+	h := NewPlatformSettingsHandler(q)
+	h.SetRunTx(fakeSettingsRunTx(q))
+	h.SetCache(cache)
+	if !cache.BoolValue(context.Background(), "feature.catalog", false) {
+		t.Fatal("failed to prime true feature value")
+	}
+
+	request := func() *http.Request {
+		return withURLParam(authedRequest(http.MethodPut, "/api/v1/admin/settings/feature.catalog/", callerID, []byte(`{"value":false}`)), "key", "feature.catalog")
+	}
+	q.outboxErr = errors.New("audit unavailable")
+	w := httptest.NewRecorder()
+	h.Update(w, request())
+	if w.Code != http.StatusServiceUnavailable || !cache.BoolValue(context.Background(), "feature.catalog", false) {
+		t.Fatalf("rollback invalidated cache: status=%d value=%t", w.Code, cache.BoolValue(context.Background(), "feature.catalog", false))
+	}
+
+	q.outboxErr = nil
+	w = httptest.NewRecorder()
+	h.Update(w, request())
+	if w.Code != http.StatusOK || cache.BoolValue(context.Background(), "feature.catalog", true) {
+		t.Fatalf("commit did not invalidate cache: status=%d value=%t", w.Code, cache.BoolValue(context.Background(), "feature.catalog", true))
+	}
+}
+
+func TestSettings_TransactionalAuditOmitsConfigurationValues(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+	h := NewPlatformSettingsHandler(q)
+	h.SetRunTx(fakeSettingsRunTx(q))
+	secretLikeValue := "internal-only-SENTINEL"
+	r := withURLParam(authedRequest(http.MethodPut, "/api/v1/admin/settings/banner.login_text/", callerID, []byte(`{"value":"`+secretLikeValue+`"}`)), "key", "banner.login_text")
+	w := httptest.NewRecorder()
+
+	h.Update(w, r)
+
+	if w.Code != http.StatusOK || len(q.auditDetails) != 1 {
+		t.Fatalf("status=%d audit_details=%d body=%s", w.Code, len(q.auditDetails), w.Body.String())
+	}
+	if strings.Contains(string(q.auditDetails[0]), secretLikeValue) || strings.Contains(string(q.auditDetails[0]), "old_value") || strings.Contains(string(q.auditDetails[0]), "new_value") {
+		t.Fatalf("audit detail contains setting material: %s", q.auditDetails[0])
 	}
 }
 
@@ -509,8 +738,11 @@ func TestSettings_FeaturesReturnsOnlyFeatureBooleans(t *testing.T) {
 	if flags["feature.extensions"] {
 		t.Fatalf("feature.extensions default = true, want fail-closed false")
 	}
-	if !flags["feature.fleet_grafana"] {
-		t.Fatalf("feature.fleet_grafana default = false, want true")
+	if !flags["feature.shared_grafana"] {
+		t.Fatalf("feature.shared_grafana default = false, want true")
+	}
+	if flags["feature.fleet_grafana"] != flags["feature.shared_grafana"] {
+		t.Fatalf("deprecated Grafana alias diverged: %+v", flags)
 	}
 	if flags["feature.hosted_loki"] {
 		t.Fatalf("feature.hosted_loki default = true, want fail-closed false")

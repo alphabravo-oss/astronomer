@@ -24,6 +24,10 @@ Anything with a `runbook_url` on a PrometheusRule in
 | `AstronomerWorkerDLQGrowing` | [worker-dlq-growing.md](worker-dlq-growing.md) |
 | `AstronomerTaskOutboxDeadRows` | [task-outbox-stalled.md](task-outbox-stalled.md) |
 | `AstronomerTaskOutboxStalled` | [task-outbox-stalled.md](task-outbox-stalled.md) |
+| `AstronomerAuditOutboxDeadRows` | [audit-outbox-stalled.md](audit-outbox-stalled.md) |
+| `AstronomerAuditOutboxStalled` | [audit-outbox-stalled.md](audit-outbox-stalled.md) |
+| `AstronomerApiserverAllowlistDriftProlonged` | [apiserver-allowlist.md](apiserver-allowlist.md) |
+| `AstronomerApiserverAllowlistProviderAuthorizationFailures` | [apiserver-allowlist.md](apiserver-allowlist.md) |
 | `AstronomerDBPoolExhausted` | [db-pool-exhausted.md](db-pool-exhausted.md) |
 | `AstronomerDBDeadlocks` | [db-runtime-contention.md](db-runtime-contention.md) |
 | `AstronomerDBLongTransaction` | [db-runtime-contention.md](db-runtime-contention.md) |
@@ -50,6 +54,10 @@ Anything with a `runbook_url` on a PrometheusRule in
 
 | Scenario | Runbook |
 |---|---|
+| Production installation and first canary | [production-installation.md](production-installation.md) |
+| Management-plane backup, restore proof, and cutover | [management-backup-and-restore.md](management-backup-and-restore.md) |
+| Redacted support-bundle collection and transfer | [support-bundle.md](support-bundle.md) |
+| Unknown or cross-system incident triage | [troubleshooting-guide.md](troubleshooting-guide.md) |
 | cert-manager renewal stuck | [cert-manager-stuck.md](cert-manager-stuck.md) |
 | Cluster-agent mass disconnect | [cluster-agent-mass-disconnect.md](cluster-agent-mass-disconnect.md) |
 | Redis data loss | [redis-data-loss.md](redis-data-loss.md) |
@@ -65,15 +73,20 @@ Anything with a `runbook_url` on a PrometheusRule in
 
 - DR plan: [`../management-plane-dr-runbook.md`](../management-plane-dr-runbook.md)
 - Upgrade: [`../upgrade-runbook.md`](../upgrade-runbook.md)
+- Air-gapped install and upgrade: [`../airgapped-install.md`](../airgapped-install.md)
 - Secret rotation: [`../secret-rotation-runbook.md`](../secret-rotation-runbook.md)
 - On-call onboarding: [`../oncall-onboarding.md`](../oncall-onboarding.md)
 - Image verification (signing): [`../verify-images.md`](../verify-images.md)
+- Adopted EKS/GKE/AKS/DOKS acceptance: [`cloud-provider-acceptance.md`](cloud-provider-acceptance.md)
+- RC qualification and protected promotion: [`release-candidate-rehearsal.md`](release-candidate-rehearsal.md)
 
-## Stub maturity
+## Release acceptance
 
-Runbooks linked from PrometheusRule alerts (top table) carry first-pass
-operational detail. The bottom table is intentionally stub-level — each
-incident class has the four-section skeleton and the *known correct
-first move*. Flesh each one out when it actually fires in production;
-add timestamps and learnings to the bottom of the file as a "Recent
-incidents" section grows.
+Each release candidate must rehearse installation/upgrade, management backup
+and restore, air-gap verification when supported, support-bundle redaction,
+and the critical alert-linked recovery paths. Retain commands, timestamps,
+request IDs, checksums, release/image identities, achieved RPO/RTO, and the
+named approver. Keep credentials and raw customer payloads out of the record.
+Promotion additionally requires protected, digest-bound external accessibility
+evidence for the NVDA, Narrator, and VoiceOver RC checklists; local automation
+must never synthesize those results.

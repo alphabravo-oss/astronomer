@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import { useMemo } from 'react';
-import { Link } from '@/lib/link';
-import { useRouter } from '@/lib/navigation';
-import { useCISScans } from '@/lib/hooks';
-import { useClusters } from '@/lib/hooks';
-import { useLiveQueryInvalidation } from '@/lib/live/hooks';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { ActionButton } from '@/components/ui/action-button';
-import { formatRelativeTime, cn } from '@/lib/utils';
-import type { CISScanListItem } from '@/types';
+import { useMemo } from "react";
+import { Link } from "@/lib/link";
+import { useRouter } from "@/lib/navigation";
+import { useCISScans } from "@/components/security/hooks";
+import { useClusters } from "@/lib/hooks";
+import { useLiveQueryInvalidation } from "@/lib/live/hooks";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ActionButton } from "@/components/ui/action-button";
+import { formatRelativeTime, cn } from "@/lib/utils";
+import type { CISScanListItem } from "@/types";
 import {
   Plus,
   AlertTriangle,
@@ -18,7 +18,7 @@ import {
   XCircle,
   MinusCircle,
   ShieldCheck,
-} from 'lucide-react';
+} from "lucide-react";
 
 /**
  * CIS Scans tab body. Lives outside `page.tsx` so the parent stays a thin
@@ -34,7 +34,7 @@ export function CISScansTab() {
 
   // Cross-cluster signal: any K8s mutation invalidates the scan list so a
   // newly-completed ingest pops up without a manual refresh.
-  useLiveQueryInvalidation('cluster.k8s_changed', [['cis', 'scans']]);
+  useLiveQueryInvalidation("cluster.k8s_changed", [["cis", "scans"]]);
 
   const clusterById = useMemo(() => {
     const map = new Map<string, string>();
@@ -64,8 +64,8 @@ export function CISScansTab() {
 
   const columns: Column<CISScanListItem>[] = [
     {
-      key: 'cluster',
-      header: 'Cluster',
+      key: "cluster",
+      header: "Cluster",
       accessor: (row) => (
         <span className="font-medium text-foreground text-sm">
           {clusterById.get(row.clusterId) ?? row.clusterId.slice(0, 8)}
@@ -74,16 +74,18 @@ export function CISScansTab() {
       sortAccessor: (row) => clusterById.get(row.clusterId) ?? row.clusterId,
     },
     {
-      key: 'profile',
-      header: 'Profile',
+      key: "profile",
+      header: "Profile",
       accessor: (row) => (
-        <span className="font-mono text-xs text-muted-foreground">{row.scanType}</span>
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.scanType}
+        </span>
       ),
       sortAccessor: (row) => row.scanType,
     },
     {
-      key: 'runAt',
-      header: 'Run At',
+      key: "runAt",
+      header: "Run At",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           {row.completedAt
@@ -96,29 +98,33 @@ export function CISScansTab() {
       sortAccessor: (row) => row.completedAt ?? row.startedAt ?? row.createdAt,
     },
     {
-      key: 'status',
-      header: 'Status',
+      key: "status",
+      header: "Status",
       accessor: (row) => <StatusBadge status={row.status} />,
       sortAccessor: (row) => row.status,
     },
     {
-      key: 'pass',
-      header: 'Pass',
-      align: 'right',
+      key: "pass",
+      header: "Pass",
+      align: "right",
       accessor: (row) => (
-        <span className="tabular-nums text-status-success text-sm">{row.passed ?? 0}</span>
+        <span className="tabular-nums text-status-success text-sm">
+          {row.passed ?? 0}
+        </span>
       ),
       sortAccessor: (row) => row.passed ?? 0,
     },
     {
-      key: 'fail',
-      header: 'Fail',
-      align: 'right',
+      key: "fail",
+      header: "Fail",
+      align: "right",
       accessor: (row) => (
         <span
           className={cn(
-            'tabular-nums text-sm',
-            (row.failed ?? 0) > 0 ? 'text-status-error font-medium' : 'text-muted-foreground',
+            "tabular-nums text-sm",
+            (row.failed ?? 0) > 0
+              ? "text-status-error font-medium"
+              : "text-muted-foreground",
           )}
         >
           {row.failed ?? 0}
@@ -127,14 +133,16 @@ export function CISScansTab() {
       sortAccessor: (row) => row.failed ?? 0,
     },
     {
-      key: 'warn',
-      header: 'Warn',
-      align: 'right',
+      key: "warn",
+      header: "Warn",
+      align: "right",
       accessor: (row) => (
         <span
           className={cn(
-            'tabular-nums text-sm',
-            (row.warned ?? 0) > 0 ? 'text-status-warning' : 'text-muted-foreground',
+            "tabular-nums text-sm",
+            (row.warned ?? 0) > 0
+              ? "text-status-warning"
+              : "text-muted-foreground",
           )}
         >
           {row.warned ?? 0}
@@ -143,17 +151,19 @@ export function CISScansTab() {
       sortAccessor: (row) => row.warned ?? 0,
     },
     {
-      key: 'skip',
-      header: 'Skip',
-      align: 'right',
+      key: "skip",
+      header: "Skip",
+      align: "right",
       accessor: (row) => (
-        <span className="tabular-nums text-sm text-muted-foreground">{row.skipped ?? 0}</span>
+        <span className="tabular-nums text-sm text-muted-foreground">
+          {row.skipped ?? 0}
+        </span>
       ),
       sortAccessor: (row) => row.skipped ?? 0,
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       sortable: false,
       accessor: (row) => (
         <Link
@@ -189,9 +199,9 @@ export function CISScansTab() {
                 No vulnerability reports yet
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Install <strong>trivy-operator</strong> to scan every container image running
-                in your clusters for CVEs. Reports appear here automatically once the
-                operator finishes its first scan window.
+                Install <strong>trivy-operator</strong> to scan every container
+                image running in your clusters for CVEs. Reports appear here
+                automatically once the operator finishes its first scan window.
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
                 <Link
@@ -219,8 +229,9 @@ export function CISScansTab() {
             <AlertTriangle className="h-5 w-5 text-status-error flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-foreground">
-                {recentFailures.reduce((sum, s) => sum + (s.failed ?? 0), 0)} failed checks
-                across {recentFailures.length} recent scan{recentFailures.length === 1 ? '' : 's'}
+                {recentFailures.reduce((sum, s) => sum + (s.failed ?? 0), 0)}{" "}
+                failed checks across {recentFailures.length} recent scan
+                {recentFailures.length === 1 ? "" : "s"}
               </p>
               <ul className="mt-2 space-y-1.5">
                 {recentFailures.map((s) => (
@@ -231,7 +242,9 @@ export function CISScansTab() {
                     >
                       {clusterById.get(s.clusterId) ?? s.clusterId.slice(0, 8)}
                     </Link>
-                    <span className="text-muted-foreground font-mono">{s.scanType}</span>
+                    <span className="text-muted-foreground font-mono">
+                      {s.scanType}
+                    </span>
                     <span className="text-status-error font-medium tabular-nums">
                       {s.failed} failed
                     </span>
@@ -254,12 +267,12 @@ export function CISScansTab() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {scansPage?.total ?? scans.length} historical scan
-          {scans.length === 1 ? '' : 's'} across all clusters
+          {scans.length === 1 ? "" : "s"} across all clusters
         </p>
         <ActionButton
           intent="primary"
           icon={<Plus className="h-4 w-4" />}
-          onClick={() => router.push('/dashboard/security/scans/new')}
+          onClick={() => router.push("/dashboard/security/scans/new")}
         >
           New Scan
         </ActionButton>
@@ -273,7 +286,7 @@ export function CISScansTab() {
         searchPlaceholder="Search scans..."
         emptyMessage={
           isLoading
-            ? 'Loading scans…'
+            ? "Loading scans…"
             : 'No CIS scans yet. Click "New Scan" to run your first benchmark.'
         }
         onRowClick={(row) => router.push(`/dashboard/security/scans/${row.id}`)}
@@ -299,11 +312,36 @@ function ScanAggregateStrip({ scans }: { scans: CISScanListItem[] }) {
 
   if (scans.length === 0) return null;
 
-  const cells: { label: string; value: number; icon: React.ElementType; color: string }[] = [
-    { label: 'Passed', value: totals.passed, icon: CheckCircle2, color: 'text-status-success' },
-    { label: 'Failed', value: totals.failed, icon: XCircle, color: 'text-status-error' },
-    { label: 'Warned', value: totals.warned, icon: AlertTriangle, color: 'text-status-warning' },
-    { label: 'Skipped', value: totals.skipped, icon: MinusCircle, color: 'text-muted-foreground' },
+  const cells: {
+    label: string;
+    value: number;
+    icon: React.ElementType;
+    color: string;
+  }[] = [
+    {
+      label: "Passed",
+      value: totals.passed,
+      icon: CheckCircle2,
+      color: "text-status-success",
+    },
+    {
+      label: "Failed",
+      value: totals.failed,
+      icon: XCircle,
+      color: "text-status-error",
+    },
+    {
+      label: "Warned",
+      value: totals.warned,
+      icon: AlertTriangle,
+      color: "text-status-warning",
+    },
+    {
+      label: "Skipped",
+      value: totals.skipped,
+      icon: MinusCircle,
+      color: "text-muted-foreground",
+    },
   ];
 
   return (
@@ -311,12 +349,20 @@ function ScanAggregateStrip({ scans }: { scans: CISScanListItem[] }) {
       {cells.map((c) => {
         const Icon = c.icon;
         return (
-          <div key={c.label} className="rounded-lg border border-border bg-card p-3">
+          <div
+            key={c.label}
+            className="rounded-lg border border-border bg-card p-3"
+          >
             <div className="flex items-center gap-2">
-              <Icon className={cn('h-4 w-4', c.color)} />
+              <Icon className={cn("h-4 w-4", c.color)} />
               <span className="text-xs text-muted-foreground">{c.label}</span>
             </div>
-            <p className={cn('mt-1 text-2xl font-semibold tabular-nums', c.color)}>
+            <p
+              className={cn(
+                "mt-1 text-2xl font-semibold tabular-nums",
+                c.color,
+              )}
+            >
               {c.value.toLocaleString()}
             </p>
           </div>
@@ -333,5 +379,5 @@ function ScanAggregateStrip({ scans }: { scans: CISScanListItem[] }) {
  * stay in sync.
  */
 export const CIS_NOT_INSTALLED_HINT =
-  'cis-operator is not installed on this cluster. The scan will use the static profile fallback ' +
-  'and may not produce findings until the operator is deployed.';
+  "cis-operator is not installed on this cluster. The scan will use the static profile fallback " +
+  "and may not produce findings until the operator is deployed.";

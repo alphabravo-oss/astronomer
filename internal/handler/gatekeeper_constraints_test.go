@@ -20,6 +20,7 @@ import (
 // --- fakes ---
 
 type fakeGatekeeperQuerier struct {
+	fakeOperationIdempotencyStore
 	authored map[string]sqlc.AuthoredConstraint // key: name
 	upserts  int
 	deletes  int
@@ -49,14 +50,21 @@ func (f *fakeGatekeeperQuerier) GetAuthoredConstraintByName(_ context.Context, a
 
 func (f *fakeGatekeeperQuerier) UpsertAuthoredConstraint(_ context.Context, arg sqlc.UpsertAuthoredConstraintParams) (sqlc.AuthoredConstraint, error) {
 	f.upserts++
+	generation := int64(1)
+	if existing, ok := f.authored[arg.Name]; ok {
+		generation = existing.Generation + 1
+	}
 	c := sqlc.AuthoredConstraint{
-		ID:         uuid.New(),
-		ClusterID:  arg.ClusterID,
-		Name:       arg.Name,
-		Kind:       arg.Kind,
-		ApiVersion: arg.ApiVersion,
-		Yaml:       arg.Yaml,
-		CreatedBy:  arg.CreatedBy,
+		ID:           uuid.New(),
+		ClusterID:    arg.ClusterID,
+		Name:         arg.Name,
+		Kind:         arg.Kind,
+		ApiVersion:   arg.ApiVersion,
+		Yaml:         arg.Yaml,
+		CreatedBy:    arg.CreatedBy,
+		DesiredState: "present",
+		SyncStatus:   "pending",
+		Generation:   generation,
 	}
 	f.authored[arg.Name] = c
 	return c, nil
@@ -88,6 +96,9 @@ func authedConstraintReq(method, target, clusterID string, body any) *http.Reque
 	}
 	req := httptest.NewRequest(method, target, reader)
 	req.Header.Set("Content-Type", "application/json")
+	if method == http.MethodPost || method == http.MethodDelete {
+		req.Header.Set("Idempotency-Key", uuid.NewString())
+	}
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", clusterID)
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rc)
@@ -147,24 +158,104 @@ func decodeConstraintValidation(t *testing.T, body []byte) ConstraintValidationR
 	return env.Data
 }
 
+func TestListConstraintsReturnsAuthoredYAMLAndEnforcementAction(t *testing.T) {
+	clusterID := uuid.New()
+	q := newFakeGatekeeperQuerier()
+	q.authored["must-have-foo"] = sqlc.AuthoredConstraint{
+		ID:         uuid.New(),
+		ClusterID:  clusterID,
+		Name:       "must-have-foo",
+		Kind:       "K8sRequiredFoo",
+		ApiVersion: "constraints.gatekeeper.sh/v1beta1",
+		Yaml:       sampleConstraintYAML,
+	}
+	h := NewGatekeeperConstraintsHandler(q, nil)
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: clustersVerbBindings(clusterID, rbac.VerbRead)})
+
+	rec := httptest.NewRecorder()
+	h.ListConstraints(rec, authedConstraintReq(http.MethodGet, "/", clusterID.String(), nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Data struct {
+			Custom []map[string]any `json:"custom"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Data.Custom) != 1 {
+		t.Fatalf("want one custom constraint, got %#v", response.Data.Custom)
+	}
+	item := response.Data.Custom[0]
+	if item["yaml"] != sampleConstraintYAML {
+		t.Fatalf("authored YAML missing from response: %#v", item)
+	}
+	if item["enforcement_action"] != "dryrun" {
+		t.Fatalf("want dryrun enforcement action, got %#v", item["enforcement_action"])
+	}
+}
+
+func TestListConstraintsSkipsLiveViolationLookupForDeletionIntent(t *testing.T) {
+	clusterID := uuid.New()
+	q := newFakeGatekeeperQuerier()
+	q.authored["must-have-foo"] = sqlc.AuthoredConstraint{
+		ID:           uuid.New(),
+		ClusterID:    clusterID,
+		Name:         "must-have-foo",
+		Kind:         "K8sRequiredFoo",
+		ApiVersion:   "constraints.gatekeeper.sh/v1beta1",
+		Yaml:         sampleConstraintYAML,
+		DesiredState: "absent",
+		SyncStatus:   "pending",
+		Generation:   2,
+	}
+	requester := &stubK8sRequester{}
+	h := NewGatekeeperConstraintsHandler(q, requester)
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: clustersVerbBindings(clusterID, rbac.VerbRead)})
+
+	rec := httptest.NewRecorder()
+	h.ListConstraints(rec, authedConstraintReq(http.MethodGet, "/", clusterID.String(), nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if requests := requester.snapshot(); len(requests) != 0 {
+		t.Fatalf("deletion intent must not trigger a live violation lookup, got %+v", requests)
+	}
+	var response struct {
+		Data struct {
+			Custom []map[string]any `json:"custom"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Data.Custom) != 1 || response.Data.Custom[0]["desired_state"] != "absent" {
+		t.Fatalf("pending deletion must remain visible, got %#v", response.Data.Custom)
+	}
+}
+
 // TestCreateConstraint_ValidTemplateApplies proves a valid ConstraintTemplate
 // is server-side-applied through the tunnel and its authored record persisted.
 func TestCreateConstraint_ValidTemplateApplies(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeGatekeeperQuerier()
 	req := &stubK8sRequester{}
-	h := NewGatekeeperConstraintsHandler(q, req)
-	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: clustersVerbBindings(clusterID, rbac.VerbUpdate)})
+	txq := &transactionalGatekeeperQ{fakeGatekeeperQuerier: q}
+	h := transactionalGatekeeperHandler(txq, clusterID, req)
 
 	rec := httptest.NewRecorder()
 	h.CreateConstraint(rec, authedConstraintReq(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/gatekeeper/constraints/", clusterID.String(), ConstraintYAMLRequest{YAML: validConstraintTemplateYAML}))
 
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status: want 201, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status: want 202, got %d body=%s", rec.Code, rec.Body.String())
 	}
 	resp := decodeConstraintValidation(t, rec.Body.Bytes())
-	if !resp.Valid || !resp.Applied {
-		t.Fatalf("want valid+applied, got %+v", resp)
+	if !resp.Valid || resp.Applied || resp.Status != "pending" {
+		t.Fatalf("want valid queued intent, got %+v", resp)
 	}
 	if resp.Name != "k8srequiredfoo" || resp.Kind != "ConstraintTemplate" {
 		t.Fatalf("unexpected name/kind: %+v", resp)
@@ -172,9 +263,8 @@ func TestCreateConstraint_ValidTemplateApplies(t *testing.T) {
 	if q.upserts != 1 {
 		t.Fatalf("want 1 upsert, got %d", q.upserts)
 	}
-	reqs := req.snapshot()
-	if len(reqs) != 1 || reqs[0].Method != http.MethodPatch {
-		t.Fatalf("want one PATCH apply, got %+v", reqs)
+	if reqs := req.snapshot(); len(reqs) != 0 {
+		t.Fatalf("HTTP path must not apply remotely, got %+v", reqs)
 	}
 }
 
@@ -184,8 +274,8 @@ func TestCreateConstraint_InvalidRegoRejectedWithoutApply(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeGatekeeperQuerier()
 	req := &stubK8sRequester{}
-	h := NewGatekeeperConstraintsHandler(q, req)
-	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: clustersVerbBindings(clusterID, rbac.VerbUpdate)})
+	txq := &transactionalGatekeeperQ{fakeGatekeeperQuerier: q}
+	h := transactionalGatekeeperHandler(txq, clusterID, req)
 
 	rec := httptest.NewRecorder()
 	h.CreateConstraint(rec, authedConstraintReq(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/gatekeeper/constraints/", clusterID.String(), ConstraintYAMLRequest{YAML: invalidRegoConstraintTemplateYAML}))
@@ -254,8 +344,8 @@ func TestDeleteConstraint_RemovesRecordAndClusterResource(t *testing.T) {
 		Yaml:       sampleConstraintYAML,
 	}
 	req := &stubK8sRequester{}
-	h := NewGatekeeperConstraintsHandler(q, req)
-	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: clustersVerbBindings(clusterID, rbac.VerbUpdate)})
+	txq := &transactionalGatekeeperQ{fakeGatekeeperQuerier: q}
+	h := transactionalGatekeeperHandler(txq, clusterID, req)
 
 	r := authedConstraintReq(http.MethodDelete, "/", clusterID.String(), nil)
 	// Add the {name} path param the delete handler reads.
@@ -264,18 +354,17 @@ func TestDeleteConstraint_RemovesRecordAndClusterResource(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	h.DeleteConstraint(rec, r)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status: want 204, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status: want 202, got %d body=%s", rec.Code, rec.Body.String())
 	}
-	if q.deletes != 1 {
-		t.Fatalf("want 1 delete, got %d", q.deletes)
+	if q.deletes != 0 {
+		t.Fatalf("durable delete must retain a tombstone, physical deletes=%d", q.deletes)
 	}
-	if _, ok := q.authored["must-have-foo"]; ok {
-		t.Fatalf("record should be gone after delete")
+	if row := q.authored["must-have-foo"]; row.DesiredState != "absent" || row.SyncStatus != "pending" {
+		t.Fatalf("record should be a pending tombstone after delete, got %+v", row)
 	}
-	reqs := req.snapshot()
-	if len(reqs) != 1 || reqs[0].Method != http.MethodDelete {
-		t.Fatalf("want one DELETE to cluster, got %+v", reqs)
+	if reqs := req.snapshot(); len(reqs) != 0 {
+		t.Fatalf("HTTP path must not delete remotely, got %+v", reqs)
 	}
 }
 

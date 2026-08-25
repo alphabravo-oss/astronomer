@@ -3,11 +3,14 @@ package audit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/netip"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -25,6 +28,8 @@ import (
 type Querier interface {
 	CreateAuditLogV1(ctx context.Context, arg sqlc.CreateAuditLogV1Params) error
 }
+
+var ErrMandatoryPersistenceUnavailable = errors.New("mandatory audit persistence is unavailable")
 
 // Note: callers outside the audit package previously referenced
 // audit.Writer as an interface. The async writer struct (writer.go) now
@@ -111,13 +116,11 @@ func sanitizeValue(v any) any {
 	}
 }
 
-// Record persists an audit event. The call site passes a Querier as the
-// synchronous-fallback path: when the package-level async Writer is
-// installed (see SetWriter in writer.go), the event is enqueued into the
-// async writer's channel and Record returns without a DB round-trip; when
-// no Writer is installed (tests, bootstrap), Record falls back to a direct
-// CreateAuditLogV1 call on the querier — preserving the original
-// pre-async behavior so test fakes that satisfy Querier keep working.
+// Record persists an audit event. Mandatory mutation/auth/system events and
+// sensitive reads always take the synchronous database path. Only ordinary
+// sampled reads may use the bounded async writer. This keeps the batching
+// optimization without allowing a process crash or full channel to erase
+// compliance evidence for a successful mutation.
 //
 // The wire contract (function signature) is unchanged from the
 // pre-async version. Every existing call site continues to work
@@ -130,26 +133,17 @@ func Record(ctx context.Context, q Querier, event Event) {
 		return
 	}
 
-	if w := getDefaultWriter(); w != nil {
+	if w := getDefaultWriter(); w != nil && ClassifyPersistence(row.Action, row.ActionClass) == PersistenceSampledRead {
 		w.Enqueue(row)
-		// Logging the "audit_recorded" event remains synchronous and is
-		// independent of DB persistence — operators rely on this log
-		// line in non-DB observability paths (Loki, journald) so we
-		// emit it whether the row was enqueued or dropped. The dropped
-		// case is separately visible via the dropped_total counter and
-		// a throttled warn log inside Enqueue.
 		emitRecordedLog(row)
 		publishToBus(event, row)
 		return
 	}
 
-	// Sync fallback: callers that initialize the audit package without a
-	// Writer get the original per-request insert. Keeps tests and the
-	// k3d-bootstrap-time path working unchanged.
-	if q == nil {
-		return
-	}
-	if err := q.CreateAuditLogV1(ctx, row); err != nil {
+	// Mandatory path (and bootstrap fallback): publish only after PostgreSQL
+	// confirms the evidence row. A failed insert never emits a misleading
+	// "recorded" log or downstream event.
+	if err := recordMandatoryRow(ctx, q, event, row); err != nil {
 		recordWriteFailure("sync")
 		slog.Default().Warn("audit v1 log insert failed",
 			"source", row.Source,
@@ -160,8 +154,33 @@ func Record(ctx context.Context, q Querier, event Event) {
 		)
 		return
 	}
+}
+
+// RecordMandatory persists compliance evidence synchronously and reports
+// failure to the caller. Sensitive reads/downloads call this before writing
+// response headers so a database outage cannot produce an unaudited export.
+func RecordMandatory(ctx context.Context, q Querier, event Event) error {
+	row, ok := buildRow(event)
+	if !ok {
+		return ErrMandatoryPersistenceUnavailable
+	}
+	if err := recordMandatoryRow(ctx, q, event, row); err != nil {
+		recordWriteFailure("sync")
+		return err
+	}
+	return nil
+}
+
+func recordMandatoryRow(ctx context.Context, q Querier, event Event, row sqlc.CreateAuditLogV1Params) error {
+	if q == nil {
+		return ErrMandatoryPersistenceUnavailable
+	}
+	if err := q.CreateAuditLogV1(ctx, row); err != nil {
+		return err
+	}
 	emitRecordedLog(row)
 	publishToBus(event, row)
+	return nil
 }
 
 // BusPublisher is the optional sink the audit package publishes recorded
@@ -188,6 +207,10 @@ func SetBusPublisher(p BusPublisher) {
 }
 
 func publishToBus(event Event, row sqlc.CreateAuditLogV1Params) {
+	publishToBusWithIdentity(event, row, uuid.Nil, time.Time{})
+}
+
+func publishToBusWithIdentity(event Event, row sqlc.CreateAuditLogV1Params, eventID uuid.UUID, createdAt time.Time) {
 	busPublisherMu.RLock()
 	p := busPublisher
 	busPublisherMu.RUnlock()
@@ -217,6 +240,12 @@ func publishToBus(event Event, row sqlc.CreateAuditLogV1Params) {
 		// so a future caller putting a secret-shaped key in Detail must not leak
 		// it unredacted to external sinks.
 		"detail": SanitizeDetail(event.Detail),
+	}
+	if eventID != uuid.Nil {
+		data["event_id"] = eventID.String()
+	}
+	if !createdAt.IsZero() {
+		data["created_at"] = createdAt.UTC().Format(time.RFC3339Nano)
 	}
 	p.Publish("audit."+row.Action, data)
 }

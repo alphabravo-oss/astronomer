@@ -58,11 +58,10 @@ func NewXClusterAnomalyRecomputeTask() *asynq.Task {
 // HandleXClusterAnomalyRecompute is the asynq handler.
 func HandleXClusterAnomalyRecompute(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, XClusterAnomalyRecomputeType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "xcluster anomaly recompute runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("cross-cluster anomaly runtime is not configured")
 		}
-		q, ok := runtimeDeps.Queries.(xclusterRecomputeQuerier)
+		q, ok := runtimeDependencies(ctx).Queries.(xclusterRecomputeQuerier)
 		if !ok {
 			return fmt.Errorf("xcluster anomaly recompute not supported by runtime querier")
 		}

@@ -71,6 +71,7 @@ UPDATE projects SET
     resource_quota_cpu_limit      = $3,
     resource_quota_memory_limit   = $4,
     resource_quota_pod_count      = $5,
+    network_policy_mode           = $6,
     updated_at                    = now()
 WHERE id = $1
 RETURNING *;

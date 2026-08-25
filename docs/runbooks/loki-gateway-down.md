@@ -9,7 +9,7 @@ are unaffected. Cluster Prometheus scrape continues.
 
 - PrometheusRule expr: Deployment `astronomer-loki-gateway` has
   `spec.replicas > 0` but `status.replicas_available < 1` for 5m.
-- Fluent Bit retries then drops (hosted path). Fleet Grafana Loki panels
+- Fluent Bit retries then drops (hosted path). Shared Grafana Loki panels
   error. `QueryOutput` on system destinations is 501 by design — use Grafana.
 
 ## Triage

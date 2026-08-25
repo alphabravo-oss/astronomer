@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * Cluster "Network & access" tab (migration 070).
  *
@@ -19,12 +26,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * sweep is the eventual-consistency safety net.
  */
 
-import { useMemo, useState } from 'react';
-import { useParams } from '@/lib/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toastError, toastInfo, toastSuccess, toastWarning } from '@/lib/toast';
-import { extractApiErrorMessage } from '@/lib/api/errors';
-import type { AxiosError } from 'axios';
+import { useMemo, useState } from "react";
+import { useParams } from "@/lib/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toastError, toastInfo, toastSuccess, toastWarning } from "@/lib/toast";
+import { extractApiErrorMessage } from "@/lib/api/errors";
+import type { AxiosError } from "axios";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -35,7 +42,7 @@ import {
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
-} from 'lucide-react';
+} from "lucide-react";
 
 import {
   getApiserverAllowlist,
@@ -43,11 +50,11 @@ import {
   reconcileApiserverAllowlist,
   updateApiserverAllowlist,
   type ApiserverAllowlistMode,
-} from '@/lib/api/cluster-detail';
-import { queryKeys } from '@/lib/hooks';
-import { liveFallback } from '@/lib/live/status-store';
-import { useClustersUpdate } from '@/lib/permission-hooks';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+} from "@/lib/api/cluster-detail";
+import { queryKeys } from "@/lib/hooks";
+import { liveFallback } from "@/lib/live/status-store";
+import { useClustersUpdate } from "@/lib/permission-hooks";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 // ─── Mode badge ─────────────────────────────────────────────────────────────
 function ModeBadge({
@@ -57,20 +64,20 @@ function ModeBadge({
   mode: ApiserverAllowlistMode;
   drift: boolean;
 }) {
-  if (mode === 'disabled') {
+  if (mode === "disabled") {
     return (
       <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-gray-100 text-gray-700">
         Apiserver: open
       </span>
     );
   }
-  if (mode === 'enforce') {
+  if (mode === "enforce") {
     return (
       <span
         className={
           drift
-            ? 'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-warning/10 text-status-warning'
-            : 'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-success/10 text-status-success'
+            ? "inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-warning/10 text-status-warning"
+            : "inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-success/10 text-status-success"
         }
       >
         <Lock className="h-3 w-3" /> Apiserver: locked
@@ -85,15 +92,23 @@ function ModeBadge({
 }
 
 // ─── CIDR pill ──────────────────────────────────────────────────────────────
-function CIDRPill({ cidr, removable, onRemove }: { cidr: string; removable?: boolean; onRemove?: () => void }) {
+function CIDRPill({
+  cidr,
+  removable,
+  onRemove,
+}: {
+  cidr: string;
+  removable?: boolean;
+  onRemove?: () => void;
+}) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-mono text-slate-700">
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-mono text-foreground">
       {cidr}
       {removable && onRemove && (
         <button
           type="button"
           onClick={onRemove}
-          className="ml-1 text-slate-500 hover:text-status-error"
+          className="ml-1 text-muted-foreground hover:text-status-error"
           aria-label={`remove ${cidr}`}
         >
           ×
@@ -121,8 +136,9 @@ function ClusterNetworkAccessPage() {
   // Editor state — initialised from the server snapshot on first load.
   const [editing, setEditing] = useState<boolean>(false);
   const [editedCIDRs, setEditedCIDRs] = useState<string[]>([]);
-  const [editedMode, setEditedMode] = useState<ApiserverAllowlistMode>('monitor');
-  const [newCIDR, setNewCIDR] = useState<string>('');
+  const [editedMode, setEditedMode] =
+    useState<ApiserverAllowlistMode>("monitor");
+  const [newCIDR, setNewCIDR] = useState<string>("");
   const [showSnapshots, setShowSnapshots] = useState<boolean>(false);
   const [confirmEnforce, setConfirmEnforce] = useState<boolean>(false);
   const [requireForce, setRequireForce] = useState<boolean>(false);
@@ -131,29 +147,34 @@ function ClusterNetworkAccessPage() {
   useMemo(() => {
     if (data && !editing) {
       setEditedCIDRs(data.operatorCidrs ?? []);
-      setEditedMode(data.mode ?? 'monitor');
+      setEditedMode(data.mode ?? "monitor");
     }
   }, [data, editing]);
 
   const updateMut = useMutation({
-    mutationFn: (body: { cidrs: string[]; mode: ApiserverAllowlistMode; forceApply?: boolean }) =>
-      updateApiserverAllowlist(clusterId, body),
+    mutationFn: (body: {
+      cidrs: string[];
+      mode: ApiserverAllowlistMode;
+      forceApply?: boolean;
+    }) => updateApiserverAllowlist(clusterId, body),
     onSuccess: () => {
-      toastSuccess('Apiserver allow-list updated');
+      toastSuccess("Apiserver allow-list updated");
       setEditing(false);
       setRequireForce(false);
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.apiserverAllowlist(clusterId) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.apiserverAllowlist(clusterId),
+      });
     },
     onError: (err: AxiosError<{ error?: { code?: string } }>) => {
       const code = err.response?.data?.error?.code;
-      if (code === 'mode_change_requires_force') {
+      if (code === "mode_change_requires_force") {
         setRequireForce(true);
         toastWarning(
-          'Enforce mode requires force_apply while drift exists — re-submit to apply anyway.',
+          "Enforce mode requires force_apply while drift exists — re-submit to apply anyway.",
         );
       } else {
         toastError(
-          extractApiErrorMessage(err) ?? 'Failed to update allow-list',
+          extractApiErrorMessage(err) ?? "Failed to update allow-list",
         );
       }
     },
@@ -162,17 +183,18 @@ function ClusterNetworkAccessPage() {
   const reconcileMut = useMutation({
     mutationFn: () => reconcileApiserverAllowlist(clusterId),
     onSuccess: () => {
-      toastSuccess('Reconcile queued');
+      toastSuccess("Reconcile queued");
       // The reconciler runs async; refresh after a short delay.
       setTimeout(
-        () => queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.apiserverAllowlist(clusterId) }),
+        () =>
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.clusterPages.apiserverAllowlist(clusterId),
+          }),
         2_000,
       );
     },
     onError: (err: unknown) => {
-      toastError(
-        extractApiErrorMessage(err) ?? 'Failed to queue reconcile',
-      );
+      toastError(extractApiErrorMessage(err) ?? "Failed to queue reconcile");
     },
   });
 
@@ -184,8 +206,8 @@ function ClusterNetworkAccessPage() {
 
   function handleSave() {
     if (
-      data?.mode === 'monitor' &&
-      editedMode === 'enforce' &&
+      data?.mode === "monitor" &&
+      editedMode === "enforce" &&
       data?.drift &&
       !requireForce
     ) {
@@ -203,7 +225,7 @@ function ClusterNetworkAccessPage() {
     setConfirmEnforce(false);
     updateMut.mutate({
       cidrs: editedCIDRs,
-      mode: 'enforce',
+      mode: "enforce",
       forceApply: true,
     });
   }
@@ -212,16 +234,16 @@ function ClusterNetworkAccessPage() {
     const trimmed = newCIDR.trim();
     if (!trimmed) return;
     if (editedCIDRs.includes(trimmed)) {
-      toastInfo('CIDR already in list');
+      toastInfo("CIDR already in list");
       return;
     }
     setEditedCIDRs([...editedCIDRs, trimmed]);
-    setNewCIDR('');
+    setNewCIDR("");
   }
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 p-6 text-sm text-slate-500">
+      <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading network access…
       </div>
     );
@@ -230,7 +252,8 @@ function ClusterNetworkAccessPage() {
   if (isError || !data) {
     return (
       <div className="p-6 text-sm text-status-error">
-        Failed to load network access. <button onClick={() => refetch()}>Retry</button>
+        Failed to load network access.{" "}
+        <button onClick={() => refetch()}>Retry</button>
       </div>
     );
   }
@@ -244,10 +267,11 @@ function ClusterNetworkAccessPage() {
             Network &amp; access
             <ModeBadge mode={data.mode} drift={data.drift} />
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Manage the operator-defined CIDR allow-list for this cluster&apos;s apiserver.
-            Astronomer&apos;s tunnel egress block is always stamped on top — operators
-            can&apos;t remove it without disabling Astronomer management.
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage the operator-defined CIDR allow-list for this cluster&apos;s
+            apiserver. Astronomer&apos;s tunnel egress block is always stamped
+            on top — operators can&apos;t remove it without disabling Astronomer
+            management.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -256,7 +280,7 @@ function ClusterNetworkAccessPage() {
               <ShieldAlert className="h-3 w-3" /> Drift detected
             </span>
           )}
-          {data.syncStatus === 'synced' && (
+          {data.syncStatus === "synced" && (
             <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-success/10 text-status-success">
               <ShieldCheck className="h-3 w-3" /> Synced
             </span>
@@ -265,11 +289,13 @@ function ClusterNetworkAccessPage() {
             type="button"
             onClick={() => reconcileMut.mutate()}
             disabled={!canWrite || reconcileMut.isPending}
-            title={canWrite ? 'Run reconcile now' : reason}
-            className="inline-flex items-center gap-1 rounded border px-3 py-1 text-sm hover:bg-slate-50 disabled:opacity-50"
+            title={canWrite ? "Run reconcile now" : reason}
+            className="inline-flex items-center gap-1 rounded border px-3 py-1 text-sm hover:bg-muted/30 disabled:opacity-50"
           >
             <RefreshCw
-              className={reconcileMut.isPending ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+              className={
+                reconcileMut.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"
+              }
             />
             Reconcile now
           </button>
@@ -277,20 +303,18 @@ function ClusterNetworkAccessPage() {
       </div>
 
       {/* Detected provider + status row */}
-      <div className="grid grid-cols-3 gap-4 rounded border bg-slate-50 p-4 text-sm">
+      <div className="grid grid-cols-3 gap-4 rounded border bg-muted/30 p-4 text-sm">
         <div>
-          <div className="text-slate-500">Detected provider</div>
+          <div className="text-muted-foreground">Detected provider</div>
           <div className="font-mono">{data.detectedProvider}</div>
         </div>
         <div>
-          <div className="text-slate-500">Sync status</div>
+          <div className="text-muted-foreground">Sync status</div>
           <div className="font-mono">{data.syncStatus}</div>
         </div>
         <div>
-          <div className="text-slate-500">Last reconciled</div>
-          <div className="font-mono">
-            {data.lastReconciledAt ?? '—'}
-          </div>
+          <div className="text-muted-foreground">Last reconciled</div>
+          <div className="font-mono">{data.lastReconciledAt ?? "—"}</div>
         </div>
         {data.lastError && (
           <div className="col-span-3 flex items-start gap-2 rounded bg-status-warning/10 p-2 text-xs text-status-warning">
@@ -310,7 +334,7 @@ function ClusterNetworkAccessPage() {
                 type="button"
                 onClick={() => setEditing(true)}
                 disabled={!canWrite}
-                title={canWrite ? 'Edit' : reason}
+                title={canWrite ? "Edit" : reason}
                 className="text-xs underline disabled:opacity-50"
               >
                 Edit
@@ -346,11 +370,15 @@ function ClusterNetworkAccessPage() {
                 key={c}
                 cidr={c}
                 removable={editing}
-                onRemove={() => setEditedCIDRs(editedCIDRs.filter((x) => x !== c))}
+                onRemove={() =>
+                  setEditedCIDRs(editedCIDRs.filter((x) => x !== c))
+                }
               />
             ))}
             {(editing ? editedCIDRs : data.operatorCidrs).length === 0 && (
-              <span className="text-xs text-slate-400">No operator CIDRs configured.</span>
+              <span className="text-xs text-muted-foreground">
+                No operator CIDRs configured.
+              </span>
             )}
           </div>
           {editing && (
@@ -365,7 +393,7 @@ function ClusterNetworkAccessPage() {
               <button
                 type="button"
                 onClick={handleAddCIDR}
-                className="rounded border px-3 py-1 text-sm hover:bg-slate-50"
+                className="rounded border px-3 py-1 text-sm hover:bg-muted/30"
               >
                 Add
               </button>
@@ -373,11 +401,11 @@ function ClusterNetworkAccessPage() {
           )}
         </div>
 
-        <div className="rounded border bg-slate-50 p-4">
+        <div className="rounded border bg-muted/30 p-4">
           <h2 className="font-medium mb-2 flex items-center gap-1">
             Astronomer egress
             <span
-              className="text-xs text-slate-500"
+              className="text-xs text-muted-foreground"
               title="Astronomer's tunnel egress IPs are stamped onto every cluster's allow-list automatically. Operators cannot remove this block — doing so would brick the tunnel."
             >
               ⓘ
@@ -385,7 +413,9 @@ function ClusterNetworkAccessPage() {
           </h2>
           <div className="flex flex-wrap gap-1 min-h-[2rem]">
             {data.astronomerEgress.length === 0 ? (
-              <span className="text-xs text-slate-400">No egress CIDRs configured.</span>
+              <span className="text-xs text-muted-foreground">
+                No egress CIDRs configured.
+              </span>
             ) : (
               data.astronomerEgress.map((c) => <CIDRPill key={c} cidr={c} />)
             )}
@@ -397,7 +427,7 @@ function ClusterNetworkAccessPage() {
       <div className="rounded border p-4">
         <h2 className="font-medium mb-2">Mode</h2>
         <div className="flex gap-3 text-sm">
-          {(['monitor', 'enforce', 'disabled'] as const).map((m) => (
+          {(["monitor", "enforce", "disabled"] as const).map((m) => (
             <label key={m} className="flex items-center gap-1">
               <input
                 type="radio"
@@ -411,10 +441,10 @@ function ClusterNetworkAccessPage() {
             </label>
           ))}
         </div>
-        <p className="mt-2 text-xs text-slate-500">
-          <strong>monitor</strong>: record drift, never patch.{' '}
-          <strong>enforce</strong>: patch the cloud LB / firewall on every divergence.{' '}
-          <strong>disabled</strong>: no reconciliation.
+        <p className="mt-2 text-xs text-muted-foreground">
+          <strong>monitor</strong>: record drift, never patch.{" "}
+          <strong>enforce</strong>: patch the cloud LB / firewall on every
+          divergence. <strong>disabled</strong>: no reconciliation.
         </p>
       </div>
 
@@ -423,7 +453,7 @@ function ClusterNetworkAccessPage() {
         <h2 className="font-medium mb-2">Effective (last reconcile)</h2>
         <div className="flex flex-wrap gap-1 min-h-[2rem]">
           {data.effective.length === 0 ? (
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-muted-foreground">
               No effective list captured yet — reconcile to populate.
             </span>
           ) : (
@@ -450,7 +480,7 @@ function ClusterNetworkAccessPage() {
         <button
           type="button"
           onClick={() => setShowSnapshots(!showSnapshots)}
-          className="flex w-full items-center justify-between p-3 text-sm font-medium hover:bg-slate-50"
+          className="flex w-full items-center justify-between p-3 text-sm font-medium hover:bg-muted/30"
         >
           <span>Snapshot history</span>
           {showSnapshots ? (
@@ -462,11 +492,13 @@ function ClusterNetworkAccessPage() {
         {showSnapshots && (
           <div className="border-t p-3">
             {snapshots.length === 0 ? (
-              <p className="text-sm text-slate-400">No snapshots captured yet.</p>
+              <p className="text-sm text-muted-foreground">
+                No snapshots captured yet.
+              </p>
             ) : (
               <Table className="w-full text-sm">
                 <TableHeader>
-                  <TableRow className="text-left text-xs text-slate-500">
+                  <TableRow className="text-left text-xs text-muted-foreground">
                     <TableHead className="py-1">Captured</TableHead>
                     <TableHead>Drift</TableHead>
                     <TableHead>Effective</TableHead>
@@ -476,10 +508,16 @@ function ClusterNetworkAccessPage() {
                 <TableBody>
                   {snapshots.map((s) => (
                     <TableRow key={s.id} className="border-t text-xs">
-                      <TableCell className="py-1 font-mono">{s.capturedAt}</TableCell>
-                      <TableCell>{s.drift ? '⚠ yes' : 'no'}</TableCell>
-                      <TableCell className="font-mono">{s.effectiveCidrs.length}</TableCell>
-                      <TableCell className="font-mono">{s.desiredCidrs.length}</TableCell>
+                      <TableCell className="py-1 font-mono">
+                        {s.capturedAt}
+                      </TableCell>
+                      <TableCell>{s.drift ? "⚠ yes" : "no"}</TableCell>
+                      <TableCell className="font-mono">
+                        {s.effectiveCidrs.length}
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        {s.desiredCidrs.length}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -494,7 +532,7 @@ function ClusterNetworkAccessPage() {
         open={confirmEnforce}
         title="Switch to enforce mode?"
         description={
-          'Switching to enforce will patch the cloud LB / firewall on the next reconcile. ' +
+          "Switching to enforce will patch the cloud LB / firewall on the next reconcile. " +
           "If drift exists this can lock out a CIDR that's currently allowed but not in your operator list."
         }
         confirmText="Apply anyway (force)"
@@ -505,6 +543,8 @@ function ClusterNetworkAccessPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id/network-access/')({
-  component: ClusterNetworkAccessPage,
-});
+export const Route = createFileRoute("/dashboard/clusters/$id/network-access/")(
+  {
+    component: ClusterNetworkAccessPage,
+  },
+);

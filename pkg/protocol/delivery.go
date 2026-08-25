@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	DeliveryProtocolVersion       = "2.0"
 	MaxDeliveryAssignments        = 10_000
 	MaxDeliveryDeletions          = 10_000
 	MaxDeliveryCredentialKeys     = 32

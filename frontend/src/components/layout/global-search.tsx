@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from '@/lib/navigation';
-import { Search } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "@/lib/navigation";
+import { Search } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 /**
  * GlobalSearch is the topbar input that opens the cross-cluster search
@@ -18,33 +18,33 @@ import { cn } from '@/lib/utils';
 export function GlobalSearch() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState("");
   // "/" focuses the search input unless the user is already typing in a
   // form control.
   useEffect(() => {
     function onKeydown(e: KeyboardEvent) {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
       const active = document.activeElement;
       const isTypingTarget =
         active instanceof HTMLInputElement ||
         active instanceof HTMLTextAreaElement ||
         active instanceof HTMLSelectElement ||
-        active?.getAttribute('contenteditable') === 'true';
+        active?.getAttribute("contenteditable") === "true";
       if (!isTypingTarget) {
         e.preventDefault();
         inputRef.current?.focus();
         inputRef.current?.select();
       }
     }
-    document.addEventListener('keydown', onKeydown);
-    return () => document.removeEventListener('keydown', onKeydown);
+    document.addEventListener("keydown", onKeydown);
+    return () => document.removeEventListener("keydown", onKeydown);
   }, []);
 
   const submit = () => {
     const q = value.trim();
     const target = q
       ? `/dashboard/search?name=${encodeURIComponent(q)}`
-      : '/dashboard/search';
+      : "/dashboard/search";
     router.push(target);
   };
 
@@ -57,21 +57,21 @@ export function GlobalSearch() {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === "Enter") {
             e.preventDefault();
             submit();
           }
-          if (e.key === 'Escape') {
+          if (e.key === "Escape") {
             inputRef.current?.blur();
           }
         }}
         placeholder="Search resources..."
         aria-label="Global resource search"
         className={cn(
-          'w-full h-8 pl-8 pr-12 rounded-md border border-border bg-background text-sm',
-          'text-foreground placeholder:text-muted-foreground',
-          'focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring',
-          'transition-colors'
+          "w-full h-8 pl-8 pr-12 rounded-md border border-border bg-background text-sm",
+          "text-foreground placeholder:text-muted-foreground",
+          "focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring",
+          "transition-colors",
         )}
       />
       <kbd

@@ -49,7 +49,7 @@ const anomalyEvalSweepPageSize int32 = 500
 // collapsing to the first triggering cluster and stranding recovered clusters'
 // events as perpetually firing.
 func evaluateAnomalyRule(ctx context.Context, rule sqlc.AlertRule, config map[string]any) ([]ruleClusterEval, error) {
-	q, ok := runtimeDeps.Queries.(anomalyEvalQuerier)
+	q, ok := runtimeDependencies(ctx).Queries.(anomalyEvalQuerier)
 	if !ok {
 		// Runtime querier doesn't expose anomaly methods — this
 		// can happen in unit tests using a narrow fake. Treat

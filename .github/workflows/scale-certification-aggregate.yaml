@@ -1,0 +1,131 @@
+name: Aggregate scale certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      evidence_runs:
+        description: JSON array of exactly four objects with profile, run_id, and artifact for the production rungs
+        required: true
+        type: string
+      source_ref:
+        description: Exact trusted ref used by the source workflow, for example refs/heads/main or refs/tags/v1.2.3
+        required: true
+        type: string
+      target_tag:
+        description: Exact v1 release tag certified by this aggregate
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+jobs:
+  verify-rung:
+    strategy:
+      fail-fast: true
+      matrix:
+        evidence: ${{ fromJSON(inputs.evidence_runs) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ matrix.evidence.artifact }}
+          path: rung
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ matrix.evidence.run_id }}
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Verify exact source workflow identity and profile
+        env:
+          EXPECTED_PROFILE: ${{ matrix.evidence.profile }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          TARGET_REF: refs/tags/${{ inputs.target_tag }}
+          CERTIFICATE_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/scale-certification.yaml@${{ inputs.source_ref }}
+        run: |
+          case "$SOURCE_REF" in refs/heads/main|refs/tags/v[0-9]*) ;; *) echo "untrusted source ref: $SOURCE_REF" >&2; exit 1;; esac
+          test "$SOURCE_REF" = "$TARGET_REF"
+          case "$EXPECTED_PROFILE" in estate-100|estate-500|estate-1000|estate-1000-soak) ;; *) echo "invalid production profile" >&2; exit 1;; esac
+          jq -e --arg profile "$EXPECTED_PROFILE" '.profile == $profile and .verdict == "pass"' rung/evidence-manifest.json
+          cosign verify-blob \
+            --bundle rung/evidence-manifest.sigstore.json \
+            --certificate-identity "$CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            rung/evidence-manifest.json
+          verify_manifest_file() {
+            relative_path="$1"
+            expected="$(jq -r --arg path "$relative_path" '.files[] | select(.path == $path) | .sha256' rung/evidence-manifest.json)"
+            test -n "$expected" && test "$expected" != "null"
+            test "$(sha256sum "rung/$relative_path" | cut -d' ' -f1)" = "$expected"
+          }
+          verify_manifest_file "${EXPECTED_PROFILE}.md.json"
+          verify_manifest_file baseline-row.json
+          install -d "verified/$EXPECTED_PROFILE"
+          cp rung/evidence-manifest.json rung/evidence-manifest.sigstore.json rung/baseline-row.json \
+            "rung/${EXPECTED_PROFILE}.md.json" "verified/$EXPECTED_PROFILE/"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verified-scale-rung-${{ matrix.evidence.profile }}
+          path: verified/
+          if-no-files-found: error
+          retention-days: 7
+
+  aggregate:
+    needs: verify-rung
+    runs-on: ubuntu-latest
+    environment: scale-certification
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {ref: "refs/tags/${{ inputs.target_tag }}", persist-credentials: false}
+      - name: Enforce exact tag-bound aggregate producer
+        env: {TARGET_TAG: "${{ inputs.target_tag }}"}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/tags/$TARGET_TAG"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: verified-scale-rung-*
+          path: verified
+          merge-multiple: true
+      - name: Reduce per-component sizing evidence
+        run: |
+          reports=()
+          while IFS= read -r report; do reports+=(--report "$report"); done < <(find verified -name '*.md.json' -print | sort)
+          python3 scripts/reduce-component-sizing.py \
+            "${reports[@]}" \
+            --out component-sizing.json \
+            --docs-table-out component-sizing-table.md
+      - name: Enforce complete same-release production set
+        run: |
+          python3 scripts/aggregate-scale-evidence.py \
+            --input-dir verified \
+            --sizing component-sizing.json \
+            --sizing-docs-table component-sizing-table.md \
+            --target-version "${{ inputs.target_tag }}" \
+            --source-commit "${{ github.sha }}" \
+            --source-run-id "${{ github.run_id }}" \
+            --out certification-set.json
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Keyless sign and verify aggregate
+        env:
+          CERTIFICATE_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/scale-certification-aggregate.yaml@${{ github.ref }}
+        run: |
+          cosign sign-blob --yes --bundle certification-set.sigstore.json certification-set.json
+          cosign verify-blob \
+            --bundle certification-set.sigstore.json \
+            --certificate-identity "$CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            certification-set.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scale-certification-set-${{ github.run_id }}
+          path: |
+            certification-set.json
+            certification-set.sigstore.json
+            component-sizing.json
+            component-sizing-table.md
+          if-no-files-found: error
+          retention-days: 365

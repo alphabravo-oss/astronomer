@@ -239,7 +239,7 @@ func TestCloudCredentialsMaterializeWritesTaskOutbox(t *testing.T) {
 	if !arg.DedupeKey.Valid || arg.DedupeKey.String != wantDedupe {
 		t.Fatalf("dedupe key = %+v, want %s", arg.DedupeKey, wantDedupe)
 	}
-	if arg.QueueName != "default" || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
+	if arg.QueueName != tasks.ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
 		t.Fatalf("outbox options queue/max_retry/max_delivery = %s/%d/%d", arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
 	}
 	var payload tasks.CloudCredentialMaterializePayload
@@ -658,8 +658,8 @@ func TestCloudCreds_ListProvidersPublic(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&env); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(env.Data.Items) != 4 {
-		t.Fatalf("expected 4 providers, got %d", len(env.Data.Items))
+	if len(env.Data.Items) != 5 {
+		t.Fatalf("expected 5 providers, got %d", len(env.Data.Items))
 	}
 }
 

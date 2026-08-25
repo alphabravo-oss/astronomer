@@ -1,18 +1,18 @@
-import { useState } from 'react';
-import { Plus, X } from 'lucide-react';
-import { useCreateAlertSilence } from '@/lib/hooks';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { Select } from '@/components/ui/select';
+import { useState } from "react";
+import { Plus, X } from "lucide-react";
+import { useCreateAlertSilence } from "@/lib/hooks/alerting";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { Select } from "@/components/ui/select";
 
 export function SilenceModal({ onClose }: { onClose: () => void }) {
   const createSilence = useCreateAlertSilence();
   const [form, setForm] = useState({
-    reason: '',
-    duration: '1h',
-    matcherKey: '',
-    matcherValue: '',
+    reason: "",
+    duration: "1h",
+    matcherKey: "",
+    matcherValue: "",
     matchers: {} as Record<string, string>,
   });
 
@@ -21,8 +21,8 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
       setForm((f) => ({
         ...f,
         matchers: { ...f.matchers, [f.matcherKey]: f.matcherValue },
-        matcherKey: '',
-        matcherValue: '',
+        matcherKey: "",
+        matcherValue: "",
       }));
     }
   };
@@ -69,8 +69,14 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
       footerClassName="flex items-center justify-end gap-2"
     >
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Reason</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-3687c503-72"
+        >
+          Reason
+        </label>
         <Input
+          id="field-3687c503-72"
           value={form.reason}
           onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
           placeholder="Scheduled maintenance window"
@@ -78,8 +84,14 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Duration</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-3687c503-81"
+        >
+          Duration
+        </label>
         <Select
+          id="field-3687c503-81"
           value={form.duration}
           onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))}
         >
@@ -94,17 +106,27 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-medium text-foreground">Matchers</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-3687c503-97"
+        >
+          Matchers
+        </label>
         <div className="flex gap-2">
           <Input
+            id="field-3687c503-97"
             value={form.matcherKey}
-            onChange={(e) => setForm((f) => ({ ...f, matcherKey: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, matcherKey: e.target.value }))
+            }
             placeholder="Label name"
             className="h-8 flex-1 font-mono text-xs w-auto"
           />
           <Input
             value={form.matcherValue}
-            onChange={(e) => setForm((f) => ({ ...f, matcherValue: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, matcherValue: e.target.value }))
+            }
             placeholder="Value"
             className="h-8 flex-1 font-mono text-xs w-auto"
           />
@@ -124,7 +146,11 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
                 className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
               >
                 {k}={v}
-                <button type="button" onClick={() => removeMatcher(k)} className="hover:text-foreground">
+                <button
+                  type="button"
+                  onClick={() => removeMatcher(k)}
+                  className="hover:text-foreground"
+                >
                   <X className="h-3 w-3" />
                 </button>
               </span>

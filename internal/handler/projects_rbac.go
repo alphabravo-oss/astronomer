@@ -186,4 +186,3 @@ func userDisplayName(u sqlc.User) string {
 	}
 	return u.ID.String()
 }
-

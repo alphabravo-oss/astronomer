@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "release_line": "1.0.x",
-  "install_mode": "fresh_only",
+  "release_line": "1.1.x",
+  "install_mode": "fresh_and_upgrade",
   "kubernetes": {
     "supported_ranges": [
       {
@@ -71,6 +71,21 @@
       "source-watcher"
     ]
   },
+  "agent": {
+    "minimum_compatible_version": "v1.0.0",
+    "minimum_supported_version": "v1.1.0",
+    "maximum_supported_version_exclusive": "v2.0.0",
+    "future_major_policy": "reject",
+    "support_window_release_lines": 2,
+    "tunnel_protocol": {
+      "minimum": 1,
+      "maximum": 1
+    },
+    "heartbeat_schema": {
+      "minimum": 2,
+      "maximum": 2
+    }
+  },
   "agent_protocol": {
     "name": "astronomer.delivery",
     "supported_ranges": [
@@ -89,7 +104,11 @@
   "postgresql": {
     "supported_majors": [16, 17],
     "tls_required_in_production": true,
-    "migration_mode": "single_initial"
+    "migration_mode": "versioned_incremental",
+    "minimum_upgrade_schema": 1,
+    "target_schema": 26,
+    "reversible_through_schema": 26,
+    "supported_upgrade_release_lines": ["1.0.x", "1.1.x"]
   },
   "browsers": {
     "support_policy": "current_and_previous_stable_at_release",

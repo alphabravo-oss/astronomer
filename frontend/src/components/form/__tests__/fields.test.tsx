@@ -1,16 +1,20 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import { useAppForm } from '@/lib/form';
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useAppForm } from "@/lib/form";
 
 /** Click Save and flush the async form.handleSubmit() microtasks. */
 async function submitForm() {
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
   });
 }
 
-function TextHarness({ onSubmit }: { onSubmit: (value: { host: string }) => void }) {
+function TextHarness({
+  onSubmit,
+}: {
+  onSubmit: (value: { host: string }) => void;
+}) {
   const form = useAppForm({
-    defaultValues: { host: '' },
+    defaultValues: { host: "" },
     onSubmit: ({ value }) => onSubmit(value),
   });
   return (
@@ -23,11 +27,17 @@ function TextHarness({ onSubmit }: { onSubmit: (value: { host: string }) => void
       <form.AppField
         name="host"
         validators={{
-          onChange: ({ value }) => (value.trim() ? undefined : 'Host is required'),
+          onChange: ({ value }) =>
+            value.trim() ? undefined : "Host is required",
         }}
       >
         {(field) => (
-          <field.TextField label="Host" helper="SMTP host" required placeholder="smtp.example.com" />
+          <field.TextField
+            label="Host"
+            helper="SMTP host"
+            required
+            placeholder="smtp.example.com"
+          />
         )}
       </form.AppField>
       <form.AppForm>
@@ -37,55 +47,60 @@ function TextHarness({ onSubmit }: { onSubmit: (value: { host: string }) => void
   );
 }
 
-describe('TextField a11y wiring and error display', () => {
-  it('associates the label via generated id + htmlFor', () => {
+describe("TextField a11y wiring and error display", () => {
+  it("associates the label via generated id + htmlFor", () => {
     render(<TextHarness onSubmit={vi.fn()} />);
     const input = screen.getByLabelText(/Host/);
-    expect(input).toHaveAttribute('placeholder', 'smtp.example.com');
-    expect(screen.getByText('SMTP host')).toBeInTheDocument();
-    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(input).toHaveAttribute("placeholder", "smtp.example.com");
+    expect(screen.getByText("SMTP host")).toBeInTheDocument();
+    expect(input).not.toHaveAttribute("aria-invalid");
   });
 
-  it('shows the validator error with aria-invalid + aria-describedby, replacing the helper', () => {
+  it("shows the validator error with aria-invalid + aria-describedby, replacing the helper", () => {
     render(<TextHarness onSubmit={vi.fn()} />);
     const input = screen.getByLabelText(/Host/);
-    fireEvent.change(input, { target: { value: 'x' } });
-    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.change(input, { target: { value: "x" } });
+    fireEvent.change(input, { target: { value: "" } });
 
-    const error = screen.getByText('Host is required');
-    expect(input).toHaveAttribute('aria-invalid', 'true');
-    expect(input).toHaveAttribute('aria-describedby', error.id);
-    expect(screen.queryByText('SMTP host')).not.toBeInTheDocument();
+    const error = screen.getByText("Host is required");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAttribute("aria-describedby", error.id);
+    expect(screen.queryByText("SMTP host")).not.toBeInTheDocument();
 
     // Fixing the value clears the error and restores the helper.
-    fireEvent.change(input, { target: { value: 'smtp.corp' } });
-    expect(screen.queryByText('Host is required')).not.toBeInTheDocument();
-    expect(screen.getByText('SMTP host')).toBeInTheDocument();
-    expect(input).not.toHaveAttribute('aria-invalid');
+    fireEvent.change(input, { target: { value: "smtp.corp" } });
+    expect(screen.queryByText("Host is required")).not.toBeInTheDocument();
+    expect(screen.getByText("SMTP host")).toBeInTheDocument();
+    expect(input).not.toHaveAttribute("aria-invalid");
   });
 
-  it('disables SubmitButton while invalid and submits the form value when valid', async () => {
+  it("disables SubmitButton while invalid and submits the form value when valid", async () => {
     const onSubmit = vi.fn();
     render(<TextHarness onSubmit={onSubmit} />);
     const input = screen.getByLabelText(/Host/);
-    const button = screen.getByRole('button', { name: 'Save' });
+    const button = screen.getByRole("button", { name: "Save" });
 
-    fireEvent.change(input, { target: { value: 'x' } });
-    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.change(input, { target: { value: "x" } });
+    fireEvent.change(input, { target: { value: "" } });
     expect(button).toBeDisabled();
 
-    fireEvent.change(input, { target: { value: 'smtp.corp' } });
+    fireEvent.change(input, { target: { value: "smtp.corp" } });
     expect(button).not.toBeDisabled();
     await act(async () => {
       fireEvent.click(button);
     });
-    expect(onSubmit).toHaveBeenCalledWith({ host: 'smtp.corp' });
+    expect(onSubmit).toHaveBeenCalledWith({ host: "smtp.corp" });
   });
 });
 
 function ControlsHarness({ onSubmit }: { onSubmit: (value: unknown) => void }) {
   const form = useAppForm({
-    defaultValues: { port: 587, encryption: 'starttls', requireTls: true, prune: false },
+    defaultValues: {
+      port: 587,
+      encryption: "starttls",
+      requireTls: true,
+      prune: false,
+    },
     onSubmit: ({ value }) => onSubmit(value),
   });
   return (
@@ -108,10 +123,20 @@ function ControlsHarness({ onSubmit }: { onSubmit: (value: unknown) => void }) {
         )}
       </form.AppField>
       <form.AppField name="requireTls">
-        {(field) => <field.SwitchField label="Require TLS" helper="Reject non-TLS connections" />}
+        {(field) => (
+          <field.SwitchField
+            label="Require TLS"
+            helper="Reject non-TLS connections"
+          />
+        )}
       </form.AppField>
       <form.AppField name="prune">
-        {(field) => <field.CheckboxField label="Prune resources" helper="Delete removed resources" />}
+        {(field) => (
+          <field.CheckboxField
+            label="Prune resources"
+            helper="Delete removed resources"
+          />
+        )}
       </form.AppField>
       <form.AppForm>
         <form.SubmitButton>Save</form.SubmitButton>
@@ -120,27 +145,31 @@ function ControlsHarness({ onSubmit }: { onSubmit: (value: unknown) => void }) {
   );
 }
 
-describe('Number/Select/Switch/Checkbox fields', () => {
-  it('wires each control to the form value with label association', async () => {
+describe("Number/Select/Switch/Checkbox fields", () => {
+  it("wires each control to the form value with label association", async () => {
     const onSubmit = vi.fn();
     render(<ControlsHarness onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('Port'), { target: { value: '2525' } });
-    fireEvent.change(screen.getByLabelText('Encryption'), { target: { value: 'tls' } });
+    fireEvent.change(screen.getByLabelText("Port"), {
+      target: { value: "2525" },
+    });
+    fireEvent.change(screen.getByLabelText("Encryption"), {
+      target: { value: "tls" },
+    });
 
-    const toggle = screen.getByRole('switch', { name: 'Require TLS' });
-    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    const toggle = screen.getByRole("switch", { name: "Require TLS" });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
     fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveAttribute("aria-checked", "false");
 
-    const checkbox = screen.getByLabelText('Prune resources');
+    const checkbox = screen.getByLabelText("Prune resources");
     fireEvent.click(checkbox);
     expect(checkbox).toBeChecked();
 
     await submitForm();
     expect(onSubmit).toHaveBeenCalledWith({
       port: 2525,
-      encryption: 'tls',
+      encryption: "tls",
       requireTls: false,
       prune: true,
     });

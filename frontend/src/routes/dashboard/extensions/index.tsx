@@ -1,9 +1,16 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -12,9 +19,9 @@ import {
   Puzzle,
   Shield,
   XCircle,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { PageHeader, PageShell } from '@/components/ui/page';
+import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   disableExtension,
   enableExtension,
@@ -25,14 +32,14 @@ import {
   type ExtensionListResponse,
   type ExtensionManifest,
   type ExtensionValidationResponse,
-} from '@/lib/api/extensions';
-import { queryKeys } from '@/lib/hooks';
+} from "@/lib/api/extensions";
+import { queryKeys } from "@/lib/hooks";
 
 function statusClass(status: string, enabled?: boolean) {
-  if (enabled) return 'bg-status-success/10 text-status-success';
-  if (status === 'compatible') return 'bg-muted text-muted-foreground';
-  if (status === 'incompatible') return 'bg-status-error/10 text-status-error';
-  return 'bg-status-warning/10 text-status-warning';
+  if (enabled) return "bg-status-success/10 text-status-success";
+  if (status === "compatible") return "bg-muted text-muted-foreground";
+  if (status === "incompatible") return "bg-status-error/10 text-status-error";
+  return "bg-status-warning/10 text-status-warning";
 }
 
 function FindingList({ findings }: { findings: ExtensionFinding[] }) {
@@ -42,17 +49,24 @@ function FindingList({ findings }: { findings: ExtensionFinding[] }) {
   return (
     <div className="space-y-2">
       {findings.map((finding, index) => (
-        <div key={`${finding.field || 'finding'}:${index}`} className="rounded border border-border p-3">
+        <div
+          key={`${finding.field || "finding"}:${index}`}
+          className="rounded border border-border p-3"
+        >
           <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-            {finding.severity === 'error' ? (
+            {finding.severity === "error" ? (
               <XCircle className="h-3.5 w-3.5 text-status-error" />
             ) : (
               <AlertTriangle className="h-3.5 w-3.5 text-status-warning" />
             )}
-            {finding.severity === 'error' ? 'Error' : 'Warning'}
-            {finding.field && <span className="text-muted-foreground">{finding.field}</span>}
+            {finding.severity === "error" ? "Error" : "Warning"}
+            {finding.field && (
+              <span className="text-muted-foreground">{finding.field}</span>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{finding.message}</p>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+            {finding.message}
+          </p>
         </div>
       ))}
     </div>
@@ -73,42 +87,66 @@ function ExtensionTable({
     <div className="rounded-lg border border-border bg-card overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Installed extensions</h2>
-          <p className="text-xs text-muted-foreground mt-1">{items.length} registered</p>
+          <h2 className="text-sm font-semibold text-foreground">
+            Installed extensions
+          </h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            {items.length} registered
+          </p>
         </div>
       </div>
       {items.length === 0 ? (
-        <div className="p-8 text-center text-sm text-muted-foreground">No extensions installed.</div>
+        <div className="p-8 text-center text-sm text-muted-foreground">
+          No extensions installed.
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <Table className="w-full text-sm">
             <TableHeader className="bg-muted/40 text-xs text-muted-foreground">
               <TableRow>
-                <TableHead className="px-5 py-2.5 text-left font-medium">Name</TableHead>
-                <TableHead className="px-5 py-2.5 text-left font-medium">Version</TableHead>
-                <TableHead className="px-5 py-2.5 text-left font-medium">Permissions</TableHead>
-                <TableHead className="px-5 py-2.5 text-left font-medium">Status</TableHead>
-                <TableHead className="px-5 py-2.5 text-right font-medium">Action</TableHead>
+                <TableHead className="px-5 py-2.5 text-left font-medium">
+                  Name
+                </TableHead>
+                <TableHead className="px-5 py-2.5 text-left font-medium">
+                  Version
+                </TableHead>
+                <TableHead className="px-5 py-2.5 text-left font-medium">
+                  Permissions
+                </TableHead>
+                <TableHead className="px-5 py-2.5 text-left font-medium">
+                  Status
+                </TableHead>
+                <TableHead className="px-5 py-2.5 text-right font-medium">
+                  Action
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((item) => (
                 <TableRow key={item.id} className="border-t border-border">
                   <TableCell className="px-5 py-3">
-                    <div className="font-medium text-foreground">{item.displayName || item.name}</div>
-                    <div className="text-xs text-muted-foreground font-mono">{item.name}</div>
+                    <div className="font-medium text-foreground">
+                      {item.displayName || item.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground font-mono">
+                      {item.name}
+                    </div>
                   </TableCell>
-                  <TableCell className="px-5 py-3 text-muted-foreground whitespace-nowrap">{item.version}</TableCell>
+                  <TableCell className="px-5 py-3 text-muted-foreground whitespace-nowrap">
+                    {item.version}
+                  </TableCell>
                   <TableCell className="px-5 py-3">
                     <div className="flex flex-wrap gap-1.5">
-                      {(item.manifest.permissions ?? []).slice(0, 4).map((permission) => (
-                        <span
-                          key={permission}
-                          className="rounded border border-border px-2 py-1 text-xs text-muted-foreground"
-                        >
-                          {permission}
-                        </span>
-                      ))}
+                      {(item.manifest.permissions ?? [])
+                        .slice(0, 4)
+                        .map((permission) => (
+                          <span
+                            key={permission}
+                            className="rounded border border-border px-2 py-1 text-xs text-muted-foreground"
+                          >
+                            {permission}
+                          </span>
+                        ))}
                       {(item.manifest.permissions ?? []).length > 4 && (
                         <span className="text-xs text-muted-foreground py-1">
                           +{(item.manifest.permissions ?? []).length - 4}
@@ -117,20 +155,26 @@ function ExtensionTable({
                     </div>
                   </TableCell>
                   <TableCell className="px-5 py-3">
-                    <span className={`inline-flex rounded px-2 py-1 text-xs ${statusClass(item.compatibilityStatus, item.enabled)}`}>
-                      {item.enabled ? 'enabled' : item.compatibilityStatus}
+                    <span
+                      className={`inline-flex rounded px-2 py-1 text-xs ${statusClass(item.compatibilityStatus, item.enabled)}`}
+                    >
+                      {item.enabled ? "enabled" : item.compatibilityStatus}
                     </span>
                   </TableCell>
                   <TableCell className="px-5 py-3 text-right">
                     <button
                       type="button"
-                      disabled={toggling || (item.compatibilityStatus !== 'compatible' && !item.enabled)}
+                      disabled={
+                        toggling ||
+                        (item.compatibilityStatus !== "compatible" &&
+                          !item.enabled)
+                      }
                       onClick={() => onToggle(item.name, !item.enabled)}
                       className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
                         border border-border text-foreground hover:bg-accent transition-colors
                         disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {item.enabled ? 'Disable' : 'Enable'}
+                      {item.enabled ? "Disable" : "Enable"}
                     </button>
                   </TableCell>
                 </TableRow>
@@ -145,8 +189,10 @@ function ExtensionTable({
 
 function ExtensionsPage() {
   const queryClient = useQueryClient();
-  const [manifestText, setManifestText] = useState('');
-  const [validation, setValidation] = useState<ExtensionValidationResponse | undefined>();
+  const [manifestText, setManifestText] = useState("");
+  const [validation, setValidation] = useState<
+    ExtensionValidationResponse | undefined
+  >();
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.extensions.list,
@@ -169,27 +215,30 @@ function ExtensionsPage() {
 
   const validate = useMutation({
     mutationFn: async () => {
-      if (!parsedManifest) throw new Error('Manifest must be valid JSON');
+      if (!parsedManifest) throw new Error("Manifest must be valid JSON");
       return validateExtensionManifest(parsedManifest);
     },
     onSuccess: (result) => {
       setValidation(result);
-      if (result.valid) toastSuccess('Extension manifest is valid');
-      else toastWarning('Extension manifest has findings');
+      if (result.valid) toastSuccess("Extension manifest is valid");
+      else toastWarning("Extension manifest has findings");
     },
-    onError: (error: Error) => toastApiError('', error),
+    onError: (error: Error) => toastApiError("", error),
   });
 
   const install = useMutation({
     mutationFn: async () => {
-      if (!parsedManifest) throw new Error('Manifest must be valid JSON');
-      return installExtension(parsedManifest, { source: 'manual', enable: validation?.valid ?? false });
+      if (!parsedManifest) throw new Error("Manifest must be valid JSON");
+      return installExtension(parsedManifest, {
+        source: "manual",
+        enable: validation?.valid ?? false,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.extensions.list });
-      toastSuccess('Extension installed');
+      toastSuccess("Extension installed");
     },
-    onError: (error: Error) => toastApiError('', error),
+    onError: (error: Error) => toastApiError("", error),
   });
 
   const toggle = useMutation({
@@ -197,9 +246,9 @@ function ExtensionsPage() {
       enabled ? enableExtension(name) : disableExtension(name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.extensions.list });
-      toastSuccess('Extension updated');
+      toastSuccess("Extension updated");
     },
-    onError: (error: Error) => toastApiError('', error),
+    onError: (error: Error) => toastApiError("", error),
   });
 
   return (
@@ -230,9 +279,11 @@ function ExtensionsPage() {
         <div className="rounded-lg border border-border bg-card overflow-hidden">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Manifest</h2>
+              <h2 className="text-sm font-semibold text-foreground">
+                Manifest
+              </h2>
               <p className="text-xs text-muted-foreground mt-1">
-                {parsedManifest?.name || 'No manifest loaded'}
+                {parsedManifest?.name || "No manifest loaded"}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -244,23 +295,36 @@ function ExtensionsPage() {
                   border border-border text-foreground hover:bg-accent transition-colors
                   disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {validate.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                {validate.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                )}
                 Validate
               </button>
               <button
                 type="button"
                 onClick={() => install.mutate()}
-                disabled={install.isPending || !validation?.valid || validation.compatibilityStatus !== 'compatible'}
+                disabled={
+                  install.isPending ||
+                  !validation?.valid ||
+                  validation.compatibilityStatus !== "compatible"
+                }
                 className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
                   bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
                   disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {install.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackagePlus className="h-3.5 w-3.5" />}
+                {install.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <PackagePlus className="h-3.5 w-3.5" />
+                )}
                 Install
               </button>
             </div>
           </div>
           <textarea
+            aria-label="Extension manifest JSON"
             value={manifestText}
             onChange={(event) => {
               setManifestText(event.target.value);
@@ -276,32 +340,39 @@ function ExtensionsPage() {
             <div className="flex items-start gap-3">
               <Shield className="h-5 w-5 text-muted-foreground mt-0.5" />
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Validation state</h2>
+                <h2 className="text-sm font-semibold text-foreground">
+                  Validation state
+                </h2>
                 <p className="text-xs text-muted-foreground mt-1">
                   {validation
                     ? `${validation.compatibilityStatus}; ${validation.checksum}`
                     : parsedManifest
-                      ? 'Ready to validate'
-                      : 'Invalid JSON'}
+                      ? "Ready to validate"
+                      : "Invalid JSON"}
                 </p>
               </div>
             </div>
           </div>
           {validation && (
             <>
-              <div className={`rounded-lg border p-4 ${
-                validation.valid && validation.compatibilityStatus === 'compatible'
-                  ? 'border-status-success/30 bg-status-success/10'
-                  : 'border-status-warning/30 bg-status-warning/10'
-              }`}>
+              <div
+                className={`rounded-lg border p-4 ${
+                  validation.valid &&
+                  validation.compatibilityStatus === "compatible"
+                    ? "border-status-success/30 bg-status-success/10"
+                    : "border-status-warning/30 bg-status-warning/10"
+                }`}
+              >
                 <div className="text-sm font-medium text-foreground">
-                  {validation.valid ? 'Manifest accepted' : 'Manifest blocked'}
+                  {validation.valid ? "Manifest accepted" : "Manifest blocked"}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Compatibility: {validation.compatibilityStatus}
                 </p>
               </div>
-              <FindingList findings={[...validation.errors, ...validation.warnings]} />
+              <FindingList
+                findings={[...validation.errors, ...validation.warnings]}
+              />
             </>
           )}
         </div>
@@ -310,6 +381,6 @@ function ExtensionsPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/extensions/')({
+export const Route = createFileRoute("/dashboard/extensions/")({
   component: ExtensionsPage,
 });

@@ -26,10 +26,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // AdminDrillQuerier is the slice of sqlc.Queries the handler needs.
@@ -45,20 +47,70 @@ type AdminDrillQuerier interface {
 	GetManagementBackupDestination(ctx context.Context, id uuid.UUID) (sqlc.ManagementBackupDestination, error)
 	CreateManagementBackupDestination(ctx context.Context, arg sqlc.CreateManagementBackupDestinationParams) (sqlc.ManagementBackupDestination, error)
 	UpdateManagementBackupDestination(ctx context.Context, arg sqlc.UpdateManagementBackupDestinationParams) (sqlc.ManagementBackupDestination, error)
-	DeleteManagementBackupDestination(ctx context.Context, id uuid.UUID) error
 }
+
+type managementBackupWorkerQuerier interface {
+	GetManagementBackupDestination(context.Context, uuid.UUID) (sqlc.ManagementBackupDestination, error)
+	GetWorkloadOperation(context.Context, uuid.UUID) (sqlc.WorkloadOperation, error)
+	ClaimManagementBackupOperation(context.Context, uuid.UUID) (sqlc.WorkloadOperation, error)
+	MarkWorkloadOperationCompleted(context.Context, sqlc.MarkWorkloadOperationCompletedParams) (sqlc.WorkloadOperation, error)
+	MarkWorkloadOperationFailed(context.Context, sqlc.MarkWorkloadOperationFailedParams) (sqlc.WorkloadOperation, error)
+	MarkWorkloadOperationRetrying(context.Context, sqlc.MarkWorkloadOperationRetryingParams) (sqlc.WorkloadOperation, error)
+	ClaimManagementBackupDestinationGeneration(context.Context, sqlc.ClaimManagementBackupDestinationGenerationParams) (sqlc.ManagementBackupDestination, error)
+	CompleteManagementBackupDestinationGeneration(context.Context, sqlc.CompleteManagementBackupDestinationGenerationParams) (sqlc.ManagementBackupDestination, error)
+	FailManagementBackupDestinationGeneration(context.Context, sqlc.FailManagementBackupDestinationGenerationParams) (sqlc.ManagementBackupDestination, error)
+	RetryManagementBackupDestinationGeneration(context.Context, sqlc.RetryManagementBackupDestinationGenerationParams) (sqlc.ManagementBackupDestination, error)
+}
+
+type ManagementBackupMutationTx interface {
+	CreateManagementBackupDestination(context.Context, sqlc.CreateManagementBackupDestinationParams) (sqlc.ManagementBackupDestination, error)
+	GetManagementBackupDestinationForUpdate(context.Context, uuid.UUID) (sqlc.ManagementBackupDestination, error)
+	UpdateManagementBackupDestination(context.Context, sqlc.UpdateManagementBackupDestinationParams) (sqlc.ManagementBackupDestination, error)
+	MarkManagementBackupDestinationDeleted(context.Context, uuid.UUID) (sqlc.ManagementBackupDestination, error)
+	CreateWorkloadOperation(context.Context, sqlc.CreateWorkloadOperationParams) (sqlc.WorkloadOperation, error)
+	CreateWorkloadOperationIdempotent(context.Context, sqlc.CreateWorkloadOperationIdempotentParams) (sqlc.WorkloadOperation, error)
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+}
+
+type managementBackupRunTxFunc func(context.Context, func(ManagementBackupMutationTx) error) error
 
 // AdminDrillHandler wraps GET /api/v1/admin/backup-drill/* and
 // GET /api/v1/admin/management-backup/.
 type AdminDrillHandler struct {
-	queries        AdminDrillQuerier
-	k8s            kubernetes.Interface
-	namespace      string
-	releaseName    string
-	encryptor      *auth.Encryptor
-	httpClient     *http.Client
-	backupImage    string
-	serviceAccount string
+	queries                 AdminDrillQuerier
+	k8s                     kubernetes.Interface
+	namespace               string
+	releaseName             string
+	encryptor               *auth.Encryptor
+	httpClient              *http.Client
+	backupImage             string
+	serviceAccount          string
+	runTx                   managementBackupRunTxFunc
+	managementBackupEnabled bool
+}
+
+func (h *AdminDrillHandler) SetRunTx(runTx managementBackupRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *AdminDrillHandler) SetManagementBackupEnabled(enabled bool) {
+	if h != nil {
+		h.managementBackupEnabled = enabled
+	}
+}
+func (h *AdminDrillHandler) TransactionalManagementBackupWired() bool {
+	return h != nil && h.runTx != nil
+}
+
+func (h *AdminDrillHandler) ManagementBackupReady() bool {
+	if h == nil || h.encryptor == nil || h.k8s == nil || strings.TrimSpace(h.namespace) == "" {
+		return false
+	}
+	_, ok := h.queries.(managementBackupWorkerQuerier)
+	return ok
 }
 
 // NewAdminDrillHandler returns a usable handler. queries may be nil for
@@ -218,5 +270,23 @@ func (h *AdminDrillHandler) gateAction(w http.ResponseWriter, r *http.Request, a
 	recordAudit(r, h.queries, action, "platform", "", "management_backup", map[string]any{
 		"path": r.URL.Path,
 	})
+	return true
+}
+
+// gateManagementBackupMutation authorizes without emitting a best-effort
+// success-shaped row. Mutation handlers write their mandatory audit intent in
+// the same transaction as desired state and task outbox.
+func (h *AdminDrillHandler) gateManagementBackupMutation(w http.ResponseWriter, r *http.Request) bool {
+	_, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
+		StoreUnavailableMessage: "Admin store not configured",
+		ForbiddenMessage:        "Astronomer backup administration requires superuser privileges",
+	})
+	if !ok {
+		return false
+	}
+	if h == nil || !h.managementBackupEnabled {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Management backup is disabled")
+		return false
+	}
 	return true
 }

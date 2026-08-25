@@ -68,47 +68,56 @@ export function CharlieLifecycleNotice({ state }: { state?: string }) {
     },
     waiting_approval: {
       title: "Waiting for exact approval",
-      description: "No action runs until an eligible operator confirms this exact bounded request.",
+      description:
+        "No action runs until an eligible operator confirms this exact bounded request.",
       tone: "text-status-warning",
     },
     mcp_denied: {
       title: "MCP request denied",
-      description: "Astronomer rejected the requested tool at the private product boundary.",
+      description:
+        "Astronomer rejected the requested tool at the private product boundary.",
       tone: "text-status-error",
     },
     disabled: {
       title: "Charlie disabled",
-      description: "New Charlie sessions and work are disabled for this installation.",
+      description:
+        "New Charlie sessions and work are disabled for this installation.",
       tone: "text-muted-foreground",
     },
     read_only_finding: {
       title: "Read-only finding",
-      description: "Charlie produced a diagnosis and safe checks, but no write can run.",
+      description:
+        "Charlie produced a diagnosis and safe checks, but no write can run.",
       tone: "text-status-warning",
     },
     approval_required: {
       title: "Approval required",
-      description: "Review the exact capability, effect, target, and permission before deciding.",
+      description:
+        "Review the exact capability, effect, target, and permission before deciding.",
       tone: "text-status-warning",
     },
     auto_blocked: {
       title: "Automatic action blocked",
-      description: "An Astronomer policy, scope, budget, or safety control prevented execution.",
+      description:
+        "An Astronomer policy, scope, budget, or safety control prevented execution.",
       tone: "text-status-error",
     },
     destructive_denied: {
       title: "Destructive action denied",
-      description: "Destructive and irreversible operations are unavailable in every Charlie mode.",
+      description:
+        "Destructive and irreversible operations are unavailable in every Charlie mode.",
       tone: "text-status-error",
     },
     verification_failed: {
       title: "Verification failed",
-      description: "The bounded action did not satisfy its postcondition. Further incident work is stopped.",
+      description:
+        "The bounded action did not satisfy its postcondition. Further incident work is stopped.",
       tone: "text-status-error",
     },
     emergency_stopped: {
       title: "Emergency stop active",
-      description: "Product authority is locally closed while central state is reconciled.",
+      description:
+        "Product authority is locally closed while central state is reconciled.",
       tone: "text-status-error",
     },
   };
@@ -313,7 +322,9 @@ function ApprovalCard({
       {approval.eligible && approval.state === "pending" && permitted ? (
         <div className="mt-3 space-y-2">
           <label className="block">
-            <span className="text-muted-foreground">Rationale (optional, 512 characters)</span>
+            <span className="text-muted-foreground">
+              Rationale (optional, 512 characters)
+            </span>
             <textarea
               aria-label={`Rationale for ${approval.title}`}
               value={rationale}
@@ -375,7 +386,9 @@ function ApprovalCard({
             : "Deny exact Charlie action"
         }
         description={`${approval.capability} on ${approval.target}. This decision applies only to the displayed bounded action${rationale.trim() ? " and records your rationale" : ""}.`}
-        confirmText={confirm === "approve" ? "Approve exact action" : "Deny exact action"}
+        confirmText={
+          confirm === "approve" ? "Approve exact action" : "Deny exact action"
+        }
         loading={!!pending}
         variant={confirm === "deny" ? "destructive" : undefined}
       />

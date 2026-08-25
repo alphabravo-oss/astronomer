@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "waivers"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "waivers": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["reference", "category", "ids", "reason", "approved_by", "expires_at"],
+      "properties": {
+        "reference": {"type": "string", "pattern": "^[^\\s@]+@sha256:[a-f0-9]{64}$"},
+        "category": {"enum": ["vulnerability", "license"]},
+        "ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "reason": {"type": "string", "minLength": 1}, "approved_by": {"type": "string", "minLength": 1},
+        "expires_at": {"type": "string", "format": "date-time"}
+      }
+    }}
+  }
+}

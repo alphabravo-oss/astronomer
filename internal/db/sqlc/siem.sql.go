@@ -115,12 +115,14 @@ func (q *Queries) DeleteSIEMQueueByIDs(ctx context.Context, dollar_1 []int64) er
 }
 
 const deleteSIEMQueueOlderThan = `-- name: DeleteSIEMQueueOlderThan :execrows
-DELETE FROM siem_forward_queue WHERE created_at < $1
+DELETE FROM siem_forward_queue
+WHERE created_at < $1
+  AND (dedupe_key IS NULL OR (dedupe_key NOT LIKE 'audit:%' AND dedupe_key NOT LIKE 'siem-test:%'))
 `
 
-// Daily retention sweep. Removes queue rows older than the cutoff
-// regardless of forwarder status so a stuck/disabled forwarder doesn't
-// pin disk.
+// Daily retention applies to best-effort product events only. Transactional
+// audit receipts are mandatory evidence and remain until an external sink
+// acknowledges them, regardless of outage duration or retry count.
 func (q *Queries) DeleteSIEMQueueOlderThan(ctx context.Context, createdAt time.Time) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteSIEMQueueOlderThan, createdAt)
 	if err != nil {
@@ -133,7 +135,7 @@ const enqueueSIEMEvent = `-- name: EnqueueSIEMEvent :one
 INSERT INTO siem_forward_queue (
     forwarder_id, event_name, payload, severity
 ) VALUES ($1, $2, $3, $4)
-RETURNING id, forwarder_id, event_name, payload, severity, attempts, created_at
+RETURNING id, forwarder_id, event_name, payload, severity, attempts, created_at, dedupe_key
 `
 
 type EnqueueSIEMEventParams struct {
@@ -162,6 +164,49 @@ func (q *Queries) EnqueueSIEMEvent(ctx context.Context, arg EnqueueSIEMEventPara
 		&i.Severity,
 		&i.Attempts,
 		&i.CreatedAt,
+		&i.DedupeKey,
+	)
+	return i, err
+}
+
+const enqueueSIEMEventDeduped = `-- name: EnqueueSIEMEventDeduped :one
+INSERT INTO siem_forward_queue (
+    forwarder_id, event_name, payload, severity, dedupe_key
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (forwarder_id, dedupe_key) WHERE dedupe_key IS NOT NULL
+DO UPDATE SET dedupe_key = EXCLUDED.dedupe_key
+RETURNING id, forwarder_id, event_name, payload, severity, attempts, created_at, dedupe_key
+`
+
+type EnqueueSIEMEventDedupedParams struct {
+	ForwarderID uuid.UUID       `json:"forwarder_id"`
+	EventName   string          `json:"event_name"`
+	Payload     json.RawMessage `json:"payload"`
+	Severity    string          `json:"severity"`
+	DedupeKey   pgtype.Text     `json:"dedupe_key"`
+}
+
+// Mandatory audit delivery uses a stable event UUID. A dispatcher crash after
+// enqueue but before acknowledgement can safely replay without producing a
+// duplicate destination row.
+func (q *Queries) EnqueueSIEMEventDeduped(ctx context.Context, arg EnqueueSIEMEventDedupedParams) (SiemForwardQueue, error) {
+	row := q.db.QueryRow(ctx, enqueueSIEMEventDeduped,
+		arg.ForwarderID,
+		arg.EventName,
+		arg.Payload,
+		arg.Severity,
+		arg.DedupeKey,
+	)
+	var i SiemForwardQueue
+	err := row.Scan(
+		&i.ID,
+		&i.ForwarderID,
+		&i.EventName,
+		&i.Payload,
+		&i.Severity,
+		&i.Attempts,
+		&i.CreatedAt,
+		&i.DedupeKey,
 	)
 	return i, err
 }
@@ -314,6 +359,7 @@ func (q *Queries) ListEnabledSIEMForwarders(ctx context.Context) ([]SiemForwarde
 const listOldestSIEMQueue = `-- name: ListOldestSIEMQueue :many
 SELECT id FROM siem_forward_queue
 WHERE forwarder_id = $1
+  AND (dedupe_key IS NULL OR (dedupe_key NOT LIKE 'audit:%' AND dedupe_key NOT LIKE 'siem-test:%'))
 ORDER BY id ASC
 LIMIT $2
 `
@@ -324,7 +370,8 @@ type ListOldestSIEMQueueParams struct {
 }
 
 // Used by the tap when the queue depth hits the chart-tunable cap. We
-// delete the oldest N rows to make room for the new ones.
+// delete the oldest disposable rows to make room for the new ones. Mandatory
+// transactional audit receipts are never eviction candidates.
 func (q *Queries) ListOldestSIEMQueue(ctx context.Context, arg ListOldestSIEMQueueParams) ([]int64, error) {
 	rows, err := q.db.Query(ctx, listOldestSIEMQueue, arg.ForwarderID, arg.Limit)
 	if err != nil {
@@ -406,7 +453,7 @@ func (q *Queries) ListSIEMForwarders(ctx context.Context) ([]SiemForwarder, erro
 }
 
 const listSIEMQueueBatch = `-- name: ListSIEMQueueBatch :many
-SELECT id, forwarder_id, event_name, payload, severity, attempts, created_at
+SELECT id, forwarder_id, event_name, payload, severity, attempts, created_at, dedupe_key
 FROM siem_forward_queue
 WHERE forwarder_id = $1
 ORDER BY id ASC
@@ -438,6 +485,7 @@ func (q *Queries) ListSIEMQueueBatch(ctx context.Context, arg ListSIEMQueueBatch
 			&i.Severity,
 			&i.Attempts,
 			&i.CreatedAt,
+			&i.DedupeKey,
 		); err != nil {
 			return nil, err
 		}
@@ -450,9 +498,11 @@ func (q *Queries) ListSIEMQueueBatch(ctx context.Context, arg ListSIEMQueueBatch
 }
 
 const listSIEMQueueExhausted = `-- name: ListSIEMQueueExhausted :many
-SELECT id, forwarder_id, event_name, payload, severity, attempts, created_at
+SELECT id, forwarder_id, event_name, payload, severity, attempts, created_at, dedupe_key
 FROM siem_forward_queue
-WHERE forwarder_id = $1 AND attempts >= $2
+WHERE forwarder_id = $1
+  AND attempts >= $2
+  AND (dedupe_key IS NULL OR dedupe_key NOT LIKE 'audit:%')
 ORDER BY id ASC
 LIMIT $3
 `
@@ -483,6 +533,7 @@ func (q *Queries) ListSIEMQueueExhausted(ctx context.Context, arg ListSIEMQueueE
 			&i.Severity,
 			&i.Attempts,
 			&i.CreatedAt,
+			&i.DedupeKey,
 		); err != nil {
 			return nil, err
 		}

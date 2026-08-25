@@ -36,19 +36,27 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
+	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // ApiserverAllowlistQuerier is the DB surface ApiserverAllowlistHandler
@@ -59,6 +67,15 @@ type ApiserverAllowlistQuerier interface {
 	UpsertApiserverAllowlist(ctx context.Context, arg sqlc.UpsertApiserverAllowlistParams) (sqlc.ApiserverAllowlist, error)
 	ListApiserverAllowlistSnapshots(ctx context.Context, arg sqlc.ListApiserverAllowlistSnapshotsParams) ([]sqlc.ApiserverAllowlistSnapshot, error)
 }
+
+type ApiserverAllowlistMutationTx interface {
+	ApiserverAllowlistQuerier
+	GetApiserverAllowlistForUpdate(context.Context, uuid.UUID) (sqlc.ApiserverAllowlist, error)
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+}
+
+type apiserverAllowlistRunTxFunc func(context.Context, func(ApiserverAllowlistMutationTx) error) error
 
 // ApiserverAllowlistEnqueuer fires on-demand reconcile tasks. *asynq.Client
 // satisfies this; tests pass a stub. Nil-safe — when unwired the periodic
@@ -86,6 +103,7 @@ type ApiserverAllowlistHandler struct {
 	reconciler  ApiserverAllowlistReconcileFunc
 	taskBuilder ApiserverAllowlistTaskBuilder
 	bus         *events.Bus
+	runTx       apiserverAllowlistRunTxFunc
 	// AstronomerEgress is the runtime-known tunnel egress CIDR list,
 	// used by the /preview/ endpoint. Defaults to empty (the renderer
 	// falls back to AstronomerEgressFromEnv on render).
@@ -99,6 +117,16 @@ type ApiserverAllowlistHandler struct {
 // endpoint falls back to no-op (the periodic sweep still runs).
 func NewApiserverAllowlistHandler(queries ApiserverAllowlistQuerier) *ApiserverAllowlistHandler {
 	return &ApiserverAllowlistHandler{queries: queries}
+}
+
+func (h *ApiserverAllowlistHandler) SetRunTx(runTx apiserverAllowlistRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *ApiserverAllowlistHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
 }
 
 // SetAuditor attaches the audit writer.
@@ -154,18 +182,19 @@ func (h *ApiserverAllowlistHandler) SetEmergencyAccess(c []string) { h.Emergency
 
 // AllowlistResponse is the GET / preview response shape.
 type AllowlistResponse struct {
-	ClusterID        uuid.UUID  `json:"cluster_id"`
-	OperatorCIDRs    []string   `json:"operator_cidrs"`
-	AstronomerEgress []string   `json:"astronomer_egress"`
-	Emergency        []string   `json:"emergency"`
-	Desired          []string   `json:"desired"`
-	Effective        []string   `json:"effective"`
-	Mode             string     `json:"mode"`
-	DetectedProvider string     `json:"detected_provider"`
-	SyncStatus       string     `json:"sync_status"`
-	LastError        string     `json:"last_error,omitempty"`
-	LastReconciledAt *time.Time `json:"last_reconciled_at,omitempty"`
-	Drift            bool       `json:"drift"`
+	ClusterID        uuid.UUID            `json:"cluster_id"`
+	OperatorCIDRs    []string             `json:"operator_cidrs"`
+	AstronomerEgress []string             `json:"astronomer_egress"`
+	Emergency        []string             `json:"emergency"`
+	Desired          []string             `json:"desired"`
+	Effective        []string             `json:"effective"`
+	Mode             string               `json:"mode"`
+	DetectedProvider string               `json:"detected_provider"`
+	SyncStatus       string               `json:"sync_status"`
+	LastError        string               `json:"last_error,omitempty"`
+	LastReconciledAt *time.Time           `json:"last_reconciled_at,omitempty"`
+	Drift            bool                 `json:"drift"`
+	Capability       providers.Capability `json:"capability"`
 }
 
 // AllowlistUpdateRequest is the PUT body.
@@ -235,14 +264,14 @@ func parseAllowlistClusterID(w http.ResponseWriter, r *http.Request) (uuid.UUID,
 // emptyAllowlistResponseFor returns the GET / preview body for a cluster
 // that has no apiserver_allowlists row yet — defaults equivalent to a
 // fresh insert without any operator CIDRs.
-func (h *ApiserverAllowlistHandler) emptyAllowlistResponseFor(clusterID uuid.UUID) AllowlistResponse {
+func (h *ApiserverAllowlistHandler) emptyAllowlistResponseFor(cluster sqlc.Cluster) AllowlistResponse {
 	egress := h.AstronomerEgress
 	if len(egress) == 0 {
 		egress = allowlist.AstronomerEgressFromEnv()
 	}
 	desired := allowlist.Render(nil, egress, h.EmergencyAccess)
 	return AllowlistResponse{
-		ClusterID:        clusterID,
+		ClusterID:        cluster.ID,
 		OperatorCIDRs:    []string{},
 		AstronomerEgress: egress,
 		Emergency:        h.EmergencyAccess,
@@ -251,10 +280,11 @@ func (h *ApiserverAllowlistHandler) emptyAllowlistResponseFor(clusterID uuid.UUI
 		Mode:             "monitor",
 		DetectedProvider: "unknown",
 		SyncStatus:       "pending",
+		Capability:       providers.DeclaredCapability(providers.ClusterFromSQLC(cluster)),
 	}
 }
 
-func (h *ApiserverAllowlistHandler) rowToResponse(row sqlc.ApiserverAllowlist) AllowlistResponse {
+func (h *ApiserverAllowlistHandler) rowToResponse(row sqlc.ApiserverAllowlist, cluster sqlc.Cluster) AllowlistResponse {
 	operator := decodeCIDRSlice(row.Cidrs)
 	effective := decodeCIDRSlice(row.EffectiveCidrs)
 	egress := h.AstronomerEgress
@@ -274,6 +304,7 @@ func (h *ApiserverAllowlistHandler) rowToResponse(row sqlc.ApiserverAllowlist) A
 		SyncStatus:       row.SyncStatus,
 		LastError:        row.LastError,
 		Drift:            row.SyncStatus == "drifting",
+		Capability:       providers.DeclaredCapability(providers.ClusterFromSQLC(cluster)),
 	}
 	if row.LastReconciledAt.Valid {
 		t := row.LastReconciledAt.Time
@@ -292,7 +323,8 @@ func (h *ApiserverAllowlistHandler) Get(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
+	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
+	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
@@ -301,10 +333,10 @@ func (h *ApiserverAllowlistHandler) Get(w http.ResponseWriter, r *http.Request) 
 		// Treat "no row yet" as the empty-default response so the UI can
 		// render the page on a brand-new cluster without seeding a row
 		// first. Operators see "no policy yet" and can PUT to create.
-		RespondJSON(w, http.StatusOK, h.emptyAllowlistResponseFor(clusterID))
+		RespondJSON(w, http.StatusOK, h.emptyAllowlistResponseFor(cluster))
 		return
 	}
-	RespondJSON(w, http.StatusOK, h.rowToResponse(row))
+	RespondJSON(w, http.StatusOK, h.rowToResponse(row, cluster))
 }
 
 // Update handles PUT /clusters/{cluster_id}/apiserver-allowlist/.
@@ -313,7 +345,8 @@ func (h *ApiserverAllowlistHandler) Update(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
+	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
+	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
@@ -328,45 +361,74 @@ func (h *ApiserverAllowlistHandler) Update(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidMode, fmt.Sprintf("mode must be one of monitor|enforce|disabled, got %q", req.Mode))
 		return
 	}
+	capability := providers.DeclaredCapability(providers.ClusterFromSQLC(cluster))
+	if req.Mode == "enforce" && !capability.CanEnforce {
+		RespondRequestError(w, r, http.StatusUnprocessableEntity, apierror.UnsupportedProvider,
+			fmt.Sprintf("Provider %q cannot enforce API-server allow-lists: %s", capability.Provider, capability.Reason))
+		return
+	}
 	canonical, err := allowlist.ValidateCIDRs(req.CIDRs)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidCIDR, err.Error())
 		return
 	}
 
-	// Enforce-upgrade safety: monitor → enforce with outstanding drift
-	// requires explicit force_apply.
-	existing, existsErr := h.queries.GetApiserverAllowlistByClusterID(r.Context(), clusterID)
-	isUpgrade := existsErr == nil && existing.Mode == "monitor" && req.Mode == "enforce"
-	if isUpgrade && existing.SyncStatus == "drifting" && !req.ForceApply {
-		RespondRequestError(w, r, http.StatusConflict, apierror.ModeChangeRequiresForce,
-			"Switching to enforce while drift exists requires force_apply=true; the apiserver allow-list would change on the next reconcile.")
-
-		return
-	}
-
 	cidrsJSON, _ := json.Marshal(canonical)
-	row, err := h.queries.UpsertApiserverAllowlist(r.Context(), sqlc.UpsertApiserverAllowlistParams{
+	params := sqlc.UpsertApiserverAllowlistParams{
 		ClusterID: clusterID,
 		Cidrs:     cidrsJSON,
 		Mode:      req.Mode,
-	})
+	}
+	var existing, row sqlc.ApiserverAllowlist
+	if h.runTx != nil {
+		err = h.runTx(r.Context(), func(q ApiserverAllowlistMutationTx) error {
+			locked, lockErr := q.GetApiserverAllowlistForUpdate(r.Context(), clusterID)
+			if lockErr == nil {
+				existing = locked
+			} else if !errors.Is(lockErr, pgx.ErrNoRows) {
+				return lockErr
+			}
+			if existing.Mode == "monitor" && req.Mode == "enforce" && existing.SyncStatus == "drifting" && !req.ForceApply {
+				return errAllowlistModeChangeRequiresForce
+			}
+			row, lockErr = q.UpsertApiserverAllowlist(r.Context(), params)
+			if lockErr != nil {
+				return lockErr
+			}
+			if lockErr = h.enqueueDurableReconcile(r, q, clusterID); lockErr != nil {
+				return lockErr
+			}
+			return recordAuditOutbox(r, q, "cluster.apiserver_allowlist.updated", "cluster", clusterID.String(), "", http.StatusOK, map[string]any{
+				"mode": req.Mode, "cidrs_hash": hashCIDRs(canonical), "cidrs_count": len(canonical),
+				"force_apply": req.ForceApply, "prev_mode": existing.Mode, "prev_status": existing.SyncStatus,
+			})
+		})
+	} else {
+		existing, _ = h.queries.GetApiserverAllowlistByClusterID(r.Context(), clusterID)
+		if existing.Mode == "monitor" && req.Mode == "enforce" && existing.SyncStatus == "drifting" && !req.ForceApply {
+			err = errAllowlistModeChangeRequiresForce
+		} else {
+			row, err = h.queries.UpsertApiserverAllowlist(r.Context(), params)
+		}
+	}
+	if errors.Is(err, errAllowlistModeChangeRequiresForce) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.ModeChangeRequiresForce,
+			"Switching to enforce while drift exists requires force_apply=true; the apiserver allow-list would change on the next reconcile.")
+		return
+	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update apiserver allow-list")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update apiserver allow-list")
 		return
 	}
 	h.publishNetworkAccessChanged(clusterID)
-	h.audit(r, "cluster.apiserver_allowlist.updated", clusterID, map[string]any{
-		"mode":        req.Mode,
-		"cidrs_hash":  hashCIDRs(canonical),
-		"cidrs_count": len(canonical),
-		"force_apply": req.ForceApply,
-		"prev_mode":   existing.Mode,
-		"prev_status": existing.SyncStatus,
-	})
-	// Fire an immediate reconcile (best-effort).
-	h.fireReconcile(r.Context(), clusterID)
-	RespondJSON(w, http.StatusOK, h.rowToResponse(row))
+	if h.runTx == nil {
+		h.audit(r, "cluster.apiserver_allowlist.updated", clusterID, map[string]any{
+			"mode": req.Mode, "cidrs_hash": hashCIDRs(canonical), "cidrs_count": len(canonical),
+			"force_apply": req.ForceApply, "prev_mode": existing.Mode, "prev_status": existing.SyncStatus,
+		})
+		h.fireReconcile(r.Context(), clusterID)
+	}
+	RespondJSON(w, http.StatusOK, h.rowToResponse(row, cluster))
 }
 
 // Reconcile handles POST /clusters/{cluster_id}/apiserver-allowlist/reconcile/.
@@ -375,18 +437,88 @@ func (h *ApiserverAllowlistHandler) Reconcile(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "allow-list transaction runner is not configured")
+		return
+	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
-	if _, err := h.queries.GetApiserverAllowlistByClusterID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No allow-list policy on this cluster")
+	r = r.WithContext(withOperationIdempotency(r, "apiserver_allowlist_reconcile"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		ClusterID string `json:"cluster_id"`
+	}{ClusterID: clusterID.String()})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode allow-list reconcile request")
 		return
 	}
-	h.fireReconcile(r.Context(), clusterID)
-	h.audit(r, "cluster.apiserver_allowlist.reconciled", clusterID, nil)
-	w.WriteHeader(http.StatusAccepted)
-	_, _ = w.Write([]byte(`{"status":"accepted"}`))
+	receipt := ApiserverAllowlistReconcileReceipt{ClusterID: clusterID.String(), Status: "accepted"}
+	err = h.runTx(r.Context(), func(q ApiserverAllowlistMutationTx) error {
+		idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+		if !ok {
+			return errors.New("allow-list idempotency store is not configured")
+		}
+		_, stored, replay, claimErr := claimOperationReceipt[ApiserverAllowlistReconcileReceipt](r.Context(), idemQ, "apiserver_allowlist_reconciles", digest)
+		if claimErr != nil {
+			return claimErr
+		}
+		if replay {
+			receipt = stored
+			return nil
+		}
+		if _, lockErr := q.GetApiserverAllowlistForUpdate(r.Context(), clusterID); lockErr != nil {
+			return lockErr
+		}
+		if enqueueErr := h.enqueueDurableReconcile(r, q, clusterID); enqueueErr != nil {
+			return enqueueErr
+		}
+		if auditErr := recordAuditOutbox(r, q, "cluster.apiserver_allowlist.reconciled", "cluster", clusterID.String(), "", http.StatusAccepted, nil); auditErr != nil {
+			return auditErr
+		}
+		return attachOperationReceipt(r.Context(), idemQ, "apiserver_allowlist_reconciles", clusterID, digest, receipt)
+	})
+	if errors.Is(err, errOperationIdempotencyConflict) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different allow-list reconcile")
+		return
+	}
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No allow-list policy on this cluster")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to queue allow-list reconcile")
+		return
+	}
+	RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/apiserver-allowlist/", receipt)
+}
+
+type ApiserverAllowlistReconcileReceipt struct {
+	ClusterID string `json:"cluster_id"`
+	Status    string `json:"status"`
+}
+
+var errAllowlistModeChangeRequiresForce = errors.New("allow-list mode change requires force")
+
+func (h *ApiserverAllowlistHandler) enqueueDurableReconcile(r *http.Request, q tasks.TaskOutboxWriter, clusterID uuid.UUID) error {
+	if h.taskBuilder == nil {
+		return errors.New("allow-list task builder is unavailable")
+	}
+	task, err := h.taskBuilder(clusterID)
+	if err != nil {
+		return err
+	}
+	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(5))
+	requestID := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	_, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{
+		DedupeKey: "apiserver_allowlist:reconcile:" + audit.MutationDedupeKey(requestID, "reconcile", "cluster", clusterID.String()),
+		QueueName: "default", MaxRetry: 5, Timeout: 2 * time.Minute, MaxDeliveryAttempts: 20,
+	})
+	return err
 }
 
 // Snapshots handles GET /clusters/{cluster_id}/apiserver-allowlist/snapshots/.
@@ -438,16 +570,17 @@ func (h *ApiserverAllowlistHandler) Preview(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
+	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
+	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	row, err := h.queries.GetApiserverAllowlistByClusterID(r.Context(), clusterID)
 	if err != nil {
-		RespondJSON(w, http.StatusOK, h.emptyAllowlistResponseFor(clusterID))
+		RespondJSON(w, http.StatusOK, h.emptyAllowlistResponseFor(cluster))
 		return
 	}
-	RespondJSON(w, http.StatusOK, h.rowToResponse(row))
+	RespondJSON(w, http.StatusOK, h.rowToResponse(row, cluster))
 }
 
 // fireReconcile fans an on-demand reconcile through whichever path is

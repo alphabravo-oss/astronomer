@@ -16,12 +16,14 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -37,15 +39,83 @@ type ClusterRegistrationQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 }
 
+type ClusterRegistrationMutationTx interface {
+	ClusterRegistrationQuerier
+	audit.OutboxQuerier
+}
+
+type clusterRegistrationRunTxFunc func(context.Context, func(ClusterRegistrationMutationTx) error) error
+
+func executeClusterRegistrationMutation[T any](r *http.Request, h *ClusterRegistrationHandler, mutate func(ClusterRegistrationQuerier, *registration.Service) (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h.runTx != nil {
+		var result T
+		flush := func() {}
+		err := h.runTx(r.Context(), func(q ClusterRegistrationMutationTx) error {
+			service, flushEffects := h.service.Buffered(q)
+			flush = flushEffects
+			var mutationErr error
+			result, mutationErr = mutate(q, service)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		if err == nil {
+			flush()
+		}
+		return result, err
+	}
+	result, err := mutate(h.queries, h.service)
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.auditQueries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
+}
+
 // ClusterRegistrationHandler bundles the wizard endpoints.
 type ClusterRegistrationHandler struct {
 	queries ClusterRegistrationQuerier
 	service *registration.Service
 	bus     *events.Bus
+	runTx   clusterRegistrationRunTxFunc
 	// auditQueries lets recordAudit write through. Same querier
 	// works for both since *sqlc.Queries implements the broader
 	// audit surface, so we just pass the same interface.
 	auditQueries any
+}
+
+type clusterRegistrationMutationResult struct {
+	cluster sqlc.Cluster
+	record  sqlc.ClusterRegistrationRecord
+	step    sqlc.ClusterRegistrationStep
+}
+
+var (
+	errRegistrationStepMismatch  = errors.New("registration step belongs to another cluster")
+	errRegistrationStepNotFailed = errors.New("registration step is not failed")
+)
+
+func getClusterRegistrationStepForMutation(ctx context.Context, q ClusterRegistrationQuerier, id uuid.UUID) (sqlc.ClusterRegistrationStep, error) {
+	if locker, ok := q.(interface {
+		GetClusterRegistrationStepForUpdate(context.Context, uuid.UUID) (sqlc.ClusterRegistrationStep, error)
+	}); ok {
+		return locker.GetClusterRegistrationStepForUpdate(ctx, id)
+	}
+	return q.GetClusterRegistrationStep(ctx, id)
+}
+
+func (h *ClusterRegistrationHandler) SetRunTx(runTx clusterRegistrationRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *ClusterRegistrationHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
 }
 
 // busAdapter bridges *events.Bus (Publish(events.Type, any)) to the
@@ -126,17 +196,30 @@ func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.R
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "install_baseline is required")
 		return
 	}
-	if _, err := h.queries.GetClusterByID(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+	_, err = executeClusterRegistrationMutation(r, h,
+		func(q ClusterRegistrationQuerier, service *registration.Service) (clusterRegistrationMutationResult, error) {
+			cluster, getErr := q.GetClusterByID(r.Context(), id)
+			if getErr != nil {
+				return clusterRegistrationMutationResult{}, getErr
+			}
+			record, setErr := service.SetInstallBaseline(r.Context(), id, *req.InstallBaseline)
+			return clusterRegistrationMutationResult{cluster: cluster, record: record}, setErr
+		},
+		func(result clusterRegistrationMutationResult) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.registration.options", resourceType: "cluster", resourceID: id.String(), resourceName: result.cluster.Name, status: http.StatusOK,
+				detail: map[string]any{"install_baseline": result.record.InstallBaseline.Valid && result.record.InstallBaseline.Bool},
+			}
+		},
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to record options")
 		return
 	}
-	if _, err := h.service.SetInstallBaseline(r.Context(), id, *req.InstallBaseline); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to record options")
-		return
-	}
-	recordAudit(r, h.auditQueries, "cluster.registration.options", "cluster", id.String(), "", map[string]any{
-		"install_baseline": *req.InstallBaseline,
-	})
 	status, err := h.service.LoadStatus(r.Context(), id)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load status")
@@ -155,24 +238,34 @@ func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
-	cluster, err := h.queries.GetClusterByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
-		return
-	}
-	record, advErr := h.service.Advance(r.Context(), id, registration.EventConfirm)
+	_, advErr := executeClusterRegistrationMutation(r, h,
+		func(q ClusterRegistrationQuerier, service *registration.Service) (clusterRegistrationMutationResult, error) {
+			cluster, getErr := q.GetClusterByID(r.Context(), id)
+			if getErr != nil {
+				return clusterRegistrationMutationResult{}, getErr
+			}
+			record, advanceErr := service.Advance(r.Context(), id, registration.EventConfirm)
+			return clusterRegistrationMutationResult{cluster: cluster, record: record}, advanceErr
+		},
+		func(result clusterRegistrationMutationResult) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.registration.confirm", resourceType: "cluster", resourceID: id.String(), resourceName: result.cluster.Name, status: http.StatusOK,
+				detail: map[string]any{"install_baseline": result.record.InstallBaseline.Valid && result.record.InstallBaseline.Bool},
+			}
+		},
+	)
 	if advErr != nil {
+		if errors.Is(advErr, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+			return
+		}
 		if h.isIllegal(advErr) {
 			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, advErr.Error())
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TransitionError, advErr.Error())
+		respondTransactionalMutationError(w, r, advErr, http.StatusInternalServerError, apierror.TransitionError, "Failed to confirm registration")
 		return
 	}
-	recordAudit(r, h.auditQueries, "cluster.registration.confirm", "cluster", id.String(), cluster.Name, map[string]any{
-		"install_baseline": record.InstallBaseline.Valid && record.InstallBaseline.Bool,
-	})
-
 	status, _ := h.service.LoadStatus(r.Context(), id)
 	RespondJSON(w, http.StatusOK, status)
 }
@@ -192,34 +285,51 @@ func (h *ClusterRegistrationHandler) PostRetry(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidStep, "Invalid step ID")
 		return
 	}
-	step, err := h.queries.GetClusterRegistrationStep(r.Context(), stepID)
+	_, err = executeClusterRegistrationMutation(r, h,
+		func(q ClusterRegistrationQuerier, service *registration.Service) (clusterRegistrationMutationResult, error) {
+			step, getErr := getClusterRegistrationStepForMutation(r.Context(), q, stepID)
+			if getErr != nil {
+				return clusterRegistrationMutationResult{}, getErr
+			}
+			if step.ClusterID != id {
+				return clusterRegistrationMutationResult{}, errRegistrationStepMismatch
+			}
+			if step.Status != "failed" {
+				return clusterRegistrationMutationResult{}, errRegistrationStepNotFailed
+			}
+			record, advanceErr := service.Advance(r.Context(), id, registration.EventRetry)
+			if advanceErr != nil {
+				return clusterRegistrationMutationResult{}, advanceErr
+			}
+			if _, writeErr := service.WriteStep(r.Context(), id, registration.StepInput{
+				StepName: "delivery_retry_requested", Status: "success", Detail: map[string]any{"failed_step_id": stepID.String()},
+			}); writeErr != nil {
+				return clusterRegistrationMutationResult{}, writeErr
+			}
+			return clusterRegistrationMutationResult{record: record, step: step}, nil
+		},
+		func(result clusterRegistrationMutationResult) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.registration.retry", resourceType: "cluster", resourceID: id.String(), status: http.StatusOK,
+				detail: map[string]any{"step_id": result.step.ID.String(), "step_name": result.step.StepName},
+			}
+		},
+	)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Step not found")
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Step not found")
+		case errors.Is(err, errRegistrationStepMismatch):
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.StepMismatch, "Step does not belong to cluster")
+		case errors.Is(err, errRegistrationStepNotFailed):
+			RespondRequestError(w, r, http.StatusConflict, apierror.NotFailed, "Only failed steps can be retried")
+		case h.isIllegal(err):
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
+		default:
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.TransitionError, "Failed to retry registration")
+		}
 		return
 	}
-	if step.ClusterID != id {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.StepMismatch, "Step does not belong to cluster")
-		return
-	}
-	if step.Status != "failed" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.NotFailed, "Only failed steps can be retried")
-		return
-	}
-	// Advance back to provisioning so the timeline doesn't lie about
-	// being stuck at failed while the task is re-running.
-	if _, err := h.service.Advance(r.Context(), id, registration.EventRetry); err != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
-		return
-	}
-	_, _ = h.service.WriteStep(r.Context(), id, registration.StepInput{
-		StepName: "delivery_retry_requested",
-		Status:   "success",
-		Detail:   map[string]any{"failed_step_id": stepID.String()},
-	})
-	recordAudit(r, h.auditQueries, "cluster.registration.retry", "cluster", id.String(), "", map[string]any{
-		"step_id":   stepID.String(),
-		"step_name": step.StepName,
-	})
 	status, _ := h.service.LoadStatus(r.Context(), id)
 	RespondJSON(w, http.StatusOK, status)
 }
@@ -237,16 +347,23 @@ func (h *ClusterRegistrationHandler) PostCancel(w http.ResponseWriter, r *http.R
 	}); !ok {
 		return
 	}
-	if _, err := h.service.Advance(r.Context(), id, registration.EventCancel,
-		registration.WithError("cancelled by superuser")); err != nil {
+	_, err = executeClusterRegistrationMutation(r, h,
+		func(_ ClusterRegistrationQuerier, service *registration.Service) (clusterRegistrationMutationResult, error) {
+			record, advanceErr := service.Advance(r.Context(), id, registration.EventCancel, registration.WithError("cancelled by superuser"))
+			return clusterRegistrationMutationResult{record: record}, advanceErr
+		},
+		func(clusterRegistrationMutationResult) clusterAuditEvent {
+			return clusterAuditEvent{action: "cluster.registration.cancel", resourceType: "cluster", resourceID: id.String(), status: http.StatusOK}
+		},
+	)
+	if err != nil {
 		if h.isIllegal(err) {
 			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TransitionError, err.Error())
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.TransitionError, "Failed to cancel registration")
 		return
 	}
-	recordAudit(r, h.auditQueries, "cluster.registration.cancel", "cluster", id.String(), "", nil)
 	status, _ := h.service.LoadStatus(r.Context(), id)
 	RespondJSON(w, http.StatusOK, status)
 }

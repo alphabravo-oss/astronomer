@@ -35,13 +35,51 @@ type charlieAlertDispatchFake struct {
 	claimCalls      int
 }
 
-func configureCharlieAlertDispatchTest(t *testing.T, queries CharlieAlertDispatchQuerier, fence *charlie.WriteFence) {
+type charlieAlertReconcilerFunc func(context.Context) error
+
+func (reconcile charlieAlertReconcilerFunc) Reconcile(ctx context.Context) error {
+	return reconcile(ctx)
+}
+
+func TestCharlieAlertRuntimeValidatesAndBindsBothHandlers(t *testing.T) {
+	emptyErr := (CharlieAlertRuntime{}).Validate()
+	if emptyErr == nil {
+		t.Fatal("empty Charlie alert runtime validated successfully")
+	}
+	for _, dependency := range []string{"queries", "write_fence", "reconciler"} {
+		if !strings.Contains(emptyErr.Error(), dependency) {
+			t.Errorf("validation error %q does not report %s", emptyErr, dependency)
+		}
+	}
+
+	var typedNil *charlieAlertDispatchFake
+	typedNilErr := (CharlieAlertRuntime{
+		Queries: typedNil, WriteFence: charlie.NewWriteFence(),
+		Reconciler: charlieAlertReconcilerFunc(func(context.Context) error { return nil }),
+	}).Validate()
+	if typedNilErr == nil || !strings.Contains(typedNilErr.Error(), "queries") {
+		t.Fatalf("typed-nil query validation error = %v", typedNilErr)
+	}
+
+	runtime := CharlieAlertRuntime{
+		Queries: &charlieAlertDispatchFake{}, WriteFence: charlie.NewWriteFence(),
+		Reconciler: charlieAlertReconcilerFunc(func(context.Context) error { return nil }),
+	}
+	bindings, err := runtime.HandlerBindings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bindings) != 2 || bindings[CharlieAlertDispatchTaskType] == nil || bindings[CharlieAlertReconcileType] == nil {
+		t.Fatalf("Charlie alert bindings = %#v", bindings)
+	}
+}
+
+func configureCharlieAlertDispatchTest(t *testing.T, queries CharlieAlertDispatchQuerier, fence *charlie.WriteFence) CharlieAlertRuntime {
 	t.Helper()
 	if fence == nil {
 		fence = charlie.NewWriteFence()
 	}
-	ConfigureCharlieAlertDispatch(queries, fence)
-	t.Cleanup(func() { ConfigureCharlieAlertDispatch(nil, nil) })
+	return CharlieAlertRuntime{Queries: queries, WriteFence: fence}
 }
 
 func (f *charlieAlertDispatchFake) ClaimCharlieAlertDelivery(context.Context, uuid.UUID) (sqlc.CharlieAlertDelivery, error) {
@@ -82,8 +120,8 @@ func TestCharlieAlertDispatchRetriesProductDatabaseReadOutages(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := *base
 			tc.set(&fake)
-			configureCharlieAlertDispatchTest(t, &fake, nil)
-			err := HandleCharlieAlertDispatch(context.Background(), asynq.NewTask(CharlieAlertDispatchTaskType, []byte(`{"delivery_id":"`+deliveryID.String()+`"}`)))
+			runtime := configureCharlieAlertDispatchTest(t, &fake, nil)
+			err := runtime.HandleCharlieAlertDispatch(context.Background(), asynq.NewTask(CharlieAlertDispatchTaskType, []byte(`{"delivery_id":"`+deliveryID.String()+`"}`)))
 			if err == nil || err.Error() != "Charlie alert error: "+tc.code || strings.Contains(err.Error(), "SENTINEL") || fake.retry.LastErrorCode != tc.code {
 				t.Fatalf("read outage err=%v retry=%q", err, fake.retry.LastErrorCode)
 			}
@@ -110,10 +148,8 @@ func (f charlieAlertRoundTripFunc) RoundTrip(request *http.Request) (*http.Respo
 }
 
 func TestCharlieAlertDispatchNeverReturnsProviderOrDatabaseErrorText(t *testing.T) {
-	priorRuntime := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = priorRuntime })
 	sentinel := "credential-provider-SENTINEL"
-	ConfigureRuntime(RuntimeDependencies{HTTPClient: &http.Client{Transport: charlieAlertRoundTripFunc(func(*http.Request) (*http.Response, error) {
+	runtimeCtx := testRuntimeContext(RuntimeDependencies{HTTPClient: &http.Client{Transport: charlieAlertRoundTripFunc(func(*http.Request) (*http.Response, error) {
 		return nil, errors.New(sentinel)
 	})}})
 	connectionID, findingID, channelID, deliveryID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
@@ -123,9 +159,9 @@ func TestCharlieAlertDispatchNeverReturnsProviderOrDatabaseErrorText(t *testing.
 		channel:  sqlc.NotificationChannel{ID: channelID, Enabled: true, ChannelType: "webhook", Configuration: []byte(`{"url":"https://93.184.216.34/notify"}`)},
 		allowed:  true,
 	}
-	configureCharlieAlertDispatchTest(t, fake, nil)
+	runtime := configureCharlieAlertDispatchTest(t, fake, nil)
 	task := asynq.NewTask(CharlieAlertDispatchTaskType, []byte(`{"delivery_id":"`+deliveryID.String()+`"}`))
-	err := HandleCharlieAlertDispatch(context.Background(), task)
+	err := runtime.HandleCharlieAlertDispatch(runtimeCtx, task)
 	if err == nil || strings.Contains(err.Error(), sentinel) || err.Error() != "Charlie alert error: delivery_failed" {
 		t.Fatalf("unsafe provider error: %v", err)
 	}
@@ -134,7 +170,7 @@ func TestCharlieAlertDispatchNeverReturnsProviderOrDatabaseErrorText(t *testing.
 	}
 
 	fake.claimErr = errors.New("database-password-SENTINEL")
-	err = HandleCharlieAlertDispatch(context.Background(), task)
+	err = runtime.HandleCharlieAlertDispatch(runtimeCtx, task)
 	if err == nil || strings.Contains(err.Error(), "database-password-SENTINEL") || err.Error() != "Charlie alert error: claim_unavailable" {
 		t.Fatalf("unsafe database error: %v", err)
 	}
@@ -142,18 +178,16 @@ func TestCharlieAlertDispatchNeverReturnsProviderOrDatabaseErrorText(t *testing.
 
 func TestCharlieAlertDispatchNoopsClaimReplay(t *testing.T) {
 	fake := &charlieAlertDispatchFake{claimErr: pgx.ErrNoRows, currentErr: pgx.ErrNoRows}
-	configureCharlieAlertDispatchTest(t, fake, nil)
-	err := HandleCharlieAlertDispatch(context.Background(), asynq.NewTask(CharlieAlertDispatchTaskType, []byte(`{"delivery_id":"`+uuid.NewString()+`"}`)))
+	runtime := configureCharlieAlertDispatchTest(t, fake, nil)
+	err := runtime.HandleCharlieAlertDispatch(context.Background(), asynq.NewTask(CharlieAlertDispatchTaskType, []byte(`{"delivery_id":"`+uuid.NewString()+`"}`)))
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCharlieAlertDispatchSuppressesCurrentPolicyChangesBeforeHTTP(t *testing.T) {
-	priorRuntime := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = priorRuntime })
 	httpCalls := 0
-	ConfigureRuntime(RuntimeDependencies{HTTPClient: &http.Client{Transport: charlieAlertRoundTripFunc(func(*http.Request) (*http.Response, error) {
+	runtimeCtx := testRuntimeContext(RuntimeDependencies{HTTPClient: &http.Client{Transport: charlieAlertRoundTripFunc(func(*http.Request) (*http.Response, error) {
 		httpCalls++
 		return &http.Response{StatusCode: http.StatusNoContent, Body: http.NoBody}, nil
 	})}})
@@ -168,8 +202,8 @@ func TestCharlieAlertDispatchSuppressesCurrentPolicyChangesBeforeHTTP(t *testing
 				// disappeared and when the current threshold now exceeds severity.
 				allowed: false,
 			}
-			configureCharlieAlertDispatchTest(t, fake, nil)
-			err := HandleCharlieAlertDispatch(context.Background(), asynq.NewTask(CharlieAlertDispatchTaskType, []byte(`{"delivery_id":"`+deliveryID.String()+`"}`)))
+			runtime := configureCharlieAlertDispatchTest(t, fake, nil)
+			err := runtime.HandleCharlieAlertDispatch(runtimeCtx, asynq.NewTask(CharlieAlertDispatchTaskType, []byte(`{"delivery_id":"`+deliveryID.String()+`"}`)))
 			if err != nil || httpCalls != 0 || fake.suppressed.LastErrorCode != "policy_changed" {
 				t.Fatalf("policy recheck err=%v http_calls=%d suppressed=%q", err, httpCalls, fake.suppressed.LastErrorCode)
 			}
@@ -178,10 +212,8 @@ func TestCharlieAlertDispatchSuppressesCurrentPolicyChangesBeforeHTTP(t *testing
 }
 
 func TestCharlieAlertDispatchRecoversExpiredLeaseWithoutConcurrentSend(t *testing.T) {
-	priorRuntime := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = priorRuntime })
 	httpCalls := 0
-	ConfigureRuntime(RuntimeDependencies{HTTPClient: &http.Client{Transport: charlieAlertRoundTripFunc(func(*http.Request) (*http.Response, error) {
+	runtimeCtx := testRuntimeContext(RuntimeDependencies{HTTPClient: &http.Client{Transport: charlieAlertRoundTripFunc(func(*http.Request) (*http.Response, error) {
 		httpCalls++
 		return &http.Response{StatusCode: http.StatusNoContent, Body: http.NoBody}, nil
 	})}})
@@ -193,32 +225,30 @@ func TestCharlieAlertDispatchRecoversExpiredLeaseWithoutConcurrentSend(t *testin
 		channel: sqlc.NotificationChannel{ID: channelID, Enabled: true, ChannelType: "webhook", Configuration: []byte(`{"url":"https://93.184.216.34/notify"}`)},
 		allowed: true,
 	}
-	configureCharlieAlertDispatchTest(t, fake, nil)
+	runtime := configureCharlieAlertDispatchTest(t, fake, nil)
 	task := asynq.NewTask(CharlieAlertDispatchTaskType, []byte(`{"delivery_id":"`+deliveryID.String()+`"}`))
-	if err := HandleCharlieAlertDispatch(context.Background(), task); err == nil || err.Error() != "Charlie alert error: delivery_leased" || httpCalls != 0 {
+	if err := runtime.HandleCharlieAlertDispatch(runtimeCtx, task); err == nil || err.Error() != "Charlie alert error: delivery_leased" || httpCalls != 0 {
 		t.Fatalf("active lease err=%v http_calls=%d", err, httpCalls)
 	}
 
 	// A later Asynq retry can claim the row once its database lease expires.
 	fake.claimErr = nil
-	if err := HandleCharlieAlertDispatch(context.Background(), task); err != nil || httpCalls != 1 || !fake.delivered {
+	if err := runtime.HandleCharlieAlertDispatch(runtimeCtx, task); err != nil || httpCalls != 1 || !fake.delivered {
 		t.Fatalf("expired lease recovery err=%v http_calls=%d delivered=%t", err, httpCalls, fake.delivered)
 	}
 	// A concurrent/replayed task observes the terminal row and cannot send again.
 	fake.claimErr = pgx.ErrNoRows
 	fake.currentDelivery.Status = "delivered"
-	if err := HandleCharlieAlertDispatch(context.Background(), task); err != nil || httpCalls != 1 {
+	if err := runtime.HandleCharlieAlertDispatch(runtimeCtx, task); err != nil || httpCalls != 1 {
 		t.Fatalf("terminal replay err=%v http_calls=%d", err, httpCalls)
 	}
 }
 
 func TestCharlieAlertDispatchDisableDrainsProviderAndRejectsQueuedDelivery(t *testing.T) {
-	priorRuntime := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = priorRuntime })
 	providerEntered := make(chan struct{})
 	releaseProvider := make(chan struct{})
 	httpCalls := 0
-	ConfigureRuntime(RuntimeDependencies{HTTPClient: &http.Client{Transport: charlieAlertRoundTripFunc(func(*http.Request) (*http.Response, error) {
+	runtimeCtx := testRuntimeContext(RuntimeDependencies{HTTPClient: &http.Client{Transport: charlieAlertRoundTripFunc(func(*http.Request) (*http.Response, error) {
 		httpCalls++
 		close(providerEntered)
 		<-releaseProvider
@@ -232,10 +262,10 @@ func TestCharlieAlertDispatchDisableDrainsProviderAndRejectsQueuedDelivery(t *te
 		allowed:  true,
 	}
 	fence := charlie.NewWriteFence()
-	configureCharlieAlertDispatchTest(t, fake, fence)
+	runtime := configureCharlieAlertDispatchTest(t, fake, fence)
 	task := asynq.NewTask(CharlieAlertDispatchTaskType, []byte(`{"delivery_id":"`+deliveryID.String()+`"}`))
 	dispatchDone := make(chan error, 1)
-	go func() { dispatchDone <- HandleCharlieAlertDispatch(context.Background(), task) }()
+	go func() { dispatchDone <- runtime.HandleCharlieAlertDispatch(runtimeCtx, task) }()
 
 	select {
 	case <-providerEntered:
@@ -263,7 +293,7 @@ func TestCharlieAlertDispatchDisableDrainsProviderAndRejectsQueuedDelivery(t *te
 		t.Fatalf("disable did not finish after provider returned: %v", err)
 	}
 	claimsBefore := fake.claimCalls
-	if err := HandleCharlieAlertDispatch(context.Background(), task); err == nil || err.Error() != "Charlie alert error: write_admission_closed" {
+	if err := runtime.HandleCharlieAlertDispatch(runtimeCtx, task); err == nil || err.Error() != "Charlie alert error: write_admission_closed" {
 		t.Fatalf("queued delivery after closure was not rejected with a code: %v", err)
 	}
 	if httpCalls != 1 || fake.claimCalls != claimsBefore {

@@ -29,8 +29,9 @@
 #   K3S_IMAGE          — rancher/k3s image for the adopted cluster (default: v1.35.0-k3s1)
 #   TIMEOUT_API        — seconds to wait for the management API (default: 180)
 #   TIMEOUT_AGENT      — seconds to wait for agent connect (default: 90)
-#   TIMEOUT_BASELINE   — seconds to wait for baseline tools install (default: 600)
+#   TIMEOUT_BASELINE   — seconds to wait for Flux baseline convergence (default: 600)
 #   TIMEOUT_SCANS      — seconds to wait for first vulnerability report (default: 240)
+#   SMOKE_EVIDENCE_FILE — sanitized JSON evidence path (default: /tmp/astronomer-smoke-evidence.json)
 
 set -euo pipefail
 
@@ -44,22 +45,68 @@ set -euo pipefail
 : "${AGENT_IMAGE:=ghcr.io/alphabravo-oss/astronomer-go-agent:dev}"
 : "${SHELL_IMAGE:=ghcr.io/alphabravo-oss/astronomer-shell:dev}"
 : "${K3S_IMAGE:=rancher/k3s:v1.35.0-k3s1}"
+: "${MGMT_CONTEXT:=$(kubectl config current-context 2>/dev/null || true)}"
 : "${TIMEOUT_API:=180}"
 : "${TIMEOUT_AGENT:=90}"
 : "${TIMEOUT_BASELINE:=600}"
 : "${TIMEOUT_SCANS:=240}"
+: "${SMOKE_EVIDENCE_FILE:=/tmp/astronomer-smoke-evidence.json}"
+
+SMOKE_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+SMOKE_CURRENT_CHECK="initialization"
+SMOKE_COMPLETED_CHECKS=()
+SMOKE_SKIPPED_CHECKS=()
+SMOKE_EVIDENCE_WRITER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/write-fresh-cluster-evidence.py"
 
 KUBECONFIG_FILE="$(mktemp -t smoke-kubeconfig.XXXXXX)"
 trap 'cleanup "$?"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-step()  { printf "\n\033[1;36m▸ %s\033[0m\n" "$*"; }
+step()  { SMOKE_CURRENT_CHECK="$*"; printf "\n\033[1;36m▸ %s\033[0m\n" "$*"; }
 ok()    { printf "\033[1;32m✓ %s\033[0m\n" "$*"; }
 fail()  { printf "\033[1;31m✗ %s\033[0m\n" "$*" >&2; exit 1; }
+record_check() { SMOKE_COMPLETED_CHECKS+=("$1"); }
+record_skip() { SMOKE_SKIPPED_CHECKS+=("$1"); }
+
+write_evidence() {
+  local rc="$1" status="fail" commit kubernetes_version flux_version check flux_image management_image management_images
+  [[ "$rc" -eq 0 ]] && status="pass"
+  commit="${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+  kubernetes_version="$(kubectl --context "k3d-$SMOKE_CLUSTER" version -o json 2>/dev/null \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("serverVersion",{}).get("gitVersion",""))' 2>/dev/null || true)"
+  flux_version="$(python3 -c 'import json; print(json.load(open("deploy/release/compatibility.yaml", encoding="utf-8"))["flux"]["distribution_version"])' 2>/dev/null || true)"
+  management_images="$(kubectl --context "$MGMT_CONTEXT" -n astronomer get deployments -o json 2>/dev/null \
+    | python3 -c 'import json,sys
+payload=json.load(sys.stdin)
+for item in payload.get("items", []):
+    for container in item.get("spec",{}).get("template",{}).get("spec",{}).get("containers",[]):
+        print("{}={}".format(item.get("metadata",{}).get("name",""),container.get("image","")))' 2>/dev/null || true)"
+  local args=(
+    --output "$SMOKE_EVIDENCE_FILE" --status "$status" --exit-code "$rc"
+    --started-at "$SMOKE_STARTED_AT" --completed-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    --commit "$commit" --workflow "${GITHUB_WORKFLOW:-}" --run-id "${GITHUB_RUN_ID:-}"
+    --run-attempt "${GITHUB_RUN_ATTEMPT:-}" --job "${GITHUB_JOB:-}"
+    --repository "${GITHUB_REPOSITORY:-}" --ref "${GITHUB_REF:-}"
+    --cluster-name "$SMOKE_CLUSTER" --cluster-id "${SMOKE_CLUSTER_ID:-}"
+    --kubernetes-version "$kubernetes_version" --flux-version "$flux_version"
+    --agent-image "$AGENT_IMAGE" --shell-image "$SHELL_IMAGE" --k3s-image "$K3S_IMAGE"
+  )
+  [[ "$status" == "pass" ]] || args+=(--failed-check "$SMOKE_CURRENT_CHECK")
+  for check in "${SMOKE_COMPLETED_CHECKS[@]}"; do args+=(--check "$check"); done
+  for check in "${SMOKE_SKIPPED_CHECKS[@]}"; do args+=(--skipped-check "$check"); done
+  while IFS= read -r flux_image; do
+    [[ -z "$flux_image" ]] || args+=(--flux-image "$flux_image")
+  done <<<"${observed_flux_images:-}"
+  while IFS= read -r management_image; do
+    [[ -z "$management_image" ]] || args+=(--management-image "$management_image")
+  done <<<"$management_images"
+  python3 "$SMOKE_EVIDENCE_WRITER" "${args[@]}" || printf 'warning: failed to write smoke evidence\n' >&2
+}
 
 cleanup() {
   local rc="${1:-1}"
+  write_evidence "$rc"
   if [[ "$SMOKE_KEEP" != "1" || $rc -ne 0 ]]; then
     if [[ "${SMOKE_DELETE:-1}" == "1" ]]; then
       step "Cleanup: deleting k3d cluster $SMOKE_CLUSTER"
@@ -119,6 +166,7 @@ while (( $(date +%s) < deadline )); do
 done
 [[ "$api_ready" == "1" ]] || fail "management API at $ASTRO_URL not reachable within ${TIMEOUT_API}s"
 ok "management API responds"
+record_check "management_api_ready"
 
 # ── 1. authenticate ───────────────────────────────────────────────────
 
@@ -129,28 +177,33 @@ LOGIN_BODY="$(curl -fsS -X POST -H 'Content-Type: application/json' \
 TOKEN="$(echo "$LOGIN_BODY" | jget "['data']['token']")"
 [[ -n "$TOKEN" ]] || fail "no token in login response"
 ok "authenticated as $ASTRO_EMAIL"
+record_check "authentication"
 
 # ── 2. create k3d cluster ─────────────────────────────────────────────
 
 step "Create k3d cluster: $SMOKE_CLUSTER"
-# --network k3d-astronomer-mgmt joins the management cluster's docker
-# network so the agent can reach the public nip.io URL through the
-# host. CI environments without that network fall back to bridge —
-# the manifest URL is server-derived so it Just Works either way.
-NETWORK_ARG=""
-if docker network inspect k3d-astronomer-mgmt >/dev/null 2>&1; then
-  NETWORK_ARG="--network k3d-astronomer-mgmt"
+# Join the management cluster's Docker network so the agent can reach its
+# advertised URL through host.k3d.internal. Derive the network from the
+# caller-supplied context; hard-coding the default cluster name makes isolated
+# and concurrent smoke runs silently create an unreachable adopted cluster.
+NETWORK_ARGS=()
+if [[ "$MGMT_CONTEXT" == k3d-* ]]; then
+  MGMT_NETWORK="k3d-${MGMT_CONTEXT#k3d-}"
+  if docker network inspect "$MGMT_NETWORK" >/dev/null 2>&1; then
+    NETWORK_ARGS=(--network "$MGMT_NETWORK")
+  fi
 fi
 k3d cluster create "$SMOKE_CLUSTER" --no-lb \
     --image "$K3S_IMAGE" \
     --k3s-arg "--disable=traefik@server:0" \
-    $NETWORK_ARG \
+    "${NETWORK_ARGS[@]}" \
     >/dev/null
 ok "k3d cluster up"
 
 step "Import images into k3d"
 k3d image import -c "$SMOKE_CLUSTER" "$AGENT_IMAGE" "$SHELL_IMAGE" >/dev/null 2>&1
 ok "images imported"
+record_check "adopted_cluster_created"
 
 # ── 3. register cluster via wizard API ────────────────────────────────
 
@@ -177,6 +230,7 @@ step "Apply manifest into k3d cluster"
 kubectl --context "k3d-$SMOKE_CLUSTER" apply -f "$MANIFEST_FILE" >/dev/null
 rm -f "$MANIFEST_FILE"
 ok "manifest applied"
+record_check "registration_manifest_applied"
 
 # ── 4. wait for agent to connect ──────────────────────────────────────
 
@@ -191,38 +245,24 @@ while (( $(date +%s) < deadline )); do
   sleep 3
 done
 [[ -n "$hb" && "$hb" != "None" && "$hb" != "null" ]] || fail "agent never sent a heartbeat within ${TIMEOUT_AGENT}s"
+record_check "agent_connected"
 
 step "Confirm wizard step (advance to awaiting_agent → connected)"
 api POST "/api/v1/clusters/$SMOKE_CLUSTER_ID/registration/confirm/" \
   -d '{}' >/dev/null
 ok "confirm posted"
 
-# ── 5. wait for baseline tools to install ─────────────────────────────
+# ── 5. wait for the catalog-defined Flux baseline ─────────────────────
 
-step "Wait for baseline operators to install (timeout ${TIMEOUT_BASELINE}s)"
-deadline=$(( $(date +%s) + TIMEOUT_BASELINE ))
-expected_tools="trivy-operator fluent-bit cert-manager"
-while (( $(date +%s) < deadline )); do
-  # Per-cluster tool operations own the opt-in components. The endpoint is
-  # paginated ({data:[...]}); retain array compatibility for older releases.
-  installed="$(api GET "/api/v1/clusters/$SMOKE_CLUSTER_ID/tools/status/" 2>/dev/null \
-    | python3 -c 'import sys,json
-d=json.load(sys.stdin)
-rows=d.get("data", d) if isinstance(d, dict) else d
-print(" ".join(r["slug"] for r in rows if r.get("status") in ("installed","installing","upgrading")))' 2>/dev/null || true)"
-  missing=""
-  for t in $expected_tools; do
-    if ! echo " $installed " | grep -q " $t "; then
-      missing="$missing $t"
-    fi
-  done
-  if [[ -z "$missing" ]]; then
-    ok "all baseline tools installed: $installed"
-    break
-  fi
-  sleep 5
-done
-[[ -z "$missing" ]] || fail "baseline tools not installed after ${TIMEOUT_BASELINE}s: missing$missing"
+expected_builtin_releases="$(python3 -c 'import json
+with open("deploy/bundles/catalog.json", encoding="utf-8") as handle:
+    catalog=json.load(handle)
+print("\n".join(sorted("{}/{}".format(item["target_namespace"], item["release_name"]) for item in catalog["components"] if item["default_enabled"])))')"
+[[ -n "$expected_builtin_releases" ]] || fail "built-in bundle catalog has no default-enabled releases"
+trivy_default_enabled="$(python3 -c 'import json
+with open("deploy/bundles/catalog.json", encoding="utf-8") as handle:
+    catalog=json.load(handle)
+print("true" if any(item["slug"] == "trivy-operator" and item["default_enabled"] for item in catalog["components"]) else "false")')"
 
 step "Wait for the exact signed Flux distribution (timeout ${TIMEOUT_BASELINE}s)"
 deadline=$(( $(date +%s) + TIMEOUT_BASELINE ))
@@ -268,38 +308,47 @@ print("\n".join(sorted(rows)))')"
 [[ "$observed_flux_images" == "$expected_flux_images" ]] \
   || fail "running Flux controller images do not exactly match the signed release compatibility contract"
 ok "Flux controller images exactly match the signed release digests"
+record_check "flux_distribution_verified"
 
 step "Wait for Flux-owned built-in platform bundles (timeout ${TIMEOUT_BASELINE}s)"
 deadline=$(( $(date +%s) + TIMEOUT_BASELINE ))
-ready_builtin_releases=0
+observed_builtin_releases=""
+ready_builtin_releases=""
 while (( $(date +%s) < deadline )); do
-  ready_builtin_releases="$(kubectl --context "k3d-$SMOKE_CLUSTER" get \
+  builtin_release_rows="$(kubectl --context "k3d-$SMOKE_CLUSTER" get \
     helmreleases.helm.toolkit.fluxcd.io --all-namespaces \
     -l app.kubernetes.io/managed-by=astronomer-agent -o json 2>/dev/null \
     | python3 -c 'import json,sys
 payload=json.load(sys.stdin)
-count=0
+rows=[]
 for item in payload.get("items", []):
     metadata=item.get("metadata", {})
+    spec=item.get("spec", {})
     status=item.get("status", {})
     current=status.get("observedGeneration", 0) >= metadata.get("generation", 1)
     ready=any(c.get("type") == "Ready" and c.get("status") == "True" for c in status.get("conditions", []))
-    count += int(current and ready)
-print(count)' 2>/dev/null || echo 0)"
-  if [[ "$ready_builtin_releases" -ge 2 ]]; then
-    ok "$ready_builtin_releases agent-owned Helm releases are generation-current and Ready"
+    rows.append(("{}/{}".format(spec.get("targetNamespace", ""), spec.get("releaseName", "")), current and ready))
+for identity, is_ready in sorted(rows):
+    print("{}\t{}".format(identity, int(is_ready)))' 2>/dev/null || true)"
+  observed_builtin_releases="$(printf '%s\n' "$builtin_release_rows" | awk -F '\t' 'NF {print $1}')"
+  ready_builtin_releases="$(printf '%s\n' "$builtin_release_rows" | awk -F '\t' '$2 == "1" {print $1}')"
+  if [[ "$observed_builtin_releases" == "$expected_builtin_releases" && "$ready_builtin_releases" == "$expected_builtin_releases" ]]; then
+    ok "exact catalog-defined HelmRelease set is generation-current and Ready"
     break
   fi
   sleep 5
 done
-[[ "$ready_builtin_releases" -ge 2 ]] \
-  || fail "fewer than two built-in Helm releases became Ready after ${TIMEOUT_BASELINE}s"
+[[ "$observed_builtin_releases" == "$expected_builtin_releases" ]] \
+  || fail "agent-owned HelmRelease set does not exactly match default-enabled catalog releases after ${TIMEOUT_BASELINE}s"
+[[ "$ready_builtin_releases" == "$expected_builtin_releases" ]] \
+  || fail "not every catalog-defined HelmRelease is generation-current and Ready after ${TIMEOUT_BASELINE}s"
 
 kubectl --context "k3d-$SMOKE_CLUSTER" -n astronomer-monitoring \
   rollout status deployment/kube-state-metrics --timeout=120s >/dev/null
 kubectl --context "k3d-$SMOKE_CLUSTER" -n astronomer-monitoring \
   rollout status daemonset/prometheus-node-exporter --timeout=120s >/dev/null
 ok "kube-state-metrics and prometheus-node-exporter workloads are ready"
+record_check "catalog_baseline_releases_ready"
 
 # ── 6. open kubectl shell ─────────────────────────────────────────────
 
@@ -313,21 +362,30 @@ ok "shell session $SHELL_SESSION_ID active"
 # Tear down so the smoke test doesn't leak a long-lived shell pod.
 api POST "/api/v1/clusters/$SMOKE_CLUSTER_ID/shell/sessions/$SHELL_SESSION_ID/close/" >/dev/null 2>&1 || true
 ok "shell session closed"
+record_check "kubectl_shell"
 
 # ── 7. wait for first vulnerability report ────────────────────────────
 
-step "Wait for first image vulnerability report (timeout ${TIMEOUT_SCANS}s)"
-deadline=$(( $(date +%s) + TIMEOUT_SCANS ))
-while (( $(date +%s) < deadline )); do
-  count="$(api GET "/api/v1/clusters/$SMOKE_CLUSTER_ID/vulnerabilities/summary/" \
-    | jget "['data']['report_count']" 2>/dev/null || echo 0)"
-  if [[ "$count" -gt 0 ]]; then
-    ok "vulnerability reports flowing: $count"
-    break
-  fi
-  sleep 6
-done
-[[ "$count" -gt 0 ]] || fail "no vulnerability reports after ${TIMEOUT_SCANS}s"
+if [[ "$trivy_default_enabled" == "true" ]]; then
+  step "Wait for first image vulnerability report (timeout ${TIMEOUT_SCANS}s)"
+  deadline=$(( $(date +%s) + TIMEOUT_SCANS ))
+  count=0
+  while (( $(date +%s) < deadline )); do
+    count="$(api GET "/api/v1/clusters/$SMOKE_CLUSTER_ID/vulnerabilities/summary/" \
+      | jget "['data']['report_count']" 2>/dev/null || echo 0)"
+    if [[ "$count" -gt 0 ]]; then
+      ok "vulnerability reports flowing: $count"
+      break
+    fi
+    sleep 6
+  done
+  [[ "$count" -gt 0 ]] || fail "no vulnerability reports after ${TIMEOUT_SCANS}s"
+  record_check "vulnerability_reports"
+else
+  step "Skip vulnerability report check: trivy-operator is not default-enabled"
+  ok "vulnerability reporting is outside the catalog-defined default baseline"
+  record_skip "vulnerability_reports_not_in_default_baseline"
+fi
 
 # ── 7b. assert registration_phase == ready (T5.1) ─────────────────────
 #
@@ -361,6 +419,7 @@ print(sum(1 for s in d.get("steps",[]) if s.get("step_name")=="template_applying
   2>/dev/null || echo 0)"
 [[ "$orphan_count" -eq 0 ]] || fail "found $orphan_count orphan template_applying running rows"
 ok "no orphan template_applying rows"
+record_check "registration_ready"
 
 # ── 8. verify k8s proxy works ─────────────────────────────────────────
 
@@ -369,6 +428,7 @@ NS_COUNT="$(api GET "/api/v1/clusters/$SMOKE_CLUSTER_ID/k8s/api/v1/namespaces" \
   | jget "['items'].__len__()" 2>/dev/null || echo 0)"
 [[ "$NS_COUNT" -ge 4 ]] || fail "k8s proxy returned $NS_COUNT namespaces (expected >=4)"
 ok "k8s proxy returned $NS_COUNT namespaces"
+record_check "kubernetes_proxy"
 
 # ── 9. openapi + swagger ──────────────────────────────────────────────
 
@@ -379,5 +439,6 @@ ok "openapi spec $SPEC_LEN bytes"
 DOCS_CT="$(curl -fsS -o /dev/null -w '%{content_type}' "$ASTRO_URL/api/v1/docs/")"
 [[ "$DOCS_CT" == "text/html"* ]] || fail "swagger UI content-type: $DOCS_CT"
 ok "swagger UI served"
+record_check "openapi_and_swagger"
 
 step "All smoke-test stages passed for cluster $SMOKE_CLUSTER_ID"

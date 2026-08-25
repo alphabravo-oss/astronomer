@@ -52,8 +52,13 @@ export function placementFromForm(
       if ((operator === "In" || operator === "NotIn") && !values?.length) {
         throw new Error(`${operator} expression “${line}” requires values.`);
       }
-      if ((operator === "Exists" || operator === "DoesNotExist") && values?.length) {
-        throw new Error(`${operator} expression “${line}” cannot include values.`);
+      if (
+        (operator === "Exists" || operator === "DoesNotExist") &&
+        values?.length
+      ) {
+        throw new Error(
+          `${operator} expression “${line}” cannot include values.`,
+        );
       }
       return { key: match[1], operator, ...(values?.length ? { values } : {}) };
     });
@@ -93,9 +98,9 @@ export function placementFormDefaults(placement: Placement) {
 export function placementHasSelector(placement: PlacementRequest): boolean {
   return Boolean(
     placement.all_clusters ||
-      placement.cluster_ids?.length ||
-      placement.cluster_group_ids?.length ||
-      Object.keys(placement.match_labels ?? {}).length ||
-      placement.match_expressions?.length,
+    placement.cluster_ids?.length ||
+    placement.cluster_group_ids?.length ||
+    Object.keys(placement.match_labels ?? {}).length ||
+    placement.match_expressions?.length,
   );
 }

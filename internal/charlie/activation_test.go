@@ -120,6 +120,16 @@ func TestRuntimeDeactivateRemovesAgentAndProductMaterial(t *testing.T) {
 	if _, err := client.CoreV1().Services("astronomer").Get(context.Background(), mcpServiceName, metav1.GetOptions{}); err == nil {
 		t.Fatal("MCP service survived disconnect")
 	}
+	for _, name := range []string{productMCPSecret, productBridgeSecret} {
+		if _, err := client.CoreV1().Secrets("astronomer").Get(context.Background(), name, metav1.GetOptions{}); err == nil {
+			t.Fatalf("product trust Secret %s survived disconnect", name)
+		}
+	}
+	for _, name := range []string{productNetworkName, bridgeEgressName} {
+		if _, err := client.NetworkingV1().NetworkPolicies("astronomer").Get(context.Background(), name, metav1.GetOptions{}); err == nil {
+			t.Fatalf("activation-owned NetworkPolicy %s survived disconnect", name)
+		}
+	}
 	if err := activator.Deactivate(context.Background()); err != nil {
 		t.Fatalf("repeat disconnect must be idempotent: %v", err)
 	}

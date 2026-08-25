@@ -25,8 +25,7 @@ func TestHandleEnsureAuditLogPartitions(t *testing.T) {
 }
 
 func TestHandleEnsureAuditLogPartitions_NoRuntime(t *testing.T) {
-	defer resetRuntime()
-	if err := HandleEnsureAuditLogPartitions(context.Background(), nil); err != nil {
-		t.Fatalf("HandleEnsureAuditLogPartitions: %v", err)
+	if err := HandleEnsureAuditLogPartitions(testRuntimeContext(RuntimeDependencies{}), nil); err == nil {
+		t.Fatal("HandleEnsureAuditLogPartitions returned nil, want an unconfigured-runtime error")
 	}
 }

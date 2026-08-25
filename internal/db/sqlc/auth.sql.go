@@ -334,6 +334,34 @@ func (q *Queries) GetSSOConfigurationByID(ctx context.Context, id uuid.UUID) (Ss
 	return i, err
 }
 
+const getSSOConfigurationByIDForUpdate = `-- name: GetSSOConfigurationByIDForUpdate :one
+SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at FROM sso_configurations WHERE id = $1 FOR UPDATE
+`
+
+// Transaction-only read used by delete so the existence decision, delete,
+// and mandatory audit intent share one serialization point.
+func (q *Queries) GetSSOConfigurationByIDForUpdate(ctx context.Context, id uuid.UUID) (SsoConfiguration, error) {
+	row := q.db.QueryRow(ctx, getSSOConfigurationByIDForUpdate, id)
+	var i SsoConfiguration
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.IsEnabled,
+		&i.DisplayName,
+		&i.Config,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.AllowedOrganizations,
+		&i.AllowedDomains,
+		&i.AutoCreateUsers,
+		&i.DefaultGlobalRoleID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MigratedToDexAt,
+	)
+	return i, err
+}
+
 const getSSOConfigurationByProvider = `-- name: GetSSOConfigurationByProvider :one
 SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at FROM sso_configurations WHERE provider = $1
 `
@@ -526,6 +554,18 @@ func (q *Queries) ListTokensByUser(ctx context.Context, arg ListTokensByUserPara
 	return items, nil
 }
 
+const lockSSOProviderKey = `-- name: LockSSOProviderKey :exec
+SELECT pg_advisory_xact_lock(hashtextextended('astronomer:sso-provider:' || $1::text, 0))
+`
+
+// A row lock cannot serialize two concurrent creates when the provider row
+// does not exist yet. This transaction-scoped advisory lock gives each
+// canonical provider key a stable lock before the transaction re-reads it.
+func (q *Queries) LockSSOProviderKey(ctx context.Context, providerKey string) error {
+	_, err := q.db.Exec(ctx, lockSSOProviderKey, providerKey)
+	return err
+}
+
 const lockUser = `-- name: LockUser :exec
 UPDATE users
 SET locked_until  = $2,
@@ -558,6 +598,72 @@ func (q *Queries) PurgeExpiredJWTRevocations(ctx context.Context) (int64, error)
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const recordFailedLoginAttempt = `-- name: RecordFailedLoginAttempt :one
+UPDATE users
+SET failed_login_count = failed_login_count + 1,
+    failed_login_at = $1,
+    locked_until = CASE
+        WHEN failed_login_count + 1 >= $2::int
+        THEN $3
+        ELSE locked_until
+    END,
+    locked_reason = CASE
+        WHEN failed_login_count + 1 >= $2::int
+        THEN $4
+        ELSE locked_reason
+    END,
+    updated_at = now()
+WHERE id = $5
+RETURNING id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides, is_service
+`
+
+type RecordFailedLoginAttemptParams struct {
+	FailedLoginAt    pgtype.Timestamptz `json:"failed_login_at"`
+	LockoutThreshold int32              `json:"lockout_threshold"`
+	LockedUntil      pgtype.Timestamptz `json:"locked_until"`
+	LockedReason     string             `json:"locked_reason"`
+	ID               uuid.UUID          `json:"id"`
+}
+
+// Race-safe lockout transition. The increment and threshold decision run
+// against the row-locked current count, so concurrent bad passwords cannot
+// both observe the same stale pre-increment value and evade the threshold.
+func (q *Queries) RecordFailedLoginAttempt(ctx context.Context, arg RecordFailedLoginAttemptParams) (User, error) {
+	row := q.db.QueryRow(ctx, recordFailedLoginAttempt,
+		arg.FailedLoginAt,
+		arg.LockoutThreshold,
+		arg.LockedUntil,
+		arg.LockedReason,
+		arg.ID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.FirstName,
+		&i.LastName,
+		&i.Password,
+		&i.IsActive,
+		&i.IsStaff,
+		&i.IsSuperuser,
+		&i.LastLogin,
+		&i.DateJoined,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MustChangePassword,
+		&i.FailedLoginCount,
+		&i.FailedLoginAt,
+		&i.LockedUntil,
+		&i.LockedReason,
+		&i.TokensInvalidatedAt,
+		&i.QuotaPlan,
+		&i.QuotaOverrides,
+		&i.IsService,
+	)
+	return i, err
 }
 
 const resetFailedLoginCount = `-- name: ResetFailedLoginCount :exec

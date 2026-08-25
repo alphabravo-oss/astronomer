@@ -1,11 +1,22 @@
-import type { ElementType } from 'react';
-import { AlertCircle, Bell, Hash, Mail, MessageSquare, Send, Webhook } from 'lucide-react';
-import { useNotificationChannels, useTestNotificationChannel } from '@/lib/hooks';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { ActionButton } from '@/components/ui/action-button';
-import { formatRelativeTime } from '@/lib/utils';
-import type { NotificationChannel } from '@/types';
+import type { ElementType } from "react";
+import {
+  AlertCircle,
+  Bell,
+  Hash,
+  Mail,
+  MessageSquare,
+  Send,
+  Webhook,
+} from "lucide-react";
+import {
+  useNotificationChannels,
+  useTestNotificationChannel,
+} from "@/lib/hooks/alerting";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ActionButton } from "@/components/ui/action-button";
+import { formatRelativeTime } from "@/lib/utils";
+import type { NotificationChannel } from "@/types";
 
 const channelTypeIcons: Record<string, ElementType> = {
   slack: Hash,
@@ -16,13 +27,18 @@ const channelTypeIcons: Record<string, ElementType> = {
 };
 
 export function ChannelsTab() {
-  const { data: channels, isLoading, isError, refetch } = useNotificationChannels();
+  const {
+    data: channels,
+    isLoading,
+    isError,
+    refetch,
+  } = useNotificationChannels();
   const testChannel = useTestNotificationChannel();
 
   const columns: Column<NotificationChannel>[] = [
     {
-      key: 'name',
-      header: 'Channel',
+      key: "name",
+      header: "Channel",
       accessor: (row) => {
         const TypeIcon = channelTypeIcons[row.type] || Bell;
         return (
@@ -34,34 +50,42 @@ export function ChannelsTab() {
       },
     },
     {
-      key: 'type',
-      header: 'Type',
+      key: "type",
+      header: "Type",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">
-          {row.type === 'msteams' ? 'MS Teams' : row.type === 'pagerduty' ? 'PagerDuty' : row.type}
+          {row.type === "msteams"
+            ? "MS Teams"
+            : row.type === "pagerduty"
+              ? "PagerDuty"
+              : row.type}
         </span>
       ),
     },
     {
-      key: 'status',
-      header: 'Status',
+      key: "status",
+      header: "Status",
       accessor: (row) => (
         <StatusBadge
-          status={row.enabled ? 'active' : 'disconnected'}
-          label={row.enabled ? 'Enabled' : 'Disabled'}
+          status={row.enabled ? "active" : "disconnected"}
+          label={row.enabled ? "Enabled" : "Disabled"}
         />
       ),
     },
     {
-      key: 'created',
-      header: 'Created',
-      accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+      key: "created",
+      header: "Created",
+      accessor: (row) => (
+        <span className="text-xs text-muted-foreground">
+          {formatRelativeTime(row.createdAt)}
+        </span>
+      ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       accessor: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
           <ActionButton
             size="sm"
             intent="ghost"

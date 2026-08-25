@@ -78,8 +78,7 @@ func isAgentNotConnectedErr(err error) bool {
 // the per-cluster apply task and the periodic drift sweep route through.
 // These tasks require the tunnel hub (which only lives in the server
 // pod) so they're processed by the server-embedded asynq.Server, not by
-// the standalone astronomer-worker pod whose tasks.ConfigureClusterTemplateApply
-// is intentionally unwired.
+// the standalone astronomer-worker pod, whose runtime has no tunnel binding.
 const ClusterTemplateApplyQueueName = "tunnel"
 
 // ClusterTemplateDriftCheckType is the periodic drift sweep. Hourly
@@ -166,26 +165,10 @@ type ToolInstaller interface {
 	EnsureInstalled(ctx context.Context, clusterID uuid.UUID, slug, releaseName, preset, valuesYAML string) (sqlc.InstalledChart, error)
 }
 
-// ClusterTemplateApplyDeps wires the apply worker. Set once at startup
-// via ConfigureClusterTemplateApply; tests can swap fakes.
+// ClusterTemplateApplyDeps wires the apply worker.
 type ClusterTemplateApplyDeps struct {
 	Queries   ClusterTemplateApplyQuerier
 	Installer ToolInstaller
-}
-
-var clusterTemplateApplyDeps ClusterTemplateApplyDeps
-
-// ConfigureClusterTemplateApply wires runtime dependencies. Called once
-// from cmd/server (or the worker process bootstrap).
-func ConfigureClusterTemplateApply(deps ClusterTemplateApplyDeps) {
-	clusterTemplateApplyDeps = deps
-}
-
-// ResetClusterTemplateApply clears the runtime deps. Used by tests so
-// per-test ConfigureClusterTemplateApply calls don't bleed between
-// goroutine-parallel test cases.
-func ResetClusterTemplateApply() {
-	clusterTemplateApplyDeps = ClusterTemplateApplyDeps{}
 }
 
 // templateSpec is the parsed shape of the spec JSONB. Unknown fields are
@@ -223,24 +206,23 @@ type templatePolicy struct {
 // each step. Returns nil on terminal outcomes (applied OR failed): the
 // row's status reflects the result; the reapply endpoint is the
 // operator's recovery hook.
-func HandleClusterTemplateApply(ctx context.Context, t *asynq.Task) error {
-	if clusterTemplateApplyDeps.Queries == nil {
-		runtimeLogger().InfoContext(ctx, "cluster template apply runtime not configured, skipping")
-		return nil
+func (runtime ClusterTemplateRuntime) HandleClusterTemplateApply(ctx context.Context, t *asynq.Task) error {
+	if runtime.Deps.Queries == nil {
+		return fmt.Errorf("cluster template apply runtime is not configured")
 	}
 	var payload ClusterTemplateApplyPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
-		runtimeLogger().ErrorContext(ctx, "unmarshal cluster template apply payload", "error", err)
+		runtimeLogger(ctx).ErrorContext(ctx, "unmarshal cluster template apply payload", "error", err)
 		// Returning nil so asynq doesn't retry a structurally bad
 		// payload that will never succeed.
 		return nil
 	}
 	clusterID, err := uuid.Parse(payload.ClusterID)
 	if err != nil {
-		runtimeLogger().ErrorContext(ctx, "parse cluster id", "error", err, "raw", payload.ClusterID)
+		runtimeLogger(ctx).ErrorContext(ctx, "parse cluster id", "error", err, "raw", payload.ClusterID)
 		return nil
 	}
-	return runClusterTemplateApply(ctx, clusterTemplateApplyDeps, clusterID)
+	return runClusterTemplateApply(ctx, runtime.Deps, clusterID)
 }
 
 // runClusterTemplateApply is the testable core. Split from
@@ -254,7 +236,7 @@ func runClusterTemplateApply(ctx context.Context, deps ClusterTemplateApplyDeps,
 			// enqueue and execution. Not an error.
 			return nil
 		}
-		runtimeLogger().ErrorContext(ctx, "load cluster template application", "error", err, "cluster_id", clusterID)
+		runtimeLogger(ctx).ErrorContext(ctx, "load cluster template application", "error", err, "cluster_id", clusterID)
 		return nil
 	}
 
@@ -267,7 +249,7 @@ func runClusterTemplateApply(ctx context.Context, deps ClusterTemplateApplyDeps,
 		Status:    "applying",
 		LastError: "",
 	}); err != nil {
-		runtimeLogger().ErrorContext(ctx, "mark applying", "error", err, "cluster_id", clusterID)
+		runtimeLogger(ctx).ErrorContext(ctx, "mark applying", "error", err, "cluster_id", clusterID)
 		return nil
 	}
 
@@ -299,7 +281,7 @@ func runClusterTemplateApply(ctx context.Context, deps ClusterTemplateApplyDeps,
 		// the agent's WS connection will pick the task up. Same applies
 		// when the agent is mid-reconnect (server pod restart).
 		if isAgentNotConnectedErr(err) {
-			runtimeLogger().WarnContext(ctx, "apply deferred: agent not on this pod, returning task to queue",
+			runtimeLogger(ctx).WarnContext(ctx, "apply deferred: agent not on this pod, returning task to queue",
 				"cluster_id", clusterID, "error", err)
 			_, _ = deps.Queries.MarkClusterTemplateApplicationStatus(ctx, sqlc.MarkClusterTemplateApplicationStatusParams{
 				ClusterID: clusterID,
@@ -327,7 +309,7 @@ func runClusterTemplateApply(ctx context.Context, deps ClusterTemplateApplyDeps,
 		LastError: "",
 		AppliedAt: appliedAt,
 	}); err != nil {
-		runtimeLogger().ErrorContext(ctx, "mark applied", "error", err, "cluster_id", clusterID)
+		runtimeLogger(ctx).ErrorContext(ctx, "mark applied", "error", err, "cluster_id", clusterID)
 		return nil
 	}
 
@@ -344,7 +326,7 @@ func persistApplyFailure(ctx context.Context, deps ClusterTemplateApplyDeps, clu
 		Status:    "failed",
 		LastError: msg,
 	}); err != nil {
-		runtimeLogger().ErrorContext(ctx, "persist apply failure", "error", err, "cluster_id", clusterID, "msg", msg)
+		runtimeLogger(ctx).ErrorContext(ctx, "persist apply failure", "error", err, "cluster_id", clusterID, "msg", msg)
 	}
 }
 
@@ -554,12 +536,12 @@ func jsonbEqual(a, b json.RawMessage) bool {
 // against the snapshot. Tool/project drift could be added later but the
 // labels + environment hash already catches the high-value cases
 // (someone manually retiered a cluster, someone removed a label).
-func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
-	if clusterTemplateApplyDeps.Queries == nil {
+func (runtime ClusterTemplateRuntime) HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
+	if runtime.Deps.Queries == nil {
 		return nil
 	}
 	return runPeriodicTaskWithLeader(ctx, ClusterTemplateDriftCheckType, func() error {
-		apps, err := clusterTemplateApplyDeps.Queries.ListClusterTemplateApplicationsByStatus(ctx, sqlc.ListClusterTemplateApplicationsByStatusParams{
+		apps, err := runtime.Deps.Queries.ListClusterTemplateApplicationsByStatus(ctx, sqlc.ListClusterTemplateApplicationsByStatusParams{
 			Status: "applied",
 			Limit:  int32(clusterTemplateDriftCheckLimit),
 		})
@@ -568,7 +550,7 @@ func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
 		}
 		drift := 0
 		for _, app := range apps {
-			cluster, err := clusterTemplateApplyDeps.Queries.GetClusterByID(ctx, app.ClusterID)
+			cluster, err := runtime.Deps.Queries.GetClusterByID(ctx, app.ClusterID)
 			if err != nil {
 				continue
 			}
@@ -584,7 +566,7 @@ func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
 				continue
 			}
 		}
-		runtimeLogger().InfoContext(ctx, "cluster template drift sweep", "evaluated", len(apps), "drift", drift)
+		runtimeLogger(ctx).InfoContext(ctx, "cluster template drift sweep", "evaluated", len(apps), "drift", drift)
 		// Stuck-row recovery. A `failed` cluster_template_applications
 		// row should NOT need a manual reapply click — the operator has
 		// already opted in via install_baseline=true, and the failure is
@@ -597,8 +579,8 @@ func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
 		// the hourly sweep cadence so a permanently-broken cluster
 		// doesn't pin a worker burning retries — asynq's per-task
 		// MaxRetry caps that on the apply side.
-		if enqueuer := failedApplyEnqueuer; enqueuer != nil {
-			failed, ferr := clusterTemplateApplyDeps.Queries.ListClusterTemplateApplicationsByStatus(ctx, sqlc.ListClusterTemplateApplicationsByStatusParams{
+		if enqueuer := runtime.RecoveryEnqueuer; enqueuer != nil {
+			failed, ferr := runtime.Deps.Queries.ListClusterTemplateApplicationsByStatus(ctx, sqlc.ListClusterTemplateApplicationsByStatusParams{
 				Status: "failed",
 				Limit:  int32(clusterTemplateDriftCheckLimit),
 			})
@@ -628,7 +610,7 @@ func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
 					enqueued++
 				}
 				if enqueued > 0 || skipped > 0 {
-					runtimeLogger().InfoContext(ctx, "cluster template recovery sweep",
+					runtimeLogger(ctx).InfoContext(ctx, "cluster template recovery sweep",
 						"re_enqueued", enqueued, "skipped_backoff", skipped)
 				}
 			}
@@ -641,8 +623,8 @@ func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
 		// pending rows stale past the backoff so the pod holding the agent's WS
 		// eventually picks them up; newer pendings are left for asynq's own
 		// delivery. The apply task is idempotent + task-outbox deduped.
-		if enqueuer := failedApplyEnqueuer; enqueuer != nil {
-			pending, perr := clusterTemplateApplyDeps.Queries.ListClusterTemplateApplicationsByStatus(ctx, sqlc.ListClusterTemplateApplicationsByStatusParams{
+		if enqueuer := runtime.RecoveryEnqueuer; enqueuer != nil {
+			pending, perr := runtime.Deps.Queries.ListClusterTemplateApplicationsByStatus(ctx, sqlc.ListClusterTemplateApplicationsByStatusParams{
 				Status: "pending",
 				Limit:  int32(clusterTemplateDriftCheckLimit),
 			})
@@ -660,7 +642,7 @@ func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
 					requeued++
 				}
 				if requeued > 0 {
-					runtimeLogger().InfoContext(ctx, "cluster template stranded-pending recovery", "re_enqueued", requeued)
+					runtimeLogger(ctx).InfoContext(ctx, "cluster template stranded-pending recovery", "re_enqueued", requeued)
 				}
 			}
 		}
@@ -671,7 +653,7 @@ func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
 		// reconciler can route them to remediation, and the
 		// cluster-detail UI surfaces a red badge instead of leaving
 		// the user staring at a never-finishing spinner.
-		applying, aerr := clusterTemplateApplyDeps.Queries.ListClusterTemplateApplicationsByStatus(ctx, sqlc.ListClusterTemplateApplicationsByStatusParams{
+		applying, aerr := runtime.Deps.Queries.ListClusterTemplateApplicationsByStatus(ctx, sqlc.ListClusterTemplateApplicationsByStatusParams{
 			Status: "applying",
 			Limit:  int32(clusterTemplateDriftCheckLimit),
 		})
@@ -681,7 +663,7 @@ func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
 				if time.Since(app.UpdatedAt) <= stuckApplyingThreshold {
 					continue
 				}
-				_, cerr := clusterTemplateApplyDeps.Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
+				_, cerr := runtime.Deps.Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
 					ClusterID: app.ClusterID,
 					Type:      ConditionTemplateApplyStuck,
 					Status:    "True",
@@ -694,14 +676,14 @@ func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
 					),
 				})
 				if cerr != nil {
-					runtimeLogger().WarnContext(ctx, "stuck-applying condition write failed",
+					runtimeLogger(ctx).WarnContext(ctx, "stuck-applying condition write failed",
 						"cluster_id", app.ClusterID, "error", cerr)
 					continue
 				}
 				stuck++
 			}
 			if stuck > 0 {
-				runtimeLogger().InfoContext(ctx, "cluster template stuck-applying sweep", "marked", stuck)
+				runtimeLogger(ctx).InfoContext(ctx, "cluster template stuck-applying sweep", "marked", stuck)
 			}
 		}
 		return nil
@@ -712,14 +694,4 @@ func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
 // sweep needs. Server-side glue passes the existing apply queue client.
 type FailedApplyEnqueuer interface {
 	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
-}
-
-var failedApplyEnqueuer FailedApplyEnqueuer
-
-// ConfigureFailedApplyEnqueuer wires the asynq client the drift sweep
-// uses to re-enqueue stuck `failed` rows. Optional — when unwired the
-// sweep continues to do its drift-detection work and just skips the
-// recovery step. nil-safe.
-func ConfigureFailedApplyEnqueuer(e FailedApplyEnqueuer) {
-	failedApplyEnqueuer = e
 }

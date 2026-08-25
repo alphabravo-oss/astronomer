@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS public.logging_operations_cluster_created_idx;

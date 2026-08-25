@@ -48,6 +48,36 @@ func (q *idorCatalogQuerier) CountInstalledCharts(_ context.Context) (int64, err
 	return int64(len(q.list)), nil
 }
 
+func (q *idorCatalogQuerier) ListInstalledChartsForScopes(_ context.Context, arg sqlc.ListInstalledChartsForScopesParams) ([]sqlc.InstalledChart, error) {
+	allowed := make(map[uuid.UUID]struct{}, len(arg.ClusterIds))
+	for _, id := range arg.ClusterIds {
+		allowed[id] = struct{}{}
+	}
+	rows := make([]sqlc.InstalledChart, 0, len(q.list))
+	for _, row := range q.list {
+		if _, ok := allowed[row.ClusterID]; ok {
+			rows = append(rows, row)
+		}
+	}
+	start := min(int(arg.QueryOffset), len(rows))
+	end := min(start+int(arg.QueryLimit), len(rows))
+	return rows[start:end], nil
+}
+
+func (q *idorCatalogQuerier) CountInstalledChartsForScopes(_ context.Context, clusterIDs []uuid.UUID) (int64, error) {
+	allowed := make(map[uuid.UUID]struct{}, len(clusterIDs))
+	for _, id := range clusterIDs {
+		allowed[id] = struct{}{}
+	}
+	var count int64
+	for _, row := range q.list {
+		if _, ok := allowed[row.ClusterID]; ok {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func catalogReadBindings(clusterID uuid.UUID) []rbac.RoleBinding {
 	return []rbac.RoleBinding{{
 		ClusterID: clusterID.String(),

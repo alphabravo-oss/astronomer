@@ -31,9 +31,9 @@ const (
 	grafanaDashboardFolderAnnotationKey = "grafana_folder"
 	// Shared (non-tenant) folders. Cluster folders are reconciler-owned
 	// ConfigMaps (uid = cluster UUID); they are UX, not a security boundary.
-	grafanaFolderFleet           = "Fleet"
+	grafanaFolderShared          = "Shared"
 	grafanaFolderManagementPlane = "Management plane"
-	// Sidecar writes Fleet / Management plane under this subdir so the
+	// Sidecar writes Shared / Management plane under this subdir so the
 	// sidecarProvider walk does not import per-cluster dashboard files.
 	grafanaSidecarSharedFolder        = "shared"
 	grafanaClusterDashboardRoot       = "/tmp/dashboards/clusters"
@@ -117,6 +117,10 @@ func (h *MonitoringHandler) updateSharedGrafanaMetadata(ctx context.Context, bac
 	if h.queries == nil {
 		return nil
 	}
+	return h.updateSharedGrafanaMetadataWith(ctx, h.queries, backend, req, status)
+}
+
+func (h *MonitoringHandler) updateSharedGrafanaMetadataWith(ctx context.Context, q monitoringSharedMutationWriter, backend sqlc.MonitoringBackend, req SharedGrafanaRequest, status string) error {
 	if req.IngressHost == "" && h != nil {
 		req.IngressHost = defaultGrafanaHost(h.serverURL)
 	}
@@ -169,7 +173,7 @@ func (h *MonitoringHandler) updateSharedGrafanaMetadata(ctx context.Context, bac
 	if err := imonitoring.SealInto(&params, authCfg, h.monitoringSealer()); err != nil {
 		return err
 	}
-	_, err = h.queries.UpsertDefaultMonitoringBackend(ctx, params)
+	_, err = q.UpsertDefaultMonitoringBackend(ctx, params)
 	return err
 }
 
@@ -693,7 +697,7 @@ func grafanaDashboardConfigMapName(slug string) string {
 }
 
 // grafanaDashboardFolder maps a shipped dashboard slug onto the shared Grafana
-// folders (Fleet / Management plane). Per-cluster copies of cluster-scoped
+// folders (Shared / Management plane). Per-cluster copies of cluster-scoped
 // dashboards are provisioned separately; those folders are not a tenant
 // boundary — PromQL/LogQL rewrite is.
 func grafanaDashboardFolder(slug string) string {
@@ -701,7 +705,7 @@ func grafanaDashboardFolder(slug string) string {
 	case "management-plane", "baseline-tool-health", "continuous-delivery":
 		return grafanaFolderManagementPlane
 	default:
-		return grafanaFolderFleet
+		return grafanaFolderShared
 	}
 }
 

@@ -1,10 +1,18 @@
-import { Trash2 } from 'lucide-react';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { Badge } from '@/components/ui/badge';
-import { ActionButton } from '@/components/ui/action-button';
-import { formatRelativeTime } from '@/lib/utils';
-import type { AccessBinding, Cluster, ClusterRole, GlobalRole, Project, ProjectRole, User } from '@/types';
-import { bindingSubject, bindingTarget, roleTitle } from './-utils';
+import { Trash2 } from "lucide-react";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { ActionButton } from "@/components/ui/action-button";
+import { formatRelativeTime } from "@/lib/utils";
+import type {
+  AccessBinding,
+  Cluster,
+  ClusterRole,
+  GlobalRole,
+  Project,
+  ProjectRole,
+  User,
+} from "@/types";
+import { bindingSubject, bindingTarget, roleTitle } from "./-utils";
 
 interface BindingsTabProps {
   bindings: AccessBinding[];
@@ -35,55 +43,69 @@ export function BindingsTab({
 }: BindingsTabProps) {
   const roleName = (binding: AccessBinding) => {
     const roles =
-      binding.scope === 'global' ? globalRoles : binding.scope === 'project' ? projectRoles : clusterRoles;
+      binding.scope === "global"
+        ? globalRoles
+        : binding.scope === "project"
+          ? projectRoles
+          : clusterRoles;
     const role = roles.find((r) => r.id === binding.roleId);
     return role ? roleTitle(role) : binding.roleId;
   };
 
   const columns: Column<AccessBinding>[] = [
     {
-      key: 'subject',
-      header: 'Subject',
+      key: "subject",
+      header: "Subject",
       accessor: (row) => (
-        <span className="font-medium text-foreground">{bindingSubject(row, users)}</span>
+        <span className="font-medium text-foreground">
+          {bindingSubject(row, users)}
+        </span>
       ),
       sortAccessor: (row) => bindingSubject(row, users),
     },
     {
-      key: 'scope',
-      header: 'Scope',
+      key: "scope",
+      header: "Scope",
       accessor: (row) => (
         <Badge variant="secondary" className="capitalize">
           {row.scope}
         </Badge>
       ),
       sortAccessor: (row) => row.scope,
-      filter: { label: 'Scope' },
+      filter: { label: "Scope" },
     },
     {
-      key: 'role',
-      header: 'Role',
-      accessor: (row) => <span className="text-sm text-muted-foreground">{roleName(row)}</span>,
+      key: "role",
+      header: "Role",
+      accessor: (row) => (
+        <span className="text-sm text-muted-foreground">{roleName(row)}</span>
+      ),
       sortAccessor: (row) => roleName(row),
     },
     {
-      key: 'target',
-      header: 'Applies to',
+      key: "target",
+      header: "Applies to",
       accessor: (row) => (
-        <span className="text-sm text-muted-foreground">{bindingTarget(row, clusters, projects)}</span>
+        <span className="text-sm text-muted-foreground">
+          {bindingTarget(row, clusters, projects)}
+        </span>
       ),
       sortAccessor: (row) => bindingTarget(row, clusters, projects),
     },
     {
-      key: 'created',
-      header: 'Created',
-      accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+      key: "created",
+      header: "Created",
+      accessor: (row) => (
+        <span className="text-xs text-muted-foreground">
+          {formatRelativeTime(row.createdAt)}
+        </span>
+      ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       accessor: (row) => (
-        <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-end">
           <ActionButton
             size="icon"
             intent="ghost"

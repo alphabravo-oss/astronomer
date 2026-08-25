@@ -39,7 +39,6 @@ TOKEN="$(curl -fsS -X POST -H 'Content-Type: application/json' -d "{\"email\":\"
 [[ -n "${TOKEN:-}" ]] || { echo "login failed"; exit 1; }
 
 declare -A CID
-declare -A DESTROYED_AT
 
 # --- adopt all versions ---
 for ver in "${VERSIONS[@]}"; do
@@ -53,7 +52,7 @@ for ver in "${VERSIONS[@]}"; do
   curl -sS -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"install_baseline":false}' "$API/clusters/$cid/registration/options/" >/dev/null 2>&1
   curl -fsS -H "Authorization: Bearer $TOKEN" "$API/clusters/$cid/manifest/" | kubectl --context "k3d-$name" apply -f - >/dev/null 2>&1
   # wait heartbeat
-  for i in $(seq 1 40); do
+  for _ in {1..40}; do
     hb="$(curl -sS -H "Authorization: Bearer $TOKEN" "$API/clusters/$cid/" | jget "['data'].get('last_heartbeat')")"
     [[ -n "${hb:-}" && "$hb" != "None" && "$hb" != "null" ]] && { echo "  ✓ [$ver] active"; break; }
     sleep 3

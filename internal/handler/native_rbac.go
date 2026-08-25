@@ -3,13 +3,16 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -20,9 +23,41 @@ import (
 type NativeRBACQuerier interface {
 	CreateNativeRBACRule(ctx context.Context, arg sqlc.CreateNativeRBACRuleParams) (sqlc.NativeRbacRule, error)
 	GetNativeRBACRuleByID(ctx context.Context, id uuid.UUID) (sqlc.NativeRbacRule, error)
+	GetNativeRBACRuleForUpdate(ctx context.Context, id uuid.UUID) (sqlc.NativeRbacRule, error)
 	ListNativeRBACRulesByUser(ctx context.Context, userID uuid.UUID) ([]sqlc.NativeRbacRule, error)
 	ListNativeRBACRules(ctx context.Context, arg sqlc.ListNativeRBACRulesParams) ([]sqlc.NativeRbacRule, error)
 	DeleteNativeRBACRule(ctx context.Context, id uuid.UUID) error
+}
+
+type NativeRBACMutationTx interface {
+	NativeRBACQuerier
+	audit.OutboxQuerier
+}
+
+type nativeRBACRunTxFunc func(context.Context, func(NativeRBACMutationTx) error) error
+
+func executeNativeRBACMutation[T any](r *http.Request, h *NativeRBACHandler, mutate func(NativeRBACQuerier) (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q NativeRBACMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := mutate(h.queries)
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 // NativeRBACHandler serves CRUD for native per-CRD RBAC rules. Rules are an
@@ -30,6 +65,7 @@ type NativeRBACQuerier interface {
 // deny; see internal/rbac/native.go and the migration 126 comment.
 type NativeRBACHandler struct {
 	queries    NativeRBACQuerier
+	runTx      nativeRBACRunTxFunc
 	invalidate func(userID string)
 	// engine + bindings drive the privilege-escalation guard in Create: a
 	// caller may only author a native rule for permissions they themselves
@@ -43,6 +79,14 @@ type NativeRBACHandler struct {
 func NewNativeRBACHandler(queries NativeRBACQuerier) *NativeRBACHandler {
 	return &NativeRBACHandler{queries: queries}
 }
+
+func (h *NativeRBACHandler) SetRunTx(runTx nativeRBACRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *NativeRBACHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // SetAuthorization wires the RBAC engine + caller-binding lookup used by the
 // Create escalation guard. Mirror of the coarse RBAC handler's
@@ -116,6 +160,7 @@ func nativeRuleToResponse(r sqlc.NativeRbacRule) nativeRuleResponse {
 	return out
 }
 
+// openapi:request NativeRBACRuleRequest
 type createNativeRuleRequest struct {
 	UserID    string   `json:"userId"`
 	ClusterID string   `json:"clusterId,omitempty"`
@@ -185,7 +230,7 @@ func (h *NativeRBACHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	row, err := h.queries.CreateNativeRBACRule(r.Context(), sqlc.CreateNativeRBACRuleParams{
+	params := sqlc.CreateNativeRBACRuleParams{
 		UserID:      userID,
 		ClusterID:   clusterID,
 		Namespace:   strings.TrimSpace(req.Namespace),
@@ -193,20 +238,25 @@ func (h *NativeRBACHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Resource:    resource,
 		Verbs:       verbs,
 		CreatedByID: currentUserUUID(r),
-	})
+	}
+	row, err := executeNativeRBACMutation(r, h,
+		func(q NativeRBACQuerier) (sqlc.NativeRbacRule, error) {
+			return q.CreateNativeRBACRule(r.Context(), params)
+		},
+		func(row sqlc.NativeRbacRule) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "rbac.native_rule.created", resourceType: "native_rbac_rule", resourceID: row.ID.String(), resourceName: row.Resource, status: http.StatusCreated,
+				detail: map[string]any{"target_user": row.UserID.String(), "api_group": row.ApiGroup, "resource": row.Resource, "verbs": row.Verbs},
+			}
+		},
+	)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create native rule (does the user exist?)")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create native rule (does the user exist?)")
 		return
 	}
 	if h.invalidate != nil {
 		h.invalidate(userID.String())
 	}
-	recordAudit(r, h.queries, "rbac.native_rule.created", "native_rbac_rule", row.ID.String(), resource, map[string]any{
-		"target_user": userID.String(),
-		"api_group":   apiGroup,
-		"resource":    resource,
-		"verbs":       verbs,
-	})
 	RespondJSON(w, http.StatusCreated, nativeRuleToResponse(row))
 }
 
@@ -242,21 +292,32 @@ func (h *NativeRBACHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid rule ID")
 		return
 	}
-	row, err := h.queries.GetNativeRBACRuleByID(r.Context(), id)
+	row, err := executeNativeRBACMutation(r, h,
+		func(q NativeRBACQuerier) (sqlc.NativeRbacRule, error) {
+			existing, getErr := q.GetNativeRBACRuleForUpdate(r.Context(), id)
+			if getErr != nil {
+				return sqlc.NativeRbacRule{}, getErr
+			}
+			return existing, q.DeleteNativeRBACRule(r.Context(), id)
+		},
+		func(row sqlc.NativeRbacRule) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "rbac.native_rule.deleted", resourceType: "native_rbac_rule", resourceID: row.ID.String(), resourceName: row.Resource, status: http.StatusNoContent,
+				detail: map[string]any{"target_user": row.UserID.String()},
+			}
+		},
+	)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Native rule not found")
-		return
-	}
-	if err := h.queries.DeleteNativeRBACRule(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete native rule")
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Native rule not found")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete native rule")
 		return
 	}
 	if h.invalidate != nil {
 		h.invalidate(row.UserID.String())
 	}
-	recordAudit(r, h.queries, "rbac.native_rule.deleted", "native_rbac_rule", id.String(), row.Resource, map[string]any{
-		"target_user": row.UserID.String(),
-	})
 	w.WriteHeader(http.StatusNoContent)
 }
 

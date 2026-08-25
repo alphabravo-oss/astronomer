@@ -287,6 +287,25 @@ func TestMCPRuntimeRejectsSigningKeyThatDoesNotMatchOnboarding(t *testing.T) {
 	}
 }
 
+func TestMCPRuntimeStopsListenerWhenSigningKeyDisappears(t *testing.T) {
+	runtime, _ := mcpRuntimeFixture(t)
+	if err := runtime.reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(runtime.config.ActionSigningKeyFile); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.reconcile(context.Background()); err == nil {
+		t.Fatal("MCP runtime accepted a missing action signing key")
+	}
+	runtime.mu.Lock()
+	serving := runtime.listener != nil
+	runtime.mu.Unlock()
+	if serving {
+		t.Fatal("MCP listener survived removal of action signing trust")
+	}
+}
+
 func TestMCPRuntimeInactiveGateDoesNotResolveMountedTrustOrBind(t *testing.T) {
 	runtime, _ := mcpRuntimeFixture(t)
 	runtime.features = gateFeature(false)

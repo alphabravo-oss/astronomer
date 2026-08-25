@@ -1,4 +1,4 @@
-import type { User } from '@/types';
+import type { User } from "@/types";
 
 type RoleRule = {
   resource?: string;
@@ -32,27 +32,27 @@ type UserWithAuthz = User & {
 };
 
 export type PermissionVerb =
-  | 'create'
-  | 'read'
-  | 'update'
-  | 'delete'
-  | 'list'
-  | 'watch'
-  | 'scale'
-  | 'restart'
-  | 'exec'
-  | 'logs'
-  | 'proxy'
-  | 'sync'
-  | 'approve'
-  | 'rollback'
-  | 'orphan'
-  | 'manage';
+  | "create"
+  | "read"
+  | "update"
+  | "delete"
+  | "list"
+  | "watch"
+  | "scale"
+  | "restart"
+  | "exec"
+  | "logs"
+  | "proxy"
+  | "sync"
+  | "approve"
+  | "rollback"
+  | "orphan"
+  | "manage";
 
 export type PermissionScope =
-  | { type: 'global' }
-  | { type: 'cluster'; id?: string }
-  | { type: 'project'; id?: string };
+  | { type: "global" }
+  | { type: "cluster"; id?: string }
+  | { type: "project"; id?: string };
 
 export type PermissionDecision = {
   allowed: boolean;
@@ -73,8 +73,8 @@ export function isSuperuser(user: User | null | undefined): boolean {
 export function can(
   user: User | null | undefined,
   resource: string,
-  verb: PermissionVerb | '*',
-  scope: PermissionScope = { type: 'global' }
+  verb: PermissionVerb | "*",
+  scope: PermissionScope = { type: "global" },
 ): boolean {
   return explainPermission(user, resource, verb, scope).allowed;
 }
@@ -82,8 +82,8 @@ export function can(
 export function explainPermission(
   user: User | null | undefined,
   resource: string,
-  verb: PermissionVerb | '*',
-  scope: PermissionScope = { type: 'global' }
+  verb: PermissionVerb | "*",
+  scope: PermissionScope = { type: "global" },
 ): PermissionDecision {
   const u = user as UserWithAuthz | null | undefined;
   const permission = `${resource}:${verb}`;
@@ -111,7 +111,7 @@ export function explainPermission(
       scope,
       scopeLabel,
       reason: `Superuser access grants ${permission} ${scopePhrase(scope)}.`,
-      grantedBy: ['Superuser'],
+      grantedBy: ["Superuser"],
       requestAccessHint,
     };
   }
@@ -119,7 +119,9 @@ export function explainPermission(
   const candidates = permissionCandidates(u, scope);
   const grantedBy = candidates
     .filter((candidate) =>
-      roleRules(candidate.binding).some((rule) => ruleAllows(rule, resource, verb))
+      roleRules(candidate.binding).some((rule) =>
+        ruleAllows(rule, resource, verb),
+      ),
     )
     .map((candidate) => bindingLabel(candidate.binding, candidate.scope));
 
@@ -129,7 +131,7 @@ export function explainPermission(
       permission,
       scope,
       scopeLabel,
-      reason: `Granted by ${unique(grantedBy).join(', ')}.`,
+      reason: `Granted by ${unique(grantedBy).join(", ")}.`,
       grantedBy: unique(grantedBy),
       requestAccessHint,
     };
@@ -150,29 +152,43 @@ export function explainPermission(
 
 function permissionCandidates(
   user: UserWithAuthz,
-  scope: PermissionScope
-): Array<{ binding: RoleBindingLike; scope: PermissionScope['type'] }> {
+  scope: PermissionScope,
+): Array<{ binding: RoleBindingLike; scope: PermissionScope["type"] }> {
   return [
-    ...(user.roles?.global ?? []).map((binding) => ({ binding, scope: 'global' as const })),
-    ...(scope.type === 'cluster'
-      ? scopedBindings(user.roles?.cluster, 'cluster', scope.id).map((binding) => ({
-          binding,
-          scope: 'cluster' as const,
-        }))
+    ...(user.roles?.global ?? []).map((binding) => ({
+      binding,
+      scope: "global" as const,
+    })),
+    ...(scope.type === "cluster"
+      ? scopedBindings(user.roles?.cluster, "cluster", scope.id).map(
+          (binding) => ({
+            binding,
+            scope: "cluster" as const,
+          }),
+        )
       : []),
-    ...(scope.type === 'project'
-      ? scopedBindings(user.roles?.project, 'project', scope.id).map((binding) => ({
-          binding,
-          scope: 'project' as const,
-        }))
+    ...(scope.type === "project"
+      ? scopedBindings(user.roles?.project, "project", scope.id).map(
+          (binding) => ({
+            binding,
+            scope: "project" as const,
+          }),
+        )
       : []),
   ];
 }
 
-function scopedBindings(bindings: RoleBindingLike[] | undefined, kind: 'cluster' | 'project', id?: string): RoleBindingLike[] {
+function scopedBindings(
+  bindings: RoleBindingLike[] | undefined,
+  kind: "cluster" | "project",
+  id?: string,
+): RoleBindingLike[] {
   if (!bindings?.length) return [];
   if (!id) return bindings;
-  const idKey = kind === 'cluster' ? ['clusterId', 'cluster_id'] : ['projectId', 'project_id'];
+  const idKey =
+    kind === "cluster"
+      ? ["clusterId", "cluster_id"]
+      : ["projectId", "project_id"];
   return bindings.filter((binding) => {
     const a = binding[idKey[0] as keyof RoleBindingLike];
     const b = binding[idKey[1] as keyof RoleBindingLike];
@@ -184,48 +200,58 @@ function roleRules(binding: RoleBindingLike): RoleRule[] {
   return binding.roleRules ?? binding.role_rules ?? [];
 }
 
-function ruleAllows(rule: RoleRule, resource: string, verb: PermissionVerb | '*'): boolean {
+function ruleAllows(
+  rule: RoleRule,
+  resource: string,
+  verb: PermissionVerb | "*",
+): boolean {
   const resources = rule.resources ?? (rule.resource ? [rule.resource] : []);
   const verbs = rule.verbs ?? (rule.verb ? [rule.verb] : []);
   return matches(resources, resource) && matches(verbs, verb);
 }
 
 function matches(values: string[], expected: string): boolean {
-  return values.includes('*') || values.includes(expected);
+  return values.includes("*") || values.includes(expected);
 }
 
-function bindingLabel(binding: RoleBindingLike, scope: PermissionScope['type']): string {
+function bindingLabel(
+  binding: RoleBindingLike,
+  scope: PermissionScope["type"],
+): string {
   const name =
     binding.roleName ||
     binding.role_name ||
     binding.roleId ||
     binding.role_id ||
     binding.id ||
-    'role binding';
-  const target = scope === 'cluster'
-    ? binding.clusterId || binding.cluster_id
-    : scope === 'project'
-      ? binding.projectId || binding.project_id
-      : '';
+    "role binding";
+  const target =
+    scope === "cluster"
+      ? binding.clusterId || binding.cluster_id
+      : scope === "project"
+        ? binding.projectId || binding.project_id
+        : "";
   return target ? `${name} (${scope}:${target})` : name;
 }
 
 function describeScope(scope: PermissionScope): string {
-  if (scope.type === 'global') return 'global';
+  if (scope.type === "global") return "global";
   if (scope.id) return `${scope.type}:${scope.id}`;
   return scope.type;
 }
 
 function scopePhrase(scope: PermissionScope): string {
-  if (scope.type === 'global') return 'globally';
+  if (scope.type === "global") return "globally";
   if (scope.id) return `for ${scope.type} ${scope.id}`;
   return `for ${scope.type} scope`;
 }
 
 function accessRequestHint(scope: PermissionScope): string {
-  if (scope.type === 'cluster') return 'Request access from a cluster owner or platform administrator.';
-  if (scope.type === 'project') return 'Request access from a project owner or platform administrator.';
-  return 'Request access from a platform administrator.';
+  if (scope.type === "cluster")
+    return "Request access from a cluster owner or platform administrator.";
+  if (scope.type === "project")
+    return "Request access from a project owner or platform administrator.";
+  return "Request access from a platform administrator.";
 }
 
 function unique(values: string[]): string[] {

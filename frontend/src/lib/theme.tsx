@@ -6,15 +6,15 @@ import {
   useMemo,
   useState,
   type ReactNode,
-} from 'react';
+} from "react";
 
-export type Theme = 'light' | 'dark' | 'system';
+export type Theme = "light" | "dark" | "system";
 
 // Namespaced key — NEVER bare `theme`: other applications may share the
 // same origin and parse the bare `theme` key, so a
 // raw "dark" string there blanks its applications page. Values are stored raw
 // ("light" | "dark" | "system") so prefs written by next-themes survive.
-export const THEME_STORAGE_KEY = 'astronomer-theme';
+export const THEME_STORAGE_KEY = "astronomer-theme";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -22,26 +22,28 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: 'dark',
+  theme: "dark",
   setTheme: () => {},
 });
 
 function readStoredTheme(): Theme {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'dark';
+    return stored === "light" || stored === "dark" || stored === "system"
+      ? stored
+      : "dark";
   } catch {
-    return 'dark';
+    return "dark";
   }
 }
 
 function applyTheme(theme: Theme) {
   const dark =
-    theme === 'system'
-      ? window.matchMedia('(prefers-color-scheme: dark)').matches
-      : theme !== 'light';
-  document.documentElement.classList.toggle('dark', dark);
-  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    theme === "system"
+      ? window.matchMedia("(prefers-color-scheme: dark)").matches
+      : theme !== "light";
+  document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.style.colorScheme = dark ? "dark" : "light";
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -58,15 +60,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     applyTheme(theme);
-    if (theme !== 'system') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => applyTheme('system');
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
+    if (theme !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => applyTheme("system");
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, [theme]);
 
   const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme]);
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
 }
 
 export function useTheme(): ThemeContextValue {

@@ -9,17 +9,6 @@ import (
 	"context"
 )
 
-const countBlessedCharts = `-- name: CountBlessedCharts :one
-SELECT count(*) FROM catalog_blessed_charts
-`
-
-func (q *Queries) CountBlessedCharts(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countBlessedCharts)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const createBlessedChart = `-- name: CreateBlessedChart :exec
 INSERT INTO catalog_blessed_charts
     (repo_url, chart_name, display_name, description, category, icon_url, mgmt_safe, version_policy, source)
@@ -60,72 +49,6 @@ DELETE FROM catalog_blessed_charts WHERE source = $1
 func (q *Queries) DeleteBlessedChartsBySource(ctx context.Context, source string) error {
 	_, err := q.db.Exec(ctx, deleteBlessedChartsBySource, source)
 	return err
-}
-
-const getBlessedChart = `-- name: GetBlessedChart :one
-SELECT id, repo_url, chart_name, display_name, description, category, icon_url, mgmt_safe, version_policy, source, created_at, updated_at FROM catalog_blessed_charts WHERE repo_url = $1 AND chart_name = $2
-`
-
-type GetBlessedChartParams struct {
-	RepoUrl   string `json:"repo_url"`
-	ChartName string `json:"chart_name"`
-}
-
-func (q *Queries) GetBlessedChart(ctx context.Context, arg GetBlessedChartParams) (CatalogBlessedChart, error) {
-	row := q.db.QueryRow(ctx, getBlessedChart, arg.RepoUrl, arg.ChartName)
-	var i CatalogBlessedChart
-	err := row.Scan(
-		&i.ID,
-		&i.RepoUrl,
-		&i.ChartName,
-		&i.DisplayName,
-		&i.Description,
-		&i.Category,
-		&i.IconUrl,
-		&i.MgmtSafe,
-		&i.VersionPolicy,
-		&i.Source,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const listBlessedCharts = `-- name: ListBlessedCharts :many
-SELECT id, repo_url, chart_name, display_name, description, category, icon_url, mgmt_safe, version_policy, source, created_at, updated_at FROM catalog_blessed_charts ORDER BY category ASC, chart_name ASC
-`
-
-func (q *Queries) ListBlessedCharts(ctx context.Context) ([]CatalogBlessedChart, error) {
-	rows, err := q.db.Query(ctx, listBlessedCharts)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CatalogBlessedChart{}
-	for rows.Next() {
-		var i CatalogBlessedChart
-		if err := rows.Scan(
-			&i.ID,
-			&i.RepoUrl,
-			&i.ChartName,
-			&i.DisplayName,
-			&i.Description,
-			&i.Category,
-			&i.IconUrl,
-			&i.MgmtSafe,
-			&i.VersionPolicy,
-			&i.Source,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const upsertDefaultHelmRepository = `-- name: UpsertDefaultHelmRepository :exec

@@ -127,7 +127,7 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 		lastObservedAt = existing.LastObservedAt
 		lastDriftDetectedAt = existing.LastDriftDetectedAt
 	}
-	clusterCfg, err := h.queries.UpsertClusterMonitoringConfig(r.Context(), sqlc.UpsertClusterMonitoringConfigParams{
+	params := sqlc.UpsertClusterMonitoringConfigParams{
 		ClusterID:               clusterID,
 		BackendID:               backendID,
 		ClusterLabel:            defaultString(req.ClusterLabel, "cluster_id"),
@@ -149,16 +149,23 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 		Status:                  defaultString(req.Status, "configured"),
 		LastHealthyAt:           nullableNow(req.Status == "healthy"),
 		CreatedByID:             currentUserUUID(r),
-	})
+	}
+	clusterCfg, err := executeMonitoringMutation(r, h,
+		func(q MonitoringMutationTx) (sqlc.ClusterMonitoringConfig, error) {
+			return q.UpsertClusterMonitoringConfig(r.Context(), params)
+		},
+		func() (sqlc.ClusterMonitoringConfig, error) {
+			return h.queries.UpsertClusterMonitoringConfig(r.Context(), params)
+		},
+		func(clusterCfg sqlc.ClusterMonitoringConfig) clusterAuditEvent {
+			return clusterAuditEvent{action: "monitoring.cluster_config.update", resourceType: "cluster_monitoring_config", resourceID: clusterCfg.ClusterID.String(), resourceName: clusterCfg.PrometheusReleaseName, status: http.StatusOK, detail: map[string]any{
+				"backendId": clusterCfg.BackendID.String(), "stackNamespace": clusterCfg.StackNamespace, "status": clusterCfg.Status,
+			}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to save cluster monitoring config")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to save cluster monitoring config")
 		return
 	}
-	recordAudit(r, h.queries, "monitoring.cluster_config.update", "cluster_monitoring_config", clusterCfg.ClusterID.String(), clusterCfg.PrometheusReleaseName, map[string]any{
-		"backendId":      clusterCfg.BackendID.String(),
-		"stackNamespace": clusterCfg.StackNamespace,
-		"status":         clusterCfg.Status,
-	})
 	RespondJSON(w, http.StatusOK, clusterMonitoringConfigResponse(clusterCfg))
 }
 
@@ -183,25 +190,43 @@ func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+func (h *MonitoringHandler) stageClusterStackMutation(r *http.Request, clusterID string, req MonitoringStackRequest, values map[string]any, desiredStatus, operationType, auditAction string) (sqlc.MonitoringOperation, error) {
+	opContext := withOperationIdempotency(r, "monitoring")
+	op, err := executeMonitoringMutation(r, h,
+		func(q MonitoringMutationTx) (sqlc.MonitoringOperation, error) {
+			if persistErr := persistStackConfigWith(r.Context(), q, clusterID, req, desiredStatus); persistErr != nil {
+				return sqlc.MonitoringOperation{}, persistErr
+			}
+			return createClusterStackOperationWith(opContext, h, q, currentUserUUID(r), operationType, clusterID, req, values)
+		},
+		func() (sqlc.MonitoringOperation, error) {
+			if persistErr := persistStackConfigWith(r.Context(), h.queries, clusterID, req, desiredStatus); persistErr != nil {
+				return sqlc.MonitoringOperation{}, persistErr
+			}
+			return createClusterStackOperationWith(opContext, h, h.queries, currentUserUUID(r), operationType, clusterID, req, values)
+		},
+		func(op sqlc.MonitoringOperation) clusterAuditEvent {
+			return clusterAuditEvent{action: auditAction, resourceType: "cluster_monitoring_config", resourceID: clusterID, resourceName: req.ReleaseName, status: http.StatusAccepted, detail: map[string]any{
+				"namespace": req.Namespace, "operationId": op.ID.String(),
+			}}
+		})
+	if err == nil {
+		h.TriggerReconcile()
+	}
+	return op, err
+}
+
 func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request) {
 	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbCreate)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
 		return
 	}
-	if err := h.persistStackConfig(r.Context(), clusterID, req, "installing"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist monitoring stack config")
-		return
-	}
-	op, err := h.enqueueClusterStackOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "install", clusterID, req, values)
+	op, err := h.stageClusterStackMutation(r, clusterID, req, values, "installing", "install", "monitoring.stack.install")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to stage monitoring stack installation")
 		return
 	}
-	recordAudit(r, h.queries, "monitoring.stack.install", "cluster_monitoring_config", clusterID, req.ReleaseName, map[string]any{
-		"namespace":   req.Namespace,
-		"operationId": op.ID.String(),
-	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -225,19 +250,11 @@ func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request)
 		})
 		return
 	}
-	if err := h.persistStackConfig(r.Context(), clusterID, req, "updating"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist monitoring stack config")
-		return
-	}
-	op, err := h.enqueueClusterStackOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "upgrade", clusterID, req, values)
+	op, err := h.stageClusterStackMutation(r, clusterID, req, values, "updating", "upgrade", "monitoring.stack.upgrade")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to stage monitoring stack upgrade")
 		return
 	}
-	recordAudit(r, h.queries, "monitoring.stack.upgrade", "cluster_monitoring_config", clusterID, req.ReleaseName, map[string]any{
-		"namespace":   req.Namespace,
-		"operationId": op.ID.String(),
-	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -251,19 +268,11 @@ func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, loadErr.Error())
 		return
 	}
-	if err := h.persistStackConfig(r.Context(), clusterID, req, "reinstalled"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist monitoring stack config")
-		return
-	}
-	op, err := h.enqueueClusterStackOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "replace", clusterID, req, values)
+	op, err := h.stageClusterStackMutation(r, clusterID, req, values, "reinstalled", "replace", "monitoring.stack.replace")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to stage monitoring stack replacement")
 		return
 	}
-	recordAudit(r, h.queries, "monitoring.stack.replace", "cluster_monitoring_config", clusterID, req.ReleaseName, map[string]any{
-		"namespace":   req.Namespace,
-		"operationId": op.ID.String(),
-	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -278,46 +287,48 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
-	if h.queries != nil {
-		clusterUUID, parseErr := uuid.Parse(clusterID)
-		if parseErr == nil {
-			_, _ = h.queries.UpsertClusterMonitoringConfig(r.Context(), sqlc.UpsertClusterMonitoringConfigParams{
-				ClusterID:               clusterUUID,
-				BackendID:               cfg.BackendID,
-				ClusterLabel:            cfg.ClusterLabel,
-				ClusterLabelValue:       cfg.ClusterLabelValue,
-				ScrapeIntervalSeconds:   cfg.ScrapeIntervalSeconds,
-				Retention:               cfg.Retention,
-				StackNamespace:          cfg.StackNamespace,
-				PrometheusReleaseName:   cfg.PrometheusReleaseName,
-				ThanosSidecarEnabled:    cfg.ThanosSidecarEnabled,
-				StorageConfigID:         cfg.StorageConfigID,
-				ObjectStorageSecretName: cfg.ObjectStorageSecretName,
-				StorageClass:            cfg.StorageClass,
-				StorageSize:             cfg.StorageSize,
-				LastAppliedSpecHash:     cfg.LastAppliedSpecHash,
-				LastObservedStatus:      "uninstalled",
-				LastObservedRevision:    0,
-				LastObservedAt:          pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
-				LastDriftDetectedAt:     pgtype.Timestamptz{},
-				Status:                  "uninstalled",
-				LastHealthyAt:           pgtype.Timestamptz{},
-				CreatedByID:             currentUserUUID(r),
-			})
-		}
-	}
-	op, err := h.enqueueClusterStackOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "uninstall", clusterID, MonitoringStackRequest{
-		ReleaseName: cfg.PrometheusReleaseName,
-		Namespace:   cfg.StackNamespace,
-	}, nil)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
+	clusterUUID, parseErr := uuid.Parse(clusterID)
+	if parseErr != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
-	recordAudit(r, h.queries, "monitoring.stack.uninstall", "cluster_monitoring_config", clusterID, cfg.PrometheusReleaseName, map[string]any{
-		"namespace":   cfg.StackNamespace,
-		"operationId": op.ID.String(),
-	})
+	configParams := sqlc.UpsertClusterMonitoringConfigParams{
+		ClusterID: clusterUUID, BackendID: cfg.BackendID, ClusterLabel: cfg.ClusterLabel, ClusterLabelValue: cfg.ClusterLabelValue,
+		ScrapeIntervalSeconds: cfg.ScrapeIntervalSeconds, Retention: cfg.Retention, StackNamespace: cfg.StackNamespace,
+		PrometheusReleaseName: cfg.PrometheusReleaseName, ThanosSidecarEnabled: cfg.ThanosSidecarEnabled,
+		StorageConfigID: cfg.StorageConfigID, ObjectStorageSecretName: cfg.ObjectStorageSecretName, StorageClass: cfg.StorageClass,
+		StorageSize: cfg.StorageSize, LastAppliedSpecHash: cfg.LastAppliedSpecHash, LastObservedStatus: "uninstalled",
+		LastObservedRevision: 0, LastObservedAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		LastDriftDetectedAt: pgtype.Timestamptz{}, Status: "uninstalled", LastHealthyAt: pgtype.Timestamptz{}, CreatedByID: currentUserUUID(r),
+	}
+	opReq := MonitoringStackRequest{
+		ReleaseName: cfg.PrometheusReleaseName,
+		Namespace:   cfg.StackNamespace,
+	}
+	opContext := withOperationIdempotency(r, "monitoring")
+	op, err := executeMonitoringMutation(r, h,
+		func(q MonitoringMutationTx) (sqlc.MonitoringOperation, error) {
+			if _, updateErr := q.UpsertClusterMonitoringConfig(r.Context(), configParams); updateErr != nil {
+				return sqlc.MonitoringOperation{}, updateErr
+			}
+			return createClusterStackOperationWith(opContext, h, q, currentUserUUID(r), "uninstall", clusterID, opReq, nil)
+		},
+		func() (sqlc.MonitoringOperation, error) {
+			if _, updateErr := h.queries.UpsertClusterMonitoringConfig(r.Context(), configParams); updateErr != nil {
+				return sqlc.MonitoringOperation{}, updateErr
+			}
+			return createClusterStackOperationWith(opContext, h, h.queries, currentUserUUID(r), "uninstall", clusterID, opReq, nil)
+		},
+		func(op sqlc.MonitoringOperation) clusterAuditEvent {
+			return clusterAuditEvent{action: "monitoring.stack.uninstall", resourceType: "cluster_monitoring_config", resourceID: clusterID, resourceName: cfg.PrometheusReleaseName, status: http.StatusAccepted, detail: map[string]any{
+				"namespace": cfg.StackNamespace, "operationId": op.ID.String(),
+			}}
+		})
+	if err != nil {
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to stage monitoring stack uninstall")
+		return
+	}
+	h.TriggerReconcile()
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -561,15 +572,17 @@ func parseOptionalUUID(raw string) pgtype.UUID {
 	return pgtype.UUID{Bytes: id, Valid: true}
 }
 
-func (h *MonitoringHandler) persistStackConfig(ctx context.Context, clusterID string, req MonitoringStackRequest, status string) error {
-	if h.queries == nil {
-		return nil
-	}
+type monitoringStackConfigWriter interface {
+	GetDefaultMonitoringBackend(context.Context) (sqlc.MonitoringBackend, error)
+	UpsertClusterMonitoringConfig(context.Context, sqlc.UpsertClusterMonitoringConfigParams) (sqlc.ClusterMonitoringConfig, error)
+}
+
+func persistStackConfigWith(ctx context.Context, q monitoringStackConfigWriter, clusterID string, req MonitoringStackRequest, status string) error {
 	clusterUUID, err := uuid.Parse(clusterID)
 	if err != nil {
 		return err
 	}
-	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
+	backend, err := q.GetDefaultMonitoringBackend(ctx)
 	if err != nil {
 		return err
 	}
@@ -589,7 +602,7 @@ func (h *MonitoringHandler) persistStackConfig(ctx context.Context, clusterID st
 		"thanosSidecarEnabled":    req.ThanosSidecarEnabled == nil || *req.ThanosSidecarEnabled,
 		"autoRollbackOnFailure":   boolPtrValue(req.AutoRollbackOnFailure),
 	})
-	_, err = h.queries.UpsertClusterMonitoringConfig(ctx, sqlc.UpsertClusterMonitoringConfigParams{
+	_, err = q.UpsertClusterMonitoringConfig(ctx, sqlc.UpsertClusterMonitoringConfigParams{
 		ClusterID:               clusterUUID,
 		BackendID:               backend.ID,
 		ClusterLabel:            req.ClusterLabel,

@@ -19,7 +19,9 @@ import (
 // fakeAllowlistQuerier captures every interaction, including audit rows
 // emitted through the handler's optional auditor surface.
 type fakeAllowlistQuerier struct {
+	fakeOperationIdempotencyStore
 	clusterErr  error
+	cluster     sqlc.Cluster
 	row         *sqlc.ApiserverAllowlist
 	rowGetErr   error
 	upserted    *sqlc.UpsertApiserverAllowlistParams
@@ -33,7 +35,14 @@ func (f *fakeAllowlistQuerier) GetClusterByID(ctx context.Context, id uuid.UUID)
 	if f.clusterErr != nil {
 		return sqlc.Cluster{}, f.clusterErr
 	}
-	return sqlc.Cluster{ID: id, Name: "test-cluster"}, nil
+	cluster := f.cluster
+	if cluster.ID == uuid.Nil {
+		cluster.ID = id
+	}
+	if cluster.Name == "" {
+		cluster.Name = "test-cluster"
+	}
+	return cluster, nil
 }
 
 func (f *fakeAllowlistQuerier) GetApiserverAllowlistByClusterID(ctx context.Context, clusterID uuid.UUID) (sqlc.ApiserverAllowlist, error) {
@@ -226,6 +235,7 @@ func TestApiserverAllowlistHandler_PUT_RequiresForceApplyOnEnforceUpgradeWithDri
 	clusterID := uuid.New()
 	cidrsJSON, _ := json.Marshal([]string{"10.0.0.0/8"})
 	q := &fakeAllowlistQuerier{
+		cluster: sqlc.Cluster{ID: clusterID, Provider: "eks"},
 		row: &sqlc.ApiserverAllowlist{
 			ClusterID:  clusterID,
 			Mode:       "monitor",
@@ -271,7 +281,24 @@ func TestApiserverAllowlistHandler_PUT_RequiresForceApplyOnEnforceUpgradeWithDri
 	}
 }
 
-func TestApiserverAllowlistHandler_Reconcile_FiresHook(t *testing.T) {
+func TestApiserverAllowlistHandler_PUTRejectsUnsupportedEnforcement(t *testing.T) {
+	clusterID := uuid.New()
+	q := &fakeAllowlistQuerier{cluster: sqlc.Cluster{ID: clusterID, Provider: "self_managed"}}
+	h := NewApiserverAllowlistHandler(q)
+	router := newRouterWithHandler(h)
+	body, _ := json.Marshal(AllowlistUpdateRequest{CIDRs: []string{"10.0.0.0/8"}, Mode: "enforce"})
+	req := httptest.NewRequest(http.MethodPut, "/clusters/"+clusterID.String()+"/apiserver-allowlist/", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "unsupported_provider") {
+		t.Fatalf("expected 422 unsupported_provider; got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if q.upserted != nil {
+		t.Fatalf("unsupported enforce mode must not be persisted")
+	}
+}
+
+func TestApiserverAllowlistHandler_Reconcile_FailsClosedWithoutTransaction(t *testing.T) {
 	clusterID := uuid.New()
 	cidrsJSON, _ := json.Marshal([]string{"10.0.0.0/8"})
 	q := &fakeAllowlistQuerier{
@@ -293,13 +320,14 @@ func TestApiserverAllowlistHandler_Reconcile_FiresHook(t *testing.T) {
 	router := newRouterWithHandler(h)
 
 	req := httptest.NewRequest(http.MethodPost, "/clusters/"+clusterID.String()+"/apiserver-allowlist/reconcile/", nil)
+	req.Header.Set("Idempotency-Key", "allowlist-reconcile-fail-closed")
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("expected 202; got %d", rec.Code)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503; got %d", rec.Code)
 	}
-	if !called {
-		t.Fatalf("reconciler hook should have fired")
+	if called {
+		t.Fatalf("reconciler hook must not fire outside the durable transaction")
 	}
 }
 

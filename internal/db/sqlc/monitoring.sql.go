@@ -13,6 +13,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteDefaultMonitoringBackendIfUnused = `-- name: DeleteDefaultMonitoringBackendIfUnused :one
+DELETE FROM monitoring_backends AS mb
+WHERE mb.id = $1
+  AND (mb.is_default = true OR mb.name = 'default')
+  AND NOT EXISTS (
+      SELECT 1 FROM cluster_monitoring_configs AS cmc
+      WHERE cmc.backend_id = mb.id
+        AND cmc.status NOT IN ('uninstalled', 'not_configured')
+  )
+  AND COALESCE(mb.auth_config->'sharedThanos'->>'status', 'not_configured') IN ('', 'not_configured', 'uninstalled')
+  AND COALESCE(mb.auth_config->'sharedAlertmanager'->>'status', 'not_configured') IN ('', 'not_configured', 'uninstalled')
+  AND COALESCE(mb.auth_config->'sharedGrafana'->>'status', 'not_configured') IN ('', 'not_configured', 'uninstalled')
+  AND COALESCE(mb.auth_config->'sharedLoki'->>'status', 'not_configured') IN ('', 'not_configured', 'uninstalled')
+RETURNING mb.id, mb.name, mb.backend_type, mb.query_url, mb.alertmanager_url, mb.tenant_id, mb.auth_type, mb.auth_config, mb.default_step_seconds, mb.timeout_seconds, mb.is_default, mb.created_by_id, mb.created_at, mb.updated_at, mb.auth_config_encrypted
+`
+
+// Deleting the singleton backend cascades cluster_monitoring_configs, so the
+// API must only permit it after every per-cluster stack is explicitly
+// uninstalled (or was never configured). Retaining those terminal rows until
+// backend deletion is useful status history and safe to cascade. Shared stack
+// metadata lives in the non-secret auth_config projection; require each
+// managed family to be absent or explicitly uninstalled as well so deleting
+// configuration can never orphan a live Helm release.
+func (q *Queries) DeleteDefaultMonitoringBackendIfUnused(ctx context.Context, id uuid.UUID) (MonitoringBackend, error) {
+	row := q.db.QueryRow(ctx, deleteDefaultMonitoringBackendIfUnused, id)
+	var i MonitoringBackend
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.BackendType,
+		&i.QueryUrl,
+		&i.AlertmanagerUrl,
+		&i.TenantID,
+		&i.AuthType,
+		&i.AuthConfig,
+		&i.DefaultStepSeconds,
+		&i.TimeoutSeconds,
+		&i.IsDefault,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AuthConfigEncrypted,
+	)
+	return i, err
+}
+
 const getClusterMonitoringConfig = `-- name: GetClusterMonitoringConfig :one
 SELECT id, cluster_id, backend_id, cluster_label, cluster_label_value, scrape_interval_seconds, retention, stack_namespace, prometheus_release_name, thanos_sidecar_enabled, status, last_healthy_at, created_by_id, created_at, updated_at, storage_config_id, object_storage_secret_name, storage_class, storage_size, last_applied_spec_hash, last_observed_status, last_observed_revision, last_observed_at, last_drift_detected_at FROM cluster_monitoring_configs WHERE cluster_id = $1
 `

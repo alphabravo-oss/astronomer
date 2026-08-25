@@ -17,6 +17,7 @@ func TestRenderOutputBlockSupportedTypes(t *testing.T) {
 		wantParam  string // a param substring proving the block was rendered
 	}{
 		{"elasticsearch", map[string]any{"host": "es", "port": "9200"}, "Name es", "Host es"},
+		{"opensearch", map[string]any{"url": "https://search.example.com:9443", "username": "admin", "password": "secret"}, "Name es", "Host search.example.com"},
 		{"loki", map[string]any{"host": "loki"}, "Name loki", "Host loki"},
 		{"s3", map[string]any{"bucket": "b"}, "Name s3", "bucket b"},
 		{"stdout", map[string]any{}, "Name stdout", "Match *"},
@@ -47,6 +48,22 @@ func TestRenderOutputBlockSupportedTypes(t *testing.T) {
 				t.Errorf("%s: want %q in:\n%s", c.outputType, c.wantParam, out)
 			}
 		})
+	}
+}
+
+func TestRenderOpenSearchOutputMapsFormFieldsAndTLS(t *testing.T) {
+	raw, _ := json.Marshal(map[string]any{
+		"url":      "https://search.example.com:9443",
+		"username": "admin",
+		"password": "secret",
+	})
+	out := renderOutputBlock(loggingOperationEnvelope{
+		Name: "search", OutputType: "opensearch", Enabled: true, Configuration: raw,
+	})
+	for _, want := range []string{"Host search.example.com", "Port 9443", "HTTP_User admin", "HTTP_Passwd secret", "tls on"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("want %q in:\n%s", want, out)
+		}
 	}
 }
 

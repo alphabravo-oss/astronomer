@@ -5,15 +5,15 @@
 // the thin client wrapper the DeclarativeWidget renderers call. The bridge
 // (Tier 2) reaches the same proxy via a ticket — see requestExtensionBridgeToken.
 
-import { queryKeys } from '@/lib/query-keys';
-import * as extensionsApi from '@/lib/api/extensions';
+import { queryKeys } from "@/lib/query-keys";
+import * as extensionsApi from "@/lib/api/extensions";
 import type {
   ExtensionContext,
   ExtensionDataRequest,
   ExtensionDataResponse,
-} from '@/lib/api/extensions';
+} from "@/lib/api/extensions";
 
-export { fetchExtensionData } from '@/lib/api/extensions';
+export { fetchExtensionData } from "@/lib/api/extensions";
 
 // React Query key for a Tier-1 data fetch. Context is part of the key so the
 // same widget on different clusters/projects doesn't collide on one cache entry.
@@ -22,7 +22,11 @@ export function extensionDataKey(
   dataSourceId: string,
   context?: ExtensionContext,
 ) {
-  return queryKeys.extensions.data(name, dataSourceId, context as Record<string, unknown> | undefined);
+  return queryKeys.extensions.data(
+    name,
+    dataSourceId,
+    context as Record<string, unknown> | undefined,
+  );
 }
 
 // Convenience queryFn factory for `useQuery({ queryKey, queryFn })` at a widget.

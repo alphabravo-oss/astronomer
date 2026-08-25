@@ -74,6 +74,26 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Review API compatibility against previous release
+        env:
+          VERIFY_ARTIFACT_DIR: ${{ runner.temp }}/release-api-compatibility
+        run: |
+          previous_tag="$(git tag --sort=-v:refname --merged HEAD^ | head -n 1)"
+          if [ -n "$previous_tag" ]; then
+            ./scripts/openapi-breaking-change.sh "${previous_tag}:docs/openapi.yaml" docs/openapi.yaml
+          else
+            ./scripts/openapi-breaking-change.sh HEAD:docs/openapi.yaml docs/openapi.yaml
+          fi
+
+      - name: Retain release API compatibility review
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-api-compatibility-${{ github.ref_name }}
+          path: ${{ runner.temp }}/release-api-compatibility/
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
@@ -560,6 +580,29 @@ jobs:
           printf '%s\n' "$manifest_ref" > release-manifest.digest
           cp deploy/chart/values-production.yaml values-production.yaml
 
+      - name: Install checksum-verified Trivy
+        env:
+          TRIVY_VERSION: 0.58.2
+        run: |
+          set -euo pipefail
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz$" "trivy_${TRIVY_VERSION}_checksums.txt" | sha256sum --check
+          tar -xzf "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" trivy
+          sudo install -m 0755 trivy /usr/local/bin/trivy
+
+      - name: Qualify every transitive runtime image
+        run: |
+          set -euo pipefail
+          ./scripts/qualify-release-runtime-images.py \
+            --manifest release-manifest.json \
+            --waivers deploy/release/runtime-image-waivers.json \
+            --license-policy deploy/release/license-policy.json \
+            --work-dir runtime-image-evidence \
+            --output runtime-image-evidence.json
+          cosign sign-blob --yes --bundle runtime-image-evidence.sigstore.json runtime-image-evidence.json
+          tar -czf runtime-image-evidence.tar.gz runtime-image-evidence/
+
       - name: Attest packaged chart file
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -577,15 +620,28 @@ jobs:
             release-manifest.json
             release-manifest.sigstore.json
             release-manifest.digest
+            runtime-image-evidence.json
+            runtime-image-evidence.sigstore.json
+            runtime-image-evidence.tar.gz
             resolved-images.json
             values-production.yaml
           retention-days: 90
 
   qualify:
-    name: install exact release on a clean cluster
+    name: install exact release on a clean cluster · Kubernetes ${{ matrix.kubernetes_minor }}
     needs: [preflight, publish-chart]
     runs-on: ubuntu-22.04
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kubernetes_minor: "1.33"
+            k3s_image: rancher/k3s:v1.33.5-k3s1
+          - kubernetes_minor: "1.34"
+            k3s_image: rancher/k3s:v1.34.1-k3s1
+          - kubernetes_minor: "1.35"
+            k3s_image: rancher/k3s:v1.35.0-k3s1
     steps:
       - name: Checkout tagged configuration
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -669,9 +725,11 @@ jobs:
           EOF
 
       - name: Create clean Kubernetes and install Gateway prerequisites
+        env:
+          K3S_IMAGE: ${{ matrix.k3s_image }}
         run: |
           k3d cluster create astronomer-release \
-            --image rancher/k3s:v1.33.5-k3s1 \
+            --image "$K3S_IMAGE" \
             --port '8080:80@loadbalancer' \
             --k3s-arg '--disable=traefik@server:*' \
             --wait
@@ -751,7 +809,9 @@ jobs:
     name: publish immutable GitHub Release
     needs: [preflight, qualify]
     runs-on: ubuntu-latest
+    environment: release-production
     permissions:
+      actions: read
       contents: write
       packages: read
     steps:
@@ -765,6 +825,35 @@ jobs:
         with:
           pattern: '*-${{ needs.preflight.outputs.image-tag }}'
           merge-multiple: true
+
+      - name: Install cosign verifier
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with: {cosign-release: v2.5.3}
+
+      - name: Verify protected release approval and external accessibility evidence
+        env:
+          RELEASE_APPROVAL_JSON: ${{ vars.RELEASE_APPROVAL_JSON }}
+          TAG: ${{ needs.preflight.outputs.image-tag }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+          RUNTIME_IMAGE_EVIDENCE: runtime-image-evidence.json
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_APPROVAL_JSON"
+          umask 077
+          printf '%s' "$RELEASE_APPROVAL_JSON" > "$RUNNER_TEMP/release-approval.json"
+          python3 scripts/fetch-release-qualification-artifacts.py --approval "$RUNNER_TEMP/release-approval.json" --out "$RUNNER_TEMP/release-qualifications" --repository "$REPOSITORY" --source-commit "$SOURCE_COMMIT" --tag "$TAG"
+          q="$RUNNER_TEMP/release-qualifications"
+          python3 scripts/validate-release-approval.py "$RUNNER_TEMP/release-approval.json" \
+            --tag "$TAG" --source-commit "$SOURCE_COMMIT" --source-run-id "$SOURCE_RUN_ID" --repository "$REPOSITORY" \
+            --runtime-image-evidence "$RUNTIME_IMAGE_EVIDENCE" --runtime-image-bundle runtime-image-evidence.sigstore.json \
+            --rc-evidence "$q/rc_rehearsal/rc-rehearsal-evidence.json" --rc-bundle "$q/rc_rehearsal/rc-rehearsal-evidence.sigstore.json" \
+            --cloud-evidence "$q/cloud_acceptance/cloud-acceptance.json" --cloud-bundle "$q/cloud_acceptance/cloud-acceptance.json.sigstore.json" \
+            --scale-evidence "$q/scale_certification/certification-set.json" --scale-bundle "$q/scale_certification/certification-set.sigstore.json" \
+            --rancher-evidence "$q/rancher_benchmark/benchmark-v1.json" --rancher-bundle "$q/rancher_benchmark/benchmark-v1.sigstore.json" \
+            --accessibility-evidence "$q/accessibility/accessibility-evidence.json" --accessibility-bundle "$q/accessibility/accessibility-evidence.sigstore.json"
 
       - name: Pack OSS air-gap kit
         env:
@@ -796,6 +885,7 @@ jobs:
               -name 'astronomer-*.tgz' -o -name '*.tar.gz' -o \
               -name 'sbom-*.spdx.json' -o -name 'provenance-*.slsa.json' -o \
               -name 'release-manifest.json' -o -name 'release-manifest.sigstore.json' -o \
+              -name 'runtime-image-evidence.json' -o -name 'runtime-image-evidence.sigstore.json' -o \
               -name 'values-production.yaml' -o \
               -name 'astronomer-images.txt' -o \
               -name 'RELEASE_IMAGES' -o -name 'RELEASE_SUBJECTS' \
@@ -807,5 +897,6 @@ jobs:
             --title "Astronomer ${TAG}" \
             astronomer-*.tgz *.tar.gz sbom-*.spdx.json provenance-*.slsa.json \
             release-manifest.json release-manifest.sigstore.json \
+            runtime-image-evidence.json runtime-image-evidence.sigstore.json \
             values-production.yaml astronomer-images.txt \
             RELEASE_IMAGES RELEASE_SUBJECTS SHA256SUMS

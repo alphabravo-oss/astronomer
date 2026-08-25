@@ -5,18 +5,33 @@
  *
  * Re-exported from ../api.ts via `export * from './api/account-security'`.
  *
- * The shared axios interceptor in ../api.ts camelizes snake_case keys, so
- * all response types here use camelCase even though the wire format is
- * snake_case.
+ * Generated operations return raw snake_case wire objects; this module maps
+ * them explicitly into the camelCase view types consumed by the UI.
  */
 
-import axios, { AxiosError } from 'axios';
-import api from '../api';
-import { camelizeKeys } from '@/lib/camelize';
-import type { APIResponse, User } from '@/types';
-import { API_BASE } from '@/lib/env';
+import type { User } from "@/types";
+import { mapCurrentUser } from "@/lib/api/auth";
+import {
+  getAuthTotpStatus,
+  getUsersById,
+  postAdminUsersByIdDisableTotp,
+  postAdminUsersByIdForceLogout,
+  postAdminUsersByIdResyncGroups,
+  postAdminUsersByIdUnlock,
+  postAuthLogout,
+  postAuthLogin,
+  postAuthPasswordResetComplete,
+  postAuthPasswordResetRequest,
+  postAuthTotpDisable,
+  postAuthTotpEnrollConfirm,
+  postAuthTotpEnrollStart,
+  postAuthTotpRecoveryCodesRegenerate,
+  postAuthTotpVerify,
+} from "@/lib/api/generated/client";
 
-const API_BASE_URL = API_BASE;
+export interface AccountSecurityRequestOptions {
+  signal?: AbortSignal;
+}
 
 // ============================================================
 // TOTP
@@ -30,45 +45,83 @@ export interface TotpStatus {
 
 export interface TotpEnrollStart {
   otpauthUrl: string;
-  qrPngBase64: string;
+  qrDataUrl: string;
   sessionToken: string;
+  challenge: string;
 }
 
 export interface TotpEnrollConfirm {
   recoveryCodes: string[];
 }
 
-export async function getTotpStatus(): Promise<TotpStatus> {
-  const res = await api.get<APIResponse<TotpStatus>>('/auth/totp/status');
-  return res.data.data;
+export async function getTotpStatus(
+  options?: AccountSecurityRequestOptions,
+): Promise<TotpStatus> {
+  const wire = await getAuthTotpStatus({ signal: options?.signal });
+  return {
+    enrolled: wire.enrolled ?? false,
+    lastUsedAt: wire.last_used_at,
+    recoveryCodesRemaining: wire.recovery_codes_remaining ?? 0,
+  };
 }
 
-export async function startTotpEnrollment(): Promise<TotpEnrollStart> {
-  const res = await api.post<APIResponse<TotpEnrollStart>>('/auth/totp/enroll/start');
-  return res.data.data;
+export async function startTotpEnrollment(
+  options?: AccountSecurityRequestOptions,
+): Promise<TotpEnrollStart> {
+  const wire = await postAuthTotpEnrollStart({ signal: options?.signal });
+  if (
+    !wire.otpauth_url ||
+    !wire.qr_data_url ||
+    !wire.challenge_token ||
+    !wire.challenge
+  ) {
+    throw new Error("TOTP enrollment response omitted required setup data");
+  }
+  return {
+    otpauthUrl: wire.otpauth_url,
+    qrDataUrl: wire.qr_data_url,
+    sessionToken: wire.challenge_token,
+    challenge: wire.challenge,
+  };
 }
 
 export async function confirmTotpEnrollment(
   sessionToken: string,
+  challenge: string,
   code: string,
+  options?: AccountSecurityRequestOptions,
 ): Promise<TotpEnrollConfirm> {
-  const res = await api.post<APIResponse<TotpEnrollConfirm>>('/auth/totp/enroll/confirm', {
-    session_token: sessionToken,
-    code,
+  const wire = await postAuthTotpEnrollConfirm({
+    body: {
+      challenge_token: sessionToken,
+      challenge,
+      code,
+    },
+    signal: options?.signal,
   });
-  return res.data.data;
+  return { recoveryCodes: wire.recovery_codes ?? [] };
 }
 
-export async function disableTotp(password: string, code: string): Promise<void> {
-  await api.post('/auth/totp/disable', { password, code });
+export async function disableTotp(
+  password: string,
+  code: string,
+  options?: AccountSecurityRequestOptions,
+): Promise<void> {
+  await postAuthTotpDisable({
+    body: { password, code },
+    signal: options?.signal,
+  });
 }
 
-export async function regenerateRecoveryCodes(code: string): Promise<TotpEnrollConfirm> {
-  const res = await api.post<APIResponse<TotpEnrollConfirm>>(
-    '/auth/totp/recovery-codes/regenerate',
-    { code },
-  );
-  return res.data.data;
+export async function regenerateRecoveryCodes(
+  code: string,
+  options?: AccountSecurityRequestOptions,
+): Promise<TotpEnrollConfirm> {
+  const wire = await postAuthTotpRecoveryCodesRegenerate({
+    body: { code },
+    signal: options?.signal,
+  });
+  return { recoveryCodes: wire.recovery_codes ?? [] };
 }
 
 // ============================================================
@@ -84,7 +137,7 @@ export async function regenerateRecoveryCodes(code: string): Promise<TotpEnrollC
 export interface TotpChallenge {
   /** 'totp_required' — user already has TOTP enrolled, prompt for code */
   /** 'totp_enrollment_required' — operator policy mandates TOTP; force enrollment */
-  error: 'totp_required' | 'totp_enrollment_required';
+  error: "totp_required" | "totp_enrollment_required";
   challengeToken: string;
 }
 
@@ -97,63 +150,81 @@ export interface VerifiedLogin {
 export async function verifyTotpChallenge(
   challengeToken: string,
   code: string,
+  options?: AccountSecurityRequestOptions,
 ): Promise<VerifiedLogin> {
   // The /verify endpoint returns the same shape as a normal login success:
   // { token, refresh, user } wrapped in APIResponse.
-  const res = await api.post<APIResponse<VerifiedLogin>>('/auth/totp/verify', {
-    challenge_token: challengeToken,
-    code,
-  });
-  return res.data.data;
+  const wire = (
+    await postAuthTotpVerify({
+      body: { challenge_token: challengeToken, code },
+      signal: options?.signal,
+    })
+  ).data;
+  if (!wire?.token || !wire.user) {
+    throw new Error("TOTP verification response omitted session data");
+  }
+  return {
+    token: wire.token,
+    refresh: wire.refresh,
+    user: mapCurrentUser(wire.user),
+  };
 }
 
 /**
- * Login wrapper that surfaces the TOTP challenge instead of throwing. The
- * shared axios interceptor in ../api.ts converts non-2xx responses into a
- * plain `Error` whose `.message` is the server's message string — which
- * loses the challenge_token. So we call axios directly here and inspect
- * the raw 423 response.
+ * Login wrapper that surfaces the typed TOTP challenge instead of throwing.
  */
 export type LoginResult =
-  | { kind: 'ok'; token: string; refresh?: string; user: User }
-  | { kind: 'challenge'; challenge: TotpChallenge };
+  | { kind: "ok"; token: string; refresh?: string; user: User }
+  | { kind: "challenge"; challenge: TotpChallenge };
 
 export async function loginWithCredentialsChallengeAware(
   email: string,
   password: string,
+  options?: AccountSecurityRequestOptions,
 ): Promise<LoginResult> {
-  // We bypass the shared `api` axios instance because its response-error
-  // interceptor flattens errors into plain `Error(message)` and strips the
-  // structured payload (and HTTP status) we need for the TOTP challenge.
-  // Cookie / camelize behavior we *want* are reapplied below.
   try {
-    const res = await axios.post<APIResponse<VerifiedLogin> | VerifiedLogin>(
-      `${API_BASE_URL}/auth/login/`,
-      { email, password },
-      { headers: { 'Content-Type': 'application/json' }, withCredentials: true },
-    );
-    const raw = camelizeKeys(res.data) as { data?: VerifiedLogin } | VerifiedLogin;
-    const body = ('data' in raw && raw.data ? raw.data : (raw as VerifiedLogin));
-    return { kind: 'ok', token: body.token, refresh: body.refresh, user: body.user };
+    const body = (
+      await postAuthLogin({
+        body: { email, password },
+        signal: options?.signal,
+      })
+    ).data;
+    if (!body?.token || !body.user) {
+      throw new Error("Login response omitted session data");
+    }
+    return {
+      kind: "ok",
+      token: body.token,
+      refresh: body.refresh,
+      user: mapCurrentUser(body.user),
+    };
   } catch (err) {
-    const axiosErr = err as AxiosError<{
-      error?: 'totp_required' | 'totp_enrollment_required';
-      challenge_token?: string;
-      message?: string;
-    }>;
-    if (axiosErr.response?.status === 423 && axiosErr.response.data) {
-      const body = axiosErr.response.data;
+    const requestError = err as Error & {
+      status?: number;
+      response?: { status?: number; data?: unknown };
+    };
+    const body = requestError.response?.data as
+      | { error?: string; challenge_token?: string; message?: string }
+      | undefined;
+    if (
+      (requestError.status ?? requestError.response?.status) === 423 &&
+      body
+    ) {
       if (
-        (body.error === 'totp_required' || body.error === 'totp_enrollment_required') &&
+        (body.error === "totp_required" ||
+          body.error === "totp_enrollment_required") &&
         body.challenge_token
       ) {
         return {
-          kind: 'challenge',
-          challenge: { error: body.error, challengeToken: body.challenge_token },
+          kind: "challenge",
+          challenge: {
+            error: body.error,
+            challengeToken: body.challenge_token,
+          },
         };
       }
     }
-    const message = axiosErr.response?.data?.message || axiosErr.message || 'Login failed';
+    const message = body?.message || requestError.message || "Login failed";
     throw new Error(message);
   }
 }
@@ -162,15 +233,25 @@ export async function loginWithCredentialsChallengeAware(
 // Password reset
 // ============================================================
 
-export async function requestPasswordReset(email: string): Promise<void> {
+export async function requestPasswordReset(
+  email: string,
+  options?: AccountSecurityRequestOptions,
+): Promise<void> {
   // Always 202 — server never reveals whether the address exists.
-  await api.post('/auth/password-reset/request', { email });
+  await postAuthPasswordResetRequest({
+    body: { email },
+    signal: options?.signal,
+  });
 }
 
-export async function completePasswordReset(token: string, newPassword: string): Promise<void> {
-  await api.post('/auth/password-reset/complete', {
-    token,
-    new_password: newPassword,
+export async function completePasswordReset(
+  token: string,
+  newPassword: string,
+  options?: AccountSecurityRequestOptions,
+): Promise<void> {
+  await postAuthPasswordResetComplete({
+    body: { token, new_password: newPassword },
+    signal: options?.signal,
   });
 }
 
@@ -183,14 +264,23 @@ export interface LogoutResult {
   redirectUrl?: string;
 }
 
-export async function logoutCurrentSession(): Promise<LogoutResult> {
-  const res = await api.post<APIResponse<LogoutResult>>('/auth/logout');
+export async function logoutCurrentSession(
+  options?: AccountSecurityRequestOptions,
+): Promise<LogoutResult> {
+  const res = await postAuthLogout({ signal: options?.signal });
   // Backend wraps in APIResponse for SSO sessions but may return the bare
   // body for local users; tolerate both.
-  const body = (res.data?.data ?? (res.data as unknown)) as LogoutResult;
+  const body = ((res as { data?: unknown }).data ?? res) as {
+    revoked?: unknown;
+    redirect_url?: unknown;
+    redirectUrl?: unknown;
+  };
   return {
     revoked: Boolean(body?.revoked),
-    redirectUrl: body?.redirectUrl,
+    redirectUrl:
+      typeof (body.redirect_url ?? body.redirectUrl) === "string"
+        ? ((body.redirect_url ?? body.redirectUrl) as string)
+        : undefined,
   };
 }
 
@@ -198,20 +288,44 @@ export async function logoutCurrentSession(): Promise<LogoutResult> {
 // Admin user actions
 // ============================================================
 
-export async function adminUnlockUser(userId: string): Promise<void> {
-  await api.post(`/admin/users/${userId}/unlock`);
+export async function adminUnlockUser(
+  userId: string,
+  options?: AccountSecurityRequestOptions,
+): Promise<void> {
+  await postAdminUsersByIdUnlock({
+    path: { id: userId },
+    signal: options?.signal,
+  });
 }
 
-export async function adminForceLogoutUser(userId: string): Promise<void> {
-  await api.post(`/admin/users/${userId}/force-logout`);
+export async function adminForceLogoutUser(
+  userId: string,
+  options?: AccountSecurityRequestOptions,
+): Promise<void> {
+  await postAdminUsersByIdForceLogout({
+    path: { id: userId },
+    signal: options?.signal,
+  });
 }
 
-export async function adminDisableUserTotp(userId: string): Promise<void> {
-  await api.post(`/admin/users/${userId}/disable-totp`);
+export async function adminDisableUserTotp(
+  userId: string,
+  options?: AccountSecurityRequestOptions,
+): Promise<void> {
+  await postAdminUsersByIdDisableTotp({
+    path: { id: userId },
+    signal: options?.signal,
+  });
 }
 
-export async function adminResyncUserGroups(userId: string): Promise<void> {
-  await api.post(`/admin/users/${userId}/resync-groups`);
+export async function adminResyncUserGroups(
+  userId: string,
+  options?: AccountSecurityRequestOptions,
+): Promise<void> {
+  await postAdminUsersByIdResyncGroups({
+    path: { id: userId },
+    signal: options?.signal,
+  });
 }
 
 /**
@@ -226,7 +340,32 @@ export interface AdminUserDetail extends User {
   groups?: string[];
 }
 
-export async function getAdminUser(userId: string): Promise<AdminUserDetail> {
-  const res = await api.get<APIResponse<AdminUserDetail>>(`/admin/users/${userId}`);
-  return res.data.data;
+export async function getAdminUser(
+  userId: string,
+  options?: AccountSecurityRequestOptions,
+): Promise<AdminUserDetail> {
+  const wire = (
+    await getUsersById({ path: { id: userId }, signal: options?.signal })
+  ).data;
+  if (!wire?.id || !wire.username || !wire.email) {
+    throw new Error("getAdminUser returned no user data");
+  }
+  const provider = ["local", "github", "google", "oidc", "saml"].includes(
+    wire.provider ?? "",
+  )
+    ? (wire.provider as User["provider"])
+    : "local";
+  return {
+    id: wire.id,
+    username: wire.username,
+    email: wire.email,
+    displayName: wire.displayName || wire.username,
+    provider,
+    globalRoles: wire.globalRoles ?? [],
+    isSuperuser: wire.is_superuser ?? false,
+    is_superuser: wire.is_superuser ?? false,
+    enabled: wire.enabled ?? false,
+    lastLogin: wire.lastLogin ?? "",
+    createdAt: wire.createdAt ?? "",
+  };
 }

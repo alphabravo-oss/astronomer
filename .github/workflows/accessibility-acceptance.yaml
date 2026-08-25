@@ -1,0 +1,64 @@
+name: assistive-technology release acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag: {description: "Exact v1 release tag under test", required: true, type: string}
+      raw_evidence_run_id: {description: "Exact successful raw AT evidence run", required: true, type: string}
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    environment: accessibility-acceptance
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {ref: "refs/tags/${{ inputs.tag }}", persist-credentials: false}
+      - name: Enforce exact tag-bound producer
+        env: {TARGET_TAG: "${{ inputs.tag }}"}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/tags/$TARGET_TAG"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with: {cosign-release: v2.5.3}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: accessibility-raw-${{ inputs.raw_evidence_run_id }}
+          path: ${{ runner.temp }}/accessibility-raw
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.raw_evidence_run_id }}
+      - name: Verify exact successful raw producer and every retained byte
+        env:
+          TARGET_TAG: ${{ inputs.tag }}
+          RAW_RUN_ID: ${{ inputs.raw_evidence_run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RAW_RUN_ID}")"
+          jq -e --arg sha "$GITHUB_SHA" --arg tag "$TARGET_TAG" --arg repo "$GITHUB_REPOSITORY" '.status=="completed" and .conclusion=="success" and .event=="workflow_dispatch" and .path==".github/workflows/accessibility-raw-evidence.yaml" and .head_sha==$sha and .head_branch==$tag and .head_repository.full_name==$repo' <<<"$run_json" >/dev/null
+          artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RAW_RUN_ID}/artifacts?per_page=100&name=accessibility-raw-${RAW_RUN_ID}")"
+          jq -e --arg name "accessibility-raw-${RAW_RUN_ID}" '[.artifacts[]|select(.name==$name and .expired==false)]|length==1' <<<"$artifacts" >/dev/null
+          raw="$RUNNER_TEMP/accessibility-raw"
+          cosign verify-blob --bundle "$raw/raw-manifest.sigstore.json" --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/accessibility-raw-evidence.yaml@refs/tags/${TARGET_TAG}" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$raw/raw-manifest.json"
+          python3 scripts/raw-human-evidence-manifest.py --root "$raw" --manifest "$raw/raw-manifest.json" --verify
+          python3 scripts/build-accessibility-evidence.py --raw-dir "$raw" --tag "$TARGET_TAG" --source-commit "$GITHUB_SHA" --source-run-id "$GITHUB_RUN_ID" --raw-run-id "$RAW_RUN_ID" --out accessibility-evidence.json
+          python3 scripts/validate-accessibility-evidence.py accessibility-evidence.json \
+            --tag "$TARGET_TAG" --source-commit "$GITHUB_SHA" --source-run-id "$GITHUB_RUN_ID"
+          chmod 0644 accessibility-evidence.json
+      - name: Sign exact validated matrix
+        run: cosign sign-blob --yes --bundle accessibility-evidence.sigstore.json accessibility-evidence.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: accessibility-acceptance-${{ github.run_id }}
+          path: |
+            accessibility-evidence.json
+            accessibility-evidence.sigstore.json
+          if-no-files-found: error
+          retention-days: 365

@@ -1,53 +1,53 @@
-import type { Mocked } from 'vitest';
-import api from '../api';
-import { listDLQ, listQueues } from './admin-operations';
+import type { MockedFunction } from "vitest";
+import {
+  getAdminQueues,
+  getAdminQueuesByQueueDlq,
+} from "@/lib/api/generated/client";
+import { listDLQ, listQueues } from "./admin-operations";
 
-vi.mock('../api', () => ({
-  __esModule: true,
-  default: {
-    get: vi.fn(),
-    post: vi.fn(),
-    delete: vi.fn(),
-  },
+vi.mock("@/lib/api/generated/client", () => ({
+  getAdminQueues: vi.fn(),
+  getAdminQueuesByQueueDlq: vi.fn(),
 }));
 
-const mockedApi = api as Mocked<typeof api>;
+const mockedQueues = getAdminQueues as MockedFunction<typeof getAdminQueues>;
+const mockedDLQ = getAdminQueuesByQueueDlq as MockedFunction<
+  typeof getAdminQueuesByQueueDlq
+>;
 
-describe('admin operations API client', () => {
+describe("admin operations API client", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('unwraps standard API envelopes for queue lists', async () => {
-    mockedApi.get.mockResolvedValueOnce({
-      data: {
-        data: [
-          {
-            name: 'default',
-            size: 1,
-            active: 0,
-            pending: 1,
-            scheduled: 0,
-            retry: 0,
-            archived: 0,
-            completed: 0,
-            paused: false,
-            as_of: '2026-06-15T00:00:00Z',
-          },
-        ],
-      },
-    });
+  it("maps the generated queue operation response", async () => {
+    mockedQueues.mockResolvedValueOnce({
+      data: [
+        {
+          name: "default",
+          size: 1,
+          active: 0,
+          pending: 1,
+          scheduled: 0,
+          retry: 0,
+          archived: 0,
+          completed: 0,
+          paused: false,
+          as_of: "2026-06-15T00:00:00Z",
+        },
+      ],
+    } as never);
 
     await expect(listQueues()).resolves.toEqual([
-      expect.objectContaining({ name: 'default', pending: 1 }),
+      expect.objectContaining({ name: "default", pending: 1 }),
     ]);
   });
 
-  it('keeps raw queue array compatibility', async () => {
-    mockedApi.get.mockResolvedValueOnce({
+  it("forwards query cancellation to the generated operation", async () => {
+    mockedQueues.mockResolvedValueOnce({
       data: [
         {
-          name: 'tunnel',
+          name: "tunnel",
           size: 0,
           active: 0,
           pending: 0,
@@ -56,29 +56,29 @@ describe('admin operations API client', () => {
           archived: 0,
           completed: 0,
           paused: false,
-          as_of: '2026-06-15T00:00:00Z',
+          as_of: "2026-06-15T00:00:00Z",
         },
       ],
-    });
+    } as never);
 
-    await expect(listQueues()).resolves.toEqual([
-      expect.objectContaining({ name: 'tunnel' }),
+    const signal = new AbortController().signal;
+    await expect(listQueues(signal)).resolves.toEqual([
+      expect.objectContaining({ name: "tunnel" }),
     ]);
+    expect(mockedQueues).toHaveBeenCalledWith({ signal });
   });
 
-  it('unwraps standard API envelopes for DLQ reads', async () => {
-    mockedApi.get.mockResolvedValueOnce({
+  it("maps the generated DLQ operation response", async () => {
+    mockedDLQ.mockResolvedValueOnce({
       data: {
-        data: {
-          queue: 'default',
-          dlq: [],
-          count: 0,
-        },
+        queue: "default",
+        dlq: [],
+        count: 0,
       },
-    });
+    } as never);
 
-    await expect(listDLQ('default')).resolves.toEqual({
-      queue: 'default',
+    await expect(listDLQ("default")).resolves.toEqual({
+      queue: "default",
       dlq: [],
       count: 0,
     });

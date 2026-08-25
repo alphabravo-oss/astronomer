@@ -85,6 +85,22 @@ INSERT INTO network_policy_applications
 VALUES ($1, $2, $3, $4, 'pending', $5)
 RETURNING *;
 
+-- name: UpsertNetworkPolicyApplication :one
+-- HTTP bulk apply is idempotent and transaction-friendly. A plain INSERT
+-- followed by unique-violation recovery aborts the surrounding PostgreSQL
+-- transaction before the handler can fetch the existing row. Resetting the
+-- existing row to pending represents the caller's explicit reconcile intent.
+INSERT INTO network_policy_applications
+    (template_id, cluster_id, namespace, policy_name, status, applied_by)
+VALUES ($1, $2, $3, $4, 'pending', $5)
+ON CONFLICT (cluster_id, namespace, template_id) DO UPDATE SET
+    policy_name = EXCLUDED.policy_name,
+    status = 'pending',
+    last_error = '',
+    applied_by = EXCLUDED.applied_by,
+    updated_at = now()
+RETURNING *;
+
 -- name: DeleteNetworkPolicyApplication :exec
 DELETE FROM network_policy_applications WHERE id = $1;
 

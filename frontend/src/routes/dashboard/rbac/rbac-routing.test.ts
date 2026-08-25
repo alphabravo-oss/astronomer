@@ -8,128 +8,149 @@ import {
   isValidNamespace,
   roleTitle,
   toAccessBinding,
-} from './-utils';
+} from "./-utils";
 
 // F-03 regression: the RBAC users table must link each row to the admin
 // user-security detail, and lock state must be derivable for the badge.
 
-describe('adminUserHref', () => {
-  it('targets the admin user-security detail route', () => {
-    expect(adminUserHref('u-123')).toBe('/dashboard/admin/users/u-123');
-    expect(adminUserHref('abc-def')).toBe('/dashboard/admin/users/abc-def');
+describe("adminUserHref", () => {
+  it("targets the admin user-security detail route", () => {
+    expect(adminUserHref("u-123")).toBe("/dashboard/admin/users/u-123");
+    expect(adminUserHref("abc-def")).toBe("/dashboard/admin/users/abc-def");
   });
 });
 
-describe('isUserLocked', () => {
-  it('is false when there is no lock timestamp', () => {
+describe("isUserLocked", () => {
+  it("is false when there is no lock timestamp", () => {
     expect(isUserLocked({})).toBe(false);
     expect(isUserLocked({ lockedUntil: null })).toBe(false);
   });
 
-  it('is true when locked_until is in the future', () => {
+  it("is true when locked_until is in the future", () => {
     const future = new Date(Date.now() + 60_000).toISOString();
     expect(isUserLocked({ lockedUntil: future })).toBe(true);
     expect(isUserLocked({ locked_until: future })).toBe(true);
   });
 
-  it('is false when the lock has already expired', () => {
+  it("is false when the lock has already expired", () => {
     const past = new Date(Date.now() - 60_000).toISOString();
     expect(isUserLocked({ lockedUntil: past })).toBe(false);
   });
 
-  it('is false for an unparseable timestamp', () => {
-    expect(isUserLocked({ lockedUntil: 'not-a-date' })).toBe(false);
+  it("is false for an unparseable timestamp", () => {
+    expect(isUserLocked({ lockedUntil: "not-a-date" })).toBe(false);
   });
 });
 
 // DIR-04: the cluster-binding create form gates submit on a DNS-1123 namespace
 // (empty == cluster-wide), mirroring the backend validation on
 // POST /rbac/cluster-role-bindings/.
-describe('isValidNamespace', () => {
-  it('allows an empty namespace (cluster-wide)', () => {
-    expect(isValidNamespace('')).toBe(true);
+describe("isValidNamespace", () => {
+  it("allows an empty namespace (cluster-wide)", () => {
+    expect(isValidNamespace("")).toBe(true);
   });
 
-  it('accepts valid DNS-1123 labels', () => {
-    expect(isValidNamespace('kube-system')).toBe(true);
-    expect(isValidNamespace('default')).toBe(true);
-    expect(isValidNamespace('a')).toBe(true);
-    expect(isValidNamespace('ns1')).toBe(true);
+  it("accepts valid DNS-1123 labels", () => {
+    expect(isValidNamespace("kube-system")).toBe(true);
+    expect(isValidNamespace("default")).toBe(true);
+    expect(isValidNamespace("a")).toBe(true);
+    expect(isValidNamespace("ns1")).toBe(true);
   });
 
-  it('rejects invalid labels', () => {
-    expect(isValidNamespace('Bad_NS')).toBe(false);
-    expect(isValidNamespace('UPPER')).toBe(false);
-    expect(isValidNamespace('-leading')).toBe(false);
-    expect(isValidNamespace('trailing-')).toBe(false);
-    expect(isValidNamespace('has space')).toBe(false);
-    expect(isValidNamespace('a'.repeat(64))).toBe(false);
+  it("rejects invalid labels", () => {
+    expect(isValidNamespace("Bad_NS")).toBe(false);
+    expect(isValidNamespace("UPPER")).toBe(false);
+    expect(isValidNamespace("-leading")).toBe(false);
+    expect(isValidNamespace("trailing-")).toBe(false);
+    expect(isValidNamespace("has space")).toBe(false);
+    expect(isValidNamespace("a".repeat(64))).toBe(false);
   });
 });
 
-describe('role helpers', () => {
-  it('prefers displayName and isBuiltin after camelize', () => {
-    expect(roleTitle({ name: 'platform-admin', displayName: 'Platform Admin' })).toBe('Platform Admin');
-    expect(roleTitle({ name: 'platform-admin', displayName: '' })).toBe('platform-admin');
-    expect(isBuiltinRole({ name: 'x', isBuiltin: true })).toBe(true);
-    expect(isBuiltinRole({ name: 'x', builtin: true })).toBe(true);
-    expect(isBuiltinRole({ name: 'x' })).toBe(false);
+describe("role helpers", () => {
+  it("prefers mapped displayName and isBuiltin fields", () => {
+    expect(
+      roleTitle({ name: "platform-admin", displayName: "Platform Admin" }),
+    ).toBe("Platform Admin");
+    expect(roleTitle({ name: "platform-admin", displayName: "" })).toBe(
+      "platform-admin",
+    );
+    expect(isBuiltinRole({ name: "x", isBuiltin: true })).toBe(true);
+    expect(isBuiltinRole({ name: "x", builtin: true })).toBe(true);
+    expect(isBuiltinRole({ name: "x" })).toBe(false);
   });
 
-  it('counts CRD grants from either apiGroups spelling', () => {
+  it("counts CRD grants from either apiGroups spelling", () => {
     expect(
       crdGrantCount([
-        { resource: 'workloads', verbs: ['read'] },
-        { resource: 'certificates', verbs: ['read'], apiGroups: ['cert-manager.io'] },
-        { resource: 'helmreleases', verbs: ['list'], api_groups: ['helm.toolkit.fluxcd.io'] },
+        { resource: "workloads", verbs: ["read"] },
+        {
+          resource: "certificates",
+          verbs: ["read"],
+          apiGroups: ["cert-manager.io"],
+        },
+        {
+          resource: "helmreleases",
+          verbs: ["list"],
+          api_groups: ["helm.toolkit.fluxcd.io"],
+        },
       ]),
     ).toBe(2);
     expect(crdGrantCount(undefined)).toBe(0);
   });
 });
 
-describe('toAccessBinding', () => {
-  it('normalizes camelized cluster binding rows', () => {
-    const binding = toAccessBinding('cluster', {
-      id: 'b1',
-      userId: 'u1',
-      group: '',
-      roleId: 'r1',
-      clusterId: 'c1',
-      namespace: 'payments',
-      createdAt: '2026-01-01T00:00:00Z',
+describe("toAccessBinding", () => {
+  it("normalizes mapped cluster binding rows", () => {
+    const binding = toAccessBinding("cluster", {
+      id: "b1",
+      userId: "u1",
+      group: "",
+      roleId: "r1",
+      clusterId: "c1",
+      namespace: "payments",
+      createdAt: "2026-01-01T00:00:00Z",
     });
     expect(binding).toMatchObject({
-      scope: 'cluster',
-      userId: 'u1',
-      roleId: 'r1',
-      clusterId: 'c1',
-      namespace: 'payments',
+      scope: "cluster",
+      userId: "u1",
+      roleId: "r1",
+      clusterId: "c1",
+      namespace: "payments",
     });
   });
 });
 
-describe('binding labels', () => {
-  it('resolves users, clusters, and projects instead of raw ids', () => {
-    const binding = toAccessBinding('cluster', {
-      id: 'b1',
-      userId: 'u1',
-      roleId: 'r1',
-      clusterId: 'c1',
-      namespace: 'kube-system',
-      createdAt: '2026-01-01T00:00:00Z',
+describe("binding labels", () => {
+  it("resolves users, clusters, and projects instead of raw ids", () => {
+    const binding = toAccessBinding("cluster", {
+      id: "b1",
+      userId: "u1",
+      roleId: "r1",
+      clusterId: "c1",
+      namespace: "kube-system",
+      createdAt: "2026-01-01T00:00:00Z",
     });
     expect(
       bindingSubject(binding, [
-        { id: 'u1', username: 'ada', displayName: 'Ada', email: '', provider: 'local', enabled: true, lastLogin: '', createdAt: '' },
+        {
+          id: "u1",
+          username: "ada",
+          displayName: "Ada",
+          email: "",
+          provider: "local",
+          enabled: true,
+          lastLogin: "",
+          createdAt: "",
+        },
       ]),
-    ).toBe('Ada');
+    ).toBe("Ada");
     expect(
       bindingTarget(
         binding,
-        [{ id: 'c1', name: 'local', displayName: 'Local' } as never],
+        [{ id: "c1", name: "local", displayName: "Local" } as never],
         [],
       ),
-    ).toBe('Local / kube-system');
+    ).toBe("Local / kube-system");
   });
 });

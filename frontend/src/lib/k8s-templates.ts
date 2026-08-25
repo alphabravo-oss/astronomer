@@ -195,4 +195,97 @@ metadata:
   labels:
     env: development
 `,
+
+  persistentvolumeclaim: `apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-data
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+`,
+
+  hpa: `apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-app
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+`,
+
+  poddisruptionbudget: `apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-app
+  namespace: default
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: my-app
+`,
+
+  serviceaccount: `apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-service-account
+  namespace: default
+automountServiceAccountToken: false
+`,
+
+  role: `apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: workload-reader
+  namespace: default
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+`,
+
+  rolebinding: `apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workload-readers
+  namespace: default
+subjects:
+  - kind: Group
+    name: workload-readers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: workload-reader
+  apiGroup: rbac.authorization.k8s.io
+`,
+
+  gateway: `apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: public-gateway
+  namespace: default
+spec:
+  gatewayClassName: default
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+`,
 };

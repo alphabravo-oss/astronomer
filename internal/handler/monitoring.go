@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -31,6 +32,7 @@ import (
 type MonitoringHandler struct {
 	requester K8sRequester
 	queries   MonitoringQuerier
+	runTx     monitoringRunTxFunc
 	helm      HelmRequester
 	log       *slog.Logger
 	authz     authorizationSupport
@@ -58,6 +60,62 @@ type MonitoringHandler struct {
 	grafanaExpose  GrafanaExpose
 	sessionTTL     func(context.Context) time.Duration
 	systemOutputs  systemLoggingOutputDisabler
+}
+
+type MonitoringMutationTx interface {
+	audit.OutboxQuerier
+	GetDefaultMonitoringBackend(context.Context) (sqlc.MonitoringBackend, error)
+	UpsertDefaultMonitoringBackend(context.Context, sqlc.UpsertDefaultMonitoringBackendParams) (sqlc.MonitoringBackend, error)
+	UpsertClusterMonitoringConfig(context.Context, sqlc.UpsertClusterMonitoringConfigParams) (sqlc.ClusterMonitoringConfig, error)
+	CreateMonitoringOperation(context.Context, sqlc.CreateMonitoringOperationParams) (sqlc.MonitoringOperation, error)
+	CreateMonitoringOperationIdempotent(context.Context, sqlc.CreateMonitoringOperationIdempotentParams) (sqlc.MonitoringOperation, error)
+	RequeueMonitoringOperation(context.Context, uuid.UUID) (sqlc.MonitoringOperation, error)
+}
+
+type monitoringRunTxFunc func(context.Context, func(MonitoringMutationTx) error) error
+
+func (h *MonitoringHandler) SetRunTx(runTx monitoringRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *MonitoringHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
+
+func executeMonitoringMutation[T any](r *http.Request, h *MonitoringHandler, mutate func(MonitoringMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("monitoring handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q MonitoringMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
+}
+
+func respondMonitoringMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackStatus int, fallbackCode, fallbackMessage string) {
+	if errors.Is(err, errMonitoringOperationIdempotencyConflict) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+			"Idempotency-Key already identifies a different monitoring operation")
+		return
+	}
+	respondTransactionalMutationError(w, r, err, fallbackStatus, fallbackCode, fallbackMessage)
 }
 
 // systemLoggingOutputDisabler turns off per-cluster Astronomer Loki destinations
@@ -137,6 +195,12 @@ type MonitoringQuerier interface {
 	ListAlertRuleChannelsByRules(ctx context.Context, ruleIds []uuid.UUID) ([]sqlc.AlertRuleChannel, error)
 }
 
+type monitoringBackendDeleter interface {
+	DeleteDefaultMonitoringBackendIfUnused(context.Context, uuid.UUID) (sqlc.MonitoringBackend, error)
+}
+
+var errMonitoringBackendDeleteUnsupported = errors.New("monitoring backend deletion is not configured")
+
 func NewMonitoringHandler() *MonitoringHandler {
 	return &MonitoringHandler{log: slog.Default(), triggerCh: make(chan struct{}, 1), folderTriggerCh: make(chan struct{}, 1)}
 }
@@ -153,6 +217,7 @@ func NewMonitoringHandlerWithDeps(queries MonitoringQuerier, requester K8sReques
 	return &MonitoringHandler{queries: queries, requester: requester, helm: helm, log: slog.Default(), triggerCh: make(chan struct{}, 1), folderTriggerCh: make(chan struct{}, 1)}
 }
 
+// openapi:request UpdateMonitoringBackendRequest
 type UpdateMonitoringBackendRequest struct {
 	BackendType                  string          `json:"backendType"`
 	QueryURL                     string          `json:"queryUrl"`
@@ -166,6 +231,7 @@ type UpdateMonitoringBackendRequest struct {
 	MaxRetryAttempts             int32           `json:"maxRetryAttempts"`
 }
 
+// openapi:request UpdateClusterMonitoringConfigRequest
 type UpdateClusterMonitoringConfigRequest struct {
 	BackendID               *uuid.UUID `json:"backendId"`
 	ClusterLabel            string     `json:"clusterLabel"`
@@ -182,6 +248,7 @@ type UpdateClusterMonitoringConfigRequest struct {
 	Status                  string     `json:"status"`
 }
 
+// openapi:request MonitoringStackRequest
 type MonitoringStackRequest struct {
 	ReleaseName             string `json:"releaseName"`
 	Namespace               string `json:"namespace"`
@@ -203,6 +270,7 @@ type MonitoringStackRequest struct {
 	AutoRollbackOnFailure *bool `json:"autoRollbackOnFailure"`
 }
 
+// openapi:request SharedThanosStackRequest
 type SharedThanosStackRequest struct {
 	ManagementClusterID     string `json:"managementClusterId"`
 	Namespace               string `json:"namespace"`
@@ -216,6 +284,7 @@ type SharedThanosStackRequest struct {
 	AutoRollbackOnFailure   *bool  `json:"autoRollbackOnFailure"`
 }
 
+// openapi:request SharedAlertmanagerStackRequest
 type SharedAlertmanagerRequest struct {
 	ManagementClusterID   string `json:"managementClusterId"`
 	Namespace             string `json:"namespace"`
@@ -227,6 +296,7 @@ type SharedAlertmanagerRequest struct {
 	AutoRollbackOnFailure *bool  `json:"autoRollbackOnFailure"`
 }
 
+// openapi:request SharedGrafanaStackRequest
 // SharedGrafanaRequest is the camelCase body for the shared Grafana family.
 // ingressHost overrides grafana.<ServerURL host>; never values.ingress.host.
 type SharedGrafanaRequest struct {
@@ -242,6 +312,7 @@ type SharedGrafanaRequest struct {
 	AutoRollbackOnFailure *bool  `json:"autoRollbackOnFailure"`
 }
 
+// openapi:request SharedLokiStackRequest
 // SharedLokiRequest is the camelCase body for the shared Loki family.
 // ingestHostname is required and never derived from the Astronomer ingress host.
 type SharedLokiRequest struct {
@@ -414,26 +485,35 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		TimeoutSeconds:     req.TimeoutSeconds,
 		CreatedByID:        currentUserUUID(r),
 	}
+	if h.monitoringSealer() == nil && imonitoring.HasAuthConfigSecret(authConfigMap) {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.CryptoError, "Monitoring credential encryption is unavailable")
+		return
+	}
 	if err := imonitoring.SealInto(&params, authConfigMap, h.monitoringSealer()); err != nil {
 		h.log.Error("encrypt monitoring backend credential", "error", err)
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to secure the monitoring credential")
 		return
 	}
-	backend, err := h.queries.UpsertDefaultMonitoringBackend(r.Context(), params)
+	backend, err := executeMonitoringMutation(r, h,
+		func(q MonitoringMutationTx) (sqlc.MonitoringBackend, error) {
+			return q.UpsertDefaultMonitoringBackend(r.Context(), params)
+		},
+		func() (sqlc.MonitoringBackend, error) {
+			return h.queries.UpsertDefaultMonitoringBackend(r.Context(), params)
+		},
+		func(backend sqlc.MonitoringBackend) clusterAuditEvent {
+			return clusterAuditEvent{action: "monitoring.endpoint.update", resourceType: "monitoring_backend", resourceID: backend.ID.String(), resourceName: backend.BackendType, status: http.StatusOK, detail: map[string]any{
+				"tenant_id": backend.TenantID, "auth_type": backend.AuthType,
+			}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to save monitoring backend")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to save monitoring backend")
 		return
 	}
 	// UpdateBackendConfig is the upsert behind both CreateEndpoint and
 	// UpdateEndpoint; we record the action as "update" — when the row didn't
 	// exist before this is effectively a "create", but distinguishing the two
 	// would require a pre-read and isn't worth the extra round-trip.
-	recordAudit(r, h.queries, "monitoring.endpoint.update", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
-		"query_url":        backend.QueryUrl,
-		"alertmanager_url": backend.AlertmanagerUrl,
-		"tenant_id":        backend.TenantID,
-		"auth_type":        backend.AuthType,
-	})
 	// The response renders the document this request just produced rather than
 	// a re-read of the row — the stored JSONB is now the stripped projection,
 	// so a re-read would report `authConfigKeys: []` and make a successful save
@@ -1085,8 +1165,67 @@ func (h *MonitoringHandler) UpdateEndpoint(w http.ResponseWriter, r *http.Reques
 	h.UpdateBackendConfig(w, r)
 }
 
-// DeleteEndpoint handles DELETE /api/v1/monitoring/endpoints/{id}/.
-// We do not currently support deleting the default backend; return 501.
+// DeleteEndpoint handles DELETE /api/v1/monitoring/endpoints/{id}/. The
+// guarded SQL mutation refuses to cascade cluster monitoring configurations
+// or orphan managed shared-stack releases. Operators must detach/uninstall
+// those dependencies first; the API reports that state as a conflict.
 func (h *MonitoringHandler) DeleteEndpoint(w http.ResponseWriter, r *http.Request) {
-	RespondRequestError(w, r, http.StatusNotImplemented, apierror.NotImplemented, "Deleting the default monitoring backend is not yet supported")
+	if h == nil || h.queries == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid monitoring endpoint ID")
+		return
+	}
+	existing, err := h.queries.GetDefaultMonitoringBackend(r.Context())
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && existing.ID != id) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Monitoring endpoint not found")
+		return
+	}
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to load monitoring endpoint")
+		return
+	}
+	if _, ok := h.queries.(monitoringBackendDeleter); !ok {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring backend deletion is not configured")
+		return
+	}
+
+	_, err = executeMonitoringMutation(r, h,
+		func(q MonitoringMutationTx) (sqlc.MonitoringBackend, error) {
+			deleter, ok := q.(monitoringBackendDeleter)
+			if !ok {
+				return sqlc.MonitoringBackend{}, errMonitoringBackendDeleteUnsupported
+			}
+			return deleter.DeleteDefaultMonitoringBackendIfUnused(r.Context(), id)
+		},
+		func() (sqlc.MonitoringBackend, error) {
+			return h.queries.(monitoringBackendDeleter).DeleteDefaultMonitoringBackendIfUnused(r.Context(), id)
+		},
+		func(backend sqlc.MonitoringBackend) clusterAuditEvent {
+			return clusterAuditEvent{
+				action:       "monitoring.endpoint.delete",
+				resourceType: "monitoring_backend",
+				resourceID:   backend.ID.String(),
+				resourceName: backend.BackendType,
+				status:       http.StatusNoContent,
+				detail:       map[string]any{"tenant_id": backend.TenantID, "auth_type": backend.AuthType},
+			}
+		})
+	if errors.Is(err, pgx.ErrNoRows) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+			"Uninstall active cluster and managed shared monitoring stacks before deleting the endpoint")
+		return
+	}
+	if errors.Is(err, errMonitoringBackendDeleteUnsupported) {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring backend deletion is not configured")
+		return
+	}
+	if err != nil {
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to delete monitoring endpoint")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

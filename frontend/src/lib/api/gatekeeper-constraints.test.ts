@@ -1,65 +1,116 @@
-import type { Mocked } from 'vitest';
-import api from '@/lib/api';
 import {
-  listGatekeeperConstraints,
-  validateGatekeeperConstraint,
+  deleteClustersByIdGatekeeperConstraintsByName,
+  getClustersByIdGatekeeperConstraints,
+  postClustersByIdGatekeeperConstraints,
+  postClustersByIdGatekeeperConstraintsValidate,
+} from "@/lib/api/generated/client";
+import {
   applyGatekeeperConstraint,
   deleteGatekeeperConstraint,
-} from './gatekeeper-constraints';
+  listGatekeeperConstraints,
+  validateGatekeeperConstraint,
+} from "@/lib/api/gatekeeper-constraints";
 
-vi.mock('@/lib/api', () => ({
-  __esModule: true,
-  default: {
-    get: vi.fn(),
-    post: vi.fn(),
-    delete: vi.fn(),
-  },
+vi.mock("@/lib/api/generated/client", () => ({
+  deleteClustersByIdGatekeeperConstraintsByName: vi.fn(),
+  getClustersByIdGatekeeperConstraints: vi.fn(),
+  postClustersByIdGatekeeperConstraints: vi.fn(),
+  postClustersByIdGatekeeperConstraintsValidate: vi.fn(),
 }));
 
-const mockedApi = api as Mocked<typeof api>;
+const validationWire = {
+  valid: true,
+  errors: [],
+  applied: false,
+  name: "require-team-label",
+  kind: "K8sRequiredLabels",
+};
 
-describe('gatekeeper constraints API client', () => {
+describe("Gatekeeper generated API boundary", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('unwraps the { data: { items } } list envelope', async () => {
-    mockedApi.get.mockResolvedValueOnce({
-      data: { data: { items: [{ name: 'c1', kind: 'K8sRequiredLabels', source: 'custom', violationCount: 2 }] } },
+  it("flattens bundle and custom groups without losing their source", async () => {
+    vi.mocked(getClustersByIdGatekeeperConstraints).mockResolvedValueOnce({
+      data: {
+        bundle: [
+          {
+            name: "bundle-labels",
+            kind: "K8sRequiredLabels",
+            api_version: "constraints.gatekeeper.sh/v1beta1",
+            enforcement_action: "deny",
+          },
+        ],
+        custom: [
+          {
+            name: "custom-labels",
+            kind: "K8sRequiredLabels",
+            api_version: "constraints.gatekeeper.sh/v1beta1",
+            violation_count: 2,
+            yaml: "apiVersion: constraints.gatekeeper.sh/v1beta1",
+          },
+        ],
+      },
     });
-    await expect(listGatekeeperConstraints('cl1')).resolves.toEqual([
-      expect.objectContaining({ name: 'c1', violationCount: 2 }),
+
+    await expect(listGatekeeperConstraints("cluster-1")).resolves.toEqual([
+      expect.objectContaining({
+        name: "bundle-labels",
+        source: "bundle",
+        enforcementAction: "deny",
+        violationCount: 0,
+      }),
+      expect.objectContaining({
+        name: "custom-labels",
+        source: "custom",
+        violationCount: 2,
+      }),
     ]);
-    expect(mockedApi.get).toHaveBeenCalledWith('/clusters/cl1/gatekeeper/constraints/');
   });
 
-  it('posts YAML to the validate endpoint (no apply)', async () => {
-    mockedApi.post.mockResolvedValueOnce({
-      data: { valid: true, errors: [], applied: false, name: 'c1', kind: 'K8sRequiredLabels' },
-    });
-    await expect(validateGatekeeperConstraint('cl1', 'yaml')).resolves.toEqual(
-      expect.objectContaining({ valid: true, applied: false }),
-    );
-    expect(mockedApi.post).toHaveBeenCalledWith('/clusters/cl1/gatekeeper/constraints/validate/', {
-      yaml: 'yaml',
-    });
-  });
+  it("serializes validation and maps its envelope", async () => {
+    vi.mocked(
+      postClustersByIdGatekeeperConstraintsValidate,
+    ).mockResolvedValueOnce({ data: validationWire });
 
-  it('unwraps a { data }-wrapped validate/apply response defensively', async () => {
-    mockedApi.post.mockResolvedValueOnce({
-      data: { data: { valid: true, errors: [], applied: true, name: 'c1', kind: 'K8sRequiredLabels' } },
-    });
-    await expect(applyGatekeeperConstraint('cl1', 'yaml')).resolves.toEqual(
-      expect.objectContaining({ applied: true }),
-    );
-    expect(mockedApi.post).toHaveBeenCalledWith('/clusters/cl1/gatekeeper/constraints/', {
-      yaml: 'yaml',
+    await expect(
+      validateGatekeeperConstraint("cluster-1", "yaml"),
+    ).resolves.toEqual(validationWire);
+    expect(postClustersByIdGatekeeperConstraintsValidate).toHaveBeenCalledWith({
+      path: { id: "cluster-1" },
+      body: { yaml: "yaml" },
     });
   });
 
-  it('url-encodes the constraint name on delete', async () => {
-    mockedApi.delete.mockResolvedValueOnce({});
-    await deleteGatekeeperConstraint('cl1', 'require labels');
-    expect(mockedApi.delete).toHaveBeenCalledWith(
-      '/clusters/cl1/gatekeeper/constraints/require%20labels/',
-    );
+  it("serializes apply and maps its envelope", async () => {
+    vi.mocked(postClustersByIdGatekeeperConstraints).mockResolvedValueOnce({
+      data: { ...validationWire, status: "pending", task_id: "task-1" },
+    });
+
+    await expect(
+      applyGatekeeperConstraint("cluster-1", "yaml"),
+    ).resolves.toEqual({
+      ...validationWire,
+      status: "pending",
+      taskId: "task-1",
+    });
+  });
+
+  it("passes identifiers to the generated delete path", async () => {
+    vi.mocked(
+      deleteClustersByIdGatekeeperConstraintsByName,
+    ).mockResolvedValueOnce({
+      data: { name: "require labels", status: "pending", task_id: "task-2" },
+    });
+    await expect(
+      deleteGatekeeperConstraint("cluster-1", "require labels"),
+    ).resolves.toEqual({
+      name: "require labels",
+      status: "pending",
+      task_id: "task-2",
+    });
+    expect(deleteClustersByIdGatekeeperConstraintsByName).toHaveBeenCalledWith({
+      path: { id: "cluster-1", name: "require labels" },
+      headerParams: { "Idempotency-Key": expect.any(String) },
+    });
   });
 });

@@ -225,6 +225,7 @@ func newProjectCatalogTestEnv(t *testing.T) (*ProjectCatalogHandler, *fakeProjec
 	q := newFakeProjectCatalogQuerier()
 	h := NewProjectCatalogHandler(q)
 	h.SetAuditor(q)
+	h.SetEncryptor(testEncryptor(t))
 	projectA := uuid.New()
 	projectB := uuid.New()
 	q.projects[projectA] = sqlc.Project{ID: projectA, Name: "project-a"}

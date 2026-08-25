@@ -32,6 +32,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -39,9 +40,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // controlPlaneSnapshotJobImage is the image the one-shot snapshot Job
@@ -69,6 +75,15 @@ type ControlPlaneSnapshotQuerier interface {
 	MarkControlPlaneSnapshotFailed(ctx context.Context, arg sqlc.MarkControlPlaneSnapshotFailedParams) error
 }
 
+type ControlPlaneSnapshotMutationTx interface {
+	ControlPlaneSnapshotQuerier
+	resourceOperationIdempotencyQuerier
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+}
+
+type controlPlaneSnapshotRunTxFunc func(context.Context, func(ControlPlaneSnapshotMutationTx) error) error
+
 // ControlPlaneSnapshotHandler owns the /control-plane-snapshots/* routes.
 // The K8sRequester is the same tunnel-backed requester ResourceHandler /
 // ClusterSnapshotsHandler use to drive the member cluster's apiserver;
@@ -77,11 +92,37 @@ type ControlPlaneSnapshotQuerier interface {
 type ControlPlaneSnapshotHandler struct {
 	queries   ControlPlaneSnapshotQuerier
 	requester K8sRequester
+	runTx     controlPlaneSnapshotRunTxFunc
 }
 
 // NewControlPlaneSnapshotHandler wires the handler against the querier.
 func NewControlPlaneSnapshotHandler(queries ControlPlaneSnapshotQuerier) *ControlPlaneSnapshotHandler {
 	return &ControlPlaneSnapshotHandler{queries: queries}
+}
+
+func (h *ControlPlaneSnapshotHandler) SetRunTx(runTx controlPlaneSnapshotRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *ControlPlaneSnapshotHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
+}
+
+func enqueueControlPlaneSnapshotApply(ctx context.Context, q tasks.TaskOutboxWriter, snapshotID uuid.UUID) error {
+	task, err := tasks.NewControlPlaneSnapshotApplyTask(snapshotID)
+	if err != nil {
+		return err
+	}
+	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
+	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(5))
+	_, err = tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{
+		DedupeKey: "control_plane_snapshot:apply:" + snapshotID.String(),
+		QueueName: tasks.ClusterTemplateApplyQueueName, MaxRetry: 5,
+		Timeout: 2 * time.Minute, MaxDeliveryAttempts: 20,
+	})
+	return err
 }
 
 // SetRequester attaches the tunnel-backed K8sRequester used to POST the
@@ -136,6 +177,12 @@ type ControlPlaneSnapshotResponse struct {
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
 
+// openapi:request CreateControlPlaneSnapshotRequestWire
+type createControlPlaneSnapshotRequest struct {
+	Name     string `json:"name,omitempty"`
+	Location string `json:"location,omitempty"`
+}
+
 func controlPlaneSnapshotToResponse(row sqlc.ControlPlaneSnapshot) ControlPlaneSnapshotResponse {
 	out := ControlPlaneSnapshotResponse{
 		ID:        row.ID,
@@ -165,17 +212,21 @@ func controlPlaneSnapshotToResponse(row sqlc.ControlPlaneSnapshot) ControlPlaneS
 // POST /control-plane-snapshots/ — trigger
 // ----------------------------------------------------------------------
 
-// TriggerSnapshot records a snapshot row and applies a one-shot
+// TriggerSnapshot records a snapshot row and durable intent for a one-shot
 // privileged Job that runs the distribution's etcd-snapshot command on a
 // control-plane node.
 //
 //  1. Resolve cluster + reject managed control planes (409).
 //  2. Validate/derive the snapshot name + location.
-//  3. Insert the row (status=pending).
-//  4. Apply the Job via the tunnel requester. On success mark running;
-//     on failure mark failed and surface the error (still 202 — the row
-//     is persisted so the operator sees the attempt + reason).
+//  3. In production, atomically insert status=pending, its tunnel task, and
+//     mandatory audit, then return 202 without contacting the member cluster.
+//  4. A compatibility fallback for narrow test wiring applies synchronously;
+//     the production worker owns application, retries, and observed status.
 func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *http.Request) {
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	r = r.WithContext(withOperationIdempotency(r, "control-plane-snapshot"))
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
@@ -194,10 +245,7 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 		return
 	}
 
-	var req struct {
-		Name     string `json:"name,omitempty"`
-		Location string `json:"location,omitempty"`
-	}
+	var req createControlPlaneSnapshotRequest
 	// Body is optional — an empty POST triggers a snapshot with defaults.
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&req)
@@ -220,13 +268,58 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 		return
 	}
 
-	row, err := h.queries.CreateControlPlaneSnapshot(r.Context(), sqlc.CreateControlPlaneSnapshotParams{
+	params := sqlc.CreateControlPlaneSnapshotParams{
 		ClusterID:     clusterID,
 		Name:          name,
 		Status:        "pending",
 		Location:      location,
 		RequestedByID: currentUserUUID(r),
-	})
+	}
+	detail := map[string]any{
+		"cluster_id": clusterID.String(), "distribution": family,
+		"name": name, "location": location,
+	}
+	if h.runTx != nil {
+		var row sqlc.ControlPlaneSnapshot
+		err := h.runTx(r.Context(), func(q ControlPlaneSnapshotMutationTx) error {
+			existingID, isReplay, claimErr := claimResourceOperation(r.Context(), q, "control_plane_snapshots")
+			if claimErr != nil {
+				return claimErr
+			}
+			if isReplay {
+				replayed, getErr := q.GetControlPlaneSnapshotByID(r.Context(), existingID)
+				if getErr != nil || replayed.ClusterID != clusterID {
+					return errOperationIdempotencyConflict
+				}
+				row = replayed
+				return nil
+			}
+			var createErr error
+			row, createErr = q.CreateControlPlaneSnapshot(r.Context(), params)
+			if createErr != nil {
+				return createErr
+			}
+			if err := enqueueControlPlaneSnapshotApply(r.Context(), q, row.ID); err != nil {
+				return err
+			}
+			if err := attachResourceOperation(r.Context(), q, "control_plane_snapshots", row.ID, controlPlaneSnapshotToResponse(row)); err != nil {
+				return err
+			}
+			return recordAuditOutbox(r, q, "cluster.control_plane_snapshot.triggered", "control_plane_snapshot", row.ID.String(), cluster.Name, http.StatusAccepted, detail)
+		})
+		if err != nil {
+			if errors.Is(err, errOperationIdempotencyConflict) {
+				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
+				return
+			}
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create control-plane snapshot intent")
+			return
+		}
+		RespondAcceptedOperation(w, fmt.Sprintf("/api/v1/clusters/%s/control-plane-snapshots/%s/", clusterID, row.ID), controlPlaneSnapshotToResponse(row))
+		return
+	}
+
+	row, err := h.queries.CreateControlPlaneSnapshot(r.Context(), params)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create snapshot row")
 		return
@@ -240,13 +333,9 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 		})
 		row.Status = "failed"
 		row.Error = applyErr.Error()
-		recordAudit(r, h.queries, "cluster.control_plane_snapshot.triggered", "control_plane_snapshot", row.ID.String(), cluster.Name, map[string]any{
-			"cluster_id":   clusterID.String(),
-			"distribution": family,
-			"name":         name,
-			"apply_error":  applyErr.Error(),
-		})
-		RespondJSON(w, http.StatusAccepted, controlPlaneSnapshotToResponse(row))
+		detail["remote_submission"] = "failed"
+		recordAudit(r, h.queries, "cluster.control_plane_snapshot.triggered", "control_plane_snapshot", row.ID.String(), cluster.Name, detail)
+		RespondAcceptedOperation(w, fmt.Sprintf("/api/v1/clusters/%s/control-plane-snapshots/%s/", clusterID, row.ID), controlPlaneSnapshotToResponse(row))
 		return
 	}
 
@@ -258,13 +347,8 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 		row.Status = "running"
 	}
 
-	recordAudit(r, h.queries, "cluster.control_plane_snapshot.triggered", "control_plane_snapshot", row.ID.String(), cluster.Name, map[string]any{
-		"cluster_id":   clusterID.String(),
-		"distribution": family,
-		"name":         name,
-		"location":     location,
-	})
-	RespondJSON(w, http.StatusAccepted, controlPlaneSnapshotToResponse(row))
+	recordAudit(r, h.queries, "cluster.control_plane_snapshot.triggered", "control_plane_snapshot", row.ID.String(), cluster.Name, detail)
+	RespondAcceptedOperation(w, fmt.Sprintf("/api/v1/clusters/%s/control-plane-snapshots/%s/", clusterID, row.ID), controlPlaneSnapshotToResponse(row))
 }
 
 // ----------------------------------------------------------------------

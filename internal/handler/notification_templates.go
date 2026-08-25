@@ -32,6 +32,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/notify"
@@ -47,9 +48,45 @@ type NotificationTemplateQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 }
 
+type NotificationTemplateMutationTx interface {
+	NotificationTemplateQuerier
+	audit.OutboxQuerier
+}
+
+type notificationTemplateRunTxFunc func(context.Context, func(NotificationTemplateMutationTx) error) error
+
+func executeNotificationTemplateMutation[T any](r *http.Request, h *NotificationTemplateHandler, mutate func(NotificationTemplateQuerier) (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q NotificationTemplateMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := mutate(h.queries)
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	writer := any(h.audit)
+	if h.audit == nil {
+		writer = h.queries
+	}
+	recordAudit(r, writer, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
+}
+
 // NotificationTemplateHandler owns /api/v1/admin/notification-templates/*.
 type NotificationTemplateHandler struct {
 	queries NotificationTemplateQuerier
+	runTx   notificationTemplateRunTxFunc
 	audit   AuthAuditWriter
 	log     *slog.Logger
 }
@@ -64,6 +101,16 @@ func NewNotificationTemplateHandler(queries NotificationTemplateQuerier, log *sl
 
 // SetAuditWriter attaches the audit-log writer.
 func (h *NotificationTemplateHandler) SetAuditWriter(a AuthAuditWriter) { h.audit = a }
+
+func (h *NotificationTemplateHandler) SetRunTx(runTx notificationTemplateRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *NotificationTemplateHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
+}
 
 func (h *NotificationTemplateHandler) requireSuperuser(r *http.Request) error {
 	return requireSuperuserFromContext(r, h.queries)
@@ -189,6 +236,7 @@ func (h *NotificationTemplateHandler) Get(w http.ResponseWriter, r *http.Request
 // templateUpsert is the PUT body. body_format is optional; when
 // omitted the registry default is used so the operator doesn't have
 // to remember the per-template default.
+// openapi:request NotificationTemplateUpsertRequest
 type templateUpsert struct {
 	Subject    *string `json:"subject"`
 	Body       *string `json:"body"`
@@ -237,26 +285,25 @@ func (h *NotificationTemplateHandler) Update(w http.ResponseWriter, r *http.Requ
 	}
 
 	caller := currentUserUUID(r)
-	row, err := h.queries.UpsertNotificationTemplate(r.Context(), sqlc.UpsertNotificationTemplateParams{
-		TemplateKey: key,
-		Channel:     def.Channel,
-		SubjectTpl:  subject,
-		BodyTpl:     *req.Body,
-		BodyFormat:  bodyFormat,
-		Enabled:     enabled,
-		UpdatedBy:   caller,
-	})
+	row, err := executeNotificationTemplateMutation(r, h,
+		func(q NotificationTemplateQuerier) (sqlc.NotificationTemplate, error) {
+			return q.UpsertNotificationTemplate(r.Context(), sqlc.UpsertNotificationTemplateParams{
+				TemplateKey: key, Channel: def.Channel, SubjectTpl: subject, BodyTpl: *req.Body,
+				BodyFormat: bodyFormat, Enabled: enabled, UpdatedBy: caller,
+			})
+		},
+		func(row sqlc.NotificationTemplate) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.notification_template.updated", resourceType: "notification_template",
+				resourceID: row.ID.String(), resourceName: key, status: http.StatusOK,
+				detail: map[string]any{"channel": row.Channel, "enabled": row.Enabled, "body_format": row.BodyFormat, "body_size": len(row.BodyTpl), "subject_set": row.SubjectTpl != ""},
+			}
+		},
+	)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to save template override")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to save template override")
 		return
 	}
-	recordAudit(r, h.audit, "admin.notification_template.updated", "notification_template", row.ID.String(), key, map[string]any{
-		"channel":     row.Channel,
-		"enabled":     row.Enabled,
-		"body_format": row.BodyFormat,
-		"body_size":   len(row.BodyTpl),
-		"subject_set": row.SubjectTpl != "",
-	})
 	RespondJSON(w, http.StatusOK, templateRowToDetail(def, row))
 }
 
@@ -271,17 +318,28 @@ func (h *NotificationTemplateHandler) Delete(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown template key")
 		return
 	}
-	if err := h.queries.DeleteNotificationTemplate(r.Context(), key); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to delete template override")
+	_, err := executeNotificationTemplateMutation(r, h,
+		func(q NotificationTemplateQuerier) (string, error) {
+			return key, q.DeleteNotificationTemplate(r.Context(), key)
+		},
+		func(key string) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.notification_template.reset", resourceType: "notification_template",
+				resourceID: key, resourceName: key, status: http.StatusNoContent,
+			}
+		},
+	)
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to delete template override")
 		return
 	}
-	recordAudit(r, h.audit, "admin.notification_template.reset", "notification_template", "", key, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // previewRequest is the body for /preview/. The operator can supply a
 // candidate subject/body/body_format (so they can render WITHOUT
 // saving first) and the variable map.
+// openapi:request NotificationTemplatePreviewRequest
 type previewRequest struct {
 	Subject    string         `json:"subject"`
 	Body       string         `json:"body"`

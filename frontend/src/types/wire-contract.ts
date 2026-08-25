@@ -6,12 +6,11 @@
  *
  * This API serialises snake_case (see ClusterResponse / BackupResponse /
  * HelmRepositoryResponse in internal/handler). The frontend's types are
- * camelCase, and the bridge is a single axios response interceptor that
- * rewrites every key on the way in (`camelizeKeys`, src/lib/camelize.ts).
+ * camelCase, and feature adapters explicitly map their generated wire types.
  *
- * That bridge works, but it is invisible to the type system: `camelizeKeys<T>`
+ * A generic key mapper is invisible to the type system: `camelizeKeys<T>`
  * returns `T` unchanged as far as TypeScript is concerned, so a hand-written
- * camelCase interface can claim ANY field and the compiler will agree. The
+ * camelCase interface could claim ANY field and the compiler would agree. The
  * catalog Repositories table shipped `chartCount: number` as a required field
  * for months. No column produced it, no query computed it, no OpenAPI schema
  * declared it — the table rendered a blank cell for every repository and
@@ -24,32 +23,42 @@
  * a `HelmRepoType` union is a legitimate thing for a view type to do, while
  * inventing a field outright never is.
  */
-import type { OpenAPIComponents } from '@/types/openapi.generated';
-import type { HelmRepository, Cluster } from '@/types';
+import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { HelmRepository, Cluster } from "@/types";
 
-/** Type-level mirror of `snakeToCamel` in src/lib/camelize.ts. */
-export type SnakeToCamel<S extends string> = S extends `${infer Head}_${infer Tail}`
-  ? `${Head}${Capitalize<SnakeToCamel<Tail>>}`
-  : S;
+/** Type-level snake_case-to-camelCase transform used by explicit adapters. */
+export type SnakeToCamel<S extends string> =
+  S extends `${infer Head}_${infer Tail}`
+    ? `${Head}${Capitalize<SnakeToCamel<Tail>>}`
+    : S;
 
-/** Type-level mirror of `camelizeKeys`: rewrites the key set of one object. */
-export type CamelizeKeys<T> = {
-  [K in keyof T as SnakeToCamel<Extract<K, string>>]: T[K];
-};
+/** Rewrites one wire object's key set for view-model contract checks. */
+export type CamelizeKeys<T> = T extends readonly (infer Item)[]
+  ? CamelizeKeys<Item>[]
+  : T extends object
+    ? {
+        [K in keyof T as SnakeToCamel<Extract<K, string>>]: CamelizeKeys<T[K]>;
+      }
+    : T;
 
 /** Keys `Local` declares that the camelized `Wire` schema does not have. */
-export type PhantomWireKeys<Local, Wire> = Exclude<keyof Local, keyof CamelizeKeys<Wire>>;
+export type PhantomWireKeys<Local, Wire> = Exclude<
+  keyof Local,
+  keyof CamelizeKeys<Wire>
+>;
 
 /**
  * Resolves to `true` when every key of `Local` exists on the camelized `Wire`
  * schema, and otherwise to a tuple naming the offenders — which fails to be
  * assignable from `true`, so the offending key appears in the compiler error.
  */
-export type AssertNoPhantomWireKeys<Local, Wire> = [PhantomWireKeys<Local, Wire>] extends [never]
+export type AssertNoPhantomWireKeys<Local, Wire> = [
+  PhantomWireKeys<Local, Wire>,
+] extends [never]
   ? true
-  : ['field(s) absent from the OpenAPI schema:', PhantomWireKeys<Local, Wire>];
+  : ["field(s) absent from the OpenAPI schema:", PhantomWireKeys<Local, Wire>];
 
-type WireSchemas = OpenAPIComponents['schemas'];
+type WireSchemas = OpenAPIComponents["schemas"];
 
 // --- Bound types -----------------------------------------------------------
 //
@@ -59,23 +68,24 @@ type WireSchemas = OpenAPIComponents['schemas'];
 
 export const helmRepositoryMatchesWire: AssertNoPhantomWireKeys<
   HelmRepository,
-  WireSchemas['HelmRepository']
+  WireSchemas["HelmRepository"]
 > = true;
 
 // TODO(wire-contract): `Cluster` does not pass this guard yet. Enabling it
 // reports eight phantom fields:
 //
-//   health, namespaceCount, cpuCapacity, cpuUsage, memoryCapacity,
-//   memoryUsage, directAccessEnabled, decommissioning
+// Presentation-only enrichments such as health and capacity live on explicit
+// view models and are no longer claimed as cluster CRUD wire fields.
 //
 // These are not all the same problem — some look like client-side enrichment
-// that belongs in a separate view type, but `directAccessEnabled` is read
-// straight off the API object in components/clusters/edit-cluster-modal.tsx,
-// and the API sends cpu_percentage / memory_percentage rather than the
+// that belongs in a separate view type, and the API sends cpu_percentage / memory_percentage rather than the
 // usage/capacity pair declared here. Untangling which are undocumented
 // response fields (fix the spec) and which are genuinely absent (fix the
 // type, and the screens reading them) is its own change; it is deliberately
 // not bundled into the catalog chart_count fix.
 //
 //   export const clusterMatchesWire: AssertNoPhantomWireKeys<Cluster, WireSchemas['Cluster']> = true;
-export type _ClusterWirePhantoms = PhantomWireKeys<Cluster, WireSchemas['Cluster']>;
+export type _ClusterWirePhantoms = PhantomWireKeys<
+  Cluster,
+  WireSchemas["Cluster"]
+>;

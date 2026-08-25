@@ -33,6 +33,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,6 +52,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel/connectauth"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 const (
@@ -76,6 +78,10 @@ type AgentConnection struct {
 	ClusterID    string
 	AgentID      string
 	AgentVersion string
+	// Capabilities is the immutable CONNECT-time admission set. A nil map is
+	// reserved for in-package legacy test fixtures; production connections
+	// always carry a non-nil set, even if admission somehow accepted none.
+	Capabilities map[string]struct{}
 	SessionID    string
 	DBID         uuid.UUID
 	Conn         *websocket.Conn
@@ -491,20 +497,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close(websocket.StatusPolicyViolation, "connect timestamp outside allowed clock skew")
 		return
 	}
-	if payload.DeliveryProtocolVersion != protocol.DeliveryProtocolVersion {
-		body, _ := json.Marshal(protocol.ConnectAckPayload{
-			Accepted: false,
-			Reason:   "agent_reenrollment_required",
-		})
-		writeCtx, writeCancel := context.WithTimeout(ctx, writeTimeout)
-		_ = wsjson.Write(writeCtx, conn, &protocol.Message{Type: protocol.MsgConnectAck, Payload: body})
-		writeCancel()
-		h.publish("agent.failed", payload.ClusterID, "", payload.AgentVersion)
-		_ = conn.Close(websocket.StatusPolicyViolation, "agent_reenrollment_required")
-		return
-	}
-
-	compatibility := agentcompat.Evaluate(payload.AgentVersion)
+	compatibility := agentcompat.EvaluateConnect(payload)
 	if compatibility.Blocked {
 		h.log.Warn("agent compatibility check failed",
 			slog.String("cluster_id", payload.ClusterID),
@@ -513,7 +506,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			slog.String("reason", compatibility.Message),
 		)
 		h.publish("agent.failed", payload.ClusterID, "", payload.AgentVersion)
-		_ = conn.Close(websocket.StatusPolicyViolation, compatibility.Message)
+		h.writeConnectRejection(ctx, conn, compatibility)
 		return
 	}
 	ackPayload := protocol.ConnectAckPayload{Accepted: true}
@@ -585,7 +578,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// 3. Generate session ID and send CONNECT_ACK.
 	sessionID := fmt.Sprintf("session-%s-%d", payload.ClusterID, time.Now().UnixNano())
 	ackPayload.SessionID = sessionID
-	ackPayload.ServerVersion = ""
+	ackPayload.ServerVersion = version.Version
 	ackBody, _ := json.Marshal(ackPayload)
 
 	ackMsg := &protocol.Message{
@@ -607,6 +600,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		ClusterID:    payload.ClusterID,
 		AgentID:      payload.AgentID,
 		AgentVersion: payload.AgentVersion,
+		Capabilities: capabilitySet(payload.Capabilities),
 		SessionID:    sessionID,
 		Conn:         conn,
 		Streams:      NewStreamManager(256),
@@ -821,12 +815,78 @@ func (h *Hub) SendToAgent(clusterID string, msg *protocol.Message) error {
 	if agent == nil {
 		return fmt.Errorf("agent for cluster %q not connected", clusterID)
 	}
+	if capability := requiredCapabilityForMessage(msg); capability != "" && agent.Capabilities != nil {
+		if _, supported := agent.Capabilities[capability]; !supported {
+			return fmt.Errorf("agent for cluster %q does not advertise required capability %q", clusterID, capability)
+		}
+	}
 
 	select {
 	case agent.sendCh <- msg:
 		return nil
 	default:
 		return fmt.Errorf("send buffer full for cluster %q", clusterID)
+	}
+}
+
+func (h *Hub) writeConnectRejection(ctx context.Context, conn *websocket.Conn, status agentcompat.Status) {
+	body, _ := json.Marshal(protocol.ConnectAckPayload{
+		Accepted:              false,
+		Reason:                "agent_reenrollment_required",
+		ReasonCode:            status.Code,
+		Message:               status.Message,
+		UpgradeRecommendation: status.UpgradeRecommendation,
+		SupportedContract:     protocol.SupportedConnectContract(),
+	})
+	writeCtx, cancel := context.WithTimeout(ctx, writeTimeout)
+	_ = wsjson.Write(writeCtx, conn, &protocol.Message{Type: protocol.MsgConnectAck, Payload: body})
+	cancel()
+	_ = conn.Close(websocket.StatusPolicyViolation, status.Code)
+}
+
+func capabilitySet(capabilities []string) map[string]struct{} {
+	result := make(map[string]struct{}, len(capabilities))
+	for _, capability := range capabilities {
+		result[capability] = struct{}{}
+	}
+	return result
+}
+
+func requiredCapabilityForMessage(message *protocol.Message) string {
+	if message == nil {
+		return ""
+	}
+	switch message.Type {
+	case protocol.MsgHelmInstall, protocol.MsgHelmUpgrade, protocol.MsgHelmUninstall,
+		protocol.MsgHelmRollback, protocol.MsgHelmStatus, protocol.MsgHelmHistory:
+		return "helm"
+	case protocol.MsgExecStart, protocol.MsgExecInput, protocol.MsgExecResize, protocol.MsgExecEnd:
+		return "exec"
+	case protocol.MsgLogStart, protocol.MsgLogStop:
+		return "logs"
+	case protocol.MsgK8sStreamRequest, protocol.MsgK8sStreamStop:
+		return "watch"
+	case protocol.MsgServiceProxyRequest, protocol.MsgProxyRequest:
+		return "service_proxy"
+	case protocol.MsgRBACSyncRequest:
+		return "rbac"
+	case protocol.MsgDeliveryStateResponse, protocol.MsgDeliveryReconcile:
+		return protocol.FeatureDeliveryAssignmentsV2
+	case protocol.MsgK8sRequest:
+		var request protocol.K8sRequestPayload
+		if json.Unmarshal(message.Payload, &request) != nil {
+			return "mutate"
+		}
+		method := strings.ToUpper(strings.TrimSpace(request.Method))
+		if method == http.MethodPost && request.Path == "/api/v1/namespaces/astronomer-system/serviceaccounts/astronomer-direct-reader/token" {
+			return protocol.FeatureDirectKubeconfig
+		}
+		if method == http.MethodGet || method == http.MethodHead {
+			return "watch"
+		}
+		return "mutate"
+	default:
+		return ""
 	}
 }
 

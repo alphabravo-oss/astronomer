@@ -55,6 +55,32 @@ func (q *Queries) GetApiserverAllowlistByClusterID(ctx context.Context, clusterI
 	return i, err
 }
 
+const getApiserverAllowlistForUpdate = `-- name: GetApiserverAllowlistForUpdate :one
+SELECT cluster_id, cidrs, mode, detected_provider, last_reconciled_at,
+       sync_status, last_error, effective_cidrs, created_at, updated_at
+FROM apiserver_allowlists
+WHERE cluster_id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetApiserverAllowlistForUpdate(ctx context.Context, clusterID uuid.UUID) (ApiserverAllowlist, error) {
+	row := q.db.QueryRow(ctx, getApiserverAllowlistForUpdate, clusterID)
+	var i ApiserverAllowlist
+	err := row.Scan(
+		&i.ClusterID,
+		&i.Cidrs,
+		&i.Mode,
+		&i.DetectedProvider,
+		&i.LastReconciledAt,
+		&i.SyncStatus,
+		&i.LastError,
+		&i.EffectiveCidrs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertApiserverAllowlistSnapshot = `-- name: InsertApiserverAllowlistSnapshot :one
 
 INSERT INTO apiserver_allowlist_snapshots (

@@ -52,11 +52,10 @@ func TestPoller_MaintainsInFlightGauge(t *testing.T) {
 	}
 	d.backupStatus["b1"] = VeleroBackupStatusSnapshot{Phase: "InProgress"}
 
-	ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{Queries: q, Driver: d})
-	defer ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{})
+	runtime := ClusterSnapshotRuntime{Deps: ClusterSnapshotDeps{Queries: q, Driver: d}}
 	SetSnapshotOutcomeRecorder(func(_, _ string) {})
 
-	if err := HandleClusterSnapshotPoll(context.Background(), nil); err != nil {
+	if err := runtime.HandleClusterSnapshotPoll(context.Background(), nil); err != nil {
 		t.Fatalf("poll tick 1: %v", err)
 	}
 	mu.Lock()
@@ -77,7 +76,7 @@ func TestPoller_MaintainsInFlightGauge(t *testing.T) {
 			t.Fatalf("delete: %v", err)
 		}
 	}
-	if err := HandleClusterSnapshotPoll(context.Background(), nil); err != nil {
+	if err := runtime.HandleClusterSnapshotPoll(context.Background(), nil); err != nil {
 		t.Fatalf("poll tick 2: %v", err)
 	}
 	mu.Lock()

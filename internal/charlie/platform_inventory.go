@@ -191,5 +191,3 @@ func collectPlatforms(ctx context.Context, provider PlatformInventoryProvider) [
 	}
 	return got
 }
-
-

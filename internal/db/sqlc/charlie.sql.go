@@ -1224,237 +1224,6 @@ func (q *Queries) ClaimCharlieTriggerEvent(ctx context.Context, id uuid.UUID) (C
 	return i, err
 }
 
-const claimDueCharlieTriggerEvents = `-- name: ClaimDueCharlieTriggerEvents :many
-WITH due AS (
-    SELECT id FROM charlie_trigger_events
-    WHERE state IN ('pending', 'retry') AND next_attempt_at <= now()
-    ORDER BY next_attempt_at, created_at
-    FOR UPDATE SKIP LOCKED
-    LIMIT $1
-)
-UPDATE charlie_trigger_events e
-SET state = 'dispatching', attempt_count = attempt_count + 1, updated_at = now()
-FROM due WHERE e.id = due.id
-RETURNING e.id, e.rule_id, e.retry_of_event_id, e.source, e.event_type, e.resource_type, e.resource_id, e.fingerprint, e.summary_metadata, e.state, e.session_id, e.repeat_count, e.first_occurred_at, e.last_occurred_at, e.origin_resource_ref, e.origin_event_ref, e.attempt_count, e.next_attempt_at, e.last_error_code, e.dead_lettered_at, e.created_at, e.updated_at
-`
-
-func (q *Queries) ClaimDueCharlieTriggerEvents(ctx context.Context, batchSize int32) ([]CharlieTriggerEvent, error) {
-	rows, err := q.db.Query(ctx, claimDueCharlieTriggerEvents, batchSize)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CharlieTriggerEvent{}
-	for rows.Next() {
-		var i CharlieTriggerEvent
-		if err := rows.Scan(
-			&i.ID,
-			&i.RuleID,
-			&i.RetryOfEventID,
-			&i.Source,
-			&i.EventType,
-			&i.ResourceType,
-			&i.ResourceID,
-			&i.Fingerprint,
-			&i.SummaryMetadata,
-			&i.State,
-			&i.SessionID,
-			&i.RepeatCount,
-			&i.FirstOccurredAt,
-			&i.LastOccurredAt,
-			&i.OriginResourceRef,
-			&i.OriginEventRef,
-			&i.AttemptCount,
-			&i.NextAttemptAt,
-			&i.LastErrorCode,
-			&i.DeadLetteredAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const clearCharlieEmergencyDisabled = `-- name: ClearCharlieEmergencyDisabled :one
-UPDATE charlie_connections
-SET emergency_disabled = false,
-    emergency_disabled_by_id = NULL,
-    emergency_disabled_at = NULL,
-    requested_mode = 'disabled',
-    verified_mode = 'disabled',
-    updated_at = now()
-WHERE id = $1
-  AND active = true
-  AND emergency_disabled = true
-  AND verified_mode = 'disabled'
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest
-`
-
-func (q *Queries) ClearCharlieEmergencyDisabled(ctx context.Context, id uuid.UUID) (CharlieConnection, error) {
-	row := q.db.QueryRow(ctx, clearCharlieEmergencyDisabled, id)
-	var i CharlieConnection
-	err := row.Scan(
-		&i.ID,
-		&i.InstallationID,
-		&i.ProductID,
-		&i.ProductSlug,
-		&i.DeploymentID,
-		&i.RouteID,
-		&i.CentralUrl,
-		&i.CentralCaFingerprint,
-		&i.SigningKeyID,
-		&i.SigningKeyFingerprint,
-		&i.OnboardingSchemaVersion,
-		&i.CentralApiVersion,
-		&i.AgentProtocolVersion,
-		&i.ChartVersion,
-		&i.ChartDigest,
-		&i.ImageDigest,
-		&i.LogicalAgentID,
-		&i.ReplicaCount,
-		&i.BridgeServiceName,
-		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
-		&i.AgentSecretName,
-		&i.OnboardingPackageID,
-		&i.OnboardingPackageDigest,
-		&i.OnboardingPackageExpiresAt,
-		&i.EnrollmentCredentialsExpiresAt,
-		&i.ArtifactCredentialExpiresAt,
-		&i.CertificateExpiresAt,
-		&i.OnboardingState,
-		&i.AgentSecretHmac,
-		&i.RequestedMode,
-		&i.VerifiedMode,
-		&i.VerifiedModeRevision,
-		&i.EmergencyDisabled,
-		&i.EmergencyDisabledByID,
-		&i.EmergencyDisabledAt,
-		&i.DisclosureDigest,
-		&i.AcknowledgedDisclosureDigest,
-		&i.LeaderInstanceID,
-		&i.FencingEpoch,
-		&i.HealthState,
-		&i.Active,
-		&i.LastErrorCode,
-		&i.LastVerifiedAt,
-		&i.LastConnectedAt,
-		&i.LastRotatedAt,
-		&i.ReconciliationDueAt,
-		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.ChartReference,
-		&i.ImageReference,
-		&i.KubernetesVisibilityProfile,
-		&i.KubernetesVisibilityPodLogs,
-		&i.KubernetesVisibilityRediscoveryState,
-		&i.KubernetesVisibilityCandidateDigest,
-	)
-	return i, err
-}
-
-const compareAndSetCharlieMode = `-- name: CompareAndSetCharlieMode :one
-UPDATE charlie_connections
-SET requested_mode = $1,
-    verified_mode = $2,
-    verified_mode_revision = $3,
-    disclosure_digest = $4,
-    last_verified_at = now(),
-    updated_at = now()
-WHERE id = $5
-  AND active = true
-  AND verified_mode_revision = $6
-  AND emergency_disabled = false
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest
-`
-
-type CompareAndSetCharlieModeParams struct {
-	RequestedMode    string    `json:"requested_mode"`
-	VerifiedMode     string    `json:"verified_mode"`
-	NextRevision     int64     `json:"next_revision"`
-	DisclosureDigest string    `json:"disclosure_digest"`
-	ID               uuid.UUID `json:"id"`
-	ExpectedRevision int64     `json:"expected_revision"`
-}
-
-func (q *Queries) CompareAndSetCharlieMode(ctx context.Context, arg CompareAndSetCharlieModeParams) (CharlieConnection, error) {
-	row := q.db.QueryRow(ctx, compareAndSetCharlieMode,
-		arg.RequestedMode,
-		arg.VerifiedMode,
-		arg.NextRevision,
-		arg.DisclosureDigest,
-		arg.ID,
-		arg.ExpectedRevision,
-	)
-	var i CharlieConnection
-	err := row.Scan(
-		&i.ID,
-		&i.InstallationID,
-		&i.ProductID,
-		&i.ProductSlug,
-		&i.DeploymentID,
-		&i.RouteID,
-		&i.CentralUrl,
-		&i.CentralCaFingerprint,
-		&i.SigningKeyID,
-		&i.SigningKeyFingerprint,
-		&i.OnboardingSchemaVersion,
-		&i.CentralApiVersion,
-		&i.AgentProtocolVersion,
-		&i.ChartVersion,
-		&i.ChartDigest,
-		&i.ImageDigest,
-		&i.LogicalAgentID,
-		&i.ReplicaCount,
-		&i.BridgeServiceName,
-		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
-		&i.AgentSecretName,
-		&i.OnboardingPackageID,
-		&i.OnboardingPackageDigest,
-		&i.OnboardingPackageExpiresAt,
-		&i.EnrollmentCredentialsExpiresAt,
-		&i.ArtifactCredentialExpiresAt,
-		&i.CertificateExpiresAt,
-		&i.OnboardingState,
-		&i.AgentSecretHmac,
-		&i.RequestedMode,
-		&i.VerifiedMode,
-		&i.VerifiedModeRevision,
-		&i.EmergencyDisabled,
-		&i.EmergencyDisabledByID,
-		&i.EmergencyDisabledAt,
-		&i.DisclosureDigest,
-		&i.AcknowledgedDisclosureDigest,
-		&i.LeaderInstanceID,
-		&i.FencingEpoch,
-		&i.HealthState,
-		&i.Active,
-		&i.LastErrorCode,
-		&i.LastVerifiedAt,
-		&i.LastConnectedAt,
-		&i.LastRotatedAt,
-		&i.ReconciliationDueAt,
-		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.ChartReference,
-		&i.ImageReference,
-		&i.KubernetesVisibilityProfile,
-		&i.KubernetesVisibilityPodLogs,
-		&i.KubernetesVisibilityRediscoveryState,
-		&i.KubernetesVisibilityCandidateDigest,
-	)
-	return i, err
-}
-
 const confirmCharlieKubernetesVisibilityRediscovery = `-- name: ConfirmCharlieKubernetesVisibilityRediscovery :one
 UPDATE charlie_connections
 SET kubernetes_visibility_rediscovery_state = 'review_required',
@@ -2167,85 +1936,6 @@ func (q *Queries) CreateCharlieSession(ctx context.Context, arg CreateCharlieSes
 		&i.UpdatedAt,
 		&i.CompletedAt,
 		&i.ThreadID,
-	)
-	return i, err
-}
-
-const createCharlieTriggerEvent = `-- name: CreateCharlieTriggerEvent :one
-INSERT INTO charlie_trigger_events (
-    rule_id, source, event_type, resource_type, resource_id, fingerprint,
-    summary_metadata, state, next_attempt_at, first_occurred_at,
-    last_occurred_at, origin_resource_ref, origin_event_ref
-) VALUES (
-    $1, $2, $3,
-    $4, $5, $6,
-    $7, 'pending', $8,
-    $9, $9, $10,
-    $11
-)
-ON CONFLICT (rule_id, fingerprint) WHERE state IN ('pending', 'dispatching', 'dispatched', 'retry')
-DO UPDATE SET
-    repeat_count = charlie_trigger_events.repeat_count + 1,
-    last_occurred_at = GREATEST(charlie_trigger_events.last_occurred_at, EXCLUDED.last_occurred_at),
-    summary_metadata = EXCLUDED.summary_metadata,
-    origin_resource_ref = EXCLUDED.origin_resource_ref,
-    origin_event_ref = EXCLUDED.origin_event_ref,
-    updated_at = now()
-RETURNING id, rule_id, retry_of_event_id, source, event_type, resource_type, resource_id, fingerprint, summary_metadata, state, session_id, repeat_count, first_occurred_at, last_occurred_at, origin_resource_ref, origin_event_ref, attempt_count, next_attempt_at, last_error_code, dead_lettered_at, created_at, updated_at
-`
-
-type CreateCharlieTriggerEventParams struct {
-	RuleID            uuid.UUID       `json:"rule_id"`
-	Source            string          `json:"source"`
-	EventType         string          `json:"event_type"`
-	ResourceType      string          `json:"resource_type"`
-	ResourceID        string          `json:"resource_id"`
-	Fingerprint       string          `json:"fingerprint"`
-	SummaryMetadata   json.RawMessage `json:"summary_metadata"`
-	NextAttemptAt     time.Time       `json:"next_attempt_at"`
-	OccurredAt        time.Time       `json:"occurred_at"`
-	OriginResourceRef string          `json:"origin_resource_ref"`
-	OriginEventRef    string          `json:"origin_event_ref"`
-}
-
-func (q *Queries) CreateCharlieTriggerEvent(ctx context.Context, arg CreateCharlieTriggerEventParams) (CharlieTriggerEvent, error) {
-	row := q.db.QueryRow(ctx, createCharlieTriggerEvent,
-		arg.RuleID,
-		arg.Source,
-		arg.EventType,
-		arg.ResourceType,
-		arg.ResourceID,
-		arg.Fingerprint,
-		arg.SummaryMetadata,
-		arg.NextAttemptAt,
-		arg.OccurredAt,
-		arg.OriginResourceRef,
-		arg.OriginEventRef,
-	)
-	var i CharlieTriggerEvent
-	err := row.Scan(
-		&i.ID,
-		&i.RuleID,
-		&i.RetryOfEventID,
-		&i.Source,
-		&i.EventType,
-		&i.ResourceType,
-		&i.ResourceID,
-		&i.Fingerprint,
-		&i.SummaryMetadata,
-		&i.State,
-		&i.SessionID,
-		&i.RepeatCount,
-		&i.FirstOccurredAt,
-		&i.LastOccurredAt,
-		&i.OriginResourceRef,
-		&i.OriginEventRef,
-		&i.AttemptCount,
-		&i.NextAttemptAt,
-		&i.LastErrorCode,
-		&i.DeadLetteredAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -3641,6 +3331,48 @@ func (q *Queries) GetCharlieTriggerEvent(ctx context.Context, id uuid.UUID) (Cha
 	return i, err
 }
 
+const getCharlieTriggerEventForAdmin = `-- name: GetCharlieTriggerEventForAdmin :one
+SELECT e.id, e.rule_id, e.retry_of_event_id, e.source, e.event_type, e.resource_type, e.resource_id, e.fingerprint, e.summary_metadata, e.state, e.session_id, e.repeat_count, e.first_occurred_at, e.last_occurred_at, e.origin_resource_ref, e.origin_event_ref, e.attempt_count, e.next_attempt_at, e.last_error_code, e.dead_lettered_at, e.created_at, e.updated_at
+FROM charlie_trigger_events e
+JOIN charlie_trigger_rules r ON r.id = e.rule_id
+WHERE e.id = $1 AND r.connection_id = $2
+`
+
+type GetCharlieTriggerEventForAdminParams struct {
+	ID           uuid.UUID `json:"id"`
+	ConnectionID uuid.UUID `json:"connection_id"`
+}
+
+func (q *Queries) GetCharlieTriggerEventForAdmin(ctx context.Context, arg GetCharlieTriggerEventForAdminParams) (CharlieTriggerEvent, error) {
+	row := q.db.QueryRow(ctx, getCharlieTriggerEventForAdmin, arg.ID, arg.ConnectionID)
+	var i CharlieTriggerEvent
+	err := row.Scan(
+		&i.ID,
+		&i.RuleID,
+		&i.RetryOfEventID,
+		&i.Source,
+		&i.EventType,
+		&i.ResourceType,
+		&i.ResourceID,
+		&i.Fingerprint,
+		&i.SummaryMetadata,
+		&i.State,
+		&i.SessionID,
+		&i.RepeatCount,
+		&i.FirstOccurredAt,
+		&i.LastOccurredAt,
+		&i.OriginResourceRef,
+		&i.OriginEventRef,
+		&i.AttemptCount,
+		&i.NextAttemptAt,
+		&i.LastErrorCode,
+		&i.DeadLetteredAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getCharlieTriggerRule = `-- name: GetCharlieTriggerRule :one
 SELECT id, connection_id, name, rule_type, category, enabled, minimum_severity, selectors, thresholds, window_seconds, cooldown_seconds, service_identity_id, mode_ceiling, created_by_id, created_at, updated_at FROM charlie_trigger_rules WHERE id = $1
 `
@@ -4007,61 +3739,6 @@ func (q *Queries) ListCharlieAlertReconcileCandidates(ctx context.Context, limit
 			&i.RepeatCount,
 			&i.ResourceType,
 			&i.ResourceID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listCharlieAmbiguousReceipts = `-- name: ListCharlieAmbiguousReceipts :many
-SELECT id, connection_id, session_id, charlie_action_id, turn_id, capability, effect, argument_digest, arguments_encrypted, authorization_hash, resource_digest, fencing_epoch, product_idempotency_key, state, attempt, lease_owner, lease_expires_at, result_digest, result_status, result_encrypted, audit_correlation_id, dispatched_at, verified_at, auto_budget_reserved, safety_policy_revision, created_at, updated_at FROM charlie_action_receipts
-WHERE state IN ('dispatched', 'ambiguous', 'verifying')
-ORDER BY updated_at, id
-LIMIT $1
-`
-
-func (q *Queries) ListCharlieAmbiguousReceipts(ctx context.Context, limit int32) ([]CharlieActionReceipt, error) {
-	rows, err := q.db.Query(ctx, listCharlieAmbiguousReceipts, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CharlieActionReceipt{}
-	for rows.Next() {
-		var i CharlieActionReceipt
-		if err := rows.Scan(
-			&i.ID,
-			&i.ConnectionID,
-			&i.SessionID,
-			&i.CharlieActionID,
-			&i.TurnID,
-			&i.Capability,
-			&i.Effect,
-			&i.ArgumentDigest,
-			&i.ArgumentsEncrypted,
-			&i.AuthorizationHash,
-			&i.ResourceDigest,
-			&i.FencingEpoch,
-			&i.ProductIdempotencyKey,
-			&i.State,
-			&i.Attempt,
-			&i.LeaseOwner,
-			&i.LeaseExpiresAt,
-			&i.ResultDigest,
-			&i.ResultStatus,
-			&i.ResultEncrypted,
-			&i.AuditCorrelationID,
-			&i.DispatchedAt,
-			&i.VerifiedAt,
-			&i.AutoBudgetReserved,
-			&i.SafetyPolicyRevision,
-			&i.CreatedAt,
-			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -4795,47 +4472,6 @@ func (q *Queries) RecordAgentConnectionEvent(ctx context.Context, arg RecordAgen
 	return i, err
 }
 
-const recordTunnelLocatorEvent = `-- name: RecordTunnelLocatorEvent :one
-INSERT INTO tunnel_locator_events (
-    connection_id, cluster_id, event_type, reason_code, server_replica, occurred_at
-) VALUES (
-    $1, $2, $3,
-    $4, $5, $6
-) RETURNING id, connection_id, cluster_id, event_type, reason_code, server_replica, occurred_at, created_at
-`
-
-type RecordTunnelLocatorEventParams struct {
-	ConnectionID  string      `json:"connection_id"`
-	ClusterID     pgtype.UUID `json:"cluster_id"`
-	EventType     string      `json:"event_type"`
-	ReasonCode    string      `json:"reason_code"`
-	ServerReplica string      `json:"server_replica"`
-	OccurredAt    time.Time   `json:"occurred_at"`
-}
-
-func (q *Queries) RecordTunnelLocatorEvent(ctx context.Context, arg RecordTunnelLocatorEventParams) (TunnelLocatorEvent, error) {
-	row := q.db.QueryRow(ctx, recordTunnelLocatorEvent,
-		arg.ConnectionID,
-		arg.ClusterID,
-		arg.EventType,
-		arg.ReasonCode,
-		arg.ServerReplica,
-		arg.OccurredAt,
-	)
-	var i TunnelLocatorEvent
-	err := row.Scan(
-		&i.ID,
-		&i.ConnectionID,
-		&i.ClusterID,
-		&i.EventType,
-		&i.ReasonCode,
-		&i.ServerReplica,
-		&i.OccurredAt,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const reserveCharlieAutoBudget = `-- name: ReserveCharlieAutoBudget :one
 WITH locked_session AS MATERIALIZED (
     SELECT s.id FROM charlie_sessions s WHERE s.id = $1 FOR UPDATE
@@ -4987,14 +4623,28 @@ WITH source AS (
         last_error = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.last_error ELSE '' END,
         updated_at = now()
     RETURNING id
+), audit AS (
+    INSERT INTO audit_outbox (
+        id, dedupe_key, event_created_at, schema_version, user_id,
+        action, resource_type, resource_id, http_method, path, status_code,
+        request_id, detail, source, action_class, max_attempts
+    )
+    SELECT gen_random_uuid(), 'charlie-trigger-retry:' || event.id::text, now(), 'audit-v1', $4,
+           'admin.charlie.trigger.retry', 'charlie_trigger_event', event.id::text, 'POST',
+           '/api/v1/admin/charlie/trigger-events/{event_id}/retry/', 202,
+           event.id::text, '{"outcome_code":"authorized"}'::jsonb, 'service', 'mutation', 20
+    FROM event
+    ON CONFLICT (dedupe_key) DO UPDATE SET dedupe_key = EXCLUDED.dedupe_key
+    RETURNING id
 )
-SELECT event.id, event.rule_id, event.retry_of_event_id, event.source, event.event_type, event.resource_type, event.resource_id, event.fingerprint, event.summary_metadata, event.state, event.session_id, event.repeat_count, event.first_occurred_at, event.last_occurred_at, event.origin_resource_ref, event.origin_event_ref, event.attempt_count, event.next_attempt_at, event.last_error_code, event.dead_lettered_at, event.created_at, event.updated_at FROM event CROSS JOIN outbox
+SELECT event.id, event.rule_id, event.retry_of_event_id, event.source, event.event_type, event.resource_type, event.resource_id, event.fingerprint, event.summary_metadata, event.state, event.session_id, event.repeat_count, event.first_occurred_at, event.last_occurred_at, event.origin_resource_ref, event.origin_event_ref, event.attempt_count, event.next_attempt_at, event.last_error_code, event.dead_lettered_at, event.created_at, event.updated_at FROM event CROSS JOIN outbox CROSS JOIN audit
 `
 
 type RetryDeadCharlieTriggerEventWithOutboxParams struct {
-	RetryOfEventID uuid.UUID `json:"retry_of_event_id"`
-	ConnectionID   uuid.UUID `json:"connection_id"`
-	RequestID      uuid.UUID `json:"request_id"`
+	RetryOfEventID uuid.UUID   `json:"retry_of_event_id"`
+	ConnectionID   uuid.UUID   `json:"connection_id"`
+	RequestID      uuid.UUID   `json:"request_id"`
+	ActorID        pgtype.UUID `json:"actor_id"`
 }
 
 type RetryDeadCharlieTriggerEventWithOutboxRow struct {
@@ -5023,7 +4673,12 @@ type RetryDeadCharlieTriggerEventWithOutboxRow struct {
 }
 
 func (q *Queries) RetryDeadCharlieTriggerEventWithOutbox(ctx context.Context, arg RetryDeadCharlieTriggerEventWithOutboxParams) (RetryDeadCharlieTriggerEventWithOutboxRow, error) {
-	row := q.db.QueryRow(ctx, retryDeadCharlieTriggerEventWithOutbox, arg.RetryOfEventID, arg.ConnectionID, arg.RequestID)
+	row := q.db.QueryRow(ctx, retryDeadCharlieTriggerEventWithOutbox,
+		arg.RetryOfEventID,
+		arg.ConnectionID,
+		arg.RequestID,
+		arg.ActorID,
+	)
 	var i RetryDeadCharlieTriggerEventWithOutboxRow
 	err := row.Scan(
 		&i.ID,
@@ -5052,32 +4707,6 @@ func (q *Queries) RetryDeadCharlieTriggerEventWithOutbox(ctx context.Context, ar
 	return i, err
 }
 
-const revokeCharlieDelegation = `-- name: RevokeCharlieDelegation :execrows
-UPDATE charlie_delegations SET revoked_at = now()
-WHERE id = $1 AND revoked_at IS NULL
-`
-
-func (q *Queries) RevokeCharlieDelegation(ctx context.Context, id uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeCharlieDelegation, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const revokeCharlieDelegationsForPrincipal = `-- name: RevokeCharlieDelegationsForPrincipal :execrows
-UPDATE charlie_delegations SET revoked_at = now()
-WHERE principal_id = $1 AND revoked_at IS NULL
-`
-
-func (q *Queries) RevokeCharlieDelegationsForPrincipal(ctx context.Context, principalID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeCharlieDelegationsForPrincipal, principalID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const revokeCharlieDelegationsForSession = `-- name: RevokeCharlieDelegationsForSession :execrows
 UPDATE charlie_delegations SET revoked_at = now()
 WHERE session_id = $1 AND revoked_at IS NULL
@@ -5102,86 +4731,6 @@ func (q *Queries) RevokeExpiredCharlieDelegations(ctx context.Context) (int64, e
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const setCharlieEmergencyDisabled = `-- name: SetCharlieEmergencyDisabled :one
-UPDATE charlie_connections
-SET emergency_disabled = true,
-    emergency_disabled_by_id = $1,
-    emergency_disabled_at = now(),
-    requested_mode = 'disabled',
-    updated_at = now()
-WHERE id = $2 AND active = true
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest
-`
-
-type SetCharlieEmergencyDisabledParams struct {
-	ActorID pgtype.UUID `json:"actor_id"`
-	ID      uuid.UUID   `json:"id"`
-}
-
-func (q *Queries) SetCharlieEmergencyDisabled(ctx context.Context, arg SetCharlieEmergencyDisabledParams) (CharlieConnection, error) {
-	row := q.db.QueryRow(ctx, setCharlieEmergencyDisabled, arg.ActorID, arg.ID)
-	var i CharlieConnection
-	err := row.Scan(
-		&i.ID,
-		&i.InstallationID,
-		&i.ProductID,
-		&i.ProductSlug,
-		&i.DeploymentID,
-		&i.RouteID,
-		&i.CentralUrl,
-		&i.CentralCaFingerprint,
-		&i.SigningKeyID,
-		&i.SigningKeyFingerprint,
-		&i.OnboardingSchemaVersion,
-		&i.CentralApiVersion,
-		&i.AgentProtocolVersion,
-		&i.ChartVersion,
-		&i.ChartDigest,
-		&i.ImageDigest,
-		&i.LogicalAgentID,
-		&i.ReplicaCount,
-		&i.BridgeServiceName,
-		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
-		&i.AgentSecretName,
-		&i.OnboardingPackageID,
-		&i.OnboardingPackageDigest,
-		&i.OnboardingPackageExpiresAt,
-		&i.EnrollmentCredentialsExpiresAt,
-		&i.ArtifactCredentialExpiresAt,
-		&i.CertificateExpiresAt,
-		&i.OnboardingState,
-		&i.AgentSecretHmac,
-		&i.RequestedMode,
-		&i.VerifiedMode,
-		&i.VerifiedModeRevision,
-		&i.EmergencyDisabled,
-		&i.EmergencyDisabledByID,
-		&i.EmergencyDisabledAt,
-		&i.DisclosureDigest,
-		&i.AcknowledgedDisclosureDigest,
-		&i.LeaderInstanceID,
-		&i.FencingEpoch,
-		&i.HealthState,
-		&i.Active,
-		&i.LastErrorCode,
-		&i.LastVerifiedAt,
-		&i.LastConnectedAt,
-		&i.LastRotatedAt,
-		&i.ReconciliationDueAt,
-		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.ChartReference,
-		&i.ImageReference,
-		&i.KubernetesVisibilityProfile,
-		&i.KubernetesVisibilityPodLogs,
-		&i.KubernetesVisibilityRediscoveryState,
-		&i.KubernetesVisibilityCandidateDigest,
-	)
-	return i, err
 }
 
 const setCharlieInteractiveThreadSession = `-- name: SetCharlieInteractiveThreadSession :one
@@ -5212,39 +4761,6 @@ func (q *Queries) SetCharlieInteractiveThreadSession(ctx context.Context, arg Se
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
-	)
-	return i, err
-}
-
-const setCharlieTriggerRuleEnabled = `-- name: SetCharlieTriggerRuleEnabled :one
-UPDATE charlie_trigger_rules SET enabled = $2, updated_at = now() WHERE id = $1 RETURNING id, connection_id, name, rule_type, category, enabled, minimum_severity, selectors, thresholds, window_seconds, cooldown_seconds, service_identity_id, mode_ceiling, created_by_id, created_at, updated_at
-`
-
-type SetCharlieTriggerRuleEnabledParams struct {
-	ID      uuid.UUID `json:"id"`
-	Enabled bool      `json:"enabled"`
-}
-
-func (q *Queries) SetCharlieTriggerRuleEnabled(ctx context.Context, arg SetCharlieTriggerRuleEnabledParams) (CharlieTriggerRule, error) {
-	row := q.db.QueryRow(ctx, setCharlieTriggerRuleEnabled, arg.ID, arg.Enabled)
-	var i CharlieTriggerRule
-	err := row.Scan(
-		&i.ID,
-		&i.ConnectionID,
-		&i.Name,
-		&i.RuleType,
-		&i.Category,
-		&i.Enabled,
-		&i.MinimumSeverity,
-		&i.Selectors,
-		&i.Thresholds,
-		&i.WindowSeconds,
-		&i.CooldownSeconds,
-		&i.ServiceIdentityID,
-		&i.ModeCeiling,
-		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -5942,134 +5458,6 @@ func (q *Queries) UpdateCharlieTriggerRule(ctx context.Context, arg UpdateCharli
 		&i.ServiceIdentityID,
 		&i.ModeCeiling,
 		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const upsertAgentOperationalStatus = `-- name: UpsertAgentOperationalStatus :one
-INSERT INTO agent_operational_statuses (
-    cluster_id, agent_id, installed_agent_version, desired_agent_version,
-    protocol_version, protocol_compatible, authentication_state,
-    registration_state, credential_state, credential_expires_at, upgrade_state,
-    audit_ingestion_state, metrics_ingestion_state, state_ingestion_state,
-    pending_command_count, failed_command_count, expired_command_count,
-    downstream_api_reachable, downstream_api_reported_at, owning_server_replica,
-    last_successful_connection_at, last_status_at
-) VALUES (
-    $1, $2, $3,
-    $4, $5,
-    $6, $7,
-    $8, $9,
-    $10, $11,
-    $12, $13,
-    $14, $15,
-    $16, $17,
-    $18, $19,
-    $20, $21,
-    $22
-)
-ON CONFLICT (cluster_id) DO UPDATE SET
-    agent_id = EXCLUDED.agent_id,
-    installed_agent_version = EXCLUDED.installed_agent_version,
-    desired_agent_version = EXCLUDED.desired_agent_version,
-    protocol_version = EXCLUDED.protocol_version,
-    protocol_compatible = EXCLUDED.protocol_compatible,
-    authentication_state = EXCLUDED.authentication_state,
-    registration_state = EXCLUDED.registration_state,
-    credential_state = EXCLUDED.credential_state,
-    credential_expires_at = EXCLUDED.credential_expires_at,
-    upgrade_state = EXCLUDED.upgrade_state,
-    audit_ingestion_state = EXCLUDED.audit_ingestion_state,
-    metrics_ingestion_state = EXCLUDED.metrics_ingestion_state,
-    state_ingestion_state = EXCLUDED.state_ingestion_state,
-    pending_command_count = EXCLUDED.pending_command_count,
-    failed_command_count = EXCLUDED.failed_command_count,
-    expired_command_count = EXCLUDED.expired_command_count,
-    downstream_api_reachable = EXCLUDED.downstream_api_reachable,
-    downstream_api_reported_at = EXCLUDED.downstream_api_reported_at,
-    owning_server_replica = EXCLUDED.owning_server_replica,
-    last_successful_connection_at = EXCLUDED.last_successful_connection_at,
-    last_status_at = EXCLUDED.last_status_at,
-    updated_at = now()
-RETURNING cluster_id, agent_id, installed_agent_version, desired_agent_version, protocol_version, protocol_compatible, authentication_state, registration_state, credential_state, credential_expires_at, upgrade_state, audit_ingestion_state, metrics_ingestion_state, state_ingestion_state, pending_command_count, failed_command_count, expired_command_count, downstream_api_reachable, downstream_api_reported_at, owning_server_replica, last_successful_connection_at, last_status_at, created_at, updated_at
-`
-
-type UpsertAgentOperationalStatusParams struct {
-	ClusterID                  uuid.UUID          `json:"cluster_id"`
-	AgentID                    string             `json:"agent_id"`
-	InstalledAgentVersion      string             `json:"installed_agent_version"`
-	DesiredAgentVersion        string             `json:"desired_agent_version"`
-	ProtocolVersion            string             `json:"protocol_version"`
-	ProtocolCompatible         pgtype.Bool        `json:"protocol_compatible"`
-	AuthenticationState        string             `json:"authentication_state"`
-	RegistrationState          string             `json:"registration_state"`
-	CredentialState            string             `json:"credential_state"`
-	CredentialExpiresAt        pgtype.Timestamptz `json:"credential_expires_at"`
-	UpgradeState               string             `json:"upgrade_state"`
-	AuditIngestionState        string             `json:"audit_ingestion_state"`
-	MetricsIngestionState      string             `json:"metrics_ingestion_state"`
-	StateIngestionState        string             `json:"state_ingestion_state"`
-	PendingCommandCount        int32              `json:"pending_command_count"`
-	FailedCommandCount         int32              `json:"failed_command_count"`
-	ExpiredCommandCount        int32              `json:"expired_command_count"`
-	DownstreamApiReachable     pgtype.Bool        `json:"downstream_api_reachable"`
-	DownstreamApiReportedAt    pgtype.Timestamptz `json:"downstream_api_reported_at"`
-	OwningServerReplica        string             `json:"owning_server_replica"`
-	LastSuccessfulConnectionAt pgtype.Timestamptz `json:"last_successful_connection_at"`
-	LastStatusAt               time.Time          `json:"last_status_at"`
-}
-
-func (q *Queries) UpsertAgentOperationalStatus(ctx context.Context, arg UpsertAgentOperationalStatusParams) (AgentOperationalStatus, error) {
-	row := q.db.QueryRow(ctx, upsertAgentOperationalStatus,
-		arg.ClusterID,
-		arg.AgentID,
-		arg.InstalledAgentVersion,
-		arg.DesiredAgentVersion,
-		arg.ProtocolVersion,
-		arg.ProtocolCompatible,
-		arg.AuthenticationState,
-		arg.RegistrationState,
-		arg.CredentialState,
-		arg.CredentialExpiresAt,
-		arg.UpgradeState,
-		arg.AuditIngestionState,
-		arg.MetricsIngestionState,
-		arg.StateIngestionState,
-		arg.PendingCommandCount,
-		arg.FailedCommandCount,
-		arg.ExpiredCommandCount,
-		arg.DownstreamApiReachable,
-		arg.DownstreamApiReportedAt,
-		arg.OwningServerReplica,
-		arg.LastSuccessfulConnectionAt,
-		arg.LastStatusAt,
-	)
-	var i AgentOperationalStatus
-	err := row.Scan(
-		&i.ClusterID,
-		&i.AgentID,
-		&i.InstalledAgentVersion,
-		&i.DesiredAgentVersion,
-		&i.ProtocolVersion,
-		&i.ProtocolCompatible,
-		&i.AuthenticationState,
-		&i.RegistrationState,
-		&i.CredentialState,
-		&i.CredentialExpiresAt,
-		&i.UpgradeState,
-		&i.AuditIngestionState,
-		&i.MetricsIngestionState,
-		&i.StateIngestionState,
-		&i.PendingCommandCount,
-		&i.FailedCommandCount,
-		&i.ExpiredCommandCount,
-		&i.DownstreamApiReachable,
-		&i.DownstreamApiReportedAt,
-		&i.OwningServerReplica,
-		&i.LastSuccessfulConnectionAt,
-		&i.LastStatusAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -7,9 +7,9 @@
  * dispatched totals, last error). All endpoints are superuser-gated
  * server-side; SettingsAuthGate mirrors that in the UI.
  */
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { useAppForm, useStore } from '@/lib/form';
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { useAppForm, useStore } from "@/lib/form";
 import {
   ArrowLeft,
   Plus,
@@ -19,20 +19,23 @@ import {
   Activity,
   Loader2,
   ShieldAlert,
-} from 'lucide-react';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
-import { formatRelativeTime } from '@/lib/utils';
-import type { SIEMForwarder } from '@/types';
-import { SIEM_AUTH_SENTINEL, type SIEMForwarderWriteRequest } from '@/lib/api/siem-forwarders';
+} from "lucide-react";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { formatRelativeTime } from "@/lib/utils";
+import type { SIEMForwarder } from "@/types";
+import {
+  SIEM_AUTH_SENTINEL,
+  type SIEMForwarderWriteRequest,
+} from "@/lib/api/siem-forwarders";
 import {
   useSIEMForwarders,
   useCreateSIEMForwarder,
@@ -40,22 +43,22 @@ import {
   useDeleteSIEMForwarder,
   useTestSIEMForwarder,
   useSIEMForwarderStatus,
-} from './-hooks';
+} from "./-hooks";
 
 const TRANSPORTS: { value: string; label: string }[] = [
-  { value: 'syslog_udp', label: 'Syslog (UDP)' },
-  { value: 'syslog_tcp', label: 'Syslog (TCP)' },
-  { value: 'syslog_tls', label: 'Syslog (TLS)' },
-  { value: 'splunk_hec', label: 'Splunk HEC' },
-  { value: 'ndjson_https', label: 'NDJSON over HTTPS' },
+  { value: "syslog_udp", label: "Syslog (UDP)" },
+  { value: "syslog_tcp", label: "Syslog (TCP)" },
+  { value: "syslog_tls", label: "Syslog (TLS)" },
+  { value: "splunk_hec", label: "Splunk HEC" },
+  { value: "ndjson_https", label: "NDJSON over HTTPS" },
 ];
 
 const FORMATS: { value: string; label: string }[] = [
-  { value: '', label: 'Auto (derive from transport)' },
-  { value: 'rfc5424', label: 'Syslog RFC 5424' },
-  { value: 'rfc3164', label: 'Syslog RFC 3164' },
-  { value: 'cef', label: 'CEF' },
-  { value: 'ndjson', label: 'NDJSON' },
+  { value: "", label: "Auto (derive from transport)" },
+  { value: "rfc5424", label: "Syslog RFC 5424" },
+  { value: "rfc3164", label: "Syslog RFC 3164" },
+  { value: "cef", label: "CEF" },
+  { value: "ndjson", label: "NDJSON" },
 ];
 
 function transportLabel(t: string): string {
@@ -74,37 +77,46 @@ function SIEMForwardersList() {
 
   const columns: Column<SIEMForwarder>[] = [
     {
-      key: 'name',
-      header: 'Name',
+      key: "name",
+      header: "Name",
       accessor: (row) => (
         <div>
           <p className="font-medium text-foreground">{row.name}</p>
-          <p className="text-2xs font-mono text-muted-foreground truncate max-w-[320px]">{row.endpoint}</p>
+          <p className="text-2xs font-mono text-muted-foreground truncate max-w-[320px]">
+            {row.endpoint}
+          </p>
         </div>
       ),
     },
     {
-      key: 'transport',
-      header: 'Transport',
+      key: "transport",
+      header: "Transport",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">{transportLabel(row.transport)}</span>
+        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+          {transportLabel(row.transport)}
+        </span>
       ),
       sortAccessor: (row) => row.transport,
     },
     {
-      key: 'filters',
-      header: 'Event filters',
+      key: "filters",
+      header: "Event filters",
       sortable: false,
       accessor: (row) =>
         row.eventFilters && row.eventFilters.length > 0 ? (
           <div className="flex flex-wrap gap-1 max-w-[240px]">
             {row.eventFilters.slice(0, 3).map((f) => (
-              <span key={f} className="text-2xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono">
+              <span
+                key={f}
+                className="text-2xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+              >
                 {f}
               </span>
             ))}
             {row.eventFilters.length > 3 && (
-              <span className="text-2xs text-muted-foreground">+{row.eventFilters.length - 3}</span>
+              <span className="text-2xs text-muted-foreground">
+                +{row.eventFilters.length - 3}
+              </span>
             )}
           </div>
         ) : (
@@ -112,28 +124,32 @@ function SIEMForwardersList() {
         ),
     },
     {
-      key: 'status',
-      header: 'Status',
+      key: "status",
+      header: "Status",
       accessor: (row) => (
         <StatusBadge
-          status={row.enabled ? 'active' : 'disconnected'}
-          label={row.enabled ? 'Enabled' : 'Disabled'}
+          status={row.enabled ? "active" : "disconnected"}
+          label={row.enabled ? "Enabled" : "Disabled"}
           size="sm"
         />
       ),
-      sortAccessor: (row) => (row.enabled ? '1' : '0'),
+      sortAccessor: (row) => (row.enabled ? "1" : "0"),
     },
     {
-      key: 'updated',
-      header: 'Updated',
-      accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.updatedAt)}</span>,
+      key: "updated",
+      header: "Updated",
+      accessor: (row) => (
+        <span className="text-xs text-muted-foreground">
+          {formatRelativeTime(row.updatedAt)}
+        </span>
+      ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       sortable: false,
       accessor: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
           <button
             onClick={() => setStatusTarget(row)}
             className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -208,7 +224,10 @@ function SIEMForwardersList() {
       )}
 
       {statusTarget && (
-        <SIEMStatusDrawer forwarder={statusTarget} onClose={() => setStatusTarget(null)} />
+        <SIEMStatusDrawer
+          forwarder={statusTarget}
+          onClose={() => setStatusTarget(null)}
+        />
       )}
 
       <ConfirmDialog
@@ -247,16 +266,16 @@ function SIEMForwarderModal({
 
   const form = useAppForm({
     defaultValues: {
-      name: forwarder?.name ?? '',
-      transport: forwarder?.transport ?? 'syslog_tls',
-      endpoint: forwarder?.endpoint ?? '',
+      name: forwarder?.name ?? "",
+      transport: forwarder?.transport ?? "syslog_tls",
+      endpoint: forwarder?.endpoint ?? "",
       // On edit the real auth is never sent to the client; leave blank and only
       // submit a new value if the operator types one.
-      auth: '',
-      eventFilters: (forwarder?.eventFilters ?? []).join(', '),
-      format: forwarder?.format ?? '',
+      auth: "",
+      eventFilters: (forwarder?.eventFilters ?? []).join(", "),
+      format: forwarder?.format ?? "",
       tlsSkipVerify: forwarder?.tlsSkipVerify ?? false,
-      caCertPem: '',
+      caCertPem: "",
       batchSize: forwarder?.batchSize ?? 100,
       flushIntervalMs: forwarder?.flushIntervalMs ?? 5000,
       timeoutSeconds: forwarder?.timeoutSeconds ?? 10,
@@ -264,7 +283,7 @@ function SIEMForwarderModal({
     },
     onSubmit: async ({ value }) => {
       const filters = value.eventFilters
-        .split(',')
+        .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
       const body: SIEMForwarderWriteRequest = {
@@ -313,7 +332,7 @@ function SIEMForwarderModal({
   const isPending = create.isPending || update.isPending;
   return (
     <ModalShell
-      title={isEdit ? 'Edit SIEM Forwarder' : 'Add SIEM Forwarder'}
+      title={isEdit ? "Edit SIEM Forwarder" : "Add SIEM Forwarder"}
       onClose={onClose}
       size="md"
       footerClassName="flex items-center justify-end gap-2"
@@ -326,214 +345,287 @@ function SIEMForwarderModal({
             disabled={isPending || !name || !endpoint}
             loading={isPending}
           >
-            {isEdit ? 'Save Changes' : 'Create Forwarder'}
+            {isEdit ? "Save Changes" : "Create Forwarder"}
           </ActionButton>
         </>
       }
     >
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Name</label>
-            <form.Field name="name">
-              {(field) => (
-                <Input
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  placeholder="corp-splunk"
-                />
-              )}
-            </form.Field>
-          </div>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-97739a4a-335"
+        >
+          Name
+        </label>
+        <form.Field name="name">
+          {(field) => (
+            <Input
+              id="field-97739a4a-335"
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="corp-splunk"
+            />
+          )}
+        </form.Field>
+      </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Transport</label>
-              <form.Field name="transport">
-                {(field) => (
-                  <Select
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    >
-                    {TRANSPORTS.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </form.Field>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Format</label>
-              <form.Field name="format">
-                {(field) => (
-                  <Select
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    >
-                    {FORMATS.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </form.Field>
-            </div>
-          </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-97739a4a-351"
+          >
+            Transport
+          </label>
+          <form.Field name="transport">
+            {(field) => (
+              <Select
+                id="field-97739a4a-351"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+              >
+                {TRANSPORTS.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </form.Field>
+        </div>
+        <div className="space-y-1.5">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-97739a4a-369"
+          >
+            Format
+          </label>
+          <form.Field name="format">
+            {(field) => (
+              <Select
+                id="field-97739a4a-369"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+              >
+                {FORMATS.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </form.Field>
+        </div>
+      </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Endpoint</label>
-            <form.Field name="endpoint">
-              {(field) => (
-                <Input
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  placeholder="siem.corp.example.com:6514"
-                  className="font-mono"
-                />
-              )}
-            </form.Field>
-          </div>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-97739a4a-389"
+        >
+          Endpoint
+        </label>
+        <form.Field name="endpoint">
+          {(field) => (
+            <Input
+              id="field-97739a4a-389"
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="siem.corp.example.com:6514"
+              className="font-mono"
+            />
+          )}
+        </form.Field>
+      </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">
-              Auth {isEdit && <span className="text-2xs text-muted-foreground font-normal">(leave blank to keep existing)</span>}
-            </label>
-            <form.Field name="auth">
-              {(field) => (
-                <Input
-                  type="password"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  placeholder={isEdit && forwarder?.authConfigured ? '•••••••• (configured)' : 'HEC token / bearer / password'}
-                  className="font-mono"
-                  autoComplete="new-password"
-                />
-              )}
-            </form.Field>
-          </div>
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-foreground">
+          Auth{" "}
+          {isEdit && (
+            <span className="text-2xs text-muted-foreground font-normal">
+              (leave blank to keep existing)
+            </span>
+          )}
+        </label>
+        <form.Field name="auth">
+          {(field) => (
+            <Input
+              type="password"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder={
+                isEdit && forwarder?.authConfigured
+                  ? "•••••••• (configured)"
+                  : "HEC token / bearer / password"
+              }
+              className="font-mono"
+              autoComplete="new-password"
+            />
+          )}
+        </form.Field>
+      </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">
-              Event filters <span className="text-2xs text-muted-foreground font-normal">(comma-separated; blank = all)</span>
-            </label>
-            <form.Field name="eventFilters">
-              {(field) => (
-                <Input
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  placeholder="auth.login.failed, admin.*"
-                  className="font-mono"
-                />
-              )}
-            </form.Field>
-          </div>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-97739a4a-424"
+        >
+          Event filters{" "}
+          <span className="text-2xs text-muted-foreground font-normal">
+            (comma-separated; blank = all)
+          </span>
+        </label>
+        <form.Field name="eventFilters">
+          {(field) => (
+            <Input
+              id="field-97739a4a-424"
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="auth.login.failed, admin.*"
+              className="font-mono"
+            />
+          )}
+        </form.Field>
+      </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Batch size</label>
-              <form.Field name="batchSize">
-                {(field) => (
-                  <Input
-                    type="number"
-                    min={1}
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(parseInt(e.target.value, 10) || 0)}
-                    onBlur={field.handleBlur}
-                    />
-                )}
-              </form.Field>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Flush (ms)</label>
-              <form.Field name="flushIntervalMs">
-                {(field) => (
-                  <Input
-                    type="number"
-                    min={0}
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(parseInt(e.target.value, 10) || 0)}
-                    onBlur={field.handleBlur}
-                    />
-                )}
-              </form.Field>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Timeout (s)</label>
-              <form.Field name="timeoutSeconds">
-                {(field) => (
-                  <Input
-                    type="number"
-                    min={1}
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(parseInt(e.target.value, 10) || 0)}
-                    onBlur={field.handleBlur}
-                    />
-                )}
-              </form.Field>
-            </div>
-          </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-1.5">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-97739a4a-443"
+          >
+            Batch size
+          </label>
+          <form.Field name="batchSize">
+            {(field) => (
+              <Input
+                id="field-97739a4a-443"
+                type="number"
+                min={1}
+                value={field.state.value}
+                onChange={(e) =>
+                  field.handleChange(parseInt(e.target.value, 10) || 0)
+                }
+                onBlur={field.handleBlur}
+              />
+            )}
+          </form.Field>
+        </div>
+        <div className="space-y-1.5">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-97739a4a-457"
+          >
+            Flush (ms)
+          </label>
+          <form.Field name="flushIntervalMs">
+            {(field) => (
+              <Input
+                id="field-97739a4a-457"
+                type="number"
+                min={0}
+                value={field.state.value}
+                onChange={(e) =>
+                  field.handleChange(parseInt(e.target.value, 10) || 0)
+                }
+                onBlur={field.handleBlur}
+              />
+            )}
+          </form.Field>
+        </div>
+        <div className="space-y-1.5">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-97739a4a-471"
+          >
+            Timeout (s)
+          </label>
+          <form.Field name="timeoutSeconds">
+            {(field) => (
+              <Input
+                id="field-97739a4a-471"
+                type="number"
+                min={1}
+                value={field.state.value}
+                onChange={(e) =>
+                  field.handleChange(parseInt(e.target.value, 10) || 0)
+                }
+                onBlur={field.handleBlur}
+              />
+            )}
+          </form.Field>
+        </div>
+      </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">
-              CA certificate (PEM) <span className="text-2xs text-muted-foreground font-normal">(optional; leave blank to keep)</span>
-            </label>
-            <form.Field name="caCertPem">
-              {(field) => (
-                <Textarea
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  placeholder="-----BEGIN CERTIFICATE-----"
-                  rows={3}
-                  className="min-h-0 resize-none"
-                />
-              )}
-            </form.Field>
-          </div>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-97739a4a-487"
+        >
+          CA certificate (PEM){" "}
+          <span className="text-2xs text-muted-foreground font-normal">
+            (optional; leave blank to keep)
+          </span>
+        </label>
+        <form.Field name="caCertPem">
+          {(field) => (
+            <Textarea
+              id="field-97739a4a-487"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="-----BEGIN CERTIFICATE-----"
+              rows={3}
+              className="min-h-0 resize-none"
+            />
+          )}
+        </form.Field>
+      </div>
 
-          <div className="flex items-center justify-between gap-4">
-            <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-              <form.Field name="enabled">
-                {(field) => (
-                  <input
-                    type="checkbox"
-                    checked={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.checked)}
-                    onBlur={field.handleBlur}
-                    className="h-4 w-4 rounded border-border"
-                  />
-                )}
-              </form.Field>
-              Enabled
-            </label>
-            <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-              <form.Field name="tlsSkipVerify">
-                {(field) => (
-                  <input
-                    type="checkbox"
-                    checked={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.checked)}
-                    onBlur={field.handleBlur}
-                    className="h-4 w-4 rounded border-border"
-                  />
-                )}
-              </form.Field>
-              <span className="inline-flex items-center gap-1">
-                {tlsSkipVerify && <ShieldAlert className="h-3.5 w-3.5 text-status-warning" />}
-                Skip TLS verify
-              </span>
-            </label>
-          </div>
+      <div className="flex items-center justify-between gap-4">
+        <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+          <form.Field name="enabled">
+            {(field) => (
+              <input
+                type="checkbox"
+                checked={field.state.value}
+                onChange={(e) => field.handleChange(e.target.checked)}
+                onBlur={field.handleBlur}
+                className="h-4 w-4 rounded border-border"
+              />
+            )}
+          </form.Field>
+          Enabled
+        </label>
+        <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+          <form.Field name="tlsSkipVerify">
+            {(field) => (
+              <input
+                type="checkbox"
+                checked={field.state.value}
+                onChange={(e) => field.handleChange(e.target.checked)}
+                onBlur={field.handleBlur}
+                className="h-4 w-4 rounded border-border"
+              />
+            )}
+          </form.Field>
+          <span className="inline-flex items-center gap-1">
+            {tlsSkipVerify && (
+              <ShieldAlert className="h-3.5 w-3.5 text-status-warning" />
+            )}
+            Skip TLS verify
+          </span>
+        </label>
+      </div>
     </ModalShell>
   );
 }
@@ -542,15 +634,31 @@ function SIEMForwarderModal({
 // Per-forwarder status drawer
 // ============================================================
 
-function SIEMStatusDrawer({ forwarder, onClose }: { forwarder: SIEMForwarder; onClose: () => void }) {
+function SIEMStatusDrawer({
+  forwarder,
+  onClose,
+}: {
+  forwarder: SIEMForwarder;
+  onClose: () => void;
+}) {
   const { data: status, isLoading } = useSIEMForwarderStatus(forwarder.id);
 
-  const metric = (label: string, value: React.ReactNode, tone?: 'error' | 'warning') => (
+  const metric = (
+    label: string,
+    value: React.ReactNode,
+    tone?: "error" | "warning",
+  ) => (
     <div className="rounded-lg border border-border bg-card p-3">
-      <p className="text-2xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-2xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
       <p
         className={`mt-1 text-lg font-semibold tabular-nums ${
-          tone === 'error' ? 'text-status-error' : tone === 'warning' ? 'text-status-warning' : 'text-foreground'
+          tone === "error"
+            ? "text-status-error"
+            : tone === "warning"
+              ? "text-status-warning"
+              : "text-foreground"
         }`}
       >
         {value}
@@ -565,33 +673,47 @@ function SIEMStatusDrawer({ forwarder, onClose }: { forwarder: SIEMForwarder; on
       onClose={onClose}
       size="sm"
     >
-          {isLoading && !status ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" />
+      {isLoading && !status ? (
+        <div className="flex items-center justify-center py-8 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            {metric(
+              "Queue depth",
+              status?.queueDepth ?? 0,
+              (status?.queueDepth ?? 0) > 0 ? "warning" : undefined,
+            )}
+            {metric("Dispatched", status?.dispatchedTotal ?? 0)}
+            {metric(
+              "Dropped",
+              status?.droppedTotal ?? 0,
+              (status?.droppedTotal ?? 0) > 0 ? "error" : undefined,
+            )}
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Last sent</span>
+              <span className="text-foreground">
+                {status?.lastSentAt
+                  ? formatRelativeTime(status.lastSentAt)
+                  : "Never"}
+              </span>
             </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-3 gap-3">
-                {metric('Queue depth', status?.queueDepth ?? 0, (status?.queueDepth ?? 0) > 0 ? 'warning' : undefined)}
-                {metric('Dispatched', status?.dispatchedTotal ?? 0)}
-                {metric('Dropped', status?.droppedTotal ?? 0, (status?.droppedTotal ?? 0) > 0 ? 'error' : undefined)}
-              </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Last sent</span>
-                  <span className="text-foreground">
-                    {status?.lastSentAt ? formatRelativeTime(status.lastSentAt) : 'Never'}
-                  </span>
-                </div>
-                <div className="flex items-start justify-between gap-4">
-                  <span className="text-muted-foreground flex-shrink-0">Last error</span>
-                  <span className={`text-right ${status?.lastError ? 'text-status-error' : 'text-muted-foreground'}`}>
-                    {status?.lastError || 'None'}
-                  </span>
-                </div>
-              </div>
-            </>
-          )}
+            <div className="flex items-start justify-between gap-4">
+              <span className="text-muted-foreground flex-shrink-0">
+                Last error
+              </span>
+              <span
+                className={`text-right ${status?.lastError ? "text-status-error" : "text-muted-foreground"}`}
+              >
+                {status?.lastError || "None"}
+              </span>
+            </div>
+          </div>
+        </>
+      )}
     </ModalShell>
   );
 }

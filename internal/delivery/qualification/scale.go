@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
@@ -274,7 +275,8 @@ func (store *memoryPlanningStore) InsertRollout(_ context.Context, plan rollout.
 func (*memoryPlanningStore) AppendRolloutCreated(context.Context, rollout.FrozenRollout) error {
 	return nil
 }
-func (*memoryPlanningStore) EnqueueRollout(context.Context, uuid.UUID) error { return nil }
+func (*memoryPlanningStore) EnqueueRollout(context.Context, uuid.UUID) error       { return nil }
+func (*memoryPlanningStore) RecordAuditIntent(context.Context, audit.Intent) error { return nil }
 
 type rolloutSimulationResult struct {
 	Releases         int

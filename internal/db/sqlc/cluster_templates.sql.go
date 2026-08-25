@@ -208,6 +208,56 @@ func (q *Queries) ListClusterTemplateApplicationsByStatus(ctx context.Context, a
 	return items, nil
 }
 
+const listClusterTemplateBoundClusters = `-- name: ListClusterTemplateBoundClusters :many
+SELECT
+    a.cluster_id,
+    c.name AS cluster_name,
+    a.status,
+    a.applied_at,
+    a.last_error
+FROM cluster_template_applications AS a
+JOIN clusters AS c ON c.id = a.cluster_id
+WHERE a.template_id = $1
+ORDER BY c.name, c.id
+`
+
+type ListClusterTemplateBoundClustersRow struct {
+	ClusterID   uuid.UUID          `json:"cluster_id"`
+	ClusterName string             `json:"cluster_name"`
+	Status      string             `json:"status"`
+	AppliedAt   pgtype.Timestamptz `json:"applied_at"`
+	LastError   string             `json:"last_error"`
+}
+
+// Operator-facing detail rows for one template. The handler independently
+// requires both template-read and cluster-read permissions before exposing
+// cluster identity or application state.
+func (q *Queries) ListClusterTemplateBoundClusters(ctx context.Context, templateID uuid.UUID) ([]ListClusterTemplateBoundClustersRow, error) {
+	rows, err := q.db.Query(ctx, listClusterTemplateBoundClusters, templateID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListClusterTemplateBoundClustersRow{}
+	for rows.Next() {
+		var i ListClusterTemplateBoundClustersRow
+		if err := rows.Scan(
+			&i.ClusterID,
+			&i.ClusterName,
+			&i.Status,
+			&i.AppliedAt,
+			&i.LastError,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClusterTemplates = `-- name: ListClusterTemplates :many
 
 SELECT id, name, description, spec, created_by, created_at, updated_at FROM cluster_templates

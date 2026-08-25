@@ -248,8 +248,6 @@ func TestPostJSONErrorOmitsSecretURL(t *testing.T) {
 
 func TestPostJSONUsesBoundedFallbackClient(t *testing.T) {
 	defer httpclient.DisableGuardForTest()()
-	resetRuntime()
-	defer resetRuntime()
 
 	var captured map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -266,8 +264,8 @@ func TestPostJSONUsesBoundedFallbackClient(t *testing.T) {
 	if captured["ok"] != true {
 		t.Fatalf("captured body = %#v, want ok=true", captured)
 	}
-	if runtimeHTTPClient().Timeout != defaultWorkerHTTPTimeout {
-		t.Fatalf("fallback Timeout = %s, want %s", runtimeHTTPClient().Timeout, defaultWorkerHTTPTimeout)
+	if runtimeHTTPClient(context.Background()).Timeout != defaultWorkerHTTPTimeout {
+		t.Fatalf("fallback Timeout = %s, want %s", runtimeHTTPClient(context.Background()).Timeout, defaultWorkerHTTPTimeout)
 	}
 }
 

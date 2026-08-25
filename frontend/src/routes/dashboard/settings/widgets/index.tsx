@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * /dashboard/settings/widgets — admin CRUD for dashboard widgets +
  * Prometheus datasources (migration 058).
@@ -17,12 +24,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * settings hub.
  */
 
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@/lib/link';
-import { ArrowLeft, Plus, Trash2, Save, Loader2, FlaskConical, CheckCircle, XCircle } from 'lucide-react';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { useAppForm } from '@/lib/form';
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@/lib/link";
+import {
+  ArrowLeft,
+  Plus,
+  Trash2,
+  Save,
+  Loader2,
+  FlaskConical,
+  CheckCircle,
+  XCircle,
+} from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useAppForm } from "@/lib/form";
 import {
   listWidgets,
   createWidget,
@@ -37,32 +53,55 @@ import {
   type WidgetScope,
   type WidgetSpec,
   type WidgetWriteBody,
-  type PrometheusDatasource,
-} from '@/lib/api/dashboards';
+  type DashboardDatasource,
+} from "@/lib/api/dashboards";
 
 // Local cache keys for the admin widget/datasource lists. Assigned to
 // identifiers (not inlined into `queryKey:`) so they satisfy the lint rule
 // that reserves inline queryKey arrays for src/lib/query-keys.ts.
-const WIDGETS_KEY = ['admin', 'dashboard-widgets'] as const;
-const DATASOURCES_KEY = ['admin', 'prometheus-datasources'] as const;
+const WIDGETS_KEY = ["admin", "dashboard-widgets"] as const;
+const DATASOURCES_KEY = ["admin", "prometheus-datasources"] as const;
 
 const DEFAULT_SPEC_BY_TYPE: Record<WidgetType, string> = {
   grafana_panel: JSON.stringify(
-    { base_url: 'https://grafana.example.com', dashboard_uid: 'xyz', panel_id: 1, vars: { cluster: '$cluster_uid' } },
+    {
+      base_url: "https://grafana.example.com",
+      dashboard_uid: "xyz",
+      panel_id: 1,
+      vars: { cluster: "$cluster_uid" },
+    },
     null,
     2,
   ),
   prom_sparkline: JSON.stringify(
-    { datasource: 'default', query: 'sum(rate(container_cpu_usage_seconds_total[5m]))', duration: '1h', step: '60s' },
+    {
+      datasource: "default",
+      query: "sum(rate(container_cpu_usage_seconds_total[5m]))",
+      duration: "1h",
+      step: "60s",
+    },
     null,
     2,
   ),
   prom_stat: JSON.stringify(
-    { datasource: 'default', query: 'histogram_quantile(0.99, sum(rate(apiserver_request_duration_seconds_bucket[5m])) by (le))', unit: 's', format: '.3f' },
+    {
+      datasource: "default",
+      query:
+        "histogram_quantile(0.99, sum(rate(apiserver_request_duration_seconds_bucket[5m])) by (le))",
+      unit: "s",
+      format: ".3f",
+    },
     null,
     2,
   ),
-  url_iframe: JSON.stringify({ url: 'https://billing.example.com/clusters/{{cluster_uid}}', height_px: 280 }, null, 2),
+  url_iframe: JSON.stringify(
+    {
+      url: "https://billing.example.com/clusters/{{cluster_uid}}",
+      height_px: 280,
+    },
+    null,
+    2,
+  ),
 };
 
 function WidgetsAdminPage() {
@@ -72,25 +111,39 @@ function WidgetsAdminPage() {
   // field values themselves live on the TanStack form below.
   const [editing, setEditing] = useState<{ id?: string } | null>(null);
   const [dsError, setDsError] = useState<string | null>(null);
-  const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string }>>({});
-  const [deleteWidgetTarget, setDeleteWidgetTarget] = useState<Widget | null>(null);
-  const [deleteDatasourceTarget, setDeleteDatasourceTarget] = useState<PrometheusDatasource | null>(null);
+  const [testStatus, setTestStatus] = useState<
+    Record<string, { ok: boolean; msg: string }>
+  >({});
+  const [deleteWidgetTarget, setDeleteWidgetTarget] = useState<Widget | null>(
+    null,
+  );
+  const [deleteDatasourceTarget, setDeleteDatasourceTarget] =
+    useState<DashboardDatasource | null>(null);
 
-  const widgetsQuery = useQuery({ queryKey: WIDGETS_KEY, queryFn: listWidgets });
-  const datasourcesQuery = useQuery({ queryKey: DATASOURCES_KEY, queryFn: listDatasources });
+  const widgetsQuery = useQuery({
+    queryKey: WIDGETS_KEY,
+    queryFn: listWidgets,
+  });
+  const datasourcesQuery = useQuery({
+    queryKey: DATASOURCES_KEY,
+    queryFn: listDatasources,
+  });
   const widgets = widgetsQuery.data ?? [];
   const datasources = datasourcesQuery.data ?? [];
   const loading = widgetsQuery.isLoading;
 
-  const invalidateWidgets = () => queryClient.invalidateQueries({ queryKey: WIDGETS_KEY });
-  const invalidateDatasources = () => queryClient.invalidateQueries({ queryKey: DATASOURCES_KEY });
+  const invalidateWidgets = () =>
+    queryClient.invalidateQueries({ queryKey: WIDGETS_KEY });
+  const invalidateDatasources = () =>
+    queryClient.invalidateQueries({ queryKey: DATASOURCES_KEY });
 
   const createWidgetMutation = useMutation({
     mutationFn: (body: WidgetWriteBody) => createWidget(body),
     onSuccess: invalidateWidgets,
   });
   const updateWidgetMutation = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: WidgetWriteBody }) => updateWidget(id, body),
+    mutationFn: ({ id, body }: { id: string; body: WidgetWriteBody }) =>
+      updateWidget(id, body),
     onSuccess: invalidateWidgets,
   });
   const deleteWidgetMutation = useMutation({
@@ -98,8 +151,12 @@ function WidgetsAdminPage() {
     onSuccess: invalidateWidgets,
   });
   const createDatasourceMutation = useMutation({
-    mutationFn: (body: { name: string; url: string; bearer_token: string; enabled: boolean }) =>
-      createDatasource(body),
+    mutationFn: (body: {
+      name: string;
+      url: string;
+      bearer_token: string;
+      enabled: boolean;
+    }) => createDatasource(body),
     onSuccess: invalidateDatasources,
   });
   const deleteDatasourceMutation = useMutation({
@@ -107,13 +164,14 @@ function WidgetsAdminPage() {
     onSuccess: invalidateDatasources,
   });
 
-  const saving = createWidgetMutation.isPending || updateWidgetMutation.isPending;
+  const saving =
+    createWidgetMutation.isPending || updateWidgetMutation.isPending;
 
   const widgetDefaults = () => ({
-    name: '',
-    description: '',
-    widgetType: 'prom_sparkline' as WidgetType,
-    scope: 'global' as WidgetScope,
+    name: "",
+    description: "",
+    widgetType: "prom_sparkline" as WidgetType,
+    scope: "global" as WidgetScope,
     scopeIds: [] as string[],
     grid: { x: 0, y: 0, w: 4, h: 2 },
     refreshSeconds: 60,
@@ -129,7 +187,7 @@ function WidgetsAdminPage() {
       try {
         spec = JSON.parse(value.specText);
       } catch {
-        setError('Spec is not valid JSON');
+        setError("Spec is not valid JSON");
         return;
       }
       const body: WidgetWriteBody = {
@@ -167,7 +225,7 @@ function WidgetsAdminPage() {
     setEditing({ id: w.id });
     form.reset({
       name: w.name,
-      description: w.description ?? '',
+      description: w.description ?? "",
       widgetType: w.widgetType,
       scope: w.scope,
       scopeIds: w.scopeIds ?? [],
@@ -194,17 +252,22 @@ function WidgetsAdminPage() {
   };
 
   const [showAddDS, setShowAddDS] = useState(false);
-  const [dsName, setDsName] = useState('');
-  const [dsURL, setDsURL] = useState('');
-  const [dsBearer, setDsBearer] = useState('');
+  const [dsName, setDsName] = useState("");
+  const [dsURL, setDsURL] = useState("");
+  const [dsBearer, setDsBearer] = useState("");
 
   const addDS = async () => {
     setDsError(null);
     try {
-      await createDatasourceMutation.mutateAsync({ name: dsName, url: dsURL, bearer_token: dsBearer, enabled: true });
-      setDsName('');
-      setDsURL('');
-      setDsBearer('');
+      await createDatasourceMutation.mutateAsync({
+        name: dsName,
+        url: dsURL,
+        bearer_token: dsBearer,
+        enabled: true,
+      });
+      setDsName("");
+      setDsURL("");
+      setDsBearer("");
       setShowAddDS(false);
     } catch (e) {
       setDsError(e instanceof Error ? e.message : String(e));
@@ -216,7 +279,10 @@ function WidgetsAdminPage() {
       const out = await testDatasource(id);
       setTestStatus((s) => ({ ...s, [id]: { ok: out.ok, msg: out.message } }));
     } catch (e) {
-      setTestStatus((s) => ({ ...s, [id]: { ok: false, msg: e instanceof Error ? e.message : String(e) } }));
+      setTestStatus((s) => ({
+        ...s,
+        [id]: { ok: false, msg: e instanceof Error ? e.message : String(e) },
+      }));
     }
   };
 
@@ -234,12 +300,16 @@ function WidgetsAdminPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <Link href="/dashboard/settings" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+          <Link
+            href="/dashboard/settings"
+            className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+          >
             <ArrowLeft className="h-3 w-3" /> Settings
           </Link>
           <h1 className="text-2xl font-semibold mt-1">Dashboard widgets</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Define widgets pinned to the global dashboard, per-cluster pages, or per-project pages.
+            Define widgets pinned to the global dashboard, per-cluster pages, or
+            per-project pages.
           </p>
         </div>
       </div>
@@ -247,7 +317,9 @@ function WidgetsAdminPage() {
       {error || widgetsQuery.isError ? (
         <div className="text-sm text-status-error">
           {error ??
-            (widgetsQuery.error instanceof Error ? widgetsQuery.error.message : 'Failed to load widgets')}
+            (widgetsQuery.error instanceof Error
+              ? widgetsQuery.error.message
+              : "Failed to load widgets")}
         </div>
       ) : null}
 
@@ -255,7 +327,10 @@ function WidgetsAdminPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-medium">Widgets</h2>
           {!editing ? (
-            <button onClick={startCreate} className="text-sm inline-flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1.5 rounded">
+            <button
+              onClick={startCreate}
+              className="text-sm inline-flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1.5 rounded"
+            >
               <Plus className="h-4 w-4" /> New widget
             </button>
           ) : null}
@@ -289,11 +364,13 @@ function WidgetsAdminPage() {
                         field.handleChange(t);
                         // Switching types re-seeds the spec text, exactly like
                         // the old setSpecText(DEFAULT_SPEC_BY_TYPE[t]).
-                        form.setFieldValue('specText', DEFAULT_SPEC_BY_TYPE[t]);
+                        form.setFieldValue("specText", DEFAULT_SPEC_BY_TYPE[t]);
                       }}
                       onBlur={field.handleBlur}
                     >
-                      <option value="prom_sparkline">Prometheus sparkline</option>
+                      <option value="prom_sparkline">
+                        Prometheus sparkline
+                      </option>
                       <option value="prom_stat">Prometheus stat</option>
                       <option value="grafana_panel">Grafana panel</option>
                       <option value="url_iframe">URL iframe</option>
@@ -308,7 +385,9 @@ function WidgetsAdminPage() {
                     <select
                       className="w-full bg-background border border-border rounded px-2 py-1"
                       value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value as WidgetScope)}
+                      onChange={(e) =>
+                        field.handleChange(e.target.value as WidgetScope)
+                      }
                       onBlur={field.handleBlur}
                     >
                       <option value="global">Global</option>
@@ -319,25 +398,31 @@ function WidgetsAdminPage() {
                 </form.Field>
               </label>
               <label className="text-sm">
-                <div className="text-muted-foreground mb-1">Refresh seconds</div>
+                <div className="text-muted-foreground mb-1">
+                  Refresh seconds
+                </div>
                 <form.Field name="refreshSeconds">
                   {(field) => (
                     <input
                       type="number"
                       className="w-full bg-background border border-border rounded px-2 py-1"
                       value={field.state.value}
-                      onChange={(e) => field.handleChange(parseInt(e.target.value, 10) || 60)}
+                      onChange={(e) =>
+                        field.handleChange(parseInt(e.target.value, 10) || 60)
+                      }
                       onBlur={field.handleBlur}
                     />
                   )}
                 </form.Field>
               </label>
               <label className="text-sm col-span-2">
-                <div className="text-muted-foreground mb-1">Grid (x, y, w, h)</div>
+                <div className="text-muted-foreground mb-1">
+                  Grid (x, y, w, h)
+                </div>
                 <form.Field name="grid">
                   {(field) => (
                     <div className="flex gap-2">
-                      {(['x', 'y', 'w', 'h'] as const).map((k) => (
+                      {(["x", "y", "w", "h"] as const).map((k) => (
                         <input
                           key={k}
                           type="number"
@@ -372,11 +457,22 @@ function WidgetsAdminPage() {
               </form.Field>
             </label>
             <div className="flex gap-2">
-              <button onClick={() => void form.handleSubmit()} disabled={saving} className="inline-flex items-center gap-1 bg-primary text-primary-foreground text-sm px-3 py-1.5 rounded">
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              <button
+                onClick={() => void form.handleSubmit()}
+                disabled={saving}
+                className="inline-flex items-center gap-1 bg-primary text-primary-foreground text-sm px-3 py-1.5 rounded"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
                 Save
               </button>
-              <button onClick={cancel} className="text-sm px-3 py-1.5 rounded border border-border">
+              <button
+                onClick={cancel}
+                className="text-sm px-3 py-1.5 rounded border border-border"
+              >
                 Cancel
               </button>
             </div>
@@ -386,7 +482,9 @@ function WidgetsAdminPage() {
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading...</div>
         ) : widgets.length === 0 ? (
-          <div className="text-sm text-muted-foreground">No widgets defined. Click "New widget" to add one.</div>
+          <div className="text-sm text-muted-foreground">
+            No widgets defined. Click "New widget" to add one.
+          </div>
         ) : (
           <div className="border border-border rounded-lg overflow-hidden">
             <Table className="w-full text-sm">
@@ -397,22 +495,38 @@ function WidgetsAdminPage() {
                   <TableHead className="text-left px-3 py-2">Scope</TableHead>
                   <TableHead className="text-left px-3 py-2">Refresh</TableHead>
                   <TableHead className="text-left px-3 py-2">Enabled</TableHead>
-                  <TableHead className="text-right px-3 py-2">Actions</TableHead>
+                  <TableHead className="text-right px-3 py-2">
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {widgets.map((w) => (
                   <TableRow key={w.id} className="border-t border-border">
                     <TableCell className="px-3 py-2">{w.name}</TableCell>
-                    <TableCell className="px-3 py-2 text-muted-foreground">{w.widgetType}</TableCell>
-                    <TableCell className="px-3 py-2 text-muted-foreground">{w.scope}</TableCell>
-                    <TableCell className="px-3 py-2 text-muted-foreground">{w.refreshSeconds}s</TableCell>
-                    <TableCell className="px-3 py-2">{w.enabled ? 'yes' : 'no'}</TableCell>
+                    <TableCell className="px-3 py-2 text-muted-foreground">
+                      {w.widgetType}
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-muted-foreground">
+                      {w.scope}
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-muted-foreground">
+                      {w.refreshSeconds}s
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
+                      {w.enabled ? "yes" : "no"}
+                    </TableCell>
                     <TableCell className="px-3 py-2 text-right">
-                      <button onClick={() => startEdit(w)} className="text-xs text-primary hover:underline mr-2">
+                      <button
+                        onClick={() => startEdit(w)}
+                        className="text-xs text-primary hover:underline mr-2"
+                      >
                         Edit
                       </button>
-                      <button onClick={() => setDeleteWidgetTarget(w)} className="text-xs text-status-error hover:underline inline-flex items-center gap-1">
+                      <button
+                        onClick={() => setDeleteWidgetTarget(w)}
+                        className="text-xs text-status-error hover:underline inline-flex items-center gap-1"
+                      >
                         <Trash2 className="h-3 w-3" /> Delete
                       </button>
                     </TableCell>
@@ -441,7 +555,7 @@ function WidgetsAdminPage() {
             {dsError ??
               (datasourcesQuery.error instanceof Error
                 ? datasourcesQuery.error.message
-                : 'Failed to load datasources')}
+                : "Failed to load datasources")}
           </div>
         ) : null}
         <div className="border border-border rounded-lg overflow-hidden">
@@ -459,23 +573,46 @@ function WidgetsAdminPage() {
               {datasources.map((d) => (
                 <TableRow key={d.id} className="border-t border-border">
                   <TableCell className="px-3 py-2">{d.name}</TableCell>
-                  <TableCell className="px-3 py-2 font-mono text-xs text-muted-foreground">{d.url}</TableCell>
-                  <TableCell className="px-3 py-2 text-muted-foreground">{d.hasAuth ? 'yes' : 'none'}</TableCell>
+                  <TableCell className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                    {d.url}
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-muted-foreground">
+                    {d.hasAuth ? "yes" : "none"}
+                  </TableCell>
                   <TableCell className="px-3 py-2">
                     {testStatus[d.id] ? (
-                      <span className={`inline-flex items-center gap-1 text-xs ${testStatus[d.id].ok ? 'text-status-success' : 'text-status-error'}`}>
-                        {testStatus[d.id].ok ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                        <span className="truncate max-w-[12rem]" title={testStatus[d.id].msg}>{testStatus[d.id].msg}</span>
+                      <span
+                        className={`inline-flex items-center gap-1 text-xs ${testStatus[d.id].ok ? "text-status-success" : "text-status-error"}`}
+                      >
+                        {testStatus[d.id].ok ? (
+                          <CheckCircle className="h-3 w-3" />
+                        ) : (
+                          <XCircle className="h-3 w-3" />
+                        )}
+                        <span
+                          className="truncate max-w-[12rem]"
+                          title={testStatus[d.id].msg}
+                        >
+                          {testStatus[d.id].msg}
+                        </span>
                       </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">unknown</span>
+                      <span className="text-xs text-muted-foreground">
+                        unknown
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="px-3 py-2 text-right">
-                    <button onClick={() => runTest(d.id)} className="text-xs text-primary hover:underline mr-2 inline-flex items-center gap-1">
+                    <button
+                      onClick={() => runTest(d.id)}
+                      className="text-xs text-primary hover:underline mr-2 inline-flex items-center gap-1"
+                    >
                       <FlaskConical className="h-3 w-3" /> Test
                     </button>
-                    <button onClick={() => setDeleteDatasourceTarget(d)} className="text-xs text-status-error hover:underline">
+                    <button
+                      onClick={() => setDeleteDatasourceTarget(d)}
+                      className="text-xs text-status-error hover:underline"
+                    >
                       Delete
                     </button>
                   </TableCell>
@@ -484,25 +621,45 @@ function WidgetsAdminPage() {
               {showAddDS && (
                 <TableRow className="border-t border-border bg-muted/20">
                   <TableCell className="px-3 py-2">
-                    <input className="bg-background border border-border rounded px-2 py-1 w-32" placeholder="name" value={dsName} onChange={(e) => setDsName(e.target.value)} />
+                    <input
+                      className="bg-background border border-border rounded px-2 py-1 w-32"
+                      placeholder="name"
+                      value={dsName}
+                      onChange={(e) => setDsName(e.target.value)}
+                    />
                   </TableCell>
                   <TableCell className="px-3 py-2">
-                    <input className="bg-background border border-border rounded px-2 py-1 w-full font-mono text-xs" placeholder="https://prom..." value={dsURL} onChange={(e) => setDsURL(e.target.value)} />
+                    <input
+                      className="bg-background border border-border rounded px-2 py-1 w-full font-mono text-xs"
+                      placeholder="https://prom..."
+                      value={dsURL}
+                      onChange={(e) => setDsURL(e.target.value)}
+                    />
                   </TableCell>
                   <TableCell className="px-3 py-2">
-                    <input className="bg-background border border-border rounded px-2 py-1 w-32" placeholder="Bearer (optional)" value={dsBearer} onChange={(e) => setDsBearer(e.target.value)} />
+                    <input
+                      className="bg-background border border-border rounded px-2 py-1 w-32"
+                      placeholder="Bearer (optional)"
+                      value={dsBearer}
+                      onChange={(e) => setDsBearer(e.target.value)}
+                    />
                   </TableCell>
-                  <TableCell className="px-3 py-2 text-muted-foreground text-xs">—</TableCell>
+                  <TableCell className="px-3 py-2 text-muted-foreground text-xs">
+                    —
+                  </TableCell>
                   <TableCell className="px-3 py-2 text-right whitespace-nowrap">
-                    <button onClick={addDS} className="text-xs text-primary hover:underline inline-flex items-center gap-1 mr-2">
+                    <button
+                      onClick={addDS}
+                      className="text-xs text-primary hover:underline inline-flex items-center gap-1 mr-2"
+                    >
                       <Plus className="h-3 w-3" /> Add
                     </button>
                     <button
                       onClick={() => {
                         setShowAddDS(false);
-                        setDsName('');
-                        setDsURL('');
-                        setDsBearer('');
+                        setDsName("");
+                        setDsURL("");
+                        setDsBearer("");
                       }}
                       className="text-xs text-muted-foreground hover:text-foreground"
                     >
@@ -513,8 +670,12 @@ function WidgetsAdminPage() {
               )}
               {!showAddDS && datasources.length === 0 && (
                 <TableRow className="border-t border-border">
-                  <TableCell colSpan={5} className="px-3 py-4 text-center text-xs text-muted-foreground">
-                    No datasources yet. Use “Add datasource” to connect a Prometheus endpoint.
+                  <TableCell
+                    colSpan={5}
+                    className="px-3 py-4 text-center text-xs text-muted-foreground"
+                  >
+                    No datasources yet. Use “Add datasource” to connect a
+                    Prometheus endpoint.
                   </TableCell>
                 </TableRow>
               )}
@@ -548,6 +709,6 @@ function WidgetsAdminPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/widgets/')({
+export const Route = createFileRoute("/dashboard/settings/widgets/")({
   component: WidgetsAdminPage,
 });

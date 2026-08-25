@@ -1,0 +1,57 @@
+name: Day-2 drill execution
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Exact production scale profile and fixed drill implementation set
+        required: true
+        type: choice
+        options: [estate-100, estate-500, estate-1000, estate-1000-soak]
+
+permissions:
+  contents: read
+
+jobs:
+  execute:
+    environment: scale-certification
+    runs-on: [self-hosted, linux, x64, astronomer-scale]
+    timeout-minutes: 720
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with: {go-version-file: go.mod, cache: true}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: {node-version: 22, cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with: {version: v3.21.0}
+      - run: npm ci
+        working-directory: frontend
+      - name: Prepare short-lived credentials
+        env:
+          SCALE_API_TOKEN: ${{ secrets.SCALE_API_TOKEN }}
+          SCALE_AUDIT_OBSERVER_DATABASE_URL: ${{ secrets.SCALE_AUDIT_OBSERVER_DATABASE_URL }}
+        run: |
+          test -n "$SCALE_API_TOKEN" && test -n "$SCALE_AUDIT_OBSERVER_DATABASE_URL"
+          printf '%s' "$SCALE_API_TOKEN" > "$RUNNER_TEMP/day2-api-token"
+          printf '%s' "$SCALE_AUDIT_OBSERVER_DATABASE_URL" > "$RUNNER_TEMP/day2-audit-observer-dsn"
+          chmod 0600 "$RUNNER_TEMP/day2-api-token" "$RUNNER_TEMP/day2-audit-observer-dsn"
+      - name: Execute fixed full-window profile and bounded drill implementations
+        env:
+          LOADTEST_SERVER: ${{ vars.SCALE_SERVER_URL }}
+          LOADTEST_TOKEN: ${{ runner.temp }}/day2-api-token
+          LOADTEST_AUDIT_OBSERVER_DATABASE_URL_FILE: ${{ runner.temp }}/day2-audit-observer-dsn
+          LOADTEST_PROFILE: scripts/loadtest/profiles/${{ inputs.profile }}.yaml
+          LOADTEST_IMAGES: ${{ vars.SCALE_RELEASE_MANIFEST_DIGEST }}
+          LOADTEST_ENVIRONMENT: scale-certification
+          DAY2_EXECUTION_ARTIFACT_DIR: ${{ runner.temp }}/day2-execution
+          DAY2_DRIVER_DIR: ${{ vars.SCALE_DAY2_DRIVER_DIR }}
+          DAY2_DRIVER_MANIFEST_SHA256: ${{ vars.SCALE_DAY2_DRIVER_MANIFEST_SHA256 }}
+        run: ./scripts/run-day2-drill-execution.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: raw-day2-drill-execution-${{ inputs.profile }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/day2-execution/
+          if-no-files-found: error
+          retention-days: 90

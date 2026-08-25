@@ -12,12 +12,18 @@
  * returns an empty list / 4xx there — the page gates on distribution before
  * ever calling these.
  *
- * Response bodies are camelized by the shared axios interceptor in ../api.ts,
- * so every field below is camelCase.
+ * Generated responses retain snake_case; endpoint functions explicitly map
+ * them into the camelCase view models below.
  */
 
-import api from '../api';
-import type { APIResponse } from '@/types';
+import {
+  createControlPlaneSnapshot as createControlPlaneSnapshotOperation,
+  getControlPlaneSnapshot as getControlPlaneSnapshotOperation,
+  getControlPlaneSnapshotRestoreGuidance as getControlPlaneSnapshotRestoreGuidanceOperation,
+  listControlPlaneSnapshots as listControlPlaneSnapshotsOperation,
+} from "@/lib/api/generated/client";
+import { createIdempotencyKey } from "@/lib/api/idempotency";
+import type { OpenAPIComponents } from "@/types/openapi.generated";
 
 // ============================================================
 // Types
@@ -29,11 +35,7 @@ import type { APIResponse } from '@/types';
  * neutral pill.
  */
 export type ControlPlaneSnapshotStatus =
-  | 'pending'
-  | 'in_progress'
-  | 'completed'
-  | 'failed'
-  | string;
+  "pending" | "in_progress" | "completed" | "failed" | string;
 
 export interface ControlPlaneSnapshot {
   id: string;
@@ -58,8 +60,8 @@ export interface ControlPlaneSnapshot {
 }
 
 export interface CreateControlPlaneSnapshotRequest {
-  /** Optional operator note stored alongside the snapshot. */
-  note?: string;
+  name?: string;
+  location?: "local" | "s3";
 }
 
 /**
@@ -86,32 +88,39 @@ export interface RestoreGuidance {
 
 export async function listControlPlaneSnapshots(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ControlPlaneSnapshot[]> {
-  const res = await api.get<APIResponse<ControlPlaneSnapshot[]>>(
-    `/clusters/${clusterId}/control-plane-snapshots/`,
-  );
-  return res.data.data ?? [];
+  const response = await listControlPlaneSnapshotsOperation({
+    path: { cluster_id: clusterId },
+    signal,
+  });
+  return (response.data?.items ?? []).map(snapshotFromWire);
 }
 
 export async function getControlPlaneSnapshot(
   clusterId: string,
   snapshotId: string,
+  signal?: AbortSignal,
 ): Promise<ControlPlaneSnapshot> {
-  const res = await api.get<APIResponse<ControlPlaneSnapshot>>(
-    `/clusters/${clusterId}/control-plane-snapshots/${snapshotId}/`,
-  );
-  return res.data.data;
+  const response = await getControlPlaneSnapshotOperation({
+    path: { cluster_id: clusterId, id: snapshotId },
+    signal,
+  });
+  return snapshotFromWire(response.data!);
 }
 
 export async function createControlPlaneSnapshot(
   clusterId: string,
   body: CreateControlPlaneSnapshotRequest = {},
+  signal?: AbortSignal,
 ): Promise<ControlPlaneSnapshot> {
-  const res = await api.post<APIResponse<ControlPlaneSnapshot>>(
-    `/clusters/${clusterId}/control-plane-snapshots/`,
+  const response = await createControlPlaneSnapshotOperation({
+    path: { cluster_id: clusterId },
+    headerParams: { "Idempotency-Key": createIdempotencyKey() },
     body,
-  );
-  return res.data.data;
+    signal,
+  });
+  return snapshotFromWire(response.data!);
 }
 
 /**
@@ -121,9 +130,35 @@ export async function createControlPlaneSnapshot(
 export async function getControlPlaneSnapshotRestoreGuidance(
   clusterId: string,
   snapshotId: string,
+  signal?: AbortSignal,
 ): Promise<RestoreGuidance> {
-  const res = await api.get<APIResponse<RestoreGuidance>>(
-    `/clusters/${clusterId}/control-plane-snapshots/${snapshotId}/restore-guidance/`,
-  );
-  return res.data.data;
+  const response = await getControlPlaneSnapshotRestoreGuidanceOperation({
+    path: { cluster_id: clusterId, id: snapshotId },
+    signal,
+  });
+  const wire = response.data!;
+  return {
+    clusterId,
+    snapshotId,
+    distribution: wire.distribution,
+    steps: wire.steps,
+    guidance: [wire.summary, wire.warning, wire.docs_url].filter(Boolean).join("\n\n"),
+  };
+}
+
+type ControlPlaneSnapshotWire = OpenAPIComponents["schemas"]["ControlPlaneSnapshotWire"];
+
+function snapshotFromWire(wire: ControlPlaneSnapshotWire): ControlPlaneSnapshot {
+  return {
+    id: wire.id,
+    clusterId: wire.cluster_id,
+    name: wire.name,
+    status: wire.status,
+    sizeBytes: wire.size_bytes,
+    storageLocation: wire.location,
+    error: wire.error,
+    createdBy: wire.requested_by_id,
+    createdAt: wire.created_at,
+    completedAt: wire.completed_at,
+  };
 }

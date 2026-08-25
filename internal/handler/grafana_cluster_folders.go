@@ -207,7 +207,7 @@ func grafanaClusterScopedSlugs() []string {
 			continue
 		}
 		slug := strings.TrimSuffix(entry.Name(), ".json")
-		if grafanaDashboardFolder(slug) != grafanaFolderFleet {
+		if grafanaDashboardFolder(slug) != grafanaFolderShared {
 			continue
 		}
 		raw, err := dashboards.FS.ReadFile(entry.Name())

@@ -107,6 +107,32 @@ func TestUpdateTaskOutboxMetrics(t *testing.T) {
 	}
 }
 
+func TestUpdateAuditOutboxMetrics(t *testing.T) {
+	auditOutboxRows.Reset()
+	auditOutboxOldestSeconds.Reset()
+
+	updateAuditOutboxMetrics([]auditOutboxStatusSnapshot{
+		{status: "pending", rows: 4, oldestSeconds: 17.5},
+		{status: "dead", rows: 1, oldestSeconds: 400},
+	})
+	updateAuditOutboxMetrics([]auditOutboxStatusSnapshot{
+		{status: "failed", rows: 2, oldestSeconds: 9},
+	})
+
+	if got := metricValue(t, auditOutboxRows.WithLabelValues(observability.MetricValues("pending")...)); got != 0 {
+		t.Fatalf("pending rows = %v, want reset to 0", got)
+	}
+	if got := metricValue(t, auditOutboxRows.WithLabelValues(observability.MetricValues("failed")...)); got != 2 {
+		t.Fatalf("failed rows = %v, want 2", got)
+	}
+	if got := metricValue(t, auditOutboxRows.WithLabelValues(observability.MetricValues("dead")...)); got != 0 {
+		t.Fatalf("dead rows = %v, want reset to 0", got)
+	}
+	if got := metricValue(t, auditOutboxOldestSeconds.WithLabelValues(observability.MetricValues("failed")...)); got != 9 {
+		t.Fatalf("failed oldest seconds = %v, want 9", got)
+	}
+}
+
 func TestClassifySQLOperation(t *testing.T) {
 	tests := map[string]string{
 		"SELECT 1":              "select",

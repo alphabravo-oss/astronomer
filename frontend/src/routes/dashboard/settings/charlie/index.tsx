@@ -1,19 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { type KeyboardEvent } from "react";
-import {
-  ArrowLeft,
-  Loader2,
-  Sparkles,
-} from "lucide-react";
+import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { Link } from "@/lib/link";
 import { useRouter, useSearchParams } from "@/lib/navigation";
 import { useFeatureFlags } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import {
-  PermissionState,
-  StatePanel,
-} from "@/components/ui/empty-state";
+import { PermissionState, StatePanel } from "@/components/ui/empty-state";
 import {
   CHARLIE_ADMIN_TABS,
   adjacentTab,
@@ -33,7 +26,10 @@ import { DiagnosticsTab } from "@/components/charlie/settings/diagnostics-tab";
 import { Unavailable } from "@/components/charlie/settings/shared";
 
 export { AgentTab } from "@/components/charlie/settings/agent-tab";
-export { charlieModeWorkReady, ModeTab } from "@/components/charlie/settings/mode-tab";
+export {
+  charlieModeWorkReady,
+  ModeTab,
+} from "@/components/charlie/settings/mode-tab";
 export { KubernetesTab } from "@/components/charlie/settings/kubernetes-tab";
 export { ConnectionTab } from "@/components/charlie/settings/connection-tab";
 export { AlertsTab } from "@/components/charlie/settings/alerts-tab";
@@ -74,7 +70,10 @@ export function CharlieAdminContent() {
         retry={() => void flags.refetch()}
       />
     );
-  if (flags.data?.["feature.charlie"] !== true && flags.data?.["feature.charlie"] !== false)
+  if (
+    flags.data?.["feature.charlie"] !== true &&
+    flags.data?.["feature.charlie"] !== false
+  )
     return (
       <StatePanel
         icon={Loader2}
@@ -95,7 +94,9 @@ export function CharlieAdminContent() {
     : ["connection", "diagnostics"];
   const tab = activeTabs.includes(requestedTab) ? requestedTab : "connection";
   const select = (next: CharlieAdminTab) =>
-    router.push(`/dashboard/settings/charlie?${mergeCharlieSearch(params, { tab: next })}`);
+    router.push(
+      `/dashboard/settings/charlie?${mergeCharlieSearch(params, { tab: next })}`,
+    );
   const onTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
     const next = adjacentTab(activeTabs, tab, event.key);
     if (!next) return;

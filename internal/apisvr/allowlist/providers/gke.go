@@ -11,6 +11,8 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
 // GKEProvider patches a GKE cluster's master-authorized-networks-config
@@ -31,6 +33,10 @@ func NewGKEProvider(m CloudCredentialMaterializer) *GKEProvider {
 }
 
 func (p *GKEProvider) ID() ProviderID { return ProviderGKE }
+
+func (p *GKEProvider) Capability() Capability {
+	return Capability{Provider: ProviderGKE, CanMonitor: true, CanEnforce: true, RequiredMetadata: []string{"name", "region", "project_id", "cloud credential"}}
+}
 
 func (p *GKEProvider) Detect(ctx context.Context, cluster Cluster) string {
 	if matchAnnotationOrProvider(cluster, ProviderGKE) {
@@ -53,11 +59,20 @@ type gkeCidrBlock struct {
 
 type gkeClusterResponse struct {
 	MasterAuthorizedNetworksConfig gkeMasterAuthorizedNetworksConfig `json:"masterAuthorizedNetworksConfig"`
+	ControlPlaneEndpointsConfig    struct {
+		IPEndpointsConfig struct {
+			AuthorizedNetworksConfig gkeMasterAuthorizedNetworksConfig `json:"authorizedNetworksConfig"`
+		} `json:"ipEndpointsConfig"`
+	} `json:"controlPlaneEndpointsConfig"`
 }
 
 type gkeUpdateRequest struct {
 	Update struct {
-		DesiredMasterAuthorizedNetworksConfig gkeMasterAuthorizedNetworksConfig `json:"desiredMasterAuthorizedNetworksConfig"`
+		DesiredControlPlaneEndpointsConfig struct {
+			IPEndpointsConfig struct {
+				AuthorizedNetworksConfig gkeMasterAuthorizedNetworksConfig `json:"authorizedNetworksConfig"`
+			} `json:"ipEndpointsConfig"`
+		} `json:"desiredControlPlaneEndpointsConfig"`
 	} `json:"update"`
 }
 
@@ -68,9 +83,24 @@ func (p *GKEProvider) endpoint() string {
 	return "https://container.googleapis.com/v1"
 }
 
-func (p *GKEProvider) resourcePath(cluster Cluster) (string, error) {
-	if cluster.ProjectID == "" {
-		return "", fmt.Errorf("GKE project_id required")
+func (p *GKEProvider) resourcePath(ctx context.Context, cluster Cluster) (string, error) {
+	projectID := strings.TrimSpace(cluster.ProjectID)
+	if projectID == "" && p.Materializer != nil {
+		creds, err := p.Materializer.ResolveForCluster(ctx, cluster, ProviderGKE)
+		if err != nil {
+			return "", fmt.Errorf("resolve GKE project_id: %w", err)
+		}
+		projectID = strings.TrimSpace(creds["project_id"])
+		if projectID == "" {
+			var serviceAccount struct {
+				ProjectID string `json:"project_id"`
+			}
+			_ = json.Unmarshal([]byte(creds["service_account_json"]), &serviceAccount)
+			projectID = strings.TrimSpace(serviceAccount.ProjectID)
+		}
+	}
+	if projectID == "" {
+		return "", fmt.Errorf("GKE project_id required in cluster metadata or credential")
 	}
 	if cluster.Region == "" {
 		return "", fmt.Errorf("GKE region required")
@@ -78,13 +108,13 @@ func (p *GKEProvider) resourcePath(cluster Cluster) (string, error) {
 	if cluster.Name == "" {
 		return "", fmt.Errorf("GKE cluster name required")
 	}
-	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s", cluster.ProjectID, cluster.Region, cluster.Name), nil
+	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s", projectID, cluster.Region, cluster.Name), nil
 }
 
 func (p *GKEProvider) signAndSend(ctx context.Context, req *http.Request, cluster Cluster) (*http.Response, error) {
 	var creds map[string]string
 	if p.Materializer != nil {
-		c, err := p.Materializer.ResolveForCluster(ctx, cluster.ID)
+		c, err := p.Materializer.ResolveForCluster(ctx, cluster, ProviderGKE)
 		if err != nil {
 			return nil, fmt.Errorf("resolve cloud credential: %w", err)
 		}
@@ -94,6 +124,28 @@ func (p *GKEProvider) signAndSend(ctx context.Context, req *http.Request, cluste
 		if err := p.SigningOverride(req, creds); err != nil {
 			return nil, err
 		}
+	} else {
+		if p.Materializer == nil {
+			return nil, fmt.Errorf("GKE credential materializer is not configured")
+		}
+		serviceAccountJSON := strings.TrimSpace(creds["service_account_json"])
+		if serviceAccountJSON == "" {
+			return nil, fmt.Errorf("GKE credential requires service_account_json")
+		}
+		config, err := google.JWTConfigFromJSON([]byte(serviceAccountJSON), "https://www.googleapis.com/auth/cloud-platform")
+		if err != nil {
+			return nil, fmt.Errorf("parse GKE service account credential: %w", err)
+		}
+		baseClient := p.HTTPClient
+		if baseClient == nil {
+			baseClient = httpclient.DefaultExternal()
+		}
+		tokenCtx := context.WithValue(ctx, oauth2.HTTPClient, baseClient)
+		token, err := config.TokenSource(tokenCtx).Token()
+		if err != nil {
+			return nil, fmt.Errorf("acquire GKE OAuth token: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token.AccessToken)
 	}
 	client := p.HTTPClient
 	if client == nil {
@@ -103,7 +155,7 @@ func (p *GKEProvider) signAndSend(ctx context.Context, req *http.Request, cluste
 }
 
 func (p *GKEProvider) GetEffective(ctx context.Context, cluster Cluster) ([]string, error) {
-	path, err := p.resourcePath(cluster)
+	path, err := p.resourcePath(ctx, cluster)
 	if err != nil {
 		return nil, err
 	}
@@ -120,22 +172,26 @@ func (p *GKEProvider) GetEffective(ctx context.Context, cluster Cluster) ([]stri
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode/100 != 2 {
-		rb, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GKE GetCluster %s: status %d: %s", cluster.Name, resp.StatusCode, string(rb))
+		rb, _ := io.ReadAll(io.LimitReader(resp.Body, maxProviderErrorBody))
+		return nil, &HTTPError{Provider: ProviderGKE, Operation: "get_cluster", StatusCode: resp.StatusCode, Body: string(rb), RetryAfter: retryAfter(resp.Header.Get("Retry-After"))}
 	}
 	var out gkeClusterResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, fmt.Errorf("GKE GetCluster decode: %w", err)
 	}
-	cidrs := make([]string, 0, len(out.MasterAuthorizedNetworksConfig.CidrBlocks))
-	for _, b := range out.MasterAuthorizedNetworksConfig.CidrBlocks {
+	config := out.ControlPlaneEndpointsConfig.IPEndpointsConfig.AuthorizedNetworksConfig
+	if len(config.CidrBlocks) == 0 && len(out.MasterAuthorizedNetworksConfig.CidrBlocks) > 0 {
+		config = out.MasterAuthorizedNetworksConfig
+	}
+	cidrs := make([]string, 0, len(config.CidrBlocks))
+	for _, b := range config.CidrBlocks {
 		cidrs = append(cidrs, b.CidrBlock)
 	}
 	return allowlist.CanonicaliseEffective(cidrs), nil
 }
 
 func (p *GKEProvider) Apply(ctx context.Context, cluster Cluster, cidrs []string) error {
-	path, err := p.resourcePath(cluster)
+	path, err := p.resourcePath(ctx, cluster)
 	if err != nil {
 		return err
 	}
@@ -149,11 +205,12 @@ func (p *GKEProvider) Apply(ctx context.Context, cluster Cluster, cidrs []string
 	}
 
 	body := gkeUpdateRequest{}
-	body.Update.DesiredMasterAuthorizedNetworksConfig.Enabled = true
-	body.Update.DesiredMasterAuthorizedNetworksConfig.CidrBlocks = make([]gkeCidrBlock, 0, len(desired))
+	config := &body.Update.DesiredControlPlaneEndpointsConfig.IPEndpointsConfig.AuthorizedNetworksConfig
+	config.Enabled = true
+	config.CidrBlocks = make([]gkeCidrBlock, 0, len(desired))
 	for _, c := range desired {
-		body.Update.DesiredMasterAuthorizedNetworksConfig.CidrBlocks = append(
-			body.Update.DesiredMasterAuthorizedNetworksConfig.CidrBlocks,
+		config.CidrBlocks = append(
+			config.CidrBlocks,
 			gkeCidrBlock{CidrBlock: c, DisplayName: "astronomer-managed"},
 		)
 	}
@@ -175,8 +232,8 @@ func (p *GKEProvider) Apply(ctx context.Context, cluster Cluster, cidrs []string
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode/100 != 2 {
-		rb, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("GKE Update %s: status %d: %s", cluster.Name, resp.StatusCode, string(rb))
+		rb, _ := io.ReadAll(io.LimitReader(resp.Body, maxProviderErrorBody))
+		return &HTTPError{Provider: ProviderGKE, Operation: "update_cluster", StatusCode: resp.StatusCode, Body: string(rb), RetryAfter: retryAfter(resp.Header.Get("Retry-After"))}
 	}
 	return nil
 }

@@ -27,11 +27,15 @@ import (
 // dependency. The unique-index re-rating semantic is reproduced here via
 // findExisting in the create path.
 type fakeRatingsQuerier struct {
-	ratings    map[uuid.UUID]sqlc.ChartRating
-	aggregates map[uuid.UUID]sqlc.ChartRatingAggregate
-	coEdges    map[[2]uuid.UUID]int32
-	charts     map[uuid.UUID]sqlc.HelmChart
-	users      map[uuid.UUID]sqlc.User
+	ratings      map[uuid.UUID]sqlc.ChartRating
+	aggregates   map[uuid.UUID]sqlc.ChartRatingAggregate
+	coEdges      map[[2]uuid.UUID]int32
+	charts       map[uuid.UUID]sqlc.HelmChart
+	users        map[uuid.UUID]sqlc.User
+	audits       []sqlc.UpsertAuditOutboxParams
+	lockKeys     []string
+	outboxErr    error
+	aggregateErr error
 }
 
 func newFakeRatingsQuerier() *fakeRatingsQuerier {
@@ -75,6 +79,9 @@ func (f *fakeRatingsQuerier) CountChartRatingsByChart(_ context.Context, chartID
 }
 
 func (f *fakeRatingsQuerier) UpsertChartRatingAggregate(_ context.Context, arg sqlc.UpsertChartRatingAggregateParams) (sqlc.ChartRatingAggregate, error) {
+	if f.aggregateErr != nil {
+		return sqlc.ChartRatingAggregate{}, f.aggregateErr
+	}
 	a := sqlc.ChartRatingAggregate{
 		ChartID: arg.ChartID, RatingCount: arg.RatingCount, RatingSum: arg.RatingSum,
 		AvgStars: arg.AvgStars, BayesianScore: arg.BayesianScore, UpdatedAt: time.Now(),
@@ -253,7 +260,9 @@ func newRatingsHandler(t *testing.T) (*ChartRatingsHandler, *fakeRatingsQuerier,
 	q.charts[chartID] = sqlc.HelmChart{ID: chartID, Name: "demo"}
 	userID := uuid.New()
 	q.users[userID] = sqlc.User{ID: userID, IsSuperuser: false}
-	return NewChartRatingsHandler(q), q, chartID, userID
+	h := NewChartRatingsHandler(q)
+	h.SetRunTx(fakeRatingsRunTx(q))
+	return h, q, chartID, userID
 }
 
 // doAuth wraps a request with an injected authenticated user. chi

@@ -17,14 +17,19 @@ export const CSRF_HEADER = 'X-CSRF-Token';
  * Fill and submit the real credentials form. Does not wait for navigation.
  *
  * Rate-limit aware: /auth/login/ sits behind a fixed-window 5/min/IP limiter
- * (internal/server/middleware/login_rate_limit.go) and every live spec —
- * plus every `retries: 1` re-attempt — logs in as the same admin from the
- * same IP, so back-to-back runs can eat the window. On a 429 we wait out
+ * (internal/server/middleware/login_rate_limit.go) and every live spec logs in
+ * as the same admin from the same IP, so back-to-back retry-free suites can eat
+ * the window. On a 429 we wait out
  * the advertised Retry-After and resubmit instead of failing the spec.
  */
 export async function submitLoginForm(page: Page) {
-  await page.locator('#identifier').fill(ADMIN_EMAIL);
-  await page.locator('#password').fill(ADMIN_PASSWORD);
+  await submitLoginFormAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+}
+
+/** Submit the real login form as an explicitly seeded live-fixture identity. */
+export async function submitLoginFormAs(page: Page, email: string, password: string) {
+  await page.locator('#identifier').fill(email);
+  await page.locator('#password').fill(password);
   for (let attempt = 0; attempt < 3; attempt++) {
     const loginResponse = page.waitForResponse(
       (res) => res.url().endsWith('/auth/login/') && res.request().method() === 'POST',
@@ -42,6 +47,12 @@ export async function submitLoginForm(page: Page) {
 export async function loginViaForm(page: Page) {
   await page.goto('/auth/login');
   await submitLoginForm(page);
+  await expect(page).toHaveURL(/\/dashboard/);
+}
+
+export async function loginViaFormAs(page: Page, email: string, password: string) {
+  await page.goto('/auth/login');
+  await submitLoginFormAs(page, email, password);
   await expect(page).toHaveURL(/\/dashboard/);
 }
 

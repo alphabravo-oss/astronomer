@@ -12,6 +12,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 const maximumManifestBytes = 1 << 20
@@ -60,12 +62,25 @@ type Manifest struct {
 			MaximumMinor string `json:"maximum_minor"`
 		} `json:"kubernetes"`
 		AgentProtocol struct {
-			Name    string `json:"name"`
-			Minimum int    `json:"minimum"`
-			Maximum int    `json:"maximum"`
+			Name                 string   `json:"name"`
+			Minimum              int      `json:"minimum"`
+			Maximum              int      `json:"maximum"`
+			RequiredCapabilities []string `json:"required_capabilities"`
 		} `json:"agent_protocol"`
+		Agent struct {
+			MinimumCompatibleVersion         string `json:"minimum_compatible_version"`
+			MinimumSupportedVersion          string `json:"minimum_supported_version"`
+			MaximumSupportedVersionExclusive string `json:"maximum_supported_version_exclusive"`
+			TunnelProtocolMinimum            int    `json:"tunnel_protocol_minimum"`
+			TunnelProtocolMaximum            int    `json:"tunnel_protocol_maximum"`
+			HeartbeatSchemaMinimum           int    `json:"heartbeat_schema_minimum"`
+			HeartbeatSchemaMaximum           int    `json:"heartbeat_schema_maximum"`
+		} `json:"agent"`
 		PostgreSQL struct {
-			SupportedMajors []int `json:"supported_majors"`
+			SupportedMajors         []int `json:"supported_majors"`
+			MinimumUpgradeSchema    int   `json:"minimum_upgrade_schema"`
+			TargetSchema            int   `json:"target_schema"`
+			ReversibleThroughSchema int   `json:"reversible_through_schema"`
 		} `json:"postgresql"`
 		Browsers struct {
 			SupportPolicy  string `json:"support_policy"`
@@ -113,17 +128,24 @@ type Manifest struct {
 // Projection is the narrow release data consumed by registration and system
 // rollout. It intentionally contains no registry credentials or mutable tags.
 type Projection struct {
-	Version                string
-	AgentImage             string
-	FluxVersion            string
-	FluxRepository         string
-	FluxDigest             string
-	BundleRepository       string
-	BundleDigest           string
-	MinimumKubernetesMinor string
-	MaximumKubernetesMinor string
-	CertificateOIDCIssuer  string
-	CertificateIdentity    string
+	Version                               string
+	AgentImage                            string
+	FluxVersion                           string
+	FluxRepository                        string
+	FluxDigest                            string
+	BundleRepository                      string
+	BundleDigest                          string
+	MinimumKubernetesMinor                string
+	MaximumKubernetesMinor                string
+	CertificateOIDCIssuer                 string
+	CertificateIdentity                   string
+	MinimumCompatibleAgentVersion         string
+	MinimumSupportedAgentVersion          string
+	MaximumSupportedAgentVersionExclusive string
+	TunnelProtocolMinimum                 int
+	TunnelProtocolMaximum                 int
+	HeartbeatSchemaMinimum                int
+	HeartbeatSchemaMaximum                int
 }
 
 type mirrorMapping struct {
@@ -248,7 +270,7 @@ func ApplyMirrorMapping(path, manifestPath string, release Projection) (Projecti
 }
 
 func (manifest Manifest) Validate(expectedVersion string) (Projection, error) {
-	if manifest.SchemaVersion != 1 || manifest.Release.InstallMode != "fresh_only" || !versionPattern.MatchString(manifest.Release.Version) {
+	if manifest.SchemaVersion != 1 || manifest.Release.InstallMode != "fresh_and_upgrade" || !versionPattern.MatchString(manifest.Release.Version) {
 		return Projection{}, errors.New("release manifest metadata is invalid")
 	}
 	expectedVersion = "v" + strings.TrimPrefix(strings.TrimSpace(expectedVersion), "v")
@@ -261,8 +283,21 @@ func (manifest Manifest) Validate(expectedVersion string) (Projection, error) {
 		return Projection{}, errors.New("release manifest signing identity is invalid")
 	}
 	if manifest.Compatibility.AgentProtocol.Name != "astronomer.delivery" ||
-		manifest.Compatibility.AgentProtocol.Minimum != 2 || manifest.Compatibility.AgentProtocol.Maximum != 2 ||
-		manifest.Compatibility.Kubernetes.MinimumMinor == "" || manifest.Compatibility.Kubernetes.MaximumMinor == "" {
+		manifest.Compatibility.AgentProtocol.Minimum != protocol.MinimumDeliveryProtocolVersion ||
+		manifest.Compatibility.AgentProtocol.Maximum != protocol.MaximumDeliveryProtocolVersion ||
+		!sameStringSet(manifest.Compatibility.AgentProtocol.RequiredCapabilities, protocol.RequiredConnectCapabilities()) ||
+		manifest.Compatibility.Agent.MinimumCompatibleVersion != protocol.MinimumCompatibleAgentVersion ||
+		manifest.Compatibility.Agent.MinimumSupportedVersion != protocol.MinimumSupportedAgentVersion ||
+		manifest.Compatibility.Agent.MaximumSupportedVersionExclusive != protocol.MaximumSupportedAgentVersionExclusive ||
+		manifest.Compatibility.Agent.TunnelProtocolMinimum != protocol.MinimumTunnelProtocolVersion ||
+		manifest.Compatibility.Agent.TunnelProtocolMaximum != protocol.MaximumTunnelProtocolVersion ||
+		manifest.Compatibility.Agent.HeartbeatSchemaMinimum != protocol.MinimumHeartbeatSchemaVersion ||
+		manifest.Compatibility.Agent.HeartbeatSchemaMaximum != protocol.MaximumHeartbeatSchemaVersion ||
+		manifest.Compatibility.Kubernetes.MinimumMinor == "" || manifest.Compatibility.Kubernetes.MaximumMinor == "" ||
+		manifest.Compatibility.PostgreSQL.MinimumUpgradeSchema < 1 ||
+		manifest.Compatibility.PostgreSQL.TargetSchema < manifest.Compatibility.PostgreSQL.MinimumUpgradeSchema ||
+		manifest.Compatibility.PostgreSQL.ReversibleThroughSchema > manifest.Compatibility.PostgreSQL.TargetSchema ||
+		len(manifest.Compatibility.PostgreSQL.SupportedMajors) == 0 {
 		return Projection{}, errors.New("release manifest compatibility is invalid")
 	}
 	if manifest.Flux.Version == "" || len(manifest.Flux.Controllers) != 3 || len(manifest.Flux.APIs) < 3 ||
@@ -302,11 +337,35 @@ func (manifest Manifest) Validate(expectedVersion string) (Projection, error) {
 	return Projection{
 		Version: manifest.Release.Version, AgentImage: agentImage, FluxVersion: manifest.Flux.Version,
 		FluxRepository: fluxRepository, FluxDigest: fluxDigest, BundleRepository: bundleRepository, BundleDigest: bundleDigest,
-		MinimumKubernetesMinor: manifest.Compatibility.Kubernetes.MinimumMinor,
-		MaximumKubernetesMinor: manifest.Compatibility.Kubernetes.MaximumMinor,
-		CertificateOIDCIssuer:  manifest.Release.SigningPolicy.CertificateOIDCIssuer,
-		CertificateIdentity:    manifest.Release.SigningPolicy.CertificateIdentity,
+		MinimumKubernetesMinor:                manifest.Compatibility.Kubernetes.MinimumMinor,
+		MaximumKubernetesMinor:                manifest.Compatibility.Kubernetes.MaximumMinor,
+		CertificateOIDCIssuer:                 manifest.Release.SigningPolicy.CertificateOIDCIssuer,
+		CertificateIdentity:                   manifest.Release.SigningPolicy.CertificateIdentity,
+		MinimumCompatibleAgentVersion:         manifest.Compatibility.Agent.MinimumCompatibleVersion,
+		MinimumSupportedAgentVersion:          manifest.Compatibility.Agent.MinimumSupportedVersion,
+		MaximumSupportedAgentVersionExclusive: manifest.Compatibility.Agent.MaximumSupportedVersionExclusive,
+		TunnelProtocolMinimum:                 manifest.Compatibility.Agent.TunnelProtocolMinimum,
+		TunnelProtocolMaximum:                 manifest.Compatibility.Agent.TunnelProtocolMaximum,
+		HeartbeatSchemaMinimum:                manifest.Compatibility.Agent.HeartbeatSchemaMinimum,
+		HeartbeatSchemaMaximum:                manifest.Compatibility.Agent.HeartbeatSchemaMaximum,
 	}, nil
+}
+
+func sameStringSet(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	counts := make(map[string]int, len(left))
+	for _, item := range left {
+		counts[item]++
+	}
+	for _, item := range right {
+		counts[item]--
+		if counts[item] < 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func validateArtifact(item Artifact) error {

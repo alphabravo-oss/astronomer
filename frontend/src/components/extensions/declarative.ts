@@ -9,14 +9,14 @@
 // be unit tested without rendering, and every formatter is a closed enum so a
 // hostile manifest can never inject markup — the value always becomes a string.
 
-import { formatBytes, formatDate } from '@/lib/utils';
+import { formatBytes, formatDate } from "@/lib/utils";
 import type {
   ChartSpec,
   DataShape,
   ExtensionDataResponse,
   FieldBinding,
   FieldFormat,
-} from '@/lib/api/extensions';
+} from "@/lib/api/extensions";
 
 // A single proxied row is an opaque JSON object; we only read declared dot-paths.
 export type ProxyRow = Record<string, unknown>;
@@ -32,15 +32,16 @@ export type ProxyRow = Record<string, unknown>;
 export function getByPath(row: unknown, path: string): unknown {
   if (row == null || !path) return undefined;
   let cur: unknown = row;
-  for (const seg of path.split('.')) {
+  for (const seg of path.split(".")) {
     if (cur == null) return undefined;
     if (Array.isArray(cur)) {
       const idx = Number(seg);
-      if (!Number.isInteger(idx) || idx < 0 || idx >= cur.length) return undefined;
+      if (!Number.isInteger(idx) || idx < 0 || idx >= cur.length)
+        return undefined;
       cur = cur[idx];
       continue;
     }
-    if (typeof cur !== 'object') return undefined;
+    if (typeof cur !== "object") return undefined;
     cur = (cur as Record<string, unknown>)[seg];
   }
   return cur;
@@ -52,50 +53,53 @@ export function getByPath(row: unknown, path: string): unknown {
 // `null`/`undefined`/non-finite numbers render as an em dash ("no data"),
 // distinct from a real 0.
 // ---------------------------------------------------------------------------
-const EM_DASH = '—';
+const EM_DASH = "—";
 
 export function formatValue(value: unknown, format?: FieldFormat): string {
   if (value === null || value === undefined) return EM_DASH;
 
   switch (format) {
-    case 'number':
+    case "number":
       return formatNumberLike(value);
-    case 'currency':
+    case "currency":
       return formatCurrency(value);
-    case 'bytes': {
+    case "bytes": {
       const n = toFiniteNumber(value);
       return n === undefined ? String(value) : formatBytes(n);
     }
-    case 'datetime': {
-      const s = typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+    case "datetime": {
+      const s =
+        typeof value === "string" || typeof value === "number"
+          ? String(value)
+          : "";
       return s ? formatDate(s) : EM_DASH;
     }
-    case 'duration':
+    case "duration":
       return formatDuration(value);
-    case 'badge':
+    case "badge":
       // The badge label is the raw text; the renderer wraps it in a StatusBadge.
       return String(value);
-    case 'text':
+    case "text":
     default:
       return stringifyScalar(value);
   }
 }
 
 function toFiniteNumber(value: unknown): number | undefined {
-  const n = typeof value === 'number' ? value : Number(value);
+  const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : undefined;
 }
 
 function formatNumberLike(value: unknown): string {
   const n = toFiniteNumber(value);
   if (n === undefined) return String(value);
-  return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 function formatCurrency(value: unknown): string {
   const n = toFiniteNumber(value);
   if (n === undefined) return String(value);
-  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
 // Duration: input is a count of seconds. Renders the largest two units
@@ -115,14 +119,14 @@ export function formatDuration(value: unknown): string {
   if (h) parts.push(`${h}h`);
   if (m) parts.push(`${m}m`);
   if (secs || parts.length === 0) parts.push(`${secs}s`);
-  return parts.slice(0, 2).join(' ');
+  return parts.slice(0, 2).join(" ");
 }
 
 // A scalar that is not run through a numeric/date formatter: objects/arrays are
 // JSON-stringified so a cell never renders "[object Object]" or leaks a nested
 // structure as live nodes. Strings/numbers/booleans pass through as text.
 function stringifyScalar(value: unknown): string {
-  if (typeof value === 'object') {
+  if (typeof value === "object") {
     try {
       return JSON.stringify(value);
     } catch {
@@ -139,7 +143,9 @@ function stringifyScalar(value: unknown): string {
 // can return into the row array the renderers iterate, tolerating the data being
 // either the bare value or wrapped in { rows }.
 // ---------------------------------------------------------------------------
-export function extractRows(res: ExtensionDataResponse | undefined): ProxyRow[] {
+export function extractRows(
+  res: ExtensionDataResponse | undefined,
+): ProxyRow[] {
   if (!res) return [];
   const data = res.data as unknown;
   const unwrapped = unwrapRows(data);
@@ -155,7 +161,9 @@ export function extractRows(res: ExtensionDataResponse | undefined): ProxyRow[] 
 
 // The single row for an object/stat widget: first extracted row, or {} so a
 // stat with a missing field renders an em dash rather than crashing.
-export function extractObject(res: ExtensionDataResponse | undefined): ProxyRow {
+export function extractObject(
+  res: ExtensionDataResponse | undefined,
+): ProxyRow {
   return extractRows(res)[0] ?? {};
 }
 
@@ -167,7 +175,7 @@ function unwrapRows(data: unknown): unknown {
 }
 
 function isRecord(v: unknown): v is ProxyRow {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,9 +189,12 @@ export interface ChartPoint {
   values: number[];
 }
 
-export function buildChartSeries(rows: ProxyRow[], spec: ChartSpec): ChartPoint[] {
+export function buildChartSeries(
+  rows: ProxyRow[],
+  spec: ChartSpec,
+): ChartPoint[] {
   return rows.map((row) => ({
-    x: formatValue(getByPath(row, spec.x), 'text'),
+    x: formatValue(getByPath(row, spec.x), "text"),
     values: spec.y.map((yPath) => toFiniteNumber(getByPath(row, yPath)) ?? 0),
   }));
 }
@@ -208,7 +219,7 @@ export function isEmptyResponse(
 ): boolean {
   if (!res) return true;
   const rows = extractRows(res);
-  if (shape === 'object') {
+  if (shape === "object") {
     return Object.keys(rows[0] ?? {}).length === 0;
   }
   return rows.length === 0;
@@ -218,9 +229,16 @@ export function isEmptyResponse(
 // omits fields — the union of keys across the first row, each as a text column.
 // (The proxy already projected to the allowlisted fields server-side; this is a
 // display fallback so a fields-less table still renders something sane.)
-export function tableColumns(rows: ProxyRow[], fields?: FieldBinding[]): FieldBinding[] {
+export function tableColumns(
+  rows: ProxyRow[],
+  fields?: FieldBinding[],
+): FieldBinding[] {
   if (fields && fields.length) return fields;
   const first = rows[0];
   if (!first) return [];
-  return Object.keys(first).map((k) => ({ path: k, label: k, format: 'text' as FieldFormat }));
+  return Object.keys(first).map((k) => ({
+    path: k,
+    label: k,
+    format: "text" as FieldFormat,
+  }));
 }

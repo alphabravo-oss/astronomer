@@ -16,11 +16,13 @@ import (
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
 	"github.com/alphabravocompany/astronomer-go/internal/agentlifecycle"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
@@ -40,6 +42,13 @@ type ClusterAgentQuerier interface {
 	ListAgentLifecycleOperationsByCluster(ctx context.Context, arg sqlc.ListAgentLifecycleOperationsByClusterParams) ([]sqlc.AgentLifecycleOperation, error)
 }
 
+type ClusterAgentMutationTx interface {
+	ClusterAgentQuerier
+	audit.OutboxQuerier
+}
+
+type clusterAgentRunTxFunc func(context.Context, func(ClusterAgentMutationTx) error) error
+
 type ClusterAgentHandler struct {
 	queries                    ClusterAgentQuerier
 	now                        func() time.Time
@@ -48,7 +57,16 @@ type ClusterAgentHandler struct {
 	agentUpgradeDefaultProfile string
 	requester                  K8sRequester
 	bus                        *events.Bus
+	runTx                      clusterAgentRunTxFunc
 }
+
+func (h *ClusterAgentHandler) SetRunTx(runTx clusterAgentRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *ClusterAgentHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // SetEventBus wires the SSE bus for cluster_agents.changed liveness events
 // (P4.5). Optional: fire-and-forget and nil-safe.
@@ -110,6 +128,7 @@ type clusterAgentSummary struct {
 	ServerVersion                 string         `json:"server_version"`
 	MinimumSupportedAgentVersion  string         `json:"minimum_supported_agent_version"`
 	MinimumCompatibleAgentVersion string         `json:"minimum_compatible_agent_version"`
+	MaximumSupportedAgentVersion  string         `json:"maximum_supported_agent_version_exclusive"`
 	GeneratedAt                   string         `json:"generated_at"`
 }
 
@@ -390,6 +409,7 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 		ServerVersion:                 version.Version,
 		MinimumSupportedAgentVersion:  agentcompat.MinimumSupportedVersion,
 		MinimumCompatibleAgentVersion: agentcompat.MinimumCompatibleVersion,
+		MaximumSupportedAgentVersion:  protocol.MaximumSupportedAgentVersionExclusive,
 		GeneratedAt:                   now.Format(time.RFC3339),
 	}
 	for _, cluster := range clusters {
@@ -790,6 +810,9 @@ func (h *ClusterAgentHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
 	}
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
@@ -811,6 +834,10 @@ func (h *ClusterAgentHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "agent lifecycle transaction runner is not configured")
+		return
+	}
 	spec, err := json.Marshal(map[string]any{
 		"request":      req,
 		"plan":         plan,
@@ -821,7 +848,7 @@ func (h *ClusterAgentHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode lifecycle operation")
 		return
 	}
-	op, err := h.createAgentLifecycleOperation(withOperationIdempotency(r, "agent_lifecycle"), sqlc.CreateAgentLifecycleOperationParams{
+	params := sqlc.CreateAgentLifecycleOperationParams{
 		ClusterID:      cluster.ID,
 		OperationType:  agentlifecycle.OperationTypeUpgrade,
 		TargetVersion:  plan.TargetVersion,
@@ -830,31 +857,70 @@ func (h *ClusterAgentHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		Strategy:       plan.Strategy,
 		OperationSpec:  spec,
 		RequestedBy:    currentUserUUID(r),
-	})
+	}
+	r = r.WithContext(withOperationIdempotency(r, "agent_lifecycle"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		ClusterID string                  `json:"cluster_id"`
+		Request   agentUpgradePlanRequest `json:"request"`
+	}{ClusterID: cluster.ID.String(), Request: req})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to queue agent upgrade operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode lifecycle request")
 		return
 	}
-	h.publishClusterAgentChanged(cluster.ID, op.ID.String())
-	recordAudit(r, h.queries, "agent.upgrade.queued", "agent_lifecycle_operation", op.ID.String(), firstNonEmptyAgentValue(cluster.DisplayName, cluster.Name), map[string]any{
-		"cluster_id":      cluster.ID.String(),
-		"current_version": plan.CurrentVersion,
-		"target_version":  plan.TargetVersion,
-		"target_image":    plan.TargetImage,
-		"strategy":        plan.Strategy,
+	receipt := agentUpgradeOperationResponse{Operation: agentLifecycleOperationDTO(sqlc.AgentLifecycleOperation{}), Plan: plan}
+	replayed := false
+	var op sqlc.AgentLifecycleOperation
+	err = h.runTx(r.Context(), func(q ClusterAgentMutationTx) error {
+		idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+		if !ok {
+			return errors.New("agent lifecycle idempotency store is not configured")
+		}
+		_, stored, replay, claimErr := claimOperationReceipt[agentUpgradeOperationResponse](r.Context(), idemQ, "agent_lifecycle_operations", digest)
+		if claimErr != nil {
+			return claimErr
+		}
+		if replay {
+			receipt = stored
+			replayed = true
+			return nil
+		}
+		var createErr error
+		op, createErr = createAgentLifecycleOperation(r.Context(), q, params)
+		if createErr != nil {
+			return createErr
+		}
+		if op.ClusterID != params.ClusterID || op.OperationType != params.OperationType || op.TargetVersion != params.TargetVersion || op.TargetImage != params.TargetImage || op.Strategy != params.Strategy {
+			return errOperationIdempotencyConflict
+		}
+		receipt = agentUpgradeOperationResponse{Operation: agentLifecycleOperationDTO(op), Plan: plan}
+		if auditErr := recordAuditOutbox(r, q, "agent.upgrade.queued", "agent_lifecycle_operation", op.ID.String(), firstNonEmptyAgentValue(cluster.DisplayName, cluster.Name), http.StatusAccepted, map[string]any{
+			"cluster_id": cluster.ID.String(), "current_version": plan.CurrentVersion,
+			"target_version": plan.TargetVersion, "strategy": plan.Strategy,
+		}); auditErr != nil {
+			return auditErr
+		}
+		return attachOperationReceipt(r.Context(), idemQ, "agent_lifecycle_operations", op.ID, digest, receipt)
 	})
-	RespondJSON(w, http.StatusAccepted, agentUpgradeOperationResponse{
-		Operation: agentLifecycleOperationDTO(op),
-		Plan:      plan,
-	})
+	if errors.Is(err, errOperationIdempotencyConflict) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different agent upgrade")
+		return
+	}
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to queue agent upgrade operation")
+		return
+	}
+	if !replayed {
+		h.publishClusterAgentChanged(cluster.ID, op.ID.String())
+	}
+	RespondAcceptedOperation(w, "/api/v1/cluster-agents/"+cluster.ID.String()+"/operations/", receipt)
 }
 
-func (h *ClusterAgentHandler) createAgentLifecycleOperation(ctx context.Context, params sqlc.CreateAgentLifecycleOperationParams) (sqlc.AgentLifecycleOperation, error) {
+func createAgentLifecycleOperation(ctx context.Context, q ClusterAgentQuerier, params sqlc.CreateAgentLifecycleOperationParams) (sqlc.AgentLifecycleOperation, error) {
 	if idem, ok := operationIdempotencyFromContext(ctx); ok {
 		type idempotentCreator interface {
 			CreateAgentLifecycleOperationIdempotent(context.Context, sqlc.CreateAgentLifecycleOperationIdempotentParams) (sqlc.AgentLifecycleOperation, error)
 		}
-		if creator, ok := h.queries.(idempotentCreator); ok {
+		if creator, ok := q.(idempotentCreator); ok {
 			return creator.CreateAgentLifecycleOperationIdempotent(ctx, sqlc.CreateAgentLifecycleOperationIdempotentParams{
 				Scope:          idem.scope,
 				IdempotencyKey: idem.key,
@@ -869,7 +935,7 @@ func (h *ClusterAgentHandler) createAgentLifecycleOperation(ctx context.Context,
 			})
 		}
 	}
-	return h.queries.CreateAgentLifecycleOperation(ctx, params)
+	return q.CreateAgentLifecycleOperation(ctx, params)
 }
 
 func (h *ClusterAgentHandler) Operations(w http.ResponseWriter, r *http.Request) {
@@ -996,7 +1062,11 @@ func buildClusterAgentItem(cluster sqlc.Cluster, conn sqlc.AgentConnection, conn
 	if len(reasons) > 0 {
 		item.AgentStatus = "degraded"
 		item.DegradedReasons = reasons
-		item.RecommendedAction = "Review the degraded reasons and rotate to the least-privilege operator profile where possible."
+		if compatibility.UpgradeRecommendation != "" {
+			item.RecommendedAction = compatibility.UpgradeRecommendation
+		} else {
+			item.RecommendedAction = "Review the degraded reasons and rotate to the least-privilege operator profile where possible."
+		}
 		return item
 	}
 	item.AgentStatus = "connected"

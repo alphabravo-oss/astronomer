@@ -97,10 +97,11 @@ v1 safety settings. For external PostgreSQL, the read-only hook:
 
 1. proves the configured DSN is reachable;
 2. accepts a truly empty `public` schema;
-3. accepts one clean migration row at schema version 1 only when all required
-   v1 delivery tables exist;
-4. rejects dirty, unknown, multi-row, pre-v1, or recognizable old delivery
-   schemas; and
+3. accepts one clean migration row inside the release compatibility manifest's
+   `minimum_upgrade_schema`–`target_schema` range only when required baseline
+   tables exist;
+4. rejects dirty, future, below-minimum, multi-row, or recognizable legacy
+   delivery schemas; and
 5. never mutates the database or deletes a persistent volume.
 
 The hook also validates required Kubernetes APIs, ingress or Gateway API
@@ -109,7 +110,7 @@ actionable and leaves existing data untouched.
 
 The bundled development database cannot be queried by a pre-install hook
 because its StatefulSet does not exist yet. The migration job initializes that
-new volume at v1.
+new volume to the chart's declared target schema.
 
 ## Flux-native delivery contract
 

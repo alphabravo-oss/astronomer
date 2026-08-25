@@ -22,9 +22,7 @@ export function normalizeCharlieAdminTab(
     : "connection";
 }
 
-export function canManageCharlie(
-  user: User | null | undefined,
-): boolean {
+export function canManageCharlie(user: User | null | undefined): boolean {
   // Feature/connection state controls runtime authority, not access to the
   // local administration surface needed to inspect or enable it.
   return can(user, "charlie", "manage");
@@ -76,7 +74,7 @@ export function automationValidationIssues(input: {
     gracePeriodSeconds: number;
     flapWindowSeconds: number;
     flapCount: number;
-    fleetThresholdPercent: number;
+    estateThresholdPercent: number;
     maximumAttempts: number;
     serviceIdentity: string;
     modeCeiling: string;
@@ -102,13 +100,17 @@ export function automationValidationIssues(input: {
         rule.maximumAttempts,
       ].some((value) => !Number.isInteger(value) || value < 1)
     )
-      issues.push(`${label} timing, flap count, and attempts must be positive integers.`);
+      issues.push(
+        `${label} timing, flap count, and attempts must be positive integers.`,
+      );
     if (
-      !Number.isInteger(rule.fleetThresholdPercent) ||
-      rule.fleetThresholdPercent < 0 ||
-      rule.fleetThresholdPercent > 100
+      !Number.isInteger(rule.estateThresholdPercent) ||
+      rule.estateThresholdPercent < 0 ||
+      rule.estateThresholdPercent > 100
     )
-      issues.push(`${label} cluster coverage threshold must be between 0 and 100.`);
+      issues.push(
+        `${label} cluster coverage threshold must be between 0 and 100.`,
+      );
   });
   return issues;
 }

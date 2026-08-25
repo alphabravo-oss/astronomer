@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -14,11 +15,37 @@ import (
 
 type fakeWriter struct {
 	last *sqlc.CreateAuditLogV1Params
+	err  error
 }
 
 func (f *fakeWriter) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
 	f.last = &arg
-	return nil
+	return f.err
+}
+
+func TestRecordMandatoryReturnsPersistenceFailure(t *testing.T) {
+	want := errors.New("database unavailable")
+	writer := &fakeWriter{err: want}
+	err := RecordMandatory(context.Background(), writer, Event{
+		Action:       "compliance.report.export",
+		ActionClass:  ClassRead,
+		ResourceType: "security_scan",
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("RecordMandatory error = %v, want %v", err, want)
+	}
+	if writer.last == nil {
+		t.Fatal("mandatory audit row was not attempted")
+	}
+	if writer.last.ActionClass != ClassRead {
+		t.Fatalf("action class = %q, want %q", writer.last.ActionClass, ClassRead)
+	}
+}
+
+func TestRecordMandatoryRejectsMissingWriter(t *testing.T) {
+	if err := RecordMandatory(context.Background(), nil, Event{Action: "compliance.report.export"}); !errors.Is(err, ErrMandatoryPersistenceUnavailable) {
+		t.Fatalf("RecordMandatory nil writer error = %v", err)
+	}
 }
 
 func TestSanitizeDetail(t *testing.T) {

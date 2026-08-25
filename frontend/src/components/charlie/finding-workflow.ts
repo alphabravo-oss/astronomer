@@ -27,7 +27,9 @@ export function findingWorkflowLabel(finding: CharlieFinding): string {
   return finding.workflowState.replaceAll("_", " ");
 }
 
-export function findingDecisionLabel(decision: FindingLifecycleDecision): string {
+export function findingDecisionLabel(
+  decision: FindingLifecycleDecision,
+): string {
   return decision.replaceAll("_", " ");
 }
 

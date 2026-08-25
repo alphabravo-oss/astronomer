@@ -36,6 +36,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/compliance"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -68,7 +69,14 @@ func init() {
 // (commit, rollback) so the handler can defer rollback and call
 // commit on success — keeping the tx-lifecycle dance out of the
 // engine itself.
-type runTxFunc func(ctx context.Context, fn func(q compliance.Querier) error) error
+type ComplianceBaselineMutationTx interface {
+	compliance.Querier
+	GetComplianceBaselineApplicationForUpdate(context.Context, uuid.UUID) (sqlc.ComplianceBaselineApplication, error)
+	GetActiveComplianceBaselineApplicationForUpdate(context.Context) (sqlc.ComplianceBaselineApplication, error)
+	audit.OutboxQuerier
+}
+
+type runTxFunc func(ctx context.Context, fn func(q ComplianceBaselineMutationTx) error) error
 
 // ComplianceBaselineReader is the read-only Querier interface the
 // handler uses for the non-mutating endpoints (List / Get / History
@@ -123,7 +131,7 @@ func NewComplianceBaselinesHandler(reader ComplianceBaselineReader, runTx runTxF
 // based on the engine's error return.
 func NewComplianceBaselinesHandlerFromPool(pool *pgxpool.Pool, logger *slog.Logger) *ComplianceBaselinesHandler {
 	reader := sqlc.New(pool)
-	runTx := func(ctx context.Context, fn func(q compliance.Querier) error) error {
+	runTx := func(ctx context.Context, fn func(q ComplianceBaselineMutationTx) error) error {
 		tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
 			return err
@@ -251,6 +259,7 @@ func (h *ComplianceBaselinesHandler) Diff(w http.ResponseWriter, r *http.Request
 }
 
 // ApplyRequest is the body shape for POST .../apply/.
+// openapi:request ComplianceBaselineApplyRequest
 type ApplyRequest struct {
 	Notes string `json:"notes,omitempty"`
 }
@@ -277,19 +286,30 @@ func (h *ComplianceBaselinesHandler) Apply(w http.ResponseWriter, r *http.Reques
 	}
 	userID := callerUUID(r)
 
-	// Capture pre-apply active slug for the audit detail.
-	prevActiveSlug := ""
-	if active, err := h.reader.GetActiveComplianceBaselineApplication(r.Context()); err == nil {
-		if base, err := h.reader.GetComplianceBaseline(r.Context(), active.BaselineID); err == nil {
-			prevActiveSlug = base.Slug
-		}
-	}
-
 	var appID uuid.UUID
-	txErr := h.runTx(r.Context(), func(q compliance.Querier) error {
-		var err error
-		appID, err = compliance.Apply(r.Context(), q, id, userID, req.Notes, h.logger)
-		return err
+	var baseline sqlc.ComplianceBaseline
+	txErr := h.runTx(r.Context(), func(q ComplianceBaselineMutationTx) error {
+		prevActiveSlug := ""
+		if active, activeErr := q.GetActiveComplianceBaselineApplicationForUpdate(r.Context()); activeErr == nil {
+			if base, baseErr := q.GetComplianceBaseline(r.Context(), active.BaselineID); baseErr == nil {
+				prevActiveSlug = base.Slug
+			}
+		} else if !errors.Is(activeErr, pgx.ErrNoRows) {
+			return activeErr
+		}
+		var applyErr error
+		appID, applyErr = compliance.Apply(r.Context(), q, id, userID, req.Notes, h.logger)
+		if applyErr != nil {
+			return applyErr
+		}
+		baseline, applyErr = q.GetComplianceBaseline(r.Context(), id)
+		if applyErr != nil {
+			return applyErr
+		}
+		return recordAuditOutbox(r, q, "compliance.baseline.applied", "compliance_baseline", id.String(), baseline.Slug, http.StatusOK, map[string]any{
+			"application_id": appID.String(), "slug": baseline.Slug, "prev_active_slug": prevActiveSlug,
+			"notes_present": req.Notes != "", "notes_length": len(req.Notes),
+		})
 	})
 	if txErr != nil {
 		if errors.Is(txErr, compliance.ErrAuditRetentionDowngrade) {
@@ -304,19 +324,12 @@ func (h *ComplianceBaselinesHandler) Apply(w http.ResponseWriter, r *http.Reques
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Baseline not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ApplyError, txErr.Error())
+		respondTransactionalMutationError(w, r, txErr, http.StatusInternalServerError, apierror.ApplyError, "Failed to apply compliance baseline")
 		return
 	}
 
-	// Refresh the active-baseline gauge + audit log.
-	baseline, _ := h.reader.GetComplianceBaseline(r.Context(), id)
+	// Refresh the active-baseline gauge only after state and audit commit.
 	h.updateActiveGauge(baseline.Slug)
-	recordAudit(r, h.auditQ, "compliance.baseline.applied", "compliance_baseline", id.String(), baseline.Slug, map[string]any{
-		"application_id":   appID.String(),
-		"slug":             baseline.Slug,
-		"prev_active_slug": prevActiveSlug,
-		"notes":            req.Notes,
-	})
 
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"application_id": appID,
@@ -378,8 +391,30 @@ func (h *ComplianceBaselinesHandler) Revert(w http.ResponseWriter, r *http.Reque
 	}
 	userID := callerUUID(r)
 
-	txErr := h.runTx(r.Context(), func(q compliance.Querier) error {
-		return compliance.Revert(r.Context(), q, id, userID, h.logger)
+	var reverted sqlc.ComplianceBaselineApplication
+	txErr := h.runTx(r.Context(), func(q ComplianceBaselineMutationTx) error {
+		var lockErr error
+		reverted, lockErr = q.GetComplianceBaselineApplicationForUpdate(r.Context(), id)
+		if lockErr != nil {
+			return lockErr
+		}
+		active, lockErr := q.GetActiveComplianceBaselineApplicationForUpdate(r.Context())
+		if lockErr != nil {
+			return lockErr
+		}
+		if active.ID != id {
+			return compliance.ErrNewerApplicationExists
+		}
+		if lockErr = compliance.Revert(r.Context(), q, id, userID, h.logger); lockErr != nil {
+			return lockErr
+		}
+		base, lockErr := q.GetComplianceBaseline(r.Context(), reverted.BaselineID)
+		if lockErr != nil {
+			return lockErr
+		}
+		return recordAuditOutbox(r, q, "compliance.baseline.reverted", "compliance_baseline_application", id.String(), base.Slug, http.StatusOK, map[string]any{
+			"application_id": id.String(), "baseline_id": reverted.BaselineID.String(), "slug": base.Slug,
+		})
 	})
 	if txErr != nil {
 		if errors.Is(txErr, compliance.ErrNewerApplicationExists) {
@@ -390,7 +425,7 @@ func (h *ComplianceBaselinesHandler) Revert(w http.ResponseWriter, r *http.Reque
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Application not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RevertError, txErr.Error())
+		respondTransactionalMutationError(w, r, txErr, http.StatusInternalServerError, apierror.RevertError, "Failed to revert compliance baseline")
 		return
 	}
 
@@ -403,10 +438,6 @@ func (h *ComplianceBaselinesHandler) Revert(w http.ResponseWriter, r *http.Reque
 		base, _ := h.reader.GetComplianceBaseline(r.Context(), app.BaselineID)
 		h.updateActiveGauge(base.Slug)
 	}
-
-	recordAudit(r, h.auditQ, "compliance.baseline.reverted", "compliance_baseline_application", id.String(), "", map[string]any{
-		"application_id": id.String(),
-	})
 
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"application_id": id,

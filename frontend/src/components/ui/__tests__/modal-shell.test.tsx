@@ -1,20 +1,26 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { ModalShell } from '@/components/ui/modal-shell';
+import { fireEvent, render, screen } from "@testing-library/react";
+import { ModalShell } from "@/components/ui/modal-shell";
 
-describe('ModalShell', () => {
-  it('renders title and body content', () => {
+describe("ModalShell", () => {
+  it("renders title and body content", () => {
     render(
       <ModalShell title="Security action" onClose={vi.fn()}>
         <p>Confirm the sensitive action.</p>
       </ModalShell>,
     );
 
-    expect(screen.getByRole('dialog', { name: 'Security action' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Security action' })).toBeInTheDocument();
-    expect(screen.getByText('Confirm the sensitive action.')).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Security action" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Security action" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Confirm the sensitive action."),
+    ).toBeInTheDocument();
   });
 
-  it('closes on Escape', () => {
+  it("closes on Escape", () => {
     const onClose = vi.fn();
     render(
       <ModalShell title="Security action" onClose={onClose}>
@@ -22,13 +28,13 @@ describe('ModalShell', () => {
       </ModalShell>,
     );
 
-    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('moves focus into the dialog and restores prior focus on unmount', () => {
-    const opener = document.createElement('button');
-    opener.textContent = 'Open modal';
+  it("moves focus into the dialog and restores prior focus on unmount", () => {
+    const opener = document.createElement("button");
+    opener.textContent = "Open modal";
     document.body.appendChild(opener);
     opener.focus();
 
@@ -38,14 +44,14 @@ describe('ModalShell', () => {
       </ModalShell>,
     );
 
-    expect(screen.getByLabelText('Close')).toHaveFocus();
+    expect(screen.getByLabelText("Close")).toHaveFocus();
 
     unmount();
     expect(opener).toHaveFocus();
     opener.remove();
   });
 
-  it('traps Tab focus inside the dialog', () => {
+  it("traps Tab focus inside the dialog", () => {
     render(
       <ModalShell
         title="Security action"
@@ -61,25 +67,25 @@ describe('ModalShell', () => {
       </ModalShell>,
     );
 
-    const close = screen.getByLabelText('Close');
-    const submit = screen.getByRole('button', { name: 'Submit' });
+    const close = screen.getByLabelText("Close");
+    const submit = screen.getByRole("button", { name: "Submit" });
 
     expect(close).toHaveFocus();
 
-    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
     expect(submit).toHaveFocus();
 
-    fireEvent.keyDown(document, { key: 'Tab' });
+    fireEvent.keyDown(document, { key: "Tab" });
     expect(close).toHaveFocus();
   });
 
-  it('honors autofocus on a field inside the dialog', () => {
+  it("honors managed initial focus on a field inside the dialog", () => {
     render(
       <ModalShell title="Type to confirm" onClose={vi.fn()}>
-        <input aria-label="Confirmation" autoFocus />
+        <input aria-label="Confirmation" data-initial-focus />
       </ModalShell>,
     );
 
-    expect(screen.getByLabelText('Confirmation')).toHaveFocus();
+    expect(screen.getByLabelText("Confirmation")).toHaveFocus();
   });
 });

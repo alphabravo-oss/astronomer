@@ -4624,7 +4624,6 @@ INSERT INTO public.cluster_roles (id, name, description, permissions, rules, is_
 -- Data for Name: cluster_templates; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.cluster_templates (id, name, description, spec, created_by, created_at, updated_at) VALUES ('9c13ee16-6c2d-4624-adab-bca25cb351f5', 'Platform baseline', 'Astronomer-recommended baseline operators applied to every newly-registered cluster: trivy-operator (image vuln scans), kube-state-metrics + node-exporter (metrics), fluent-bit (log forwarding), cert-manager (TLS). Builtin; clone before customizing.', '{"tools": [{"slug": "trivy-operator", "preset": "default", "namespace": "astronomer-trivy-system", "create_namespace": true}, {"slug": "kube-state-metrics", "preset": "default", "namespace": "astronomer-monitoring", "create_namespace": true}, {"slug": "prometheus-node-exporter", "preset": "default", "namespace": "astronomer-monitoring", "create_namespace": true}, {"slug": "fluent-bit", "preset": "default", "namespace": "astronomer-logging", "create_namespace": true}, {"slug": "cert-manager", "preset": "default", "namespace": "astronomer-cert-manager", "create_namespace": true}], "builtin": true}', NULL, '2026-08-17 02:45:16.82856+00', '2026-08-17 02:45:16.839787+00');
 
 
 --
@@ -4707,7 +4706,7 @@ INSERT INTO public.control_plane_policies (id, name, monitoring_queue_depth_thre
 
 INSERT INTO public.dashboard_widgets (id, name, description, widget_type, spec, scope, scope_ids, grid_x, grid_y, grid_w, grid_h, refresh_seconds, enabled, created_by, created_at, updated_at) VALUES ('33a22ca4-a957-4f7a-8f34-d9bbd0d30f4a', 'Pod CPU saturation', 'Per-cluster pod CPU usage as a percentage of requests. Edit the datasource + query when wiring Prometheus.', 'prom_sparkline', '{"step": "60s", "query": "sum(rate(container_cpu_usage_seconds_total[5m])) / sum(kube_pod_container_resource_requests{resource=\"cpu\"})", "duration": "1h", "datasource": "default"}', 'cluster', '{}', 0, 0, 6, 2, 60, true, NULL, '2026-08-17 02:45:16.667483+00', '2026-08-17 02:45:16.667483+00');
 INSERT INTO public.dashboard_widgets (id, name, description, widget_type, spec, scope, scope_ids, grid_x, grid_y, grid_w, grid_h, refresh_seconds, enabled, created_by, created_at, updated_at) VALUES ('533283f3-775f-4104-8f6d-c81be05a4257', 'API server p99 latency', 'Apiserver request latency 99th percentile, scoped per cluster.', 'prom_stat', '{"unit": "s", "query": "histogram_quantile(0.99, sum(rate(apiserver_request_duration_seconds_bucket[5m])) by (le))", "format": ".3f", "datasource": "default"}', 'cluster', '{}', 6, 0, 3, 1, 30, true, NULL, '2026-08-17 02:45:16.667483+00', '2026-08-17 02:45:16.667483+00');
-INSERT INTO public.dashboard_widgets (id, name, description, widget_type, spec, scope, scope_ids, grid_x, grid_y, grid_w, grid_h, refresh_seconds, enabled, created_by, created_at, updated_at) VALUES ('09c3c9f5-3aee-4402-9ed5-b844773b6742', 'Cluster health rollup', 'Fleet-wide rollup of healthy clusters / total clusters.', 'prom_sparkline', '{"step": "5m", "query": "count(up{job=\"kubernetes-nodes\"} == 1) / count(up{job=\"kubernetes-nodes\"})", "duration": "6h", "datasource": "default"}', 'global', '{}', 0, 0, 12, 2, 120, true, NULL, '2026-08-17 02:45:16.667483+00', '2026-08-17 02:45:16.667483+00');
+INSERT INTO public.dashboard_widgets (id, name, description, widget_type, spec, scope, scope_ids, grid_x, grid_y, grid_w, grid_h, refresh_seconds, enabled, created_by, created_at, updated_at) VALUES ('09c3c9f5-3aee-4402-9ed5-b844773b6742', 'Cluster health rollup', 'Estate-wide rollup of healthy clusters / total clusters.', 'prom_sparkline', '{"step": "5m", "query": "count(up{job=\"kubernetes-nodes\"} == 1) / count(up{job=\"kubernetes-nodes\"})", "duration": "6h", "datasource": "default"}', 'global', '{}', 0, 0, 12, 2, 120, true, NULL, '2026-08-17 02:45:16.667483+00', '2026-08-17 02:45:16.667483+00');
 
 
 --
@@ -5137,7 +5136,7 @@ spec:
 -- Data for Name: platform_configuration; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.platform_configuration (id, server_url, platform_name, telemetry_enabled, bootstrapped_at, instance_id, default_cluster_template_id) VALUES (1, '', 'Astronomer', false, NULL, 'db97a1ae-a892-43ff-9f6e-6472149bd900', '9c13ee16-6c2d-4624-adab-bca25cb351f5');
+INSERT INTO public.platform_configuration (id, server_url, platform_name, telemetry_enabled, bootstrapped_at, instance_id, default_cluster_template_id) VALUES (1, '', 'Astronomer', false, NULL, 'db97a1ae-a892-43ff-9f6e-6472149bd900', NULL);
 
 
 --
@@ -5231,7 +5230,7 @@ INSERT INTO public.project_roles (id, name, description, permissions, rules, is_
 INSERT INTO public.quota_plans (name, enforcement, description, max_clusters_per_project, max_namespaces_per_project, max_members_per_project, max_projects_per_user, max_tokens_per_user, max_streams_per_user, max_total_clusters, max_total_users, created_at, updated_at) VALUES ('free', 'hard', 'Free tier - small footprint', 5, 10, 10, 3, 5, 3, 0, 0, '2026-08-17 02:45:16.59341+00', '2026-08-17 02:45:16.59341+00');
 INSERT INTO public.quota_plans (name, enforcement, description, max_clusters_per_project, max_namespaces_per_project, max_members_per_project, max_projects_per_user, max_tokens_per_user, max_streams_per_user, max_total_clusters, max_total_users, created_at, updated_at) VALUES ('team', 'hard', 'Team tier - moderate fleet', 20, 50, 50, 10, 20, 5, 0, 0, '2026-08-17 02:45:16.59341+00', '2026-08-17 02:45:16.59341+00');
 INSERT INTO public.quota_plans (name, enforcement, description, max_clusters_per_project, max_namespaces_per_project, max_members_per_project, max_projects_per_user, max_tokens_per_user, max_streams_per_user, max_total_clusters, max_total_users, created_at, updated_at) VALUES ('enterprise', 'soft', 'Enterprise tier - generous defaults, alerts only', 0, 0, 0, 0, 0, 0, 0, 0, '2026-08-17 02:45:16.59341+00', '2026-08-17 02:45:16.59341+00');
-INSERT INTO public.quota_plans (name, enforcement, description, max_clusters_per_project, max_namespaces_per_project, max_members_per_project, max_projects_per_user, max_tokens_per_user, max_streams_per_user, max_total_clusters, max_total_users, created_at, updated_at) VALUES ('global', 'hard', 'Singleton fleet-wide cap', 0, 0, 0, 0, 0, 0, 0, 0, '2026-08-17 02:45:16.59341+00', '2026-08-17 02:45:16.59341+00');
+INSERT INTO public.quota_plans (name, enforcement, description, max_clusters_per_project, max_namespaces_per_project, max_members_per_project, max_projects_per_user, max_tokens_per_user, max_streams_per_user, max_total_clusters, max_total_users, created_at, updated_at) VALUES ('global', 'hard', 'Singleton estate-wide cap', 0, 0, 0, 0, 0, 0, 0, 0, '2026-08-17 02:45:16.59341+00', '2026-08-17 02:45:16.59341+00');
 
 
 --

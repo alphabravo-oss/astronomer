@@ -35,25 +35,106 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
       - name: Migration roundtrip smoke (TEST-05)
         run: ./scripts/migrate-roundtrip-smoke.sh
         env:
           # Job uses service container when present; script also self-starts docker PG.
           DATABASE_URL: ${{ env.DATABASE_URL }}
 
+      - name: Supported release-line upgrade matrix
+        run: ./scripts/release-upgrade-matrix.sh
+
       - name: Run authoritative backend gate
         run: ./scripts/verify-enterprise.sh backend
         env:
           VERIFY_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-verify-enterprise-backend
 
-      - name: Upload failed backend test reports
-        if: ${{ failure() }}
+      - name: Upload commit-bound backend evidence
+        if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: enterprise-backend-failure-${{ github.sha }}
+          name: enterprise-backend-evidence-${{ github.sha }}
           path: ${{ runner.temp }}/astronomer-verify-enterprise-backend
-          if-no-files-found: warn
-          retention-days: 14
+          if-no-files-found: error
+          retention-days: 90
+
+  stateful-qualifications:
+    name: stateful · ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: postgres-integrations, command: "make test-postgres-integration"}
+          - {name: postgres-integrations-race, command: "POSTGRES_INTEGRATION_RACE=1 make test-postgres-integration"}
+          - {name: worker-runtime, command: "make test-worker-runtime-integration"}
+          - {name: worker-runtime-race, command: "WORKER_INTEGRATION_RACE=1 make test-worker-runtime-integration"}
+          - {name: process-restart, command: "make test-process-restart-qualification"}
+          - {name: process-restart-race, command: "PROCESS_RESTART_QUALIFICATION_RACE=1 make test-process-restart-qualification"}
+          - {name: redis-outage, command: "make test-redis-outage-recovery"}
+          - {name: redis-outage-race, command: "REDIS_OUTAGE_RECOVERY_RACE=1 make test-redis-outage-recovery"}
+          - {name: postgres-outage, command: "make test-postgres-outage-qualification"}
+          - {name: postgres-outage-race, command: "POSTGRES_OUTAGE_QUALIFICATION_RACE=1 make test-postgres-outage-qualification"}
+          - {name: tunnel-owner-ha, command: "./scripts/test-tunnel-queue-ha.sh"}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Run qualification without hidden skips
+        env:
+          QUALIFICATION_COMMAND: ${{ matrix.command }}
+        run: |
+          mkdir -p stateful-evidence
+          set -o pipefail
+          bash -Eeuo pipefail -c "$QUALIFICATION_COMMAND" 2>&1 | tee "stateful-evidence/${{ matrix.name }}.log"
+      - name: Retain stateful qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: stateful-${{ matrix.name }}-${{ github.run_id }}
+          path: stateful-evidence/
+          if-no-files-found: error
+          retention-days: 90
+
+  postgres-failover-certification:
+    name: PostgreSQL failover RPO/RTO certification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Validate failover harness contract
+        run: make test-postgres-failover-static
+
+      - name: Certify PostgreSQL streaming failover
+        run: make test-postgres-failover-certification
+        env:
+          POSTGRES_FAILOVER_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-postgres-failover
+          POSTGRES_FAILOVER_RPO_MAX_ROWS: "0"
+          POSTGRES_FAILOVER_RTO_MAX_SECONDS: "30"
+
+      - name: Upload PostgreSQL failover evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: postgres-failover-evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/astronomer-postgres-failover/
+          if-no-files-found: error
+          retention-days: 90
 
   frontend:
     name: enterprise frontend gate
@@ -83,14 +164,14 @@ jobs:
           NPM_AUDIT_LEVEL: moderate
           VERIFY_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-verify-enterprise-frontend
 
-      - name: Upload failed frontend test reports
-        if: ${{ failure() }}
+      - name: Upload commit-bound frontend evidence
+        if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: enterprise-frontend-failure-${{ github.sha }}
+          name: enterprise-frontend-evidence-${{ github.sha }}
           path: ${{ runner.temp }}/astronomer-verify-enterprise-frontend
-          if-no-files-found: warn
-          retention-days: 14
+          if-no-files-found: error
+          retention-days: 90
 
   frontend-e2e:
     name: Playwright end-to-end tests
@@ -117,6 +198,9 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      - name: Validate flake ownership and quarantine expiry
+        run: node ../scripts/test-flake-report.mjs --validate
+
       - name: End-to-end tests
         run: npm run test:e2e
 
@@ -126,6 +210,9 @@ jobs:
           # P7.3: the crawl also writes one full-page screenshot per route to
           # frontend/gallery/ for the reviewer eyeball (non-blocking).
           SMOKE_GALLERY: "1"
+
+      - name: Blocking desktop, tablet, and mobile visual matrix
+        run: npm run test:e2e:visual
 
       - name: Upload screenshot gallery
         if: always()
@@ -140,40 +227,17 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report
-          path: frontend/playwright-report
-          retention-days: 14
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 30
 
-  # P7.2 live e2e tier: the 4 live specs run against a REAL Go backend
-  # (postgres + redis services, bootstrap admin, SSE bus) through the vite
-  # preview proxy. Parallel with the frontend job; runtime budget ≤6 min.
+  # P7.2 live e2e tier: the live specs run through the same disposable,
+  # fail-fast process harness available to developers via make.
   frontend-e2e-live:
     name: frontend live e2e
     runs-on: ubuntu-24.04
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: astronomer
-          POSTGRES_PASSWORD: astronomer
-          POSTGRES_DB: astronomer
-        # 5433 matches the Makefile's DATABASE_URL default (compose port
-        # offset convention), so `make migrate-up` needs no override.
-        ports:
-          - 5433:5432
-        options: >-
-          --health-cmd "pg_isready -U astronomer"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6380:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -183,50 +247,6 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-
-      - name: Install golang-migrate CLI
-        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.1
-
-      - name: Run migrations
-        run: make migrate-up
-
-      - name: Start Go server
-        # Backgrounded; the process outlives the step. Env mirrors the
-        # docker-compose dev values plus the bootstrap admin the live specs
-        # log in as (EnsureBootstrapAdmin creates an immediately usable
-        # admin@astronomer.local — no forced password reset).
-        #
-        # The signing / Fernet keys are generated per run rather than taken
-        # from the repo: a committed value is a value anyone can sign a token
-        # with, which is exactly what config.DevSentinelsInUse now flags and
-        # AstronomerInsecureDevKeyInUse pages on. Nothing in the live specs
-        # depends on the literals — the DB is thrown away with the job.
-        run: |
-          export SECRET_KEY="pr-validation-e2e-$(openssl rand -hex 16)"
-          export ASTRONOMER_ENCRYPTION_KEY="$(openssl rand -base64 32 | tr '+/' '-_')"
-          go build -o /tmp/astronomer-server ./cmd/server
-          /tmp/astronomer-server >server.log 2>&1 &
-        env:
-          DATABASE_URL: postgres://astronomer:astronomer@localhost:5433/astronomer?sslmode=disable
-          REDIS_URL: redis://localhost:6380/0
-          ENV: development
-          DEBUG: "true"
-          ALLOWED_HOSTS: "*"
-          CORS_ALLOWED_ORIGINS: http://localhost:3000
-          LOG_LEVEL: debug
-          ASTRONOMER_BOOTSTRAP_PASSWORD: e2e-live-password
-
-      - name: Wait for backend health
-        run: |
-          for i in $(seq 1 90); do
-            if curl -fsS http://localhost:8000/health/ >/dev/null 2>&1; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "backend never became healthy" >&2
-          tail -n 100 server.log
-          exit 1
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -243,23 +263,23 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Live end-to-end tests
-        working-directory: frontend
-        run: npx playwright test --project=live
-        env:
-          BACKEND_URL: http://localhost:8000
+      - name: Validate live-browser harness contract
+        run: make test-live-browser-static
 
-      - name: Upload live Playwright report
-        if: ${{ !cancelled() }}
+      - name: Disposable live end-to-end stack
+        run: make test-live-browser
+        env:
+          LIVE_BROWSER_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-live-browser
+          LIVE_BROWSER_TRIVY_ENABLED: "1"
+
+      - name: Upload live browser evidence
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: playwright-report-live
-          path: frontend/playwright-report
-          retention-days: 14
-
-      - name: Server log on failure
-        if: failure()
-        run: tail -n 200 server.log
+          name: live-browser-evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/astronomer-live-browser/
+          if-no-files-found: error
+          retention-days: 90
 
   helm:
     name: enterprise Helm gate
@@ -285,14 +305,14 @@ jobs:
         env:
           VERIFY_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-verify-enterprise-helm
 
-      - name: Upload failed Helm renders and reports
-        if: ${{ failure() }}
+      - name: Upload commit-bound Helm evidence
+        if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: enterprise-helm-failure-${{ github.sha }}
+          name: enterprise-helm-evidence-${{ github.sha }}
           path: ${{ runner.temp }}/astronomer-verify-enterprise-helm
-          if-no-files-found: warn
-          retention-days: 14
+          if-no-files-found: error
+          retention-days: 90
 
   container-supply-chain:
     name: image scan and sbom
@@ -356,3 +376,49 @@ jobs:
           name: sbom-${{ matrix.component.name }}-${{ github.sha }}
           path: sbom-${{ matrix.component.name }}.spdx.json
           retention-days: 30
+
+  enterprise-signoff:
+    name: same-commit PR qualification aggregate
+    if: always()
+    needs:
+      - backend
+      - stateful-qualifications
+      - postgres-failover-certification
+      - frontend
+      - frontend-e2e
+      - frontend-e2e-live
+      - helm
+      - container-supply-chain
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every same-commit qualification
+        env:
+          RESULTS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          results = json.loads(os.environ["RESULTS_JSON"])
+          failed = {name: value["result"] for name, value in results.items() if value["result"] != "success"}
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          lines = ["## Same-commit PR qualification aggregate", "", "| Gate | Result |", "| --- | --- |"]
+          lines.extend(f"| `{name}` | {value['result']} |" for name, value in sorted(results.items()))
+          if summary:
+              with open(summary, "a", encoding="utf-8") as handle:
+                  handle.write("\n".join(lines) + "\n")
+          if failed:
+              raise SystemExit(f"required qualification failure: {failed}")
+          PY
+      - name: Require every protected external producer in the release aggregator contract
+        run: |
+          ./scripts/check-enterprise-qualification-producers.py > "$RUNNER_TEMP/protected-producers.json"
+          python3 - <<'PY'
+          import json, os
+          value = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "protected-producers.json"), encoding="utf-8"))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("\n### Protected release qualifications (validated wiring; external signed runs still required)\n\n")
+              summary.write("| Producer | Workflow | Environment |\n| --- | --- | --- |\n")
+              for row in value["protected_producers"]:
+                  summary.write(f"| `{row['id']}` | `{row['workflow']}` | `{row['environment']}` |\n")
+          PY

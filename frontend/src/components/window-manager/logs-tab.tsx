@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { usePodLogs, type PodLogsStatus } from '@/lib/hooks';
-import { cn } from '@/lib/utils';
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { usePodLogs, type PodLogsStatus } from "@/lib/hooks";
+import { cn } from "@/lib/utils";
 import {
   ArrowDown,
   Clock,
@@ -13,8 +13,8 @@ import {
   Search,
   WrapText,
   X,
-} from 'lucide-react';
-import type { PodLog } from '@/types';
+} from "lucide-react";
+import type { PodLog } from "@/types";
 
 interface LogsTabProps {
   clusterId: string;
@@ -41,16 +41,23 @@ export function LogsTab({
   const [follow, setFollow] = useState(true);
   const [wrap, setWrap] = useState(true);
   const [showTimestamps, setShowTimestamps] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  const [tailRange, setTailRange] = useState<TailRange>({ kind: 'lines', n: 500 });
+  const [tailRange, setTailRange] = useState<TailRange>({
+    kind: "lines",
+    n: 500,
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { data: logs, isLoading, status } = usePodLogs(clusterId, namespace, pod, {
+  const {
+    data: logs,
+    isLoading,
+    status,
+  } = usePodLogs(clusterId, namespace, pod, {
     container,
-    tailLines: tailRange.kind === 'lines' ? tailRange.n : undefined,
-    sinceSeconds: tailRange.kind === 'seconds' ? tailRange.s : undefined,
-    noTail: tailRange.kind === 'all',
+    tailLines: tailRange.kind === "lines" ? tailRange.n : undefined,
+    sinceSeconds: tailRange.kind === "seconds" ? tailRange.s : undefined,
+    noTail: tailRange.kind === "all",
     follow,
   });
 
@@ -89,39 +96,45 @@ export function LogsTab({
         setFollow((prev) => (prev ? false : prev));
       }
     }
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
   const filteredLogs = useMemo(() => {
     if (!searchQuery.trim() || !logs) return logs || [];
     const q = searchQuery.toLowerCase();
-    return logs.filter((log) => (log.message || '').toLowerCase().includes(q));
+    return logs.filter((log) => (log.message || "").toLowerCase().includes(q));
   }, [logs, searchQuery]);
 
   const handleDownload = useCallback(() => {
     if (!filteredLogs.length) return;
     const content = filteredLogs
-      .map((log) => `${showTimestamps ? log.timestamp + ' ' : ''}${log.message}`)
-      .join('\n');
-    const blob = new Blob([content], { type: 'text/plain' });
+      .map(
+        (log) => `${showTimestamps ? log.timestamp + " " : ""}${log.message}`,
+      )
+      .join("\n");
+    const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `${pod}-${container || 'main'}-logs.txt`;
+    a.download = `${pod}-${container || "main"}-logs.txt`;
     a.click();
     URL.revokeObjectURL(url);
   }, [filteredLogs, pod, container, showTimestamps]);
 
   const getLogLineClass = (log: PodLog) => {
-    const msg = (log.message || '').toLowerCase();
-    if (log.level === 'error' || msg.includes('error') || msg.includes('fatal')) {
-      return 'log-error';
+    const msg = (log.message || "").toLowerCase();
+    if (
+      log.level === "error" ||
+      msg.includes("error") ||
+      msg.includes("fatal")
+    ) {
+      return "log-error";
     }
-    if (log.level === 'warn' || msg.includes('warn')) {
-      return 'log-warn';
+    if (log.level === "warn" || msg.includes("warn")) {
+      return "log-warn";
     }
-    return '';
+    return "";
   };
 
   return (
@@ -129,12 +142,15 @@ export function LogsTab({
       className="flex flex-col h-full bg-background"
       // Hide the inactive tab without unmounting so the WS connection
       // stays alive and the log buffer doesn't reset on tab switch.
-      style={{ display: visible ? 'flex' : 'none' }}
+      style={{ display: visible ? "flex" : "none" }}
     >
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-muted/40 border-b border-border flex-wrap">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="font-mono truncate max-w-[280px]" title={`${namespace}/${pod}`}>
+          <span
+            className="font-mono truncate max-w-[280px]"
+            title={`${namespace}/${pod}`}
+          >
             {namespace}/{pod}
           </span>
           {container && (
@@ -147,10 +163,10 @@ export function LogsTab({
           <button
             onClick={() => setShowTimestamps((v) => !v)}
             className={cn(
-              'inline-flex items-center h-6 px-1.5 rounded text-2xs transition-colors',
+              "inline-flex items-center h-6 px-1.5 rounded text-2xs transition-colors",
               showTimestamps
-                ? 'bg-accent text-foreground'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent",
             )}
             title="Toggle timestamps"
           >
@@ -159,10 +175,10 @@ export function LogsTab({
           <button
             onClick={() => setWrap((v) => !v)}
             className={cn(
-              'inline-flex items-center h-6 px-1.5 rounded text-2xs transition-colors',
+              "inline-flex items-center h-6 px-1.5 rounded text-2xs transition-colors",
               wrap
-                ? 'bg-accent text-foreground'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent",
             )}
             title="Toggle line wrap"
           >
@@ -171,10 +187,10 @@ export function LogsTab({
           <button
             onClick={() => setShowSearch((v) => !v)}
             className={cn(
-              'inline-flex items-center h-6 px-1.5 rounded text-2xs transition-colors',
+              "inline-flex items-center h-6 px-1.5 rounded text-2xs transition-colors",
               showSearch
-                ? 'bg-accent text-foreground'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent",
             )}
             title="Filter logs"
           >
@@ -183,15 +199,21 @@ export function LogsTab({
           <button
             onClick={() => setFollow((v) => !v)}
             className={cn(
-              'inline-flex items-center gap-1 h-6 px-1.5 rounded text-2xs transition-colors',
+              "inline-flex items-center gap-1 h-6 px-1.5 rounded text-2xs transition-colors",
               follow
-                ? 'bg-status-success/10 text-status-success'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                ? "bg-status-success/10 text-status-success"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent",
             )}
-            title={follow ? 'Stop following' : 'Follow logs'}
+            title={follow ? "Stop following" : "Follow logs"}
           >
-            {follow ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-            <span className="hidden sm:inline">{follow ? 'Following' : 'Follow'}</span>
+            {follow ? (
+              <Pause className="h-3 w-3" />
+            ) : (
+              <Play className="h-3 w-3" />
+            )}
+            <span className="hidden sm:inline">
+              {follow ? "Following" : "Follow"}
+            </span>
           </button>
           <button
             onClick={handleDownload}
@@ -214,7 +236,7 @@ export function LogsTab({
             placeholder="Filter logs..."
             className="flex-1 h-5 bg-transparent text-xs text-foreground placeholder:text-muted-foreground
               focus:outline-none"
-            autoFocus
+            data-initial-focus
           />
           {searchQuery && (
             <span className="text-2xs text-muted-foreground">
@@ -224,7 +246,7 @@ export function LogsTab({
           <button
             onClick={() => {
               setShowSearch(false);
-              setSearchQuery('');
+              setSearchQuery("");
             }}
             className="text-muted-foreground hover:text-foreground"
           >
@@ -237,8 +259,8 @@ export function LogsTab({
       <div
         ref={scrollRef}
         className={cn(
-          'log-viewer flex-1 min-h-0 overflow-y-auto p-3',
-          wrap ? 'overflow-x-hidden' : 'overflow-x-auto'
+          "log-viewer flex-1 min-h-0 overflow-y-auto p-3",
+          wrap ? "overflow-x-hidden" : "overflow-x-auto",
         )}
       >
         {isLoading ? (
@@ -248,15 +270,15 @@ export function LogsTab({
           </div>
         ) : filteredLogs.length === 0 ? (
           <div className="flex items-center justify-center h-full text-zinc-600 text-xs">
-            {searchQuery ? 'No matching log lines' : 'No logs available'}
+            {searchQuery ? "No matching log lines" : "No logs available"}
           </div>
         ) : (
           filteredLogs.map((log, i) => (
             <div
               key={i}
               className={cn(
-                'flex gap-2 hover:bg-white/[0.02] px-1 -mx-1 rounded',
-                getLogLineClass(log)
+                "flex gap-2 hover:bg-white/[0.02] px-1 -mx-1 rounded",
+                getLogLineClass(log),
               )}
             >
               {showTimestamps && (
@@ -266,7 +288,7 @@ export function LogsTab({
               )}
               <span
                 className={cn(
-                  wrap ? 'break-all whitespace-pre-wrap' : 'whitespace-pre'
+                  wrap ? "break-all whitespace-pre-wrap" : "whitespace-pre",
                 )}
               >
                 {log.message}
@@ -301,47 +323,51 @@ export function LogsTab({
 // site can fan out to the right query param (`tail_lines` vs `since_seconds`
 // vs neither) without ambiguity.
 export type TailRange =
-  | { kind: 'lines'; n: number }
-  | { kind: 'seconds'; s: number }
-  | { kind: 'all' };
+  | { kind: "lines"; n: number }
+  | { kind: "seconds"; s: number }
+  | { kind: "all" };
 
 type TailRangeOption =
-  | { kind: 'lines'; n: number; label: string }
-  | { kind: 'seconds'; s: number; label: string }
-  | { kind: 'all'; label: string };
+  | { kind: "lines"; n: number; label: string }
+  | { kind: "seconds"; s: number; label: string }
+  | { kind: "all"; label: string };
 
 const TAIL_LINE_OPTIONS: TailRangeOption[] = [
-  { kind: 'lines', n: 100, label: '100 lines' },
-  { kind: 'lines', n: 500, label: '500 lines' },
-  { kind: 'lines', n: 1000, label: '1000 lines' },
-  { kind: 'lines', n: 5000, label: '5000 lines' },
+  { kind: "lines", n: 100, label: "100 lines" },
+  { kind: "lines", n: 500, label: "500 lines" },
+  { kind: "lines", n: 1000, label: "1000 lines" },
+  { kind: "lines", n: 5000, label: "5000 lines" },
 ];
 
 const TAIL_TIME_OPTIONS: TailRangeOption[] = [
-  { kind: 'seconds', s: 5 * 60, label: 'Last 5 minutes' },
-  { kind: 'seconds', s: 15 * 60, label: 'Last 15 minutes' },
-  { kind: 'seconds', s: 60 * 60, label: 'Last 1 hour' },
-  { kind: 'seconds', s: 12 * 60 * 60, label: 'Last 12 hours' },
-  { kind: 'seconds', s: 24 * 60 * 60, label: 'Last 24 hours' },
-  { kind: 'all', label: 'All' },
+  { kind: "seconds", s: 5 * 60, label: "Last 5 minutes" },
+  { kind: "seconds", s: 15 * 60, label: "Last 15 minutes" },
+  { kind: "seconds", s: 60 * 60, label: "Last 1 hour" },
+  { kind: "seconds", s: 12 * 60 * 60, label: "Last 12 hours" },
+  { kind: "seconds", s: 24 * 60 * 60, label: "Last 24 hours" },
+  { kind: "all", label: "All" },
 ];
 
 function labelForRange(r: TailRange): string {
-  if (r.kind === 'lines') {
-    const match = TAIL_LINE_OPTIONS.find((o) => o.kind === 'lines' && o.n === r.n);
+  if (r.kind === "lines") {
+    const match = TAIL_LINE_OPTIONS.find(
+      (o) => o.kind === "lines" && o.n === r.n,
+    );
     return match?.label ?? `${r.n} lines`;
   }
-  if (r.kind === 'seconds') {
-    const match = TAIL_TIME_OPTIONS.find((o) => o.kind === 'seconds' && o.s === r.s);
+  if (r.kind === "seconds") {
+    const match = TAIL_TIME_OPTIONS.find(
+      (o) => o.kind === "seconds" && o.s === r.s,
+    );
     return match?.label ?? `Last ${r.s}s`;
   }
-  return 'All';
+  return "All";
 }
 
 function rangeEquals(a: TailRange, b: TailRangeOption): boolean {
-  if (a.kind === 'lines' && b.kind === 'lines') return a.n === b.n;
-  if (a.kind === 'seconds' && b.kind === 'seconds') return a.s === b.s;
-  if (a.kind === 'all' && b.kind === 'all') return true;
+  if (a.kind === "lines" && b.kind === "lines") return a.n === b.n;
+  if (a.kind === "seconds" && b.kind === "seconds") return a.s === b.s;
+  if (a.kind === "all" && b.kind === "all") return true;
   return false;
 }
 
@@ -368,14 +394,14 @@ function TailRangeSelect({
         setOpen(false);
       }
     }
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
   }, [open]);
 
   const pick = (opt: TailRangeOption) => {
-    if (opt.kind === 'lines') onChange({ kind: 'lines', n: opt.n });
-    else if (opt.kind === 'seconds') onChange({ kind: 'seconds', s: opt.s });
-    else onChange({ kind: 'all' });
+    if (opt.kind === "lines") onChange({ kind: "lines", n: opt.n });
+    else if (opt.kind === "seconds") onChange({ kind: "seconds", s: opt.s });
+    else onChange({ kind: "all" });
     setOpen(false);
   };
 
@@ -386,10 +412,10 @@ function TailRangeSelect({
         key={opt.label}
         onClick={() => pick(opt)}
         className={cn(
-          'w-full flex items-center px-2 py-1 rounded text-2xs transition-colors',
+          "w-full flex items-center px-2 py-1 rounded text-2xs transition-colors",
           selected
-            ? 'bg-accent text-foreground'
-            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+            ? "bg-accent text-foreground"
+            : "text-muted-foreground hover:bg-accent hover:text-foreground",
         )}
       >
         <span className="tabular-nums">{opt.label}</span>
@@ -409,13 +435,19 @@ function TailRangeSelect({
         <span className="tabular-nums">{labelForRange(value)}</span>
         <svg
           className={cn(
-            'h-3 w-3 text-muted-foreground transition-transform',
-            open && 'rotate-180'
+            "h-3 w-3 text-muted-foreground transition-transform",
+            open && "rotate-180",
           )}
           viewBox="0 0 12 12"
           fill="none"
         >
-          <path d="M3 5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M3 5l3 3 3-3"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       </button>
       {open && (

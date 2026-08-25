@@ -306,8 +306,7 @@ type RBACCacheInvalidator interface {
 	InvalidateAll()
 }
 
-// ClusterDecommissionDeps wires the reconciler. Set once at server startup
-// via ConfigureClusterDecommission; tests can swap a fake DecommissionTunnel.
+// ClusterDecommissionDeps wires the reconciler.
 type ClusterDecommissionDeps struct {
 	Queries ClusterDecommissionQuerier
 	Tunnel  DecommissionTunnel
@@ -320,17 +319,7 @@ type ClusterDecommissionDeps struct {
 	RBACCache RBACCacheInvalidator
 }
 
-var clusterDecommissionDeps ClusterDecommissionDeps
-
-func ConfigureClusterDecommission(deps ClusterDecommissionDeps) {
-	clusterDecommissionDeps = deps
-}
-
 // ResetClusterDecommission clears the runtime dependencies. Used by tests.
-func ResetClusterDecommission() {
-	clusterDecommissionDeps = ClusterDecommissionDeps{}
-}
-
 // ClusterDecommissionPayload is the asynq task body. The handler enqueues
 // the row's ID; the worker re-loads the row to discover the cluster ID and
 // the current phase state (so partial re-runs after a crash are idempotent).
@@ -357,10 +346,9 @@ func NewClusterDecommissionAllTask() (*asynq.Task, error) {
 // in order, and persists the outcome. Returns nil even on phase failure so
 // asynq doesn't blindly retry the entire task — the row's status reflects the
 // failure, and the periodic sweep picks failed rows up for re-runs.
-func HandleClusterDecommission(ctx context.Context, t *asynq.Task) error {
-	if clusterDecommissionDeps.Queries == nil {
-		runtimeLogger().InfoContext(ctx, "cluster decommission runtime not configured, skipping")
-		return nil
+func (runtime ClusterDecommissionRuntime) HandleClusterDecommission(ctx context.Context, t *asynq.Task) error {
+	if runtime.Deps.Queries == nil {
+		return fmt.Errorf("cluster decommission runtime is not configured")
 	}
 	var p ClusterDecommissionPayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
@@ -370,25 +358,24 @@ func HandleClusterDecommission(ctx context.Context, t *asynq.Task) error {
 	if err != nil {
 		return fmt.Errorf("invalid decommission_id: %w", err)
 	}
-	return runClusterDecommission(ctx, clusterDecommissionDeps, id)
+	return runClusterDecommission(ctx, runtime.Deps, id)
 }
 
 // HandleClusterDecommissionAll is the periodic-sweep handler. Walks every
 // pending/running row and re-runs the reconciler. Bounded by a fixed limit
 // to avoid stampeding the DB after a long outage.
-func HandleClusterDecommissionAll(ctx context.Context, _ *asynq.Task) error {
+func (runtime ClusterDecommissionRuntime) HandleClusterDecommissionAll(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ClusterDecommissionAllType, func() error {
-		if clusterDecommissionDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "cluster decommission runtime not configured, skipping sweep")
-			return nil
+		if runtime.Deps.Queries == nil {
+			return fmt.Errorf("cluster decommission runtime is not configured")
 		}
-		rows, err := clusterDecommissionDeps.Queries.ListPendingClusterDecommissions(ctx, 50)
+		rows, err := runtime.Deps.Queries.ListPendingClusterDecommissions(ctx, 50)
 		if err != nil {
 			return fmt.Errorf("list pending cluster decommissions: %w", err)
 		}
 		for _, row := range rows {
-			if err := runClusterDecommission(ctx, clusterDecommissionDeps, row.ID); err != nil {
-				runtimeLogger().WarnContext(ctx, "cluster decommission sweep step failed",
+			if err := runClusterDecommission(ctx, runtime.Deps, row.ID); err != nil {
+				runtimeLogger(ctx).WarnContext(ctx, "cluster decommission sweep step failed",
 					"decommission_id", row.ID.String(),
 					"cluster_id", row.ClusterID.String(),
 					"error", err)
@@ -482,7 +469,7 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 			// The 1-minute sweep is the backstop. Mirrors
 			// cluster_template_apply.go's agent-not-connected re-queue.
 			if isAgentNotConnectedErr(phaseErr) {
-				runtimeLogger().WarnContext(ctx, "cluster decommission cleanup deferred: agent on a sibling pod, returning task to queue",
+				runtimeLogger(ctx).WarnContext(ctx, "cluster decommission cleanup deferred: agent on a sibling pod, returning task to queue",
 					"decommission_id", id.String(), "cluster_id", row.ClusterID.String(), "error", phaseErr)
 				delete(phases, PhaseCleanupManagedSide)
 				_, _ = q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{ID: id, Phases: phasesJSON(phases)})
@@ -517,7 +504,7 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 	// reconnecting agent can still authenticate to run cleanup. The grace cap
 	// guarantees we eventually advance (no deadlock on a dead agent).
 	if !cleanupSatisfied(ctx, deps, phases, row) {
-		runtimeLogger().InfoContext(ctx, "cluster decommission waiting for managed-side cleanup before token revoke",
+		runtimeLogger(ctx).InfoContext(ctx, "cluster decommission waiting for managed-side cleanup before token revoke",
 			"decommission_id", id.String(), "cluster_id", row.ClusterID.String(),
 			"attempts", row.Attempts)
 		return nil

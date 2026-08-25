@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/group-mappings — SSO group → RBAC role bindings.
  *
@@ -10,58 +10,57 @@ import { createFileRoute } from '@tanstack/react-router';
  * Connectors come from the Dex connector list; an empty / "any" value
  * matches mappings regardless of source. Roles come from `useGlobalRoles`.
  */
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import {
-  ArrowLeft,
-  Plus,
-  Trash2,
-  Users,
-} from 'lucide-react';
-import { toastError } from '@/lib/toast';
-import { useAppForm, useStore } from '@/lib/form';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { formatRelativeTime } from '@/lib/utils';
-import { useDexConnectors } from '@/components/auth/hooks';
-import { useGlobalRoles, useClusters, useProjects } from '@/lib/hooks';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { ArrowLeft, Plus, Trash2, Users } from "lucide-react";
+import { toastError } from "@/lib/toast";
+import { useAppForm, useStore } from "@/lib/form";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { formatRelativeTime } from "@/lib/utils";
+import { useDexConnectors } from "@/components/auth/hooks";
+import { useGlobalRoles, useClusters, useProjects } from "@/lib/hooks";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import {
   useCreateGroupMapping,
   useDeleteGroupMapping,
   useGroupMappings,
-} from '@/components/settings/hooks';
-import type { GroupMapping, GroupScope } from '@/lib/api/settings';
+} from "@/components/settings/hooks";
+import type { GroupMappingView, GroupScope } from "@/lib/api/settings";
 
 function GroupMappingsTable() {
   const { data, isLoading } = useGroupMappings();
   const del = useDeleteGroupMapping();
   const [showCreate, setShowCreate] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<GroupMapping | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<GroupMappingView | null>(null);
 
-  const columns: Column<GroupMapping>[] = [
+  const columns: Column<GroupMappingView>[] = [
     {
-      key: 'connector',
-      header: 'Connector',
+      key: "connector",
+      header: "Connector",
       accessor: (row) => (
         <span className="text-xs font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground">
-          {row.connector || '(any)'}
+          {row.connector || "(any)"}
         </span>
       ),
     },
     {
-      key: 'groupName',
-      header: 'Group',
-      accessor: (row) => <span className="text-sm font-mono text-foreground">{row.groupName}</span>,
+      key: "groupName",
+      header: "Group",
+      accessor: (row) => (
+        <span className="text-sm font-mono text-foreground">
+          {row.groupName}
+        </span>
+      ),
     },
     {
-      key: 'scope',
-      header: 'Scope',
+      key: "scope",
+      header: "Scope",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded border border-border text-foreground capitalize">
           {row.scope}
@@ -69,32 +68,36 @@ function GroupMappingsTable() {
       ),
     },
     {
-      key: 'role',
-      header: 'Role',
-      accessor: (row) => <span className="text-sm text-foreground">{row.role}</span>,
+      key: "role",
+      header: "Role",
+      accessor: (row) => (
+        <span className="text-sm text-foreground">{row.role}</span>
+      ),
     },
     {
-      key: 'target',
-      header: 'Target',
+      key: "target",
+      header: "Target",
       accessor: (row) =>
-        row.scope === 'global' ? (
+        row.scope === "global" ? (
           <span className="text-xs text-muted-foreground italic">global</span>
         ) : (
           <span className="text-xs font-mono text-muted-foreground">
-            {row.targetDisplay ?? row.target ?? '--'}
+            {row.targetDisplay ?? row.target ?? "--"}
           </span>
         ),
     },
     {
-      key: 'createdAt',
-      header: 'Created',
+      key: "createdAt",
+      header: "Created",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>
+        <span className="text-xs text-muted-foreground">
+          {formatRelativeTime(row.createdAt)}
+        </span>
       ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       sortable: false,
       accessor: (row) => (
         <button
@@ -115,7 +118,12 @@ function GroupMappingsTable() {
   return (
     <>
       <div className="flex items-center justify-end">
-        <ActionButton type="button" intent="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>
+        <ActionButton
+          type="button"
+          intent="primary"
+          icon={<Plus className="h-4 w-4" />}
+          onClick={() => setShowCreate(true)}
+        >
           New mapping
         </ActionButton>
       </div>
@@ -127,7 +135,10 @@ function GroupMappingsTable() {
         emptyMessage="No group mappings configured"
         searchPlaceholder="Search by group or role..."
       />
-      <CreateGroupMappingModal open={showCreate} onClose={() => setShowCreate(false)} />
+      <CreateGroupMappingModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+      />
       <ConfirmDialog
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
@@ -137,7 +148,7 @@ function GroupMappingsTable() {
           setConfirmDelete(null);
         }}
         title="Delete group mapping?"
-        description={`Members of "${confirmDelete?.groupName}" from "${confirmDelete?.connector || 'any connector'}" will lose the "${confirmDelete?.role}" role on their next sync.`}
+        description={`Members of "${confirmDelete?.groupName}" from "${confirmDelete?.connector || "any connector"}" will lose the "${confirmDelete?.role}" role on their next sync.`}
         confirmText="Delete"
         variant="destructive"
       />
@@ -145,7 +156,13 @@ function GroupMappingsTable() {
   );
 }
 
-function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function CreateGroupMappingModal({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   const create = useCreateGroupMapping();
   const { data: connectors } = useDexConnectors();
   const { data: roles } = useGlobalRoles();
@@ -154,11 +171,11 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
 
   const form = useAppForm({
     defaultValues: {
-      connector: '',
-      groupName: '',
-      scope: 'global' as GroupScope,
-      role: '',
-      target: '',
+      connector: "",
+      groupName: "",
+      scope: "global" as GroupScope,
+      role: "",
+      target: "",
     },
     validators: {
       // Old checks (imperative, pre-submit): group name required, role
@@ -166,16 +183,16 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
       // form-level onSubmit validator; same messages, same order.
       onSubmit: ({ value }) =>
         !value.groupName
-          ? 'Group name is required'
+          ? "Group name is required"
           : !value.role
-            ? 'Role is required'
-            : value.scope !== 'global' && !value.target
-              ? 'Target is required for scoped mappings'
+            ? "Role is required"
+            : value.scope !== "global" && !value.target
+              ? "Target is required for scoped mappings"
               : undefined,
     },
     // Same UX as before: the failed check surfaces as a toast, not inline.
     onSubmitInvalid: ({ formApi }) => {
-      const err = formApi.state.errors.find((e) => typeof e === 'string');
+      const err = formApi.state.errors.find((e) => typeof e === "string");
       if (err) toastError(err);
     },
     onSubmit: async ({ value }) => {
@@ -185,8 +202,8 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
           group_name: value.groupName,
           scope: value.scope,
           role_id: value.role,
-          ...(value.scope === 'cluster' ? { cluster_id: value.target } : {}),
-          ...(value.scope === 'project' ? { project_id: value.target } : {}),
+          ...(value.scope === "cluster" ? { cluster_id: value.target } : {}),
+          ...(value.scope === "project" ? { project_id: value.target } : {}),
         });
         onClose();
         form.reset();
@@ -222,66 +239,115 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
         </>
       }
     >
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Connector</label>
-          <form.Field name="connector">
-            {(field) => (
-              <Select
-                value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value)}
-                onBlur={field.handleBlur}
-              >
-                <option value="">Any connector</option>
-                {(connectors ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.displayName} ({c.type})
-                  </option>
-                ))}
-              </Select>
-            )}
-          </form.Field>
-        </div>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-611d387d-226"
+        >
+          Connector
+        </label>
+        <form.Field name="connector">
+          {(field) => (
+            <Select
+              id="field-611d387d-226"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+            >
+              <option value="">Any connector</option>
+              {(connectors ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.displayName} ({c.type})
+                </option>
+              ))}
+            </Select>
+          )}
+        </form.Field>
+      </div>
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Group name</label>
-          <form.Field name="groupName">
-            {(field) => (
-              <Input
-                type="text"
-                value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value)}
-                onBlur={field.handleBlur}
-                placeholder="platform-admins"
-                className="font-mono"
-                autoFocus
-              />
-            )}
-          </form.Field>
-        </div>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-611d387d-246"
+        >
+          Group name
+        </label>
+        <form.Field name="groupName">
+          {(field) => (
+            <Input
+              id="field-611d387d-246"
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="platform-admins"
+              className="font-mono"
+              data-initial-focus
+            />
+          )}
+        </form.Field>
+      </div>
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Scope</label>
-          <form.Field name="scope">
-            {(field) => (
-              <Select
-                value={field.state.value}
-                onChange={(e) => {
-                  field.handleChange(e.target.value as GroupScope);
-                  form.setFieldValue('target', '');
-                }}
-                onBlur={field.handleBlur}
-              >
-                <option value="global">Global</option>
-                <option value="cluster">Cluster</option>
-                <option value="project">Project</option>
-              </Select>
-            )}
-          </form.Field>
-        </div>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-611d387d-263"
+        >
+          Scope
+        </label>
+        <form.Field name="scope">
+          {(field) => (
+            <Select
+              id="field-611d387d-263"
+              value={field.state.value}
+              onChange={(e) => {
+                field.handleChange(e.target.value as GroupScope);
+                form.setFieldValue("target", "");
+              }}
+              onBlur={field.handleBlur}
+            >
+              <option value="global">Global</option>
+              <option value="cluster">Cluster</option>
+              <option value="project">Project</option>
+            </Select>
+          )}
+        </form.Field>
+      </div>
 
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-611d387d-283"
+        >
+          Role
+        </label>
+        <form.Field name="role">
+          {(field) => (
+            <Select
+              id="field-611d387d-283"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+            >
+              <option value="" disabled>
+                Pick a role…
+              </option>
+              {(roles ?? []).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.displayName} ({r.name})
+                </option>
+              ))}
+            </Select>
+          )}
+        </form.Field>
+      </div>
+
+      {scope !== "global" && (
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Role</label>
-          <form.Field name="role">
+          <label className="text-sm font-medium text-foreground capitalize">
+            {scope} target
+          </label>
+          <form.Field name="target">
             {(field) => (
               <Select
                 value={field.state.value}
@@ -289,48 +355,25 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
                 onBlur={field.handleBlur}
               >
                 <option value="" disabled>
-                  Pick a role…
+                  Pick a {scope}…
                 </option>
-                {(roles ?? []).map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.displayName} ({r.name})
-                  </option>
-                ))}
+                {scope === "cluster" &&
+                  (clustersData?.data ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                {scope === "project" &&
+                  (projectsData?.data ?? []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.displayName} ({p.name})
+                    </option>
+                  ))}
               </Select>
             )}
           </form.Field>
         </div>
-
-        {scope !== 'global' && (
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground capitalize">{scope} target</label>
-            <form.Field name="target">
-              {(field) => (
-                <Select
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                >
-                  <option value="" disabled>
-                    Pick a {scope}…
-                  </option>
-                  {scope === 'cluster' &&
-                    (clustersData?.data ?? []).map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  {scope === 'project' &&
-                    (projectsData?.data ?? []).map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.displayName} ({p.name})
-                      </option>
-                    ))}
-                </Select>
-              )}
-            </form.Field>
-          </div>
-        )}
+      )}
     </ModalShell>
   );
 }
@@ -361,6 +404,6 @@ function GroupMappingsPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/group-mappings/')({
+export const Route = createFileRoute("/dashboard/settings/group-mappings/")({
   component: GroupMappingsPage,
 });

@@ -30,9 +30,9 @@ describe("Charlie safe UI boundary", () => {
       type: "backup",
       id: "management",
     });
-    expect(contextForRoute("/dashboard/delivery/targets/target-1")[0].type).toBe(
-      "self_management_application",
-    );
+    expect(
+      contextForRoute("/dashboard/delivery/targets/target-1")[0].type,
+    ).toBe("self_management_application");
     expect(contextForRoute("/dashboard/audit")).toEqual([]);
     expect(contextForRoute("/dashboard/logging")).toEqual([]);
   });

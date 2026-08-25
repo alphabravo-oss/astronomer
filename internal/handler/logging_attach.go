@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -15,6 +14,26 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/lokiauth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
+
+type loggingAttachWriter interface {
+	systemLoggingOutputWriter
+	loggingOperationCreator
+	UpsertLokiIngestToken(context.Context, sqlc.UpsertLokiIngestTokenParams) (sqlc.LokiIngestToken, error)
+}
+
+func persistLoggingAttach(ctx context.Context, q loggingAttachWriter, token *sqlc.UpsertLokiIngestTokenParams, spec systemLoggingOutputSpec, userID pgtype.UUID) (loggingMutationResult[sqlc.LoggingOutput], error) {
+	if token != nil {
+		if _, err := q.UpsertLokiIngestToken(ctx, *token); err != nil {
+			return loggingMutationResult[sqlc.LoggingOutput]{}, err
+		}
+	}
+	output, err := upsertSystemLoggingOutputWith(ctx, q, spec)
+	if err != nil {
+		return loggingMutationResult[sqlc.LoggingOutput]{}, err
+	}
+	op, err := createLoggingOutputApplyOperation(ctx, q, output, userID)
+	return loggingMutationResult[sqlc.LoggingOutput]{row: output, op: op}, err
+}
 
 // GetAstronomerAttachStatus handles GET /api/v1/clusters/{id}/logging/outputs/attach-astronomer/.
 // logging:read. Used by the cluster logging CTA; does not run the sizer.
@@ -57,6 +76,9 @@ func (h *LoggingHandler) AttachAstronomerLogs(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbCreate) {
+		return
+	}
+	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 
@@ -102,6 +124,7 @@ func (h *LoggingHandler) AttachAstronomerLogs(w http.ResponseWriter, r *http.Req
 	}
 
 	plaintext := ""
+	var tokenParams *sqlc.UpsertLokiIngestTokenParams
 	if !hasToken || rotate {
 		minted, mintErr := mintLokiIngestToken()
 		if mintErr != nil {
@@ -113,15 +136,13 @@ func (h *LoggingHandler) AttachAstronomerLogs(w http.ResponseWriter, r *http.Req
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to encrypt ingest token")
 			return
 		}
-		if _, storeErr := h.queries.UpsertLokiIngestToken(r.Context(), sqlc.UpsertLokiIngestTokenParams{
+		params := sqlc.UpsertLokiIngestTokenParams{
 			ClusterID:      clusterID,
 			TokenHash:      lokiauth.HashBearer(minted),
 			TokenEncrypted: sealed,
 			CreatedByID:    currentUserUUID(r),
-		}); storeErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to store ingest token")
-			return
 		}
+		tokenParams = &params
 		plaintext = minted
 	}
 
@@ -129,44 +150,44 @@ func (h *LoggingHandler) AttachAstronomerLogs(w http.ResponseWriter, r *http.Req
 	if strings.TrimSpace(port) == "" {
 		port = "443"
 	}
-	output, err := h.upsertSystemLoggingOutput(r.Context(), systemLoggingOutputSpec{
+	spec := systemLoggingOutputSpec{
 		ClusterID: clusterID,
 		Host:      state.Host,
 		Port:      port,
 		Enabled:   true,
 		CreatedBy: currentUserUUID(r),
-	})
+	}
+	auditAction := "logging.output.attach_astronomer"
+	if rotate {
+		auditAction = "logging.loki_token.rotate"
+	}
+	mutationContext := withOperationIdempotency(r, "logging")
+	result, err := executeLoggingMutation(r, h,
+		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingOutput], error) {
+			return persistLoggingAttach(mutationContext, q, tokenParams, spec, currentUserUUID(r))
+		},
+		func() (loggingMutationResult[sqlc.LoggingOutput], error) {
+			return persistLoggingAttach(mutationContext, h.queries, tokenParams, spec, currentUserUUID(r))
+		},
+		func(result loggingMutationResult[sqlc.LoggingOutput]) clusterAuditEvent {
+			return clusterAuditEvent{action: auditAction, resourceType: "logging_output", resourceID: result.row.ID.String(), resourceName: result.row.Name, status: http.StatusAccepted, detail: map[string]any{
+				"cluster_id": clusterID.String(), "rotated": rotate, "minted": plaintext != "", "operation_id": operationIDOrEmpty(result.op),
+			}}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to attach Astronomer logs")
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to attach Astronomer logs")
 		return
 	}
+	h.afterLoggingOperationCommit(result.op)
 	if h.lokiIngest != nil {
 		if recErr := h.lokiIngest.ReconcileLokiIngest(r.Context()); recErr != nil && h.log != nil {
 			h.log.Warn("loki ingest reconcile after attach failed", "error", recErr, "cluster_id", clusterID.String())
 		}
 	}
-	op, opErr := h.enqueueOutputApply(withOperationIdempotency(r, "logging"), output, currentUserUUID(r))
-	if opErr != nil && h.log != nil {
-		h.log.Warn("logging: failed to enqueue output apply", "id", output.ID.String(), "error", opErr)
-	}
-
-	auditAction := "logging.output.attach_astronomer"
-	if rotate {
-		auditAction = "logging.loki_token.rotate"
-	}
-	recordAudit(r, h.queries, auditAction, "logging_output", output.ID.String(), output.Name, map[string]any{
-		"cluster_id":   clusterID.String(),
-		"rotated":      rotate,
-		"minted":       plaintext != "",
-		"operation_id": operationIDOrEmpty(op),
+	RespondAcceptedOperation(w, "/api/v1/logging/operations/"+result.op.ID.String()+"/", loggingAttachMutationReceipt{
+		Output:    attachAstronomerResponse(result.row, plaintext),
+		Operation: loggingOperationResponse(result.op),
 	})
-
-	status := http.StatusOK
-	if plaintext != "" {
-		status = http.StatusCreated
-		w.Header().Set("Location", "/api/v1/logging/outputs/"+output.ID.String()+"/")
-	}
-	RespondJSON(w, status, attachAstronomerResponse(output, plaintext))
 }
 
 func (h *LoggingHandler) lokiTokenForCluster(ctx context.Context, clusterID uuid.UUID) (sqlc.LokiIngestToken, bool) {
@@ -187,17 +208,16 @@ func clusterIDFromClusterRoute(r *http.Request) (uuid.UUID, error) {
 	return clusterIDFromRequest(r)
 }
 
-func attachAstronomerResponse(output sqlc.LoggingOutput, token string) map[string]any {
-	raw, err := json.Marshal(loggingOutputDTO(output))
-	if err != nil {
-		return map[string]any{"id": output.ID.String()}
-	}
-	var body map[string]any
-	if err := json.Unmarshal(raw, &body); err != nil {
-		return map[string]any{"id": output.ID.String()}
-	}
-	if token != "" {
-		body["token"] = token
-	}
-	return body
+type loggingAttachResult struct {
+	loggingOutputResponse
+	Token string `json:"token,omitempty"`
+}
+
+type loggingAttachMutationReceipt struct {
+	Output    loggingAttachResult `json:"output"`
+	Operation map[string]any      `json:"operation"`
+}
+
+func attachAstronomerResponse(output sqlc.LoggingOutput, token string) loggingAttachResult {
+	return loggingAttachResult{loggingOutputResponse: loggingOutputDTO(output), Token: token}
 }

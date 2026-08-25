@@ -57,35 +57,20 @@ type HelmStatusProber interface {
 	Status(ctx context.Context, clusterID, releaseName, namespace string) (*protocol.HelmResultPayload, error)
 }
 
-// ToolDriftSweepDeps wires the sweep. Set once at startup via
-// ConfigureToolDriftSweep; tests swap fakes.
+// ToolDriftSweepDeps wires the sweep.
 type ToolDriftSweepDeps struct {
 	Queries ToolDriftSweepQuerier
 	Helm    HelmStatusProber
 }
 
-var toolDriftSweepDeps ToolDriftSweepDeps
-
-// ConfigureToolDriftSweep wires runtime dependencies. Called from server
-// bootstrap (the sweep runs on the server pod's tunnel worker).
-func ConfigureToolDriftSweep(deps ToolDriftSweepDeps) {
-	toolDriftSweepDeps = deps
-}
-
-// ResetToolDriftSweep clears the runtime deps. Used by tests.
-func ResetToolDriftSweep() {
-	toolDriftSweepDeps = ToolDriftSweepDeps{}
-}
-
-// HandleToolDriftSweep is the asynq handler. Skips silently when unwired
-// (e.g. the standalone worker pod, which has no tunnel).
-func HandleToolDriftSweep(ctx context.Context, _ *asynq.Task) error {
-	if toolDriftSweepDeps.Queries == nil || toolDriftSweepDeps.Helm == nil {
-		runtimeLogger().InfoContext(ctx, "tool drift sweep runtime not configured, skipping")
-		return nil
+// HandleToolDriftSweep is the tunnel-worker handler. Missing composition is a
+// task error and a production startup failure.
+func (runtime ToolDriftRuntime) HandleToolDriftSweep(ctx context.Context, _ *asynq.Task) error {
+	if err := runtime.Validate(); err != nil {
+		return fmt.Errorf("tool drift sweep runtime is not configured")
 	}
 	return runPeriodicTaskWithLeader(ctx, ToolDriftSweepType, func() error {
-		return runToolDriftSweep(ctx, toolDriftSweepDeps)
+		return runToolDriftSweep(ctx, runtime.Deps)
 	})
 }
 
@@ -109,7 +94,7 @@ func runToolDriftSweep(ctx context.Context, deps ToolDriftSweepDeps) error {
 			DriftDetected: detected,
 			DriftDetail:   detail,
 		}); err != nil {
-			runtimeLogger().WarnContext(ctx, "tool drift mark failed",
+			runtimeLogger(ctx).WarnContext(ctx, "tool drift mark failed",
 				"installed_chart_id", c.ID, "error", err)
 			continue
 		}
@@ -117,7 +102,7 @@ func runToolDriftSweep(ctx context.Context, deps ToolDriftSweepDeps) error {
 			drift++
 		}
 	}
-	runtimeLogger().InfoContext(ctx, "tool drift sweep", "evaluated", len(charts), "drift", drift)
+	runtimeLogger(ctx).InfoContext(ctx, "tool drift sweep", "evaluated", len(charts), "drift", drift)
 	return nil
 }
 
@@ -136,7 +121,7 @@ func chartDrift(ctx context.Context, helm HelmStatusProber, c sqlc.InstalledChar
 		// Transient (agent not connected, timeout). Signal probeOK=false so
 		// the caller preserves the prior drift state instead of overwriting
 		// it. We log so the probe failure isn't invisible.
-		runtimeLogger().WarnContext(ctx, "tool drift probe failed",
+		runtimeLogger(ctx).WarnContext(ctx, "tool drift probe failed",
 			"release", c.ReleaseName, "namespace", c.Namespace, "error", err)
 		return false, "", false
 	}

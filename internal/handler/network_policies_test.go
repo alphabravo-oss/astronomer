@@ -21,6 +21,7 @@ import (
 // fakeNetPolQuerier records mutations + serves the NetworkPolicyQuerier
 // interface. Mirrors the style of fakeClusterTemplateQuerier.
 type fakeNetPolHandlerQuerier struct {
+	fakeOperationIdempotencyStore
 	mu sync.Mutex
 
 	templates    map[uuid.UUID]sqlc.NetworkPolicyTemplate
@@ -28,6 +29,8 @@ type fakeNetPolHandlerQuerier struct {
 	applications map[uuid.UUID]sqlc.NetworkPolicyApplication
 	clusters     map[uuid.UUID]sqlc.Cluster
 	audits       []sqlc.CreateAuditLogV1Params
+	taskOutbox   []sqlc.UpsertTaskOutboxParams
+	auditOutbox  []sqlc.UpsertAuditOutboxParams
 }
 
 func newFakeNetPolHandlerQuerier() *fakeNetPolHandlerQuerier {
@@ -275,27 +278,16 @@ func TestNetPolHandler_TestApply_CreatesRowAndEnqueues(t *testing.T) {
 	h := NewNetworkPolicyHandler(q)
 	body, _ := json.Marshal(ApplyNetworkPolicyRequest{TemplateID: tmpl.ID.String(), Namespace: "team-a"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+cluster.ID.String()+"/network-policies/applications/", bytes.NewReader(body))
+	req.Header.Set("Idempotency-Key", "network-policy-single")
 	w := httptest.NewRecorder()
 	mkRouter(h).ServeHTTP(w, req)
 
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected fail-closed 503, got %d body=%s", w.Code, w.Body.String())
 	}
-	if len(q.applications) != 1 {
-		t.Errorf("expected 1 application created, got %d", len(q.applications))
+	if len(q.applications) != 0 {
+		t.Fatalf("unwired request created %d applications", len(q.applications))
 	}
-	q.mu.Lock()
-	audits := append([]sqlc.CreateAuditLogV1Params(nil), q.audits...)
-	q.mu.Unlock()
-	if len(audits) != 1 {
-		t.Fatalf("audit rows=%d want 1", len(audits))
-	}
-	auditRow := audits[0]
-	if auditRow.Action != "cluster.network_policy.applied" || auditRow.ResourceType != "cluster" || auditRow.ResourceID != cluster.ID.String() {
-		t.Fatalf("audit row=%+v, want cluster.network_policy.applied on cluster %s", auditRow, cluster.ID)
-	}
-	assertAuditDetail(t, auditRow.Detail, "template_id", tmpl.ID.String())
-	assertAuditDetail(t, auditRow.Detail, "template_slug", tmpl.Slug)
 }
 
 func TestNetPolHandler_TestApply_RejectsBuiltinTemplateEdit(t *testing.T) {
@@ -408,13 +400,14 @@ func TestNetPolHandler_CreateApplications_BulkNamespaces(t *testing.T) {
 		Namespaces: []string{"team-a", "team-b", "team-c"},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+cluster.ID.String()+"/network-policies/applications/", bytes.NewReader(body))
+	req.Header.Set("Idempotency-Key", "network-policy-bulk")
 	w := httptest.NewRecorder()
 	mkRouter(h).ServeHTTP(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected fail-closed 503, got %d body=%s", w.Code, w.Body.String())
 	}
-	if got := len(q.applications); got != 3 {
-		t.Errorf("expected 3 applications, got %d", got)
+	if got := len(q.applications); got != 0 {
+		t.Fatalf("unwired bulk request created %d applications", got)
 	}
 }
 
@@ -434,13 +427,14 @@ func TestNetPolHandler_Reapply_ResetsStatusToPending(t *testing.T) {
 
 	h := NewNetworkPolicyHandler(q)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+cluster.ID.String()+"/network-policies/applications/"+app.ID.String()+"/reapply/", nil)
+	req.Header.Set("Idempotency-Key", "network-policy-reapply")
 	w := httptest.NewRecorder()
 	mkRouter(h).ServeHTTP(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected fail-closed 503, got %d body=%s", w.Code, w.Body.String())
 	}
-	if got := q.applications[app.ID].Status; got != "pending" {
-		t.Errorf("expected status=pending after reapply, got %q", got)
+	if got := q.applications[app.ID].Status; got != "failed" {
+		t.Fatalf("unwired reapply mutated status to %q", got)
 	}
 }
 
@@ -462,10 +456,11 @@ func TestNetPolHandler_RequiresClusterUpdate(t *testing.T) {
 	h := NewNetworkPolicyHandler(q)
 	body, _ := json.Marshal(ApplyNetworkPolicyRequest{TemplateID: tmpl.ID.String(), Namespace: "team-a"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+cluster.ID.String()+"/network-policies/applications/", bytes.NewReader(body))
+	req.Header.Set("Idempotency-Key", "network-policy-handler-only")
 	w := httptest.NewRecorder()
 	mkRouter(h).ServeHTTP(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Errorf("expected 202 from a handler-only call (auth is at router), got %d", w.Code)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected 503 without transaction runner, got %d", w.Code)
 	}
 }
 

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func TestLoadRejectsUnknownMutableAndMismatchedRelease(t *testing.T) {
@@ -106,7 +108,7 @@ func validManifest() Manifest {
 	var manifest Manifest
 	manifest.SchemaVersion = 1
 	manifest.Release.Version = "v1.0.0"
-	manifest.Release.InstallMode = "fresh_only"
+	manifest.Release.InstallMode = "fresh_and_upgrade"
 	manifest.Release.SigningPolicy.CertificateOIDCIssuer = "https://token.actions.githubusercontent.com"
 	manifest.Release.SigningPolicy.CertificateIdentity = "https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/v1.0.0"
 	manifest.Compatibility.Kubernetes.MinimumMinor = "1.33"
@@ -114,6 +116,18 @@ func validManifest() Manifest {
 	manifest.Compatibility.AgentProtocol.Name = "astronomer.delivery"
 	manifest.Compatibility.AgentProtocol.Minimum = 2
 	manifest.Compatibility.AgentProtocol.Maximum = 2
+	manifest.Compatibility.AgentProtocol.RequiredCapabilities = protocol.RequiredConnectCapabilities()
+	manifest.Compatibility.Agent.MinimumCompatibleVersion = protocol.MinimumCompatibleAgentVersion
+	manifest.Compatibility.Agent.MinimumSupportedVersion = protocol.MinimumSupportedAgentVersion
+	manifest.Compatibility.Agent.MaximumSupportedVersionExclusive = protocol.MaximumSupportedAgentVersionExclusive
+	manifest.Compatibility.Agent.TunnelProtocolMinimum = protocol.MinimumTunnelProtocolVersion
+	manifest.Compatibility.Agent.TunnelProtocolMaximum = protocol.MaximumTunnelProtocolVersion
+	manifest.Compatibility.Agent.HeartbeatSchemaMinimum = protocol.MinimumHeartbeatSchemaVersion
+	manifest.Compatibility.Agent.HeartbeatSchemaMaximum = protocol.MaximumHeartbeatSchemaVersion
+	manifest.Compatibility.PostgreSQL.SupportedMajors = []int{16, 17}
+	manifest.Compatibility.PostgreSQL.MinimumUpgradeSchema = 1
+	manifest.Compatibility.PostgreSQL.TargetSchema = 14
+	manifest.Compatibility.PostgreSQL.ReversibleThroughSchema = 5
 	manifest.Flux.Version = "v2.9.3"
 	manifest.Flux.APIs = []string{"a", "b", "c"}
 	manifest.BuiltInBundles.CatalogDigest = digest('a')

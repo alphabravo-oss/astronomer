@@ -98,25 +98,10 @@ type NetworkPolicyQuerier interface {
 	GetNetworkPolicyTemplateByID(ctx context.Context, id uuid.UUID) (sqlc.NetworkPolicyTemplate, error)
 }
 
-// NetworkPolicyApplyDeps wires the reconciler. Set once at startup via
-// ConfigureNetworkPolicyApply; tests can swap fakes.
+// NetworkPolicyApplyDeps wires the reconciler.
 type NetworkPolicyApplyDeps struct {
 	Queries   NetworkPolicyQuerier
 	Requester K8sRequester
-}
-
-var networkPolicyDeps NetworkPolicyApplyDeps
-
-// ConfigureNetworkPolicyApply wires the reconciler runtime. Called once
-// from cmd/server (or the worker bootstrap).
-func ConfigureNetworkPolicyApply(deps NetworkPolicyApplyDeps) {
-	networkPolicyDeps = deps
-}
-
-// ResetNetworkPolicyApply clears the runtime deps. Used by tests so
-// per-test Configure calls don't bleed across goroutine-parallel cases.
-func ResetNetworkPolicyApply() {
-	networkPolicyDeps = NetworkPolicyApplyDeps{}
 }
 
 // Metrics
@@ -164,28 +149,27 @@ func SetNetworkPolicyApplicationsGauge(clusterID, status string, n float64) {
 // HandleNetworkPolicyApply is the asynq handler. When the payload
 // carries an application ID we process just that row; otherwise we
 // sweep the pending+failed+drifting queue.
-func HandleNetworkPolicyApply(ctx context.Context, t *asynq.Task) error {
-	if networkPolicyDeps.Queries == nil {
-		runtimeLogger().InfoContext(ctx, "network policy apply runtime not configured, skipping")
-		return nil
+func (runtime NetworkPolicyRuntime) HandleNetworkPolicyApply(ctx context.Context, t *asynq.Task) error {
+	if runtime.Deps.Queries == nil {
+		return fmt.Errorf("network policy apply runtime is not configured")
 	}
 	var payload NetworkPolicyApplyPayload
 	if len(t.Payload()) > 0 {
 		if err := json.Unmarshal(t.Payload(), &payload); err != nil {
-			runtimeLogger().ErrorContext(ctx, "unmarshal network policy apply payload", "error", err)
+			runtimeLogger(ctx).ErrorContext(ctx, "unmarshal network policy apply payload", "error", err)
 			return nil
 		}
 	}
 	if payload.ApplicationID != "" {
 		id, err := uuid.Parse(payload.ApplicationID)
 		if err != nil {
-			runtimeLogger().ErrorContext(ctx, "parse application id", "error", err)
+			runtimeLogger(ctx).ErrorContext(ctx, "parse application id", "error", err)
 			return nil
 		}
-		return runNetworkPolicyApplyOne(ctx, networkPolicyDeps, id)
+		return runNetworkPolicyApplyOne(ctx, runtime.Deps, id)
 	}
 	return runPeriodicTaskWithLeader(ctx, NetworkPolicyApplyType, func() error {
-		return runNetworkPolicyApplySweep(ctx, networkPolicyDeps)
+		return runNetworkPolicyApplySweep(ctx, runtime.Deps)
 	})
 }
 
@@ -227,7 +211,7 @@ func applyOneNetworkPolicy(ctx context.Context, deps NetworkPolicyApplyDeps, row
 	if !tmpl.Enabled {
 		// Disabled template — treat as paused. Leave the row alone; the
 		// operator can re-enable to resume convergence.
-		runtimeLogger().InfoContext(ctx, "skip apply for disabled template", "template_id", tmpl.ID, "application_id", row.ID)
+		runtimeLogger(ctx).InfoContext(ctx, "skip apply for disabled template", "template_id", tmpl.ID, "application_id", row.ID)
 		return
 	}
 	if deps.Requester == nil {
@@ -255,7 +239,7 @@ func applyOneNetworkPolicy(ctx context.Context, deps NetworkPolicyApplyDeps, row
 		LastError:    "",
 		TouchApplied: true,
 	}); err != nil {
-		runtimeLogger().ErrorContext(ctx, "mark applied", "error", err, "id", row.ID)
+		runtimeLogger(ctx).ErrorContext(ctx, "mark applied", "error", err, "id", row.ID)
 		return
 	}
 	recordNetworkPolicyOutcome(tmpl.Slug, "success")
@@ -288,7 +272,7 @@ func markNetworkPolicyFailure(ctx context.Context, deps NetworkPolicyApplyDeps, 
 		LastError:    msg,
 		TouchApplied: false,
 	}); err != nil {
-		runtimeLogger().ErrorContext(ctx, "persist failure", "error", err, "id", row.ID, "msg", msg)
+		runtimeLogger(ctx).ErrorContext(ctx, "persist failure", "error", err, "id", row.ID, "msg", msg)
 	}
 	// Best-effort: derive the template slug for the metric without
 	// re-querying. If the templateID lookup failed earlier we'll just
@@ -352,12 +336,12 @@ func DeleteNetworkPolicyInCluster(ctx context.Context, requester K8sRequester, c
 // drift sweep. Walks 'applied' rows, GETs each in-cluster
 // NetworkPolicy, and marks 'drifting' on divergence so the next apply
 // sweep re-stamps it.
-func HandleNetworkPolicyDriftCheck(ctx context.Context, _ *asynq.Task) error {
-	if networkPolicyDeps.Queries == nil {
-		return nil
+func (runtime NetworkPolicyRuntime) HandleNetworkPolicyDriftCheck(ctx context.Context, _ *asynq.Task) error {
+	if runtime.Deps.Queries == nil {
+		return fmt.Errorf("network policy drift runtime is not configured")
 	}
 	return runPeriodicTaskWithLeader(ctx, NetworkPolicyDriftCheckType, func() error {
-		return runNetworkPolicyDriftSweep(ctx, networkPolicyDeps)
+		return runNetworkPolicyDriftSweep(ctx, runtime.Deps)
 	})
 }
 
@@ -374,7 +358,7 @@ func runNetworkPolicyDriftSweep(ctx context.Context, deps NetworkPolicyApplyDeps
 		}
 		drifted, derr := checkNetworkPolicyDrift(ctx, deps, row)
 		if derr != nil {
-			runtimeLogger().WarnContext(ctx, "drift check error", "error", derr, "id", row.ID)
+			runtimeLogger(ctx).WarnContext(ctx, "drift check error", "error", derr, "id", row.ID)
 			continue
 		}
 		if drifted {
@@ -385,7 +369,7 @@ func runNetworkPolicyDriftSweep(ctx context.Context, deps NetworkPolicyApplyDeps
 				LastError:    "drift detected; will reapply on next tick",
 				TouchApplied: false,
 			}); err != nil {
-				runtimeLogger().WarnContext(ctx, "mark drifting", "error", err, "id", row.ID)
+				runtimeLogger(ctx).WarnContext(ctx, "mark drifting", "error", err, "id", row.ID)
 			}
 			// T6.068 — audit fan-out on drift detection. Reconciled
 			// rows are audited from the apply path (existing
@@ -408,7 +392,7 @@ func runNetworkPolicyDriftSweep(ctx context.Context, deps NetworkPolicyApplyDeps
 			}
 		}
 	}
-	runtimeLogger().InfoContext(ctx, "network policy drift sweep", "evaluated", len(rows), "drift", drift)
+	runtimeLogger(ctx).InfoContext(ctx, "network policy drift sweep", "evaluated", len(rows), "drift", drift)
 	return nil
 }
 
@@ -453,4 +437,3 @@ func checkNetworkPolicyDrift(ctx context.Context, deps NetworkPolicyApplyDeps, r
 	}
 	return false, nil
 }
-

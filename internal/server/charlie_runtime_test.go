@@ -19,25 +19,23 @@ func (f *runtimeDispatcherFake) Dispatch(context.Context, uuid.UUID) error {
 }
 
 func TestCharlieRuntimeGenerationCannotRegisterAfterShutdown(t *testing.T) {
-	tasks.ConfigureCharlieTriggerDispatcher(nil)
-	t.Cleanup(func() { tasks.ConfigureCharlieTriggerDispatcher(nil) })
+	triggers := &tasks.CharlieTriggerRuntime{}
 	dispatcher := &runtimeDispatcherFake{}
-	generation := &charlieRuntimeGeneration{dispatcher: dispatcher}
+	generation := &charlieRuntimeGeneration{dispatcher: dispatcher, triggers: triggers}
 	if err := generation.Shutdown(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	generation.Run(t.Context())
 	task := asynq.NewTask(tasks.CharlieTriggerDispatchType, []byte(`{"event_id":"`+uuid.NewString()+`"}`))
-	if err := tasks.HandleCharlieTriggerDispatch(t.Context(), task); err == nil {
+	if err := triggers.HandleCharlieTriggerDispatch(t.Context(), task); err == nil {
 		t.Fatal("stopped generation registered its trigger dispatcher")
 	}
 }
 
 func TestCharlieRuntimeGenerationDeregistersDispatcherOnShutdown(t *testing.T) {
-	tasks.ConfigureCharlieTriggerDispatcher(nil)
-	t.Cleanup(func() { tasks.ConfigureCharlieTriggerDispatcher(nil) })
+	triggers := &tasks.CharlieTriggerRuntime{}
 	dispatcher := &runtimeDispatcherFake{}
-	generation := &charlieRuntimeGeneration{dispatcher: dispatcher}
+	generation := &charlieRuntimeGeneration{dispatcher: dispatcher, triggers: triggers}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
@@ -47,7 +45,7 @@ func TestCharlieRuntimeGenerationDeregistersDispatcherOnShutdown(t *testing.T) {
 	task := asynq.NewTask(tasks.CharlieTriggerDispatchType, []byte(`{"event_id":"`+uuid.NewString()+`"}`))
 	deadline := time.Now().Add(time.Second)
 	for {
-		if err := tasks.HandleCharlieTriggerDispatch(t.Context(), task); err == nil {
+		if err := triggers.HandleCharlieTriggerDispatch(t.Context(), task); err == nil {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -60,7 +58,7 @@ func TestCharlieRuntimeGenerationDeregistersDispatcherOnShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-done
-	if err := tasks.HandleCharlieTriggerDispatch(t.Context(), task); err == nil {
+	if err := triggers.HandleCharlieTriggerDispatch(t.Context(), task); err == nil {
 		t.Fatal("stopped generation retained its trigger dispatcher")
 	}
 }

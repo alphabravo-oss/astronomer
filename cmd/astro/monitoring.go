@@ -130,7 +130,7 @@ func newMonitoringMetricsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersIdMetricsWithResponse(cmd.Context(), id)
+			resp, err := client.GetClustersByIdMetricsWithResponse(cmd.Context(), id, nil)
 			if err != nil {
 				return err
 			}
@@ -156,7 +156,7 @@ func newMonitoringMetricsSummaryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersIdMetricsSummaryWithResponse(cmd.Context(), id)
+			resp, err := client.GetClustersByIdMetricsSummaryWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -186,7 +186,7 @@ func newMonitoringHealthCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersIdHealthWithResponse(cmd.Context(), id)
+			resp, err := client.GetClustersByIdHealthWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -216,7 +216,7 @@ func newMonitoringConditionsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersIdConditionsWithResponse(cmd.Context(), id)
+			resp, err := client.GetClustersByIdConditionsWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -242,7 +242,7 @@ func newMonitoringConditionRemediationCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersIdConditionRemediationWithResponse(cmd.Context(), id)
+			resp, err := client.GetClustersByIdConditionRemediationWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -285,7 +285,7 @@ func newMonitoringVulnerabilitiesSummaryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersIdVulnerabilitiesSummaryWithResponse(cmd.Context(), id)
+			resp, err := client.GetClustersByIdVulnerabilitiesSummaryWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -311,7 +311,7 @@ func newMonitoringVulnerabilitiesImagesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersIdVulnerabilitiesImagesWithResponse(cmd.Context(), id)
+			resp, err := client.GetClustersByIdVulnerabilitiesImagesWithResponse(cmd.Context(), id, nil)
 			if err != nil {
 				return err
 			}
@@ -342,11 +342,11 @@ func newMonitoringEventsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var params *astroclient.GetApiV1ClustersClusterIdEventsParams
+			var params *astroclient.GetClustersByClusterIdEventsParams
 			if cmd.Flags().Changed("limit") {
-				params = &astroclient.GetApiV1ClustersClusterIdEventsParams{Limit: &limit}
+				params = &astroclient.GetClustersByClusterIdEventsParams{Limit: &limit}
 			}
-			resp, err := client.GetApiV1ClustersClusterIdEventsWithResponse(cmd.Context(), id, params)
+			resp, err := client.GetClustersByClusterIdEventsWithResponse(cmd.Context(), id, params)
 			if err != nil {
 				return err
 			}
@@ -394,7 +394,7 @@ func newServiceMeshGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersClusterIdServiceMeshWithResponse(cmd.Context(), id)
+			resp, err := client.GetClustersByClusterIdServiceMeshWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -420,7 +420,7 @@ func newServiceMeshInventoryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersClusterIdServiceMeshInventoryWithResponse(cmd.Context(), id)
+			resp, err := client.GetClustersByClusterIdServiceMeshInventoryWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -446,7 +446,7 @@ func newServiceMeshMtlsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ClustersClusterIdServiceMeshMtlsWithResponse(cmd.Context(), id)
+			resp, err := client.GetClustersByClusterIdServiceMeshMtlsWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -472,7 +472,7 @@ func newServiceMeshDetectCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1ClustersClusterIdServiceMeshDetectWithResponse(cmd.Context(), id)
+			resp, err := client.PostClustersByClusterIdServiceMeshDetectWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -526,7 +526,7 @@ anything else is sent verbatim as {"yaml": "<document>"}.`,
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1ClustersClusterIdServiceMeshValidateWithBodyWithResponse(
+			resp, err := client.PostClustersByClusterIdServiceMeshValidateWithBodyWithResponse(
 				cmd.Context(), id, "application/json", bytes.NewReader(payload))
 			if err != nil {
 				return err

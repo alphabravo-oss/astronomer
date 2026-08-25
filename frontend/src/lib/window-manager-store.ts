@@ -1,5 +1,5 @@
-import { persistedStore } from '@/lib/persisted-store';
-import { createStoreHook } from '@/lib/store-hook';
+import { persistedStore } from "@/lib/persisted-store";
+import { createStoreHook } from "@/lib/store-hook";
 
 // ============================================================
 // Window Manager Store (Rancher-style bottom drawer)
@@ -9,12 +9,12 @@ import { createStoreHook } from '@/lib/store-hook';
 // concurrent logs/exec tabs. Tabs are pure ephemeral state (live WS
 // connections); we only persist drawer chrome (height + minimized).
 
-export type WindowTabKind = 'logs' | 'exec';
+export type WindowTabKind = "logs" | "exec";
 
 export type WindowTab =
   | {
       id: string;
-      kind: 'logs';
+      kind: "logs";
       clusterId: string;
       namespace: string;
       pod: string;
@@ -22,15 +22,15 @@ export type WindowTab =
     }
   | {
       id: string;
-      kind: 'exec';
+      kind: "exec";
       clusterId: string;
       namespace: string;
       pod: string;
       container?: string;
-      shell?: 'bash' | 'sh';
+      shell?: "bash" | "sh";
     };
 
-type AddTabInput = Omit<WindowTab, 'id'> & { id?: string };
+type AddTabInput = Omit<WindowTab, "id"> & { id?: string };
 
 interface WindowManagerState extends Record<string, unknown> {
   tabs: WindowTab[];
@@ -57,12 +57,12 @@ const MIN_HEIGHT = 200;
 // same (pod, container) reuses the existing tab rather than spawning
 // a duplicate WS connection.
 export function tabIdFor(t: AddTabInput): string {
-  const container = t.container || '_';
+  const container = t.container || "_";
   return `${t.kind}:${t.clusterId}:${t.namespace}:${t.pod}:${container}`;
 }
 
 function clampHeight(px: number): number {
-  if (typeof window === 'undefined') {
+  if (typeof window === "undefined") {
     return Math.max(MIN_HEIGHT, px);
   }
   const max = Math.max(MIN_HEIGHT, window.innerHeight - 80);
@@ -85,11 +85,15 @@ export const useWindowManagerStore = createStoreHook(
           .getState()
           .tabs.find((t) => t.id === id);
         if (existing) {
-          useWindowManagerStore.setState({ activeTabId: id, open: true, minimized: false });
+          useWindowManagerStore.setState({
+            activeTabId: id,
+            open: true,
+            minimized: false,
+          });
           return id;
         }
 
-        const tab = { ...(input as Omit<WindowTab, 'id'>), id } as WindowTab;
+        const tab = { ...(input as Omit<WindowTab, "id">), id } as WindowTab;
         useWindowManagerStore.setState((state) => {
           // Enforce hard cap by dropping the oldest tab. We avoid silently
           // failing because the user just clicked an action — show them
@@ -129,14 +133,18 @@ export const useWindowManagerStore = createStoreHook(
       },
 
       closeAll: () => {
-        useWindowManagerStore.setState({ tabs: [], activeTabId: null, open: false });
+        useWindowManagerStore.setState({
+          tabs: [],
+          activeTabId: null,
+          open: false,
+        });
       },
 
       setActive: (id) => {
         useWindowManagerStore.setState((state) =>
           state.tabs.find((t) => t.id === id)
             ? { activeTabId: id, open: true, minimized: false }
-            : state
+            : state,
         );
       },
 
@@ -144,10 +152,11 @@ export const useWindowManagerStore = createStoreHook(
         useWindowManagerStore.setState((s) => ({ minimized: !s.minimized })),
       setMinimized: (m) => useWindowManagerStore.setState({ minimized: m }),
       setOpen: (open) => useWindowManagerStore.setState({ open }),
-      setHeight: (px) => useWindowManagerStore.setState({ height: clampHeight(px) }),
+      setHeight: (px) =>
+        useWindowManagerStore.setState({ height: clampHeight(px) }),
     },
     {
-      name: 'astronomer-window-manager',
+      name: "astronomer-window-manager",
       // Only chrome is persisted; live tabs are intentionally dropped on
       // reload because their WS connections can't survive a page load.
       partialize: (state) => ({

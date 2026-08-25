@@ -109,8 +109,9 @@ SELECT * FROM control_plane_silences
 WHERE starts_at <= now() AND ends_at > now()
 ORDER BY ends_at ASC;
 
--- name: DeleteControlPlaneSilence :exec
-DELETE FROM control_plane_silences WHERE id = $1;
+-- name: DeleteControlPlaneSilence :one
+DELETE FROM control_plane_silences WHERE id = $1
+RETURNING *;
 
 -- name: ListAlertInhibitions :many
 SELECT * FROM alert_inhibitions

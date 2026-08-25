@@ -14,6 +14,7 @@ resources:
   deploymentsPerCluster: 50
   servicesPerCluster: 75
 eventsPerSecond: 500
+mandatoryAudit: {ratePerSecond: 2, maxOperations: 3720}
 day2FailureDrills:
   - agent_reconnect_storm
   - delivery_rollout_fanout

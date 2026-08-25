@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-// TestLookupProvider_Known exercises the four built-in providers — the
+// TestLookupProvider_Known exercises every built-in provider — the
 // "is this provider known?" check is the gate every handler write
 // shares so a regression here breaks every PUT/POST.
 func TestLookupProvider_Known(t *testing.T) {
-	for _, name := range []string{"aws", "gcp", "azure", "generic"} {
+	for _, name := range []string{"aws", "gcp", "azure", "digitalocean", "generic"} {
 		t.Run(name, func(t *testing.T) {
 			p, ok := LookupProvider(name)
 			if !ok {
@@ -41,10 +41,10 @@ func TestLookupProvider_CaseInsensitive(t *testing.T) {
 
 func TestListProviders_StableOrder(t *testing.T) {
 	got := ListProviders()
-	if len(got) != 4 {
-		t.Fatalf("expected 4 providers, got %d", len(got))
+	if len(got) != 5 {
+		t.Fatalf("expected 5 providers, got %d", len(got))
 	}
-	want := []string{"aws", "azure", "gcp", "generic"}
+	want := []string{"aws", "azure", "digitalocean", "gcp", "generic"}
 	for i, p := range got {
 		if p.Name != want[i] {
 			t.Fatalf("provider[%d]: expected %q, got %q", i, want[i], p.Name)
@@ -59,6 +59,8 @@ func TestValidate_AWS_OK(t *testing.T) {
 		"access_key_id":     "AKIAFAKE",
 		"secret_access_key": "shhh",
 		"region":            "us-east-1",
+		"session_token":     "temporary-token",
+		"assume_role_arn":   "arn:aws:iam::123456789012:role/astronomer",
 	}
 	if err := Validate("aws", blob); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -201,10 +203,14 @@ func TestRedactSecrets_AWS(t *testing.T) {
 		"access_key_id":     "AKIAFAKE",
 		"secret_access_key": "shhh",
 		"region":            "us-east-1",
+		"session_token":     "temporary-token",
 	}
 	got := RedactSecrets("aws", in)
 	if got["access_key_id"] != SecretSentinel || got["secret_access_key"] != SecretSentinel {
 		t.Fatalf("expected secret keys to redact, got %+v", got)
+	}
+	if got["session_token"] != SecretSentinel {
+		t.Fatalf("expected session token to redact, got %+v", got)
 	}
 	if got["region"] != "us-east-1" {
 		t.Fatalf("expected region to pass through, got %+v", got)

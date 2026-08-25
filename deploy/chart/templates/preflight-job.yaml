@@ -1,6 +1,12 @@
 {{- define "astronomer.preflightJobSpec" -}}
 {{- $serviceAccountName := .serviceAccountName -}}
 {{- with .root }}
+{{- $releaseCompatibility := (.Files.Get "files/release-compatibility.json" | fromJson) -}}
+{{- $minimumUpgradeSchema := int $releaseCompatibility.postgresql.minimum_upgrade_schema -}}
+{{- $targetSchema := int $releaseCompatibility.postgresql.target_schema -}}
+{{- if or (ne (int .Values.preflight.databaseSchema.minimumUpgradeVersion) $minimumUpgradeSchema) (ne (int .Values.preflight.databaseSchema.targetVersion) $targetSchema) -}}
+{{- fail "preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate" -}}
+{{- end }}
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 600
@@ -67,10 +73,10 @@ spec:
             - /bin/sh
             - -ec
             - |
-              fail_fresh_install() {
-                echo "fresh_install_required: $1"
-                echo "Astronomer v1.0.0 never deletes, reformats, or upgrades a pre-v1 database."
-                echo "Install v1 with a new release name and an empty database; keep the old release and backup for rollback."
+              fail_schema_preflight() {
+                echo "database_schema_rejected: $1"
+                echo "This release accepts an empty database or one clean schema from {{ $minimumUpgradeSchema }} through {{ $targetSchema }}."
+                echo "Restore a verified backup or install with a new database; this preflight never changes the database."
                 exit 1
               }
 
@@ -100,7 +106,7 @@ spec:
                 exit 1
               }
               if [ -n "$legacy_tables" ]; then
-                fail_fresh_install "legacy delivery tables detected: ${legacy_tables}"
+                fail_schema_preflight "legacy delivery tables detected: ${legacy_tables}"
               fi
 
               has_migrations=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc "SELECT to_regclass('public.schema_migrations') IS NOT NULL;") || exit 1
@@ -110,7 +116,7 @@ spec:
                   JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
                   WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p');") || exit 1
                 if [ "$public_tables" != "0" ]; then
-                  fail_fresh_install "unknown public schema without schema_migrations"
+                  fail_schema_preflight "unknown public schema without schema_migrations"
                 fi
                 echo "Empty PostgreSQL database detected; fresh v1 install is allowed."
                 exit 0
@@ -125,8 +131,11 @@ spec:
               migration_rows=$(printf '%s' "$migration_state" | cut -d '|' -f 1)
               migration_version=$(printf '%s' "$migration_state" | cut -d '|' -f 2)
               migration_dirty=$(printf '%s' "$migration_state" | cut -d '|' -f 3)
-              if [ "$migration_rows" != "1" ] || [ "$migration_version" != "{{ .Values.preflight.freshInstall.acceptedSchemaVersion }}" ] || [ "$migration_dirty" != "f" ]; then
-                fail_fresh_install "expected one clean schema_migrations row at version {{ .Values.preflight.freshInstall.acceptedSchemaVersion }}, found rows=${migration_rows} version=${migration_version} dirty=${migration_dirty}"
+              if [ "$migration_rows" != "1" ] || [ "$migration_dirty" != "f" ]; then
+                fail_schema_preflight "expected one clean schema_migrations row, found rows=${migration_rows} version=${migration_version} dirty=${migration_dirty}"
+              fi
+              if [ "$migration_version" -lt "{{ $minimumUpgradeSchema }}" ] || [ "$migration_version" -gt "{{ $targetSchema }}" ]; then
+                fail_schema_preflight "schema version ${migration_version} is outside supported range {{ $minimumUpgradeSchema }}-{{ $targetSchema }}"
               fi
 
               missing_v1_tables=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc "
@@ -141,9 +150,9 @@ spec:
                 SELECT COALESCE(string_agg(name, ',' ORDER BY name), '')
                 FROM required WHERE to_regclass('public.' || name) IS NULL;") || exit 1
               if [ -n "$missing_v1_tables" ]; then
-                fail_fresh_install "schema version is 1 but required v1 tables are missing: ${missing_v1_tables}"
+                fail_schema_preflight "required Astronomer tables are missing: ${missing_v1_tables}"
               fi
-              echo "Existing clean Astronomer v1 database accepted."
+              echo "Existing clean Astronomer schema ${migration_version} accepted for migration to {{ $targetSchema }}."
           resources:
             requests:
               cpu: 25m

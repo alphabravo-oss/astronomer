@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * Admin gate for the Settings hub. Wraps the page body and shows a 403
@@ -7,9 +7,9 @@
  * loading-then-error flash and keeps the page header informative when an
  * operator browses to a URL they can't actually use.
  */
-import { ArrowLeft, Lock } from 'lucide-react';
-import { useIsSuperuser } from '@/components/settings/hooks';
-import { EmptyState } from '@/components/ui/empty-state';
+import { ArrowLeft, Lock } from "lucide-react";
+import { useIsSuperuser } from "@/components/settings/hooks";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export function SettingsAuthGate({ children }: { children: React.ReactNode }) {
   const { isSuperuser, ready } = useIsSuperuser();

@@ -30,6 +30,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -67,6 +68,36 @@ type ChartRatingsQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 }
 
+// ChartRatingMutationTx is the complete transaction-bound surface for a
+// rating write. The locked reads keep authorization and upsert decisions true
+// until commit; catalog.Querier keeps aggregate maintenance in that same
+// transaction; OutboxQuerier makes audit evidence mandatory.
+type ChartRatingMutationTx interface {
+	ChartRatingsQuerier
+	LockChartRatingMutationKey(context.Context, string) error
+	GetChartRatingByIDForUpdate(context.Context, uuid.UUID) (sqlc.ChartRating, error)
+	GetChartRatingByUserAndInstallationForUpdate(context.Context, sqlc.GetChartRatingByUserAndInstallationParams) (sqlc.ChartRating, error)
+	GetChartRatingByUserAndChartNoInstallForUpdate(context.Context, sqlc.GetChartRatingByUserAndChartNoInstallParams) (sqlc.ChartRating, error)
+	GetUserByIDForUpdate(context.Context, uuid.UUID) (sqlc.User, error)
+	audit.OutboxQuerier
+}
+
+type chartRatingRunTxFunc func(context.Context, func(ChartRatingMutationTx) error) error
+
+type chartRatingMutationResult struct {
+	rating sqlc.ChartRating
+	action string
+	status int
+}
+
+var (
+	errChartRatingChartNotFound = errors.New("chart rating chart not found")
+	errChartRatingNotFound      = errors.New("chart rating not found")
+	errChartRatingCallerMissing = errors.New("chart rating caller not found")
+	errChartRatingForbidden     = errors.New("chart rating mutation forbidden")
+	errChartRatingConflict      = errors.New("chart rating conflicts with chart")
+)
+
 // ChartRatingsHandler handles ratings + recommendation HTTP endpoints.
 // It does not run any background work; rating writes call
 // catalog.RecomputeAggregate inline so the hot-path browse never reads
@@ -76,6 +107,7 @@ type ChartRatingsHandler struct {
 	queries ChartRatingsQuerier
 	log     *slog.Logger
 	authz   authorizationSupport
+	runTx   chartRatingRunTxFunc
 }
 
 // NewChartRatingsHandler returns a handler bound to the given querier.
@@ -98,8 +130,65 @@ func (h *ChartRatingsHandler) SetAuthorization(engine *rbac.Engine, querier midd
 	h.authz.SetAuthorization(engine, querier)
 }
 
+func (h *ChartRatingsHandler) SetRunTx(runTx chartRatingRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *ChartRatingsHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
+}
+
+// executeChartRatingMutation is the only rating-write commit boundary. A
+// missing runner fails closed: production must never fall back to independent
+// domain, aggregate, and best-effort audit writes.
+func executeChartRatingMutation(
+	r *http.Request,
+	h *ChartRatingsHandler,
+	mutate func(ChartRatingMutationTx) (chartRatingMutationResult, error),
+) (chartRatingMutationResult, error) {
+	var result chartRatingMutationResult
+	if h == nil || h.runTx == nil {
+		return result, audit.ErrOutboxUnavailable
+	}
+	err := h.runTx(r.Context(), func(q ChartRatingMutationTx) error {
+		var mutationErr error
+		result, mutationErr = mutate(q)
+		if mutationErr != nil {
+			return mutationErr
+		}
+		if err := catalog.RecomputeAggregate(r.Context(), q, result.rating.ChartID); err != nil {
+			return err
+		}
+		return recordAuditOutbox(r, q, result.action, "chart_rating", result.rating.ID.String(), "", result.status, map[string]any{
+			"chart_id": result.rating.ChartID.String(),
+			"stars":    result.rating.Stars,
+		})
+	})
+	return result, err
+}
+
+func respondChartRatingMutationError(w http.ResponseWriter, r *http.Request, err error, forbiddenMessage, fallbackCode, fallbackMessage string) {
+	switch {
+	case errors.Is(err, errChartRatingChartNotFound):
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "chart not found")
+	case errors.Is(err, errChartRatingNotFound):
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "rating not found")
+	case errors.Is(err, errChartRatingCallerMissing):
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Caller not found")
+	case errors.Is(err, errChartRatingForbidden):
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, forbiddenMessage)
+	case errors.Is(err, errChartRatingConflict):
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "rating does not belong to this chart")
+	default:
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, fallbackCode, fallbackMessage)
+	}
+}
+
 // --- request / response payloads -------------------------------------
 
+// openapi:request ChartRatingWriteRequest
 type createOrUpdateRatingRequest struct {
 	Stars int16 `json:"stars"`
 	// InstallationID is optional. When omitted the rating is bound by
@@ -233,93 +322,79 @@ func (h *ChartRatingsHandler) CreateRating(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Verify chart exists. A POST against a non-existent chart should
-	// 404, not silently insert and then fail on the FK.
-	if _, err := h.queries.GetHelmChartByID(r.Context(), chartID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "chart not found")
-			return
+	result, err := executeChartRatingMutation(r, h, func(q ChartRatingMutationTx) (chartRatingMutationResult, error) {
+		if err := q.LockChartRatingMutationKey(r.Context(), "chart-rating:chart:"+chartID.String()); err != nil {
+			return chartRatingMutationResult{}, err
 		}
-		h.log.ErrorContext(r.Context(), "lookup chart", "error", err)
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "lookup chart failed")
-		return
-	}
+		if err := q.LockChartRatingMutationKey(r.Context(), chartRatingNaturalLockKey(userID, chartID, instID)); err != nil {
+			return chartRatingMutationResult{}, err
+		}
+		if _, err := q.GetHelmChartByID(r.Context(), chartID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return chartRatingMutationResult{}, errChartRatingChartNotFound
+			}
+			return chartRatingMutationResult{}, err
+		}
 
-	// Re-rate semantics: if a row exists, UPDATE rather than INSERT.
-	// We resolve to an existing row through one of two unique
-	// constraints depending on whether the rating is install-bound.
-	existing, found := h.findExistingRating(r.Context(), userID, chartID, instID)
-	if found {
-		updated, err := h.queries.UpdateChartRating(r.Context(), sqlc.UpdateChartRatingParams{
-			ID: existing.ID, Stars: body.Stars, Note: note,
-		})
+		existing, found, err := findExistingRatingForUpdate(r.Context(), q, userID, chartID, instID)
 		if err != nil {
-			h.log.ErrorContext(r.Context(), "update rating", "error", err)
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "could not update rating")
-			return
+			return chartRatingMutationResult{}, err
 		}
-		h.recomputeInline(r.Context(), chartID)
-		recordAudit(r, h.queries, "chart.rating.updated", "chart_rating", updated.ID.String(), "", map[string]any{
-			"chart_id": chartID.String(),
-			"stars":    body.Stars,
-		})
-		RespondJSON(w, http.StatusOK, toRatingResponse(updated))
-		return
-	}
+		if found {
+			// An installation-bound rating is globally unique for the user. Do
+			// not let a mismatched chart URL silently update another chart.
+			if existing.ChartID != chartID {
+				return chartRatingMutationResult{}, errChartRatingConflict
+			}
+			updated, err := q.UpdateChartRating(r.Context(), sqlc.UpdateChartRatingParams{
+				ID: existing.ID, Stars: body.Stars, Note: note,
+			})
+			return chartRatingMutationResult{rating: updated, action: "chart.rating.updated", status: http.StatusOK}, err
+		}
 
-	created, err := h.queries.CreateChartRating(r.Context(), sqlc.CreateChartRatingParams{
-		ChartID:        chartID,
-		InstallationID: instID,
-		UserID:         userID,
-		Stars:          body.Stars,
-		Note:           note,
+		created, err := q.CreateChartRating(r.Context(), sqlc.CreateChartRatingParams{
+			ChartID: chartID, InstallationID: instID, UserID: userID,
+			Stars: body.Stars, Note: note,
+		})
+		return chartRatingMutationResult{rating: created, action: "chart.rating.created", status: http.StatusCreated}, err
 	})
 	if err != nil {
-		h.log.ErrorContext(r.Context(), "create rating", "error", err)
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "could not create rating")
+		h.log.ErrorContext(r.Context(), "commit rating upsert", "error", err)
+		respondChartRatingMutationError(w, r, err, "only the rating's owner may modify it", apierror.CreateError, "could not create or update rating")
 		return
 	}
-	h.recomputeInline(r.Context(), chartID)
-	recordAudit(r, h.queries, "chart.rating.created", "chart_rating", created.ID.String(), "", map[string]any{
-		"chart_id": chartID.String(),
-		"stars":    body.Stars,
-	})
-	w.Header().Set("Location", "/charts/"+chartID.String()+"/ratings/"+created.ID.String()+"/")
-	RespondJSON(w, http.StatusCreated, toRatingResponse(created))
+	if result.status == http.StatusCreated {
+		w.Header().Set("Location", "/charts/"+chartID.String()+"/ratings/"+result.rating.ID.String()+"/")
+	}
+	RespondJSON(w, result.status, toRatingResponse(result.rating))
 }
 
-// findExistingRating returns the row (if any) the new POST should
-// resolve to. Install-bound: (user, installation). Otherwise: (user,
-// chart, installation IS NULL) — matching the partial unique index.
-func (h *ChartRatingsHandler) findExistingRating(ctx context.Context, userID, chartID uuid.UUID, instID pgtype.UUID) (sqlc.ChartRating, bool) {
+func chartRatingNaturalLockKey(userID, chartID uuid.UUID, instID pgtype.UUID) string {
 	if instID.Valid {
-		got, err := h.queries.GetChartRatingByUserAndInstallation(ctx, sqlc.GetChartRatingByUserAndInstallationParams{
-			UserID: userID, InstallationID: instID,
-		})
-		if err == nil {
-			return got, true
-		}
-		return sqlc.ChartRating{}, false
+		return "chart-rating:user-installation:" + userID.String() + ":" + uuid.UUID(instID.Bytes).String()
 	}
-	got, err := h.queries.GetChartRatingByUserAndChartNoInstall(ctx, sqlc.GetChartRatingByUserAndChartNoInstallParams{
-		UserID: userID, ChartID: chartID,
-	})
-	if err == nil {
-		return got, true
-	}
-	return sqlc.ChartRating{}, false
+	return "chart-rating:user-chart:" + userID.String() + ":" + chartID.String()
 }
 
-// recomputeInline runs catalog.RecomputeAggregate without blocking the
-// HTTP response on its result. The aggregate row is cheap to rebuild
-// (a single scan of chart_ratings on this chart_id), but the spec
-// stipulates the catalog browse should read fresh — so we run it
-// synchronously inside the handler. Errors are logged, not surfaced
-// to the caller; the nightly recompute is the backstop.
-func (h *ChartRatingsHandler) recomputeInline(ctx context.Context, chartID uuid.UUID) {
-	if err := catalog.RecomputeAggregate(ctx, h.queries, chartID); err != nil {
-		h.log.WarnContext(ctx, "inline recompute failed", "chart_id", chartID, "error", err)
+// findExistingRatingForUpdate repeats POST's state-dependent upsert lookup
+// after the natural-key lock has been acquired inside the transaction.
+func findExistingRatingForUpdate(ctx context.Context, q ChartRatingMutationTx, userID, chartID uuid.UUID, instID pgtype.UUID) (sqlc.ChartRating, bool, error) {
+	var (
+		got sqlc.ChartRating
+		err error
+	)
+	if instID.Valid {
+		got, err = q.GetChartRatingByUserAndInstallationForUpdate(ctx, sqlc.GetChartRatingByUserAndInstallationParams{UserID: userID, InstallationID: instID})
+	} else {
+		got, err = q.GetChartRatingByUserAndChartNoInstallForUpdate(ctx, sqlc.GetChartRatingByUserAndChartNoInstallParams{UserID: userID, ChartID: chartID})
 	}
+	if err == nil {
+		return got, true, nil
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sqlc.ChartRating{}, false, nil
+	}
+	return sqlc.ChartRating{}, false, err
 }
 
 // ListRatings handles GET /charts/{chart_id}/ratings/.
@@ -416,26 +491,18 @@ func (h *ChartRatingsHandler) GetMyRating(w http.ResponseWriter, r *http.Request
 // is validated against the existing row to prevent a cross-chart
 // hijack (caller supplies any chart_id, body says any stars).
 func (h *ChartRatingsHandler) UpdateRating(w http.ResponseWriter, r *http.Request) {
-	user, callerID, ok := h.requireUser(w, r)
+	callerID, ok := requireChartRatingUserID(w, r)
 	if !ok {
+		return
+	}
+	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
 		return
 	}
 	ratingID, err := uuid.Parse(chi.URLParam(r, "rating_id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "rating_id must be a UUID")
-		return
-	}
-	existing, err := h.queries.GetChartRatingByID(r.Context(), ratingID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "rating not found")
-			return
-		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, err.Error())
-		return
-	}
-	if existing.UserID != callerID && !user.IsSuperuser {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "only the rating's owner may modify it")
 		return
 	}
 	var body createOrUpdateRatingRequest
@@ -452,26 +519,47 @@ func (h *ChartRatingsHandler) UpdateRating(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.NoteTooLong, "note must be 280 chars or fewer")
 		return
 	}
-	updated, err := h.queries.UpdateChartRating(r.Context(), sqlc.UpdateChartRatingParams{
-		ID: ratingID, Stars: body.Stars, Note: note,
+	result, err := executeChartRatingMutation(r, h, func(q ChartRatingMutationTx) (chartRatingMutationResult, error) {
+		if err := q.LockChartRatingMutationKey(r.Context(), "chart-rating:chart:"+chartID.String()); err != nil {
+			return chartRatingMutationResult{}, err
+		}
+		user, err := q.GetUserByIDForUpdate(r.Context(), callerID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return chartRatingMutationResult{}, errChartRatingCallerMissing
+		}
+		if err != nil {
+			return chartRatingMutationResult{}, err
+		}
+		existing, err := q.GetChartRatingByIDForUpdate(r.Context(), ratingID)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && existing.ChartID != chartID) {
+			return chartRatingMutationResult{}, errChartRatingNotFound
+		}
+		if err != nil {
+			return chartRatingMutationResult{}, err
+		}
+		if existing.UserID != callerID && !user.IsSuperuser {
+			return chartRatingMutationResult{}, errChartRatingForbidden
+		}
+		updated, err := q.UpdateChartRating(r.Context(), sqlc.UpdateChartRatingParams{ID: ratingID, Stars: body.Stars, Note: note})
+		return chartRatingMutationResult{rating: updated, action: "chart.rating.updated", status: http.StatusOK}, err
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, err.Error())
+		respondChartRatingMutationError(w, r, err, "only the rating's owner may modify it", apierror.UpdateError, "could not update rating")
 		return
 	}
-	h.recomputeInline(r.Context(), existing.ChartID)
-	recordAudit(r, h.queries, "chart.rating.updated", "chart_rating", ratingID.String(), "", map[string]any{
-		"chart_id": existing.ChartID.String(),
-		"stars":    body.Stars,
-	})
-	RespondJSON(w, http.StatusOK, toRatingResponse(updated))
+	RespondJSON(w, http.StatusOK, toRatingResponse(result.rating))
 }
 
 // DeleteRating handles DELETE /charts/{chart_id}/ratings/{rating_id}/.
 // Owner-or-superuser only, same as Update.
 func (h *ChartRatingsHandler) DeleteRating(w http.ResponseWriter, r *http.Request) {
-	user, callerID, ok := h.requireUser(w, r)
+	callerID, ok := requireChartRatingUserID(w, r)
 	if !ok {
+		return
+	}
+	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
 		return
 	}
 	ratingID, err := uuid.Parse(chi.URLParam(r, "rating_id"))
@@ -479,28 +567,36 @@ func (h *ChartRatingsHandler) DeleteRating(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "rating_id must be a UUID")
 		return
 	}
-	existing, err := h.queries.GetChartRatingByID(r.Context(), ratingID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "rating not found")
-			return
+	_, err = executeChartRatingMutation(r, h, func(q ChartRatingMutationTx) (chartRatingMutationResult, error) {
+		if err := q.LockChartRatingMutationKey(r.Context(), "chart-rating:chart:"+chartID.String()); err != nil {
+			return chartRatingMutationResult{}, err
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, err.Error())
-		return
-	}
-	if existing.UserID != callerID && !user.IsSuperuser {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "only the rating's owner may delete it")
-		return
-	}
-	if err := h.queries.DeleteChartRating(r.Context(), ratingID); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, err.Error())
-		return
-	}
-	h.recomputeInline(r.Context(), existing.ChartID)
-	recordAudit(r, h.queries, "chart.rating.deleted", "chart_rating", ratingID.String(), "", map[string]any{
-		"chart_id": existing.ChartID.String(),
-		"stars":    existing.Stars,
+		user, err := q.GetUserByIDForUpdate(r.Context(), callerID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return chartRatingMutationResult{}, errChartRatingCallerMissing
+		}
+		if err != nil {
+			return chartRatingMutationResult{}, err
+		}
+		existing, err := q.GetChartRatingByIDForUpdate(r.Context(), ratingID)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && existing.ChartID != chartID) {
+			return chartRatingMutationResult{}, errChartRatingNotFound
+		}
+		if err != nil {
+			return chartRatingMutationResult{}, err
+		}
+		if existing.UserID != callerID && !user.IsSuperuser {
+			return chartRatingMutationResult{}, errChartRatingForbidden
+		}
+		if err := q.DeleteChartRating(r.Context(), ratingID); err != nil {
+			return chartRatingMutationResult{}, err
+		}
+		return chartRatingMutationResult{rating: existing, action: "chart.rating.deleted", status: http.StatusNoContent}, nil
 	})
+	if err != nil {
+		respondChartRatingMutationError(w, r, err, "only the rating's owner may delete it", apierror.DeleteError, "could not delete rating")
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -526,10 +622,9 @@ func (h *ChartRatingsHandler) PopularRecommendations(w http.ResponseWriter, r *h
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
 		return
 	}
-	// TopCharts returns a ranked, limit-capped slice with no COUNT query, so
-	// Total is the page length. // TODO(total)
+	// TopCharts is limit-capped; omit an inexact total.
 	results = h.filterVisibleRecommendations(r.Context(), results, projectID, projectScoped, limit)
-	RespondList(w, results, NewPagination(len(results), limit, 0, len(results)))
+	RespondList(w, results, NewPaginationFromPage(limit, 0, len(results)))
 }
 
 // SimilarRecommendations handles GET /catalog/recommendations/similar/{chart_id}/.
@@ -552,10 +647,9 @@ func (h *ChartRatingsHandler) SimilarRecommendations(w http.ResponseWriter, r *h
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
 		return
 	}
-	// SimilarCharts returns a similarity-ranked, limit-capped slice with no
-	// COUNT query, so Total is the page length. // TODO(total)
+	// SimilarCharts is limit-capped; omit an inexact total.
 	results = h.filterVisibleRecommendations(r.Context(), results, projectID, projectScoped, limit)
-	RespondList(w, results, NewPagination(len(results), limit, 0, len(results)))
+	RespondList(w, results, NewPaginationFromPage(limit, 0, len(results)))
 }
 
 func (h *ChartRatingsHandler) authorizeRecommendationChart(w http.ResponseWriter, r *http.Request, chartID, projectID uuid.UUID, projectScoped bool) bool {
@@ -606,23 +700,18 @@ func (h *ChartRatingsHandler) recommendationChartVisible(ctx context.Context, ch
 // requireUser resolves the authenticated user (for the superuser check)
 // and writes the appropriate error if anything is missing. Returns the
 // full user row, the parsed UUID, and a continue-flag.
-func (h *ChartRatingsHandler) requireUser(w http.ResponseWriter, r *http.Request) (sqlc.User, uuid.UUID, bool) {
+func requireChartRatingUserID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	auth, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
-		return sqlc.User{}, uuid.Nil, false
+		return uuid.Nil, false
 	}
 	userID, err := uuid.Parse(auth.ID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Invalid user ID")
-		return sqlc.User{}, uuid.Nil, false
+		return uuid.Nil, false
 	}
-	user, err := h.queries.GetUserByID(r.Context(), userID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Caller not found")
-		return sqlc.User{}, uuid.Nil, false
-	}
-	return user, userID, true
+	return userID, true
 }
 
 // numericToFloat is the handler-side decoder. Mirrors the helper in

@@ -29,8 +29,8 @@ const restoreOperationColumns = `
 
 const createRestoreOperationIdempotent = `-- name: CreateRestoreOperationIdempotent :one
 WITH claimed AS (
-    INSERT INTO operation_idempotency_keys (scope, idempotency_key)
-    VALUES ($1, $2)
+    INSERT INTO operation_idempotency_keys (scope, idempotency_key, operation_table, operation_id)
+    VALUES ($1, $2, 'restore_operations', gen_random_uuid())
     ON CONFLICT (scope, idempotency_key) DO UPDATE
     SET operation_table = CASE WHEN operation_table = '' THEN 'restore_operations' ELSE operation_table END,
         operation_id = COALESCE(operation_id, gen_random_uuid()),
@@ -47,12 +47,6 @@ inserted AS (
     WHERE operation_table = 'restore_operations'
     ON CONFLICT (id) DO NOTHING
     RETURNING ` + restoreOperationColumns + `
-),
-attached AS (
-    UPDATE operation_idempotency_keys
-    SET response = COALESCE((SELECT to_jsonb(inserted) FROM inserted LIMIT 1), response),
-        updated_at = now()
-    WHERE scope = $1 AND idempotency_key = $2
 )
 SELECT ` + restoreOperationColumns + ` FROM inserted
 UNION ALL
@@ -63,7 +57,7 @@ WHERE claimed.operation_table = 'restore_operations'
 LIMIT 1`
 
 func (q *Queries) CreateRestoreOperationIdempotent(ctx context.Context, arg CreateRestoreOperationIdempotentParams) (RestoreOperation, error) {
-	return scanRestoreOperationForIdempotency(q.db.QueryRow(ctx, createRestoreOperationIdempotent,
+	op, err := scanRestoreOperationForIdempotency(q.db.QueryRow(ctx, createRestoreOperationIdempotent,
 		arg.Scope,
 		arg.IdempotencyKey,
 		arg.BackupID,
@@ -75,6 +69,10 @@ func (q *Queries) CreateRestoreOperationIdempotent(ctx context.Context, arg Crea
 		arg.IncludedNamespaces,
 		arg.NamespaceMapping,
 	))
+	if err == nil {
+		err = q.attachOperationIdempotencyResponse(ctx, arg.Scope, arg.IdempotencyKey, "restore_operations", op.ID, op)
+	}
+	return op, err
 }
 
 type CreateDeferredOperationIdempotentParams struct {
@@ -92,8 +90,8 @@ type CreateDeferredOperationIdempotentParams struct {
 
 const createDeferredOperationIdempotent = `-- name: CreateDeferredOperationIdempotent :one
 WITH claimed AS (
-    INSERT INTO operation_idempotency_keys (scope, idempotency_key)
-    VALUES ($1, $2)
+    INSERT INTO operation_idempotency_keys (scope, idempotency_key, operation_table, operation_id)
+    VALUES ($1, $2, 'deferred_operations', gen_random_uuid())
     ON CONFLICT (scope, idempotency_key) DO UPDATE
     SET operation_table = CASE WHEN operation_table = '' THEN 'deferred_operations' ELSE operation_table END,
         operation_id = COALESCE(operation_id, gen_random_uuid()),
@@ -110,12 +108,6 @@ inserted AS (
     WHERE operation_table = 'deferred_operations'
     ON CONFLICT (id) DO NOTHING
     RETURNING ` + deferredOperationSelectColumns + `
-),
-attached AS (
-    UPDATE operation_idempotency_keys
-    SET response = COALESCE((SELECT to_jsonb(inserted) FROM inserted LIMIT 1), response),
-        updated_at = now()
-    WHERE scope = $1 AND idempotency_key = $2
 )
 SELECT ` + deferredOperationSelectColumns + ` FROM inserted
 UNION ALL
@@ -126,7 +118,7 @@ WHERE claimed.operation_table = 'deferred_operations'
 LIMIT 1`
 
 func (q *Queries) CreateDeferredOperationIdempotent(ctx context.Context, arg CreateDeferredOperationIdempotentParams) (DeferredOperation, error) {
-	return scanDeferredOperationRow(q.db.QueryRow(ctx, createDeferredOperationIdempotent,
+	op, err := scanDeferredOperationRow(q.db.QueryRow(ctx, createDeferredOperationIdempotent,
 		arg.Scope,
 		arg.IdempotencyKey,
 		arg.WindowID,
@@ -138,6 +130,10 @@ func (q *Queries) CreateDeferredOperationIdempotent(ctx context.Context, arg Cre
 		arg.ExpiresAt,
 		arg.RequestedBy,
 	))
+	if err == nil {
+		err = q.attachOperationIdempotencyResponse(ctx, arg.Scope, arg.IdempotencyKey, "deferred_operations", op.ID, op)
+	}
+	return op, err
 }
 
 func scanRestoreOperationForIdempotency(row operationScanRow) (RestoreOperation, error) {

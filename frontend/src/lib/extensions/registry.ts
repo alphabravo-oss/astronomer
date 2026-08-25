@@ -7,25 +7,25 @@
 // flow through the same index; the tier is read off each mount, never authored
 // here (see the design doc: "Tier is derived, not authored").
 
-import { useQuery } from '@tanstack/react-query';
-import { getFeatureFlags } from '@/lib/api';
-import { queryKeys } from '@/lib/query-keys';
-import * as extensionsApi from '@/lib/api/extensions';
+import { useQuery } from "@tanstack/react-query";
+import { getFeatureFlags } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
+import * as extensionsApi from "@/lib/api/extensions";
 import type {
   ExtensionMount,
   ExtensionMountsResponse,
   ExtensionPointKind,
-} from '@/lib/api/extensions';
+} from "@/lib/api/extensions";
 
 // Indexed view of every enabled mount, keyed by the four mount points. Each
 // bucket is always present (possibly empty) so consumers never null-check.
 export type ExtensionRegistry = Record<ExtensionPointKind, ExtensionMount[]>;
 
 export const EXTENSION_POINTS: ExtensionPointKind[] = [
-  'sidebar',
-  'dashboardWidget',
-  'clusterTab',
-  'settingsPage',
+  "sidebar",
+  "dashboardWidget",
+  "clusterTab",
+  "settingsPage",
 ];
 
 export function emptyRegistry(): ExtensionRegistry {
@@ -60,7 +60,9 @@ function bucketsOf(
 // (2) a mount is filed under its own `point` field when that disagrees with the
 // bucket it arrived in, so a malformed projection can't smuggle a clusterTab
 // into the sidebar list.
-export function indexMounts(res: ExtensionMountsResponse | undefined): ExtensionRegistry {
+export function indexMounts(
+  res: ExtensionMountsResponse | undefined,
+): ExtensionRegistry {
   const registry = emptyRegistry();
   const buckets = bucketsOf(res);
   for (const kind of EXTENSION_POINTS) {
@@ -84,7 +86,7 @@ export function useEnabledExtensions() {
     queryFn: getFeatureFlags,
     staleTime: 30_000,
   });
-  const enabled = flags.data?.['feature.extensions'] === true;
+  const enabled = flags.data?.["feature.extensions"] === true;
   return useQuery({
     queryKey: queryKeys.extensions.mounts,
     queryFn: () => extensionsApi.getExtensionMounts(),

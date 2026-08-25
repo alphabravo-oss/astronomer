@@ -24,10 +24,8 @@ func (f *fakeLeader) TryLeader(_ context.Context, _ string) (func(), bool, error
 }
 
 func TestRunPeriodicTaskWithLeader_NoLeaderConfigured(t *testing.T) {
-	resetRuntime()
-
 	called := false
-	if err := runPeriodicTaskWithLeader(context.Background(), "job", func() error {
+	if err := runPeriodicTaskWithLeader(testRuntimeContext(RuntimeDependencies{}), "job", func() error {
 		called = true
 		return nil
 	}); err != nil {
@@ -38,24 +36,22 @@ func TestRunPeriodicTaskWithLeader_NoLeaderConfigured(t *testing.T) {
 	}
 }
 
-func TestConfigureRuntimeUsesBoundedHTTPClientByDefault(t *testing.T) {
-	defer resetRuntime()
-	ConfigureRuntime(RuntimeDependencies{})
-	if runtimeDeps.HTTPClient == nil {
+func TestCoreRuntimeUsesBoundedHTTPClientByDefault(t *testing.T) {
+	deps := runtimeDependencies(testRuntimeContext(RuntimeDependencies{}))
+	if deps.HTTPClient == nil {
 		t.Fatal("HTTPClient was not configured")
 	}
-	if runtimeDeps.HTTPClient.Timeout != defaultWorkerHTTPTimeout {
-		t.Fatalf("HTTPClient.Timeout = %s, want %s", runtimeDeps.HTTPClient.Timeout, defaultWorkerHTTPTimeout)
+	if deps.HTTPClient.Timeout != defaultWorkerHTTPTimeout {
+		t.Fatalf("HTTPClient.Timeout = %s, want %s", deps.HTTPClient.Timeout, defaultWorkerHTTPTimeout)
 	}
 }
 
 func TestRunPeriodicTaskWithLeader_NotHeldSkipsWork(t *testing.T) {
-	defer resetRuntime()
 	fl := &fakeLeader{held: false}
-	ConfigureRuntime(RuntimeDependencies{Leader: fl})
+	ctx := testRuntimeContext(RuntimeDependencies{Leader: fl})
 
 	called := false
-	if err := runPeriodicTaskWithLeader(context.Background(), "job", func() error {
+	if err := runPeriodicTaskWithLeader(ctx, "job", func() error {
 		called = true
 		return nil
 	}); err != nil {
@@ -73,12 +69,11 @@ func TestRunPeriodicTaskWithLeader_NotHeldSkipsWork(t *testing.T) {
 }
 
 func TestRunPeriodicTaskWithLeader_HeldRunsAndReleases(t *testing.T) {
-	defer resetRuntime()
 	fl := &fakeLeader{held: true}
-	ConfigureRuntime(RuntimeDependencies{Leader: fl})
+	ctx := testRuntimeContext(RuntimeDependencies{Leader: fl})
 
 	called := false
-	if err := runPeriodicTaskWithLeader(context.Background(), "job", func() error {
+	if err := runPeriodicTaskWithLeader(ctx, "job", func() error {
 		called = true
 		return nil
 	}); err != nil {
@@ -96,11 +91,10 @@ func TestRunPeriodicTaskWithLeader_HeldRunsAndReleases(t *testing.T) {
 }
 
 func TestRunPeriodicTaskWithLeader_PropagatesAcquireError(t *testing.T) {
-	defer resetRuntime()
 	fl := &fakeLeader{err: errors.New("boom")}
-	ConfigureRuntime(RuntimeDependencies{Leader: fl})
+	ctx := testRuntimeContext(RuntimeDependencies{Leader: fl})
 
-	err := runPeriodicTaskWithLeader(context.Background(), "job", func() error { return nil })
+	err := runPeriodicTaskWithLeader(ctx, "job", func() error { return nil })
 	if err == nil {
 		t.Fatal("expected error")
 	}

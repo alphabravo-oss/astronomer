@@ -121,14 +121,14 @@ func newProjectListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1ProjectsParams{}
+			params := &astroclient.GetProjectsParams{}
 			if limit >= 0 {
 				params.Limit = &limit
 			}
 			if offset >= 0 {
 				params.Offset = &offset
 			}
-			resp, err := client.GetApiV1ProjectsWithResponse(cmd.Context(), params)
+			resp, err := client.GetProjectsWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -161,7 +161,7 @@ func newProjectGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ProjectsIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetProjectsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -196,7 +196,7 @@ cluster (--cluster is required) and may seed an initial namespace set.`,
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1ProjectsJSONRequestBody{
+			body := astroclient.PostProjectsJSONRequestBody{
 				Name:               args[0],
 				ClusterId:          cid,
 				Description:        projectStrPtr(description),
@@ -205,7 +205,7 @@ cluster (--cluster is required) and may seed an initial namespace set.`,
 			if len(namespaces) > 0 {
 				body.Namespaces = &namespaces
 			}
-			resp, err := client.PostApiV1ProjectsWithResponse(cmd.Context(), body)
+			resp, err := client.PostProjectsWithResponse(cmd.Context(), body)
 			if err != nil {
 				return err
 			}
@@ -246,13 +246,13 @@ func newProjectUpdateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PutApiV1ProjectsIdJSONRequestBody{
-				Name:                projectStrPtr(name),
-				Description:         projectStrPtr(description),
-				PodSecurityProfile:  projectStrPtr(podSecurityProfile),
-				ResourceQuotaCpu:    projectStrPtr(quotaCPU),
-				ResourceQuotaMemory: projectStrPtr(quotaMemory),
-				ResourceQuotaPods:   projectIntPtr(quotaPods),
+			body := astroclient.PutProjectsByIdJSONRequestBody{
+				DisplayName:              projectStrPtr(name),
+				Description:              projectStrPtr(description),
+				PodSecurityProfile:       projectStrPtr(podSecurityProfile),
+				ResourceQuotaCpuLimit:    projectStrPtr(quotaCPU),
+				ResourceQuotaMemoryLimit: projectStrPtr(quotaMemory),
+				ResourceQuotaPodCount:    projectIntPtr(quotaPods),
 			}
 			if replaceNamespaces {
 				// Allow clearing to an explicit (possibly empty) set.
@@ -261,7 +261,7 @@ func newProjectUpdateCmd() *cobra.Command {
 			} else if len(namespaces) > 0 {
 				body.Namespaces = &namespaces
 			}
-			resp, err := client.PutApiV1ProjectsIdWithResponse(cmd.Context(), id, body)
+			resp, err := client.PutProjectsByIdWithResponse(cmd.Context(), id, body)
 			if err != nil {
 				return err
 			}
@@ -301,7 +301,7 @@ func newProjectDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1ProjectsIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteProjectsByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -333,7 +333,7 @@ func newProjectClustersCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ProjectsIdClustersWithResponse(cmd.Context(), id)
+			resp, err := client.GetProjectsByIdClustersWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -373,8 +373,8 @@ func newProjectAddNamespaceCmd() *cobra.Command {
 			if namespace == "" {
 				return fmt.Errorf("--namespace is required")
 			}
-			body := astroclient.PostApiV1ProjectsIdAddNamespaceJSONRequestBody{Namespace: namespace}
-			resp, err := client.PostApiV1ProjectsIdAddNamespaceWithResponse(cmd.Context(), id, body)
+			body := astroclient.PostProjectsByIdAddNamespaceJSONRequestBody{Namespace: namespace}
+			resp, err := client.PostProjectsByIdAddNamespaceWithResponse(cmd.Context(), id, body)
 			if err != nil {
 				return err
 			}
@@ -411,8 +411,8 @@ func newProjectRemoveNamespaceCmd() *cobra.Command {
 			if namespace == "" {
 				return fmt.Errorf("--namespace is required")
 			}
-			body := astroclient.PostApiV1ProjectsIdRemoveNamespaceJSONRequestBody{Namespace: namespace}
-			resp, err := client.PostApiV1ProjectsIdRemoveNamespaceWithResponse(cmd.Context(), id, body)
+			body := astroclient.PostProjectsByIdRemoveNamespaceJSONRequestBody{Namespace: namespace}
+			resp, err := client.PostProjectsByIdRemoveNamespaceWithResponse(cmd.Context(), id, body)
 			if err != nil {
 				return err
 			}
@@ -445,7 +445,7 @@ func newProjectQuotaCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ProjectsIdQuotaUsageWithResponse(cmd.Context(), id)
+			resp, err := client.GetProjectsByIdQuotaUsageWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -478,13 +478,13 @@ func newProjectPolicyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PatchApiV1ProjectsIdPolicyJSONRequestBody{
-				PodSecurityProfile:  projectStrPtr(podSecurityProfile),
-				ResourceQuotaCpu:    projectStrPtr(quotaCPU),
-				ResourceQuotaMemory: projectStrPtr(quotaMemory),
-				ResourceQuotaPods:   projectIntPtr(quotaPods),
+			body := astroclient.PatchProjectsByIdPolicyJSONRequestBody{
+				PodSecurityProfile:       projectStrPtr(podSecurityProfile),
+				ResourceQuotaCpuLimit:    projectStrPtr(quotaCPU),
+				ResourceQuotaMemoryLimit: projectStrPtr(quotaMemory),
+				ResourceQuotaPodCount:    projectIntPtr(quotaPods),
 			}
-			resp, err := client.PatchApiV1ProjectsIdPolicyWithResponse(cmd.Context(), id, body)
+			resp, err := client.PatchProjectsByIdPolicyWithResponse(cmd.Context(), id, body)
 			if err != nil {
 				return err
 			}
@@ -519,7 +519,7 @@ func newProjectTakeoverCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1ProjectsIdOwnershipTakeoverWithResponse(cmd.Context(), id)
+			resp, err := client.PostProjectsByIdOwnershipTakeoverWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -567,7 +567,7 @@ func newCloudCredentialsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ProjectsProjectIdCloudCredentialsWithResponse(cmd.Context(), pid)
+			resp, err := client.GetProjectsByProjectIdCloudCredentialsWithResponse(cmd.Context(), pid)
 			if err != nil {
 				return err
 			}
@@ -601,7 +601,7 @@ func newCloudCredentialsGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ProjectsProjectIdCloudCredentialsIdWithResponse(cmd.Context(), pid, id)
+			resp, err := client.GetProjectsByProjectIdCloudCredentialsByIdWithResponse(cmd.Context(), pid, id)
 			if err != nil {
 				return err
 			}
@@ -636,7 +636,7 @@ secret_access_key=...). Server redacts secret values on read-back.`,
 			if name == "" || provider == "" {
 				return fmt.Errorf("--name and --provider are required")
 			}
-			body := astroclient.PostApiV1ProjectsProjectIdCloudCredentialsJSONRequestBody{
+			body := astroclient.PostProjectsByProjectIdCloudCredentialsJSONRequestBody{
 				Name:        name,
 				Provider:    provider,
 				Description: projectStrPtr(description),
@@ -645,7 +645,7 @@ secret_access_key=...). Server redacts secret values on read-back.`,
 				d := data
 				body.Data = &d
 			}
-			resp, err := client.PostApiV1ProjectsProjectIdCloudCredentialsWithResponse(cmd.Context(), pid, body)
+			resp, err := client.PostProjectsByProjectIdCloudCredentialsWithResponse(cmd.Context(), pid, body)
 			if err != nil {
 				return err
 			}
@@ -695,7 +695,7 @@ func newCloudCredentialsUpdateCmd() *cobra.Command {
 				body.Data = &d
 			}
 			if usePatch {
-				resp, err := client.PatchApiV1ProjectsProjectIdCloudCredentialsIdWithResponse(cmd.Context(), pid, id, body)
+				resp, err := client.PatchProjectsByProjectIdCloudCredentialsByIdWithResponse(cmd.Context(), pid, id, body)
 				if err != nil {
 					return err
 				}
@@ -708,7 +708,7 @@ func newCloudCredentialsUpdateCmd() *cobra.Command {
 			if name == "" || provider == "" {
 				return fmt.Errorf("--name and --provider are required for a PUT update (use --patch for partial updates)")
 			}
-			resp, err := client.PutApiV1ProjectsProjectIdCloudCredentialsIdWithResponse(cmd.Context(), pid, id, body)
+			resp, err := client.PutProjectsByProjectIdCloudCredentialsByIdWithResponse(cmd.Context(), pid, id, body)
 			if err != nil {
 				return err
 			}
@@ -745,7 +745,7 @@ func newCloudCredentialsDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1ProjectsProjectIdCloudCredentialsIdWithResponse(cmd.Context(), pid, id)
+			resp, err := client.DeleteProjectsByProjectIdCloudCredentialsByIdWithResponse(cmd.Context(), pid, id)
 			if err != nil {
 				return err
 			}
@@ -777,7 +777,7 @@ func newCloudCredentialsTestCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1ProjectsProjectIdCloudCredentialsIdTestWithResponse(cmd.Context(), pid, id)
+			resp, err := client.PostProjectsByProjectIdCloudCredentialsByIdTestWithResponse(cmd.Context(), pid, id)
 			if err != nil {
 				return err
 			}

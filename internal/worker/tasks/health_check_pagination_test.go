@@ -37,18 +37,15 @@ func (q *hcPageQuerier) ListClusters(_ context.Context, arg sqlc.ListClustersPar
 // freeze at 'active' after their agents disconnect. Before the fix this
 // returned only the first healthCheckPageSize rows.
 func TestHealthCheckTargets_PagesEntireFleet(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	const total = healthCheckPageSize*2 + 37 // spans three pages
 	all := make([]sqlc.Cluster, total)
 	for i := range all {
 		all[i] = sqlc.Cluster{ID: uuid.New()}
 	}
 	q := &hcPageQuerier{clusters: all}
-	runtimeDeps = RuntimeDependencies{Queries: q}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q})
 
-	got, err := healthCheckTargets(context.Background(), "")
+	got, err := healthCheckTargets(ctx, "")
 	if err != nil {
 		t.Fatalf("healthCheckTargets: %v", err)
 	}

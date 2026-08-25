@@ -20,12 +20,12 @@
  * normal backoff/re-mint loop.
  */
 
-import type { QueryClient } from '@tanstack/react-query';
-import { createStreamTicket } from '@/lib/api';
-import { API_BASE } from '@/lib/env';
-import { dispatchLiveFrame } from './dispatch';
-import { clearPacedInvalidations } from './paced-invalidate';
-import { setLiveStatus, type LiveStatus } from './status-store';
+import type { QueryClient } from "@tanstack/react-query";
+import { createStreamTicket } from "@/lib/api/auth";
+import { API_BASE } from "@/lib/env";
+import { dispatchLiveFrame } from "./dispatch";
+import { clearPacedInvalidations } from "./paced-invalidate";
+import { setLiveStatus, type LiveStatus } from "./status-store";
 
 /** 3 missed 25s sys.ping heartbeats = half-open connection. */
 const WATCHDOG_MS = 75_000;
@@ -38,10 +38,10 @@ interface ConnectionState {
   retryCount: number;
   /** Pending reconnect timer so we can cancel during teardown. */
   reconnectTimer: ReturnType<typeof setTimeout> | null;
+  /** In-flight ticket mint shared by every concurrent refcount acquire. */
+  connectAttempt: Promise<void> | null;
   /** Heartbeat watchdog — reset on ANY frame, fires after WATCHDOG_MS. */
   watchdogTimer: ReturnType<typeof setTimeout> | null;
-  /** Ticket this connection was opened with. */
-  openedWithTicket: string | null;
   /** Reference count: how many live hooks currently hold the connection. */
   refCount: number;
   /** Most recent status the SSE client sees. */
@@ -70,10 +70,10 @@ function ensureConnection(): ConnectionState {
       target: new EventTarget(),
       retryCount: 0,
       reconnectTimer: null,
+      connectAttempt: null,
       watchdogTimer: null,
-      openedWithTicket: null,
       refCount: 0,
-      status: 'idle',
+      status: "idle",
       everOpened: false,
     };
   }
@@ -100,18 +100,18 @@ function setStatus(state: ConnectionState, next: LiveStatus): void {
   if (prev === next) return;
   state.status = next;
   setLiveStatus(next);
-  if (next === 'closed') {
+  if (next === "closed") {
     // Pending trailing invalidations are pointless with the event source
     // gone — the open→closed bulk invalidate below kicks every active query.
     clearPacedInvalidations();
   }
-  if (next === 'open') {
+  if (next === "open") {
     if (state.everOpened) {
-      liveQueryClient?.invalidateQueries({ refetchType: 'active' });
+      liveQueryClient?.invalidateQueries({ refetchType: "active" });
     }
     state.everOpened = true;
-  } else if (prev === 'open' && next === 'closed') {
-    liveQueryClient?.invalidateQueries({ refetchType: 'active' });
+  } else if (prev === "open" && next === "closed") {
+    liveQueryClient?.invalidateQueries({ refetchType: "active" });
   }
 }
 
@@ -142,7 +142,7 @@ function armWatchdog(state: ConnectionState): void {
       /* ignore */
     }
     state.source = null;
-    setStatus(state, 'closed');
+    setStatus(state, "closed");
     scheduleReconnect(state);
   }, WATCHDOG_MS);
 }
@@ -155,7 +155,7 @@ function armWatchdog(state: ConnectionState): void {
  */
 function openSource(state: ConnectionState): void {
   if (state.source) {
-    if (state.status !== 'closed') return;
+    if (state.status !== "closed") return;
     try {
       state.source.close();
     } catch {
@@ -167,22 +167,26 @@ function openSource(state: ConnectionState): void {
     clearTimeout(state.reconnectTimer);
     state.reconnectTimer = null;
   }
-  setStatus(state, 'connecting');
-  createStreamTicket('events')
+  // Dashboard hooks mount in the same React commit. Until ticket minting
+  // resolves there is no EventSource to share, so `source` alone is not a
+  // sufficient singleton guard. Coalesce every acquire onto this attempt.
+  if (state.connectAttempt) return;
+  setStatus(state, "connecting");
+  const attempt = createStreamTicket("events")
     .then(({ ticket }) => {
       if (state.refCount === 0 || state.source) return;
-      state.openedWithTicket = ticket;
       let es: EventSource;
       try {
         es = new EventSource(streamURL(ticket), { withCredentials: false });
       } catch {
+        setStatus(state, "closed");
         scheduleReconnect(state);
         return;
       }
       state.source = es;
 
       es.onopen = () => {
-        setStatus(state, 'open');
+        setStatus(state, "open");
         state.retryCount = 0;
         armWatchdog(state);
       };
@@ -205,18 +209,23 @@ function openSource(state: ConnectionState): void {
           /* ignore */
         }
         state.source = null;
-        setStatus(state, 'closed');
+        setStatus(state, "closed");
         scheduleReconnect(state);
       };
     })
     .catch(() => {
-      setStatus(state, 'closed');
+      setStatus(state, "closed");
       scheduleReconnect(state);
+    })
+    .finally(() => {
+      if (state.connectAttempt === attempt) state.connectAttempt = null;
     });
+  state.connectAttempt = attempt;
 }
 
 function scheduleReconnect(state: ConnectionState): void {
   if (state.refCount === 0) return; // nothing's listening
+  if (state.reconnectTimer) return; // one backoff loop per singleton stream
   state.retryCount += 1;
   // Exponential backoff: 1s, 2s, 4s, 8s, ... capped at 30s.
   const delay = Math.min(30000, 1000 * 2 ** Math.min(state.retryCount - 1, 5));
@@ -233,7 +242,7 @@ function scheduleReconnect(state: ConnectionState): void {
 export function acquireLiveStream(): void {
   const state = ensureConnection();
   state.refCount += 1;
-  if (!state.source || state.status === 'closed') {
+  if (!state.source || state.status === "closed") {
     openSource(state);
   }
 }
@@ -254,7 +263,7 @@ export function releaseLiveStream(): void {
       /* ignore */
     }
     state.source = null;
-    setStatus(state, 'closed');
+    setStatus(state, "closed");
     state.refCount = 0;
   }
 }
@@ -265,7 +274,7 @@ export function releaseLiveStream(): void {
  */
 export function reopenIfClosed(): void {
   const state = conn;
-  if (state && state.refCount > 0 && state.status === 'closed') {
+  if (state && state.refCount > 0 && state.status === "closed") {
     openSource(state);
   }
 }

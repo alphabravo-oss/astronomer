@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "default_retry_budget": 0,
+    "live_retry_budget": 0,
+    "max_quarantine_days": 14
+  },
+  "entries": []
+}

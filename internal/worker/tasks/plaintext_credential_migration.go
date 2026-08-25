@@ -33,25 +33,14 @@ type PlaintextCredentialMigrationDeps struct {
 	Encryptor *auth.Encryptor
 }
 
-var plaintextCredentialMigrationDeps PlaintextCredentialMigrationDeps
-
-func ConfigurePlaintextCredentialMigration(deps PlaintextCredentialMigrationDeps) {
-	plaintextCredentialMigrationDeps = deps
-}
-
-func ResetPlaintextCredentialMigration() {
-	plaintextCredentialMigrationDeps = PlaintextCredentialMigrationDeps{}
-}
-
 func NewPlaintextCredentialMigrationTask() (*asynq.Task, error) {
 	return asynq.NewTask(PlaintextCredentialMigrationType, nil), nil
 }
 
-func HandlePlaintextCredentialMigration(ctx context.Context, _ *asynq.Task) error {
-	deps := plaintextCredentialMigrationDeps
+func (runtime MaintenanceRuntime) HandlePlaintextCredentialMigration(ctx context.Context, _ *asynq.Task) error {
+	deps := runtime.PlaintextCredentials
 	if deps.Queries == nil || deps.Encryptor == nil {
-		runtimeLogger().InfoContext(ctx, "plaintext credential migration not configured, skipping")
-		return nil
+		return fmt.Errorf("plaintext credential migration runtime is not configured")
 	}
 	if err := migrateBackupStorageCredentials(ctx, deps); err != nil {
 		return err
@@ -103,7 +92,7 @@ func migrateMonitoringBackendAuthConfigs(ctx context.Context, deps PlaintextCred
 				// Nothing outside the non-secret allow-list, so there is
 				// nothing to protect and sealing would only move the config
 				// bag behind a decrypt. Walk past it.
-				runtimeLogger().WarnContext(ctx, "monitoring backend matched the plaintext-credential sweep but carries no sealable secret",
+				runtimeLogger(ctx).WarnContext(ctx, "monitoring backend matched the plaintext-credential sweep but carries no sealable secret",
 					"backend_id", row.ID)
 				skipped++
 				continue
@@ -162,7 +151,7 @@ func migrateHelmRepositoryAuthConfigs(ctx context.Context, deps PlaintextCredent
 				// Nothing to protect (a `charts` list, a bare username), and
 				// writing an envelope anyway would move the chart list out of
 				// the catalog API's reach. Walk past it.
-				runtimeLogger().WarnContext(ctx, "chart repository matched the plaintext-credential sweep but carries no sealable secret",
+				runtimeLogger(ctx).WarnContext(ctx, "chart repository matched the plaintext-credential sweep but carries no sealable secret",
 					"repository_id", row.ID)
 				skipped++
 				continue

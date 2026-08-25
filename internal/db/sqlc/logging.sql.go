@@ -145,6 +145,54 @@ func (q *Queries) CreateLoggingPipeline(ctx context.Context, arg CreateLoggingPi
 	return i, err
 }
 
+const createLoggingSavedSearch = `-- name: CreateLoggingSavedSearch :one
+INSERT INTO logging_saved_searches (
+    output_id, owner_user_id, name, query_text, namespaces,
+    result_limit, direction, live_tail
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, output_id, owner_user_id, name, query_text, namespaces, result_limit, direction, live_tail, created_at, updated_at
+`
+
+type CreateLoggingSavedSearchParams struct {
+	OutputID    uuid.UUID `json:"output_id"`
+	OwnerUserID uuid.UUID `json:"owner_user_id"`
+	Name        string    `json:"name"`
+	QueryText   string    `json:"query_text"`
+	Namespaces  []string  `json:"namespaces"`
+	ResultLimit int32     `json:"result_limit"`
+	Direction   string    `json:"direction"`
+	LiveTail    bool      `json:"live_tail"`
+}
+
+func (q *Queries) CreateLoggingSavedSearch(ctx context.Context, arg CreateLoggingSavedSearchParams) (LoggingSavedSearch, error) {
+	row := q.db.QueryRow(ctx, createLoggingSavedSearch,
+		arg.OutputID,
+		arg.OwnerUserID,
+		arg.Name,
+		arg.QueryText,
+		arg.Namespaces,
+		arg.ResultLimit,
+		arg.Direction,
+		arg.LiveTail,
+	)
+	var i LoggingSavedSearch
+	err := row.Scan(
+		&i.ID,
+		&i.OutputID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.QueryText,
+		&i.Namespaces,
+		&i.ResultLimit,
+		&i.Direction,
+		&i.LiveTail,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteLoggingOutput = `-- name: DeleteLoggingOutput :exec
 DELETE FROM logging_outputs WHERE id = $1
 `
@@ -161,6 +209,24 @@ DELETE FROM logging_pipelines WHERE id = $1
 func (q *Queries) DeleteLoggingPipeline(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteLoggingPipeline, id)
 	return err
+}
+
+const deleteLoggingSavedSearch = `-- name: DeleteLoggingSavedSearch :execrows
+DELETE FROM logging_saved_searches
+WHERE id = $1 AND owner_user_id = $2
+`
+
+type DeleteLoggingSavedSearchParams struct {
+	ID          uuid.UUID `json:"id"`
+	OwnerUserID uuid.UUID `json:"owner_user_id"`
+}
+
+func (q *Queries) DeleteLoggingSavedSearch(ctx context.Context, arg DeleteLoggingSavedSearchParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLoggingSavedSearch, arg.ID, arg.OwnerUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const disableSystemLoggingOutputs = `-- name: DisableSystemLoggingOutputs :many
@@ -247,6 +313,36 @@ func (q *Queries) GetLoggingPipelineByID(ctx context.Context, id uuid.UUID) (Log
 	return i, err
 }
 
+const getLoggingSavedSearchForOwner = `-- name: GetLoggingSavedSearchForOwner :one
+SELECT id, output_id, owner_user_id, name, query_text, namespaces, result_limit, direction, live_tail, created_at, updated_at
+FROM logging_saved_searches
+WHERE id = $1 AND owner_user_id = $2
+`
+
+type GetLoggingSavedSearchForOwnerParams struct {
+	ID          uuid.UUID `json:"id"`
+	OwnerUserID uuid.UUID `json:"owner_user_id"`
+}
+
+func (q *Queries) GetLoggingSavedSearchForOwner(ctx context.Context, arg GetLoggingSavedSearchForOwnerParams) (LoggingSavedSearch, error) {
+	row := q.db.QueryRow(ctx, getLoggingSavedSearchForOwner, arg.ID, arg.OwnerUserID)
+	var i LoggingSavedSearch
+	err := row.Scan(
+		&i.ID,
+		&i.OutputID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.QueryText,
+		&i.Namespaces,
+		&i.ResultLimit,
+		&i.Direction,
+		&i.LiveTail,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getSystemLoggingOutputByCluster = `-- name: GetSystemLoggingOutputByCluster :one
 SELECT id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at, is_system FROM logging_outputs WHERE cluster_id = $1 AND is_system = true LIMIT 1
 `
@@ -309,6 +405,43 @@ func (q *Queries) ListLoggingOutputs(ctx context.Context, arg ListLoggingOutputs
 	return items, nil
 }
 
+const listLoggingPipelineOutputDetails = `-- name: ListLoggingPipelineOutputDetails :many
+SELECT lpo.logging_pipeline_id,
+       o.id AS logging_output_id,
+       o.name AS logging_output_name
+FROM logging_pipeline_outputs lpo
+JOIN logging_outputs o ON o.id = lpo.logging_output_id
+WHERE lpo.logging_pipeline_id = ANY($1::uuid[])
+ORDER BY lpo.logging_pipeline_id, lower(o.name), o.id
+`
+
+type ListLoggingPipelineOutputDetailsRow struct {
+	LoggingPipelineID uuid.UUID `json:"logging_pipeline_id"`
+	LoggingOutputID   uuid.UUID `json:"logging_output_id"`
+	LoggingOutputName string    `json:"logging_output_name"`
+}
+
+// One batch query enriches list responses without an N+1 request pattern.
+func (q *Queries) ListLoggingPipelineOutputDetails(ctx context.Context, pipelineIds []uuid.UUID) ([]ListLoggingPipelineOutputDetailsRow, error) {
+	rows, err := q.db.Query(ctx, listLoggingPipelineOutputDetails, pipelineIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLoggingPipelineOutputDetailsRow{}
+	for rows.Next() {
+		var i ListLoggingPipelineOutputDetailsRow
+		if err := rows.Scan(&i.LoggingPipelineID, &i.LoggingOutputID, &i.LoggingOutputName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLoggingPipelines = `-- name: ListLoggingPipelines :many
 SELECT id, name, cluster_id, namespaces, labels, filters, enabled, created_by_id, created_at, updated_at FROM logging_pipelines ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
@@ -336,6 +469,52 @@ func (q *Queries) ListLoggingPipelines(ctx context.Context, arg ListLoggingPipel
 			&i.Filters,
 			&i.Enabled,
 			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLoggingSavedSearches = `-- name: ListLoggingSavedSearches :many
+
+SELECT id, output_id, owner_user_id, name, query_text, namespaces, result_limit, direction, live_tail, created_at, updated_at
+FROM logging_saved_searches
+WHERE owner_user_id = $1 AND output_id = $2
+ORDER BY updated_at DESC, id DESC
+`
+
+type ListLoggingSavedSearchesParams struct {
+	OwnerUserID uuid.UUID `json:"owner_user_id"`
+	OutputID    uuid.UUID `json:"output_id"`
+}
+
+// Logging Saved Searches
+func (q *Queries) ListLoggingSavedSearches(ctx context.Context, arg ListLoggingSavedSearchesParams) ([]LoggingSavedSearch, error) {
+	rows, err := q.db.Query(ctx, listLoggingSavedSearches, arg.OwnerUserID, arg.OutputID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LoggingSavedSearch{}
+	for rows.Next() {
+		var i LoggingSavedSearch
+		if err := rows.Scan(
+			&i.ID,
+			&i.OutputID,
+			&i.OwnerUserID,
+			&i.Name,
+			&i.QueryText,
+			&i.Namespaces,
+			&i.ResultLimit,
+			&i.Direction,
+			&i.LiveTail,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -466,6 +645,44 @@ func (q *Queries) ListSystemLoggingOutputs(ctx context.Context) ([]LoggingOutput
 	return items, nil
 }
 
+const replaceLoggingPipelineOutputs = `-- name: ReplaceLoggingPipelineOutputs :one
+WITH removed AS (
+    DELETE FROM logging_pipeline_outputs
+    WHERE logging_pipeline_outputs.logging_pipeline_id = $1
+),
+desired AS (
+    SELECT DISTINCT unnest($2::uuid[]) AS output_id
+),
+inserted AS (
+    INSERT INTO logging_pipeline_outputs (logging_pipeline_id, logging_output_id)
+    SELECT p.id, o.id
+    FROM desired d
+    JOIN logging_pipelines p ON p.id = $1
+    JOIN logging_outputs o
+      ON o.id = d.output_id
+     AND o.cluster_id = p.cluster_id
+    RETURNING logging_output_id
+)
+SELECT count(*) FROM inserted
+`
+
+type ReplaceLoggingPipelineOutputsParams struct {
+	LoggingPipelineID uuid.UUID   `json:"logging_pipeline_id"`
+	OutputIds         []uuid.UUID `json:"output_ids"`
+}
+
+// Full-replacement semantics are intentional: the pipeline write API is PUT,
+// and the handler executes this statement in the same transaction as the
+// pipeline row, reconcile operation, and audit outbox intent. The cluster join
+// prevents a pipeline from routing one cluster's logs into another cluster's
+// output, even if a caller supplies a valid foreign output UUID.
+func (q *Queries) ReplaceLoggingPipelineOutputs(ctx context.Context, arg ReplaceLoggingPipelineOutputsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, replaceLoggingPipelineOutputs, arg.LoggingPipelineID, arg.OutputIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const updateLoggingOutput = `-- name: UpdateLoggingOutput :one
 UPDATE logging_outputs SET
     name = $2,
@@ -547,6 +764,58 @@ func (q *Queries) UpdateLoggingPipeline(ctx context.Context, arg UpdateLoggingPi
 		&i.Filters,
 		&i.Enabled,
 		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateLoggingSavedSearch = `-- name: UpdateLoggingSavedSearch :one
+UPDATE logging_saved_searches
+SET name = $3,
+    query_text = $4,
+    namespaces = $5,
+    result_limit = $6,
+    direction = $7,
+    live_tail = $8,
+    updated_at = now()
+WHERE id = $1 AND owner_user_id = $2
+RETURNING id, output_id, owner_user_id, name, query_text, namespaces, result_limit, direction, live_tail, created_at, updated_at
+`
+
+type UpdateLoggingSavedSearchParams struct {
+	ID          uuid.UUID `json:"id"`
+	OwnerUserID uuid.UUID `json:"owner_user_id"`
+	Name        string    `json:"name"`
+	QueryText   string    `json:"query_text"`
+	Namespaces  []string  `json:"namespaces"`
+	ResultLimit int32     `json:"result_limit"`
+	Direction   string    `json:"direction"`
+	LiveTail    bool      `json:"live_tail"`
+}
+
+func (q *Queries) UpdateLoggingSavedSearch(ctx context.Context, arg UpdateLoggingSavedSearchParams) (LoggingSavedSearch, error) {
+	row := q.db.QueryRow(ctx, updateLoggingSavedSearch,
+		arg.ID,
+		arg.OwnerUserID,
+		arg.Name,
+		arg.QueryText,
+		arg.Namespaces,
+		arg.ResultLimit,
+		arg.Direction,
+		arg.LiveTail,
+	)
+	var i LoggingSavedSearch
+	err := row.Scan(
+		&i.ID,
+		&i.OutputID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.QueryText,
+		&i.Namespaces,
+		&i.ResultLimit,
+		&i.Direction,
+		&i.LiveTail,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

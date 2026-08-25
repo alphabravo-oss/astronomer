@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * mTLS breakdown sub-page — per-namespace view backed by the
  * /api/v1/clusters/{id}/service-mesh/mtls/ endpoint (migration 071).
@@ -11,40 +18,49 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * non-exclusive.
  */
 
-import { Link } from '@/lib/link';
-import { useParams } from '@/lib/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, Info, Loader2, Server, Shield } from 'lucide-react';
+import { Link } from "@/lib/link";
+import { useParams } from "@/lib/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronLeft, Info, Loader2, Server, Shield } from "lucide-react";
 
-import { queryKeys, useCluster } from '@/lib/hooks';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { getServiceMeshMTLS, type MTLSBreakdownRow } from '@/lib/api/cluster-detail';
+import { queryKeys, useCluster } from "@/lib/hooks";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import {
+  getServiceMeshMTLS,
+  type MTLSBreakdownRow,
+} from "@/lib/api/cluster-detail";
 
 // modeStyle picks a tailwind colour for a mode badge. STRICT is the
 // strongest signal so we paint it green; UNSET / DISABLE stay muted.
 function modeStyle(mode: string): string {
   switch (mode) {
-    case 'STRICT':
-      return 'bg-status-success/15 text-status-success border-status-success/30';
-    case 'PERMISSIVE':
-      return 'bg-status-warning/15 text-status-warning border-status-warning/30';
-    case 'DISABLE':
-      return 'bg-status-error/15 text-status-error border-status-error/30';
+    case "STRICT":
+      return "bg-status-success/15 text-status-success border-status-success/30";
+    case "PERMISSIVE":
+      return "bg-status-warning/15 text-status-warning border-status-warning/30";
+    case "DISABLE":
+      return "bg-status-error/15 text-status-error border-status-error/30";
     default:
-      return 'bg-muted text-muted-foreground border-border';
+      return "bg-muted text-muted-foreground border-border";
   }
 }
 
 function MTLSRow({ row }: { row: MTLSBreakdownRow }) {
   return (
     <TableRow className="border-t border-border">
-      <TableCell className="px-4 py-2.5 font-mono text-sm text-foreground">{row.namespace}</TableCell>
+      <TableCell className="px-4 py-2.5 font-mono text-sm text-foreground">
+        {row.namespace}
+      </TableCell>
       <TableCell className="px-4 py-2.5">
-        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${modeStyle(row.mode)}`}>
+        <span
+          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${modeStyle(row.mode)}`}
+        >
           {row.mode}
         </span>
       </TableCell>
-      <TableCell className="px-4 py-2.5 text-sm text-muted-foreground">{row.rules}</TableCell>
+      <TableCell className="px-4 py-2.5 text-sm text-muted-foreground">
+        {row.rules}
+      </TableCell>
     </TableRow>
   );
 }
@@ -137,12 +153,19 @@ function ClusterServiceMeshMTLSPage() {
               </TableRow>
             ) : !mtls || mtls.rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  {mtls?.notice ? 'No per-namespace breakdown available.' : 'No mTLS rules found.'}
+                <TableCell
+                  colSpan={3}
+                  className="px-4 py-12 text-center text-sm text-muted-foreground"
+                >
+                  {mtls?.notice
+                    ? "No per-namespace breakdown available."
+                    : "No mTLS rules found."}
                 </TableCell>
               </TableRow>
             ) : (
-              mtls.rows.map((row) => <MTLSRow key={`${row.namespace}-${row.mode}`} row={row} />)
+              mtls.rows.map((row) => (
+                <MTLSRow key={`${row.namespace}-${row.mode}`} row={row} />
+              ))
             )}
           </TableBody>
         </Table>
@@ -151,6 +174,8 @@ function ClusterServiceMeshMTLSPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id/service-mesh/mtls/')({
+export const Route = createFileRoute(
+  "/dashboard/clusters/$id/service-mesh/mtls/",
+)({
   component: ClusterServiceMeshMTLSPage,
 });

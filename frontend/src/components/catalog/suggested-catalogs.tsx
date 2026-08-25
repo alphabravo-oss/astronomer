@@ -1,12 +1,16 @@
-'use client';
+"use client";
 
-import { useMemo, useState } from 'react';
-import { Package, Check, Plus, AlertTriangle } from 'lucide-react';
-import { ActionButton } from '@/components/ui/action-button';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { useCreateHelmRepository } from '@/lib/hooks';
-import { SUGGESTED_CATALOGS, normalizeRepoUrl, type SuggestedCatalog } from '@/lib/catalogs/suggested';
-import type { HelmRepository } from '@/types';
+import { useMemo, useState } from "react";
+import { Package, Check, Plus, AlertTriangle } from "lucide-react";
+import { ActionButton } from "@/components/ui/action-button";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { useCreateHelmRepository } from "@/lib/hooks/catalog";
+import {
+  SUGGESTED_CATALOGS,
+  normalizeRepoUrl,
+  type SuggestedCatalog,
+} from "@/lib/catalogs/suggested";
+import type { HelmRepository } from "@/types";
 
 interface SuggestedCatalogsProps {
   /** Existing helm_repositories rows — used to determine "Added" state. */
@@ -15,7 +19,10 @@ interface SuggestedCatalogsProps {
   onJumpToExisting?: (repo: HelmRepository) => void;
 }
 
-export function SuggestedCatalogs({ existing, onJumpToExisting }: SuggestedCatalogsProps) {
+export function SuggestedCatalogs({
+  existing,
+  onJumpToExisting,
+}: SuggestedCatalogsProps) {
   const createRepo = useCreateHelmRepository();
   const [pendingName, setPendingName] = useState<string | null>(null);
   const [dhiConfirm, setDhiConfirm] = useState<SuggestedCatalog | null>(null);
@@ -56,7 +63,9 @@ export function SuggestedCatalogs({ existing, onJumpToExisting }: SuggestedCatal
     <div className="space-y-3">
       <div className="flex items-baseline justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Suggested catalogs</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            Suggested catalogs
+          </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             One-click add for well-known chart repositories.
           </p>
@@ -109,7 +118,9 @@ export function SuggestedCatalogs({ existing, onJumpToExisting }: SuggestedCatal
                     size="sm"
                     intent="ghost"
                     icon={<Check className="h-3 w-3" />}
-                    onClick={() => existingRepo && onJumpToExisting?.(existingRepo)}
+                    onClick={() =>
+                      existingRepo && onJumpToExisting?.(existingRepo)
+                    }
                     className="bg-status-success/10 text-status-success hover:bg-status-success/20 hover:text-status-success"
                     title="View in Your repositories"
                   >
@@ -166,7 +177,7 @@ function DhiConfirmModal({
       size="sm"
       footerClassName="flex items-center justify-end gap-2"
       titleIcon={<AlertTriangle className="h-5 w-5 text-status-warning" />}
-      footer={(
+      footer={
         <>
           <ActionButton onClick={onCancel}>Cancel</ActionButton>
           <ActionButton
@@ -177,16 +188,19 @@ function DhiConfirmModal({
             I have a subscription, add anyway
           </ActionButton>
         </>
-      )}
+      }
     >
-          <p className="text-sm text-foreground">
-            Add <span className="font-medium">{catalog.displayName}</span>?
-          </p>
-          <p className="text-sm text-muted-foreground">
-            This catalog requires a paid Docker Hardened Images subscription.
-            Pulls will fail without credentials configured in{' '}
-            <code className="font-mono text-xs px-1 py-0.5 rounded bg-muted">auth_config</code>.
-          </p>
+      <p className="text-sm text-foreground">
+        Add <span className="font-medium">{catalog.displayName}</span>?
+      </p>
+      <p className="text-sm text-muted-foreground">
+        This catalog requires a paid Docker Hardened Images subscription. Pulls
+        will fail without credentials configured in{" "}
+        <code className="font-mono text-xs px-1 py-0.5 rounded bg-muted">
+          auth_config
+        </code>
+        .
+      </p>
     </ModalShell>
   );
 }

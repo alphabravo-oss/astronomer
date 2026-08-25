@@ -32,7 +32,8 @@
 //
 // Audit + metrics:
 //   - admin.vault_connection.{created,updated,deleted,tested,healthchecked}
-//     audit rows are written best-effort.
+//     audit evidence is mandatory; state-changing rows and audit intents share
+//     one database transaction.
 //   - The /test/ and /health/ endpoints update last_health_* on the row
 //     and emit astronomer_vault_connection_health{connection}.
 
@@ -52,10 +53,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 )
 
@@ -76,6 +79,17 @@ type VaultConnectionQuerier interface {
 	SetProjectDefaultVaultConnection(ctx context.Context, arg sqlc.SetProjectDefaultVaultConnectionParams) error
 	GetProjectDefaultVaultConnection(ctx context.Context, projectID uuid.UUID) (pgtype.UUID, error)
 }
+
+type VaultMutationTx interface {
+	audit.OutboxQuerier
+	CreateVaultConnection(context.Context, sqlc.CreateVaultConnectionParams) (sqlc.VaultConnection, error)
+	UpdateVaultConnection(context.Context, sqlc.UpdateVaultConnectionParams) (sqlc.VaultConnection, error)
+	DeleteVaultConnection(context.Context, uuid.UUID) error
+	UpdateVaultConnectionHealth(context.Context, sqlc.UpdateVaultConnectionHealthParams) error
+	SetProjectDefaultVaultConnection(context.Context, sqlc.SetProjectDefaultVaultConnectionParams) error
+}
+
+type vaultRunTxFunc func(context.Context, func(VaultMutationTx) error) error
 
 // VaultProbe is the surface used by /test/ + /health/ endpoints. The
 // production implementation builds a transient avault.Client via the
@@ -103,6 +117,32 @@ type TestResult struct {
 	ProbePath string `json:"probe_path,omitempty"`
 }
 
+type vaultHealthPersistence struct {
+	connection sqlc.VaultConnection
+	ok         bool
+	lastError  string
+	action     string
+	detail     map[string]any
+}
+
+func (h *VaultHandler) persistHealthResult(r *http.Request, result vaultHealthPersistence) error {
+	params := sqlc.UpdateVaultConnectionHealthParams{ID: result.connection.ID, LastHealthOk: result.ok, LastError: result.lastError}
+	_, err := executeVaultMutation(r, h,
+		func(q VaultMutationTx) (vaultHealthPersistence, error) {
+			return result, q.UpdateVaultConnectionHealth(r.Context(), params)
+		},
+		func() (vaultHealthPersistence, error) {
+			return result, h.queries.UpdateVaultConnectionHealth(r.Context(), params)
+		},
+		func(result vaultHealthPersistence) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: result.action, resourceType: "vault_connection", resourceID: result.connection.ID.String(), resourceName: result.connection.Name,
+				status: http.StatusOK, detail: result.detail,
+			}
+		})
+	return err
+}
+
 // VaultHandler owns the admin + project-default endpoints.
 type VaultHandler struct {
 	queries   VaultConnectionQuerier
@@ -110,6 +150,7 @@ type VaultHandler struct {
 	encryptor *auth.Encryptor
 	probe     VaultProbe
 	resolver  *avault.Resolver // cached resolver for ClearCache calls on mutate/delete
+	runTx     vaultRunTxFunc
 }
 
 // NewVaultHandler wires the handler. The encryptor is required for
@@ -122,6 +163,45 @@ func (h *VaultHandler) SetAuditor(a any) {
 	if h != nil {
 		h.auditor = a
 	}
+}
+
+func (h *VaultHandler) SetRunTx(runTx vaultRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *VaultHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
+
+func executeVaultMutation[T any](r *http.Request, h *VaultHandler, mutate func(VaultMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("vault handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q VaultMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	writer := h.auditor
+	if writer == nil {
+		writer = h.queries
+	}
+	recordAudit(r, writer, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 func (h *VaultHandler) SetEncryptor(e *auth.Encryptor) {
 	if h != nil {
@@ -282,7 +362,7 @@ func (h *VaultHandler) Create(w http.ResponseWriter, r *http.Request) {
 		createdBy = pgtype.UUID{Bytes: u, Valid: true}
 	}
 
-	row, err := h.queries.CreateVaultConnection(r.Context(), sqlc.CreateVaultConnectionParams{
+	params := sqlc.CreateVaultConnectionParams{
 		Name:          req.Name,
 		Description:   req.Description,
 		Addr:          req.Addr,
@@ -294,20 +374,26 @@ func (h *VaultHandler) Create(w http.ResponseWriter, r *http.Request) {
 		DefaultMount:  mount,
 		Enabled:       enabled,
 		CreatedBy:     createdBy,
-	})
+	}
+	row, err := executeVaultMutation(r, h,
+		func(q VaultMutationTx) (sqlc.VaultConnection, error) {
+			return q.CreateVaultConnection(r.Context(), params)
+		},
+		func() (sqlc.VaultConnection, error) { return h.queries.CreateVaultConnection(r.Context(), params) },
+		func(row sqlc.VaultConnection) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.vault_connection.created", resourceType: "vault_connection", resourceID: row.ID.String(), resourceName: row.Name,
+				status: http.StatusCreated, detail: map[string]any{"addr": row.Addr, "auth_method": row.AuthMethod, "namespace": row.Namespace},
+			}
+		})
 	if err != nil {
 		if isUniqueViolation(err) {
 			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A vault connection with that name already exists")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create vault connection")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create vault connection")
 		return
 	}
-	recordAudit(r, h.queries, "admin.vault_connection.created", "vault_connection", row.ID.String(), row.Name, map[string]any{
-		"addr":        row.Addr,
-		"auth_method": row.AuthMethod,
-		"namespace":   row.Namespace,
-	})
 	w.Header().Set("Location", "/api/v1/admin/vault-connections/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, h.toResponse(row, true))
 }
@@ -370,7 +456,7 @@ func (h *VaultHandler) Update(w http.ResponseWriter, r *http.Request) {
 		enabled = *req.Enabled
 	}
 
-	row, err := h.queries.UpdateVaultConnection(r.Context(), sqlc.UpdateVaultConnectionParams{
+	params := sqlc.UpdateVaultConnectionParams{
 		ID:            id,
 		Description:   req.Description,
 		Addr:          req.Addr,
@@ -381,18 +467,25 @@ func (h *VaultHandler) Update(w http.ResponseWriter, r *http.Request) {
 		CaCertPem:     req.CACertPEM,
 		DefaultMount:  mount,
 		Enabled:       enabled,
-	})
+	}
+	row, err := executeVaultMutation(r, h,
+		func(q VaultMutationTx) (sqlc.VaultConnection, error) {
+			return q.UpdateVaultConnection(r.Context(), params)
+		},
+		func() (sqlc.VaultConnection, error) { return h.queries.UpdateVaultConnection(r.Context(), params) },
+		func(row sqlc.VaultConnection) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.vault_connection.updated", resourceType: "vault_connection", resourceID: row.ID.String(), resourceName: row.Name,
+				status: http.StatusOK, detail: map[string]any{"addr": row.Addr, "auth_method": row.AuthMethod},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update vault connection")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update vault connection")
 		return
 	}
 	if h.resolver != nil {
 		h.resolver.ClearCache(row.ID)
 	}
-	recordAudit(r, h.queries, "admin.vault_connection.updated", "vault_connection", row.ID.String(), row.Name, map[string]any{
-		"addr":        row.Addr,
-		"auth_method": row.AuthMethod,
-	})
 	RespondJSON(w, http.StatusOK, h.toResponse(row, true))
 }
 
@@ -411,14 +504,26 @@ func (h *VaultHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Vault connection not found")
 		return
 	}
-	if err := h.queries.DeleteVaultConnection(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete vault connection")
+	_, err = executeVaultMutation(r, h,
+		func(q VaultMutationTx) (sqlc.VaultConnection, error) {
+			return existing, q.DeleteVaultConnection(r.Context(), id)
+		},
+		func() (sqlc.VaultConnection, error) {
+			return existing, h.queries.DeleteVaultConnection(r.Context(), id)
+		},
+		func(existing sqlc.VaultConnection) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "admin.vault_connection.deleted", resourceType: "vault_connection", resourceID: id.String(), resourceName: existing.Name,
+				status: http.StatusNoContent,
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete vault connection")
 		return
 	}
 	if h.resolver != nil {
 		h.resolver.ClearCache(id)
 	}
-	recordAudit(r, h.queries, "admin.vault_connection.deleted", "vault_connection", id.String(), existing.Name, map[string]any{})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -443,6 +548,7 @@ func (h *VaultHandler) Test(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Vault probe not configured")
 		return
 	}
+	// openapi:request-operation adminVaultConnectionTest
 	var body struct {
 		ProbePath string `json:"probe_path"`
 	}
@@ -453,38 +559,40 @@ func (h *VaultHandler) Test(w http.ResponseWriter, r *http.Request) {
 
 	authBlob, decErr := h.decryptAuth(conn)
 	if decErr != nil {
-		_ = h.queries.UpdateVaultConnectionHealth(r.Context(), sqlc.UpdateVaultConnectionHealthParams{ID: conn.ID, LastHealthOk: false, LastError: decErr.Error()})
-		RespondJSON(w, http.StatusOK, TestResult{OK: false, Message: decErr.Error()})
+		safeErr := redaction.String(decErr.Error())
+		if persistErr := h.persistHealthResult(r, vaultHealthPersistence{
+			connection: conn, ok: false, lastError: safeErr, action: "admin.vault_connection.tested",
+			detail: map[string]any{"ok": false, "probe_path": body.ProbePath, "result": "decrypt_failed"},
+		}); persistErr != nil {
+			respondTransactionalMutationError(w, r, persistErr, http.StatusInternalServerError, apierror.WriteError, "Failed to persist Vault test result")
+			return
+		}
+		RespondJSON(w, http.StatusOK, TestResult{OK: false, Message: safeErr})
 		return
 	}
 
 	res, err := h.probe.Test(r.Context(), conn, authBlob, body.ProbePath)
 	if err != nil {
-		// The probe consolidates auth + kv-probe; an err here means we
-		// couldn't even authenticate. Stamp health row + audit.
-		_ = h.queries.UpdateVaultConnectionHealth(r.Context(), sqlc.UpdateVaultConnectionHealthParams{
-			ID: conn.ID, LastHealthOk: false, LastError: err.Error(),
-		})
+		safeErr := redaction.String(err.Error())
+		if persistErr := h.persistHealthResult(r, vaultHealthPersistence{
+			connection: conn, ok: false, lastError: safeErr, action: "admin.vault_connection.tested",
+			detail: map[string]any{"ok": false, "probe_path": body.ProbePath, "result": "probe_failed"},
+		}); persistErr != nil {
+			respondTransactionalMutationError(w, r, persistErr, http.StatusInternalServerError, apierror.WriteError, "Failed to persist Vault test result")
+			return
+		}
 		observability.RecordVaultHealth(conn.Name, false)
-		recordAudit(r, h.queries, "admin.vault_connection.tested", "vault_connection", conn.ID.String(), conn.Name, map[string]any{
-			"ok":         false,
-			"probe_path": body.ProbePath,
-			"error":      err.Error(),
-		})
-		RespondJSON(w, http.StatusOK, TestResult{OK: false, Message: err.Error(), ProbePath: body.ProbePath})
+		RespondJSON(w, http.StatusOK, TestResult{OK: false, Message: safeErr, ProbePath: body.ProbePath})
 		return
 	}
-	_ = h.queries.UpdateVaultConnectionHealth(r.Context(), sqlc.UpdateVaultConnectionHealthParams{
-		ID: conn.ID, LastHealthOk: res.OK, LastError: "",
-	})
+	if persistErr := h.persistHealthResult(r, vaultHealthPersistence{
+		connection: conn, ok: res.OK, action: "admin.vault_connection.tested",
+		detail: map[string]any{"ok": res.OK, "latency_ms": res.LatencyMS, "probe_path": body.ProbePath},
+	}); persistErr != nil {
+		respondTransactionalMutationError(w, r, persistErr, http.StatusInternalServerError, apierror.WriteError, "Failed to persist Vault test result")
+		return
+	}
 	observability.RecordVaultHealth(conn.Name, res.OK)
-	recordAudit(r, h.queries, "admin.vault_connection.tested", "vault_connection", conn.ID.String(), conn.Name, map[string]any{
-		"ok":         res.OK,
-		"latency_ms": res.LatencyMS,
-		"probe_path": body.ProbePath,
-		// IMPORTANT: never include any field from the Vault response;
-		// only timing + reachability.
-	})
 	RespondJSON(w, http.StatusOK, res)
 }
 
@@ -510,9 +618,16 @@ func (h *VaultHandler) Health(w http.ResponseWriter, r *http.Request) {
 	}
 	authBlob, decErr := h.decryptAuth(conn)
 	if decErr != nil {
-		_ = h.queries.UpdateVaultConnectionHealth(r.Context(), sqlc.UpdateVaultConnectionHealthParams{ID: conn.ID, LastHealthOk: false, LastError: decErr.Error()})
+		safeErr := redaction.String(decErr.Error())
+		if persistErr := h.persistHealthResult(r, vaultHealthPersistence{
+			connection: conn, ok: false, lastError: safeErr, action: "admin.vault_connection.healthchecked",
+			detail: map[string]any{"ok": false, "result": "decrypt_failed"},
+		}); persistErr != nil {
+			respondTransactionalMutationError(w, r, persistErr, http.StatusInternalServerError, apierror.WriteError, "Failed to persist Vault health result")
+			return
+		}
 		observability.RecordVaultHealth(conn.Name, false)
-		RespondJSON(w, http.StatusOK, map[string]any{"ok": false, "message": decErr.Error()})
+		RespondJSON(w, http.StatusOK, map[string]any{"ok": false, "message": safeErr})
 		return
 	}
 	start := time.Now()
@@ -522,17 +637,17 @@ func (h *VaultHandler) Health(w http.ResponseWriter, r *http.Request) {
 	msg := "ok"
 	errStr := ""
 	if !ok {
-		msg = herr.Error()
+		msg = redaction.String(herr.Error())
 		errStr = msg
 	}
-	_ = h.queries.UpdateVaultConnectionHealth(r.Context(), sqlc.UpdateVaultConnectionHealthParams{
-		ID: conn.ID, LastHealthOk: ok, LastError: errStr,
-	})
+	if persistErr := h.persistHealthResult(r, vaultHealthPersistence{
+		connection: conn, ok: ok, lastError: errStr, action: "admin.vault_connection.healthchecked",
+		detail: map[string]any{"ok": ok, "latency_ms": latency.Milliseconds()},
+	}); persistErr != nil {
+		respondTransactionalMutationError(w, r, persistErr, http.StatusInternalServerError, apierror.WriteError, "Failed to persist Vault health result")
+		return
+	}
 	observability.RecordVaultHealth(conn.Name, ok)
-	recordAudit(r, h.queries, "admin.vault_connection.healthchecked", "vault_connection", conn.ID.String(), conn.Name, map[string]any{
-		"ok":         ok,
-		"latency_ms": latency.Milliseconds(),
-	})
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"ok":         ok,
 		"latency_ms": latency.Milliseconds(),
@@ -594,6 +709,7 @@ func (h *VaultHandler) PutProjectDefault(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
+	// openapi:request-operation putProjectsByIdDefaultVaultConnection
 	var body struct {
 		ConnectionID *string `json:"connection_id"`
 	}
@@ -614,16 +730,31 @@ func (h *VaultHandler) PutProjectDefault(w http.ResponseWriter, r *http.Request)
 		}
 		ptr = pgtype.UUID{Bytes: id, Valid: true}
 	}
-	if err := h.queries.SetProjectDefaultVaultConnection(r.Context(), sqlc.SetProjectDefaultVaultConnectionParams{
+	params := sqlc.SetProjectDefaultVaultConnectionParams{
 		ID:                       projectID,
 		DefaultVaultConnectionID: ptr,
-	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project default vault connection")
+	}
+	_, err = executeVaultMutation(r, h,
+		func(q VaultMutationTx) (pgtype.UUID, error) {
+			return ptr, q.SetProjectDefaultVaultConnection(r.Context(), params)
+		},
+		func() (pgtype.UUID, error) {
+			return ptr, h.queries.SetProjectDefaultVaultConnection(r.Context(), params)
+		},
+		func(ptr pgtype.UUID) clusterAuditEvent {
+			connectionID := any(nil)
+			if ptr.Valid {
+				connectionID = uuid.UUID(ptr.Bytes).String()
+			}
+			return clusterAuditEvent{
+				action: "project.default_vault_connection.set", resourceType: "project", resourceID: projectID.String(),
+				status: http.StatusOK, detail: map[string]any{"connection_id": connectionID},
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project default vault connection")
 		return
 	}
-	recordAudit(r, h.queries, "project.default_vault_connection.set", "project", projectID.String(), "", map[string]any{
-		"connection_id": stringOrNull(body.ConnectionID),
-	})
 	RespondJSON(w, http.StatusOK, map[string]any{"connection_id": stringOrNull(body.ConnectionID)})
 }
 

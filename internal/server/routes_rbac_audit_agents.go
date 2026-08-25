@@ -158,9 +158,9 @@ func registerRBACAuditAgentRoutes(r chi.Router, deps RouterDependencies) {
 		})
 		// Python-named alerts/* alias paths for the frontend's expected URLs.
 		r.Route("/alerts", func(r chi.Router) {
-			r.With(alertsUpdate).Post("/rules/{id}/enable/", deps.Alerting.EnableRule)
-			r.With(alertsUpdate).Post("/rules/{id}/disable/", deps.Alerting.DisableRule)
-			r.With(alertsUpdate).Post("/silences/{id}/expire/", deps.Alerting.ExpireSilence)
+			r.With(alertsUpdate, deprecatedAPIAlias("/api/v1/alerting/rules/{id}/enable")).Post("/rules/{id}/enable/", deps.Alerting.EnableRule)
+			r.With(alertsUpdate, deprecatedAPIAlias("/api/v1/alerting/rules/{id}/disable")).Post("/rules/{id}/disable/", deps.Alerting.DisableRule)
+			r.With(alertsUpdate, deprecatedAPIAlias("/api/v1/alerting/silences/{id}/expire")).Post("/silences/{id}/expire/", deps.Alerting.ExpireSilence)
 		})
 	}
 

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -11,8 +12,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
@@ -31,8 +34,39 @@ type ControlPlaneQuerier interface {
 	CreateControlPlaneSilence(ctx context.Context, arg sqlc.CreateControlPlaneSilenceParams) (sqlc.ControlPlaneSilence, error)
 	ListControlPlaneSilences(ctx context.Context, arg sqlc.ListControlPlaneSilencesParams) ([]sqlc.ControlPlaneSilence, error)
 	GetActiveControlPlaneSilences(ctx context.Context) ([]sqlc.ControlPlaneSilence, error)
-	DeleteControlPlaneSilence(ctx context.Context, id uuid.UUID) error
+	DeleteControlPlaneSilence(ctx context.Context, id uuid.UUID) (sqlc.ControlPlaneSilence, error)
 	ListEnabledNotificationChannels(ctx context.Context) ([]sqlc.NotificationChannel, error)
+}
+
+type ControlPlaneMutationTx interface {
+	ControlPlaneQuerier
+	audit.OutboxQuerier
+}
+
+type controlPlaneRunTxFunc func(context.Context, func(ControlPlaneMutationTx) error) error
+
+func executeControlPlaneMutation[T any](r *http.Request, h *ControlPlaneHandler, mutate func(ControlPlaneQuerier) (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q ControlPlaneMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := mutate(h.queries)
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 type ControlPlaneHandler struct {
@@ -45,8 +79,17 @@ type ControlPlaneHandler struct {
 	Security   *SecurityHandler
 	queue      *asynq.Client
 	emails     EmailNotifier
+	runTx      controlPlaneRunTxFunc
 	mu         sync.Mutex
 }
+
+func (h *ControlPlaneHandler) SetRunTx(runTx controlPlaneRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *ControlPlaneHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // SetEmailNotifier attaches the SMTP email enqueuer used by the
 // alert-fired dispatch path to render and persist email_messages
@@ -55,6 +98,7 @@ type ControlPlaneHandler struct {
 // unaffected.
 func (h *ControlPlaneHandler) SetEmailNotifier(n EmailNotifier) { h.emails = n }
 
+// openapi:request ControlPlanePolicyRequest
 type UpdateControlPlanePolicyRequest struct {
 	MonitoringQueueDepthThreshold    int32 `json:"monitoringQueueDepthThreshold"`
 	DeliveryQueueDepthThreshold      int32 `json:"deliveryQueueDepthThreshold"`
@@ -71,6 +115,7 @@ type UpdateControlPlanePolicyRequest struct {
 	RecentFailureWindowMinutes       int32 `json:"recentFailureWindowMinutes"`
 }
 
+// openapi:request ControlPlaneSilenceRequest
 type CreateControlPlaneSilenceRequest struct {
 	Controller    string `json:"controller" validate:"required"`
 	ConditionType string `json:"conditionType"`
@@ -133,7 +178,7 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
-	policy, err := h.queries.UpsertDefaultControlPlanePolicy(r.Context(), sqlc.UpsertDefaultControlPlanePolicyParams{
+	params := sqlc.UpsertDefaultControlPlanePolicyParams{
 		MonitoringQueueDepthThreshold:    atLeastOne(req.MonitoringQueueDepthThreshold),
 		DeliveryQueueDepthThreshold:      atLeastOne(req.DeliveryQueueDepthThreshold),
 		ToolsQueueDepthThreshold:         atLeastOne(req.ToolsQueueDepthThreshold),
@@ -147,19 +192,29 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 		ToolsRecentFailureThreshold:      atLeastOne(req.ToolsRecentFailureThreshold),
 		CatalogRecentFailureThreshold:    atLeastOne(req.CatalogRecentFailureThreshold),
 		RecentFailureWindowMinutes:       atLeastOne(req.RecentFailureWindowMinutes),
-	})
+	}
+	policy, err := executeControlPlaneMutation(r, h,
+		func(q ControlPlaneQuerier) (sqlc.ControlPlanePolicy, error) {
+			return q.UpsertDefaultControlPlanePolicy(r.Context(), params)
+		},
+		func(policy sqlc.ControlPlanePolicy) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "controlplane.policy.update", resourceType: "control_plane_policy", resourceID: policy.ID.String(), status: http.StatusOK,
+				detail: map[string]any{
+					"monitoring_queue_depth_threshold": policy.MonitoringQueueDepthThreshold,
+					"delivery_queue_depth_threshold":   policy.DeliveryQueueDepthThreshold,
+					"tools_queue_depth_threshold":      policy.ToolsQueueDepthThreshold,
+					"catalog_queue_depth_threshold":    policy.CatalogQueueDepthThreshold,
+					"recent_failure_window_minutes":    policy.RecentFailureWindowMinutes,
+				},
+			}
+		},
+	)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.PolicyError, "Failed to update control plane policy")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.PolicyError, "Failed to update control plane policy")
 		return
 	}
 	go h.evaluate(context.Background())
-	recordAudit(r, h.queries, "controlplane.policy.update", "control_plane_policy", policy.ID.String(), "", map[string]any{
-		"monitoring_queue_depth_threshold": policy.MonitoringQueueDepthThreshold,
-		"delivery_queue_depth_threshold":   policy.DeliveryQueueDepthThreshold,
-		"tools_queue_depth_threshold":      policy.ToolsQueueDepthThreshold,
-		"catalog_queue_depth_threshold":    policy.CatalogQueueDepthThreshold,
-		"recent_failure_window_minutes":    policy.RecentFailureWindowMinutes,
-	})
 	RespondJSON(w, http.StatusOK, controlPlanePolicyResponse(policy))
 }
 
@@ -183,10 +238,7 @@ func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request)
 	for _, alert := range alerts {
 		resp = append(resp, controlPlaneAlertResponse(alert))
 	}
-	// No COUNT query is exposed for control-plane alerts, so the page
-	// length stands in as the total. // TODO(total): add a
-	// CountControlPlaneAlerts query honoring the status/controller filters.
-	RespondList(w, resp, NewPagination(len(resp), int(arg.Limit), int(arg.Offset), len(resp)))
+	RespondList(w, resp, NewPaginationFromPage(int(arg.Limit), int(arg.Offset), len(resp)))
 }
 
 func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Request) {
@@ -195,18 +247,25 @@ func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid alert ID")
 		return
 	}
-	alert, err := h.queries.AcknowledgeControlPlaneAlert(r.Context(), sqlc.AcknowledgeControlPlaneAlertParams{
-		ID:               id,
-		AcknowledgedByID: currentUserUUID(r),
-	})
+	alert, err := executeControlPlaneMutation(r, h,
+		func(q ControlPlaneQuerier) (sqlc.ControlPlaneAlert, error) {
+			return q.AcknowledgeControlPlaneAlert(r.Context(), sqlc.AcknowledgeControlPlaneAlertParams{ID: id, AcknowledgedByID: currentUserUUID(r)})
+		},
+		func(alert sqlc.ControlPlaneAlert) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "controlplane.alert.acknowledge", resourceType: "control_plane_alert", resourceID: id.String(), resourceName: alert.Controller, status: http.StatusOK,
+				detail: map[string]any{"condition_type": alert.ConditionType, "status": alert.Status},
+			}
+		},
+	)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Control plane alert not found")
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Control plane alert not found")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.AlertError, "Failed to acknowledge control plane alert")
 		return
 	}
-	recordAudit(r, h.queries, "controlplane.alert.acknowledge", "control_plane_alert", id.String(), alert.Controller, map[string]any{
-		"condition_type": alert.ConditionType,
-		"status":         alert.Status,
-	})
 	RespondJSON(w, http.StatusOK, controlPlaneAlertResponse(alert))
 }
 
@@ -223,10 +282,7 @@ func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Reques
 	for _, item := range items {
 		resp = append(resp, controlPlaneSilenceResponse(item))
 	}
-	// No COUNT query is exposed for control-plane silences, so the page
-	// length stands in as the total. // TODO(total): add a
-	// CountControlPlaneSilences query.
-	RespondList(w, resp, NewPagination(len(resp), queryLimit(r, 50), queryInt(r, "offset", 0), len(resp)))
+	RespondList(w, resp, NewPaginationFromPage(queryLimit(r, 50), queryInt(r, "offset", 0), len(resp)))
 }
 
 func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Request) {
@@ -240,23 +296,29 @@ func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Reque
 			duration = parsed
 		}
 	}
-	item, err := h.queries.CreateControlPlaneSilence(r.Context(), sqlc.CreateControlPlaneSilenceParams{
+	params := sqlc.CreateControlPlaneSilenceParams{
 		Controller:    req.Controller,
 		ConditionType: req.ConditionType,
 		Reason:        req.Reason,
 		StartsAt:      time.Now().UTC(),
 		EndsAt:        time.Now().UTC().Add(duration),
 		CreatedByID:   currentUserUUID(r),
-	})
+	}
+	item, err := executeControlPlaneMutation(r, h,
+		func(q ControlPlaneQuerier) (sqlc.ControlPlaneSilence, error) {
+			return q.CreateControlPlaneSilence(r.Context(), params)
+		},
+		func(item sqlc.ControlPlaneSilence) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "controlplane.silence.create", resourceType: "control_plane_silence", resourceID: item.ID.String(), resourceName: item.Controller, status: http.StatusCreated,
+				detail: map[string]any{"controller": item.Controller, "condition_type": item.ConditionType, "duration": duration.String()},
+			}
+		},
+	)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SilenceError, "Failed to create control plane silence")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SilenceError, "Failed to create control plane silence")
 		return
 	}
-	recordAudit(r, h.queries, "controlplane.silence.create", "control_plane_silence", item.ID.String(), req.Reason, map[string]any{
-		"controller":     req.Controller,
-		"condition_type": req.ConditionType,
-		"duration":       duration.String(),
-	})
 	w.Header().Set("Location", "/api/v1/controllers/silences/"+item.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, controlPlaneSilenceResponse(item))
 }
@@ -267,11 +329,25 @@ func (h *ControlPlaneHandler) DeleteSilence(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid silence ID")
 		return
 	}
-	if err := h.queries.DeleteControlPlaneSilence(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Control plane silence not found")
+	_, err = executeControlPlaneMutation(r, h,
+		func(q ControlPlaneQuerier) (sqlc.ControlPlaneSilence, error) {
+			return q.DeleteControlPlaneSilence(r.Context(), id)
+		},
+		func(item sqlc.ControlPlaneSilence) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "controlplane.silence.delete", resourceType: "control_plane_silence", resourceID: item.ID.String(), resourceName: item.Controller, status: http.StatusNoContent,
+				detail: map[string]any{"condition_type": item.ConditionType},
+			}
+		},
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Control plane silence not found")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SilenceError, "Failed to delete control plane silence")
 		return
 	}
-	recordAudit(r, h.queries, "controlplane.silence.delete", "control_plane_silence", id.String(), "", nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

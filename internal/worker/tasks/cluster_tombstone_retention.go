@@ -48,15 +48,14 @@ func NewClusterTombstoneRetentionTask() *asynq.Task {
 // clusters row is then the only way to name those rows.
 func HandleClusterTombstoneRetention(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ClusterTombstoneRetentionType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().DebugContext(ctx, "cluster tombstone retention runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("cluster tombstone retention runtime is not configured")
 		}
-		q, ok := runtimeDeps.Queries.(clusterTombstonePurger)
+		q, ok := runtimeDependencies(ctx).Queries.(clusterTombstonePurger)
 		if !ok {
 			return fmt.Errorf("cluster tombstone retention not supported by runtime querier")
 		}
-		days := runtimeDeps.ClusterTombstoneRetentionDays
+		days := runtimeDependencies(ctx).ClusterTombstoneRetentionDays
 		if days <= 0 {
 			days = defaultClusterTombstoneRetentionDays
 		}
@@ -72,7 +71,7 @@ func HandleClusterTombstoneRetention(ctx context.Context, _ *asynq.Task) error {
 			emitTombstonePurgedAudit(ctx, row, days)
 		}
 		if len(rows) > 0 {
-			runtimeLogger().InfoContext(ctx, "purged cluster tombstones",
+			runtimeLogger(ctx).InfoContext(ctx, "purged cluster tombstones",
 				"rows", len(rows),
 				"cutoff", cutoff.Format(time.RFC3339),
 				"retention_days", days,
@@ -98,7 +97,7 @@ func emitTombstonePurgedAudit(ctx context.Context, row sqlc.ListExpiredClusterTo
 	if err != nil {
 		return
 	}
-	_ = runtimeDeps.Queries.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
+	_ = runtimeDependencies(ctx).Queries.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
 		Source:       "worker",
 		Action:       "cluster.tombstone.purged",
 		ResourceType: "cluster",

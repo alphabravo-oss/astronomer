@@ -7,12 +7,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -30,19 +32,53 @@ type fakeWebhookQuerier struct {
 	users       map[uuid.UUID]sqlc.User
 	createCount int
 	retryCount  int
+	audits      []sqlc.UpsertAuditOutboxParams
+	idempotency map[string]sqlc.OperationIdempotencyKey
 }
 
 func newFakeWebhookQuerier(users ...sqlc.User) *fakeWebhookQuerier {
 	q := &fakeWebhookQuerier{
-		subsByID:   map[uuid.UUID]sqlc.WebhookSubscription{},
-		subsByName: map[string]sqlc.WebhookSubscription{},
-		deliveries: map[uuid.UUID]sqlc.WebhookDelivery{},
-		users:      map[uuid.UUID]sqlc.User{},
+		subsByID:    map[uuid.UUID]sqlc.WebhookSubscription{},
+		subsByName:  map[string]sqlc.WebhookSubscription{},
+		deliveries:  map[uuid.UUID]sqlc.WebhookDelivery{},
+		users:       map[uuid.UUID]sqlc.User{},
+		idempotency: map[string]sqlc.OperationIdempotencyKey{},
 	}
 	for _, u := range users {
 		q.users[u.ID] = u
 	}
 	return q
+}
+
+func (f *fakeWebhookQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.audits = append(f.audits, arg)
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
+}
+
+func (f *fakeWebhookQuerier) ReserveOperationIdempotencyKey(_ context.Context, arg sqlc.ReserveOperationIdempotencyKeyParams) (sqlc.OperationIdempotencyKey, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := arg.Scope + "\x00" + arg.IdempotencyKey
+	row, ok := f.idempotency[key]
+	if !ok {
+		row = sqlc.OperationIdempotencyKey{Scope: arg.Scope, IdempotencyKey: arg.IdempotencyKey}
+		f.idempotency[key] = row
+	}
+	return row, nil
+}
+
+func (f *fakeWebhookQuerier) AttachOperationIdempotencyKey(_ context.Context, arg sqlc.AttachOperationIdempotencyKeyParams) (sqlc.OperationIdempotencyKey, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := arg.Scope + "\x00" + arg.IdempotencyKey
+	row := sqlc.OperationIdempotencyKey{
+		Scope: arg.Scope, IdempotencyKey: arg.IdempotencyKey, OperationTable: arg.OperationTable,
+		OperationID: pgtype.UUID{Bytes: arg.OperationID, Valid: true}, Response: arg.Response,
+	}
+	f.idempotency[key] = row
+	return row, nil
 }
 
 func (f *fakeWebhookQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.User, error) {
@@ -344,6 +380,7 @@ func TestWebhooksHandler_TestEndpoint(t *testing.T) {
 	superID := uuid.New()
 	q := newFakeWebhookQuerier(sqlc.User{ID: superID, IsSuperuser: true})
 	h := newWebhookTestHandler(t, q)
+	h.SetRunTx(func(_ context.Context, fn func(WebhookMutationTx) error) error { return fn(q) })
 
 	// Seed a subscription so we have a target.
 	subID := uuid.New()
@@ -362,6 +399,7 @@ func TestWebhooksHandler_TestEndpoint(t *testing.T) {
 		authedWebhookRequest(http.MethodPost, "/api/v1/admin/webhooks/"+subID.String()+"/test/", superID, []byte("{}")),
 		"id", subID.String(),
 	)
+	req.Header.Set("Idempotency-Key", "webhook-test-once")
 	h.Test(w, req)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("test endpoint: status=%d body=%s", w.Code, w.Body.String())
@@ -371,13 +409,63 @@ func TestWebhooksHandler_TestEndpoint(t *testing.T) {
 	if got := len(q.deliveries); got != 1 {
 		t.Errorf("expected 1 queued delivery, got %d", got)
 	}
-	for _, d := range q.deliveries {
+	var deliveryID uuid.UUID
+	for id, d := range q.deliveries {
+		deliveryID = id
 		if d.EventName != "webhook.test_ping" {
 			t.Errorf("event_name = %q, want webhook.test_ping", d.EventName)
 		}
 		if d.Status != "queued" {
 			t.Errorf("status = %q, want queued", d.Status)
 		}
+	}
+	if w.Header().Get("Location") == "" || w.Header().Get("Retry-After") != "2" || len(q.audits) != 1 {
+		t.Fatalf("durable receipt/audit missing: Location=%q Retry-After=%q audits=%d", w.Header().Get("Location"), w.Header().Get("Retry-After"), len(q.audits))
+	}
+	replay := httptest.NewRecorder()
+	h.Test(replay, req.Clone(req.Context()))
+	if replay.Code != http.StatusAccepted || replay.Header().Get("Location") != w.Header().Get("Location") || replay.Body.String() != w.Body.String() {
+		t.Fatalf("replay changed receipt: status=%d body=%s", replay.Code, replay.Body.String())
+	}
+	if len(q.deliveries) != 1 || len(q.audits) != 1 {
+		t.Fatalf("replay duplicated delivery/audit: %d/%d", len(q.deliveries), len(q.audits))
+	}
+	status := httptest.NewRecorder()
+	statusRequest := withChiParam(withChiParam(
+		authedWebhookRequest(http.MethodGet, webhookDeliveryLocation(subID, deliveryID), superID, nil),
+		"id", subID.String()), "delivery_id", deliveryID.String())
+	h.GetDelivery(status, statusRequest)
+	if status.Code != http.StatusOK || !strings.Contains(status.Body.String(), deliveryID.String()) {
+		t.Fatalf("exact delivery status: status=%d body=%s", status.Code, status.Body.String())
+	}
+}
+
+func TestWebhooksHandler_AsyncEdgesRequireIdempotencyKey(t *testing.T) {
+	superID, subID, deliveryID := uuid.New(), uuid.New(), uuid.New()
+	q := newFakeWebhookQuerier(sqlc.User{ID: superID, IsSuperuser: true})
+	q.subsByID[subID] = sqlc.WebhookSubscription{ID: subID, Name: "target"}
+	q.deliveries[deliveryID] = sqlc.WebhookDelivery{ID: deliveryID, SubscriptionID: subID}
+	h := newWebhookTestHandler(t, q)
+	h.SetRunTx(func(_ context.Context, fn func(WebhookMutationTx) error) error { return fn(q) })
+	for name, target := range map[string]struct {
+		target string
+		fn     func(http.ResponseWriter, *http.Request)
+	}{
+		"test":  {target: "/api/v1/admin/webhooks/" + subID.String() + "/test/", fn: h.Test},
+		"retry": {target: webhookDeliveryLocation(subID, deliveryID) + "retry/", fn: h.RetryDelivery},
+	} {
+		t.Run(name, func(t *testing.T) {
+			req := authedWebhookRequest(http.MethodPost, target.target, superID, nil)
+			req = withChiParam(req, "id", subID.String())
+			if name == "retry" {
+				req = withChiParam(req, "delivery_id", deliveryID.String())
+			}
+			w := httptest.NewRecorder()
+			target.fn(w, req)
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+			}
+		})
 	}
 }
 
@@ -503,6 +591,7 @@ func TestWebhooksHandler_RetryEndpoint(t *testing.T) {
 	superID := uuid.New()
 	q := newFakeWebhookQuerier(sqlc.User{ID: superID, IsSuperuser: true})
 	h := newWebhookTestHandler(t, q)
+	h.SetRunTx(func(_ context.Context, fn func(WebhookMutationTx) error) error { return fn(q) })
 
 	subID := uuid.New()
 	delID := uuid.New()
@@ -517,6 +606,7 @@ func TestWebhooksHandler_RetryEndpoint(t *testing.T) {
 		),
 		"delivery_id", delID.String(),
 	)
+	req.Header.Set("Idempotency-Key", "webhook-retry-once")
 	h.RetryDelivery(w, req)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("retry: status=%d body=%s", w.Code, w.Body.String())
@@ -526,6 +616,14 @@ func TestWebhooksHandler_RetryEndpoint(t *testing.T) {
 	}
 	if q.deliveries[delID].Status != "queued" {
 		t.Errorf("delivery status after retry = %q, want queued", q.deliveries[delID].Status)
+	}
+	replay := httptest.NewRecorder()
+	h.RetryDelivery(replay, req.Clone(req.Context()))
+	if replay.Code != http.StatusAccepted || replay.Header().Get("Location") != w.Header().Get("Location") || replay.Body.String() != w.Body.String() {
+		t.Fatalf("retry replay changed receipt: status=%d body=%s", replay.Code, replay.Body.String())
+	}
+	if q.retryCount != 1 || len(q.audits) != 1 {
+		t.Fatalf("retry replay duplicated mutation/audit: %d/%d", q.retryCount, len(q.audits))
 	}
 }
 
@@ -550,6 +648,7 @@ func TestWebhooksHandler_RetryEndpoint_CrossSubscription_404(t *testing.T) {
 		),
 		"delivery_id", delID.String(),
 	)
+	req.Header.Set("Idempotency-Key", "cross-subscription")
 	h.RetryDelivery(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected 404 on cross-subscription retry, got %d", w.Code)

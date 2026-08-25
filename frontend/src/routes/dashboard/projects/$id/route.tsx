@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet } from '@tanstack/react-router';
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 /**
  * Project detail layout — adds the tab strip shared by every sub-route under
  * `/dashboard/projects/[id]/`. Each tab is its own page so deep-links keep
@@ -12,18 +12,32 @@ import { createFileRoute, Outlet } from '@tanstack/react-router';
  * Cloud Credentials / Quota) ship as part of the project-detail-tabs sprint.
  * Adding more is a one-line change to the `tabs` array.
  */
-import { Link } from '@/lib/link';
-import { useParams, usePathname } from '@/lib/navigation';
-import { ArrowLeft, FolderKanban, Shield, KeyRound, Gauge, Loader2, LayoutDashboard, Package } from 'lucide-react';
-import { useProject } from '@/lib/hooks';
-import { cn } from '@/lib/utils';
+import { Link } from "@/lib/link";
+import { useParams, usePathname } from "@/lib/navigation";
+import {
+  ArrowLeft,
+  FolderKanban,
+  Shield,
+  KeyRound,
+  Gauge,
+  Loader2,
+  LayoutDashboard,
+  Package,
+} from "lucide-react";
+import { useProject } from "@/lib/hooks";
+import { cn } from "@/lib/utils";
 
 const tabs = [
-  { key: 'overview', label: 'Overview', icon: LayoutDashboard, segment: '' },
-  { key: 'policy', label: 'Policy', icon: Shield, segment: '/policy' },
-  { key: 'cloud-credentials', label: 'Cloud Credentials', icon: KeyRound, segment: '/cloud-credentials' },
-  { key: 'catalogs', label: 'Catalogs', icon: Package, segment: '/catalogs' },
-  { key: 'quota', label: 'Quota', icon: Gauge, segment: '/quota' },
+  { key: "overview", label: "Overview", icon: LayoutDashboard, segment: "" },
+  { key: "policy", label: "Policy", icon: Shield, segment: "/policy" },
+  {
+    key: "cloud-credentials",
+    label: "Cloud Credentials",
+    icon: KeyRound,
+    segment: "/cloud-credentials",
+  },
+  { key: "catalogs", label: "Catalogs", icon: Package, segment: "/catalogs" },
+  { key: "quota", label: "Quota", icon: Gauge, segment: "/quota" },
 ] as const;
 
 function ProjectDetailLayout() {
@@ -38,11 +52,17 @@ function ProjectDetailLayout() {
   // Overview matches when nothing else does (i.e. we're sitting on the bare
   // /projects/[id] route or any unknown nested path).
   const activeKey = (() => {
-    const remaining = pathname.startsWith(base) ? pathname.slice(base.length) : '';
+    const remaining = pathname.startsWith(base)
+      ? pathname.slice(base.length)
+      : "";
     const match = tabs
-      .filter((t) => t.segment && (remaining === t.segment || remaining.startsWith(`${t.segment}/`)))
+      .filter(
+        (t) =>
+          t.segment &&
+          (remaining === t.segment || remaining.startsWith(`${t.segment}/`)),
+      )
       .sort((a, b) => b.segment.length - a.segment.length)[0];
-    return match?.key ?? 'overview';
+    return match?.key ?? "overview";
   })();
 
   return (
@@ -57,19 +77,23 @@ function ProjectDetailLayout() {
 
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Project</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Project
+          </p>
           <div className="flex items-center gap-2 mt-1">
             <FolderKanban className="h-5 w-5 text-muted-foreground" />
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             ) : (
               <h1 className="text-2xl font-semibold text-foreground tracking-tight truncate">
-                {project?.displayName || project?.name || 'Project'}
+                {project?.displayName || project?.name || "Project"}
               </h1>
             )}
           </div>
           {project?.description && (
-            <p className="text-sm text-muted-foreground mt-1 max-w-3xl">{project.description}</p>
+            <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
+              {project.description}
+            </p>
           )}
         </div>
       </div>
@@ -85,10 +109,10 @@ function ProjectDetailLayout() {
                 key={tab.key}
                 href={href}
                 className={cn(
-                  'flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors',
+                  "flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors",
                   active
-                    ? 'border-foreground text-foreground'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                    ? "border-foreground text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -106,6 +130,6 @@ function ProjectDetailLayout() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/projects/$id')({
+export const Route = createFileRoute("/dashboard/projects/$id")({
   component: ProjectDetailLayout,
 });

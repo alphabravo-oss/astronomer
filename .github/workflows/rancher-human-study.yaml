@@ -1,0 +1,63 @@
+name: Rancher counterbalanced human study attestation
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag: {description: "Exact v1 release tag studied", required: true, type: string}
+      raw_evidence_run_id: {description: "Exact successful raw human-study evidence run", required: true, type: string}
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+jobs:
+  attest:
+    runs-on: ubuntu-latest
+    environment: rancher-human-study
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {ref: "refs/tags/${{ inputs.tag }}", persist-credentials: false}
+      - name: Enforce exact tag-bound human-study producer
+        env: {TARGET_TAG: "${{ inputs.tag }}"}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/tags/$TARGET_TAG"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with: {cosign-release: v2.5.3}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: rancher-human-raw-${{ inputs.raw_evidence_run_id }}
+          path: ${{ runner.temp }}/rancher-human-raw
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.raw_evidence_run_id }}
+      - name: Verify exact successful raw study and build closed evidence
+        env:
+          RAW_RUN_ID: ${{ inputs.raw_evidence_run_id }}
+          TARGET_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RAW_RUN_ID}")"
+          jq -e --arg sha "$GITHUB_SHA" --arg tag "$TARGET_TAG" --arg repo "$GITHUB_REPOSITORY" '.status=="completed" and .conclusion=="success" and .event=="workflow_dispatch" and .path==".github/workflows/rancher-human-raw-evidence.yaml" and .head_sha==$sha and .head_branch==$tag and .head_repository.full_name==$repo' <<<"$run_json" >/dev/null
+          artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RAW_RUN_ID}/artifacts?per_page=100&name=rancher-human-raw-${RAW_RUN_ID}")"
+          jq -e --arg name "rancher-human-raw-${RAW_RUN_ID}" '[.artifacts[]|select(.name==$name and .expired==false)]|length==1' <<<"$artifacts" >/dev/null
+          raw="$RUNNER_TEMP/rancher-human-raw"
+          cosign verify-blob --bundle "$raw/raw-manifest.sigstore.json" --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/rancher-human-raw-evidence.yaml@refs/tags/${TARGET_TAG}" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$raw/raw-manifest.json"
+          python3 scripts/raw-human-evidence-manifest.py --root "$raw" --manifest "$raw/raw-manifest.json" --verify
+          node scripts/build-rancher-human-study.mjs --raw-dir "$raw" --raw-run-id "$RAW_RUN_ID" --out human-evaluation.json
+          node scripts/validate-rancher-human-study.mjs human-evaluation.json
+          chmod 0644 human-evaluation.json
+      - name: Sign exact validated human study
+        run: cosign sign-blob --yes --bundle human-evaluation.sigstore.json human-evaluation.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rancher-human-study-${{ github.run_id }}
+          path: |
+            human-evaluation.json
+            human-evaluation.sigstore.json
+          if-no-files-found: error
+          retention-days: 365

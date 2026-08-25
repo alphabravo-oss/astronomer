@@ -1,6 +1,13 @@
-'use client';
+"use client";
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * Cluster Snapshots tab.
  *
@@ -20,11 +27,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * permission and where to request access.
  */
 
-import { useMemo, useState } from 'react';
-import { useAppForm, useStore } from '@/lib/form';
-import { useParams } from '@/lib/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toastApiError, toastSuccess } from '@/lib/toast';
+import { useMemo, useState } from "react";
+import { useAppForm, useStore } from "@/lib/form";
+import { useParams } from "@/lib/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 import {
   AlertTriangle,
   Archive,
@@ -43,20 +50,25 @@ import {
   ShieldAlert,
   Trash2,
   XCircle,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { queryKeys, useCluster, useClusterNamespaces, useClusters } from '@/lib/hooks';
-import { liveFallback } from '@/lib/live/status-store';
-import { useClustersUpdate } from '@/lib/permission-hooks';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-state';
+import {
+  queryKeys,
+  useCluster,
+  useClusterNamespaces,
+  useClusters,
+} from "@/lib/hooks";
+import { liveFallback } from "@/lib/live/status-store";
+import { useClustersUpdate } from "@/lib/permission-hooks";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   createControlPlaneSnapshot,
   getControlPlaneSnapshotRestoreGuidance,
   listControlPlaneSnapshots,
   type ControlPlaneSnapshot,
   type ControlPlaneSnapshotStatus,
-} from '@/lib/api/cluster-snapshots';
+} from "@/lib/api/cluster-snapshots";
 import {
   createSnapshot,
   createSnapshotSchedule,
@@ -71,65 +83,65 @@ import {
   type SnapshotPhase,
   type SnapshotSchedule,
   type SnapshotSpec,
-} from '@/lib/api/cluster-detail';
-import { cn } from '@/lib/utils';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ActionButton } from '@/components/ui/action-button';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { PageHeader, PageShell } from '@/components/ui/page';
+} from "@/lib/api/cluster-detail";
+import { cn } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ActionButton } from "@/components/ui/action-button";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { PageHeader, PageShell } from "@/components/ui/page";
 
 // ─── Phase pill ─────────────────────────────────────────────────────────────
 function PhasePill({ phase }: { phase: SnapshotPhase }) {
   const tone = (() => {
     switch (phase) {
-      case 'Completed':
-        return 'bg-status-success/10 text-status-success border-status-success/20';
-      case 'InProgress':
-      case 'New':
-        return 'bg-status-info/10 text-status-info border-status-info/20';
-      case 'PartiallyFailed':
-        return 'bg-status-warning/10 text-status-warning border-status-warning/20';
-      case 'Failed':
-      case 'FailedValidation':
-        return 'bg-status-error/10 text-status-error border-status-error/20';
-      case 'Deleting':
-        return 'bg-muted text-muted-foreground border-border';
+      case "Completed":
+        return "bg-status-success/10 text-status-success border-status-success/20";
+      case "InProgress":
+      case "New":
+        return "bg-status-info/10 text-status-info border-status-info/20";
+      case "PartiallyFailed":
+        return "bg-status-warning/10 text-status-warning border-status-warning/20";
+      case "Failed":
+      case "FailedValidation":
+        return "bg-status-error/10 text-status-error border-status-error/20";
+      case "Deleting":
+        return "bg-muted text-muted-foreground border-border";
       default:
-        return 'bg-muted text-muted-foreground border-border';
+        return "bg-muted text-muted-foreground border-border";
     }
   })();
   const Icon = (() => {
     switch (phase) {
-      case 'Completed':
+      case "Completed":
         return CheckCircle2;
-      case 'InProgress':
-      case 'New':
+      case "InProgress":
+      case "New":
         return Loader2;
-      case 'Failed':
-      case 'FailedValidation':
+      case "Failed":
+      case "FailedValidation":
         return XCircle;
-      case 'PartiallyFailed':
+      case "PartiallyFailed":
         return AlertTriangle;
       default:
         return Clock;
     }
   })();
-  const spinning = phase === 'InProgress' || phase === 'New';
+  const spinning = phase === "InProgress" || phase === "New";
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs border font-medium',
+        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs border font-medium",
         tone,
       )}
     >
-      <Icon className={cn('h-3 w-3', spinning && 'animate-spin')} />
+      <Icon className={cn("h-3 w-3", spinning && "animate-spin")} />
       {phase}
     </span>
   );
 }
 
 function fmt(iso?: string) {
-  if (!iso) return '—';
+  if (!iso) return "—";
   try {
     return new Date(iso).toLocaleString();
   } catch {
@@ -156,30 +168,40 @@ function ClusterVeleroSnapshotsPage() {
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
   const { data: veleroStatus, isLoading: veleroLoading } = useQuery({
     queryKey: queryKeys.clusterPages.veleroStatus(clusterId),
-    queryFn: () => getVeleroStatus(clusterId),
+    queryFn: ({ signal }) => getVeleroStatus(clusterId, signal),
     enabled: !!clusterId,
-    refetchInterval: liveFallback(30000),
+    // Velero reconciles this state asynchronously and the worker does not emit
+    // snapshot.changed when a storage location's phase changes. Keep bounded
+    // polling even while the general SSE stream is healthy.
+    refetchInterval: 30000,
     refetchIntervalInBackground: false,
   });
 
   const veleroReady = !!veleroStatus?.installed;
   const defaultStorageLocation =
-    veleroStatus?.storageLocations?.find((s) => s.default && s.phase === 'Available')?.name ??
-    veleroStatus?.storageLocations?.find((s) => s.phase === 'Available')?.name ??
+    veleroStatus?.storageLocations?.find(
+      (s) => s.default && s.phase === "Available",
+    )?.name ??
+    veleroStatus?.storageLocations?.find((s) => s.phase === "Available")
+      ?.name ??
     veleroStatus?.storageLocations?.[0]?.name;
 
   const { data: snapshots, isLoading: snapsLoading } = useQuery({
     queryKey: queryKeys.clusterPages.snapshots(clusterId),
-    queryFn: () => listSnapshots(clusterId),
+    queryFn: ({ signal }) => listSnapshots(clusterId, signal),
     enabled: !!clusterId && veleroReady,
-    refetchInterval: liveFallback(30000),
+    // Create-time snapshot.changed can arrive while the row is still New;
+    // terminal worker transitions do not currently publish another event.
+    refetchInterval: 30000,
     refetchIntervalInBackground: false,
   });
   const { data: schedules, isLoading: schedLoading } = useQuery({
     queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId),
-    queryFn: () => listSnapshotSchedules(clusterId),
+    queryFn: ({ signal }) => listSnapshotSchedules(clusterId, signal),
     enabled: !!clusterId && veleroReady,
-    refetchInterval: liveFallback(60000),
+    // lastRun is worker-owned status, so it needs a bounded reconciliation
+    // poll independently of connection-level SSE health.
+    refetchInterval: 60000,
     refetchIntervalInBackground: false,
   });
 
@@ -187,35 +209,45 @@ function ClusterVeleroSnapshotsPage() {
   const [newSnapshotOpen, setNewSnapshotOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState<Snapshot | null>(null);
   const [deleteOpen, setDeleteOpen] = useState<Snapshot | null>(null);
-  const [scheduleOpen, setScheduleOpen] = useState<{ mode: 'create' } | { mode: 'edit'; schedule: SnapshotSchedule } | null>(null);
-  const [scheduleDeleteOpen, setScheduleDeleteOpen] = useState<SnapshotSchedule | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState<
+    { mode: "create" } | { mode: "edit"; schedule: SnapshotSchedule } | null
+  >(null);
+  const [scheduleDeleteOpen, setScheduleDeleteOpen] =
+    useState<SnapshotSchedule | null>(null);
 
   // Mutations
   const deleteSnap = useMutation({
     mutationFn: (snapshotId: string) => deleteSnapshot(clusterId, snapshotId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshots(clusterId) });
-      toastSuccess('Snapshot delete initiated');
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.snapshots(clusterId),
+      });
+      toastSuccess("Snapshot delete initiated");
       setDeleteOpen(null);
     },
-    onError: (e: Error) => toastApiError('Delete failed', e),
+    onError: (e: Error) => toastApiError("Delete failed", e),
   });
   const deleteSched = useMutation({
-    mutationFn: (scheduleId: string) => deleteSnapshotSchedule(clusterId, scheduleId),
+    mutationFn: (scheduleId: string) =>
+      deleteSnapshotSchedule(clusterId, scheduleId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId) });
-      toastSuccess('Schedule deleted');
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId),
+      });
+      toastSuccess("Schedule deleted");
       setScheduleDeleteOpen(null);
     },
-    onError: (e: Error) => toastApiError('Delete failed', e),
+    onError: (e: Error) => toastApiError("Delete failed", e),
   });
   const toggleSched = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       updateSnapshotSchedule(clusterId, id, { enabled }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId),
+      });
     },
-    onError: (e: Error) => toastApiError('Toggle failed', e),
+    onError: (e: Error) => toastApiError("Toggle failed", e),
   });
 
   // ─── Loading / not-found ────────────────────────────────────────────────
@@ -248,7 +280,7 @@ function ClusterVeleroSnapshotsPage() {
           description={
             veleroStatus?.reason
               ? `Workload snapshots show up here after Velero is installed on this cluster. ${veleroStatus.reason}`
-              : 'Workload snapshots show up here after Velero is installed on this cluster. Install it from Cluster Tools, then return to take and schedule snapshots.'
+              : "Workload snapshots show up here after Velero is installed on this cluster. Install it from Cluster Tools, then return to take and schedule snapshots."
           }
           actionLabel="Install Velero"
           actionHref={`/dashboard/clusters/${clusterId}/apps?section=browse&install=velero`}
@@ -268,16 +300,17 @@ function ClusterVeleroSnapshotsPage() {
         description={`Velero-backed snapshots and scheduled snapshots for ${cluster.displayName}.`}
       />
 
-
       {/* BSL banner */}
       {showBslBanner && (
         <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 p-4 flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-status-warning flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">Backup storage location not ready</p>
+            <p className="text-sm font-medium text-foreground">
+              Backup storage location not ready
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
               {veleroStatus?.reason ||
-                'Velero is installed but the backup storage location is not yet Available. Snapshots will fail until it reconciles.'}
+                "Velero is installed but the backup storage location is not yet Available. Snapshots will fail until it reconciles."}
             </p>
           </div>
         </div>
@@ -287,9 +320,11 @@ function ClusterVeleroSnapshotsPage() {
       {veleroReady && (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-foreground">Snapshot schedules</h2>
+            <h2 className="text-sm font-medium text-foreground">
+              Snapshot schedules
+            </h2>
             <button
-              onClick={() => canWrite && setScheduleOpen({ mode: 'create' })}
+              onClick={() => canWrite && setScheduleOpen({ mode: "create" })}
               disabled={!canWrite}
               title={canWrite ? undefined : reason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
@@ -305,8 +340,10 @@ function ClusterVeleroSnapshotsPage() {
             schedules={schedules || []}
             canWrite={canWrite}
             disabledReason={reason}
-            onToggle={(s) => toggleSched.mutate({ id: s.id, enabled: !s.enabled })}
-            onEdit={(s) => setScheduleOpen({ mode: 'edit', schedule: s })}
+            onToggle={(s) =>
+              toggleSched.mutate({ id: s.id, enabled: !s.enabled })
+            }
+            onEdit={(s) => setScheduleOpen({ mode: "edit", schedule: s })}
             onDelete={(s) => setScheduleDeleteOpen(s)}
           />
         </section>
@@ -316,7 +353,9 @@ function ClusterVeleroSnapshotsPage() {
       {veleroReady && (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-foreground">Recent snapshots</h2>
+            <h2 className="text-sm font-medium text-foreground">
+              Recent snapshots
+            </h2>
             <button
               onClick={() => canWrite && setNewSnapshotOpen(true)}
               disabled={!canWrite}
@@ -363,7 +402,9 @@ function ClusterVeleroSnapshotsPage() {
         <ScheduleDialog
           clusterId={clusterId}
           mode={scheduleOpen.mode}
-          schedule={scheduleOpen.mode === 'edit' ? scheduleOpen.schedule : undefined}
+          schedule={
+            scheduleOpen.mode === "edit" ? scheduleOpen.schedule : undefined
+          }
           onClose={() => setScheduleOpen(null)}
         />
       )}
@@ -377,7 +418,7 @@ function ClusterVeleroSnapshotsPage() {
         description={
           deleteOpen
             ? `This initiates a Velero DeleteBackup request for "${deleteOpen.name}". The backup is removed from object storage as well.`
-            : ''
+            : ""
         }
         confirmText="Delete"
         variant="destructive"
@@ -388,12 +429,14 @@ function ClusterVeleroSnapshotsPage() {
       <ConfirmDialog
         open={!!scheduleDeleteOpen}
         onClose={() => setScheduleDeleteOpen(null)}
-        onConfirm={() => scheduleDeleteOpen && deleteSched.mutate(scheduleDeleteOpen.id)}
+        onConfirm={() =>
+          scheduleDeleteOpen && deleteSched.mutate(scheduleDeleteOpen.id)
+        }
         title="Delete schedule"
         description={
           scheduleDeleteOpen
             ? `Delete the snapshot schedule "${scheduleDeleteOpen.name}"? Existing snapshots produced by this schedule are kept.`
-            : ''
+            : ""
         }
         confirmText="Delete"
         variant="destructive"
@@ -432,9 +475,12 @@ function SchedulesTable({
     return (
       <div className="rounded-lg border border-border bg-card p-8 flex flex-col items-center justify-center text-muted-foreground">
         <CalendarClock className="h-8 w-8 mb-2" />
-        <p className="text-sm font-medium text-foreground">No snapshot schedules</p>
+        <p className="text-sm font-medium text-foreground">
+          No snapshot schedules
+        </p>
         <p className="text-xs mt-1">
-          Create a schedule to take cron-driven snapshots of selected namespaces.
+          Create a schedule to take cron-driven snapshots of selected
+          namespaces.
         </p>
       </div>
     );
@@ -445,24 +491,41 @@ function SchedulesTable({
       <Table className="w-full text-sm">
         <TableHeader className="bg-muted/30 text-xs text-muted-foreground">
           <TableRow>
-            <TableHead className="text-left font-medium px-4 py-2.5">Name</TableHead>
-            <TableHead className="text-left font-medium px-4 py-2.5">Cron</TableHead>
-            <TableHead className="text-left font-medium px-4 py-2.5">Namespaces</TableHead>
-            <TableHead className="text-left font-medium px-4 py-2.5">Enabled</TableHead>
-            <TableHead className="text-left font-medium px-4 py-2.5">Last run</TableHead>
-            <TableHead className="text-right font-medium px-4 py-2.5">Actions</TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">
+              Name
+            </TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">
+              Cron
+            </TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">
+              Namespaces
+            </TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">
+              Enabled
+            </TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">
+              Last run
+            </TableHead>
+            <TableHead className="text-right font-medium px-4 py-2.5">
+              Actions
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody className="divide-y divide-border">
           {schedules.map((s) => (
             <TableRow key={s.id} className="hover:bg-accent/30">
-              <TableCell className="px-4 py-2.5 font-medium text-foreground">{s.name}</TableCell>
-              <TableCell className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{s.cron}</TableCell>
+              <TableCell className="px-4 py-2.5 font-medium text-foreground">
+                {s.name}
+              </TableCell>
+              <TableCell className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                {s.cron}
+              </TableCell>
               <TableCell className="px-4 py-2.5">
                 <div className="flex flex-wrap gap-1">
-                  {(s.spec.includedNamespaces && s.spec.includedNamespaces.length > 0
+                  {(s.spec.includedNamespaces &&
+                  s.spec.includedNamespaces.length > 0
                     ? s.spec.includedNamespaces
-                    : ['(all)']
+                    : ["(all)"]
                   ).map((ns) => (
                     <span
                       key={ns}
@@ -482,26 +545,28 @@ function SchedulesTable({
                   title={canWrite ? undefined : disabledReason}
                   onClick={() => onToggle(s)}
                   className={cn(
-                    'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                    s.enabled ? 'bg-primary' : 'bg-muted',
-                    !canWrite && 'opacity-50 cursor-not-allowed',
+                    "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                    s.enabled ? "bg-primary" : "bg-muted",
+                    !canWrite && "opacity-50 cursor-not-allowed",
                   )}
                 >
                   <span
                     className={cn(
-                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                      s.enabled ? 'translate-x-4' : 'translate-x-0.5',
+                      "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                      s.enabled ? "translate-x-4" : "translate-x-0.5",
                     )}
                   />
                 </button>
               </TableCell>
-              <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">{fmt(s.lastRun)}</TableCell>
+              <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
+                {fmt(s.lastRun)}
+              </TableCell>
               <TableCell className="px-4 py-2.5">
                 <div className="flex items-center justify-end gap-1.5">
                   <button
                     onClick={() => onEdit(s)}
                     disabled={!canWrite}
-                    title={canWrite ? 'Edit' : disabledReason}
+                    title={canWrite ? "Edit" : disabledReason}
                     className="inline-flex items-center justify-center h-7 w-7 rounded text-muted-foreground
                       hover:text-foreground hover:bg-accent transition-colors
                       disabled:opacity-50 disabled:cursor-not-allowed"
@@ -511,7 +576,7 @@ function SchedulesTable({
                   <button
                     onClick={() => onDelete(s)}
                     disabled={!canWrite}
-                    title={canWrite ? 'Delete' : disabledReason}
+                    title={canWrite ? "Delete" : disabledReason}
                     className="inline-flex items-center justify-center h-7 w-7 rounded text-muted-foreground
                       hover:text-status-error hover:bg-status-error/10 transition-colors
                       disabled:opacity-50 disabled:cursor-not-allowed"
@@ -557,7 +622,8 @@ function SnapshotsTable({
         <Archive className="h-8 w-8 mb-2" />
         <p className="text-sm font-medium text-foreground">No snapshots yet</p>
         <p className="text-xs mt-1">
-          Create one on demand, or set up a schedule to capture them automatically.
+          Create one on demand, or set up a schedule to capture them
+          automatically.
         </p>
       </div>
     );
@@ -568,48 +634,81 @@ function SnapshotsTable({
       <Table className="w-full text-sm">
         <TableHeader className="bg-muted/30 text-xs text-muted-foreground">
           <TableRow>
-            <TableHead className="text-left font-medium px-4 py-2.5">Name</TableHead>
-            <TableHead className="text-left font-medium px-4 py-2.5">Source</TableHead>
-            <TableHead className="text-left font-medium px-4 py-2.5">Phase</TableHead>
-            <TableHead className="text-left font-medium px-4 py-2.5">Started</TableHead>
-            <TableHead className="text-left font-medium px-4 py-2.5">Completed</TableHead>
-            <TableHead className="text-left font-medium px-4 py-2.5">W / E</TableHead>
-            <TableHead className="text-right font-medium px-4 py-2.5">Actions</TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">
+              Name
+            </TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">
+              Source
+            </TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">
+              Phase
+            </TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">
+              Started
+            </TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">
+              Completed
+            </TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">
+              W / E
+            </TableHead>
+            <TableHead className="text-right font-medium px-4 py-2.5">
+              Actions
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody className="divide-y divide-border">
           {snapshots.map((s) => (
             <TableRow key={s.id} className="hover:bg-accent/30">
-              <TableCell className="px-4 py-2.5 font-medium text-foreground">{s.name}</TableCell>
+              <TableCell className="px-4 py-2.5 font-medium text-foreground">
+                {s.name}
+              </TableCell>
               <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
-                {s.source === 'schedule' ? (
+                {s.source === "schedule" ? (
                   <span title={s.scheduleName}>
                     schedule
-                    {s.scheduleName ? <span className="ml-1 text-foreground">/ {s.scheduleName}</span> : null}
+                    {s.scheduleName ? (
+                      <span className="ml-1 text-foreground">
+                        / {s.scheduleName}
+                      </span>
+                    ) : null}
                   </span>
                 ) : (
-                  'ad-hoc'
+                  "ad-hoc"
                 )}
               </TableCell>
-              <TableCell className="px-4 py-2.5"><PhasePill phase={s.phase} /></TableCell>
-              <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">{fmt(s.startTimestamp)}</TableCell>
-              <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">{fmt(s.completionTimestamp)}</TableCell>
+              <TableCell className="px-4 py-2.5">
+                <PhasePill phase={s.phase} />
+              </TableCell>
+              <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
+                {fmt(s.startTimestamp)}
+              </TableCell>
+              <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
+                {fmt(s.completionTimestamp)}
+              </TableCell>
               <TableCell className="px-4 py-2.5 text-xs">
                 <span className="text-muted-foreground">
-                  {s.warnings ?? 0} / <span className={s.errors ? 'text-status-error' : ''}>{s.errors ?? 0}</span>
+                  {s.warnings ?? 0} /{" "}
+                  <span className={s.errors ? "text-status-error" : ""}>
+                    {s.errors ?? 0}
+                  </span>
                 </span>
               </TableCell>
               <TableCell className="px-4 py-2.5">
                 <div className="flex items-center justify-end gap-1.5">
                   <button
                     onClick={() => onRestore(s)}
-                    disabled={!canWrite || (s.phase !== 'Completed' && s.phase !== 'PartiallyFailed')}
+                    disabled={
+                      !canWrite ||
+                      (s.phase !== "Completed" && s.phase !== "PartiallyFailed")
+                    }
                     title={
                       !canWrite
                         ? disabledReason
-                        : s.phase !== 'Completed' && s.phase !== 'PartiallyFailed'
-                          ? 'Snapshot is not in a restorable state'
-                          : 'Restore'
+                        : s.phase !== "Completed" &&
+                            s.phase !== "PartiallyFailed"
+                          ? "Snapshot is not in a restorable state"
+                          : "Restore"
                     }
                     className="inline-flex items-center gap-1 h-7 px-2 rounded text-xs text-muted-foreground
                       hover:text-foreground hover:bg-accent transition-colors
@@ -621,7 +720,7 @@ function SnapshotsTable({
                   <button
                     onClick={() => onDelete(s)}
                     disabled={!canWrite}
-                    title={canWrite ? 'Delete' : disabledReason}
+                    title={canWrite ? "Delete" : disabledReason}
                     className="inline-flex items-center justify-center h-7 w-7 rounded text-muted-foreground
                       hover:text-status-error hover:bg-status-error/10 transition-colors
                       disabled:opacity-50 disabled:cursor-not-allowed"
@@ -653,8 +752,8 @@ function NewSnapshotDialog({
   const form = useAppForm({
     defaultValues: {
       selectedNs: [] as string[],
-      resources: '',
-      ttl: '720h',
+      resources: "",
+      ttl: "720h",
       snapshotVolumes: true,
     },
     onSubmit: () => mutation.mutate(),
@@ -665,11 +764,14 @@ function NewSnapshotDialog({
     mutationFn: () => {
       const value = form.state.values;
       const spec: SnapshotSpec = {
-        includedNamespaces: value.selectedNs.length ? value.selectedNs : undefined,
-        includedResources: value.resources
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean) || undefined,
+        includedNamespaces: value.selectedNs.length
+          ? value.selectedNs
+          : undefined,
+        includedResources:
+          value.resources
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean) || undefined,
         snapshotVolumes: value.snapshotVolumes,
         ttl: value.ttl || undefined,
         storageLocation: defaultStorageLocation,
@@ -677,26 +779,38 @@ function NewSnapshotDialog({
       return createSnapshot(clusterId, { spec });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshots(clusterId) });
-      toastSuccess('Snapshot queued');
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.snapshots(clusterId),
+      });
+      toastSuccess("Snapshot queued");
       onClose();
     },
-    onError: (e: Error) => toastApiError('Snapshot failed', e),
+    onError: (e: Error) => toastApiError("Snapshot failed", e),
   });
 
   return (
-    <Modal onClose={onClose} title="New snapshot" icon={<Archive className="h-4 w-4" />}>
+    <Modal
+      onClose={onClose}
+      title="New snapshot"
+      icon={<Archive className="h-4 w-4" />}
+    >
       <NamespaceMultiSelect
         namespaces={namespaces?.map((n) => n.name) || []}
         selected={selectedNs}
-        onChange={(ns) => form.setFieldValue('selectedNs', ns)}
+        onChange={(ns) => form.setFieldValue("selectedNs", ns)}
       />
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Resources (comma-separated)</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-85015528-696"
+        >
+          Resources (comma-separated)
+        </label>
         <form.Field name="resources">
           {(field) => (
             <input
+              id="field-85015528-696"
               type="text"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -710,10 +824,16 @@ function NewSnapshotDialog({
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">TTL</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-85015528-713"
+        >
+          TTL
+        </label>
         <form.Field name="ttl">
           {(field) => (
             <input
+              id="field-85015528-713"
               type="text"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -766,8 +886,8 @@ function RestoreSnapshotDialog({
   const form = useAppForm({
     defaultValues: {
       targetClusterId: clusterId,
-      includedNs: '',
-      excludedNs: '',
+      includedNs: "",
+      excludedNs: "",
       restorePVs: true,
     },
     onSubmit: () => mutation.mutate(),
@@ -786,20 +906,32 @@ function RestoreSnapshotDialog({
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshots(clusterId) });
-      toastSuccess('Restore queued');
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.snapshots(clusterId),
+      });
+      toastSuccess("Restore queued");
       onClose();
     },
-    onError: (e: Error) => toastApiError('Restore failed', e),
+    onError: (e: Error) => toastApiError("Restore failed", e),
   });
 
   return (
-    <Modal onClose={onClose} title={`Restore from ${snapshot.name}`} icon={<RotateCcw className="h-4 w-4" />}>
+    <Modal
+      onClose={onClose}
+      title={`Restore from ${snapshot.name}`}
+      icon={<RotateCcw className="h-4 w-4" />}
+    >
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Target cluster</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-85015528-799"
+        >
+          Target cluster
+        </label>
         <form.Field name="targetClusterId">
           {(field) => (
             <select
+              id="field-85015528-799"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -808,7 +940,7 @@ function RestoreSnapshotDialog({
             >
               {(clustersPage?.data || []).map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.displayName} {c.id === clusterId ? '(this cluster)' : ''}
+                  {c.displayName} {c.id === clusterId ? "(this cluster)" : ""}
                 </option>
               ))}
             </select>
@@ -821,10 +953,16 @@ function RestoreSnapshotDialog({
         </summary>
         <div className="pt-3 space-y-3">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-foreground">Included namespaces (comma-separated)</label>
+            <label
+              className="text-xs font-medium text-foreground"
+              htmlFor="field-85015528-824"
+            >
+              Included namespaces (comma-separated)
+            </label>
             <form.Field name="includedNs">
               {(field) => (
                 <input
+                  id="field-85015528-824"
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -836,10 +974,16 @@ function RestoreSnapshotDialog({
             </form.Field>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-foreground">Excluded namespaces (comma-separated)</label>
+            <label
+              className="text-xs font-medium text-foreground"
+              htmlFor="field-85015528-839"
+            >
+              Excluded namespaces (comma-separated)
+            </label>
             <form.Field name="excludedNs">
               {(field) => (
                 <input
+                  id="field-85015528-839"
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -884,7 +1028,7 @@ function ScheduleDialog({
   onClose,
 }: {
   clusterId: string;
-  mode: 'create' | 'edit';
+  mode: "create" | "edit";
   schedule?: SnapshotSchedule;
   onClose: () => void;
 }) {
@@ -892,11 +1036,11 @@ function ScheduleDialog({
   const { data: namespaces } = useClusterNamespaces(clusterId);
   const form = useAppForm({
     defaultValues: {
-      name: schedule?.name || '',
-      cron: schedule?.cron || '0 3 * * *',
+      name: schedule?.name || "",
+      cron: schedule?.cron || "0 3 * * *",
       enabled: schedule?.enabled ?? true,
       selectedNs: (schedule?.spec.includedNamespaces || []) as string[],
-      ttl: schedule?.spec.ttl || '720h',
+      ttl: schedule?.spec.ttl || "720h",
       snapshotVolumes: schedule?.spec.snapshotVolumes ?? true,
     },
     onSubmit: () => mutation.mutate(),
@@ -905,13 +1049,15 @@ function ScheduleDialog({
   const name = useStore(form.store, (s) => s.values.name);
   const cron = useStore(form.store, (s) => s.values.cron);
 
-  const isEdit = mode === 'edit' && !!schedule;
+  const isEdit = mode === "edit" && !!schedule;
 
   const mutation = useMutation({
     mutationFn: () => {
       const value = form.state.values;
       const spec: SnapshotSpec = {
-        includedNamespaces: value.selectedNs.length ? value.selectedNs : undefined,
+        includedNamespaces: value.selectedNs.length
+          ? value.selectedNs
+          : undefined,
         snapshotVolumes: value.snapshotVolumes,
         ttl: value.ttl || undefined,
       };
@@ -931,24 +1077,34 @@ function ScheduleDialog({
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId) });
-      toastSuccess(isEdit ? 'Schedule updated' : 'Schedule created');
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId),
+      });
+      toastSuccess(isEdit ? "Schedule updated" : "Schedule created");
       onClose();
     },
-    onError: (e: Error) => toastApiError('Schedule failed', e),
+    onError: (e: Error) => toastApiError("Schedule failed", e),
   });
 
   return (
     <Modal
       onClose={onClose}
-      title={isEdit ? `Edit schedule — ${schedule?.name}` : 'New snapshot schedule'}
+      title={
+        isEdit ? `Edit schedule — ${schedule?.name}` : "New snapshot schedule"
+      }
       icon={<CalendarClock className="h-4 w-4" />}
     >
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Name</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-85015528-948"
+        >
+          Name
+        </label>
         <form.Field name="name">
           {(field) => (
             <input
+              id="field-85015528-948"
               type="text"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -963,10 +1119,16 @@ function ScheduleDialog({
         </form.Field>
       </div>
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">Cron</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-85015528-966"
+        >
+          Cron
+        </label>
         <form.Field name="cron">
           {(field) => (
             <input
+              id="field-85015528-966"
               type="text"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -982,14 +1144,20 @@ function ScheduleDialog({
       <NamespaceMultiSelect
         namespaces={namespaces?.map((n) => n.name) || []}
         selected={selectedNs}
-        onChange={(ns) => form.setFieldValue('selectedNs', ns)}
+        onChange={(ns) => form.setFieldValue("selectedNs", ns)}
       />
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">TTL</label>
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="field-85015528-989"
+        >
+          TTL
+        </label>
         <form.Field name="ttl">
           {(field) => (
             <input
+              id="field-85015528-989"
               type="text"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -1033,7 +1201,7 @@ function ScheduleDialog({
         onCancel={onClose}
         onSubmit={() => void form.handleSubmit()}
         loading={mutation.isPending}
-        submitLabel={isEdit ? 'Save' : 'Create schedule'}
+        submitLabel={isEdit ? "Save" : "Create schedule"}
         disabled={!name || !cron}
       />
     </Modal>
@@ -1051,18 +1219,29 @@ function NamespaceMultiSelect({
   onChange: (ns: string[]) => void;
 }) {
   const sorted = useMemo(() => [...namespaces].sort(), [namespaces]);
-  const [filter, setFilter] = useState('');
-  const filtered = sorted.filter((n) => n.toLowerCase().includes(filter.toLowerCase()));
+  const [filter, setFilter] = useState("");
+  const filtered = sorted.filter((n) =>
+    n.toLowerCase().includes(filter.toLowerCase()),
+  );
 
   const toggle = (n: string) =>
-    onChange(selected.includes(n) ? selected.filter((x) => x !== n) : [...selected, n]);
+    onChange(
+      selected.includes(n) ? selected.filter((x) => x !== n) : [...selected, n],
+    );
 
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-foreground">
-        Namespaces <span className="text-xs text-muted-foreground font-normal">(leave empty for all)</span>
+      <label
+        className="text-sm font-medium text-foreground"
+        htmlFor="field-85015528-1062"
+      >
+        Namespaces{" "}
+        <span className="text-xs text-muted-foreground font-normal">
+          (leave empty for all)
+        </span>
       </label>
       <input
+        id="field-85015528-1062"
         type="text"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
@@ -1072,7 +1251,9 @@ function NamespaceMultiSelect({
       />
       <div className="rounded-md border border-border bg-background max-h-40 overflow-y-auto">
         {filtered.length === 0 ? (
-          <div className="text-xs text-muted-foreground px-3 py-2">No namespaces match.</div>
+          <div className="text-xs text-muted-foreground px-3 py-2">
+            No namespaces match.
+          </div>
         ) : (
           filtered.map((ns) => (
             <label
@@ -1098,7 +1279,11 @@ function NamespaceMultiSelect({
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-muted border border-border text-muted-foreground"
             >
               {ns}
-              <button onClick={() => toggle(ns)} className="hover:text-foreground" aria-label={`Remove ${ns}`}>
+              <button
+                onClick={() => toggle(ns)}
+                className="hover:text-foreground"
+                aria-label={`Remove ${ns}`}
+              >
                 <XCircle className="h-3 w-3" />
               </button>
             </span>
@@ -1155,11 +1340,7 @@ function ModalFooter({
   return (
     <div className="flex items-center justify-end gap-2 pt-2 border-t border-border -mx-6 px-6 pb-0 mt-2">
       <div className="pt-3 flex items-center gap-2">
-        <ActionButton
-          onClick={onCancel}
-          disabled={loading}
-          intent="ghost"
-        >
+        <ActionButton onClick={onCancel} disabled={loading} intent="ghost">
           Cancel
         </ActionButton>
         <ActionButton
@@ -1178,7 +1359,7 @@ function ModalFooter({
 
 function parseCsv(s: string): string[] | undefined {
   const parts = s
-    .split(',')
+    .split(",")
     .map((x) => x.trim())
     .filter(Boolean);
   return parts.length ? parts : undefined;
@@ -1196,7 +1377,7 @@ function parseCsv(s: string): string[] | undefined {
 // Managed distributions expose no operator-accessible etcd, so control-plane
 // snapshots aren't available there. Everything else (k3s / rke2 / k8s /
 // openshift / self-managed) is treated as snapshot-capable.
-const MANAGED_DISTRIBUTIONS = new Set(['eks', 'aks', 'gke']);
+const MANAGED_DISTRIBUTIONS = new Set(["eks", "aks", "gke"]);
 function isManagedControlPlane(distribution?: string): boolean {
   return !!distribution && MANAGED_DISTRIBUTIONS.has(distribution);
 }
@@ -1204,14 +1385,20 @@ function isManagedControlPlane(distribution?: string): boolean {
 // Local query key — control-plane snapshots are distinct from the Velero
 // workload snapshots keyed under queryKeys.clusterPages.snapshots.
 const cpSnapshotsKey = (clusterId: string) =>
-  ['clusters', clusterId, 'control-plane-snapshots'] as const;
+  ["clusters", clusterId, "control-plane-snapshots"] as const;
 const cpGuidanceKey = (clusterId: string, snapshotId: string) =>
-  ['clusters', clusterId, 'control-plane-snapshots', snapshotId, 'restore-guidance'] as const;
+  [
+    "clusters",
+    clusterId,
+    "control-plane-snapshots",
+    snapshotId,
+    "restore-guidance",
+  ] as const;
 
 function fmtBytes(bytes?: number): string {
-  if (bytes == null) return '—';
+  if (bytes == null) return "—";
   if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
+  const units = ["KB", "MB", "GB", "TB"];
   let val = bytes / 1024;
   let i = 0;
   while (val >= 1024 && i < units.length - 1) {
@@ -1223,20 +1410,22 @@ function fmtBytes(bytes?: number): string {
 
 function CPStatusPill({ status }: { status: ControlPlaneSnapshotStatus }) {
   const palette: Record<string, string> = {
-    pending: 'bg-muted text-muted-foreground border-border',
-    in_progress: 'bg-status-info/10 text-status-info border-status-info/20',
-    completed: 'bg-status-success/10 text-status-success border-status-success/20',
-    failed: 'bg-status-error/10 text-status-error border-status-error/20',
+    pending: "bg-muted text-muted-foreground border-border",
+    running: "bg-status-info/10 text-status-info border-status-info/20",
+    in_progress: "bg-status-info/10 text-status-info border-status-info/20",
+    completed:
+      "bg-status-success/10 text-status-success border-status-success/20",
+    failed: "bg-status-error/10 text-status-error border-status-error/20",
   };
-  const cls = palette[status] ?? 'bg-muted text-muted-foreground border-border';
+  const cls = palette[status] ?? "bg-muted text-muted-foreground border-border";
   return (
     <span
       className={cn(
-        'inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium capitalize',
+        "inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium capitalize",
         cls,
       )}
     >
-      {String(status).replace(/_/g, ' ')}
+      {String(status).replace(/_/g, " ")}
     </span>
   );
 }
@@ -1254,21 +1443,22 @@ export function ClusterControlPlaneSnapshotsPage() {
   // the managed/loading branches never hit the backend.
   const snapshotsQuery = useQuery({
     queryKey: cpSnapshotsKey(clusterId),
-    queryFn: () => listControlPlaneSnapshots(clusterId),
+    queryFn: ({ signal }) => listControlPlaneSnapshots(clusterId, signal),
     enabled: !!clusterId && !!cluster && !managed,
     refetchInterval: liveFallback(15000),
     refetchIntervalInBackground: false,
   });
 
-  const [guidanceTarget, setGuidanceTarget] = useState<ControlPlaneSnapshot | null>(null);
+  const [guidanceTarget, setGuidanceTarget] =
+    useState<ControlPlaneSnapshot | null>(null);
 
   const takeSnapshot = useMutation({
     mutationFn: () => createControlPlaneSnapshot(clusterId, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: cpSnapshotsKey(clusterId) });
-      toastSuccess('Snapshot requested');
+      toastSuccess("Snapshot requested");
     },
-    onError: (e: Error) => toastApiError('Snapshot failed', e),
+    onError: (e: Error) => toastApiError("Snapshot failed", e),
   });
 
   if (clusterLoading) {
@@ -1319,10 +1509,11 @@ export function ClusterControlPlaneSnapshotsPage() {
           description={
             <>
               {cluster.displayName} runs a managed control plane
-              {cluster.distribution ? ` (${cluster.distribution})` : ''}, so its etcd is operated
-              by the cloud provider and can&apos;t be snapshotted from here. Use the provider&apos;s
-              managed backup/restore for control-plane recovery; workload state can still be
-              protected with Velero snapshots.
+              {cluster.distribution ? ` (${cluster.distribution})` : ""}, so its
+              etcd is operated by the cloud provider and can&apos;t be
+              snapshotted from here. Use the provider&apos;s managed
+              backup/restore for control-plane recovery; workload state can
+              still be protected with Velero snapshots.
             </>
           }
         />
@@ -1332,64 +1523,84 @@ export function ClusterControlPlaneSnapshotsPage() {
 
   const columns: Column<ControlPlaneSnapshot>[] = [
     {
-      key: 'name',
-      header: 'Snapshot',
+      key: "name",
+      header: "Snapshot",
       accessor: (s) => (
         <div className="min-w-0">
-          <div className="font-mono text-xs text-foreground break-all">{s.name || s.id}</div>
-          {s.error ? <div className="text-xs text-status-error mt-1">{s.error}</div> : null}
+          <div className="font-mono text-xs text-foreground break-all">
+            {s.name || s.id}
+          </div>
+          {s.error ? (
+            <div className="text-xs text-status-error mt-1">{s.error}</div>
+          ) : null}
         </div>
       ),
       sortAccessor: (s) => s.name || s.id,
     },
     {
-      key: 'status',
-      header: 'Status',
+      key: "status",
+      header: "Status",
       accessor: (s) => <CPStatusPill status={s.status} />,
       sortAccessor: (s) => s.status,
-      filter: { label: 'Status' },
+      filter: { label: "Status" },
     },
     {
-      key: 'etcdRevision',
-      header: 'etcd revision',
+      key: "etcdRevision",
+      header: "etcd revision",
       accessor: (s) => (
         <span className="font-mono text-xs text-muted-foreground">
-          {s.etcdRevision != null ? s.etcdRevision.toLocaleString() : '—'}
+          {s.etcdRevision != null ? s.etcdRevision.toLocaleString() : "—"}
         </span>
       ),
       sortAccessor: (s) => s.etcdRevision ?? 0,
-      align: 'right',
+      align: "right",
     },
     {
-      key: 'size',
-      header: 'Size',
-      accessor: (s) => <span className="text-xs text-muted-foreground">{fmtBytes(s.sizeBytes)}</span>,
+      key: "size",
+      header: "Size",
+      accessor: (s) => (
+        <span className="text-xs text-muted-foreground">
+          {fmtBytes(s.sizeBytes)}
+        </span>
+      ),
       sortAccessor: (s) => s.sizeBytes ?? 0,
-      align: 'right',
+      align: "right",
     },
     {
-      key: 'createdBy',
-      header: 'Taken by',
-      accessor: (s) => <span className="text-xs text-muted-foreground">{s.createdBy || '—'}</span>,
-      sortAccessor: (s) => s.createdBy ?? '',
+      key: "createdBy",
+      header: "Taken by",
+      accessor: (s) => (
+        <span className="text-xs text-muted-foreground">
+          {s.createdBy || "—"}
+        </span>
+      ),
+      sortAccessor: (s) => s.createdBy ?? "",
     },
     {
-      key: 'createdAt',
-      header: 'Created',
-      accessor: (s) => <span className="text-xs text-muted-foreground">{fmt(s.createdAt)}</span>,
-      sortAccessor: (s) => s.createdAt ?? '',
+      key: "createdAt",
+      header: "Created",
+      accessor: (s) => (
+        <span className="text-xs text-muted-foreground">
+          {fmt(s.createdAt)}
+        </span>
+      ),
+      sortAccessor: (s) => s.createdAt ?? "",
     },
     {
-      key: 'completedAt',
-      header: 'Completed',
-      accessor: (s) => <span className="text-xs text-muted-foreground">{fmt(s.completedAt)}</span>,
-      sortAccessor: (s) => s.completedAt ?? '',
+      key: "completedAt",
+      header: "Completed",
+      accessor: (s) => (
+        <span className="text-xs text-muted-foreground">
+          {fmt(s.completedAt)}
+        </span>
+      ),
+      sortAccessor: (s) => s.completedAt ?? "",
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       sortable: false,
-      align: 'right',
+      align: "right",
       accessor: (s) => (
         <button
           onClick={() => setGuidanceTarget(s)}
@@ -1443,14 +1654,17 @@ function RestoreGuidanceModal({
 }) {
   const guidanceQuery = useQuery({
     queryKey: cpGuidanceKey(clusterId, snapshot.id),
-    queryFn: () => getControlPlaneSnapshotRestoreGuidance(clusterId, snapshot.id),
+    queryFn: ({ signal }) =>
+      getControlPlaneSnapshotRestoreGuidance(clusterId, snapshot.id, signal),
     refetchOnWindowFocus: false,
   });
 
   return (
     <ModalShell
       title="Restore runbook"
-      subtitle={<span className="font-mono">{snapshot.name || snapshot.id}</span>}
+      subtitle={
+        <span className="font-mono">{snapshot.name || snapshot.id}</span>
+      }
       onClose={onClose}
       size="lg"
       titleIcon={
@@ -1465,47 +1679,49 @@ function RestoreGuidanceModal({
         </ActionButton>
       }
     >
-          <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning flex items-start gap-2">
-            <Lock className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-            <span>
-              This is guidance only. Restoring a control plane is a manual, out-of-band procedure —
-              nothing on this page performs an automated restore.
-            </span>
-          </div>
+      <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning flex items-start gap-2">
+        <Lock className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+        <span>
+          This is guidance only. Restoring a control plane is a manual,
+          out-of-band procedure — nothing on this page performs an automated
+          restore.
+        </span>
+      </div>
 
-          {guidanceQuery.isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading runbook…
-            </div>
-          ) : guidanceQuery.isError ? (
-            <div className="text-sm text-status-error py-8 text-center">
-              Failed to load restore guidance.{' '}
-              <button
-                onClick={() => void guidanceQuery.refetch()}
-                className="underline hover:text-foreground"
-              >
-                Retry
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {guidanceQuery.data?.steps && guidanceQuery.data.steps.length > 0 && (
-                <ol className="list-decimal pl-5 space-y-1 text-sm text-foreground">
-                  {guidanceQuery.data.steps.map((step, i) => (
-                    <li key={i}>{step}</li>
-                  ))}
-                </ol>
-              )}
-              <pre className="whitespace-pre-wrap break-words rounded-lg border border-border bg-muted/30 p-3 text-xs font-mono text-foreground">
-                {guidanceQuery.data?.guidance || 'No runbook text was provided for this snapshot.'}
-              </pre>
-              {guidanceQuery.data?.generatedAt && (
-                <p className="text-xs text-muted-foreground">
-                  Generated {fmt(guidanceQuery.data.generatedAt)}
-                </p>
-              )}
-            </div>
+      {guidanceQuery.isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading runbook…
+        </div>
+      ) : guidanceQuery.isError ? (
+        <div className="text-sm text-status-error py-8 text-center">
+          Failed to load restore guidance.{" "}
+          <button
+            onClick={() => void guidanceQuery.refetch()}
+            className="underline hover:text-foreground"
+          >
+            Retry
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {guidanceQuery.data?.steps && guidanceQuery.data.steps.length > 0 && (
+            <ol className="list-decimal pl-5 space-y-1 text-sm text-foreground">
+              {guidanceQuery.data.steps.map((step, i) => (
+                <li key={i}>{step}</li>
+              ))}
+            </ol>
           )}
+          <pre className="whitespace-pre-wrap break-words rounded-lg border border-border bg-muted/30 p-3 text-xs font-mono text-foreground">
+            {guidanceQuery.data?.guidance ||
+              "No runbook text was provided for this snapshot."}
+          </pre>
+          {guidanceQuery.data?.generatedAt && (
+            <p className="text-xs text-muted-foreground">
+              Generated {fmt(guidanceQuery.data.generatedAt)}
+            </p>
+          )}
+        </div>
+      )}
     </ModalShell>
   );
 }

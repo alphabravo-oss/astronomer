@@ -39,8 +39,7 @@ func (f *fakeDeliveryRolloutReconciler) Sweep(_ context.Context, limit int) erro
 
 func TestDeliveryRolloutTaskDispatchesSingleAndSweep(t *testing.T) {
 	configured := &fakeDeliveryRolloutReconciler{}
-	ConfigureDeliveryRolloutReconciler(configured)
-	t.Cleanup(func() { ConfigureDeliveryRolloutReconciler(nil) })
+	runtime := DeliveryRuntime{RolloutReconciler: configured}
 
 	id := uuid.New()
 	task, err := NewDeliveryRolloutTask(id)
@@ -50,14 +49,14 @@ func TestDeliveryRolloutTaskDispatchesSingleAndSweep(t *testing.T) {
 	if task.Type() != DeliveryRolloutReconcileType {
 		t.Fatalf("task type = %q", task.Type())
 	}
-	if err := HandleDeliveryRolloutReconcile(context.Background(), task); err != nil {
+	if err := runtime.HandleDeliveryRolloutReconcile(context.Background(), task); err != nil {
 		t.Fatal(err)
 	}
 	if configured.oneCalls != 1 || configured.oneID != id || configured.sweepCalls != 0 {
 		t.Fatalf("single dispatch = %+v", configured)
 	}
 
-	if err := HandleDeliveryRolloutReconcile(context.Background(), asynq.NewTask(DeliveryRolloutReconcileType, []byte(`{}`))); err != nil {
+	if err := runtime.HandleDeliveryRolloutReconcile(context.Background(), asynq.NewTask(DeliveryRolloutReconcileType, []byte(`{}`))); err != nil {
 		t.Fatal(err)
 	}
 	if configured.sweepCalls != 1 || configured.sweepLimit != deliveryRolloutSweepLimit {
@@ -69,24 +68,22 @@ func TestDeliveryRolloutTaskRejectsInvalidInputs(t *testing.T) {
 	if _, err := NewDeliveryRolloutTask(uuid.Nil); err == nil {
 		t.Fatal("zero rollout ID was accepted")
 	}
-	ConfigureDeliveryRolloutReconciler(nil)
-	if err := HandleDeliveryRolloutReconcile(context.Background(), &asynq.Task{}); err == nil {
+	if err := (DeliveryRuntime{}).HandleDeliveryRolloutReconcile(context.Background(), &asynq.Task{}); err == nil {
 		t.Fatal("unconfigured reconciler was accepted")
 	}
 
 	configured := &fakeDeliveryRolloutReconciler{}
-	ConfigureDeliveryRolloutReconciler(configured)
-	t.Cleanup(func() { ConfigureDeliveryRolloutReconciler(nil) })
+	runtime := DeliveryRuntime{RolloutReconciler: configured}
 	for _, payload := range [][]byte{
 		[]byte(`{"unknown":true}`),
 		[]byte(`{"rollout_id":"not-a-uuid"}`),
 		[]byte(`{} {}`),
 	} {
-		if err := HandleDeliveryRolloutReconcile(context.Background(), asynq.NewTask(DeliveryRolloutReconcileType, payload)); err == nil {
+		if err := runtime.HandleDeliveryRolloutReconcile(context.Background(), asynq.NewTask(DeliveryRolloutReconcileType, payload)); err == nil {
 			t.Fatalf("invalid payload %q was accepted", payload)
 		}
 	}
-	if err := HandleDeliveryRolloutReconcile(context.Background(), nil); err == nil {
+	if err := runtime.HandleDeliveryRolloutReconcile(context.Background(), nil); err == nil {
 		t.Fatal("nil task was accepted")
 	}
 	if configured.oneCalls != 0 || configured.sweepCalls != 0 {
@@ -94,7 +91,7 @@ func TestDeliveryRolloutTaskRejectsInvalidInputs(t *testing.T) {
 	}
 
 	configured.err = errors.New("database unavailable")
-	if err := HandleDeliveryRolloutReconcile(context.Background(), asynq.NewTask(DeliveryRolloutReconcileType, nil)); !errors.Is(err, configured.err) {
+	if err := runtime.HandleDeliveryRolloutReconcile(context.Background(), asynq.NewTask(DeliveryRolloutReconcileType, nil)); !errors.Is(err, configured.err) {
 		t.Fatalf("reconciler error = %v", err)
 	}
 }

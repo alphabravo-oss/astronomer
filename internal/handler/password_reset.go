@@ -26,11 +26,13 @@ var _ context.Context // imported indirectly by the sqlc method signatures
 const passwordResetTTL = 30 * time.Minute
 
 // PasswordResetRequest is the body of POST /auth/password-reset/request/.
+// openapi:request-operation postAuthPasswordResetRequest
 type PasswordResetRequest struct {
 	Email string `json:"email"`
 }
 
 // PasswordResetComplete is the body of POST /auth/password-reset/complete/.
+// openapi:request-operation postAuthPasswordResetComplete
 type PasswordResetComplete struct {
 	Token       string `json:"token"`
 	NewPassword string `json:"new_password"`

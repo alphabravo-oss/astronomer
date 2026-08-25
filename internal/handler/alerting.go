@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
@@ -87,9 +89,51 @@ type AlertingQuerier interface {
 	UpsertDefaultMonitoringBackend(ctx context.Context, arg sqlc.UpsertDefaultMonitoringBackendParams) (sqlc.MonitoringBackend, error)
 }
 
+// AlertingMutationTx is the complete transaction-bound surface used by
+// alerting writes. Embedding the read interface is intentional: several
+// mutations perform read/modify/write work (rule-channel associations,
+// enable/disable, expire) that must remain inside the same transaction as the
+// audit intent. The task outbox makes TestChannel durable without a DB/Redis
+// dual-write window.
+type AlertingMutationTx interface {
+	AlertingQuerier
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+}
+
+type alertingRunTxFunc func(context.Context, func(AlertingMutationTx) error) error
+
+func executeAlertingMutation[T any](r *http.Request, h *AlertingHandler, mutate func(AlertingMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("alerting handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q AlertingMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
+}
+
 // AlertingHandler handles alerting endpoints.
 type AlertingHandler struct {
 	queries   AlertingQuerier
+	runTx     alertingRunTxFunc
 	requester K8sRequester
 	// enqueuer hands a notification:send task to the worker dispatcher for the
 	// "Test Channel" button. Optional — when nil, the test endpoint reports
@@ -136,6 +180,17 @@ func NewAlertingHandler(queries AlertingQuerier) *AlertingHandler {
 func NewAlertingHandlerWithDeps(queries AlertingQuerier, requester K8sRequester) *AlertingHandler {
 	return &AlertingHandler{queries: queries, requester: requester}
 }
+
+// SetRunTx wires the production database transaction used to commit an
+// alerting mutation, its durable side-effect intent, and its audit intent as
+// one unit.
+func (h *AlertingHandler) SetRunTx(runTx alertingRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *AlertingHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // SetEnqueuer wires the asynq client used to dispatch test notifications.
 func (h *AlertingHandler) SetEnqueuer(e tasks.Enqueuer) { h.enqueuer = e }
@@ -191,6 +246,7 @@ func (h *AlertingHandler) alertmanagerTiming(ctx context.Context) (groupWait, gr
 // --- Request types ---
 
 // CreateChannelRequest represents the request body for creating a notification channel.
+// openapi:request AlertChannelRequest
 type CreateChannelRequest struct {
 	Name          string          `json:"name" validate:"required"`
 	ChannelType   string          `json:"channel_type"`
@@ -206,6 +262,7 @@ type CreateChannelRequest struct {
 // with RuleKind="anomaly" requires the operator to supply Metric +
 // AnomalyStddev + AnomalyWindowSeconds; the other anomaly fields
 // default sensibly (stddev=3, direction=above, min_samples=50).
+// openapi:request AlertRuleRequest
 type CreateAlertRuleRequest struct {
 	Name                   string            `json:"name" validate:"required"`
 	Description            string            `json:"description"`
@@ -235,6 +292,7 @@ type CreateAlertRuleRequest struct {
 }
 
 // CreateSilenceRequest represents the request body for creating an alert silence.
+// openapi:request AlertSilenceRequest
 type CreateSilenceRequest struct {
 	RuleID    *uuid.UUID        `json:"rule_id"`
 	ClusterID *uuid.UUID        `json:"cluster_id"`
@@ -319,23 +377,32 @@ func (h *AlertingHandler) CreateChannel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	channel, err := h.queries.CreateNotificationChannel(r.Context(), sqlc.CreateNotificationChannelParams{
+	params := sqlc.CreateNotificationChannelParams{
 		Name:          req.Name,
 		ChannelType:   channelType,
 		Configuration: configuration,
 		Enabled:       req.Enabled,
 		CreatedByID:   currentUserUUID(r),
-	})
+	}
+	channel, err := executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (sqlc.NotificationChannel, error) {
+			return q.CreateNotificationChannel(r.Context(), params)
+		},
+		func() (sqlc.NotificationChannel, error) {
+			return h.queries.CreateNotificationChannel(r.Context(), params)
+		},
+		func(row sqlc.NotificationChannel) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.channel.create", resourceType: "notification_channel",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated,
+				detail: map[string]any{"channel_type": row.ChannelType, "enabled": row.Enabled},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create notification channel")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create notification channel")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
-
-	recordAudit(r, h.queries, "alert.channel.create", "notification_channel", channel.ID.String(), channel.Name, map[string]any{
-		"channel_type": channel.ChannelType,
-		"enabled":      channel.Enabled,
-	})
 
 	w.Header().Set("Location", "/api/v1/alerting/channels/"+channel.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, notificationChannelResponse(channel))
@@ -401,23 +468,32 @@ func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	channel, err := h.queries.UpdateNotificationChannel(r.Context(), sqlc.UpdateNotificationChannelParams{
+	params := sqlc.UpdateNotificationChannelParams{
 		ID:            id,
 		Name:          req.Name,
 		ChannelType:   req.ChannelType,
 		Configuration: req.Configuration,
 		Enabled:       req.Enabled,
-	})
+	}
+	channel, err := executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (sqlc.NotificationChannel, error) {
+			return q.UpdateNotificationChannel(r.Context(), params)
+		},
+		func() (sqlc.NotificationChannel, error) {
+			return h.queries.UpdateNotificationChannel(r.Context(), params)
+		},
+		func(row sqlc.NotificationChannel) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.channel.update", resourceType: "notification_channel",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusOK,
+				detail: map[string]any{"channel_type": row.ChannelType, "enabled": row.Enabled},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update notification channel")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update notification channel")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
-
-	recordAudit(r, h.queries, "alert.channel.update", "notification_channel", channel.ID.String(), channel.Name, map[string]any{
-		"channel_type": channel.ChannelType,
-		"enabled":      channel.Enabled,
-	})
 
 	RespondJSON(w, http.StatusOK, notificationChannelResponse(channel))
 }
@@ -434,7 +510,7 @@ func (h *AlertingHandler) TestChannel(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Notification channel not found")
 		return
 	}
-	if h.enqueuer == nil {
+	if h.runTx == nil && h.enqueuer == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.DispatcherUnavailable, "Notification dispatcher is not available")
 		return
 	}
@@ -454,11 +530,31 @@ func (h *AlertingHandler) TestChannel(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.BuildError, "Failed to build test notification")
 		return
 	}
-	if _, err := h.enqueuer.Enqueue(task); err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.EnqueueError, "Failed to enqueue test notification")
+	dedupeKey := "alert_channel_test:" + id.String() + ":" + uuid.NewString()
+	_, err = executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (sqlc.NotificationChannel, error) {
+			_, enqueueErr := tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{
+				DedupeKey: dedupeKey, QueueName: "critical", MaxRetry: 3,
+				Timeout: time.Minute, MaxDeliveryAttempts: 20,
+			})
+			return channel, enqueueErr
+		},
+		func() (sqlc.NotificationChannel, error) {
+			_, enqueueErr := h.enqueuer.Enqueue(task)
+			return channel, enqueueErr
+		},
+		func(row sqlc.NotificationChannel) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.channel.test", resourceType: "notification_channel",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusOK,
+				detail: map[string]any{"channel_type": row.ChannelType},
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusBadGateway, apierror.EnqueueError, "Failed to enqueue test notification")
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Test notification sent to " + channel.Name})
+	RespondJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Test notification queued for " + channel.Name})
 }
 
 // DeleteChannel handles DELETE /api/v1/alerting/channels/{id}/.
@@ -473,13 +569,24 @@ func (h *AlertingHandler) DeleteChannel(w http.ResponseWriter, r *http.Request) 
 	if existing, lookupErr := h.queries.GetNotificationChannelByID(r.Context(), id); lookupErr == nil {
 		channelName = existing.Name
 	}
-	if err := h.queries.DeleteNotificationChannel(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Notification channel not found")
+	_, err = executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (struct{}, error) {
+			return struct{}{}, q.DeleteNotificationChannel(r.Context(), id)
+		},
+		func() (struct{}, error) {
+			return struct{}{}, h.queries.DeleteNotificationChannel(r.Context(), id)
+		},
+		func(struct{}) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.channel.delete", resourceType: "notification_channel",
+				resourceID: id.String(), resourceName: channelName, status: http.StatusNoContent,
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Notification channel not found")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
-
-	recordAudit(r, h.queries, "alert.channel.delete", "notification_channel", id.String(), channelName, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -554,7 +661,7 @@ func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		ruleType = req.Type
 	}
 
-	rule, err := h.queries.CreateAlertRule(r.Context(), sqlc.CreateAlertRuleParams{
+	params := sqlc.CreateAlertRuleParams{
 		Name:            req.Name,
 		ClusterID:       clusterID,
 		RuleType:        ruleType,
@@ -563,23 +670,42 @@ func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		Enabled:         req.Enabled,
 		CooldownMinutes: req.CooldownMinutes,
 		CreatedByID:     currentUserUUID(r),
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create alert rule")
-		return
 	}
-	if err := h.syncRuleChannels(r.Context(), rule.ID, req.NotificationChannelIDs); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to associate notification channels")
+	rule, err := executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (sqlc.AlertRule, error) {
+			rule, createErr := q.CreateAlertRule(r.Context(), params)
+			if createErr != nil {
+				return sqlc.AlertRule{}, createErr
+			}
+			if syncErr := syncRuleChannelsWith(r.Context(), q, rule.ID, req.NotificationChannelIDs); syncErr != nil {
+				return sqlc.AlertRule{}, syncErr
+			}
+			return rule, nil
+		},
+		func() (sqlc.AlertRule, error) {
+			rule, createErr := h.queries.CreateAlertRule(r.Context(), params)
+			if createErr != nil {
+				return sqlc.AlertRule{}, createErr
+			}
+			if syncErr := syncRuleChannelsWith(r.Context(), h.queries, rule.ID, req.NotificationChannelIDs); syncErr != nil {
+				return sqlc.AlertRule{}, syncErr
+			}
+			return rule, nil
+		},
+		func(row sqlc.AlertRule) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.rule.create", resourceType: "alert_rule",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated,
+				detail: map[string]any{"rule_type": row.RuleType, "severity": row.Severity, "enabled": row.Enabled},
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create alert rule or associate notification channels")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
 
 	h.publishAlertingChanged("rule", nullableUUIDString(rule.ClusterID), rule.ID)
-	recordAudit(r, h.queries, "alert.rule.create", "alert_rule", rule.ID.String(), rule.Name, map[string]any{
-		"rule_type": rule.RuleType,
-		"severity":  rule.Severity,
-		"enabled":   rule.Enabled,
-	})
 
 	w.Header().Set("Location", "/api/v1/alerting/rules/"+rule.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, h.alertRuleResponse(r.Context(), rule))
@@ -638,7 +764,7 @@ func (h *AlertingHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Configuration = alertRuleConfigurationWithFallback(req, current.Configuration)
 
-	rule, err := h.queries.UpdateAlertRule(r.Context(), sqlc.UpdateAlertRuleParams{
+	params := sqlc.UpdateAlertRuleParams{
 		ID:              id,
 		Name:            req.Name,
 		RuleType:        req.RuleType,
@@ -646,24 +772,46 @@ func (h *AlertingHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 		Severity:        req.Severity,
 		Enabled:         req.Enabled,
 		CooldownMinutes: req.CooldownMinutes,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update alert rule")
-		return
 	}
-	if len(req.NotificationChannelIDs) > 0 {
-		if err := h.syncRuleChannels(r.Context(), rule.ID, req.NotificationChannelIDs); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update notification channels")
-			return
-		}
+	rule, err := executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (sqlc.AlertRule, error) {
+			rule, updateErr := q.UpdateAlertRule(r.Context(), params)
+			if updateErr != nil {
+				return sqlc.AlertRule{}, updateErr
+			}
+			if len(req.NotificationChannelIDs) > 0 {
+				if syncErr := syncRuleChannelsWith(r.Context(), q, rule.ID, req.NotificationChannelIDs); syncErr != nil {
+					return sqlc.AlertRule{}, syncErr
+				}
+			}
+			return rule, nil
+		},
+		func() (sqlc.AlertRule, error) {
+			rule, updateErr := h.queries.UpdateAlertRule(r.Context(), params)
+			if updateErr != nil {
+				return sqlc.AlertRule{}, updateErr
+			}
+			if len(req.NotificationChannelIDs) > 0 {
+				if syncErr := syncRuleChannelsWith(r.Context(), h.queries, rule.ID, req.NotificationChannelIDs); syncErr != nil {
+					return sqlc.AlertRule{}, syncErr
+				}
+			}
+			return rule, nil
+		},
+		func(row sqlc.AlertRule) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.rule.update", resourceType: "alert_rule",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusOK,
+				detail: map[string]any{"severity": row.Severity, "enabled": row.Enabled},
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update alert rule or notification channels")
+		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
 
 	h.publishAlertingChanged("rule", nullableUUIDString(rule.ClusterID), rule.ID)
-	recordAudit(r, h.queries, "alert.rule.update", "alert_rule", rule.ID.String(), rule.Name, map[string]any{
-		"severity": rule.Severity,
-		"enabled":  rule.Enabled,
-	})
 
 	RespondJSON(w, http.StatusOK, h.alertRuleResponse(r.Context(), rule))
 }
@@ -682,14 +830,26 @@ func (h *AlertingHandler) DeleteRule(w http.ResponseWriter, r *http.Request) {
 		ruleName = existing.Name
 		ruleCluster = nullableUUIDString(existing.ClusterID)
 	}
-	if err := h.queries.DeleteAlertRule(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert rule not found")
+	_, err = executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (struct{}, error) {
+			return struct{}{}, q.DeleteAlertRule(r.Context(), id)
+		},
+		func() (struct{}, error) {
+			return struct{}{}, h.queries.DeleteAlertRule(r.Context(), id)
+		},
+		func(struct{}) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.rule.delete", resourceType: "alert_rule",
+				resourceID: id.String(), resourceName: ruleName, status: http.StatusNoContent,
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Alert rule not found")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
 
 	h.publishAlertingChanged("rule", ruleCluster, id)
-	recordAudit(r, h.queries, "alert.rule.delete", "alert_rule", id.String(), ruleName, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -774,16 +934,34 @@ func (h *AlertingHandler) AcknowledgeEvent(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert event not found")
 		return
 	}
-	if err := h.queries.AcknowledgeAlertEvent(r.Context(), sqlc.AcknowledgeAlertEventParams{
+	params := sqlc.AcknowledgeAlertEventParams{
 		ID:               id,
 		AcknowledgedByID: currentUserUUID(r),
-	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to acknowledge alert event")
+	}
+	event, err := executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (sqlc.AlertEvent, error) {
+			if mutationErr := q.AcknowledgeAlertEvent(r.Context(), params); mutationErr != nil {
+				return sqlc.AlertEvent{}, mutationErr
+			}
+			return q.GetAlertEventByID(r.Context(), id)
+		},
+		func() (sqlc.AlertEvent, error) {
+			if mutationErr := h.queries.AcknowledgeAlertEvent(r.Context(), params); mutationErr != nil {
+				return sqlc.AlertEvent{}, mutationErr
+			}
+			return h.queries.GetAlertEventByID(r.Context(), id)
+		},
+		func(sqlc.AlertEvent) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.event.acknowledge", resourceType: "alert_event",
+				resourceID: id.String(), status: http.StatusOK,
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to acknowledge alert event")
 		return
 	}
-	event, _ := h.queries.GetAlertEventByID(r.Context(), id)
 	h.publishAlertingChanged("event", nullableUUIDString(event.ClusterID), id)
-	recordAudit(r, h.queries, "alert.event.acknowledge", "alert_event", id.String(), "", nil)
 	RespondJSON(w, http.StatusOK, h.alertEventResponse(r.Context(), event))
 }
 
@@ -798,16 +976,34 @@ func (h *AlertingHandler) ResolveEvent(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert event not found")
 		return
 	}
-	if err := h.queries.UpdateAlertEventStatus(r.Context(), sqlc.UpdateAlertEventStatusParams{
+	params := sqlc.UpdateAlertEventStatusParams{
 		ID:     id,
 		Status: "resolved",
-	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to resolve alert event")
+	}
+	event, err := executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (sqlc.AlertEvent, error) {
+			if mutationErr := q.UpdateAlertEventStatus(r.Context(), params); mutationErr != nil {
+				return sqlc.AlertEvent{}, mutationErr
+			}
+			return q.GetAlertEventByID(r.Context(), id)
+		},
+		func() (sqlc.AlertEvent, error) {
+			if mutationErr := h.queries.UpdateAlertEventStatus(r.Context(), params); mutationErr != nil {
+				return sqlc.AlertEvent{}, mutationErr
+			}
+			return h.queries.GetAlertEventByID(r.Context(), id)
+		},
+		func(sqlc.AlertEvent) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.event.resolve", resourceType: "alert_event",
+				resourceID: id.String(), status: http.StatusOK,
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to resolve alert event")
 		return
 	}
-	event, _ := h.queries.GetAlertEventByID(r.Context(), id)
 	h.publishAlertingChanged("event", nullableUUIDString(event.ClusterID), id)
-	recordAudit(r, h.queries, "alert.event.resolve", "alert_event", id.String(), "", nil)
 	RespondJSON(w, http.StatusOK, h.alertEventResponse(r.Context(), event))
 }
 
@@ -879,25 +1075,38 @@ func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) 
 		endsAt = startsAt.Add(duration)
 	}
 
-	silence, err := h.queries.CreateAlertSilence(r.Context(), sqlc.CreateAlertSilenceParams{
+	params := sqlc.CreateAlertSilenceParams{
 		RuleID:      ruleID,
 		ClusterID:   clusterID,
 		Reason:      req.Reason,
 		StartsAt:    startsAt,
 		EndsAt:      endsAt,
 		CreatedByID: currentUserUUID(r),
-	})
+	}
+	silence, err := executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (sqlc.AlertSilence, error) {
+			return q.CreateAlertSilence(r.Context(), params)
+		},
+		func() (sqlc.AlertSilence, error) {
+			return h.queries.CreateAlertSilence(r.Context(), params)
+		},
+		func(row sqlc.AlertSilence) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.silence.create", resourceType: "alert_silence",
+				resourceID: row.ID.String(), resourceName: req.Reason, status: http.StatusCreated,
+				detail: map[string]any{
+					"starts_at": startsAt.UTC().Format(time.RFC3339),
+					"ends_at":   endsAt.UTC().Format(time.RFC3339),
+				},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create alert silence")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create alert silence")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
 
 	h.publishAlertingChanged("silence", nullableUUIDString(silence.ClusterID), silence.ID)
-	recordAudit(r, h.queries, "alert.silence.create", "alert_silence", silence.ID.String(), req.Reason, map[string]any{
-		"starts_at": startsAt.UTC().Format(time.RFC3339),
-		"ends_at":   endsAt.UTC().Format(time.RFC3339),
-	})
 
 	w.Header().Set("Location", "/api/v1/alerting/silences/"+silence.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, alertSilenceResponse(silence))
@@ -924,7 +1133,7 @@ func (h *AlertingHandler) setRuleEnabled(w http.ResponseWriter, r *http.Request,
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert rule not found")
 		return
 	}
-	rule, err := h.queries.UpdateAlertRule(r.Context(), sqlc.UpdateAlertRuleParams{
+	params := sqlc.UpdateAlertRuleParams{
 		ID:              id,
 		Name:            current.Name,
 		RuleType:        current.RuleType,
@@ -932,20 +1141,30 @@ func (h *AlertingHandler) setRuleEnabled(w http.ResponseWriter, r *http.Request,
 		Severity:        current.Severity,
 		Enabled:         enabled,
 		CooldownMinutes: current.CooldownMinutes,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update alert rule")
-		return
 	}
-	_ = h.syncSharedAlertingAssets(r.Context())
-	h.publishAlertingChanged("rule", nullableUUIDString(rule.ClusterID), rule.ID)
 	action := "alert.rule.disable"
 	if enabled {
 		action = "alert.rule.enable"
 	}
-	recordAudit(r, h.queries, action, "alert_rule", rule.ID.String(), rule.Name, map[string]any{
-		"enabled": enabled,
-	})
+	rule, err := executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (sqlc.AlertRule, error) {
+			return q.UpdateAlertRule(r.Context(), params)
+		},
+		func() (sqlc.AlertRule, error) {
+			return h.queries.UpdateAlertRule(r.Context(), params)
+		},
+		func(row sqlc.AlertRule) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: action, resourceType: "alert_rule", resourceID: row.ID.String(),
+				resourceName: row.Name, status: http.StatusOK, detail: map[string]any{"enabled": enabled},
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update alert rule")
+		return
+	}
+	_ = h.syncSharedAlertingAssets(r.Context())
+	h.publishAlertingChanged("rule", nullableUUIDString(rule.ClusterID), rule.ID)
 	RespondJSON(w, http.StatusOK, h.alertRuleResponse(r.Context(), rule))
 }
 
@@ -967,15 +1186,27 @@ func (h *AlertingHandler) ExpireSilence(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.AlreadyExpired, "This silence has already expired.")
 		return
 	}
-	if err := h.queries.DeleteAlertSilence(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to expire silence")
+	_, err = executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (struct{}, error) {
+			return struct{}{}, q.DeleteAlertSilence(r.Context(), id)
+		},
+		func() (struct{}, error) {
+			return struct{}{}, h.queries.DeleteAlertSilence(r.Context(), id)
+		},
+		func(struct{}) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.silence.expire", resourceType: "alert_silence",
+				resourceID: id.String(), resourceName: match.Reason, status: http.StatusOK,
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to expire silence")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
 	h.publishAlertingChanged("silence", nullableUUIDString(match.ClusterID), id)
 	expired := match
 	expired.EndsAt = time.Now()
-	recordAudit(r, h.queries, "alert.silence.expire", "alert_silence", id.String(), match.Reason, nil)
 	RespondJSON(w, http.StatusOK, alertSilenceResponse(expired))
 }
 
@@ -992,14 +1223,26 @@ func (h *AlertingHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert silence not found")
 		return
 	}
-	if err := h.queries.DeleteAlertSilence(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert silence not found")
+	_, err = executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (struct{}, error) {
+			return struct{}{}, q.DeleteAlertSilence(r.Context(), id)
+		},
+		func() (struct{}, error) {
+			return struct{}{}, h.queries.DeleteAlertSilence(r.Context(), id)
+		},
+		func(struct{}) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.silence.delete", resourceType: "alert_silence",
+				resourceID: id.String(), resourceName: match.Reason, status: http.StatusNoContent,
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Alert silence not found")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
 
 	h.publishAlertingChanged("silence", nullableUUIDString(match.ClusterID), id)
-	recordAudit(r, h.queries, "alert.silence.delete", "alert_silence", id.String(), match.Reason, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1055,21 +1298,32 @@ func (h *AlertingHandler) CreateInhibition(w http.ResponseWriter, r *http.Reques
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	inhibition, err := h.queries.CreateAlertInhibition(r.Context(), sqlc.CreateAlertInhibitionParams{
+	params := sqlc.CreateAlertInhibitionParams{
 		Name:           req.Name,
 		SourceMatchers: marshalMatchers(req.SourceMatchers),
 		TargetMatchers: marshalMatchers(req.TargetMatchers),
 		EqualLabels:    marshalEqualLabels(req.EqualLabels),
 		Enabled:        enabled,
 		CreatedByID:    currentUserUUID(r),
-	})
+	}
+	inhibition, err := executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (sqlc.AlertInhibition, error) {
+			return q.CreateAlertInhibition(r.Context(), params)
+		},
+		func() (sqlc.AlertInhibition, error) {
+			return h.queries.CreateAlertInhibition(r.Context(), params)
+		},
+		func(row sqlc.AlertInhibition) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.inhibition.create", resourceType: "alert_inhibition",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated,
+				detail: map[string]any{"enabled": enabled},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create inhibition")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create inhibition")
 		return
 	}
-	recordAudit(r, h.queries, "alert.inhibition.create", "alert_inhibition", inhibition.ID.String(), inhibition.Name, map[string]any{
-		"enabled": enabled,
-	})
 	w.Header().Set("Location", "/api/v1/admin/alerting/inhibitions/"+inhibition.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, alertInhibitionResponse(inhibition))
 }
@@ -1097,21 +1351,32 @@ func (h *AlertingHandler) UpdateInhibition(w http.ResponseWriter, r *http.Reques
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	inhibition, err := h.queries.UpdateAlertInhibition(r.Context(), sqlc.UpdateAlertInhibitionParams{
+	params := sqlc.UpdateAlertInhibitionParams{
 		ID:             id,
 		Name:           req.Name,
 		SourceMatchers: marshalMatchers(req.SourceMatchers),
 		TargetMatchers: marshalMatchers(req.TargetMatchers),
 		EqualLabels:    marshalEqualLabels(req.EqualLabels),
 		Enabled:        enabled,
-	})
+	}
+	inhibition, err := executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (sqlc.AlertInhibition, error) {
+			return q.UpdateAlertInhibition(r.Context(), params)
+		},
+		func() (sqlc.AlertInhibition, error) {
+			return h.queries.UpdateAlertInhibition(r.Context(), params)
+		},
+		func(row sqlc.AlertInhibition) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.inhibition.update", resourceType: "alert_inhibition",
+				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusOK,
+				detail: map[string]any{"enabled": enabled},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update inhibition")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update inhibition")
 		return
 	}
-	recordAudit(r, h.queries, "alert.inhibition.update", "alert_inhibition", inhibition.ID.String(), inhibition.Name, map[string]any{
-		"enabled": enabled,
-	})
 	RespondJSON(w, http.StatusOK, alertInhibitionResponse(inhibition))
 }
 
@@ -1127,11 +1392,23 @@ func (h *AlertingHandler) DeleteInhibition(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Inhibition not found")
 		return
 	}
-	if err := h.queries.DeleteAlertInhibition(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete inhibition")
+	_, err = executeAlertingMutation(r, h,
+		func(q AlertingMutationTx) (struct{}, error) {
+			return struct{}{}, q.DeleteAlertInhibition(r.Context(), id)
+		},
+		func() (struct{}, error) {
+			return struct{}{}, h.queries.DeleteAlertInhibition(r.Context(), id)
+		},
+		func(struct{}) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "alert.inhibition.delete", resourceType: "alert_inhibition",
+				resourceID: id.String(), resourceName: match.Name, status: http.StatusNoContent,
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete inhibition")
 		return
 	}
-	recordAudit(r, h.queries, "alert.inhibition.delete", "alert_inhibition", id.String(), match.Name, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -2073,8 +2350,14 @@ func validateAnomalyRuleRequest(req CreateAlertRuleRequest) string {
 	return ""
 }
 
-func (h *AlertingHandler) syncRuleChannels(ctx context.Context, ruleID uuid.UUID, channelIDs []string) error {
-	existing, err := h.queries.ListChannelsForAlertRule(ctx, ruleID)
+type alertRuleChannelQuerier interface {
+	ListChannelsForAlertRule(context.Context, uuid.UUID) ([]sqlc.NotificationChannel, error)
+	AddAlertRuleChannel(context.Context, sqlc.AddAlertRuleChannelParams) error
+	RemoveAlertRuleChannel(context.Context, sqlc.RemoveAlertRuleChannelParams) error
+}
+
+func syncRuleChannelsWith(ctx context.Context, q alertRuleChannelQuerier, ruleID uuid.UUID, channelIDs []string) error {
+	existing, err := q.ListChannelsForAlertRule(ctx, ruleID)
 	if err != nil {
 		return err
 	}
@@ -2092,7 +2375,7 @@ func (h *AlertingHandler) syncRuleChannels(ctx context.Context, ruleID uuid.UUID
 		if err != nil {
 			return err
 		}
-		if err := h.queries.AddAlertRuleChannel(ctx, sqlc.AddAlertRuleChannelParams{
+		if err := q.AddAlertRuleChannel(ctx, sqlc.AddAlertRuleChannelParams{
 			AlertRuleID:           ruleID,
 			NotificationChannelID: parsed,
 		}); err != nil {
@@ -2103,7 +2386,7 @@ func (h *AlertingHandler) syncRuleChannels(ctx context.Context, ruleID uuid.UUID
 		if _, ok := targetSet[id]; ok {
 			continue
 		}
-		if err := h.queries.RemoveAlertRuleChannel(ctx, sqlc.RemoveAlertRuleChannelParams{
+		if err := q.RemoveAlertRuleChannel(ctx, sqlc.RemoveAlertRuleChannelParams{
 			AlertRuleID:           ruleID,
 			NotificationChannelID: channel.ID,
 		}); err != nil {

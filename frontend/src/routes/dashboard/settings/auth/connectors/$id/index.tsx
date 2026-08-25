@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/auth/connectors/[id]/ — edit a single connector.
  *
@@ -9,27 +9,30 @@ import { createFileRoute } from '@tanstack/react-router';
  *     when the user actually types into them, so we never leak ciphertext
  *     and we don't accidentally clobber stored secrets on a no-op save.
  */
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { useParams, useRouter } from '@/lib/navigation';
-import { ArrowLeft, Loader2, Trash2 } from 'lucide-react';
-import { extractApiErrorMessage } from '@/lib/api/errors';
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { useParams, useRouter } from "@/lib/navigation";
+import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import {
   useDexConnector,
   useDexConnectorTypes,
   useUpdateDexConnector,
   useDeleteDexConnector,
   useApplyDexConfig,
-} from '@/components/auth/hooks';
-import { ConnectorForm, type ConnectorFormState } from '@/components/auth/connector-form';
-import { ActionButton } from '@/components/ui/action-button';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { getConnectorMeta } from '@/components/auth/connector-meta';
+} from "@/components/auth/hooks";
+import {
+  ConnectorForm,
+  type ConnectorFormState,
+} from "@/components/auth/connector-form";
+import { ActionButton } from "@/components/ui/action-button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { getConnectorMeta } from "@/components/auth/connector-meta";
 
 function EditConnectorPage() {
   const params = useParams();
-  const id = String(params?.id ?? '');
+  const id = String(params?.id ?? "");
   const router = useRouter();
   const { data: connector, isLoading } = useDexConnector(id);
   const { data: types = [] } = useDexConnectorTypes();
@@ -80,7 +83,8 @@ function EditConnectorPage() {
       });
       // Stay on the page so the operator can immediately apply.
     } catch (err) {
-      const message = extractApiErrorMessage(err) ?? 'Failed to update connector.';
+      const message =
+        extractApiErrorMessage(err) ?? "Failed to update connector.";
       setServerError(message);
     }
   };
@@ -88,7 +92,7 @@ function EditConnectorPage() {
   const handleDelete = async () => {
     try {
       await deleteMutation.mutateAsync(connector.id);
-      router.push('/dashboard/settings/auth');
+      router.push("/dashboard/settings/auth");
     } catch {
       /* toast handles the error */
     }
@@ -109,21 +113,21 @@ function EditConnectorPage() {
         title={`${meta.label || connector.type} · ${connector.name}`}
         description={<span className="font-mono">{connector.id}</span>}
         actions={
-        <div className="flex items-center gap-2">
-          <ActionButton
-            onClick={() => applyMutation.mutate()}
-            loading={applyMutation.isPending}
-          >
-            Apply to Dex
-          </ActionButton>
-          <ActionButton
-            intent="destructive"
-            icon={<Trash2 className="h-3.5 w-3.5" />}
-            onClick={() => setConfirmDelete(true)}
-          >
-            Delete
-          </ActionButton>
-        </div>
+          <div className="flex items-center gap-2">
+            <ActionButton
+              onClick={() => applyMutation.mutate()}
+              loading={applyMutation.isPending}
+            >
+              Apply to Dex
+            </ActionButton>
+            <ActionButton
+              intent="destructive"
+              icon={<Trash2 className="h-3.5 w-3.5" />}
+              onClick={() => setConfirmDelete(true)}
+            >
+              Delete
+            </ActionButton>
+          </div>
         }
       />
 
@@ -145,8 +149,8 @@ function EditConnectorPage() {
           />
         ) : (
           <p className="text-sm text-muted-foreground">
-            Connector type <span className="font-mono">{connector.type}</span> is not in the
-            registry. Edit via the API.
+            Connector type <span className="font-mono">{connector.type}</span>{" "}
+            is not in the registry. Edit via the API.
           </p>
         )}
       </div>
@@ -166,6 +170,8 @@ function EditConnectorPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/auth/connectors/$id/')({
+export const Route = createFileRoute(
+  "/dashboard/settings/auth/connectors/$id/",
+)({
   component: EditConnectorPage,
 });

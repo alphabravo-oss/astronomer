@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "owner": "platform-architecture",
+  "description": "Executable dependency-direction rules for the Go control plane and TypeScript frontend. Rules apply recursively to production source files; test-only route imports are excluded explicitly.",
+  "go": [
+    {
+      "name": "public-packages-do-not-import-internal-code",
+      "root": "pkg",
+      "forbidden_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/"
+      ],
+      "rationale": "Reusable public packages must remain consumable without reaching into private implementation packages."
+    },
+    {
+      "name": "generated-db-layer-is-leaf-infrastructure",
+      "root": "internal/db/sqlc",
+      "forbidden_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/"
+      ],
+      "rationale": "Generated persistence code is a leaf adapter and cannot depend on handlers, servers, or business workflows."
+    },
+    {
+      "name": "worker-tasks-do-not-depend-on-http-delivery",
+      "root": "internal/worker/tasks",
+      "forbidden_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/handler",
+        "github.com/alphabravocompany/astronomer-go/internal/server"
+      ],
+      "rationale": "Task execution is composed through narrow interfaces and cannot depend on HTTP handlers or router composition."
+    },
+    {
+      "name": "server-middleware-does-not-depend-on-handlers",
+      "root": "internal/server/middleware",
+      "forbidden_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/handler"
+      ],
+      "rationale": "Cross-cutting transport policy must be independently reusable by handlers and route composition."
+    },
+    {
+      "name": "handlers-do-not-depend-on-router-composition",
+      "root": "internal/handler",
+      "forbidden_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/server"
+      ],
+      "allowed_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+      ],
+      "rationale": "Handlers may use the shared request-context contract during its extraction, but cannot import router or server composition packages."
+    }
+  ],
+  "frontend": [
+    {
+      "name": "wire-api-does-not-depend-on-ui",
+      "root": "frontend/src/lib/api",
+      "forbidden_prefixes": ["@/components", "@/routes", "@/lib/hooks"],
+      "rationale": "Wire adapters are framework-light domain clients and cannot reach into screens, components, or query hooks."
+    },
+    {
+      "name": "shared-types-do-not-depend-on-consumers",
+      "root": "frontend/src/types",
+      "forbidden_prefixes": [
+        "@/components",
+        "@/routes",
+        "@/lib/hooks",
+        "@/lib/api"
+      ],
+      "rationale": "Shared and generated DTO/view-model types remain dependency roots rather than importing their consumers."
+    },
+    {
+      "name": "shared-components-do-not-depend-on-routes",
+      "root": "frontend/src/components",
+      "forbidden_prefixes": ["@/routes"],
+      "exclude_suffixes": [".test.ts", ".test.tsx"],
+      "rationale": "Production components must be reusable without importing a concrete screen or route module."
+    },
+    {
+      "name": "frontend-libraries-do-not-depend-on-routes",
+      "root": "frontend/src/lib",
+      "forbidden_prefixes": ["@/routes"],
+      "exclude_suffixes": [".test.ts", ".test.tsx"],
+      "rationale": "Libraries and query hooks sit below route composition in the frontend dependency graph."
+    }
+  ]
+}

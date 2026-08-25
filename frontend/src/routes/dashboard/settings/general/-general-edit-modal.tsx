@@ -1,11 +1,14 @@
-import { useEffect } from 'react';
-import { useGeneralSettings, useSaveGeneralSettings } from '@/lib/hooks';
-import { useAppForm } from '@/lib/form';
-import { ActionButton } from '@/components/ui/action-button';
-import { Input } from '@/components/ui/input';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { Select } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
+import { useEffect } from "react";
+import {
+  useGeneralSettings,
+  useSaveGeneralSettings,
+} from "@/lib/hooks/user-settings";
+import { useAppForm } from "@/lib/form";
+import { ActionButton } from "@/components/ui/action-button";
+import { Input } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 export function GeneralEditModal({ onClose }: { onClose: () => void }) {
   const { data: generalSettings } = useGeneralSettings();
@@ -13,7 +16,7 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
 
   const generalForm = useAppForm({
     defaultValues: {
-      platformName: 'Astronomer',
+      platformName: "Astronomer",
       agentHeartbeatInterval: 30,
       defaultSessionTimeout: 60,
       enableAuditLogging: true,
@@ -34,7 +37,7 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (generalSettings) {
       generalForm.reset({
-        platformName: generalSettings.platformName ?? 'Astronomer',
+        platformName: generalSettings.platformName ?? "Astronomer",
         agentHeartbeatInterval: generalSettings.agentHeartbeatInterval ?? 30,
         defaultSessionTimeout: generalSettings.defaultSessionTimeout ?? 60,
         enableAuditLogging: generalSettings.enableAuditLogging ?? true,
@@ -64,7 +67,12 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <label htmlFor="platform-name" className="text-sm font-medium text-foreground">Platform Name</label>
+          <label
+            htmlFor="platform-name"
+            className="text-sm font-medium text-foreground"
+          >
+            Platform Name
+          </label>
           <generalForm.Field name="platformName">
             {(field) => (
               <Input
@@ -79,7 +87,12 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="agent-heartbeat" className="text-sm font-medium text-foreground">Agent Heartbeat Interval</label>
+          <label
+            htmlFor="agent-heartbeat"
+            className="text-sm font-medium text-foreground"
+          >
+            Agent Heartbeat Interval
+          </label>
           <generalForm.Field name="agentHeartbeatInterval">
             {(field) => (
               <Select
@@ -98,7 +111,12 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="session-timeout" className="text-sm font-medium text-foreground">Default Session Timeout</label>
+          <label
+            htmlFor="session-timeout"
+            className="text-sm font-medium text-foreground"
+          >
+            Default Session Timeout
+          </label>
           <generalForm.Field name="defaultSessionTimeout">
             {(field) => (
               <Select
@@ -119,8 +137,12 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
 
         <div className="flex items-center justify-between p-4 rounded-lg border border-border">
           <div>
-            <p className="text-sm font-medium text-foreground">Enable Audit Logging</p>
-            <p className="text-xs text-muted-foreground">Log all API actions for compliance</p>
+            <p className="text-sm font-medium text-foreground">
+              Enable Audit Logging
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Log all API actions for compliance
+            </p>
           </div>
           <generalForm.Field name="enableAuditLogging">
             {(field) => (
@@ -136,8 +158,12 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
 
         <div className="flex items-center justify-between p-4 rounded-lg border border-border">
           <div>
-            <p className="text-sm font-medium text-foreground">Metrics Collection</p>
-            <p className="text-xs text-muted-foreground">Collect and aggregate cluster metrics</p>
+            <p className="text-sm font-medium text-foreground">
+              Metrics Collection
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Collect and aggregate cluster metrics
+            </p>
           </div>
           <generalForm.Field name="metricsCollection">
             {(field) => (

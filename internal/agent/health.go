@@ -671,6 +671,31 @@ func applyDeliveryCapabilities(heartbeat *protocol.HeartbeatPayload) {
 	}
 }
 
+func connectCapabilities(profile string) []string {
+	enabled, _ := capabilityFeaturesForProfile(profile)
+	heartbeat := &protocol.HeartbeatPayload{
+		PrivilegeProfile: normalizeAgentPrivilegeProfile(profile),
+		EnabledFeatures:  append([]string(nil), enabled...),
+	}
+	applyDeliveryCapabilities(heartbeat)
+	// Installed manifests provision a separate read-only ServiceAccount and
+	// grant the agent only its TokenRequest subresource. This capability is
+	// profile-independent: it never mints the agent's own credential and never
+	// inherits the selected agent privilege profile.
+	heartbeat.EnabledFeatures = append(heartbeat.EnabledFeatures, protocol.FeatureDirectKubeconfig)
+	seen := make(map[string]struct{}, len(heartbeat.EnabledFeatures))
+	capabilities := make([]string, 0, len(heartbeat.EnabledFeatures))
+	for _, capability := range heartbeat.EnabledFeatures {
+		if _, exists := seen[capability]; exists {
+			continue
+		}
+		seen[capability] = struct{}{}
+		capabilities = append(capabilities, capability)
+	}
+	sort.Strings(capabilities)
+	return capabilities
+}
+
 func defaultAgentValue(value, fallback string) string {
 	if strings.TrimSpace(value) == "" {
 		return fallback

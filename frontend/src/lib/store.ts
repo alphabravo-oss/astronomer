@@ -1,7 +1,7 @@
-import type { User } from '@/types';
-import { clearLegacyTokenStorage } from '@/lib/auth/session';
-import { persistedStore } from '@/lib/persisted-store';
-import { createStoreHook } from '@/lib/store-hook';
+import type { User } from "@/types";
+import { clearLegacyTokenStorage } from "@/lib/auth/session";
+import { persistedStore } from "@/lib/persisted-store";
+import { createStoreHook } from "@/lib/store-hook";
 
 // ============================================================
 // Auth Store
@@ -40,11 +40,13 @@ export const useAuthStore = createStoreHook(
         })),
     },
     {
-      name: 'astronomer-auth',
+      name: "astronomer-auth",
       version: 2,
       migrate: (persisted) => {
-        if (!persisted || typeof persisted !== 'object') return persisted;
-        const state = persisted as Partial<AuthState> & { token?: string | null };
+        if (!persisted || typeof persisted !== "object") return persisted;
+        const state = persisted as Partial<AuthState> & {
+          token?: string | null;
+        };
         const { token: _legacyToken, ...rest } = state;
         return rest;
       },
@@ -73,12 +75,14 @@ export const useUIStore = createStoreHook(
       sidebarCollapsed: false,
       commandPaletteOpen: false,
       toggleSidebarCollapsed: () =>
-        useUIStore.setState((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+        useUIStore.setState((state) => ({
+          sidebarCollapsed: !state.sidebarCollapsed,
+        })),
       setCommandPaletteOpen: (open) =>
         useUIStore.setState({ commandPaletteOpen: open }),
     },
     {
-      name: 'astronomer-ui',
+      name: "astronomer-ui",
       // A stale persisted `theme` value from older builds hydrates as an
       // ignored extra key (theme is owned by lib/theme.tsx) and is dropped
       // from the envelope on the next write.

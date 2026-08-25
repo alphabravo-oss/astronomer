@@ -1,0 +1,62 @@
+{
+  "schema_version": "rancher-ux-benchmark-tasks/v1",
+  "scope": "day-2 operations on already-provisioned adopted clusters",
+  "subjects": {
+    "rancher": {
+      "source_commit": "e870de073d56eec568516fae4bc5f76c5d409909",
+      "ui_version": "v2.15.0-alpha1"
+    },
+    "astronomer": {
+      "source_commit": "resolved-at-run-time",
+      "ui_version": "resolved-at-run-time"
+    }
+  },
+  "start_state": {
+    "route": "authenticated product landing page",
+    "cache_modes": ["cold", "warm"],
+    "viewport": "Desktop Chrome 1440x900",
+    "fixture": "one disposable adopted cluster with namespace team-a, Deployment web, Pod web-0, ConfigMap web-config, events, logs, and an update-only operator"
+  },
+  "tasks": [
+    {
+      "id": "inspect-workload-health",
+      "prompt": "Find the web workload in team-a. Report whether it is healthy, then open the current Pod's events and logs.",
+      "success_probe": "Independent cluster API observes the named Deployment and Pod; the browser visited conditions or events and logs for the matching Pod.",
+      "injection": "none",
+      "human_questions": ["The path was easy to discover.", "The health information was clear."]
+    },
+    {
+      "id": "scale-workload",
+      "prompt": "Increase the web workload from two replicas to three and confirm that three replicas become ready.",
+      "success_probe": "Independent cluster API observes spec.replicas=3 and status.readyReplicas=3 with one effective scale mutation.",
+      "injection": "none",
+      "human_questions": ["The action and resulting state were easy to understand."]
+    },
+    {
+      "id": "recover-apply-conflict",
+      "prompt": "Change web-config's mode value to safe, review the change, and apply it. If another editor changed the object, recover without discarding your intended value.",
+      "success_probe": "Independent cluster API observes mode=safe, the injected competing field remains present, and no duplicate mutation occurred.",
+      "injection": "one external field-manager update after the editor opens",
+      "human_questions": ["The conflict explanation and recovery choice were clear and safe."]
+    },
+    {
+      "id": "recover-transient-read",
+      "prompt": "Open web-config and continue after the first load is temporarily unavailable.",
+      "success_probe": "The first matching read fails transiently, an in-place recovery action succeeds, and the correct object is displayed without a full page reload.",
+      "injection": "one transient 503 on the first matching resource read",
+      "human_questions": ["The failure explained what happened and how to continue."]
+    },
+    {
+      "id": "delete-safe-configmap",
+      "prompt": "Delete the disposable old-config object after reviewing the impact and recovery guidance.",
+      "success_probe": "Independent cluster API observes old-config absent with one effective delete and no other fixture object removed.",
+      "injection": "none",
+      "human_questions": ["The impact, confirmation, and recovery guidance inspired appropriate confidence."]
+    }
+  ],
+  "claim_policy": {
+    "automated": "Mechanical efficiency may be qualified only from retained paired results for every task and both products.",
+    "human": "Clarity and discoverability require a counterbalanced human study; automation cannot pass this dimension.",
+    "overall": "Overall parity cannot be pass unless automated and human dimensions both pass. Missing evidence is pending, never pass."
+  }
+}

@@ -54,11 +54,13 @@ func publishQueueTerminalFailure(ctx context.Context, publisher TerminalFailureP
 func queueTerminalFailureAllowed(taskType string) bool {
 	_, allowed := map[string]struct{}{
 		TypeHealthCheck: {}, TypeAlertEvaluation: {}, TypeCatalogSync: {}, TypeMetricsAggregation: {}, TypeMonitoringReconcile: {},
-		TypeBackupExecution: {}, TypeSecurityScan: {}, TypeSecurityIngest: {}, TypeNotificationSend: {}, TypeAgentManifest: {},
+		TypeBackupExecution: {}, TypeSecurityIngest: {}, TypeNotificationSend: {},
 		TypeRunScheduledBackups: {}, TypeRunRestore: {}, TypeProjectReconcile: {}, TypeClusterDecommission: {},
-		TypeClusterTemplateApply: {}, TypeClusterApplyRegistrySecret: {}, TypeClusterSnapshotPoll: {}, TypeCloudCredentialMaterialize: {},
+		TypeClusterTemplateApply: {}, TypeClusterApplyRegistrySecret: {}, TypeClusterSnapshotPoll: {}, TypeClusterSnapshotApplyOperation: {}, TypeCloudCredentialMaterialize: {},
 		TypeDispatchDeferred: {}, TypeToolDriftSweep: {},
 		tasks.GitOpsSyncType: {}, tasks.NetworkPolicyApplyType: {}, tasks.ApiserverAllowlistReconcileType: {}, tasks.ClusterConditionReconcileType: {},
+		tasks.ControlPlaneSnapshotApplyType:     {},
+		tasks.GatekeeperConstraintReconcileType: {},
 	}[taskType]
 	return allowed
 }

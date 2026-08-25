@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * One monitoring-stack lifecycle surface: status, preview, install / upgrade /
@@ -22,7 +22,7 @@
  * button. Preview is deliberately kept for read-only callers, because that is
  * exactly what the endpoint's own gate allows.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Download,
@@ -35,18 +35,21 @@ import {
   Trash2,
   Upload,
   X,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { ActionButton } from '@/components/ui/action-button';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { PermissionState } from '@/components/ui/empty-state';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { cn, formatRelativeTime } from '@/lib/utils';
-import type { PermissionDecision } from '@/lib/permissions';
-import type { MonitoringStackTarget, SharedGrafanaStatus } from '@/lib/api/monitoring-stack';
-import { useMonitoringStackController } from '@/components/monitoring/hooks';
-import { StackOperationPanel } from '@/components/monitoring/stack-operation-panel';
-import { StackPreviewDialog } from '@/components/monitoring/stack-preview-dialog';
+import { ActionButton } from "@/components/ui/action-button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PermissionState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { cn, formatRelativeTime } from "@/lib/utils";
+import type { PermissionDecision } from "@/lib/permissions";
+import type {
+  MonitoringStackTarget,
+  SharedGrafanaStatus,
+} from "@/lib/api/monitoring-stack";
+import { useMonitoringStackController } from "@/components/monitoring/hooks";
+import { StackOperationPanel } from "@/components/monitoring/stack-operation-panel";
+import { StackPreviewDialog } from "@/components/monitoring/stack-preview-dialog";
 import {
   buildStackBody,
   fleetGrafanaOpenURL,
@@ -59,7 +62,7 @@ import {
   type StackFamilySpec,
   type StackField,
   type StackFormValues,
-} from '@/components/monitoring/stack-spec';
+} from "@/components/monitoring/stack-spec";
 
 export interface StackLifecyclePermissions {
   /** monitoring:read — status + preview. */
@@ -92,7 +95,7 @@ export interface StackLifecyclePanelProps {
 }
 
 const inputClass =
-  'h-8 w-full rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring';
+  "h-8 w-full rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring";
 
 function denialReason(decision: PermissionDecision): string {
   return decision.disabledReason || decision.reason;
@@ -113,7 +116,9 @@ export function StackLifecyclePanel({
   const status = statusQuery.data;
   const installed = stackIsInstalled(status);
 
-  const [values, setValues] = useState<StackFormValues>(() => seedStackValues(spec, null));
+  const [values, setValues] = useState<StackFormValues>(() =>
+    seedStackValues(spec, null),
+  );
   const [dirty, setDirty] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [confirmUninstall, setConfirmUninstall] = useState(false);
@@ -122,7 +127,7 @@ export function StackLifecyclePanel({
   // intentional action ("Install"/"Edit configuration"), so the page never opens
   // straight onto a bare form.
   const [editing, setEditing] = useState(false);
-  const seedStampRef = useRef<string>('');
+  const seedStampRef = useRef<string>("");
 
   // Re-seed from the recorded desired state, but never over an operator's
   // in-progress edits. Posting the full seeded spec back is what keeps an
@@ -145,7 +150,10 @@ export function StackLifecyclePanel({
     setValues((prev) => ({ ...prev, [name]: value }));
   };
 
-  const missing = useMemo(() => missingRequiredFields(spec, values), [spec, values]);
+  const missing = useMemo(
+    () => missingRequiredFields(spec, values),
+    [spec, values],
+  );
   const pendingReplaceReasons = useMemo(
     () => replaceTriggeringChanges(spec, values, status),
     [spec, values, status],
@@ -157,14 +165,14 @@ export function StackLifecyclePanel({
   const canMutate = canInstall || canUpdate || canUninstall;
 
   const busyReason = controller.isBusy
-    ? 'An operation for this stack is already in progress.'
+    ? "An operation for this stack is already in progress."
     : undefined;
   const missingReason = missing.length
-    ? `Set ${missing.map((field) => field.label).join(', ')} first.`
+    ? `Set ${missing.map((field) => field.label).join(", ")} first.`
     : undefined;
   const blockReason = busyReason ?? missingReason;
 
-  const run = async (verb: 'install' | 'upgrade' | 'replace' | 'uninstall') => {
+  const run = async (verb: "install" | "upgrade" | "replace" | "uninstall") => {
     const op = await controller.run(verb, buildStackBody(spec, values));
     if (op) setDirty(false);
     return op;
@@ -185,27 +193,38 @@ export function StackLifecyclePanel({
     );
   }
 
-  const releaseLabel = status?.releaseName || spec.defaults.releaseName || spec.title;
+  const releaseLabel =
+    status?.releaseName || spec.defaults.releaseName || spec.title;
   const grafanaOpenURL =
-    spec.key === 'grafana' ? fleetGrafanaOpenURL(status as SharedGrafanaStatus | undefined) : null;
+    spec.key === "grafana"
+      ? fleetGrafanaOpenURL(status as SharedGrafanaStatus | undefined)
+      : null;
 
   return (
     <section
       aria-label={spec.title}
       data-testid={`stack-panel-${spec.key}`}
-      className={cn('rounded-lg border border-border bg-card', className)}
+      className={cn("rounded-lg border border-border bg-card", className)}
     >
       <header className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="truncate text-sm font-semibold text-foreground">{spec.title}</h2>
+            <h2 className="truncate text-sm font-semibold text-foreground">
+              {spec.title}
+            </h2>
             <StatusBadge
               status={stackStatusTone(status?.status)}
-              label={statusQuery.isLoading ? 'Loading' : stackStatusLabel(status?.status)}
+              label={
+                statusQuery.isLoading
+                  ? "Loading"
+                  : stackStatusLabel(status?.status)
+              }
               size="sm"
             />
           </div>
-          <p className="mt-1 max-w-2xl text-xs text-muted-foreground">{spec.description}</p>
+          <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+            {spec.description}
+          </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {grafanaOpenURL ? (
@@ -216,7 +235,7 @@ export function StackLifecyclePanel({
               className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-accent"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Open fleet Grafana
+              Open shared Grafana
             </a>
           ) : null}
           <ActionButton
@@ -247,8 +266,10 @@ export function StackLifecyclePanel({
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
               The live release has drifted from the recorded desired state
-              {status.driftReasons?.length ? `: ${status.driftReasons.join(', ')}` : ''}. An upgrade
-              re-applies the desired values.
+              {status.driftReasons?.length
+                ? `: ${status.driftReasons.join(", ")}`
+                : ""}
+              . An upgrade re-applies the desired values.
             </span>
           </div>
         )}
@@ -260,10 +281,13 @@ export function StackLifecyclePanel({
         {controller.replaceRequired && (
           <div className="flex items-start justify-between gap-3 rounded-md border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
             <div className="min-w-0">
-              <p className="font-medium">{controller.replaceRequired.message}</p>
+              <p className="font-medium">
+                {controller.replaceRequired.message}
+              </p>
               {controller.replaceRequired.replaceReasons.length > 0 && (
                 <p className="mt-0.5">
-                  Reasons: {controller.replaceRequired.replaceReasons.join(', ')}.
+                  Reasons:{" "}
+                  {controller.replaceRequired.replaceReasons.join(", ")}.
                 </p>
               )}
             </div>
@@ -273,7 +297,11 @@ export function StackLifecyclePanel({
                   Replace instead
                 </ActionButton>
               )}
-              <ActionButton size="sm" intent="ghost" onClick={controller.clearReplaceRequired}>
+              <ActionButton
+                size="sm"
+                intent="ghost"
+                onClick={controller.clearReplaceRequired}
+              >
                 Dismiss
               </ActionButton>
             </div>
@@ -292,7 +320,7 @@ export function StackLifecyclePanel({
                 <StackFieldControl
                   key={field.name}
                   field={field}
-                  value={values[field.name] ?? ''}
+                  value={values[field.name] ?? ""}
                   onChange={(next) => setField(field.name, next)}
                   clusterOptions={clusterOptions}
                   storageOptions={storageOptions}
@@ -301,16 +329,17 @@ export function StackLifecyclePanel({
             </div>
             {installed && pendingReplaceReasons.length > 0 && (
               <p className="text-xs text-status-warning">
-                Changing {pendingReplaceReasons.join(', ')} cannot be applied in place — Upgrade will
-                be rejected and Replace (uninstall + reinstall) is required.
+                Changing {pendingReplaceReasons.join(", ")} cannot be applied in
+                place — Upgrade will be rejected and Replace (uninstall +
+                reinstall) is required.
               </p>
             )}
           </div>
         )}
         {!canMutate && (
           <p className="text-xs text-muted-foreground">
-            You can view this stack and preview its rendered values, but not change it.{' '}
-            {denialReason(permissions.update)}
+            You can view this stack and preview its rendered values, but not
+            change it. {denialReason(permissions.update)}
           </p>
         )}
 
@@ -354,7 +383,7 @@ export function StackLifecyclePanel({
               size="sm"
               intent="primary"
               icon={<Download className="h-3.5 w-3.5" />}
-              onClick={() => void run('install')}
+              onClick={() => void run("install")}
               loading={controller.isEnqueuing}
               loadingLabel="Queueing"
               disabled={!!blockReason}
@@ -369,7 +398,7 @@ export function StackLifecyclePanel({
                 size="sm"
                 intent="primary"
                 icon={<Upload className="h-3.5 w-3.5" />}
-                onClick={() => void run('upgrade')}
+                onClick={() => void run("upgrade")}
                 loading={controller.isEnqueuing}
                 loadingLabel="Queueing"
                 disabled={!!blockReason}
@@ -426,27 +455,33 @@ export function StackLifecyclePanel({
         isLoading={preview.isPending}
         error={(preview.error as Error) ?? null}
         actions={
-          preview.data && !preview.data.requiresReplace && !installed && canInstall ? (
+          preview.data &&
+          !preview.data.requiresReplace &&
+          !installed &&
+          canInstall ? (
             <ActionButton
               size="sm"
               intent="primary"
               disabled={!!blockReason}
               disabledReason={blockReason}
               onClick={async () => {
-                const op = await run('install');
+                const op = await run("install");
                 if (op) setPreviewOpen(false);
               }}
             >
               Install these values
             </ActionButton>
-          ) : preview.data && !preview.data.requiresReplace && installed && canUpdate ? (
+          ) : preview.data &&
+            !preview.data.requiresReplace &&
+            installed &&
+            canUpdate ? (
             <ActionButton
               size="sm"
               intent="primary"
               disabled={!!blockReason}
               disabledReason={blockReason}
               onClick={async () => {
-                const op = await run('upgrade');
+                const op = await run("upgrade");
                 if (op) setPreviewOpen(false);
               }}
             >
@@ -466,12 +501,12 @@ export function StackLifecyclePanel({
         onClose={() => setConfirmReplace(false)}
         onConfirm={async () => {
           controller.clearReplaceRequired();
-          const op = await run('replace');
+          const op = await run("replace");
           if (op) setConfirmReplace(false);
         }}
         title={`Replace ${spec.title}`}
         description={`Replace uninstalls the "${releaseLabel}" release${
-          status?.namespace ? ` in namespace ${status.namespace}` : ''
+          status?.namespace ? ` in namespace ${status.namespace}` : ""
         } and installs it again with the values above. It destroys ${spec.destroys}. Monitoring is unavailable while it runs.`}
         confirmText="Replace"
         confirmValue={releaseLabel}
@@ -486,12 +521,12 @@ export function StackLifecyclePanel({
         open={confirmUninstall}
         onClose={() => setConfirmUninstall(false)}
         onConfirm={async () => {
-          const op = await run('uninstall');
+          const op = await run("uninstall");
           if (op) setConfirmUninstall(false);
         }}
         title={`Uninstall ${spec.title}`}
         description={`This deletes the Helm release "${releaseLabel}"${
-          status?.namespace ? ` from namespace ${status.namespace}` : ''
+          status?.namespace ? ` from namespace ${status.namespace}` : ""
         }. It destroys ${spec.destroys}. This cannot be undone.`}
         confirmText="Uninstall"
         confirmValue={releaseLabel}
@@ -508,24 +543,25 @@ function StackSummary({
   status,
   installed,
 }: {
-  status: ReturnType<typeof useMonitoringStackController>['status']['data'];
+  status: ReturnType<typeof useMonitoringStackController>["status"]["data"];
   installed: boolean;
 }) {
   if (!installed) {
     return (
       <p className="text-xs text-muted-foreground">
-        No Helm release is recorded for this stack. Preview the values below, then install.
+        No Helm release is recorded for this stack. Preview the values below,
+        then install.
       </p>
     );
   }
 
   const observed = status?.observedRelease;
   const rows: Array<[string, React.ReactNode]> = [
-    ['Namespace', status?.namespace || '—'],
-    ['Release', status?.releaseName || '—'],
-    ['Chart version', status?.chartVersion || '—'],
+    ["Namespace", status?.namespace || "—"],
+    ["Release", status?.releaseName || "—"],
+    ["Chart version", status?.chartVersion || "—"],
     [
-      'Helm status',
+      "Helm status",
       observed ? (
         <span className="inline-flex items-center gap-1.5">
           <StatusBadge status={observed.status} size="sm" />
@@ -536,18 +572,20 @@ function StackSummary({
             already records lastObservedRevision and the reconciler rolls back
             to a prior revision itself. Not built here.
           */}
-          {typeof observed.revision === 'number' && (
-            <span className="text-xs text-muted-foreground">rev {observed.revision}</span>
+          {typeof observed.revision === "number" && (
+            <span className="text-xs text-muted-foreground">
+              rev {observed.revision}
+            </span>
           )}
         </span>
       ) : (
-        '—'
+        "—"
       ),
     ],
-    ['Pods', typeof status?.pods === 'number' ? String(status.pods) : '—'],
+    ["Pods", typeof status?.pods === "number" ? String(status.pods) : "—"],
     [
-      'Observed',
-      observed?.observedAt ? formatRelativeTime(observed.observedAt) : '—',
+      "Observed",
+      observed?.observedAt ? formatRelativeTime(observed.observedAt) : "—",
     ],
   ];
 
@@ -593,19 +631,25 @@ function StackFieldControl({
     </span>
   );
 
-  if (field.kind === 'boolean') {
+  if (field.kind === "boolean") {
     return (
       <label className="flex items-start gap-2">
         <input
           type="checkbox"
-          checked={value === 'true'}
-          onChange={(event) => onChange(event.target.checked ? 'true' : 'false')}
+          checked={value === "true"}
+          onChange={(event) =>
+            onChange(event.target.checked ? "true" : "false")
+          }
           className="mt-0.5 h-4 w-4 rounded border-border"
           aria-label={field.label}
         />
         <span className="min-w-0">
           {label}
-          {field.help && <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.help}</span>}
+          {field.help && (
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+              {field.help}
+            </span>
+          )}
         </span>
       </label>
     );
@@ -615,29 +659,35 @@ function StackFieldControl({
   // fields the form has no idea what the current setting is, because no status
   // endpoint returns them (SERVER_BLIND_FIELDS). The empty option is what keeps
   // the key OUT of the request body so the backend's own policy applies.
-  if (field.kind === 'tristate') {
+  if (field.kind === "tristate") {
     return (
       <label className="block min-w-0">
         {label}
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className={cn(inputClass, 'mt-1')}
+          className={cn(inputClass, "mt-1")}
           aria-label={field.label}
         >
-          <option value="">{field.unsetLabel ?? 'Use backend default'}</option>
+          <option value="">{field.unsetLabel ?? "Use backend default"}</option>
           <option value="true">Enabled</option>
           <option value="false">Disabled</option>
         </select>
         {field.help && (
-          <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.help}</span>
+          <span className="mt-0.5 block text-[11px] text-muted-foreground">
+            {field.help}
+          </span>
         )}
       </label>
     );
   }
 
   const options =
-    field.kind === 'cluster' ? clusterOptions : field.kind === 'storageConfig' ? storageOptions : undefined;
+    field.kind === "cluster"
+      ? clusterOptions
+      : field.kind === "storageConfig"
+        ? storageOptions
+        : undefined;
 
   return (
     <label className="block min-w-0">
@@ -646,10 +696,10 @@ function StackFieldControl({
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className={cn(inputClass, 'mt-1')}
+          className={cn(inputClass, "mt-1")}
           aria-label={field.label}
         >
-          <option value="">{field.required ? 'Select…' : 'None'}</option>
+          <option value="">{field.required ? "Select…" : "None"}</option>
           {options.map((option) => (
             <option key={option.id} value={option.id}>
               {option.label}
@@ -658,15 +708,19 @@ function StackFieldControl({
         </select>
       ) : (
         <input
-          type={field.kind === 'number' ? 'number' : 'text'}
+          type={field.kind === "number" ? "number" : "text"}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={field.placeholder}
-          className={cn(inputClass, 'mt-1')}
+          className={cn(inputClass, "mt-1")}
           aria-label={field.label}
         />
       )}
-      {field.help && <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.help}</span>}
+      {field.help && (
+        <span className="mt-0.5 block text-[11px] text-muted-foreground">
+          {field.help}
+        </span>
+      )}
     </label>
   );
 }

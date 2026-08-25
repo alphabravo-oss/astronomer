@@ -28,6 +28,8 @@ func main() {
 		listenAddr = flag.String("listen", "127.0.0.1:0", "TCP address on which to listen")
 		root       = flag.String("root", "", "fixture root containing git/ and helm/")
 		portFile   = flag.String("port-file", "", "optional file to receive the selected TCP port")
+		tlsCert    = flag.String("tls-cert", "", "optional PEM certificate for HTTPS")
+		tlsKey     = flag.String("tls-key", "", "optional PEM private key for HTTPS")
 		selfTest   = flag.Bool("self-test", false, "exit successfully without starting a server")
 	)
 	flag.Parse()
@@ -74,9 +76,18 @@ func main() {
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
 	}()
+	if (*tlsCert == "") != (*tlsKey == "") {
+		log.Fatal("--tls-cert and --tls-key must be supplied together")
+	}
 	log.Printf("serving synthetic Flux fixtures on %s", listener.Addr())
-	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+	var serveErr error
+	if *tlsCert != "" {
+		serveErr = server.ServeTLS(listener, *tlsCert, *tlsKey)
+	} else {
+		serveErr = server.Serve(listener)
+	}
+	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		log.Fatal(serveErr)
 	}
 }
 

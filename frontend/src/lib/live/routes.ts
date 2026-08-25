@@ -40,8 +40,8 @@ function clusterLivenessRoute(d: LiveEventData): QueryKey[] {
   return keys;
 }
 
-function fleetAndLivenessRoute(d: LiveEventData): QueryKey[] {
-  return [...clusterLivenessRoute(d), qk.delivery.fleet];
+function estateAndLivenessRoute(d: LiveEventData): QueryKey[] {
+  return [...clusterLivenessRoute(d), qk.delivery.estate];
 }
 
 /**
@@ -182,8 +182,8 @@ function entityIdOf(d: LiveEventData): string | null {
  * per domain as publishers land.
  */
 export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
-  "cluster.connected": fleetAndLivenessRoute,
-  "cluster.disconnected": fleetAndLivenessRoute,
+  "cluster.connected": estateAndLivenessRoute,
+  "cluster.disconnected": estateAndLivenessRoute,
   // Heartbeats also refresh the conditions surface (P4.9): the health-check
   // worker reconciles cluster conditions on the same signal that bumps
   // last_heartbeat, and there is no dedicated conditions event.
@@ -220,9 +220,9 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
     if (cid) keys.push(qk.clusters.detail(cid));
     return keys;
   },
-  "cluster.deleted": fleetAndLivenessRoute,
+  "cluster.deleted": estateAndLivenessRoute,
   "agent.reconnecting": clusterLivenessRoute,
-  "agent.failed": fleetAndLivenessRoute,
+  "agent.failed": estateAndLivenessRoute,
   "cluster.k8s_changed": k8sChangedRoute,
   "cluster.registration.step": registrationRoute,
   "cluster.registration.phase": registrationRoute,
@@ -265,7 +265,7 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
   "siem_forwarder.changed": () => [qk.siemForwarders.all],
   "cluster_agents.changed": (d) => {
     const cid = clusterIdOf(d);
-    const keys: QueryKey[] = [qk.agents.all, qk.delivery.fleet];
+    const keys: QueryKey[] = [qk.agents.all, qk.delivery.estate];
     if (cid) keys.push(qk.agents.operations(cid));
     return keys;
   },
@@ -287,7 +287,7 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
       ? [
           qk.delivery.rolloutsAll(projectId),
           qk.delivery.deploymentsAll(projectId),
-          qk.delivery.fleet,
+          qk.delivery.estate,
         ]
       : [qk.delivery.all];
   },
@@ -295,7 +295,7 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
     const projectId = typeof d.projectId === "string" ? d.projectId : "";
     const cid = clusterIdOf(d);
     const keys: QueryKey[] = projectId
-      ? [qk.delivery.deploymentsAll(projectId), qk.delivery.fleet]
+      ? [qk.delivery.deploymentsAll(projectId), qk.delivery.estate]
       : [qk.delivery.all];
     if (projectId && cid)
       keys.push(qk.delivery.clusterInventory(projectId, cid));

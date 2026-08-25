@@ -22,8 +22,42 @@ WHERE (
 ) AND (
     sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status)::text
 )
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $1 OFFSET $2;
+
+-- name: CountToolOperations :one
+SELECT count(*) FROM tool_operations
+WHERE (
+    sqlc.narg(target_type)::text IS NULL OR target_type = sqlc.narg(target_type)::text
+) AND (
+    sqlc.narg(target_key)::text IS NULL OR target_key = sqlc.narg(target_key)::text
+) AND (
+    sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status)::text
+);
+
+-- name: ListToolOperationsForScopes :many
+SELECT * FROM tool_operations
+WHERE (
+    sqlc.narg(target_type)::text IS NULL OR target_type = sqlc.narg(target_type)::text
+) AND (
+    sqlc.narg(target_key)::text IS NULL OR target_key = sqlc.narg(target_key)::text
+) AND (
+    sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status)::text
+) AND payload->>'clusterId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND (payload->>'clusterId')::uuid = ANY(sqlc.arg(cluster_ids)::uuid[])
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountToolOperationsForScopes :one
+SELECT count(*) FROM tool_operations
+WHERE (
+    sqlc.narg(target_type)::text IS NULL OR target_type = sqlc.narg(target_type)::text
+) AND (
+    sqlc.narg(target_key)::text IS NULL OR target_key = sqlc.narg(target_key)::text
+) AND (
+    sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status)::text
+) AND payload->>'clusterId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND (payload->>'clusterId')::uuid = ANY(sqlc.arg(cluster_ids)::uuid[]);
 
 -- name: ListPendingToolOperations :many
 SELECT * FROM tool_operations

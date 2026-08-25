@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS public.catalog_operations_cluster_created_idx;

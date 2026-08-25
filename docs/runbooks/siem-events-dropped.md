@@ -1,7 +1,7 @@
 # AstronomerSIEMEventsDropped
 
-`astronomer_siem_dropped_total` is incrementing — events destined for an
-external SIEM forwarder are being discarded. Downstream security tooling
+`astronomer_siem_dropped_total` is incrementing — best-effort product events
+destined for an external SIEM forwarder are being discarded. Downstream tooling
 (Splunk, Sentinel, Chronicle, an HTTP collector, etc.) has a blind spot for
 the duration of the drop window.
 
@@ -9,12 +9,15 @@ the duration of the drop window.
 
 Fires on `rate(astronomer_siem_dropped_total[10m]) > 0`. The metric is labelled
 by `reason` (queue full, retries exhausted, forwarder disabled/unreachable, or
-serialization error). A drop means the event was accepted by the platform but
-never delivered to the configured SIEM destination.
+serialization error). A drop means a non-transactional product event was
+accepted by the platform but never delivered to the configured SIEM
+destination. Transactional audit receipts are durable PostgreSQL rows and are
+never deleted by queue pressure, retry exhaustion, or age retention.
 
 This is distinct from `AstronomerAuditEventsDropped`, which is about the local
-audit-log DB write. An event can be persisted locally but still fail to forward,
-or vice-versa.
+audit-log DB write. A transactional audit event and its matching SIEM receipts
+commit together; older/unmigrated audit writers and ordinary product events do
+not inherit that guarantee.
 
 ## Diagnose
 
@@ -53,8 +56,8 @@ or vice-versa.
 
 - **`unreachable` / retries exhausted**: the destination is down or blocked by
   egress policy. Fix connectivity (destination health, NetworkPolicy egress,
-  credentials/token). Delivery resumes once the endpoint is reachable; the drop
-  rate returns to zero.
+  credentials/token). Mandatory audit receipts continue retrying; disposable
+  events that exhaust the budget increment the drop counter.
 - **`queue_full`**: the forwarder can't keep up with event volume. Confirm the
   destination is healthy (not just rate-limiting), then scale the server or raise
   the forwarder's queue/batch settings. If a single noisy source is responsible,
@@ -67,9 +70,10 @@ or vice-versa.
 
 ## Assess the gap
 
-After recovery, record the drop window and, if the destination supports it,
-back-fill from the local audit log (`GET /api/v1/audit/`) for the affected
-period so the SIEM record is complete.
+After recovery, record the drop window. Transactional audit receipts replay
+automatically with their stable destination key. If non-transactional events
+were dropped and the destination supports imports, back-fill available audit
+history from `GET /api/v1/audit/` for the affected period.
 
 ## See also
 

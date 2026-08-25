@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/auth/connectors/new/ — three-step connector wizard.
  *
@@ -12,24 +12,24 @@ import { createFileRoute } from '@tanstack/react-router';
  *      Dex hot-reloads. Operators who want to batch multiple changes can
  *      skip and apply from the overview page.
  */
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { useRouter } from '@/lib/navigation';
-import { ArrowLeft, Loader2, Search } from 'lucide-react';
-import { ActionButton } from '@/components/ui/action-button';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { extractApiErrorMessage } from '@/lib/api/errors';
-import { cn } from '@/lib/utils';
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { useRouter } from "@/lib/navigation";
+import { ArrowLeft, Loader2, Search } from "lucide-react";
+import { ActionButton } from "@/components/ui/action-button";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { extractApiErrorMessage } from "@/lib/api/errors";
+import { cn } from "@/lib/utils";
 import {
   useDexConnectorTypes,
   useCreateDexConnector,
   useApplyDexConfig,
-} from '@/components/auth/hooks';
-import { ConnectorForm } from '@/components/auth/connector-form';
-import { getConnectorMeta } from '@/components/auth/connector-meta';
-import type { DexConnectorTypeSpec } from '@/types';
+} from "@/components/auth/hooks";
+import { ConnectorForm } from "@/components/auth/connector-form";
+import { getConnectorMeta } from "@/components/auth/connector-meta";
+import type { DexConnectorTypeSpec } from "@/types";
 
-type WizardStep = 'pick' | 'configure' | 'apply';
+type WizardStep = "pick" | "configure" | "apply";
 
 function NewConnectorPage() {
   const router = useRouter();
@@ -37,20 +37,28 @@ function NewConnectorPage() {
   const createMutation = useCreateDexConnector();
   const applyMutation = useApplyDexConfig();
 
-  const [step, setStep] = useState<WizardStep>('pick');
-  const [selectedType, setSelectedType] = useState<DexConnectorTypeSpec | null>(null);
-  const [search, setSearch] = useState('');
+  const [step, setStep] = useState<WizardStep>("pick");
+  const [selectedType, setSelectedType] = useState<DexConnectorTypeSpec | null>(
+    null,
+  );
+  const [search, setSearch] = useState("");
   const [serverError, setServerError] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
 
   const filtered = types.filter((t) => {
     if (!search) return true;
     const meta = getConnectorMeta(t.type);
-    const haystack = `${t.type} ${meta.label} ${meta.description}`.toLowerCase();
+    const haystack =
+      `${t.type} ${meta.label} ${meta.description}`.toLowerCase();
     return haystack.includes(search.toLowerCase());
   });
 
-  const handleSubmit = async (state: { name: string; displayName: string; config: Record<string, unknown>; enabled: boolean }) => {
+  const handleSubmit = async (state: {
+    name: string;
+    displayName: string;
+    config: Record<string, unknown>;
+    enabled: boolean;
+  }) => {
     if (!selectedType) return;
     setServerError(null);
     try {
@@ -62,11 +70,12 @@ function NewConnectorPage() {
         enabled: state.enabled,
       });
       setCreatedId(created.id);
-      setStep('apply');
+      setStep("apply");
     } catch (err) {
       // Surface the server's `error.message` so missing-fields lists land
       // inline next to the form.
-      const message = extractApiErrorMessage(err) ?? 'Failed to create connector.';
+      const message =
+        extractApiErrorMessage(err) ?? "Failed to create connector.";
       setServerError(message);
     }
   };
@@ -84,15 +93,15 @@ function NewConnectorPage() {
       <PageHeader
         eyebrow="Auth · New Connector"
         title={
-          step === 'pick'
-            ? 'Choose a connector type'
-            : step === 'configure'
-              ? `Configure ${getConnectorMeta(selectedType?.type ?? '').label || selectedType?.type}`
-              : 'Apply to Dex?'
+          step === "pick"
+            ? "Choose a connector type"
+            : step === "configure"
+              ? `Configure ${getConnectorMeta(selectedType?.type ?? "").label || selectedType?.type}`
+              : "Apply to Dex?"
         }
       />
 
-      {step === 'pick' && (
+      {step === "pick" && (
         <>
           <div className="flex items-center gap-2 px-3 rounded-lg border border-border bg-background">
             <Search className="h-4 w-4 text-muted-foreground" />
@@ -120,11 +129,11 @@ function NewConnectorPage() {
                     key={t.type}
                     onClick={() => {
                       setSelectedType(t);
-                      setStep('configure');
+                      setStep("configure");
                     }}
                     className={cn(
-                      'flex flex-col gap-2 p-4 rounded-lg border border-border bg-card text-left',
-                      'hover:bg-card/80 hover:border-foreground/20 transition-colors'
+                      "flex flex-col gap-2 p-4 rounded-lg border border-border bg-card text-left",
+                      "hover:bg-card/80 hover:border-foreground/20 transition-colors",
                     )}
                   >
                     <div className="flex items-center gap-2">
@@ -132,8 +141,12 @@ function NewConnectorPage() {
                         <Icon className="h-4 w-4 text-foreground" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{meta.label || t.type}</p>
-                        <p className="text-2xs font-mono text-muted-foreground truncate">{t.type}</p>
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {meta.label || t.type}
+                        </p>
+                        <p className="text-2xs font-mono text-muted-foreground truncate">
+                          {t.type}
+                        </p>
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground line-clamp-2">
@@ -141,7 +154,8 @@ function NewConnectorPage() {
                     </p>
                     <div className="flex items-center justify-between mt-auto pt-1">
                       <span className="text-2xs text-muted-foreground">
-                        {t.required.length} required field{t.required.length === 1 ? '' : 's'}
+                        {t.required.length} required field
+                        {t.required.length === 1 ? "" : "s"}
                       </span>
                     </div>
                   </button>
@@ -152,7 +166,7 @@ function NewConnectorPage() {
         </>
       )}
 
-      {step === 'configure' && selectedType && (
+      {step === "configure" && selectedType && (
         <div className="rounded-xl border border-border bg-card p-6">
           <ConnectorForm
             spec={selectedType}
@@ -162,25 +176,29 @@ function NewConnectorPage() {
             onCancel={() => {
               setSelectedType(null);
               setServerError(null);
-              setStep('pick');
+              setStep("pick");
             }}
             serverError={serverError}
           />
         </div>
       )}
 
-      {step === 'apply' && createdId && (
+      {step === "apply" && createdId && (
         <div className="rounded-xl border border-border bg-card p-6 space-y-4">
           <div>
-            <p className="text-sm font-medium text-foreground">Connector created.</p>
+            <p className="text-sm font-medium text-foreground">
+              Connector created.
+            </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              The new connector is saved but Dex hasn&apos;t reloaded yet. Apply now to push
-              the retained runtime Secret in your cluster, or batch with other changes from the
-              overview page.
+              The new connector is saved but Dex hasn&apos;t reloaded yet. Apply
+              now to push the retained runtime Secret in your cluster, or batch
+              with other changes from the overview page.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-end">
-            <ActionButton onClick={() => router.push('/dashboard/settings/auth')}>
+            <ActionButton
+              onClick={() => router.push("/dashboard/settings/auth")}
+            >
               Apply later
             </ActionButton>
             <ActionButton
@@ -188,7 +206,7 @@ function NewConnectorPage() {
               onClick={async () => {
                 try {
                   await applyMutation.mutateAsync();
-                  router.push('/dashboard/settings/auth');
+                  router.push("/dashboard/settings/auth");
                 } catch {
                   /* mutation toasts on error */
                 }
@@ -204,6 +222,8 @@ function NewConnectorPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/auth/connectors/new/')({
+export const Route = createFileRoute(
+  "/dashboard/settings/auth/connectors/new/",
+)({
   component: NewConnectorPage,
 });

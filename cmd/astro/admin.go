@@ -395,7 +395,8 @@ func newAdminWebhookTestCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.AdminWebhookTestWithResponse(cmd.Context(), id)
+			params := &astroclient.AdminWebhookTestParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.AdminWebhookTestWithResponse(cmd.Context(), id, params)
 			if err != nil {
 				return err
 			}
@@ -475,7 +476,8 @@ func newAdminWebhookRetryDeliveryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.AdminWebhookRetryDeliveryWithResponse(cmd.Context(), id, deliveryID)
+			params := &astroclient.AdminWebhookRetryDeliveryParams{IdempotencyKey: uuid.NewString()}
+			resp, err := client.AdminWebhookRetryDeliveryWithResponse(cmd.Context(), id, deliveryID, params)
 			if err != nil {
 				return err
 			}
@@ -751,14 +753,14 @@ func newAdminNPTListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &astroclient.GetApiV1AdminNetworkPolicyTemplatesParams{}
+			params := &astroclient.GetAdminNetworkPolicyTemplatesParams{}
 			if cmd.Flags().Changed("limit") {
 				params.Limit = &limit
 			}
 			if cmd.Flags().Changed("offset") {
 				params.Offset = &offset
 			}
-			resp, err := client.GetApiV1AdminNetworkPolicyTemplatesWithResponse(cmd.Context(), params)
+			resp, err := client.GetAdminNetworkPolicyTemplatesWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -787,7 +789,7 @@ func newAdminNPTGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1AdminNetworkPolicyTemplatesIdWithResponse(cmd.Context(), id)
+			resp, err := client.GetAdminNetworkPolicyTemplatesByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -814,7 +816,7 @@ func newAdminNPTCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1AdminNetworkPolicyTemplatesWithBodyWithResponse(cmd.Context(), adminJSONContentType, adminBodyReader(body))
+			resp, err := client.PostAdminNetworkPolicyTemplatesWithBodyWithResponse(cmd.Context(), adminJSONContentType, adminBodyReader(body))
 			if err != nil {
 				return err
 			}
@@ -847,7 +849,7 @@ func newAdminNPTUpdateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PutApiV1AdminNetworkPolicyTemplatesIdWithBodyWithResponse(cmd.Context(), id, adminJSONContentType, adminBodyReader(body))
+			resp, err := client.PutAdminNetworkPolicyTemplatesByIdWithBodyWithResponse(cmd.Context(), id, adminJSONContentType, adminBodyReader(body))
 			if err != nil {
 				return err
 			}
@@ -880,7 +882,7 @@ func newAdminNPTDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteApiV1AdminNetworkPolicyTemplatesIdWithResponse(cmd.Context(), id)
+			resp, err := client.DeleteAdminNetworkPolicyTemplatesByIdWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -981,7 +983,7 @@ func newAdminBackupDrillCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1AdminBackupDrillWithResponse(cmd.Context())
+			resp, err := client.GetAdminBackupDrillWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}

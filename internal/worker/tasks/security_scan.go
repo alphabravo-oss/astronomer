@@ -8,12 +8,16 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -22,7 +26,10 @@ import (
 // after a ClusterScan CR has been created. The handler is package-public so
 // the security HTTP handler can reference the same string without importing
 // this package (avoiding a worker → handler import cycle).
-const SecurityIngestType = "security:ingest_scan_results"
+const (
+	SecurityIngestType         = "security:ingest_scan_results"
+	SecurityIngestRecoveryType = "security:recover_scan_ingestion"
+)
 
 // ingestPollInterval and ingestMaxAttempts together cap report polling at
 // 30 minutes (60 attempts × 30s), matching the design doc. We use a
@@ -31,6 +38,9 @@ const SecurityIngestType = "security:ingest_scan_results"
 const (
 	ingestPollInterval = 30 * time.Second
 	ingestMaxAttempts  = 60
+	ingestLease        = 2 * time.Minute
+	maxIngestBodyBytes = 8 << 20
+	ingestRecoveryRows = 100
 )
 
 // SecurityScanPayload is the legacy payload still consumed by the
@@ -45,10 +55,8 @@ type SecurityScanPayload struct {
 // incremented on every re-enqueue so we can fail the scan after the
 // configured ceiling rather than retrying forever.
 type SecurityScanIngestPayload struct {
-	ScanID          string `json:"scan_id"`
-	ClusterID       string `json:"cluster_id"`
-	ClusterScanName string `json:"cluster_scan_name"`
-	AttemptCount    int    `json:"attempt_count,omitempty"`
+	ScanID     string `json:"scan_id"`
+	Generation int64  `json:"generation,omitempty"`
 }
 
 // SecurityIngestQuerier is the slice of the runtime querier the ingest task
@@ -56,8 +64,11 @@ type SecurityScanIngestPayload struct {
 // implementation without dragging in the entire RuntimeQuerier surface.
 type SecurityIngestQuerier interface {
 	GetSecurityScanResultByID(ctx context.Context, id uuid.UUID) (sqlc.SecurityScanResult, error)
-	UpdateSecurityScanReport(ctx context.Context, arg sqlc.UpdateSecurityScanReportParams) error
-	UpdateSecurityScanFailedWithMessage(ctx context.Context, arg sqlc.UpdateSecurityScanFailedWithMessageParams) error
+	ClaimSecurityScanPoll(ctx context.Context, arg sqlc.ClaimSecurityScanPollParams) (sqlc.SecurityScanResult, error)
+	RescheduleSecurityScanPoll(ctx context.Context, arg sqlc.RescheduleSecurityScanPollParams) (int64, error)
+	FinalizeSecurityScanReport(ctx context.Context, arg sqlc.FinalizeSecurityScanReportParams) (int64, error)
+	FailSecurityScanPoll(ctx context.Context, arg sqlc.FailSecurityScanPollParams) (int64, error)
+	ListRecoverableSecurityScans(ctx context.Context, arg sqlc.ListRecoverableSecurityScansParams) ([]sqlc.SecurityScanResult, error)
 }
 
 // SecurityIngestK8sFetcher mirrors handler.K8sRequester but lives in the
@@ -66,47 +77,25 @@ type SecurityIngestK8sFetcher interface {
 	Do(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error)
 }
 
-// SecurityIngestEnqueuer matches asynq.Client just enough to schedule a
-// follow-up poll without forcing tests to spin up Redis.
-type SecurityIngestEnqueuer interface {
-	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
-}
-
-// SecurityIngestDeps carries the optional task dependencies. The handler is
-// nil-safe — when these aren't wired the task no-ops, which is the right
-// behavior in test environments.
+// SecurityIngestDeps carries the task dependencies. Production composition
+// validation requires the database, tunnel fetcher, and durable task outbox;
+// the handler also fails visibly if invoked before they are wired.
 type SecurityIngestDeps struct {
 	Queries SecurityIngestQuerier
 	K8s     SecurityIngestK8sFetcher
-	Queue   SecurityIngestEnqueuer
+	Outbox  TaskOutboxWriter
 	Log     *slog.Logger
+	Bus     *events.Bus
+	Owner   string
 	// Now is overridable for tests.
 	Now func() time.Time
 }
 
-var securityIngestDeps SecurityIngestDeps
-
-// ConfigureSecurityIngest wires the deps for the report-ingest task. Called
-// from internal/server/server.go on startup once the tunnel hub and asynq
-// client are available.
-func ConfigureSecurityIngest(deps SecurityIngestDeps) {
-	securityIngestDeps = deps
-	if securityIngestDeps.Log == nil {
-		securityIngestDeps.Log = slog.Default()
-	}
-	if securityIngestDeps.Now == nil {
-		securityIngestDeps.Now = time.Now
-	}
-}
-
-// NewSecurityScanTask creates a new security scan task. Kept for backward
-// compatibility — current call sites are limited to the legacy code path.
+// NewSecurityScanTask rejects the retired synthetic scan path. Real scans are
+// created through the security API and completed by security:ingest_scan_results.
 func NewSecurityScanTask(payload SecurityScanPayload) (*asynq.Task, error) {
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal security scan payload: %w", err)
-	}
-	return asynq.NewTask("security:scan", data, asynq.MaxRetry(1)), nil
+	_ = payload
+	return nil, fmt.Errorf("security:scan is retired; create a ClusterScan through the security API")
 }
 
 // NewSecurityIngestTask schedules the next poll of a ClusterScanReport. This
@@ -117,16 +106,13 @@ func NewSecurityIngestTask(payload SecurityScanIngestPayload) (*asynq.Task, erro
 	if err != nil {
 		return nil, fmt.Errorf("marshal security ingest payload: %w", err)
 	}
-	return asynq.NewTask(SecurityIngestType, data,
-		asynq.MaxRetry(3),
-		asynq.ProcessIn(ingestPollInterval),
-		asynq.Timeout(35*time.Minute),
-	), nil
+	return asynq.NewTask(SecurityIngestType, data, asynq.MaxRetry(3), asynq.Timeout(2*time.Minute)), nil
 }
 
-// HandleSecurityScan is the legacy entrypoint. Maintained so the existing
-// task type continues to work.
-func HandleSecurityScan(ctx context.Context, t *asynq.Task) error {
+// HandleSecurityScan drains legacy queue entries without fabricating an empty
+// completed scan result. SkipRetry keeps the invalid operation visible as a
+// terminal queue failure while preventing repeated execution.
+func HandleSecurityScan(_ context.Context, t *asynq.Task) error {
 	var p SecurityScanPayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
 		return fmt.Errorf("unmarshal security scan payload: %w", err)
@@ -134,64 +120,26 @@ func HandleSecurityScan(ctx context.Context, t *asynq.Task) error {
 	if p.ClusterID == "" {
 		return fmt.Errorf("cluster_id is required")
 	}
-	scanType := p.ScanType
-	if scanType == "" {
-		scanType = "full"
-	}
-	slog.InfoContext(ctx, "running security scan",
-		"cluster_id", p.ClusterID,
-		"scan_type", scanType,
-	)
-	if runtimeDeps.Queries == nil {
-		slog.InfoContext(ctx, "security scan runtime not configured, skipping DB result creation")
-		return nil
-	}
-	clusterID, err := uuid.Parse(p.ClusterID)
-	if err != nil {
+	if _, err := uuid.Parse(p.ClusterID); err != nil {
 		return fmt.Errorf("invalid cluster_id: %w", err)
 	}
-	summary, _ := json.Marshal(map[string]any{
-		"critical": 0,
-		"high":     0,
-		"medium":   0,
-		"low":      0,
-	})
-	results, _ := json.Marshal(map[string]any{
-		"scan_type": scanType,
-		"source":    "worker",
-		"findings":  []any{},
-	})
-	if _, err := runtimeDeps.Queries.CreateSecurityScanResult(ctx, sqlc.CreateSecurityScanResultParams{
-		ClusterID:     clusterID,
-		ScanType:      scanType,
-		Status:        "completed",
-		Summary:       summary,
-		Results:       results,
-		InitiatedByID: emptyUUID(),
-	}); err != nil {
-		return err
-	}
-	slog.InfoContext(ctx, "security scan complete", "cluster_id", p.ClusterID, "scan_type", scanType)
-	return nil
+	return fmt.Errorf("security:scan is retired; use security:ingest_scan_results: %w", asynq.SkipRetry)
 }
 
 // HandleSecurityIngest polls the ClusterScanReport for the given scan and
 // either ingests it (success), reschedules another poll (still running), or
 // marks the scan failed (timeout / unrecoverable error).
-func HandleSecurityIngest(ctx context.Context, t *asynq.Task) error {
+func (runtime SecurityIngestRuntime) HandleSecurityIngest(ctx context.Context, t *asynq.Task) error {
+	runtime = runtime.normalized()
 	var p SecurityScanIngestPayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
 		return fmt.Errorf("unmarshal security ingest payload: %w", err)
 	}
-	if p.ScanID == "" || p.ClusterID == "" || p.ClusterScanName == "" {
-		return fmt.Errorf("scan_id, cluster_id, and cluster_scan_name are required")
+	if p.ScanID == "" {
+		return fmt.Errorf("scan_id is required")
 	}
-	if securityIngestDeps.Queries == nil || securityIngestDeps.K8s == nil {
-		// Runtime not wired — most likely a test env or scheduler started
-		// before the server did. No-op rather than retrying forever.
-		slog.InfoContext(ctx, "security ingest runtime not configured, skipping",
-			"scan_id", p.ScanID)
-		return nil
+	if runtime.Deps.Queries == nil || runtime.Deps.K8s == nil || runtime.Deps.Outbox == nil {
+		return fmt.Errorf("security ingest runtime is not configured")
 	}
 
 	scanID, err := uuid.Parse(p.ScanID)
@@ -199,71 +147,202 @@ func HandleSecurityIngest(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("invalid scan_id: %w", err)
 	}
 
-	// Fetch the report by name from the cis-operator API. cis-operator names
-	// the report identically to the ClusterScan that produced it.
-	report, found, err := fetchClusterScanReport(ctx, securityIngestDeps.K8s, p.ClusterID, p.ClusterScanName)
+	stored, err := runtime.Deps.Queries.GetSecurityScanResultByID(ctx, scanID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
 	if err != nil {
-		return reschedule(ctx, p, err.Error())
+		return fmt.Errorf("load security scan: %w", err)
+	}
+	if !securityScanActive(stored) {
+		return nil
+	}
+	generation := p.Generation
+	if generation == 0 {
+		generation = stored.PollGeneration
+	}
+	if generation != stored.PollGeneration {
+		return nil
+	}
+	now := runtime.Deps.Now().UTC()
+	claimed, err := runtime.Deps.Queries.ClaimSecurityScanPoll(ctx, sqlc.ClaimSecurityScanPollParams{
+		Owner:          runtime.Deps.Owner,
+		LeaseExpiresAt: timestamptz(now.Add(ingestLease)),
+		ID:             scanID,
+		Generation:     generation,
+		NowAt:          timestamptz(now),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("claim security scan poll: %w", err)
+	}
+	if claimed.PollDeadline.Valid && !now.Before(claimed.PollDeadline.Time) {
+		return runtime.finishSecurityScanFailed(ctx, claimed, "ClusterScanReport ingestion deadline exceeded")
+	}
+	if claimed.PollAttempt > ingestMaxAttempts {
+		return runtime.finishSecurityScanFailed(ctx, claimed, fmt.Sprintf("ClusterScanReport not available after %d attempts", ingestMaxAttempts))
+	}
+
+	report, found, err := fetchClusterScanReport(ctx, runtime.Deps.K8s, claimed.ClusterID.String(), claimed.ClusterScanName)
+	if err != nil {
+		if isTerminalSecurityIngestError(err) {
+			return runtime.finishSecurityScanFailed(ctx, claimed, err.Error())
+		}
+		return runtime.rescheduleSecurityScan(ctx, claimed, err.Error())
 	}
 	if !found {
-		return reschedule(ctx, p, "report not yet available")
+		return runtime.rescheduleSecurityScan(ctx, claimed, "report not yet available")
 	}
 
 	counts, findings, summaryRaw, resultsRaw := flattenClusterScanReport(report)
 
-	if err := securityIngestDeps.Queries.UpdateSecurityScanReport(ctx, sqlc.UpdateSecurityScanReportParams{
-		ID:       scanID,
-		Summary:  summaryRaw,
-		Results:  resultsRaw,
-		Passed:   counts.Pass,
-		Failed:   counts.Fail,
-		Warned:   counts.Warn,
-		Skipped:  counts.Skip,
-		Findings: findings,
-	}); err != nil {
-		securityIngestDeps.Log.Error("update security scan report failed",
+	rows, err := runtime.Deps.Queries.FinalizeSecurityScanReport(ctx, sqlc.FinalizeSecurityScanReportParams{
+		Summary: summaryRaw, Results: resultsRaw, Passed: counts.Pass, Failed: counts.Fail,
+		Warned: counts.Warn, Skipped: counts.Skip, Findings: findings,
+		UpstreamReportName: reportObjectName(report), ID: claimed.ID,
+		Generation: claimed.PollGeneration, Owner: runtime.Deps.Owner,
+	})
+	if err != nil {
+		runtime.Deps.Log.Error("update security scan report failed",
 			"scan_id", p.ScanID, "error", err)
 		return err
 	}
-	securityIngestDeps.Log.Info("security scan ingested",
+	if rows == 0 {
+		return nil
+	}
+	runtime.publishSecurityScanChanged(claimed)
+	runtime.Deps.Log.Info("security scan ingested",
 		"scan_id", p.ScanID,
 		"pass", counts.Pass, "fail", counts.Fail, "warn", counts.Warn, "skip", counts.Skip)
 	return nil
 }
 
-// reschedule re-enqueues the ingest task unless we've hit the attempt
-// ceiling, in which case we mark the scan failed with a clear message.
-func reschedule(ctx context.Context, p SecurityScanIngestPayload, reason string) error {
-	p.AttemptCount++
-	if p.AttemptCount >= ingestMaxAttempts {
-		scanID, err := uuid.Parse(p.ScanID)
-		if err != nil {
-			return err
-		}
-		msg := fmt.Sprintf("ClusterScanReport not available after %d attempts: %s",
-			ingestMaxAttempts, reason)
-		if err := securityIngestDeps.Queries.UpdateSecurityScanFailedWithMessage(ctx, sqlc.UpdateSecurityScanFailedWithMessageParams{
-			ID:           scanID,
-			ErrorMessage: msg,
-		}); err != nil {
-			return err
-		}
-		securityIngestDeps.Log.Warn("security scan timed out", "scan_id", p.ScanID, "reason", reason)
-		return nil
+func (runtime SecurityIngestRuntime) rescheduleSecurityScan(ctx context.Context, scan sqlc.SecurityScanResult, reason string) error {
+	next := runtime.Deps.Now().UTC().Add(ingestPollInterval)
+	rows, err := runtime.Deps.Queries.RescheduleSecurityScanPoll(ctx, sqlc.RescheduleSecurityScanPollParams{
+		NextPollAt: timestamptz(next), Reason: reason, ID: scan.ID,
+		Generation: scan.PollGeneration, Owner: runtime.Deps.Owner,
+	})
+	if err != nil || rows == 0 {
+		return err
 	}
-	if securityIngestDeps.Queue == nil {
-		// No queue wired — fall through quietly. asynq's own retry will
-		// eventually take care of re-queueing.
-		return errors.New(reason)
-	}
-	task, err := NewSecurityIngestTask(p)
+	runtime.publishSecurityScanChanged(scan)
+	return runtime.enqueueSecurityScanPoll(ctx, scan, next,
+		fmt.Sprintf("security_scan_ingest:%s:%d:%d", scan.ID, scan.PollGeneration, scan.PollAttempt+1))
+}
+
+func (runtime SecurityIngestRuntime) finishSecurityScanFailed(ctx context.Context, scan sqlc.SecurityScanResult, reason string) error {
+	rows, err := runtime.Deps.Queries.FailSecurityScanPoll(ctx, sqlc.FailSecurityScanPollParams{
+		Reason: reason, ID: scan.ID, Generation: scan.PollGeneration, Owner: runtime.Deps.Owner,
+	})
 	if err != nil {
 		return err
 	}
-	if _, err := securityIngestDeps.Queue.Enqueue(task); err != nil {
-		return err
+	if rows > 0 {
+		runtime.publishSecurityScanChanged(scan)
+		runtime.Deps.Log.Warn("security scan ingestion failed", "scan_id", scan.ID, "reason", reason)
 	}
 	return nil
+}
+
+func (runtime SecurityIngestRuntime) enqueueSecurityScanPoll(ctx context.Context, scan sqlc.SecurityScanResult, due time.Time, dedupe string) error {
+	task, err := NewSecurityIngestTask(SecurityScanIngestPayload{ScanID: scan.ID.String(), Generation: scan.PollGeneration})
+	if err != nil {
+		return err
+	}
+	_, err = EnqueueTaskOutbox(ctx, runtime.Deps.Outbox, task, TaskOutboxOptions{
+		DedupeKey: dedupe, QueueName: ClusterTemplateApplyQueueName, MaxRetry: 3,
+		Timeout: 2 * time.Minute, MaxDeliveryAttempts: 20, NextAttemptAt: due,
+	})
+	return err
+}
+
+// HandleSecurityIngestRecovery is the periodic repair path for the crash
+// windows on both sides of Redis delivery. Row leases make duplicate recovery
+// tasks harmless, while a time-bucketed outbox key can replace a delivery that
+// Redis acknowledged and subsequently lost.
+func (runtime SecurityIngestRuntime) HandleSecurityIngestRecovery(ctx context.Context, _ *asynq.Task) error {
+	runtime = runtime.normalized()
+	return runPeriodicTaskWithLeaderUsing(ctx, runtime.Leader, runtime.Deps.Log, SecurityIngestRecoveryType, func() error {
+		if runtime.Deps.Queries == nil || runtime.Deps.Outbox == nil {
+			return fmt.Errorf("security ingest recovery runtime is not configured")
+		}
+		now := runtime.Deps.Now().UTC()
+		rows, err := runtime.Deps.Queries.ListRecoverableSecurityScans(ctx, sqlc.ListRecoverableSecurityScansParams{
+			NowAt: timestamptz(now), RowLimit: ingestRecoveryRows,
+		})
+		if err != nil {
+			return fmt.Errorf("list recoverable security scans: %w", err)
+		}
+		var firstErr error
+		for _, scan := range rows {
+			if scan.PollDeadline.Valid && !now.Before(scan.PollDeadline.Time) {
+				changed, failErr := runtime.Deps.Queries.FailSecurityScanPoll(ctx, sqlc.FailSecurityScanPollParams{
+					Reason: "ClusterScanReport ingestion deadline exceeded", ID: scan.ID,
+					Generation: scan.PollGeneration, Owner: "",
+				})
+				if failErr == nil && changed > 0 {
+					runtime.publishSecurityScanChanged(scan)
+				}
+				if failErr != nil && firstErr == nil {
+					firstErr = failErr
+				}
+				continue
+			}
+			dedupe := fmt.Sprintf("security_scan_recovery:%s:%d:%d", scan.ID, scan.PollGeneration, now.Unix()/60)
+			if enqueueErr := runtime.enqueueSecurityScanPoll(ctx, scan, now, dedupe); enqueueErr != nil && firstErr == nil {
+				firstErr = enqueueErr
+			}
+		}
+		return firstErr
+	})
+}
+
+func (runtime SecurityIngestRuntime) publishSecurityScanChanged(scan sqlc.SecurityScanResult) {
+	events.PublishChanged(runtime.Deps.Bus, "cis_scan", scan.ClusterID.String(), scan.ID.String(), nil)
+	events.PublishChanged(runtime.Deps.Bus, "security_scan", scan.ClusterID.String(), scan.ID.String(), nil)
+}
+
+func securityScanActive(scan sqlc.SecurityScanResult) bool {
+	if scan.CancelRequestedAt.Valid {
+		return false
+	}
+	switch scan.Status {
+	case "pending", "running", "in_progress":
+		return true
+	default:
+		return false
+	}
+}
+
+func timestamptz(value time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: value.UTC(), Valid: true}
+}
+
+type terminalSecurityIngestError struct{ err error }
+
+func (e terminalSecurityIngestError) Error() string { return e.err.Error() }
+func (e terminalSecurityIngestError) Unwrap() error { return e.err }
+
+func isTerminalSecurityIngestError(err error) bool {
+	var terminal terminalSecurityIngestError
+	return errors.As(err, &terminal)
+}
+
+func securityIngestStatusError(status int) error {
+	err := fmt.Errorf("unexpected Kubernetes API status %d", status)
+	if status >= http.StatusBadRequest && status < http.StatusInternalServerError && status != http.StatusNotFound {
+		return terminalSecurityIngestError{err: err}
+	}
+	return err
+}
+
+func reportObjectName(report map[string]any) string {
+	metadata, _ := report["metadata"].(map[string]any)
+	name, _ := metadata["name"].(string)
+	return strings.TrimSpace(name)
 }
 
 // fetchClusterScanReport queries the per-cluster API for a ClusterScanReport
@@ -280,11 +359,14 @@ func fetchClusterScanReport(ctx context.Context, fetcher SecurityIngestK8sFetche
 	if err != nil {
 		return nil, false, err
 	}
+	if resp == nil {
+		return nil, false, errors.New("empty Kubernetes API response")
+	}
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, false, nil
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, false, fmt.Errorf("unexpected status %d", resp.StatusCode)
+		return nil, false, securityIngestStatusError(resp.StatusCode)
 	}
 	body, err := decodeIngestBody(resp)
 	if err != nil {
@@ -292,7 +374,7 @@ func fetchClusterScanReport(ctx context.Context, fetcher SecurityIngestK8sFetche
 	}
 	var out map[string]any
 	if err := json.Unmarshal(body, &out); err != nil {
-		return nil, false, err
+		return nil, false, terminalSecurityIngestError{err: fmt.Errorf("decode ClusterScanReport JSON: %w", err)}
 	}
 	return out, true, nil
 }
@@ -310,11 +392,14 @@ func fetchClusterScanReportNameFromScan(ctx context.Context, fetcher SecurityIng
 	if err != nil {
 		return "", false, err
 	}
+	if resp == nil {
+		return "", false, errors.New("empty Kubernetes API response")
+	}
 	if resp.StatusCode == http.StatusNotFound {
 		return "", false, nil
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
-		return "", false, fmt.Errorf("unexpected status %d", resp.StatusCode)
+		return "", false, securityIngestStatusError(resp.StatusCode)
 	}
 	body, err := decodeIngestBody(resp)
 	if err != nil {
@@ -326,7 +411,7 @@ func fetchClusterScanReportNameFromScan(ctx context.Context, fetcher SecurityIng
 		} `json:"status"`
 	}
 	if err := json.Unmarshal(body, &scan); err != nil {
-		return "", false, err
+		return "", false, terminalSecurityIngestError{err: fmt.Errorf("decode ClusterScan JSON: %w", err)}
 	}
 	if scan.Status.ReportName == "" {
 		return "", false, nil
@@ -339,11 +424,14 @@ func findClusterScanReportNameByOwner(ctx context.Context, fetcher SecurityInges
 	if err != nil {
 		return "", false, err
 	}
+	if resp == nil {
+		return "", false, errors.New("empty Kubernetes API response")
+	}
 	if resp.StatusCode == http.StatusNotFound {
 		return "", false, nil
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
-		return "", false, fmt.Errorf("unexpected status %d", resp.StatusCode)
+		return "", false, securityIngestStatusError(resp.StatusCode)
 	}
 	body, err := decodeIngestBody(resp)
 	if err != nil {
@@ -360,7 +448,7 @@ func findClusterScanReportNameByOwner(ctx context.Context, fetcher SecurityInges
 		} `json:"items"`
 	}
 	if err := json.Unmarshal(body, &list); err != nil {
-		return "", false, err
+		return "", false, terminalSecurityIngestError{err: fmt.Errorf("decode ClusterScanReport list JSON: %w", err)}
 	}
 	for _, item := range list.Items {
 		if item.Metadata.Name == scanName {
@@ -487,5 +575,15 @@ func decodeIngestBody(resp *protocol.K8sResponsePayload) ([]byte, error) {
 	if resp == nil || resp.Body == "" {
 		return nil, nil
 	}
-	return base64.StdEncoding.DecodeString(resp.Body)
+	if len(resp.Body) > base64.StdEncoding.EncodedLen(maxIngestBodyBytes) {
+		return nil, terminalSecurityIngestError{err: fmt.Errorf("Kubernetes API response exceeds %d bytes", maxIngestBodyBytes)}
+	}
+	body, err := base64.StdEncoding.DecodeString(resp.Body)
+	if err != nil {
+		return nil, terminalSecurityIngestError{err: fmt.Errorf("decode Kubernetes API response body: %w", err)}
+	}
+	if len(body) > maxIngestBodyBytes {
+		return nil, terminalSecurityIngestError{err: fmt.Errorf("Kubernetes API response exceeds %d bytes", maxIngestBodyBytes)}
+	}
+	return body, nil
 }

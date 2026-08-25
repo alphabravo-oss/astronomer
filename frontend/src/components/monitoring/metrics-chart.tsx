@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useMemo } from 'react';
+import { useMemo } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -10,10 +10,10 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-} from 'recharts';
-import { format, parseISO } from 'date-fns';
-import { formatBytes, formatCPU, cn } from '@/lib/utils';
-import type { MetricsSeries } from '@/types';
+} from "recharts";
+import { format, parseISO } from "date-fns";
+import { formatBytes, formatCPU, cn } from "@/lib/utils";
+import type { MetricsSeries } from "@/types";
 
 interface MetricsChartProps {
   title: string;
@@ -24,17 +24,17 @@ interface MetricsChartProps {
 }
 
 const CHART_COLORS = [
-  { stroke: '#3b82f6', fill: '#3b82f6' },  // blue
-  { stroke: '#6366f1', fill: '#6366f1' },  // indigo
-  { stroke: '#10b981', fill: '#10b981' },  // green
-  { stroke: '#f59e0b', fill: '#f59e0b' },  // amber
-  { stroke: '#ef4444', fill: '#ef4444' },  // red
+  { stroke: "#3b82f6", fill: "#3b82f6" }, // blue
+  { stroke: "#6366f1", fill: "#6366f1" }, // indigo
+  { stroke: "#10b981", fill: "#10b981" }, // green
+  { stroke: "#f59e0b", fill: "#f59e0b" }, // amber
+  { stroke: "#ef4444", fill: "#ef4444" }, // red
 ];
 
 export function MetricsChart({
   title,
   series,
-  unit = '',
+  unit = "",
   height = 280,
   className,
 }: MetricsChartProps) {
@@ -62,10 +62,10 @@ export function MetricsChart({
   }, [series]);
 
   const formatValue = (value: number): string => {
-    if (unit === 'bytes' || unit === 'bytes/s') return formatBytes(value);
-    if (unit === 'millicores') return formatCPU(value);
-    if (unit === '%') return `${value.toFixed(1)}%`;
-    if (typeof value === 'number') {
+    if (unit === "bytes" || unit === "bytes/s") return formatBytes(value);
+    if (unit === "millicores") return formatCPU(value);
+    if (unit === "%") return `${value.toFixed(1)}%`;
+    if (typeof value === "number") {
       return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(1);
     }
     return String(value);
@@ -73,7 +73,7 @@ export function MetricsChart({
 
   const formatTimestamp = (ts: string): string => {
     try {
-      return format(parseISO(ts), 'HH:mm');
+      return format(parseISO(ts), "HH:mm");
     } catch {
       return ts;
     }
@@ -81,7 +81,9 @@ export function MetricsChart({
 
   if (!chartData.length) {
     return (
-      <div className={cn('rounded-lg border border-border bg-card p-5', className)}>
+      <div
+        className={cn("rounded-lg border border-border bg-card p-5", className)}
+      >
         <h3 className="text-sm font-medium text-foreground mb-4">{title}</h3>
         <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
           No data available
@@ -91,15 +93,35 @@ export function MetricsChart({
   }
 
   return (
-    <div className={cn('rounded-lg border border-border bg-card p-5', className)}>
+    <div
+      className={cn("rounded-lg border border-border bg-card p-5", className)}
+    >
       <h3 className="text-sm font-medium text-foreground mb-4">{title}</h3>
       <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+        <AreaChart
+          data={chartData}
+          margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
+        >
           <defs>
             {series.map((_, idx) => (
-              <linearGradient key={idx} id={`gradient_${idx}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={CHART_COLORS[idx % CHART_COLORS.length].fill} stopOpacity={0.15} />
-                <stop offset="100%" stopColor={CHART_COLORS[idx % CHART_COLORS.length].fill} stopOpacity={0.01} />
+              <linearGradient
+                key={idx}
+                id={`gradient_${idx}`}
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop
+                  offset="0%"
+                  stopColor={CHART_COLORS[idx % CHART_COLORS.length].fill}
+                  stopOpacity={0.15}
+                />
+                <stop
+                  offset="100%"
+                  stopColor={CHART_COLORS[idx % CHART_COLORS.length].fill}
+                  stopOpacity={0.01}
+                />
               </linearGradient>
             ))}
           </defs>
@@ -135,7 +157,9 @@ export function MetricsChart({
               return (
                 <div className="rounded-lg border border-border bg-popover px-3 py-2 shadow-xl">
                   <p className="text-xs text-muted-foreground mb-1.5">
-                    {label ? format(parseISO(label as string), 'MMM d, HH:mm:ss') : ''}
+                    {label
+                      ? format(parseISO(label as string), "MMM d, HH:mm:ss")
+                      : ""}
                   </p>
                   {payload.map((entry, idx) => (
                     <div key={idx} className="flex items-center gap-2 text-sm">
@@ -144,7 +168,10 @@ export function MetricsChart({
                         style={{ backgroundColor: entry.color }}
                       />
                       <span className="text-muted-foreground">
-                        {series[idx]?.label || series[idx]?.name || `Series ${idx + 1}`}:
+                        {series[idx]?.label ||
+                          series[idx]?.name ||
+                          `Series ${idx + 1}`}
+                        :
                       </span>
                       <span className="font-medium text-foreground tabular-nums">
                         {formatValue(entry.value as number)}
@@ -161,12 +188,17 @@ export function MetricsChart({
               content={({ payload }) => (
                 <div className="flex items-center justify-center gap-4 mt-2">
                   {payload?.map((entry, idx) => (
-                    <div key={idx} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <div
+                      key={idx}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                    >
                       <span
                         className="inline-block w-2.5 h-0.5 rounded-full"
                         style={{ backgroundColor: entry.color }}
                       />
-                      {series[idx]?.label || series[idx]?.name || `Series ${idx + 1}`}
+                      {series[idx]?.label ||
+                        series[idx]?.name ||
+                        `Series ${idx + 1}`}
                     </div>
                   ))}
                 </div>

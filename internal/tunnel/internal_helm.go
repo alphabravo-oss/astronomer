@@ -53,6 +53,7 @@ const internalHelmWait = 10 * time.Minute
 // We carry MsgType in the body rather than the URL so the endpoint
 // surface stays a single route — siblings discriminate per-op only at the
 // payload boundary.
+// openapi:request-operation internalTunnelHelm
 type InternalHelmRequest struct {
 	MsgType protocol.MessageType        `json:"msg_type"`
 	Payload protocol.HelmRequestPayload `json:"payload"`

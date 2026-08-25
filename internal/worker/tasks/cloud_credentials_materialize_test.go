@@ -145,17 +145,16 @@ func (fakeDecryptor) Decrypt(token string) (string, error) {
 
 // --- Tests -------------------------------------------------------------
 
-func setupMaterializeDeps(t *testing.T) (*fakeCloudCredentialQuerier, *fakeProjectK8sRequester) {
+func setupMaterializeDeps(t *testing.T) (*fakeCloudCredentialQuerier, *fakeProjectK8sRequester, CloudCredentialRuntime) {
 	t.Helper()
 	q := newFakeCloudCredentialQuerier()
 	r := &fakeProjectK8sRequester{}
-	ConfigureCloudCredentialMaterialize(CloudCredentialMaterializeDeps{
+	runtime := CloudCredentialRuntime{Deps: CloudCredentialMaterializeDeps{
 		Queries:   q,
 		Requester: r,
 		Decryptor: fakeDecryptor{},
-	})
-	t.Cleanup(ResetCloudCredentialMaterialize)
-	return q, r
+	}}
+	return q, r, runtime
 }
 
 // TestMaterialize_CreatesK8sSecret is the happy-path apply: a credential
@@ -163,7 +162,7 @@ func setupMaterializeDeps(t *testing.T) (*fakeCloudCredentialQuerier, *fakeProje
 // blob, builds the Secret manifest, SSAs it through the requester, and
 // marks the row applied.
 func TestMaterialize_CreatesK8sSecret(t *testing.T) {
-	q, r := setupMaterializeDeps(t)
+	q, r, runtime := setupMaterializeDeps(t)
 
 	credID := uuid.New()
 	clusterID := uuid.New()
@@ -197,7 +196,7 @@ func TestMaterialize_CreatesK8sSecret(t *testing.T) {
 		Op:           "apply",
 	})
 	task := asynq.NewTask(CloudCredentialMaterializeType, payload)
-	if err := HandleCloudCredentialMaterialize(context.Background(), task); err != nil {
+	if err := runtime.HandleCloudCredentialMaterialize(context.Background(), task); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -243,7 +242,7 @@ func TestMaterialize_CreatesK8sSecret(t *testing.T) {
 
 // TestMaterialize_RemovesSecretOnDelete exercises the Op=delete path.
 func TestMaterialize_RemovesSecretOnDelete(t *testing.T) {
-	_, r := setupMaterializeDeps(t)
+	_, r, runtime := setupMaterializeDeps(t)
 	payload, _ := json.Marshal(CloudCredentialMaterializePayload{
 		CredentialID: uuid.New().String(),
 		ClusterID:    uuid.New().String(),
@@ -252,7 +251,7 @@ func TestMaterialize_RemovesSecretOnDelete(t *testing.T) {
 		Op:           "delete",
 	})
 	task := asynq.NewTask(CloudCredentialMaterializeType, payload)
-	if err := HandleCloudCredentialMaterialize(context.Background(), task); err != nil {
+	if err := runtime.HandleCloudCredentialMaterialize(context.Background(), task); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := r.all()
@@ -271,7 +270,7 @@ func TestMaterialize_RemovesSecretOnDelete(t *testing.T) {
 // non-applied row and re-applies each via the same code path as the
 // single-task handler.
 func TestMaterialize_DriftReconcile(t *testing.T) {
-	q, r := setupMaterializeDeps(t)
+	q, r, runtime := setupMaterializeDeps(t)
 	// Seed two credentials, each with one pending materialization.
 	for i := 0; i < 2; i++ {
 		credID := uuid.New()
@@ -295,7 +294,7 @@ func TestMaterialize_DriftReconcile(t *testing.T) {
 			Status:       "pending",
 		}}
 	}
-	if err := HandleCloudCredentialDriftReconcile(context.Background(), nil); err != nil {
+	if err := runtime.HandleCloudCredentialDriftReconcile(context.Background(), nil); err != nil {
 		t.Fatalf("drift reconcile failed: %v", err)
 	}
 	if got := r.all(); len(got) != 2 {
@@ -307,7 +306,7 @@ func TestMaterialize_DriftReconcile(t *testing.T) {
 // from the requester stamps the row as failed with the body in
 // last_error.
 func TestMaterialize_FailureMarksRowFailed(t *testing.T) {
-	q, r := setupMaterializeDeps(t)
+	q, r, runtime := setupMaterializeDeps(t)
 	r.respFn = func(k8sRequest) (*ProjectK8sResponse, error) {
 		return &ProjectK8sResponse{StatusCode: http.StatusForbidden, Body: []byte(`{"reason":"Forbidden"}`)}, nil
 	}
@@ -341,7 +340,7 @@ func TestMaterialize_FailureMarksRowFailed(t *testing.T) {
 		Op:           "apply",
 	})
 	task := asynq.NewTask(CloudCredentialMaterializeType, payload)
-	if err := HandleCloudCredentialMaterialize(context.Background(), task); err == nil {
+	if err := runtime.HandleCloudCredentialMaterialize(context.Background(), task); err == nil {
 		t.Fatalf("expected error from non-2xx response")
 	}
 	if len(q.failedCalls) != 1 || q.failedCalls[0].ID != matID {
@@ -359,7 +358,7 @@ func TestMaterialize_FailureMarksRowFailed(t *testing.T) {
 // from the loaded row, so a tampered payload can't trick the worker
 // into applying a credential from another project.
 func TestMaterialize_RBACProjectScope(t *testing.T) {
-	q, r := setupMaterializeDeps(t)
+	q, r, runtime := setupMaterializeDeps(t)
 
 	// A credential exists under project P, with a materialization for
 	// cluster C / namespace N. The worker payload references the same
@@ -390,7 +389,7 @@ func TestMaterialize_RBACProjectScope(t *testing.T) {
 		Op:           "apply",
 	})
 	task := asynq.NewTask(CloudCredentialMaterializeType, payload)
-	if err := HandleCloudCredentialMaterialize(context.Background(), task); err != nil {
+	if err := runtime.HandleCloudCredentialMaterialize(context.Background(), task); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := r.all()

@@ -70,6 +70,17 @@ WHERE status = 'running'
 ORDER BY created_at ASC
 LIMIT $1 OFFSET $2;
 
+-- name: ListPendingControlPlaneSnapshots :many
+-- Crash-repair source for a desired-state row committed before its targeted
+-- task reached a tunnel owner. Applying by immutable snapshot ID is
+-- idempotent, so the periodic sweep may safely race normal task delivery.
+SELECT id, cluster_id, name, status, location, size_bytes,
+       requested_by_id, error, created_at, completed_at
+FROM control_plane_snapshots
+WHERE status = 'pending'
+ORDER BY created_at ASC
+LIMIT $1;
+
 -- name: PruneControlPlaneSnapshots :exec
 -- Retention: keep the newest $2 rows for the cluster, delete the rest.
 -- Only terminal rows are eligible so an in-flight snapshot is never

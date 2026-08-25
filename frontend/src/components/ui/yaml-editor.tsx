@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import { lazy, Suspense, useRef, useCallback } from 'react';
-import { CheckCircle2, Copy, Download, Save, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { toastError, toastSuccess } from '@/lib/toast';
-import { ActionButton } from '@/components/ui/action-button';
+import { lazy, Suspense, useRef, useCallback } from "react";
+import { CheckCircle2, Copy, Download, Save, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { toastError, toastSuccess } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
 
-const MonacoEditor = lazy(() => import('@monaco-editor/react'));
+const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
 function EditorLoading() {
   return (
@@ -38,7 +38,7 @@ export function YamlEditor({
   saving,
   dryRunning,
   saveBlocked,
-  height = '100%',
+  height = "100%",
   className,
 }: YamlEditorProps) {
   const editorRef = useRef<unknown>(null);
@@ -50,18 +50,18 @@ export function YamlEditor({
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(value);
-      toastSuccess('Copied to clipboard');
+      toastSuccess("Copied to clipboard");
     } catch {
-      toastError('Failed to copy');
+      toastError("Failed to copy");
     }
   }, [value]);
 
   const handleDownload = useCallback(() => {
-    const blob = new Blob([value], { type: 'text/yaml' });
+    const blob = new Blob([value], { type: "text/yaml" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = 'resource.yaml';
+    a.download = "resource.yaml";
     a.click();
     URL.revokeObjectURL(url);
   }, [value]);
@@ -75,15 +75,23 @@ export function YamlEditor({
   }, [onDryRun, value]);
 
   return (
-    <div className={cn('flex flex-col', className)}>
+    <div className={cn("flex flex-col", className)}>
       {/* Toolbar */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-terminal text-terminal-foreground border-b border-border">
         <span className="text-xs text-terminal-foreground/60">YAML</span>
         <div className="flex items-center gap-1">
-          <button onClick={handleCopy} className="p-1.5 rounded hover:bg-white/10 text-terminal-foreground/80 hover:text-terminal-foreground transition-colors" title="Copy">
+          <button
+            onClick={handleCopy}
+            className="p-1.5 rounded hover:bg-white/10 text-terminal-foreground/80 hover:text-terminal-foreground transition-colors"
+            title="Copy"
+          >
             <Copy className="h-3.5 w-3.5" />
           </button>
-          <button onClick={handleDownload} className="p-1.5 rounded hover:bg-white/10 text-terminal-foreground/80 hover:text-terminal-foreground transition-colors" title="Download">
+          <button
+            onClick={handleDownload}
+            className="p-1.5 rounded hover:bg-white/10 text-terminal-foreground/80 hover:text-terminal-foreground transition-colors"
+            title="Download"
+          >
             <Download className="h-3.5 w-3.5" />
           </button>
           {!readOnly && onDryRun && (
@@ -105,7 +113,11 @@ export function YamlEditor({
             <ActionButton
               onClick={handleSave}
               disabled={saving || dryRunning}
-              disabledReason={saveBlocked ? 'Run dry run and review the diff before saving' : undefined}
+              disabledReason={
+                saveBlocked
+                  ? "Run dry run and review the diff before saving"
+                  : undefined
+              }
               icon={<Save className="h-3 w-3" />}
               intent="primary"
               loading={saving}
@@ -127,18 +139,18 @@ export function YamlEditor({
             language="yaml"
             theme="vs-dark"
             value={value}
-            onChange={(v) => onChange?.(v || '')}
+            onChange={(v) => onChange?.(v || "")}
             onMount={handleEditorDidMount}
             options={{
               readOnly,
               minimap: { enabled: false },
               fontSize: 13,
-              lineNumbers: 'on',
+              lineNumbers: "on",
               scrollBeyondLastLine: false,
-              wordWrap: 'on',
+              wordWrap: "on",
               tabSize: 2,
               automaticLayout: true,
-              renderLineHighlight: 'line',
+              renderLineHighlight: "line",
               folding: true,
               padding: { top: 8 },
             }}

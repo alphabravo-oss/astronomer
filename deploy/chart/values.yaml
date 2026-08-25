@@ -395,13 +395,13 @@ preflight:
     tag: "v1.1.0"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
-  # v1 is fresh-install-only. The external-database hook admits an empty
-  # database or an already-clean v1 singleton migration. It rejects dirty,
-  # v0 multi-migration, unknown-version, and legacy delivery-table states
-  # without changing the database or deleting any PVC.
-  freshInstall:
-    required: true
-    acceptedSchemaVersion: 1
+  # Read-only upgrade admission for external databases. Empty databases are
+  # accepted for fresh installs; clean schemas in this inclusive range are
+  # accepted for an in-place migration to targetVersion. Dirty, future,
+  # pre-support, multi-row, and legacy-provider schemas fail before mutation.
+  databaseSchema:
+    minimumUpgradeVersion: 1
+    targetVersion: 26
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65534

@@ -65,6 +65,8 @@ group `astronomer.observability.alerts`):
 - `astronomer_db_longest_transaction_seconds{astronomer_instance_id}`
 - `astronomer_task_outbox_rows{astronomer_instance_id,status}`
 - `astronomer_task_outbox_oldest_due_seconds{astronomer_instance_id,status}`
+- `astronomer_audit_outbox_rows{astronomer_instance_id,status}`
+- `astronomer_audit_outbox_oldest_seconds{astronomer_instance_id,status}`
 
 Chart-shipped Prometheus rules also consume Kubernetes/Postgres exporter
 metrics when available:
@@ -85,6 +87,17 @@ metrics when available:
 - `astronomer_tunnel_state_updates_received_total{astronomer_instance_id,kind}`
 - `astronomer_tunnel_state_updates_handled_total{astronomer_instance_id,outcome,kind}`
 - `astronomer_k8s_proxy_errors_total{astronomer_instance_id,mode,reason}`
+
+## API-server allow-list metrics
+
+- `astronomer_apiserver_allowlist_drift{astronomer_instance_id,cluster}` — `1` while provider-effective CIDRs differ from desired state.
+- `astronomer_apiserver_allowlist_reconciles_total{astronomer_instance_id,cluster,provider,outcome}` — bounded reconcile outcomes.
+- `astronomer_apiserver_allowlist_provider_authorization_failures_total{astronomer_instance_id,cluster,provider}` — provider HTTP 401/403 failures only.
+
+The chart alerts after 30 minutes of continuous drift and after three provider
+authorization failures in 15 minutes. Cluster/provider labels are bounded by
+the adopted estate and supported provider registry; errors and credentials are
+never metric labels.
 
 ## Delivery metrics
 

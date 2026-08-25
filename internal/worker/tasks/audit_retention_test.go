@@ -6,12 +6,27 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type fakeAuditRetentionQuerier struct {
 	partitions []string
 	dropped    []string
 	dropErr    error
+}
+
+type fakeAuditRetentionWithOutbox struct {
+	fakeAuditRetentionQuerier
+	cutoff      pgtype.Timestamptz
+	purged      int64
+	purgeCalled int
+}
+
+func (f *fakeAuditRetentionWithOutbox) DeleteDeliveredAuditOutboxBefore(_ context.Context, cutoff pgtype.Timestamptz) (int64, error) {
+	f.purgeCalled++
+	f.cutoff = cutoff
+	return f.purged, nil
 }
 
 func (f *fakeAuditRetentionQuerier) ListAuditLogPartitions(_ context.Context) ([]string, error) {
@@ -92,9 +107,24 @@ func TestEnforceAuditLogRetentionPropagatesDropError(t *testing.T) {
 	}
 }
 
+func TestEnforceAuditLogRetentionPurgesOnlyOldDeliveredOutboxReceipts(t *testing.T) {
+	now := time.Date(2026, time.May, 9, 12, 0, 0, 0, time.UTC)
+	q := &fakeAuditRetentionWithOutbox{purged: 7}
+
+	if err := enforceAuditLogRetention(context.Background(), q, now, 13); err != nil {
+		t.Fatalf("enforceAuditLogRetention: %v", err)
+	}
+	if q.purgeCalled != 1 || !q.cutoff.Valid {
+		t.Fatalf("outbox purge calls=%d cutoff=%#v", q.purgeCalled, q.cutoff)
+	}
+	want := now.Add(-deliveredAuditOutboxRetention)
+	if !q.cutoff.Time.Equal(want) {
+		t.Fatalf("outbox cutoff = %s, want %s", q.cutoff.Time, want)
+	}
+}
+
 func TestHandleEnforceAuditLogRetentionNoRuntime(t *testing.T) {
-	defer resetRuntime()
-	if err := HandleEnforceAuditLogRetention(context.Background(), nil); err != nil {
-		t.Fatalf("HandleEnforceAuditLogRetention: %v", err)
+	if err := HandleEnforceAuditLogRetention(testRuntimeContext(RuntimeDependencies{}), nil); err == nil {
+		t.Fatal("HandleEnforceAuditLogRetention returned nil, want an unconfigured-runtime error")
 	}
 }

@@ -9,17 +9,17 @@
  * patching to new domains.
  */
 
-import { useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 // Aliased to `qk` to match the rest of the live module (the hooks file has a
 // `queryKeys` parameter that would otherwise shadow the factory import).
-import { queryKeys as qk } from '@/lib/query-keys';
+import { queryKeys as qk } from "@/lib/query-keys";
 import type {
   ClusterMetricsPayload,
   ClusterStatusChangedPayload,
   LiveEvent,
-} from './envelope';
-import { acquireLiveStream, liveTarget, releaseLiveStream } from './stream';
+} from "./envelope";
+import { acquireLiveStream, liveTarget, releaseLiveStream } from "./stream";
 
 /**
  * Mount alongside `useLiveEvents()` in the dashboard layout. The optimistic
@@ -34,7 +34,8 @@ export function useLiveClusterMetricsMerger(): void {
     const target = liveTarget();
 
     const onMetrics = (e: Event) => {
-      const detail = (e as CustomEvent<LiveEvent<ClusterMetricsPayload>>).detail;
+      const detail = (e as CustomEvent<LiveEvent<ClusterMetricsPayload>>)
+        .detail;
       const payload = detail?.data;
       if (!payload?.clusterId) return;
 
@@ -48,23 +49,31 @@ export function useLiveClusterMetricsMerger(): void {
       );
 
       // Detail page cache: ['clusters', 'detail', id]
-      queryClient.setQueryData(qk.clusters.detail(payload.clusterId), (old: unknown) =>
-        mergeClusterMetricsIntoDetail(old, payload),
+      queryClient.setQueryData(
+        qk.clusters.detail(payload.clusterId),
+        (old: unknown) => mergeClusterMetricsIntoDetail(old, payload),
       );
     };
 
     const onStatus = (e: Event) => {
-      const detail = (e as CustomEvent<LiveEvent<ClusterStatusChangedPayload>>).detail;
+      const detail = (e as CustomEvent<LiveEvent<ClusterStatusChangedPayload>>)
+        .detail;
       const payload = detail?.data;
       if (!payload?.clusterId || !payload?.newStatus) return;
       // Patch any cached list / detail responses to flip the status field
       // without waiting for the next refetch.
       queryClient.setQueriesData(
         { queryKey: qk.clusters.listAll },
-        (old: unknown) => mergeClusterStatusIntoListResponse(old, payload.clusterId, payload.newStatus!),
+        (old: unknown) =>
+          mergeClusterStatusIntoListResponse(
+            old,
+            payload.clusterId,
+            payload.newStatus!,
+          ),
       );
-      queryClient.setQueryData(qk.clusters.detail(payload.clusterId), (old: unknown) =>
-        mergeClusterStatusIntoDetail(old, payload.newStatus!),
+      queryClient.setQueryData(
+        qk.clusters.detail(payload.clusterId),
+        (old: unknown) => mergeClusterStatusIntoDetail(old, payload.newStatus!),
       );
       // NOTE: we deliberately do NOT invalidateQueries here. The optimistic
       // patch above already reflects the new status; an unconditional
@@ -73,12 +82,18 @@ export function useLiveClusterMetricsMerger(): void {
       // dependent caches catch up via the query's own periodic refetch.
     };
 
-    target.addEventListener('cluster.metrics', onMetrics as EventListener);
-    target.addEventListener('cluster.status_changed', onStatus as EventListener);
+    target.addEventListener("cluster.metrics", onMetrics as EventListener);
+    target.addEventListener(
+      "cluster.status_changed",
+      onStatus as EventListener,
+    );
 
     return () => {
-      target.removeEventListener('cluster.metrics', onMetrics as EventListener);
-      target.removeEventListener('cluster.status_changed', onStatus as EventListener);
+      target.removeEventListener("cluster.metrics", onMetrics as EventListener);
+      target.removeEventListener(
+        "cluster.status_changed",
+        onStatus as EventListener,
+      );
       releaseLiveStream();
     };
   }, [queryClient]);
@@ -118,7 +133,7 @@ function mergeClusterMetricsIntoListResponse(
   old: unknown,
   m: ClusterMetricsPayload,
 ): unknown {
-  if (!old || typeof old !== 'object') return old;
+  if (!old || typeof old !== "object") return old;
   const list = old as ClusterListShape;
   if (!Array.isArray(list.data)) return old;
   const idx = list.data.findIndex((c) => c.id === m.clusterId);
@@ -133,13 +148,16 @@ function mergeClusterMetricsIntoListResponse(
     // `disconnected`, the cluster is clearly active — flip the status
     // optimistically (the cluster.status_changed sweep will confirm
     // shortly).
-    status: next[idx].status === 'disconnected' ? 'active' : next[idx].status,
+    status: next[idx].status === "disconnected" ? "active" : next[idx].status,
   };
   return { ...list, data: next };
 }
 
-function mergeClusterMetricsIntoDetail(old: unknown, m: ClusterMetricsPayload): unknown {
-  if (!old || typeof old !== 'object') return old;
+function mergeClusterMetricsIntoDetail(
+  old: unknown,
+  m: ClusterMetricsPayload,
+): unknown {
+  if (!old || typeof old !== "object") return old;
   const c = old as ClusterDetailShape;
   if (c.id !== m.clusterId) return old;
   return {
@@ -147,7 +165,7 @@ function mergeClusterMetricsIntoDetail(old: unknown, m: ClusterMetricsPayload): 
     cpuPercentage: m.cpuPercentage,
     memoryPercentage: m.memoryPercentage,
     podCount: m.podCount,
-    status: c.status === 'disconnected' ? 'active' : c.status,
+    status: c.status === "disconnected" ? "active" : c.status,
   };
 }
 
@@ -156,7 +174,7 @@ function mergeClusterStatusIntoListResponse(
   clusterId: string,
   newStatus: string,
 ): unknown {
-  if (!old || typeof old !== 'object') return old;
+  if (!old || typeof old !== "object") return old;
   const list = old as ClusterListShape;
   if (!Array.isArray(list.data)) return old;
   const idx = list.data.findIndex((c) => c.id === clusterId);
@@ -166,8 +184,11 @@ function mergeClusterStatusIntoListResponse(
   return { ...list, data: next };
 }
 
-function mergeClusterStatusIntoDetail(old: unknown, newStatus: string): unknown {
-  if (!old || typeof old !== 'object') return old;
+function mergeClusterStatusIntoDetail(
+  old: unknown,
+  newStatus: string,
+): unknown {
+  if (!old || typeof old !== "object") return old;
   const c = old as ClusterDetailShape;
   return { ...c, status: newStatus };
 }

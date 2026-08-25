@@ -50,6 +50,14 @@ func RespondRequestError(w http.ResponseWriter, r *http.Request, status int, cod
 	writeJSON(w, status, map[string]any{"error": errObj})
 }
 
+// RespondAcceptedOperation writes a durable-operation receipt and the standard
+// polling headers clients need to recover progress after a disconnect.
+func RespondAcceptedOperation(w http.ResponseWriter, location string, payload any) {
+	w.Header().Set("Location", location)
+	w.Header().Set("Retry-After", "2")
+	RespondJSON(w, http.StatusAccepted, payload)
+}
+
 // RespondPaginated writes a paginated JSON response matching DRF list format.
 // It extracts limit and offset from the request's query parameters,
 // defaulting to limit=20 and offset=0. Always responds with status 200.

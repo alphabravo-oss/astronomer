@@ -82,9 +82,9 @@ func TestExtensionTicket_ScopeMismatch(t *testing.T) {
 	other := uuid.New()
 
 	cases := []struct {
-		name                 string
-		ext, dsID            string
-		clusterID            uuid.UUID
+		name      string
+		ext, dsID string
+		clusterID uuid.UUID
 	}{
 		{"wrong extension", "other-ext", "podCost", cluster},
 		{"wrong dataSource", "cost-insights", "otherSource", cluster},

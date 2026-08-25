@@ -15,6 +15,7 @@ import (
 type charlieRuntimeGeneration struct {
 	events     *charlie.EventRuntime
 	dispatcher tasks.CharlieTriggerDispatcher
+	triggers   *tasks.CharlieTriggerRuntime
 
 	mu      sync.Mutex
 	stopped bool
@@ -29,7 +30,7 @@ func (g *charlieRuntimeGeneration) Run(ctx context.Context) {
 		g.mu.Unlock()
 		return
 	}
-	tasks.ConfigureCharlieTriggerDispatcher(g.dispatcher)
+	g.triggers.SetDispatcher(g.dispatcher)
 	g.mu.Unlock()
 	if g.events != nil {
 		go g.events.Run(ctx)
@@ -47,7 +48,7 @@ func (g *charlieRuntimeGeneration) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	g.stopped = true
-	tasks.ConfigureCharlieTriggerDispatcher(nil)
+	g.triggers.SetDispatcher(nil)
 	g.mu.Unlock()
 	return nil
 }

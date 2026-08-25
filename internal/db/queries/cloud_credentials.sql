@@ -23,6 +23,18 @@ SELECT id, project_id, name, provider, description, data_encrypted, target_refs,
 FROM cloud_credentials
 WHERE project_id = $1 AND name = $2;
 
+-- name: ListCloudCredentialsForCluster :many
+-- Cloud control-plane reconcilers resolve credentials through the same
+-- explicit target_refs/materialization relationship used for Kubernetes
+-- Secret delivery. DISTINCT collapses one credential targeting multiple
+-- namespaces in the same cluster.
+SELECT DISTINCT c.id, c.project_id, c.name, c.provider, c.description,
+       c.data_encrypted, c.target_refs, c.created_by, c.created_at, c.updated_at
+FROM cloud_credentials c
+JOIN cloud_credential_materializations m ON m.credential_id = c.id
+WHERE m.cluster_id = $1
+ORDER BY c.name ASC;
+
 -- name: CreateCloudCredential :one
 INSERT INTO cloud_credentials (
     project_id, name, provider, description, data_encrypted, target_refs, created_by

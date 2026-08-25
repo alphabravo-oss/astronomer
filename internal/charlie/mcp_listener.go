@@ -14,10 +14,11 @@ import (
 )
 
 type MCPListenerConfig struct {
-	Address     string
-	Certificate string
-	PrivateKey  string
-	ClientCA    string
+	Address           string
+	Certificate       string
+	PrivateKey        string
+	ClientCA          string
+	ExpectedClientURI string
 }
 
 // MCPListener is a dedicated private listener. It is never mounted into the
@@ -33,8 +34,8 @@ func NewMCPListener(config MCPListenerConfig, handler *MCPHandler) (*MCPListener
 	if handler == nil || strings.TrimSpace(config.Address) == "" {
 		return nil, fmt.Errorf("Charlie MCP listener requires a private address and handler")
 	}
-	if config.Certificate == "" || config.PrivateKey == "" || config.ClientCA == "" {
-		return nil, fmt.Errorf("Charlie MCP listener requires mounted TLS files")
+	if config.Certificate == "" || config.PrivateKey == "" || config.ClientCA == "" || strings.TrimSpace(config.ExpectedClientURI) == "" {
+		return nil, fmt.Errorf("Charlie MCP listener requires mounted TLS files and an expected client identity")
 	}
 	reloader, err := newCertificateReloader(config.Certificate, config.PrivateKey)
 	if err != nil {
@@ -53,7 +54,17 @@ func NewMCPListener(config MCPListenerConfig, handler *MCPHandler) (*MCPListener
 		ClientAuth:     tls.RequireAndVerifyClientCert,
 		ClientCAs:      clientCAs,
 		GetCertificate: reloader.GetCertificate,
-		NextProtos:     []string{"h2", "http/1.1"},
+		VerifyConnection: func(state tls.ConnectionState) error {
+			if len(state.VerifiedChains) == 0 || len(state.PeerCertificates) == 0 {
+				return fmt.Errorf("Charlie MCP client certificate was not verified")
+			}
+			leaf := state.PeerCertificates[0]
+			if !state.VerifiedChains[0][0].Equal(leaf) || len(leaf.URIs) != 1 || leaf.URIs[0].String() != config.ExpectedClientURI {
+				return fmt.Errorf("Charlie MCP client identity is not authorized")
+			}
+			return nil
+		},
+		NextProtos: []string{"h2", "http/1.1"},
 	}
 	return &MCPListener{
 		addr:   config.Address,

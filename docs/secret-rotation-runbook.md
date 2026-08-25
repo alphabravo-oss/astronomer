@@ -110,6 +110,9 @@ writing that is:
 - `prometheus_datasources.auth_encrypted`
 - `siem_forwarders.auth_encrypted`
 - `cloud_credentials.data_encrypted`
+  - Includes every provider secret inside the encrypted JSON envelope, including
+    AWS `secret_access_key` and temporary `session_token`; neither is stored in
+    a separate plaintext column.
 - `smtp_settings.password_encrypted`
 - `cluster_registry_configs.registry_password_encrypted`
 - `webhook_subscriptions.secret_encrypted`

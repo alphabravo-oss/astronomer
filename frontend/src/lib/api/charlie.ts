@@ -1,5 +1,28 @@
-import api from "@/lib/api";
 import { API_BASE } from "@/lib/env";
+import {
+  abortCharlieSession as abortCharlieSessionOperation,
+  acknowledgeCharlieFinding,
+  createCharlieSession as createCharlieSessionOperation,
+  createCharlieSessionMessage,
+  createCharlieThread,
+  createCharlieThreadMessage,
+  decideCharlieApproval as decideCharlieApprovalOperation,
+  dismissCharlieFinding,
+  getActiveCharlieThread,
+  getCharlieFinding as getCharlieFindingOperation,
+  getCharlieSession as getCharlieSessionOperation,
+  getCharlieSessionHistory,
+  getCharlieThreadHistory as getCharlieThreadHistoryOperation,
+  listCharlieApprovals as listCharlieApprovalsOperation,
+  listCharlieCommands,
+  listCharlieFindings as listCharlieFindingsOperation,
+  listCharlieSessions as listCharlieSessionsOperation,
+  listCharlieThreads as listCharlieThreadsOperation,
+  requestCharlieFindingVerification,
+  resolveCharlieFinding,
+  searchCharlieContext as searchCharlieContextOperation,
+  startCharlieFindingRemediation,
+} from "@/lib/api/generated/client";
 import type {
   CharlieCommandCatalog,
   CharlieCommandDescriptor,
@@ -11,6 +34,9 @@ export type {
   CharlieCommandDescriptor,
   CharlieCommandRequest,
 };
+export interface CharlieRequestOptions {
+  signal?: AbortSignal;
+}
 export type CharlieResource = {
   type:
     | "installation"
@@ -270,7 +296,8 @@ function mapCharlieSession(value: CharlieWireSession): CharlieSession {
     state: value.state,
     visibility: value.visibility,
     centralRevision: value.centralRevision ?? value.central_revision ?? 0,
-    source: value.source ?? (value.visibility === "incident" ? "event" : "user"),
+    source:
+      value.source ?? (value.visibility === "incident" ? "event" : "user"),
     createdAt: value.createdAt ?? value.created_at,
     updatedAt: value.updatedAt ?? value.updated_at,
   };
@@ -286,9 +313,10 @@ function mapCharlieResource(value: CharlieWireResource): CharlieResource {
 
 function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
   const detail = value.detail ?? {};
-  const advisory: CharlieAdvisoryDetailWire = "finding" in detail
-    ? (detail.finding ?? {})
-    : (detail as CharlieAdvisoryDetailWire);
+  const advisory: CharlieAdvisoryDetailWire =
+    "finding" in detail
+      ? (detail.finding ?? {})
+      : (detail as CharlieAdvisoryDetailWire);
   const affected = value.affectedResource ??
     value.affected_resource ?? {
       type: "installation",
@@ -296,8 +324,11 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
       requiredVerb: "read",
     };
   const severity = value.severity === "info" ? "low" : value.severity;
-  const manualWire = advisory.manualRemediation ?? advisory.manual_remediation ??
-    advisory.workflow?.manualRemediation ?? advisory.workflow?.manual_remediation;
+  const manualWire =
+    advisory.manualRemediation ??
+    advisory.manual_remediation ??
+    advisory.workflow?.manualRemediation ??
+    advisory.workflow?.manual_remediation;
   const proposedAction = value.proposedAction ?? value.proposed_action;
   return {
     id: value.id,
@@ -307,8 +338,13 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
     affectedResource: mapCharlieResource(affected),
     confidence: advisory.confidence,
     reasonNoAction: value.reasonNoAction ?? value.reason_no_action,
-    riskImpact: value.riskImpact ?? value.risk_impact ?? advisory.riskImpact ?? advisory.risk_impact,
-    verificationSummary: value.verificationSummary ?? value.verification_summary,
+    riskImpact:
+      value.riskImpact ??
+      value.risk_impact ??
+      advisory.riskImpact ??
+      advisory.risk_impact,
+    verificationSummary:
+      value.verificationSummary ?? value.verification_summary,
     summary: value.summary || advisory.diagnosis || "",
     sessionId: value.sessionId ?? value.session_id,
     source: value.source,
@@ -316,7 +352,10 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
     createdAt: value.createdAt ?? value.created_at,
     updatedAt: value.updatedAt ?? value.updated_at,
     workflowState:
-      value.workflowState ?? value.workflow_state ?? advisory.workflow?.state ?? "manual_remediation_required",
+      value.workflowState ??
+      value.workflow_state ??
+      advisory.workflow?.state ??
+      "manual_remediation_required",
     availableDecisions:
       value.availableDecisions ?? value.available_decisions ?? [],
     evidence: (advisory.evidenceSummary ?? advisory.evidence_summary ?? []).map(
@@ -348,46 +387,58 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
   };
 }
 
-export async function getCharlieOverview(): Promise<{
+export async function getCharlieOverview(
+  options?: CharlieRequestOptions,
+): Promise<{
   sessions: CharlieSession[];
   mode: "disabled" | "read_only" | "approval" | "auto";
 }> {
-  const { data } = await api.get("/charlie/sessions/");
-  const value = data.data ?? data;
+  const value = await listCharlieSessionsOperation({ signal: options?.signal });
   return {
     sessions: (value.sessions ?? []).map(mapCharlieSession),
     mode: value.mode ?? "disabled",
   };
 }
-export async function listCharlieSessions(): Promise<CharlieSession[]> {
-  return (await getCharlieOverview()).sessions;
+export async function listCharlieSessions(
+  options?: CharlieRequestOptions,
+): Promise<CharlieSession[]> {
+  return (await getCharlieOverview(options)).sessions;
 }
-export async function createCharlieSession(input: {
-  clientSessionId: string;
-  intent: string;
-  trigger?: string;
-  currentUiContext?: string;
-  resources?: CharlieResource[];
-}): Promise<CharlieSession> {
-  const { data } = await api.post("/charlie/sessions/", {
-    client_session_id: input.clientSessionId,
-    intent: input.intent,
-    trigger: input.trigger,
-    current_ui_context: input.currentUiContext,
-    resources: input.resources?.map((r) => ({
-      type: r.type,
-      id: r.id,
-      required_verb: r.requiredVerb,
-    })),
+export async function createCharlieSession(
+  input: {
+    clientSessionId: string;
+    intent: string;
+    trigger?: string;
+    currentUiContext?: string;
+    resources?: CharlieResource[];
+  },
+  options?: CharlieRequestOptions,
+): Promise<CharlieSession> {
+  const data = await createCharlieSessionOperation({
+    body: {
+      client_session_id: input.clientSessionId,
+      intent: input.intent,
+      trigger: input.trigger,
+      current_ui_context: input.currentUiContext,
+      resources: input.resources?.map((r) => ({
+        type: r.type,
+        id: r.id,
+        required_verb: r.requiredVerb,
+      })),
+    },
+    signal: options?.signal,
   });
-  return mapCharlieSession(data.session ?? data.data?.session ?? data);
+  return mapCharlieSession(data.session);
 }
-export async function getCharlieSession(id: string): Promise<CharlieSession> {
-  const { data } = await api.get(
-    `/charlie/sessions/${encodeURIComponent(id)}/`,
-  );
-  const value = data.data ?? data;
-  const session = mapCharlieSession(value.session ?? value);
+export async function getCharlieSession(
+  id: string,
+  options?: CharlieRequestOptions,
+): Promise<CharlieSession> {
+  const value = await getCharlieSessionOperation({
+    path: { session_id: id },
+    signal: options?.signal,
+  });
+  const session = mapCharlieSession(value.session);
   const remoteState = value.remote?.state;
   const state =
     remoteState === "completed" ||
@@ -398,21 +449,32 @@ export async function getCharlieSession(id: string): Promise<CharlieSession> {
       : session.state;
   return { ...session, state };
 }
-export async function getCharlieHistory(id: string): Promise<CharlieMessage[]> {
-  const { data } = await api.get(
-    `/charlie/sessions/${encodeURIComponent(id)}/history/`,
-  );
-  const value = data.messages ?? data.data?.messages ?? data.data ?? data;
+export async function getCharlieHistory(
+  id: string,
+  options?: CharlieRequestOptions,
+): Promise<CharlieMessage[]> {
+  const value = await getCharlieSessionHistory({
+    path: { session_id: id },
+    signal: options?.signal,
+  });
   if (!Array.isArray(value)) return [];
   return (value as CharlieHistoryItemWire[]).map((item) => {
     const citations = (Array.isArray(item.citations) ? item.citations : [])
       .slice(0, 16)
       .flatMap((citation) => {
         const id = typeof citation.id === "string" ? citation.id : "";
-        const title = typeof citation.title === "string" ? citation.title.trim() : "";
-        const source = typeof citation.source === "string" ? citation.source.trim() : "";
+        const title =
+          typeof citation.title === "string" ? citation.title.trim() : "";
+        const source =
+          typeof citation.source === "string" ? citation.source.trim() : "";
         if (!id || !title || !source) return [];
-        return [{ id: id.slice(0, 128), title: title.slice(0, 1024), source: source.slice(0, 2048) }];
+        return [
+          {
+            id: id.slice(0, 128),
+            title: title.slice(0, 1024),
+            source: source.slice(0, 2048),
+          },
+        ];
       });
     return {
       id: item.itemId ?? item.item_id ?? "",
@@ -428,16 +490,25 @@ export async function getCharlieHistory(id: string): Promise<CharlieMessage[]> {
     };
   });
 }
-export async function sendCharlieMessage(id: string, message: string) {
-  const { data } = await api.post(
-    `/charlie/sessions/${encodeURIComponent(id)}/messages/`,
-    { client_message_id: crypto.randomUUID(), message },
-  );
-  return data;
+export async function sendCharlieMessage(
+  id: string,
+  message: string,
+  options?: CharlieRequestOptions,
+) {
+  return createCharlieSessionMessage({
+    path: { session_id: id },
+    body: { client_message_id: crypto.randomUUID(), message },
+    signal: options?.signal,
+  });
 }
-export async function abortCharlieSession(id: string) {
-  await api.post(`/charlie/sessions/${encodeURIComponent(id)}/abort/`, {
-    request_id: crypto.randomUUID(),
+export async function abortCharlieSession(
+  id: string,
+  options?: CharlieRequestOptions,
+) {
+  await abortCharlieSessionOperation({
+    path: { session_id: id },
+    body: { request_id: crypto.randomUUID() },
+    signal: options?.signal,
   });
 }
 
@@ -478,15 +549,18 @@ type CharlieActiveThreadWire = {
 };
 
 /**
- * Normalize the thread envelope after the shared Axios interceptor camelizes
- * response keys. Keeping this boundary explicit prevents a successful turn
+ * Normalize the raw generated thread envelope. Keeping this boundary explicit
+ * prevents a successful turn
  * from losing its local session ID, which would stop the browser from opening
  * the authenticated lifecycle-event stream and leave progress stuck at the
  * initial "Sending request" label.
  */
-function mapCharlieActiveThread(value: CharlieActiveThreadWire | undefined): CharlieActiveThread {
+function mapCharlieActiveThread(
+  value: CharlieActiveThreadWire | undefined,
+): CharlieActiveThread {
   const rawThread = value?.thread;
-  const currentSessionID = rawThread?.currentSessionId ?? rawThread?.current_session_id;
+  const currentSessionID =
+    rawThread?.currentSessionId ?? rawThread?.current_session_id;
   const rawSessionIDs = value?.sessionIds ?? value?.session_ids;
   const rawCurrentSession = value?.currentSession ?? value?.current_session;
   return {
@@ -528,19 +602,30 @@ export type CharlieTurnReceipt = {
   acceptedAt?: string;
 };
 
-export async function getCharlieCommands(): Promise<CharlieCommandCatalog> {
-  const { data } = await api.get("/charlie/commands/");
-  return (data?.data ?? data) as CharlieCommandCatalog;
+export async function getCharlieCommands(
+  options?: CharlieRequestOptions,
+): Promise<CharlieCommandCatalog> {
+  return listCharlieCommands({ signal: options?.signal });
 }
 
-export async function getCharlieActiveThread(): Promise<CharlieActiveThread> {
-  const { data } = await api.get("/charlie/threads/active/");
-  return mapCharlieActiveThread(data?.data ?? data);
+export async function getCharlieActiveThread(
+  options?: CharlieRequestOptions,
+): Promise<CharlieActiveThread> {
+  return mapCharlieActiveThread(
+    (await getActiveCharlieThread({
+      signal: options?.signal,
+    })) as CharlieActiveThreadWire,
+  );
 }
 
-export async function newCharlieChat(): Promise<CharlieActiveThread> {
-  const { data } = await api.post("/charlie/threads/new/", {});
-  return mapCharlieActiveThread(data?.data ?? data);
+export async function newCharlieChat(
+  options?: CharlieRequestOptions,
+): Promise<CharlieActiveThread> {
+  return mapCharlieActiveThread(
+    (await createCharlieThread({
+      signal: options?.signal,
+    })) as CharlieActiveThreadWire,
+  );
 }
 
 export async function sendCharlieThreadMessage(
@@ -550,21 +635,33 @@ export async function sendCharlieThreadMessage(
     currentUiContext?: string;
     resources?: CharlieResource[];
     command?: CharlieCommandRequest;
+    signal?: AbortSignal;
   },
 ): Promise<CharlieActiveThread & { receipt?: CharlieTurnReceipt }> {
-  const { data } = await api.post("/charlie/threads/messages/", {
-    client_message_id: crypto.randomUUID(),
-    message,
-    trigger: options?.trigger,
-    current_ui_context: options?.currentUiContext,
-    resources: options?.resources?.map((r) => ({
-      type: r.type,
-      id: r.id,
-      required_verb: r.requiredVerb,
-    })),
-    command: options?.command,
-  });
-  const value = data?.data ?? data;
+  const value = (await createCharlieThreadMessage({
+    body: {
+      client_message_id: crypto.randomUUID(),
+      message,
+      trigger: options?.trigger,
+      current_ui_context: options?.currentUiContext,
+      resources: options?.resources?.map((r) => ({
+        type: r.type,
+        id: r.id,
+        required_verb: r.requiredVerb,
+      })),
+      command: options?.command,
+    },
+    signal: options?.signal,
+  })) as CharlieActiveThreadWire & {
+    receipt?: {
+      sessionId?: string;
+      session_id?: string;
+      turnId?: string;
+      turn_id?: string;
+      acceptedAt?: string;
+      accepted_at?: string;
+    };
+  };
   const rawReceipt = value?.receipt;
   const receiptSessionId = rawReceipt?.sessionId ?? rawReceipt?.session_id;
   const receiptTurnId = rawReceipt?.turnId ?? rawReceipt?.turn_id;
@@ -588,11 +685,13 @@ export async function sendCharlieThreadMessage(
 
 export async function getCharlieThreadHistory(
   threadId: string,
+  options?: CharlieRequestOptions,
 ): Promise<CharlieMessage[]> {
-  const { data } = await api.get(
-    `/charlie/threads/${encodeURIComponent(threadId)}/history/`,
-  );
-  const value = data.items ?? data.data?.items ?? data.data ?? data;
+  const response = await getCharlieThreadHistoryOperation({
+    path: { thread_id: threadId },
+    signal: options?.signal,
+  });
+  const value = (response as { items?: unknown }).items ?? response;
   if (!Array.isArray(value)) return [];
   return (value as CharlieHistoryItemWire[]).map((item) => {
     const citations = (Array.isArray(item.citations) ? item.citations : [])
@@ -627,11 +726,13 @@ export async function getCharlieThreadHistory(
   });
 }
 
-export async function listCharlieThreads(): Promise<
+export async function listCharlieThreads(
+  options?: CharlieRequestOptions,
+): Promise<
   Array<{ id: string; title: string; state: string; updated_at?: string }>
 > {
-  const { data } = await api.get("/charlie/threads/");
-  const value = data.threads ?? data.data?.threads ?? data.data ?? data;
+  const value = (await listCharlieThreadsOperation({ signal: options?.signal }))
+    .threads;
   if (!Array.isArray(value)) return [];
   return value.map((row: Record<string, unknown>) => ({
     id: String(row.id ?? ""),
@@ -757,23 +858,40 @@ export function subscribeCharlieSessionEvents(
 // state; the client never substitutes local authorization or execution.
 export async function searchCharlieContext(
   query: string,
+  options?: CharlieRequestOptions,
 ): Promise<CharlieContextOption[]> {
-  const { data } = await api.get("/charlie/context/search/", {
-    params: { q: query, limit: 20 },
-  });
-  return data.items ?? data.data?.items ?? [];
+  return (
+    await searchCharlieContextOperation({
+      query: { q: query, limit: 20 },
+      signal: options?.signal,
+    })
+  ).items.map((wire) => ({
+    type: wire.type,
+    id: wire.id,
+    requiredVerb: "read",
+    label: wire.label,
+    summary: wire.summary,
+  }));
 }
-export async function listCharlieFindings(): Promise<CharlieFinding[]> {
-  const { data } = await api.get("/charlie/findings/", {
-    params: { limit: 100 },
-  });
-  return (data.items ?? data.data?.items ?? []).map(mapCharlieFinding);
+export async function listCharlieFindings(
+  options?: CharlieRequestOptions,
+): Promise<CharlieFinding[]> {
+  return (
+    await listCharlieFindingsOperation({
+      query: { limit: 100 },
+      signal: options?.signal,
+    })
+  ).items.map(mapCharlieFinding);
 }
-export async function getCharlieFinding(id: string): Promise<CharlieFinding> {
-  const { data } = await api.get(
-    `/charlie/findings/${encodeURIComponent(id)}/`,
-  );
-  return mapCharlieFinding(data.finding ?? data.data?.finding ?? data);
+export async function getCharlieFinding(
+  id: string,
+  options?: CharlieRequestOptions,
+): Promise<CharlieFinding> {
+  const data = await getCharlieFindingOperation({
+    path: { finding_id: id },
+    signal: options?.signal,
+  });
+  return mapCharlieFinding(data.finding);
 }
 export async function transitionCharlieFinding(
   id: string,
@@ -783,35 +901,59 @@ export async function transitionCharlieFinding(
     | "request_verification"
     | "dismiss"
     | "resolve",
+  options?: CharlieRequestOptions,
 ) {
-  const path = action.replaceAll("_", "-");
-  await api.post(`/charlie/findings/${encodeURIComponent(id)}/${path}/`, {
-    request_id: crypto.randomUUID(),
-  });
+  const args = {
+    path: { finding_id: id },
+    body: { request_id: crypto.randomUUID() },
+    signal: options?.signal,
+  };
+  const operations = {
+    acknowledge: acknowledgeCharlieFinding,
+    start_remediation: startCharlieFindingRemediation,
+    request_verification: requestCharlieFindingVerification,
+    dismiss: dismissCharlieFinding,
+    resolve: resolveCharlieFinding,
+  };
+  await operations[action](args);
 }
-export async function listCharlieApprovals(): Promise<CharlieApproval[]> {
-  const { data } = await api.get("/charlie/approvals/");
-  return data.items ?? data.data?.items ?? [];
+export async function listCharlieApprovals(
+  options?: CharlieRequestOptions,
+): Promise<CharlieApproval[]> {
+  return (await listCharlieApprovalsOperation({ signal: options?.signal }))
+    .items as CharlieApproval[];
 }
 export async function decideCharlieApproval(
   id: string,
   decision: "approve" | "deny",
   rationale = "",
+  options?: CharlieRequestOptions,
 ) {
   try {
-    await api.post(`/charlie/approvals/${encodeURIComponent(id)}/decision/`, {
-      request_id: crypto.randomUUID(),
-      decision,
-      rationale: rationale.trim().slice(0, 512),
+    await decideCharlieApprovalOperation({
+      path: { approval_id: id },
+      body: {
+        request_id: crypto.randomUUID(),
+        decision,
+        rationale: rationale.trim().slice(0, 512),
+      },
+      signal: options?.signal,
     });
   } catch (error) {
-    const status = (error as { response?: { status?: number } }).response?.status;
+    const status = (error as { response?: { status?: number } }).response
+      ?.status;
     if (status === 409) {
-      throw new Error("This exact approval is stale or was already decided. Refresh before trying again.");
+      throw new Error(
+        "This exact approval is stale or was already decided. Refresh before trying again.",
+      );
     }
     if (status === 403) {
-      throw new Error("Approval eligibility or target permission changed. No action was authorized.");
+      throw new Error(
+        "Approval eligibility or target permission changed. No action was authorized.",
+      );
     }
-    throw new Error("Charlie could not confirm the decision. No action was authorized.");
+    throw new Error(
+      "Charlie could not confirm the decision. No action was authorized.",
+    );
   }
 }

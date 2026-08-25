@@ -18,7 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const fleetStaleAfter = 5 * time.Minute
+const estateStaleAfter = 5 * time.Minute
 
 type InventoryQueries interface {
 	GetDeliveryControllerInventory(context.Context, sqlc.GetDeliveryControllerInventoryParams) (sqlc.DeliveryControllerInventory, error)
@@ -27,7 +27,7 @@ type InventoryQueries interface {
 	CountDeliveryControllerCompatibility(context.Context) ([]sqlc.CountDeliveryControllerCompatibilityRow, error)
 	GetCurrentDeliverySystemRollout(context.Context) (sqlc.DeliverySystemRollout, error)
 	ListDeliverySystemReleases(context.Context, sqlc.ListDeliverySystemReleasesParams) ([]sqlc.ListDeliverySystemReleasesRow, error)
-	ListDeliveryFleetClusters(context.Context) ([]sqlc.ListDeliveryFleetClustersRow, error)
+	ListDeliveryEstateClusters(context.Context) ([]sqlc.ListDeliveryEstateClustersRow, error)
 	CountActiveDeliveryRollouts(context.Context) (int64, error)
 }
 
@@ -125,14 +125,14 @@ func (h *InventoryHandler) SystemCompatibility(w http.ResponseWriter, r *http.Re
 	})
 }
 
-type DeliveryFleet struct {
-	Summary       DeliveryFleetSummary       `json:"summary"`
-	Clusters      []DeliveryFleetCluster     `json:"clusters"`
-	Attention     []DeliveryFleetAttention   `json:"attention"`
-	Distributions DeliveryFleetDistributions `json:"distributions"`
+type DeliveryEstate struct {
+	Summary       DeliveryEstateSummary       `json:"summary"`
+	Clusters      []DeliveryEstateCluster     `json:"clusters"`
+	Attention     []DeliveryEstateAttention   `json:"attention"`
+	Distributions DeliveryEstateDistributions `json:"distributions"`
 }
 
-type DeliveryFleetSummary struct {
+type DeliveryEstateSummary struct {
 	AdoptedClusters int64 `json:"adopted_clusters"`
 	FluxReady       int64 `json:"flux_ready"`
 	Incompatible    int64 `json:"incompatible"`
@@ -145,7 +145,7 @@ type DeliveryFleetSummary struct {
 	ActiveRollouts  int64 `json:"active_rollouts"`
 }
 
-type DeliveryFleetCluster struct {
+type DeliveryEstateCluster struct {
 	ID                  uuid.UUID  `json:"id"`
 	Name                string     `json:"name"`
 	DisplayName         string     `json:"display_name"`
@@ -169,7 +169,7 @@ type DeliveryFleetCluster struct {
 	LastObservedAt      *time.Time `json:"last_observed_at"`
 }
 
-type DeliveryFleetAttention struct {
+type DeliveryEstateAttention struct {
 	ClusterID   uuid.UUID `json:"cluster_id"`
 	ClusterName string    `json:"cluster_name"`
 	Severity    string    `json:"severity"`
@@ -177,23 +177,23 @@ type DeliveryFleetAttention struct {
 	Detail      string    `json:"detail"`
 }
 
-type DeliveryFleetCount struct {
+type DeliveryEstateCount struct {
 	Key   string `json:"key"`
 	Count int64  `json:"count"`
 }
 
-type DeliveryFleetDistributions struct {
-	Compatibility    []DeliveryFleetCount `json:"compatibility"`
-	Privilege        []DeliveryFleetCount `json:"privilege"`
-	AssignmentPhases []DeliveryFleetCount `json:"assignment_phases"`
+type DeliveryEstateDistributions struct {
+	Compatibility    []DeliveryEstateCount `json:"compatibility"`
+	Privilege        []DeliveryEstateCount `json:"privilege"`
+	AssignmentPhases []DeliveryEstateCount `json:"assignment_phases"`
 }
 
-func (h *InventoryHandler) Fleet(w http.ResponseWriter, r *http.Request) {
+func (h *InventoryHandler) Estate(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery inventory persistence is unavailable")
 		return
 	}
-	rows, err := h.queries.ListDeliveryFleetClusters(r.Context())
+	rows, err := h.queries.ListDeliveryEstateClusters(r.Context())
 	if err != nil {
 		respondDatabaseError(w, err)
 		return
@@ -207,22 +207,22 @@ func (h *InventoryHandler) Fleet(w http.ResponseWriter, r *http.Request) {
 	if h.now != nil {
 		now = h.now()
 	}
-	respondData(w, http.StatusOK, buildDeliveryFleet(rows, activeRollouts, now))
+	respondData(w, http.StatusOK, buildDeliveryEstate(rows, activeRollouts, now))
 }
 
-func buildDeliveryFleet(rows []sqlc.ListDeliveryFleetClustersRow, activeRollouts int64, now time.Time) DeliveryFleet {
-	clusters := make([]DeliveryFleetCluster, 0, len(rows))
-	attention := make([]DeliveryFleetAttention, 0)
+func buildDeliveryEstate(rows []sqlc.ListDeliveryEstateClustersRow, activeRollouts int64, now time.Time) DeliveryEstate {
+	clusters := make([]DeliveryEstateCluster, 0, len(rows))
+	attention := make([]DeliveryEstateAttention, 0)
 	compatibilityCounts := map[string]int64{}
 	privilegeCounts := map[string]int64{}
 	phaseCounts := map[string]int64{}
-	var summary DeliveryFleetSummary
+	var summary DeliveryEstateSummary
 	summary.ActiveRollouts = activeRollouts
 
 	for _, row := range rows {
-		cluster := fleetClusterFromRow(row, now)
+		cluster := estateClusterFromRow(row, now)
 		clusters = append(clusters, cluster)
-		if item, ok := fleetAttentionFor(cluster); ok {
+		if item, ok := estateAttentionFor(cluster); ok {
 			attention = append(attention, item)
 		}
 		if cluster.IsLocal {
@@ -247,33 +247,33 @@ func buildDeliveryFleet(rows []sqlc.ListDeliveryFleetClustersRow, activeRollouts
 		summary.Degraded += cluster.DegradedCount
 		compatibilityCounts[cluster.CompatibilityStatus]++
 		privilegeCounts[cluster.PrivilegeProfile]++
-		addFleetPhaseCounts(phaseCounts, row)
+		addEstatePhaseCounts(phaseCounts, row)
 	}
 
-	return DeliveryFleet{
+	return DeliveryEstate{
 		Summary:   summary,
 		Clusters:  clusters,
 		Attention: attention,
-		Distributions: DeliveryFleetDistributions{
-			Compatibility:    sortedFleetCounts(compatibilityCounts),
-			Privilege:        sortedFleetCounts(privilegeCounts),
-			AssignmentPhases: sortedFleetCounts(phaseCounts),
+		Distributions: DeliveryEstateDistributions{
+			Compatibility:    sortedEstateCounts(compatibilityCounts),
+			Privilege:        sortedEstateCounts(privilegeCounts),
+			AssignmentPhases: sortedEstateCounts(phaseCounts),
 		},
 	}
 }
 
-func fleetClusterFromRow(row sqlc.ListDeliveryFleetClustersRow, now time.Time) DeliveryFleetCluster {
+func estateClusterFromRow(row sqlc.ListDeliveryEstateClustersRow, now time.Time) DeliveryEstateCluster {
 	displayName := row.DisplayName
 	if displayName == "" {
 		displayName = row.Name
 	}
-	return DeliveryFleetCluster{
+	return DeliveryEstateCluster{
 		ID:                  row.ID,
 		Name:                row.Name,
 		DisplayName:         displayName,
 		IsLocal:             row.IsLocal,
 		Connected:           row.Connected,
-		Stale:               fleetRowIsStale(row, now),
+		Stale:               estateRowIsStale(row, now),
 		PrivilegeProfile:    fleetPrivilegeProfile(row.Annotations),
 		KubernetesVersion:   row.KubernetesVersion,
 		AgentVersion:        row.AgentVersion,
@@ -292,25 +292,25 @@ func fleetClusterFromRow(row sqlc.ListDeliveryFleetClustersRow, now time.Time) D
 	}
 }
 
-func fleetRowIsStale(row sqlc.ListDeliveryFleetClustersRow, now time.Time) bool {
+func estateRowIsStale(row sqlc.ListDeliveryEstateClustersRow, now time.Time) bool {
 	if row.IsLocal || !row.Connected {
 		return false
 	}
-	if !row.LastHeartbeat.Valid || now.Sub(row.LastHeartbeat.Time) > fleetStaleAfter {
+	if !row.LastHeartbeat.Valid || now.Sub(row.LastHeartbeat.Time) > estateStaleAfter {
 		return true
 	}
-	if row.InventoryObservedAt.Valid && now.Sub(row.InventoryObservedAt.Time) > fleetStaleAfter {
+	if row.InventoryObservedAt.Valid && now.Sub(row.InventoryObservedAt.Time) > estateStaleAfter {
 		return true
 	}
 	return false
 }
 
-func fleetAttentionFor(cluster DeliveryFleetCluster) (DeliveryFleetAttention, bool) {
+func estateAttentionFor(cluster DeliveryEstateCluster) (DeliveryEstateAttention, bool) {
 	if cluster.IsLocal {
-		return DeliveryFleetAttention{}, false
+		return DeliveryEstateAttention{}, false
 	}
 	name := cluster.DisplayName
-	item := DeliveryFleetAttention{ClusterID: cluster.ID, ClusterName: name}
+	item := DeliveryEstateAttention{ClusterID: cluster.ID, ClusterName: name}
 	switch {
 	case !cluster.Connected:
 		item.Severity, item.Reason, item.Detail = "error", "disconnected", "Agent is not connected"
@@ -330,12 +330,12 @@ func fleetAttentionFor(cluster DeliveryFleetCluster) (DeliveryFleetAttention, bo
 	case cluster.CompatibilityStatus == "unknown":
 		item.Severity, item.Reason, item.Detail = "warning", "inventory_missing", "No Flux controller inventory has been reported"
 	default:
-		return DeliveryFleetAttention{}, false
+		return DeliveryEstateAttention{}, false
 	}
 	return item, true
 }
 
-func addFleetPhaseCounts(counts map[string]int64, row sqlc.ListDeliveryFleetClustersRow) {
+func addEstatePhaseCounts(counts map[string]int64, row sqlc.ListDeliveryEstateClustersRow) {
 	add := func(phase string, count int64) {
 		if count > 0 {
 			counts[phase] += count
@@ -352,15 +352,15 @@ func addFleetPhaseCounts(counts map[string]int64, row sqlc.ListDeliveryFleetClus
 	add("deleting", row.DeletingCount)
 }
 
-func sortedFleetCounts(values map[string]int64) []DeliveryFleetCount {
+func sortedEstateCounts(values map[string]int64) []DeliveryEstateCount {
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	out := make([]DeliveryFleetCount, 0, len(keys))
+	out := make([]DeliveryEstateCount, 0, len(keys))
 	for _, key := range keys {
-		out = append(out, DeliveryFleetCount{Key: key, Count: values[key]})
+		out = append(out, DeliveryEstateCount{Key: key, Count: values[key]})
 	}
 	return out
 }

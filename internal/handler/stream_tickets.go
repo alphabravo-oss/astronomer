@@ -18,6 +18,7 @@ type StreamTicketHandler struct {
 	authz authorizationSupport
 }
 
+// openapi:request StreamTicketRequest
 type StreamTicketRequest struct {
 	StreamType string `json:"stream_type"`
 	ClusterID  string `json:"cluster_id,omitempty"`

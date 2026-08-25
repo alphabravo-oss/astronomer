@@ -37,8 +37,14 @@ describe("Charlie administration boundaries", () => {
     expect(checks.find((c) => c.id === "agent_standby")?.state).toBe("unknown");
   });
   it("preserves filters and context in deep links", () => {
-    const current = new URLSearchParams("tab=findings&filter=open&context=cluster-a&finding=f-1");
-    expect(mergeCharlieSearch(current, {tab:"approvals",approval:"a-1"})).toBe("tab=approvals&filter=open&context=cluster-a&finding=f-1&approval=a-1");
+    const current = new URLSearchParams(
+      "tab=findings&filter=open&context=cluster-a&finding=f-1",
+    );
+    expect(
+      mergeCharlieSearch(current, { tab: "approvals", approval: "a-1" }),
+    ).toBe(
+      "tab=approvals&filter=open&context=cluster-a&finding=f-1&approval=a-1",
+    );
   });
   it("requires charlie:manage but remains available while runtime is disabled", () => {
     const admin = { id: "u", isSuperuser: true } as unknown as User;
@@ -46,17 +52,33 @@ describe("Charlie administration boundaries", () => {
     expect(canManageCharlie({ id: "u" } as User)).toBe(false);
   });
   it("rejects hidden or invalid automation defaults before transport", () => {
-    expect(automationValidationIssues({ rules: [{
-      name: "", sourceType: "", severities: [], cooldownSeconds: 0,
-      gracePeriodSeconds: 1, flapWindowSeconds: 1, flapCount: 1,
-      fleetThresholdPercent: 101, maximumAttempts: 1, serviceIdentity: "", modeCeiling: "invalid",
-    }] })).toEqual(expect.arrayContaining([
-      "Rule 1 needs a name.",
-      "Rule 1 needs a source type.",
-      "Rule 1 needs a service identity.",
-      "Rule 1 needs a valid mode ceiling.",
-      "Rule 1 needs at least one severity.",
-      "Rule 1 cluster coverage threshold must be between 0 and 100.",
-    ]));
+    expect(
+      automationValidationIssues({
+        rules: [
+          {
+            name: "",
+            sourceType: "",
+            severities: [],
+            cooldownSeconds: 0,
+            gracePeriodSeconds: 1,
+            flapWindowSeconds: 1,
+            flapCount: 1,
+            estateThresholdPercent: 101,
+            maximumAttempts: 1,
+            serviceIdentity: "",
+            modeCeiling: "invalid",
+          },
+        ],
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        "Rule 1 needs a name.",
+        "Rule 1 needs a source type.",
+        "Rule 1 needs a service identity.",
+        "Rule 1 needs a valid mode ceiling.",
+        "Rule 1 needs at least one severity.",
+        "Rule 1 cluster coverage threshold must be between 0 and 100.",
+      ]),
+    );
   });
 });

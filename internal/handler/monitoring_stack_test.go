@@ -317,6 +317,7 @@ func (c stackLifecycleCase) request() *http.Request {
 		body = strings.NewReader("")
 	}
 	req := httptest.NewRequest(c.method, c.target, body)
+	req.Header.Set("Idempotency-Key", "monitoring-lifecycle-test")
 	rc := chi.NewRouteContext()
 	for k, v := range c.params {
 		rc.URLParams.Add(k, v)

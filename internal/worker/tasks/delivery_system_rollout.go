@@ -3,7 +3,6 @@ package tasks
 import (
 	"context"
 	"errors"
-	"sync"
 
 	"github.com/hibiken/asynq"
 
@@ -16,18 +15,7 @@ type DeliverySystemRolloutReconciler interface {
 	Sweep(context.Context, int) error
 }
 
-var deliverySystemRolloutRuntime struct {
-	sync.RWMutex
-	reconciler DeliverySystemRolloutReconciler
-}
-
-func ConfigureDeliverySystemRolloutReconciler(reconciler DeliverySystemRolloutReconciler) {
-	deliverySystemRolloutRuntime.Lock()
-	deliverySystemRolloutRuntime.reconciler = reconciler
-	deliverySystemRolloutRuntime.Unlock()
-}
-
-func HandleDeliverySystemRolloutReconcile(ctx context.Context, task *asynq.Task) (finalErr error) {
+func (runtime DeliveryRuntime) HandleDeliverySystemRolloutReconcile(ctx context.Context, task *asynq.Task) (finalErr error) {
 	defer func() {
 		result := "success"
 		if finalErr != nil {
@@ -38,9 +26,7 @@ func HandleDeliverySystemRolloutReconcile(ctx context.Context, task *asynq.Task)
 	if task == nil {
 		return errors.New("delivery system rollout task is required")
 	}
-	deliverySystemRolloutRuntime.RLock()
-	reconciler := deliverySystemRolloutRuntime.reconciler
-	deliverySystemRolloutRuntime.RUnlock()
+	reconciler := runtime.SystemRolloutReconciler
 	if reconciler == nil {
 		return errors.New("delivery system rollout reconciler is not configured")
 	}

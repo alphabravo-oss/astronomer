@@ -201,11 +201,11 @@ func newAuditActivityCmd() *cobra.Command {
 				}
 				return renderSDK(cmd, resp.JSON200)
 			}
-			params := &astroclient.GetApiV1ActivityParams{}
+			params := &astroclient.GetActivityParams{}
 			if cmd.Flags().Changed("limit") {
 				params.Limit = &limit
 			}
-			resp, err := client.GetApiV1ActivityWithResponse(cmd.Context(), params)
+			resp, err := client.GetActivityWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -257,7 +257,7 @@ func newAuditAlertingChannelsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1AlertingChannelsWithResponse(cmd.Context())
+			resp, err := client.GetAlertingChannelsWithResponse(cmd.Context(), nil)
 			if err != nil {
 				return err
 			}
@@ -282,14 +282,14 @@ so the file contents are sent as the raw JSON request body.`,
 			if err != nil {
 				return err
 			}
-			// The generated PostApiV1AlertingChannelsWithResponse takes no
+			// The generated PostAlertingChannelsWithResponse takes no
 			// body parameter, so the channel definition cannot be attached
 			// through the typed SDK method. We surface this gap clearly
 			// rather than silently sending an empty create.
 			_ = file
 			_ = client
 			return fmt.Errorf("create alerting channel: the generated SDK method " +
-				"PostApiV1AlertingChannelsWithResponse accepts no request body, so a " +
+				"PostAlertingChannelsWithResponse accepts no request body, so a " +
 				"channel definition cannot be sent through it; regenerate the SDK with a " +
 				"typed body (or use the raw HTTP client) to enable this command")
 		},
@@ -316,7 +316,7 @@ func newAuditAlertingEventsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1AlertingEventsWithResponse(cmd.Context())
+			resp, err := client.GetAlertingEventsWithResponse(cmd.Context(), nil)
 			if err != nil {
 				return err
 			}
@@ -342,7 +342,7 @@ func newAuditToolsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ToolsWithResponse(cmd.Context())
+			resp, err := client.GetToolsWithResponse(cmd.Context(), nil)
 			if err != nil {
 				return err
 			}
@@ -386,7 +386,7 @@ func newAuditExtensionsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ExtensionsWithResponse(cmd.Context())
+			resp, err := client.GetExtensionsWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -416,7 +416,7 @@ client-side.`,
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ExtensionsWithResponse(cmd.Context())
+			resp, err := client.GetExtensionsWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -454,7 +454,7 @@ func newAuditExtensionsCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1ExtensionsJSONRequestBody{
+			body := astroclient.PostExtensionsJSONRequestBody{
 				Manifest: manifest,
 			}
 			if cmd.Flags().Changed("enable") {
@@ -463,7 +463,7 @@ func newAuditExtensionsCreateCmd() *cobra.Command {
 			if source != "" {
 				body.Source = &source
 			}
-			resp, err := client.PostApiV1ExtensionsWithResponse(cmd.Context(), body)
+			resp, err := client.PostExtensionsWithResponse(cmd.Context(), body)
 			if err != nil {
 				return err
 			}
@@ -494,10 +494,10 @@ func newAuditExtensionsValidateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := astroclient.PostApiV1ExtensionsValidateJSONRequestBody{
+			body := astroclient.PostExtensionsValidateJSONRequestBody{
 				Manifest: &manifest,
 			}
-			resp, err := client.PostApiV1ExtensionsValidateWithResponse(cmd.Context(), body)
+			resp, err := client.PostExtensionsValidateWithResponse(cmd.Context(), body)
 			if err != nil {
 				return err
 			}
@@ -522,7 +522,7 @@ func newAuditExtensionsEnableCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1ExtensionsNameEnableWithResponse(cmd.Context(), args[0])
+			resp, err := client.PostExtensionsByNameEnableWithResponse(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}
@@ -545,7 +545,7 @@ func newAuditExtensionsDisableCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostApiV1ExtensionsNameDisableWithResponse(cmd.Context(), args[0])
+			resp, err := client.PostExtensionsByNameDisableWithResponse(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}
@@ -567,7 +567,7 @@ func newAuditExtensionsSampleManifestCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetApiV1ExtensionsSampleManifestWithResponse(cmd.Context())
+			resp, err := client.GetExtensionsSampleManifestWithResponse(cmd.Context())
 			if err != nil {
 				return err
 			}

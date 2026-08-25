@@ -18,8 +18,9 @@
 //     based on diff, NO patch.
 //  5. If mode='enforce' AND set differs: Apply(desired), snapshot,
 //     mark sync_status accordingly.
-//  6. If detected_provider is in {'unknown','self_managed'} and mode='enforce':
-//     LOG warning, treat as monitor for this tick (audit-only).
+//  6. Enforcement on a monitor-only provider is a permanent configuration
+//     error. The HTTP API rejects new rows and this worker fails closed for
+//     legacy rows rather than silently downgrading their declared mode.
 //
 // The cleartext credentials for the cloud API client live inside the
 // provider driver's per-call materializer resolution; nothing persists
@@ -100,25 +101,6 @@ type ApiserverAllowlistReconcileDeps struct {
 	AuditWriter any
 }
 
-var apiserverAllowlistDeps ApiserverAllowlistReconcileDeps
-
-// ConfigureApiserverAllowlistReconcile stores the runtime deps. Called
-// from server startup.
-func ConfigureApiserverAllowlistReconcile(deps ApiserverAllowlistReconcileDeps) {
-	apiserverAllowlistDeps = deps
-}
-
-// ResetApiserverAllowlistReconcile clears the deps (test-only).
-func ResetApiserverAllowlistReconcile() {
-	apiserverAllowlistDeps = ApiserverAllowlistReconcileDeps{}
-}
-
-// ApiserverAllowlistReconcileDepsForTest returns the wired deps. Test-only
-// — production code reaches into apiserverAllowlistDeps directly.
-func ApiserverAllowlistReconcileDepsForTest() ApiserverAllowlistReconcileDeps {
-	return apiserverAllowlistDeps
-}
-
 // Metrics ---------------------------------------------------------------
 
 var (
@@ -145,19 +127,27 @@ var (
 		},
 		observability.MetricLabels("cluster", "provider", "outcome"),
 	)
+
+	apiserverAllowlistProviderAuthorizationFailures = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "astronomer",
+			Name:      "apiserver_allowlist_provider_authorization_failures_total",
+			Help:      "Cloud-provider authorization failures while reconciling API-server allow-lists.",
+		},
+		observability.MetricLabels("cluster", "provider"),
+	)
 )
 
 func init() {
-	prometheus.MustRegister(apiserverAllowlistDriftGauge, apiserverAllowlistReconcilesTotal)
+	prometheus.MustRegister(apiserverAllowlistDriftGauge, apiserverAllowlistReconcilesTotal, apiserverAllowlistProviderAuthorizationFailures)
 }
 
 // Handlers --------------------------------------------------------------
 
 // HandleApiserverAllowlistReconcile is the per-cluster reconcile task.
-func HandleApiserverAllowlistReconcile(ctx context.Context, t *asynq.Task) error {
-	if apiserverAllowlistDeps.Queries == nil || apiserverAllowlistDeps.Registry == nil {
-		runtimeLogger().InfoContext(ctx, "apiserver allowlist reconcile runtime not configured, skipping")
-		return nil
+func (runtime ApiserverAllowlistRuntime) HandleApiserverAllowlistReconcile(ctx context.Context, t *asynq.Task) error {
+	if runtime.Deps.Queries == nil || runtime.Deps.Registry == nil {
+		return fmt.Errorf("apiserver allowlist reconcile runtime is not configured")
 	}
 	var p ApiserverAllowlistReconcilePayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
@@ -167,23 +157,22 @@ func HandleApiserverAllowlistReconcile(ctx context.Context, t *asynq.Task) error
 	if err != nil {
 		return fmt.Errorf("invalid cluster_id: %w", err)
 	}
-	return ReconcileApiserverAllowlistOnce(ctx, clusterID)
+	return runtime.ReconcileApiserverAllowlistOnce(ctx, clusterID)
 }
 
 // HandleApiserverAllowlistReconcileAll is the periodic 15m sweep handler.
-func HandleApiserverAllowlistReconcileAll(ctx context.Context, _ *asynq.Task) error {
+func (runtime ApiserverAllowlistRuntime) HandleApiserverAllowlistReconcileAll(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ApiserverAllowlistReconcileAllType, func() error {
-		if apiserverAllowlistDeps.Queries == nil || apiserverAllowlistDeps.Registry == nil {
-			runtimeLogger().InfoContext(ctx, "apiserver allowlist reconcile runtime not configured, skipping sweep")
-			return nil
+		if runtime.Deps.Queries == nil || runtime.Deps.Registry == nil {
+			return fmt.Errorf("apiserver allowlist reconcile runtime is not configured")
 		}
-		rows, err := apiserverAllowlistDeps.Queries.ListActiveApiserverAllowlists(ctx)
+		rows, err := runtime.Deps.Queries.ListActiveApiserverAllowlists(ctx)
 		if err != nil {
 			return fmt.Errorf("list active allow-lists: %w", err)
 		}
 		for _, row := range rows {
-			if err := ReconcileApiserverAllowlistOnce(ctx, row.ClusterID); err != nil {
-				runtimeLogger().WarnContext(ctx, "apiserver allowlist reconcile error",
+			if err := runtime.ReconcileApiserverAllowlistOnce(ctx, row.ClusterID); err != nil {
+				runtimeLogger(ctx).WarnContext(ctx, "apiserver allowlist reconcile error",
 					"cluster_id", row.ClusterID.String(),
 					"error", err)
 			}
@@ -193,14 +182,13 @@ func HandleApiserverAllowlistReconcileAll(ctx context.Context, _ *asynq.Task) er
 }
 
 // HandleApiserverAllowlistCleanupSnapshots is the daily 90d retention sweep.
-func HandleApiserverAllowlistCleanupSnapshots(ctx context.Context, _ *asynq.Task) error {
+func (runtime ApiserverAllowlistRuntime) HandleApiserverAllowlistCleanupSnapshots(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ApiserverAllowlistCleanupSnapshotsType, func() error {
-		if apiserverAllowlistDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "apiserver allowlist cleanup runtime not configured, skipping")
-			return nil
+		if runtime.Deps.Queries == nil {
+			return fmt.Errorf("apiserver allowlist cleanup runtime is not configured")
 		}
 		cutoff := time.Now().Add(-time.Duration(SnapshotRetentionDays) * 24 * time.Hour)
-		if err := apiserverAllowlistDeps.Queries.DeleteApiserverAllowlistSnapshotsOlderThan(ctx, cutoff); err != nil {
+		if err := runtime.Deps.Queries.DeleteApiserverAllowlistSnapshotsOlderThan(ctx, cutoff); err != nil {
 			return fmt.Errorf("delete old allow-list snapshots: %w", err)
 		}
 		return nil
@@ -210,8 +198,8 @@ func HandleApiserverAllowlistCleanupSnapshots(ctx context.Context, _ *asynq.Task
 // ReconcileApiserverAllowlistOnce runs the per-cluster reconcile algorithm.
 // Exported so the handler's on-demand reconcile path can call directly
 // instead of going through asynq for an immediate result.
-func ReconcileApiserverAllowlistOnce(ctx context.Context, clusterID uuid.UUID) error {
-	deps := apiserverAllowlistDeps
+func (runtime ApiserverAllowlistRuntime) ReconcileApiserverAllowlistOnce(ctx context.Context, clusterID uuid.UUID) error {
+	deps := runtime.Deps
 	row, err := deps.Queries.GetApiserverAllowlistByClusterID(ctx, clusterID)
 	if err != nil {
 		return fmt.Errorf("load allow-list row: %w", err)
@@ -233,12 +221,21 @@ func ReconcileApiserverAllowlistOnce(ctx context.Context, clusterID uuid.UUID) e
 		desired := allowlist.Render(operatorCIDRs, egressOrEnv(deps.AstronomerEgress), deps.EmergencyAccess)
 		return stampReconcileOutcome(ctx, deps, row, providers.ProviderUnknown, "failed", "no provider driver detected", desired, []string{})
 	}
+	capability := deps.Registry.CapabilityFor(ctx, pc)
+	if row.Mode == "enforce" && !capability.CanEnforce {
+		operatorCIDRs := decodeCIDRsRow(row.Cidrs)
+		desired := allowlist.Render(operatorCIDRs, egressOrEnv(deps.AstronomerEgress), deps.EmergencyAccess)
+		unsupported := &providers.UnsupportedEnforcementError{Provider: detectedID, Reason: capability.Reason}
+		_ = stampReconcileOutcome(ctx, deps, row, detectedID, "failed", unsupported.Error(), desired, []string{})
+		return unsupported
+	}
 
 	// Step 2: GetEffective from the cloud LB / firewall.
 	effective, getErr := driver.GetEffective(ctx, pc)
-	if getErr != nil && !providers.ErrProviderNotImplemented(getErr) {
+	if getErr != nil {
 		// Real error: stamp + emit metric + bail.
 		apiserverAllowlistReconcilesTotal.WithLabelValues(observability.MetricValues(clusterID.String(), detectedID, "failed")...).Inc()
+		recordApiserverAllowlistProviderAuthorizationFailure(clusterID, detectedID, getErr)
 		_ = stampReconcileOutcome(ctx, deps, row, detectedID, "failed", fmt.Sprintf("get_effective: %v", getErr), nil, []string{})
 		return getErr
 	}
@@ -273,19 +270,6 @@ func ReconcileApiserverAllowlistOnce(ctx context.Context, clusterID uuid.UUID) e
 		setDriftGauge(clusterID.String(), drift)
 		return stampReconcileOutcome(ctx, deps, row, detectedID, status, "", desired, effective)
 	case "enforce":
-		// Refuse enforce on unknown / self-managed / scaffolded providers.
-		if detectedID == providers.ProviderUnknown || detectedID == providers.ProviderSelfManaged {
-			runtimeLogger().WarnContext(ctx, "apiserver allowlist enforce on non-cloud provider, downgrading to monitor",
-				"cluster_id", clusterID.String(),
-				"detected_provider", detectedID)
-			status := "synced"
-			if drift {
-				status = "drifting"
-			}
-			apiserverAllowlistReconcilesTotal.WithLabelValues(observability.MetricValues(clusterID.String(), detectedID, "skipped_enforce")...).Inc()
-			setDriftGauge(clusterID.String(), drift)
-			return stampReconcileOutcome(ctx, deps, row, detectedID, status, "enforce mode requires a cloud-managed provider", desired, effective)
-		}
 		if !drift {
 			apiserverAllowlistReconcilesTotal.WithLabelValues(observability.MetricValues(clusterID.String(), detectedID, "synced")...).Inc()
 			setDriftGauge(clusterID.String(), false)
@@ -293,12 +277,8 @@ func ReconcileApiserverAllowlistOnce(ctx context.Context, clusterID uuid.UUID) e
 		}
 		applyErr := driver.Apply(ctx, pc, desired)
 		if applyErr != nil {
-			if providers.ErrProviderNotImplemented(applyErr) {
-				apiserverAllowlistReconcilesTotal.WithLabelValues(observability.MetricValues(clusterID.String(), detectedID, "skipped_enforce")...).Inc()
-				setDriftGauge(clusterID.String(), true)
-				return stampReconcileOutcome(ctx, deps, row, detectedID, "drifting", "provider not implemented in v1", desired, effective)
-			}
 			apiserverAllowlistReconcilesTotal.WithLabelValues(observability.MetricValues(clusterID.String(), detectedID, "failed")...).Inc()
+			recordApiserverAllowlistProviderAuthorizationFailure(clusterID, detectedID, applyErr)
 			setDriftGauge(clusterID.String(), true)
 			_ = stampReconcileOutcome(ctx, deps, row, detectedID, "failed", applyErr.Error(), desired, effective)
 			return applyErr
@@ -309,6 +289,12 @@ func ReconcileApiserverAllowlistOnce(ctx context.Context, clusterID uuid.UUID) e
 	default:
 		// Unknown mode (shouldn't reach here due to CHECK constraint).
 		return nil
+	}
+}
+
+func recordApiserverAllowlistProviderAuthorizationFailure(clusterID uuid.UUID, provider providers.ProviderID, err error) {
+	if providers.IsAuthorizationError(err) {
+		apiserverAllowlistProviderAuthorizationFailures.WithLabelValues(observability.MetricValues(clusterID.String(), provider)...).Inc()
 	}
 }
 

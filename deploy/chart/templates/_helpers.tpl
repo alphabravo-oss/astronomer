@@ -6,6 +6,16 @@ Chart name (truncated to 63 chars per DNS-1123 spec).
 {{- end }}
 
 {{/*
+Content-address the immutable release manifest ConfigMap. An upgrade creates a
+new object before switching workloads, so Kubernetes never has to patch an
+immutable object in place. Helm owns and prunes the superseded object.
+*/}}
+{{- define "astronomer.releaseManifestConfigMapName" -}}
+{{- $prefix := include "astronomer.fullname" . | trunc 29 | trimSuffix "-" -}}
+{{- printf "%s-release-manifest-%s" $prefix (sha256sum .Values.release.manifest | trunc 16) -}}
+{{- end -}}
+
+{{/*
 Fully qualified release name. Combines release name + chart name,
 unless fullnameOverride is provided.
 */}}

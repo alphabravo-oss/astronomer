@@ -3,19 +3,38 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
-
-	"github.com/google/uuid"
 )
+
+func TestIsAuthorizationError(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "unauthorized", err: &HTTPError{Provider: ProviderEKS, StatusCode: http.StatusUnauthorized}, want: true},
+		{name: "forbidden wrapped", err: fmt.Errorf("provider call: %w", &HTTPError{Provider: ProviderAKS, StatusCode: http.StatusForbidden}), want: true},
+		{name: "throttled", err: &HTTPError{Provider: ProviderGKE, StatusCode: http.StatusTooManyRequests}},
+		{name: "unrelated", err: fmt.Errorf("credential materializer unavailable")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsAuthorizationError(tc.err); got != tc.want {
+				t.Fatalf("IsAuthorizationError() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
 
 // fakeMaterializer satisfies CloudCredentialMaterializer with a static
 // blob. Tests don't care what's inside; they just need it non-nil.
 type fakeMaterializer struct{ blob map[string]string }
 
-func (f *fakeMaterializer) ResolveForCluster(ctx context.Context, _ uuid.UUID) (map[string]string, error) {
+func (f *fakeMaterializer) ResolveForCluster(ctx context.Context, _ Cluster, _ ProviderID) (map[string]string, error) {
 	return f.blob, nil
 }
 
@@ -82,6 +101,7 @@ func TestProvider_EKSApplyIsIdempotent(t *testing.T) {
 
 	p := NewEKSProvider(&fakeMaterializer{})
 	p.Endpoint = srv.URL
+	p.SigningOverride = func(*http.Request, map[string]string) error { return nil }
 	cluster := Cluster{Name: "test-eks", Provider: "eks", Region: "us-east-1"}
 
 	// First Apply with the SAME set the API returns — should NOT POST.
@@ -124,6 +144,7 @@ func TestProvider_EKSGetEffective(t *testing.T) {
 
 	p := NewEKSProvider(&fakeMaterializer{})
 	p.Endpoint = srv.URL
+	p.SigningOverride = func(*http.Request, map[string]string) error { return nil }
 	got, err := p.GetEffective(context.Background(), Cluster{Name: "test-eks"})
 	if err != nil {
 		t.Fatalf("get-effective: %v", err)
@@ -159,6 +180,7 @@ func TestProvider_GKEApplyIsIdempotent(t *testing.T) {
 
 	p := NewGKEProvider(&fakeMaterializer{})
 	p.Endpoint = srv.URL
+	p.SigningOverride = func(*http.Request, map[string]string) error { return nil }
 	cluster := Cluster{Name: "test-gke", Provider: "gke", Region: "us-central1", ProjectID: "proj"}
 
 	if err := p.Apply(context.Background(), cluster, []string{"10.0.0.0/8", "192.168.0.0/16"}); err != nil {
@@ -175,27 +197,81 @@ func TestProvider_GKEApplyIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestProvider_AKSReturnsNotImplemented(t *testing.T) {
-	p := NewAKSProvider(nil)
-	if err := p.Apply(context.Background(), Cluster{}, nil); err == nil || !ErrProviderNotImplemented(err) {
-		t.Fatalf("expected not-implemented sentinel; got %v", err)
+func TestProvider_AKSGetAndApply(t *testing.T) {
+	var putCalls int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ContainerService/managedClusters/test-aks", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("api-version") != defaultAKSAPIVersion {
+			t.Fatalf("unexpected api version: %s", r.URL.RawQuery)
+		}
+		if r.Method == http.MethodGet {
+			w.Header().Set("ETag", `"generation-7"`)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": "/read-only", "location": "eastus",
+				"properties": map[string]any{"provisioningState": "Succeeded", "apiServerAccessProfile": map[string]any{"authorizedIPRanges": []string{"10.0.0.0/8"}}},
+			})
+			return
+		}
+		atomic.AddInt32(&putCalls, 1)
+		if r.Header.Get("If-Match") != `"generation-7"` {
+			t.Fatalf("missing optimistic concurrency header")
+		}
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if _, leaked := body["id"]; leaked {
+			t.Fatalf("read-only id leaked into update body")
+		}
+		w.WriteHeader(http.StatusAccepted)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	p := NewAKSProvider(&fakeMaterializer{blob: map[string]string{"subscription_id": "sub"}})
+	p.Endpoint = srv.URL
+	p.HTTPClient = srv.Client()
+	p.AuthOverride = func(context.Context, *http.Request, map[string]string) error { return nil }
+	cluster := Cluster{Name: "test-aks", ResourceGroup: "rg", Provider: ProviderAKS}
+	if got, err := p.GetEffective(context.Background(), cluster); err != nil || len(got) != 1 {
+		t.Fatalf("get effective: %v %v", got, err)
 	}
-	if _, err := p.GetEffective(context.Background(), Cluster{}); err == nil || !ErrProviderNotImplemented(err) {
-		t.Fatalf("expected not-implemented sentinel; got %v", err)
+	if err := p.Apply(context.Background(), cluster, []string{"10.0.0.0/8", "203.0.113.0/24"}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if atomic.LoadInt32(&putCalls) != 1 {
+		t.Fatalf("expected one AKS update")
 	}
 }
 
-func TestProvider_DOKSReturnsNotImplemented(t *testing.T) {
-	p := NewDOKSProvider(nil)
-	if err := p.Apply(context.Background(), Cluster{}, nil); err == nil || !ErrProviderNotImplemented(err) {
-		t.Fatalf("expected not-implemented sentinel; got %v", err)
+func TestProvider_DOKSGetAndApply(t *testing.T) {
+	var putCalls int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/kubernetes/clusters/do-cluster-id", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode(map[string]any{"kubernetes_cluster": map[string]any{"control_plane_firewall": map[string]any{"enabled": true, "allowed_addresses": []string{"10.0.0.0/8"}}}})
+			return
+		}
+		atomic.AddInt32(&putCalls, 1)
+		w.WriteHeader(http.StatusAccepted)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	p := NewDOKSProvider(&fakeMaterializer{blob: map[string]string{"token": "secret"}})
+	p.Endpoint = srv.URL
+	p.HTTPClient = srv.Client()
+	p.AuthOverride = func(*http.Request, map[string]string) error { return nil }
+	cluster := Cluster{Provider: ProviderDOKS, ProviderResourceID: "do-cluster-id"}
+	if err := p.Apply(context.Background(), cluster, []string{"10.0.0.0/8", "203.0.113.0/24"}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if atomic.LoadInt32(&putCalls) != 1 {
+		t.Fatalf("expected one DOKS update")
 	}
 }
 
 func TestProvider_SelfManagedRefusesApply(t *testing.T) {
 	p := NewSelfManagedProvider()
-	if err := p.Apply(context.Background(), Cluster{}, nil); err == nil || !ErrProviderNotImplemented(err) {
-		t.Fatalf("self-managed apply should refuse with sentinel; got %v", err)
+	var unsupported *UnsupportedEnforcementError
+	if err := p.Apply(context.Background(), Cluster{}, nil); !errors.As(err, &unsupported) {
+		t.Fatalf("self-managed apply should return a permanent capability error; got %v", err)
 	}
 	// GetEffective is allowed to return empty (monitor mode keeps recording).
 	got, err := p.GetEffective(context.Background(), Cluster{})

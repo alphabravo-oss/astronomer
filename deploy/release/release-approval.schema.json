@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astronomer.io/schemas/release-approval-v2.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "tag", "source_commit", "source_run_id", "approver", "approved_at", "runtime_images", "rc_rehearsal", "cloud_acceptance", "scale_certification", "rancher_benchmark", "accessibility"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "tag": {"type": "string", "pattern": "^v1\\.[0-9]+\\.[0-9]+$"},
+    "source_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "source_run_id": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+    "approver": {"type": "string", "minLength": 1, "maxLength": 128},
+    "approved_at": {"type": "string", "format": "date-time"},
+    "runtime_images": {"$ref": "#/$defs/localEvidence"},
+    "rc_rehearsal": {"$ref": "#/$defs/externalEvidence"},
+    "cloud_acceptance": {"$ref": "#/$defs/externalEvidence"},
+    "scale_certification": {"$ref": "#/$defs/externalEvidence"},
+    "rancher_benchmark": {"$ref": "#/$defs/externalEvidence"},
+    "accessibility": {"$ref": "#/$defs/externalEvidence"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "localEvidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "evidence_digest"],
+      "properties": {"status": {"const": "passed"}, "evidence_digest": {"$ref": "#/$defs/digest"}}
+    },
+    "externalEvidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "evidence_digest", "source_run_id", "source_ref", "artifact_name"],
+      "properties": {
+        "status": {"const": "passed"}, "evidence_digest": {"$ref": "#/$defs/digest"},
+        "source_run_id": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "source_ref": {"type": "string", "pattern": "^refs/tags/v1\\.[0-9]+\\.[0-9]+$"},
+        "artifact_name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"}
+      }
+    }
+  }
+}

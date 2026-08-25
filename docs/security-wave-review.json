@@ -1,0 +1,327 @@
+{
+  "version": 1,
+  "reviewed_at": "2026-08-23",
+  "policy": "Every program wave must explicitly review every control. A reviewed control is not a GA waiver: live_qualification_pending remains blocking in the release validation matrix.",
+  "controls": [
+    {
+      "id": "authentication_token_scope",
+      "title": "Authentication and token scope",
+      "acceptance": "Non-public routes deny anonymous access and API tokens cannot exceed their declared read, write, or administrative scope.",
+      "evidence": [
+        {
+          "path": "internal/server/routes_security_test.go",
+          "anchor": "func TestEveryRouteDeniesUnauthenticatedRequests"
+        },
+        {
+          "path": "internal/server/middleware/api_token_scope_test.go",
+          "anchor": "func TestRequireWriteScopeForMutations_ReadTokenRejectedOnMutation"
+        }
+      ]
+    },
+    {
+      "id": "authorization_scope",
+      "title": "Global/project/cluster/namespace authorization",
+      "acceptance": "Every protected collection and object is filtered at its declared scope before pagination or mutation.",
+      "evidence": [
+        {
+          "path": "internal/server/collection_scope_route_test.go",
+          "anchor": "func TestNamespaceNarrowedBindingDoesNotSeeNeighbouringProjects"
+        },
+        {
+          "path": "internal/server/security_read_scope_route_test.go",
+          "anchor": "func TestSecurityReadRouteAuthorizationPersonas"
+        }
+      ]
+    },
+    {
+      "id": "object_ownership",
+      "title": "Object-level ownership and cross-tenant negative case",
+      "acceptance": "Route identifiers, durable object ownership, and caller-visible scope agree; cross-tenant identifiers do not disclose objects.",
+      "evidence": [
+        {
+          "path": "internal/handler/security_scope_test.go",
+          "anchor": "func TestSecurityScanObjectReadsRejectWrongClusterAndTombstones"
+        },
+        {
+          "path": "internal/handler/catalog_idor_test.go",
+          "anchor": "func TestCatalogHandler_GetInstalledChartValuesDeniesCrossCluster"
+        },
+        {
+          "path": "internal/handler/ownership_conflict_test.go",
+          "anchor": "func TestTransferOwnershipToAPI_RejectsSystemOwned"
+        }
+      ]
+    },
+    {
+      "id": "browser_csrf",
+      "title": "CSRF for cookie-authenticated mutation",
+      "acceptance": "Every browser-cookie mutation in the mounted route table requires a valid double-submit token; bearer-token requests remain non-cookie scoped.",
+      "evidence": [
+        {
+          "path": "internal/server/routes_security_test.go",
+          "anchor": "func TestBrowserCookieMutatingRoutesRequireCSRF"
+        },
+        {
+          "path": "internal/handler/auth_test.go",
+          "anchor": "t.Run(\"refresh cookie requires csrf\""
+        }
+      ]
+    },
+    {
+      "id": "outbound_ssrf",
+      "title": "SSRF and outbound destination policy",
+      "acceptance": "Operator-controlled destinations use the shared guarded client, reject metadata and non-public address classes, and revalidate redirects and DNS results.",
+      "evidence": [
+        {
+          "path": "internal/httpclient/ssrf_test.go",
+          "anchor": "func TestIsDialAllowed_AllowPrivateStillBlocksMetadata"
+        },
+        {
+          "path": "internal/handler/catalog_hydrate_ssrf_test.go",
+          "anchor": "func Test"
+        },
+        {
+          "path": "internal/agent/service_proxy_test.go",
+          "anchor": "func TestServiceProxyRejectsSSRFHostSmuggling"
+        }
+      ]
+    },
+    {
+      "id": "secret_redaction",
+      "title": "Secret redaction",
+      "acceptance": "Credentials and secret-shaped values are removed from errors, logs, audit, support bundles, and durable task or event payloads.",
+      "evidence": [
+        {
+          "path": "internal/redaction/redaction_test.go",
+          "anchor": "func TestPayloadRedactsSensitiveKeysAndCredentialStrings"
+        },
+        {
+          "path": "internal/handler/supportbundle_test.go",
+          "anchor": "func TestSupportBundleDownloadRedactsSensitiveValues"
+        },
+        {
+          "path": "internal/audit/outbox_test.go",
+          "anchor": "func TestRecordOutboxBuildsSanitizedStableIntent"
+        }
+      ]
+    },
+    {
+      "id": "resource_bounds",
+      "title": "Request, response, concurrency, rate, and timeout bounds",
+      "acceptance": "Ordinary HTTP bodies are globally bounded and high-cost or streaming paths add response, concurrency, rate, and timeout controls appropriate to their protocol.",
+      "evidence": [
+        {
+          "path": "internal/server/middleware/request_body_test.go",
+          "anchor": "func TestBoundRequestBodiesCapsChunkedBody"
+        },
+        {
+          "path": "internal/server/middleware/api_rate_limit_test.go",
+          "anchor": "func TestAPIRateLimitMiddleware_PerClusterCeiling_EndToEnd"
+        },
+        {
+          "path": "internal/tunnel/proxy_test.go",
+          "anchor": "func TestHandleK8sProxy_Timeout"
+        },
+        {
+          "path": "internal/tunnel/server_test.go",
+          "anchor": "func TestStreamManagerMaxLimit"
+        }
+      ]
+    },
+    {
+      "id": "idempotency_replay",
+      "title": "Idempotency and replay behavior",
+      "acceptance": "Caller retries collapse to one accepted operation and durable dispatchers lease, retry, and deduplicate without acknowledging unfinished work.",
+      "evidence": [
+        {
+          "path": "internal/server/middleware/idempotency_test.go",
+          "anchor": "func TestIdempotency_ConcurrentCollapse"
+        },
+        {
+          "path": "internal/db/sqlc/operation_idempotency_ext_test.go",
+          "anchor": "func TestOperationIdempotencySQLClaimsWithAtomicUpsert"
+        },
+        {
+          "path": "internal/worker/tasks/task_outbox_dispatch_test.go",
+          "anchor": "func TestDispatchTaskOutboxOnceRetriesEnqueueFailure"
+        }
+      ]
+    },
+    {
+      "id": "audit_durability",
+      "title": "Audit durability and content classification",
+      "acceptance": "Security-relevant state and sanitized audit intent share a transaction, with leased delivery and stable dedupe identity.",
+      "evidence": [
+        {
+          "path": "internal/db/sqlc/audit_outbox_query_test.go",
+          "anchor": "func TestDeliverAuditOutboxPersistsAndAcknowledgesAtomically"
+        },
+        {
+          "path": "internal/audit/coverage_contract_test.go",
+          "anchor": "func TestKeyMutatingHandlersEmitAudit"
+        },
+        {
+          "path": "scripts/testdata/audit-outbox-postgres-smoke.sql",
+          "anchor": "A transaction rollback must remove the mutation's audit intent"
+        }
+      ]
+    },
+    {
+      "id": "safe_failure_rollback",
+      "title": "Safe failure and rollback behavior",
+      "acceptance": "Dependency failure fails closed, records terminal state where appropriate, and never widens authority or claims success before convergence; reversible upgrades retain a tested rollback path.",
+      "evidence": [
+        {
+          "path": "internal/agent/self_upgrade_test.go",
+          "anchor": "func TestUpgradeRefusesToRetryAnOperationAlreadyRolledBack"
+        },
+        {
+          "path": "internal/handler/projects_namespace_tx_test.go",
+          "anchor": "func TestAddNamespace_TxRollsBackOnSidecarFailure"
+        },
+        {
+          "path": "internal/handler/charlie_admin_test.go",
+          "anchor": "func TestCharlieAdminAuditFailureBlocksAuthorityWideningButNotEmergencyDisable"
+        }
+      ]
+    }
+  ],
+  "wave_reviews": [
+    {
+      "wave": 0,
+      "scope": "Plan, baseline, and test-harness repair",
+      "dispositions": {
+        "authentication_token_scope": "reviewed_unchanged",
+        "authorization_scope": "reviewed_unchanged",
+        "object_ownership": "reviewed_unchanged",
+        "browser_csrf": "reviewed_unchanged",
+        "outbound_ssrf": "reviewed_unchanged",
+        "secret_redaction": "reviewed_unchanged",
+        "resource_bounds": "reviewed_unchanged",
+        "idempotency_replay": "reviewed_unchanged",
+        "audit_durability": "reviewed_unchanged",
+        "safe_failure_rollback": "reviewed_unchanged"
+      },
+      "notes": "This wave changed verification assets rather than runtime authority. It established the evidence policy and preserved all runtime controls."
+    },
+    {
+      "wave": 1,
+      "scope": "Authorization and release integrity",
+      "dispositions": {
+        "authentication_token_scope": "locally_evidenced",
+        "authorization_scope": "locally_evidenced",
+        "object_ownership": "locally_evidenced",
+        "browser_csrf": "locally_evidenced",
+        "outbound_ssrf": "reviewed_unchanged",
+        "secret_redaction": "locally_evidenced",
+        "resource_bounds": "locally_evidenced",
+        "idempotency_replay": "locally_evidenced",
+        "audit_durability": "locally_evidenced",
+        "safe_failure_rollback": "locally_evidenced"
+      },
+      "notes": "Route-wide anonymous denial, scoped security reads, Charlie isolation, migration integrity, and audited short-lived proxy and direct kubeconfig behavior are automated."
+    },
+    {
+      "wave": 2,
+      "scope": "Worker ownership and allow-list enforcement",
+      "dispositions": {
+        "authentication_token_scope": "locally_evidenced",
+        "authorization_scope": "locally_evidenced",
+        "object_ownership": "locally_evidenced",
+        "browser_csrf": "locally_evidenced",
+        "outbound_ssrf": "locally_evidenced",
+        "secret_redaction": "locally_evidenced",
+        "resource_bounds": "locally_evidenced",
+        "idempotency_replay": "locally_evidenced",
+        "audit_durability": "locally_evidenced",
+        "safe_failure_rollback": "locally_evidenced"
+      },
+      "notes": "Task ownership, guarded provider clients, encrypted credential references, durable task intent, bounded provider errors, and fail-closed dependency validation are automated."
+    },
+    {
+      "wave": 3,
+      "scope": "Durable audit, CIS, and agent compatibility",
+      "dispositions": {
+        "authentication_token_scope": "locally_evidenced",
+        "authorization_scope": "locally_evidenced",
+        "object_ownership": "locally_evidenced",
+        "browser_csrf": "locally_evidenced",
+        "outbound_ssrf": "locally_evidenced",
+        "secret_redaction": "locally_evidenced",
+        "resource_bounds": "locally_evidenced",
+        "idempotency_replay": "locally_evidenced",
+        "audit_durability": "locally_evidenced",
+        "safe_failure_rollback": "locally_evidenced"
+      },
+      "notes": "Transactional audit intent, resumable ingestion, scoped agent messages, deduplicated delivery, disconnect handling, and upgrade rollback contracts are covered locally."
+    },
+    {
+      "wave": 4,
+      "scope": "API-first contract and pagination",
+      "dispositions": {
+        "authentication_token_scope": "locally_evidenced",
+        "authorization_scope": "locally_evidenced",
+        "object_ownership": "locally_evidenced",
+        "browser_csrf": "locally_evidenced",
+        "outbound_ssrf": "reviewed_unchanged",
+        "secret_redaction": "locally_evidenced",
+        "resource_bounds": "locally_evidenced",
+        "idempotency_replay": "locally_evidenced",
+        "audit_durability": "locally_evidenced",
+        "safe_failure_rollback": "locally_evidenced"
+      },
+      "notes": "Every mounted operation is documented, mutation routes are classified, authorization precedes pagination, compatibility changes are reviewed, and generated clients preserve the wire contract."
+    },
+    {
+      "wave": 5,
+      "scope": "Explorer, accessibility, browser journeys, and logging",
+      "dispositions": {
+        "authentication_token_scope": "locally_evidenced",
+        "authorization_scope": "locally_evidenced",
+        "object_ownership": "locally_evidenced",
+        "browser_csrf": "locally_evidenced",
+        "outbound_ssrf": "locally_evidenced",
+        "secret_redaction": "locally_evidenced",
+        "resource_bounds": "locally_evidenced",
+        "idempotency_replay": "locally_evidenced",
+        "audit_durability": "locally_evidenced",
+        "safe_failure_rollback": "locally_evidenced"
+      },
+      "notes": "UI actions consume authenticated APIs, logging queries are cluster-bound and bounded, proxy destinations are guarded, and destructive operations carry impact and confirmation contracts."
+    },
+    {
+      "wave": 6,
+      "scope": "Scale, modularity, and documentation",
+      "dispositions": {
+        "authentication_token_scope": "locally_evidenced",
+        "authorization_scope": "locally_evidenced",
+        "object_ownership": "locally_evidenced",
+        "browser_csrf": "locally_evidenced",
+        "outbound_ssrf": "locally_evidenced",
+        "secret_redaction": "locally_evidenced",
+        "resource_bounds": "locally_evidenced",
+        "idempotency_replay": "locally_evidenced",
+        "audit_durability": "locally_evidenced",
+        "safe_failure_rollback": "locally_evidenced"
+      },
+      "notes": "Scale certification enforces latency, error, saturation, and leak thresholds; package and generated-inventory gates preserve control ownership as code is decomposed."
+    },
+    {
+      "wave": 7,
+      "scope": "GA evidence and release rehearsal",
+      "dispositions": {
+        "authentication_token_scope": "locally_evidenced",
+        "authorization_scope": "locally_evidenced",
+        "object_ownership": "locally_evidenced",
+        "browser_csrf": "locally_evidenced",
+        "outbound_ssrf": "locally_evidenced",
+        "secret_redaction": "locally_evidenced",
+        "resource_bounds": "live_qualification_pending",
+        "idempotency_replay": "live_qualification_pending",
+        "audit_durability": "live_qualification_pending",
+        "safe_failure_rollback": "live_qualification_pending"
+      },
+      "notes": "Local contracts are green. Multi-replica failover, outage recovery, retained scale reports, and release-candidate backup/restore/upgrade remain explicit blockers in section 27 of the implementation plan."
+    }
+  ]
+}

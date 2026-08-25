@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hibiken/asynq"
 )
@@ -26,13 +27,12 @@ func NewClusterGroupMetricsRefreshTask() *asynq.Task {
 }
 
 // HandleClusterGroupMetricsRefresh is the asynq handler. Calls the
-// installed refresh hook when one is registered; otherwise it's a no-op
-// so tests + agent worktrees without the handler package wired don't
-// fail.
+// installed refresh hook. This is an always-on tunnel-owner task, so missing
+// composition fails visibly instead of acknowledging the refresh.
 func HandleClusterGroupMetricsRefresh(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, ClusterGroupMetricsRefreshType, func() error {
 		if ClusterGroupMetricsRefresher == nil {
-			return nil
+			return fmt.Errorf("cluster group metrics refresher is not configured")
 		}
 		ClusterGroupMetricsRefresher(ctx)
 		return nil

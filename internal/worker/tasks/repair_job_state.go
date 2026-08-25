@@ -30,7 +30,7 @@ func recordRepairJobSuccess(ctx context.Context, q any, jobName string, metadata
 		Scope:    repairJobGlobalScope,
 		Metadata: payload,
 	}); err != nil {
-		runtimeLogger().WarnContext(ctx, "record repair job success failed", "job", jobName, "error", err)
+		runtimeLogger(ctx).WarnContext(ctx, "record repair job success failed", "job", jobName, "error", err)
 	}
 }
 
@@ -52,6 +52,6 @@ func recordRepairJobFailure(ctx context.Context, q any, jobName string, runErr e
 		LastError: fmt.Sprint(runErr),
 		Metadata:  payload,
 	}); err != nil {
-		runtimeLogger().WarnContext(ctx, "record repair job failure failed", "job", jobName, "error", err)
+		runtimeLogger(ctx).WarnContext(ctx, "record repair job failure failed", "job", jobName, "error", err)
 	}
 }

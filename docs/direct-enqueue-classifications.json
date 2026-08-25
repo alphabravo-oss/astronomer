@@ -11,28 +11,12 @@
       "validation": "apiserver_allowlist:reconcile_all is registered and scheduled every 15 minutes to reconcile active allowlists."
     },
     {
-      "file": "internal/handler/alerting.go",
-      "function": "TestChannel",
-      "classification": "best-effort",
-      "owner": "backend/notifications",
-      "reason": "This endpoint is an explicit delivery diagnostic and does not commit product state. An enqueue failure is returned to the caller, while a successfully accepted notification task uses the normal dispatcher retries.",
-      "validation": "NewNotificationSendTask places the task on the critical queue with MaxRetry(3). There is intentionally no durable delivery receipt or repair sweep for a test notification, so the operator must re-run a failed diagnostic."
-    },
-    {
       "file": "internal/handler/cluster_registries.go",
       "function": "enqueueApply",
       "classification": "repair-backed",
       "owner": "backend/registry",
       "reason": "Registry config writes are durable in cluster_registry_configs; this direct enqueue only accelerates Secret/ServiceAccount convergence.",
       "validation": "cluster:registry_drift_reconcile is registered and scheduled every 30 minutes, and its handler re-applies every registry row idempotently."
-    },
-    {
-      "file": "internal/handler/cluster_templates.go",
-      "function": "enqueueApply",
-      "classification": "outbox-backed",
-      "owner": "backend/templates",
-      "reason": "Production server wiring sets taskOutbox on ClusterTemplateHandler; the direct enqueue is a fallback only when the durable outbox is unavailable.",
-      "validation": "internal/server/server.go wires SetTaskOutbox(queries), and cluster_template:drift_check is also scheduled on the tunnel queue for repair."
     },
     {
       "file": "internal/handler/control_plane.go",
@@ -45,10 +29,10 @@
     {
       "file": "internal/handler/network_policies.go",
       "function": "enqueueApply",
-      "classification": "repair-backed",
+      "classification": "outbox-backed",
       "owner": "backend/network",
-      "reason": "Network policy desired state is persisted before enqueue; missed delivery is repaired by periodic apply and drift sweeps.",
-      "validation": "network_policy:apply is scheduled every 5 minutes and network_policy:drift_check is scheduled every 30 minutes."
+      "reason": "Production create/reapply paths commit each network-policy application with a unique task_outbox row and mandatory audit intent. Direct Redis enqueue remains only in the legacy/unit-test fallback.",
+      "validation": "Production wires NetworkPolicyMutationTx; rollback tests prove application rows, task intents, and audit intent commit together. Periodic apply and drift sweeps remain a second repair layer."
     },
     {
       "file": "internal/handler/platform_default_template.go",
@@ -113,14 +97,6 @@
       "owner": "backend/gitops",
       "reason": "The path creates a durable cluster_decommissions operation before dispatch and prefers a deduplicated task_outbox row. If both outbox and direct acceleration are unavailable, the pending operation remains eligible for repair.",
       "validation": "cluster:decommission_all is scheduled every minute on the tunnel queue, re-enqueues pending rows, and the reconciler uses a lease claim plus persisted idempotent phase state; TestGitOpsDecommissionWritesTaskOutboxBeforeDirectEnqueue verifies the normal outbox contract."
-    },
-    {
-      "file": "internal/worker/tasks/security_scan.go",
-      "function": "reschedule",
-      "classification": "operation-backed",
-      "owner": "backend/security",
-      "reason": "Security scan ingestion is anchored by a durable security_scan_results row. Re-enqueue failures return an error for asynq retry, and timeout updates the durable scan row as failed.",
-      "validation": "security:ingest_scan_results has bounded retry/poll behavior through NewSecurityIngestTask and reschedule."
     }
   ]
 }

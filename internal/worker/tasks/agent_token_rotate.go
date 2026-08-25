@@ -39,36 +39,21 @@ type AgentTokenRotateQuerier interface {
 	ClearExpiredAgentTokenRotationGrace(ctx context.Context, graceMinutes int32) (int64, error)
 }
 
-// AgentTokenRotateDeps wires the sweep. Set once at startup via
-// ConfigureAgentTokenRotate; tests swap a fake.
+// AgentTokenRotateDeps wires the sweep.
 type AgentTokenRotateDeps struct {
 	Queries AgentTokenRotateQuerier
 }
 
-var agentTokenRotateDeps AgentTokenRotateDeps
-
-// ConfigureAgentTokenRotate wires runtime dependencies. Called once from
-// the server bootstrap.
-func ConfigureAgentTokenRotate(deps AgentTokenRotateDeps) {
-	agentTokenRotateDeps = deps
-}
-
-// ResetAgentTokenRotate clears the runtime deps. Used by tests.
-func ResetAgentTokenRotate() {
-	agentTokenRotateDeps = AgentTokenRotateDeps{}
-}
-
 // HandleAgentTokenRotateSweep is the asynq handler. Leader-gated through
 // runPeriodicTaskWithLeader so only the lease holder drives the tick.
-func HandleAgentTokenRotateSweep(ctx context.Context, _ *asynq.Task) error {
-	if agentTokenRotateDeps.Queries == nil {
-		runtimeLogger().InfoContext(ctx, "agent token rotate sweep runtime not configured, skipping")
-		return nil
+func (runtime MaintenanceRuntime) HandleAgentTokenRotateSweep(ctx context.Context, _ *asynq.Task) error {
+	if runtime.AgentTokens.Queries == nil {
+		return fmt.Errorf("agent token rotate sweep runtime is not configured")
 	}
 	return runPeriodicTaskWithLeader(ctx, AgentTokenRotateSweepType, func() error {
 		tickCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
-		return runAgentTokenRotateSweep(tickCtx, agentTokenRotateDeps)
+		return runAgentTokenRotateSweep(tickCtx, runtime.AgentTokens)
 	})
 }
 
@@ -87,7 +72,7 @@ func runAgentTokenRotateSweep(ctx context.Context, deps AgentTokenRotateDeps) er
 		}
 		n, err := deps.Queries.SetClusterAgentTokenRotationPending(ctx, row.ClusterID)
 		if err != nil {
-			runtimeLogger().ErrorContext(ctx, "set rotation pending", "error", err, "cluster_id", row.ClusterID)
+			runtimeLogger(ctx).ErrorContext(ctx, "set rotation pending", "error", err, "cluster_id", row.ClusterID)
 			continue
 		}
 		if n > 0 {
@@ -99,11 +84,11 @@ func runAgentTokenRotateSweep(ctx context.Context, deps AgentTokenRotateDeps) er
 	// completed more than the grace window ago but whose old hash a
 	// new-token CONNECT never cleared (e.g. the agent never reconnected).
 	if _, err := deps.Queries.ClearExpiredAgentTokenRotationGrace(ctx, agentTokenRotateGraceMinutes); err != nil {
-		runtimeLogger().ErrorContext(ctx, "clear expired rotation grace", "error", err)
+		runtimeLogger(ctx).ErrorContext(ctx, "clear expired rotation grace", "error", err)
 	}
 
 	if flagged > 0 {
-		runtimeLogger().InfoContext(ctx, "agent token rotation sweep flagged clusters", "count", flagged)
+		runtimeLogger(ctx).InfoContext(ctx, "agent token rotation sweep flagged clusters", "count", flagged)
 	}
 	return nil
 }

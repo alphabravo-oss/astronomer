@@ -3,16 +3,16 @@
  *
  * Lists bundle + operator-authored constraints with their violation counts,
  * and offers a YAML authoring panel: Validate (kind/apiVersion + embedded Rego
- * for ConstraintTemplates, no apply) and Apply (validate + server-side apply
- * through the agent tunnel + persist). Delete removes an authored constraint
- * from both the cluster and the management store.
+ * for ConstraintTemplates, no apply) and Apply (validate + queue desired state
+ * for agent reconciliation). Delete queues absent desired state and remains
+ * visible until cluster reconciliation converges.
  *
  * Apply + Delete are RBAC-gated in the UI (clusters:update) to match the
  * server-side enforcement; the server independently fails closed + audits.
  */
-import { useState } from 'react';
-import { useParams } from '@/lib/navigation';
-import { Link } from '@/lib/link';
+import { useState } from "react";
+import { useParams } from "@/lib/navigation";
+import { Link } from "@/lib/link";
 import {
   ArrowLeft,
   Trash2,
@@ -22,20 +22,20 @@ import {
   Play,
   Upload,
   Server,
-} from 'lucide-react';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { PageHeader, PageShell } from '@/components/ui/page';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { useCluster } from '@/lib/hooks';
-import { useClustersUpdate } from '@/lib/permission-hooks';
-import { cn } from '@/lib/utils';
-import type { GatekeeperConstraint, ConstraintValidateResult } from '@/types';
+} from "lucide-react";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useCluster } from "@/lib/hooks";
+import { useClustersUpdate } from "@/lib/permission-hooks";
+import { cn } from "@/lib/utils";
+import type { GatekeeperConstraint, ConstraintValidateResult } from "@/types";
 import {
   useGatekeeperConstraints,
   useValidateConstraint,
   useApplyConstraint,
   useDeleteConstraint,
-} from './-hooks';
+} from "./-hooks";
 
 const STARTER_YAML = `apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sRequiredLabels
@@ -53,11 +53,16 @@ spec:
 
 export function ClusterGatekeeperPage() {
   const params = useParams();
-  const clusterId = (params?.id as string) ?? '';
+  const clusterId = (params?.id as string) ?? "";
   const { canWrite, reason } = useClustersUpdate(clusterId);
 
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
-  const { data: constraints, isLoading, isError, refetch } = useGatekeeperConstraints(clusterId);
+  const {
+    data: constraints,
+    isLoading,
+    isError,
+    refetch,
+  } = useGatekeeperConstraints(clusterId);
 
   const validate = useValidateConstraint(clusterId);
   const apply = useApplyConstraint(clusterId);
@@ -65,7 +70,9 @@ export function ClusterGatekeeperPage() {
 
   const [yaml, setYaml] = useState(STARTER_YAML);
   const [result, setResult] = useState<ConstraintValidateResult | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<GatekeeperConstraint | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<GatekeeperConstraint | null>(
+    null,
+  );
 
   const handleValidate = async () => {
     setResult(null);
@@ -89,8 +96,8 @@ export function ClusterGatekeeperPage() {
 
   const columns: Column<GatekeeperConstraint>[] = [
     {
-      key: 'name',
-      header: 'Name',
+      key: "name",
+      header: "Name",
       accessor: (row) => (
         <div>
           <p className="font-medium text-foreground">{row.name}</p>
@@ -99,15 +106,15 @@ export function ClusterGatekeeperPage() {
       ),
     },
     {
-      key: 'source',
-      header: 'Source',
+      key: "source",
+      header: "Source",
       accessor: (row) => (
         <span
           className={cn(
-            'text-xs px-2 py-0.5 rounded capitalize font-medium',
-            row.source === 'custom'
-              ? 'bg-status-info/10 text-status-info'
-              : 'bg-muted text-muted-foreground',
+            "text-xs px-2 py-0.5 rounded capitalize font-medium",
+            row.source === "custom"
+              ? "bg-status-info/10 text-status-info"
+              : "bg-muted text-muted-foreground",
           )}
         >
           {row.source}
@@ -116,24 +123,26 @@ export function ClusterGatekeeperPage() {
       sortAccessor: (row) => row.source,
     },
     {
-      key: 'enforcement',
-      header: 'Enforcement',
+      key: "enforcement",
+      header: "Enforcement",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">
-          {row.enforcementAction || '—'}
+          {row.enforcementAction || "—"}
         </span>
       ),
       sortAccessor: (row) => row.enforcementAction,
     },
     {
-      key: 'violations',
-      header: 'Violations',
-      align: 'center',
+      key: "violations",
+      header: "Violations",
+      align: "center",
       accessor: (row) => (
         <span
           className={cn(
-            'tabular-nums text-sm font-medium',
-            row.violationCount > 0 ? 'text-status-error' : 'text-muted-foreground',
+            "tabular-nums text-sm font-medium",
+            row.violationCount > 0
+              ? "text-status-error"
+              : "text-muted-foreground",
           )}
         >
           {row.violationCount}
@@ -142,18 +151,54 @@ export function ClusterGatekeeperPage() {
       sortAccessor: (row) => row.violationCount,
     },
     {
-      key: 'actions',
-      header: '',
+      key: "status",
+      header: "Status",
+      accessor: (row) =>
+        row.source === "custom" ? (
+          <div className="space-y-0.5">
+            <span
+              className={cn(
+                "inline-flex rounded px-2 py-0.5 text-xs font-medium capitalize",
+                row.syncStatus === "synced"
+                  ? "bg-status-success/10 text-status-success"
+                  : row.syncStatus === "failed"
+                    ? "bg-status-error/10 text-status-error"
+                    : "bg-status-warning/10 text-status-warning",
+              )}
+            >
+              {row.desiredState === "absent"
+                ? row.syncStatus === "synced"
+                  ? "deleted"
+                  : "deleting"
+                : row.syncStatus}
+            </span>
+            {row.lastError ? (
+              <p
+                className="max-w-56 truncate text-2xs text-status-error"
+                title={row.lastError}
+              >
+                {row.lastError}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">managed</span>
+        ),
+      sortAccessor: (row) => row.syncStatus ?? "",
+    },
+    {
+      key: "actions",
+      header: "",
       sortable: false,
       accessor: (row) =>
-        row.source === 'custom' ? (
+        row.source === "custom" && row.desiredState !== "absent" ? (
           <button
             onClick={(e) => {
               e.stopPropagation();
               if (canWrite) setDeleteTarget(row);
             }}
             disabled={!canWrite}
-            title={canWrite ? 'Delete constraint' : reason}
+            title={canWrite ? "Delete constraint" : reason}
             className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -198,14 +243,20 @@ export function ClusterGatekeeperPage() {
       {/* Authoring panel */}
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">Author constraint</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            Author constraint
+          </h2>
           <div className="flex items-center gap-2">
             <button
               onClick={handleValidate}
               disabled={busy || !yaml.trim()}
               className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
             >
-              {validate.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+              {validate.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Play className="h-3.5 w-3.5" />
+              )}
               Validate
             </button>
             <button
@@ -214,7 +265,11 @@ export function ClusterGatekeeperPage() {
               title={canWrite ? undefined : reason}
               className="inline-flex items-center gap-2 h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              {apply.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              {apply.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Upload className="h-3.5 w-3.5" />
+              )}
               Apply
             </button>
           </div>
@@ -232,10 +287,10 @@ export function ClusterGatekeeperPage() {
         {result && (
           <div
             className={cn(
-              'rounded-lg border p-3 text-sm',
+              "rounded-lg border p-3 text-sm",
               result.valid
-                ? 'border-status-success/30 bg-status-success/10'
-                : 'border-status-error/30 bg-status-error/10',
+                ? "border-status-success/30 bg-status-success/10"
+                : "border-status-error/30 bg-status-error/10",
             )}
           >
             <div className="flex items-center gap-2 font-medium">
@@ -245,11 +300,13 @@ export function ClusterGatekeeperPage() {
                 <XCircle className="h-4 w-4 text-status-error" />
               )}
               <span className="text-foreground">
-                {result.applied
-                  ? `Applied ${result.kind} "${result.name}"`
-                  : result.valid
-                    ? `Valid ${result.kind || 'constraint'}${result.name ? ` "${result.name}"` : ''}`
-                    : 'Validation failed'}
+                {result.status === "pending"
+                  ? `Queued ${result.kind} "${result.name}" for reconciliation`
+                  : result.applied
+                    ? `Applied ${result.kind} "${result.name}"`
+                    : result.valid
+                      ? `Valid ${result.kind || "constraint"}${result.name ? ` "${result.name}"` : ""}`
+                      : "Validation failed"}
               </span>
             </div>
             {result.errors && result.errors.length > 0 && (
@@ -266,14 +323,17 @@ export function ClusterGatekeeperPage() {
 
         {!canWrite && (
           <p className="text-2xs text-muted-foreground">
-            You can validate constraints, but applying requires cluster write access. {reason}
+            You can validate constraints, but applying requires cluster write
+            access. {reason}
           </p>
         )}
       </div>
 
       {/* Constraint inventory */}
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-foreground">Active constraints</h2>
+        <h2 className="text-sm font-semibold text-foreground">
+          Desired constraints
+        </h2>
         <DataTable
           data={constraints ?? []}
           columns={columns}
@@ -295,8 +355,8 @@ export function ClusterGatekeeperPage() {
           setDeleteTarget(null);
         }}
         title="Delete constraint?"
-        description={`This removes "${deleteTarget?.name}" from the cluster and the management store. This cannot be undone.`}
-        confirmText="Delete"
+        description={`This queues removal of "${deleteTarget?.name}". Its status remains visible until the cluster confirms deletion.`}
+        confirmText="Queue deletion"
         confirmValue={deleteTarget?.name}
         variant="destructive"
         loading={del.isPending}

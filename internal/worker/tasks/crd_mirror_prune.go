@@ -40,11 +40,10 @@ func NewCrdMirrorPruneStaleTask() *asynq.Task {
 // replica drops rows at a time even when several workers are deployed.
 func HandleCrdMirrorPruneStale(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, CrdMirrorPruneStaleType, func() error {
-		if runtimeDeps.Queries == nil {
-			runtimeLogger().InfoContext(ctx, "crd mirror prune runtime not configured, skipping")
-			return nil
+		if runtimeDependencies(ctx).Queries == nil {
+			return fmt.Errorf("CRD mirror prune runtime is not configured")
 		}
-		q, ok := runtimeDeps.Queries.(crd.MirrorQuerier)
+		q, ok := runtimeDependencies(ctx).Queries.(crd.MirrorQuerier)
 		if !ok {
 			return fmt.Errorf("crd mirror prune not supported by runtime querier")
 		}
@@ -56,7 +55,7 @@ func HandleCrdMirrorPruneStale(ctx context.Context, _ *asynq.Task) error {
 		// Log a single line with the per-kind counts so the daily
 		// triage SLO dashboard can pick it up without scraping the
 		// counter directly.
-		runtimeLogger().InfoContext(ctx, "crd mirror prune sweep complete",
+		runtimeLogger(ctx).InfoContext(ctx, "crd mirror prune sweep complete",
 			"ingress_classes", counts[crd.KindIngressClass],
 			"gateway_classes", counts[crd.KindGatewayClass],
 			"network_policies", counts[crd.KindNetworkPolicy],

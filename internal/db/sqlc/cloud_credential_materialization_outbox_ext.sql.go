@@ -31,21 +31,7 @@ func scanCloudCredentialMaterializationRow(row interface {
 }
 
 const upsertCloudCredentialMaterializationWithTaskOutbox = `
-WITH materialization AS (
-    INSERT INTO cloud_credential_materializations (
-        credential_id, cluster_id, namespace, secret_name, status
-    ) VALUES ($1, $2, $3, $4, 'pending')
-    ON CONFLICT (credential_id, cluster_id, namespace) DO UPDATE SET
-        secret_name = EXCLUDED.secret_name,
-        status      = CASE
-            WHEN cloud_credential_materializations.secret_name = EXCLUDED.secret_name
-                THEN cloud_credential_materializations.status
-            ELSE 'pending'
-        END,
-        updated_at  = now()
-    RETURNING ` + cloudCredentialMaterializationColumns + `
-),
-outbox AS (
+WITH outbox AS (
     INSERT INTO task_outbox (
         dedupe_key, task_type, payload, queue_name, max_retry, timeout_seconds,
         unique_seconds, max_delivery_attempts, next_attempt_at
@@ -66,7 +52,27 @@ outbox AS (
         locked_until          = NULL,
         last_error            = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.last_error ELSE '' END,
         updated_at            = now()
-    RETURNING id
+    RETURNING id, status
+),
+materialization AS (
+    INSERT INTO cloud_credential_materializations (
+        credential_id, cluster_id, namespace, secret_name, status
+    ) VALUES ($1, $2, $3, $4, 'pending')
+    ON CONFLICT (credential_id, cluster_id, namespace) DO UPDATE SET
+        secret_name = EXCLUDED.secret_name,
+        status      = CASE
+            WHEN cloud_credential_materializations.secret_name = EXCLUDED.secret_name
+                 AND (SELECT status FROM outbox) = 'delivered'
+                THEN cloud_credential_materializations.status
+            ELSE 'pending'
+        END,
+        last_error  = CASE
+            WHEN (SELECT status FROM outbox) = 'delivered'
+                THEN cloud_credential_materializations.last_error
+            ELSE ''
+        END,
+        updated_at  = now()
+    RETURNING ` + cloudCredentialMaterializationColumns + `
 )
 SELECT materialization.` + cloudCredentialMaterializationColumns + `
 FROM materialization

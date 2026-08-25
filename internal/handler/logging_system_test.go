@@ -163,7 +163,7 @@ func TestListOutputsRedactsSystemBearer(t *testing.T) {
 	}
 }
 
-func TestQueryOutputSystemRowReturns501(t *testing.T) {
+func TestQueryOutputSystemRowFailsClosedWithoutManagementProxy(t *testing.T) {
 	q := newLoggingFakeQuerier()
 	clusterID := uuid.New()
 	out, err := q.CreateLoggingOutput(context.Background(), sqlc.CreateLoggingOutputParams{
@@ -189,8 +189,8 @@ func TestQueryOutputSystemRowReturns501(t *testing.T) {
 	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
 	rec := httptest.NewRecorder()
 	h.QueryOutput(rec, req)
-	if rec.Code != http.StatusNotImplemented {
-		t.Fatalf("status = %d, want 501: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502: %s", rec.Code, rec.Body.String())
 	}
 	var wrap struct {
 		Error struct {
@@ -201,11 +201,11 @@ func TestQueryOutputSystemRowReturns501(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if wrap.Error.Code != apierror.NotImplemented {
+	if wrap.Error.Code != apierror.ProxyError {
 		t.Fatalf("code = %q", wrap.Error.Code)
 	}
-	if !strings.Contains(strings.ToLower(wrap.Error.Message), "fleet grafana") {
-		t.Fatalf("message = %q, want fleet Grafana", wrap.Error.Message)
+	if !strings.Contains(strings.ToLower(wrap.Error.Message), "not configured") {
+		t.Fatalf("message = %q, want fail-closed proxy error", wrap.Error.Message)
 	}
 }
 
@@ -386,8 +386,10 @@ func TestCreateOutputStripsBearerFromConfiguration(t *testing.T) {
 		},
 	})
 	rec := httptest.NewRecorder()
-	h.CreateOutput(rec, httptest.NewRequest(http.MethodPost, "/api/v1/logging/outputs/", bytes.NewReader(body)))
-	if rec.Code != http.StatusCreated {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/logging/outputs/", bytes.NewReader(body))
+	req.Header.Set("Idempotency-Key", "output-create-redaction-1")
+	h.CreateOutput(rec, req)
+	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
 	}
 	if strings.Contains(rec.Body.String(), "should-not-store") {

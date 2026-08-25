@@ -36,19 +36,16 @@ func (q *countingFleetQuerier) GetClusterHealthStatus(_ context.Context, _ uuid.
 // clusters must issue the fleet list once and GetClusterHealthStatus exactly C
 // times — NOT G full-fleet scans and G×C health point reads as before.
 func TestEvaluateRule_GlobalRulesShareFleetSnapshot(t *testing.T) {
-	saved := runtimeDeps
-	t.Cleanup(func() { runtimeDeps = saved })
-
 	const c = 4
 	clusters := make([]sqlc.Cluster, c)
 	for i := range clusters {
 		clusters[i] = sqlc.Cluster{ID: uuid.New(), Name: "c", Status: "active"}
 	}
 	q := &countingFleetQuerier{clusters: clusters}
-	runtimeDeps = RuntimeDependencies{Queries: q}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q})
 
 	// Build the shared snapshot once (as HandleAlertEvaluation does per tick).
-	fleet, err := buildFleetHealthSnapshot(context.Background())
+	fleet, err := buildFleetHealthSnapshot(ctx)
 	if err != nil {
 		t.Fatalf("buildFleetHealthSnapshot: %v", err)
 	}
@@ -57,7 +54,7 @@ func TestEvaluateRule_GlobalRulesShareFleetSnapshot(t *testing.T) {
 	const g = 5
 	for i := 0; i < g; i++ {
 		rule := sqlc.AlertRule{ID: uuid.New(), Enabled: true, Configuration: []byte("{}")} // ClusterID zero => global
-		evals, err := evaluateRule(context.Background(), rule, fleet)
+		evals, err := evaluateRule(ctx, rule, fleet)
 		if err != nil {
 			t.Fatalf("evaluateRule: %v", err)
 		}

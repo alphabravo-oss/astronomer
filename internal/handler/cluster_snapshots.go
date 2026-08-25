@@ -21,22 +21,24 @@
 // the parent gate is already cluster-scoped).
 //
 // Async model:
-//   - Create handlers return 202 with the freshly inserted DB row. The
-//     poller worker (cluster_snapshot:poll, every 30s) advances the
-//     phase column as Velero progresses.
-//   - DELETE never waits for Velero — it creates a DeleteBackupRequest
-//     CR on the member cluster (per Velero's removal protocol) and
-//     immediately drops the local row. Subsequent status pulls would
-//     be no-ops because the FK cascade also drops cluster_restores.
-//   - Restore is the same: 202 + DB row + Velero Restore CR.
+//   - Production create/restore/delete handlers commit desired state,
+//     a tunnel-owned task-outbox intent, and mandatory audit together.
+//     They never mutate the member cluster before the transaction commits.
+//   - The operation worker creates the immutable Velero CR and tolerates
+//     AlreadyExists, so replay after an uncertain result is safe. The poller
+//     (cluster_snapshot:poll, every 30s) mirrors terminal status afterward.
+//   - Narrow unit-test wiring without the production transaction runner keeps
+//     a compatibility fallback that applies the CR directly.
 
 package handler
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -45,13 +47,17 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/robfig/cron/v3"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // ClusterSnapshotQuerier is the narrow DB surface ClusterSnapshotsHandler
@@ -76,13 +82,69 @@ type ClusterSnapshotQuerier interface {
 	DeleteClusterSnapshotSchedule(ctx context.Context, id uuid.UUID) error
 }
 
+type ClusterSnapshotMutationTx interface {
+	ClusterSnapshotQuerier
+	resourceOperationIdempotencyQuerier
+	GetClusterSnapshotForUpdate(context.Context, uuid.UUID) (sqlc.ClusterSnapshot, error)
+	GetClusterSnapshotScheduleForUpdate(context.Context, uuid.UUID) (sqlc.ClusterSnapshotSchedule, error)
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+}
+
+type clusterSnapshotRunTxFunc func(context.Context, func(ClusterSnapshotMutationTx) error) error
+
+type clusterSnapshotAuditEvent struct {
+	action, resourceType, resourceID, resourceName string
+	status                                         int
+	detail                                         map[string]any
+}
+
+func executeClusterSnapshotMutation[T any](r *http.Request, h *ClusterSnapshotsHandler, mutate func(ClusterSnapshotMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterSnapshotAuditEvent) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, errors.New("cluster snapshot handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q ClusterSnapshotMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			if event.action == "" {
+				return nil
+			}
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
+}
+
 // ClusterSnapshotsHandler owns the /clusters/{cluster_id}/snapshots/*,
 // /snapshot-schedules/*, /velero-status/ route groups.
 type ClusterSnapshotsHandler struct {
 	queries   ClusterSnapshotQuerier
 	requester K8sRequester
 	bus       *events.Bus
+	runTx     clusterSnapshotRunTxFunc
 }
+
+func (h *ClusterSnapshotsHandler) SetRunTx(runTx clusterSnapshotRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *ClusterSnapshotsHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // SetEventBus wires the SSE bus for snapshot.changed liveness events (P4.5).
 // Optional: fire-and-forget and nil-safe.
@@ -117,6 +179,27 @@ func (h *ClusterSnapshotsHandler) SetRequester(r K8sRequester) {
 		return
 	}
 	h.requester = r
+}
+
+func enqueueClusterSnapshotOperation(ctx context.Context, q tasks.TaskOutboxWriter, payload tasks.ClusterSnapshotOperationPayload) error {
+	task, err := tasks.NewClusterSnapshotOperationTask(payload)
+	if err != nil {
+		return err
+	}
+	enriched := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
+	task = asynq.NewTask(task.Type(), enriched, asynq.MaxRetry(5))
+	operationID := payload.SnapshotID
+	if payload.Operation == tasks.ClusterSnapshotOperationRestore {
+		operationID = payload.RestoreID
+	}
+	_, err = tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{
+		DedupeKey:           fmt.Sprintf("cluster_snapshot:%s:%s", payload.Operation, operationID),
+		QueueName:           tasks.ClusterTemplateApplyQueueName,
+		MaxRetry:            5,
+		Timeout:             2 * time.Minute,
+		MaxDeliveryAttempts: 20,
+	})
+	return err
 }
 
 // ----------------------------------------------------------------------
@@ -192,11 +275,37 @@ type RestoreResponse struct {
 
 // ScheduleRequest is the create/update body for cron-driven snapshots.
 // openapi:request SnapshotScheduleRequest
+// openapi:request SnapshotScheduleUpdateRequest
 type ScheduleRequest struct {
 	Name         string       `json:"name"`
 	CronSchedule string       `json:"cron_schedule"`
 	Spec         SnapshotSpec `json:"spec"`
 	Enabled      *bool        `json:"enabled,omitempty"`
+}
+
+func snapshotScheduleUpdateParams(scheduleID uuid.UUID, req ScheduleRequest, existing sqlc.ClusterSnapshotSchedule) (sqlc.UpdateClusterSnapshotScheduleParams, error) {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = existing.Name
+	}
+	if !validVeleroResourceName(strings.ToLower(name)) {
+		return sqlc.UpdateClusterSnapshotScheduleParams{}, errors.New("name must be a valid DNS subdomain")
+	}
+	cronExpr := strings.TrimSpace(req.CronSchedule)
+	if cronExpr == "" {
+		cronExpr = existing.CronSchedule
+	}
+	if _, err := parseCronExpression(cronExpr); err != nil {
+		return sqlc.UpdateClusterSnapshotScheduleParams{}, fmt.Errorf("invalid cron_schedule: %w", err)
+	}
+	enabled := existing.Enabled
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	return sqlc.UpdateClusterSnapshotScheduleParams{
+		ID: scheduleID, Name: name, CronSchedule: cronExpr,
+		Spec: encodeSpec(req.Spec), Enabled: enabled,
+	}, nil
 }
 
 // ScheduleResponse is the wire DTO for a snapshot schedule.
@@ -433,13 +542,13 @@ func (h *ClusterSnapshotsHandler) GetSnapshot(w http.ResponseWriter, r *http.Req
 // CreateSnapshot handles POST /clusters/{cluster_id}/snapshots/.
 //
 //  1. Validate cluster + spec.
-//  2. Insert the row (phase='New') so we have an ID + audit trail.
-//  3. POST the Velero Backup CR to the member cluster's apiserver.
-//  4. If the POST fails: leave the row in DB with phase='FailedValidation'
-//     so the operator sees the failure without us having to retry
-//     automatically (the poller would otherwise loop).
-//  5. Return 202 + the DB row.
+//  2. Atomically insert phase='New', the durable apply task, and audit intent.
+//  3. Return 202; a tunnel worker idempotently creates the Velero Backup CR.
 func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.Request) {
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	r = r.WithContext(withOperationIdempotency(r, "cluster-snapshot"))
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
@@ -490,7 +599,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		expiresAt = pgtype.Timestamptz{Time: time.Now().Add(d), Valid: true}
 	}
 
-	row, err := h.queries.CreateClusterSnapshot(r.Context(), sqlc.CreateClusterSnapshotParams{
+	params := sqlc.CreateClusterSnapshotParams{
 		ClusterID:       clusterID,
 		VeleroName:      veleroName,
 		VeleroNamespace: namespace,
@@ -499,47 +608,85 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		Phase:           "New",
 		ExpiresAt:       expiresAt,
 		CreatedBy:       currentUserUUID(r),
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create snapshot row")
-		return
 	}
-
-	// Tunnel-mediated CRD POST. We accept that the create may fail
-	// (member-cluster unreachable, RBAC missing, etc.); the row is
-	// already persisted so the operator can retry via DELETE+POST.
-	if err := h.postBackupCRD(r.Context(), clusterID.String(), row, spec); err != nil {
-		// Best-effort surface the error via the response — the row
-		// stays in DB so list/get can show it. We return 202 not 500
-		// because the persisted state is correct; only the upstream
-		// Velero failed.
-		out := snapshotToResponse(row)
-		out.LastPollError = err.Error()
-		h.publishSnapshotChanged(clusterID, row.ID, "snapshot")
-		recordAudit(r, h.queries, "cluster.snapshot.created", "cluster_snapshot", row.ID.String(), cluster.Name, map[string]any{
-			"cluster_id":  clusterID.String(),
-			"velero_name": row.VeleroName,
-			"crd_error":   err.Error(),
+	type createSnapshotResult struct {
+		row       sqlc.ClusterSnapshot
+		remoteErr error
+		replay    bool
+	}
+	result, err := executeClusterSnapshotMutation(r, h,
+		func(q ClusterSnapshotMutationTx) (createSnapshotResult, error) {
+			existingID, replay, err := claimResourceOperation(r.Context(), q, "cluster_snapshots")
+			if err != nil {
+				return createSnapshotResult{}, err
+			}
+			if replay {
+				row, getErr := q.GetClusterSnapshotByID(r.Context(), existingID)
+				if getErr != nil || row.ClusterID != clusterID {
+					return createSnapshotResult{}, errOperationIdempotencyConflict
+				}
+				return createSnapshotResult{row: row, replay: true}, nil
+			}
+			row, err := q.CreateClusterSnapshot(r.Context(), params)
+			if err != nil {
+				return createSnapshotResult{}, err
+			}
+			if err := enqueueClusterSnapshotOperation(r.Context(), q, tasks.ClusterSnapshotOperationPayload{
+				Operation: tasks.ClusterSnapshotOperationCreate, SnapshotID: row.ID.String(),
+			}); err != nil {
+				return createSnapshotResult{}, err
+			}
+			if err := attachResourceOperation(r.Context(), q, "cluster_snapshots", row.ID, snapshotToResponse(row)); err != nil {
+				return createSnapshotResult{}, err
+			}
+			return createSnapshotResult{row: row}, nil
+		},
+		func() (createSnapshotResult, error) {
+			row, err := h.queries.CreateClusterSnapshot(r.Context(), params)
+			if err != nil {
+				return createSnapshotResult{}, err
+			}
+			return createSnapshotResult{row: row, remoteErr: h.postBackupCRD(r.Context(), clusterID.String(), row, spec)}, nil
+		},
+		func(result createSnapshotResult) clusterSnapshotAuditEvent {
+			if result.replay {
+				return clusterSnapshotAuditEvent{}
+			}
+			detail := map[string]any{
+				"cluster_id": clusterID.String(), "velero_name": result.row.VeleroName,
+				"source": source, "namespace": namespace,
+			}
+			if result.remoteErr != nil {
+				detail["remote_submission"] = "failed"
+			}
+			return clusterSnapshotAuditEvent{
+				action: "cluster.snapshot.created", resourceType: "cluster_snapshot",
+				resourceID: result.row.ID.String(), resourceName: cluster.Name,
+				status: http.StatusAccepted, detail: detail,
+			}
 		})
-		RespondJSON(w, http.StatusAccepted, out)
+	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create snapshot intent")
 		return
 	}
-
+	row := result.row
 	clusterSnapshotsCreatedInFlight.WithLabelValues(observability.MetricValues(clusterID.String())...).Inc()
-	recordAudit(r, h.queries, "cluster.snapshot.created", "cluster_snapshot", row.ID.String(), cluster.Name, map[string]any{
-		"cluster_id":  clusterID.String(),
-		"velero_name": row.VeleroName,
-		"source":      source,
-		"namespace":   namespace,
-	})
-
-	RespondJSON(w, http.StatusAccepted, snapshotToResponse(row))
+	h.publishSnapshotChanged(clusterID, row.ID, "snapshot")
+	out := snapshotToResponse(row)
+	if result.remoteErr != nil {
+		out.LastPollError = result.remoteErr.Error()
+	}
+	RespondAcceptedOperation(w, fmt.Sprintf("/api/v1/clusters/%s/snapshots/%s", clusterID, row.ID), out)
 }
 
 // DeleteSnapshot handles DELETE /clusters/{cluster_id}/snapshots/{id}/.
-// Creates a Velero DeleteBackupRequest CR (the indirect deletion path)
-// then drops the local row. The CR fire-and-forgets — Velero handles
-// the object-store cleanup asynchronously.
+// Atomically records a durable Velero DeleteBackupRequest intent and audit,
+// then drops the local row. The task carries the non-secret external reference
+// needed after deletion; Velero handles object-store cleanup asynchronously.
 func (h *ClusterSnapshotsHandler) DeleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	clusterID, snapshotID, ok := parseClusterAndSnapshotIDs(w, r)
 	if !ok {
@@ -551,26 +698,61 @@ func (h *ClusterSnapshotsHandler) DeleteSnapshot(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// We post the DeleteBackupRequest BEFORE the local DELETE — if it
-	// fails we still drop the local row, but we record the error.
-	// Velero's CRD is fire-and-forget anyway: even if the controller
-	// briefly misses the request, the BSL's retention sweep mops up.
-	crdErr := h.postDeleteBackupRequestCRD(r.Context(), clusterID.String(), row)
-
-	if err := h.queries.DeleteClusterSnapshot(r.Context(), snapshotID); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete snapshot row")
+	type deleteSnapshotResult struct {
+		row       sqlc.ClusterSnapshot
+		remoteErr error
+	}
+	_, err = executeClusterSnapshotMutation(r, h,
+		func(q ClusterSnapshotMutationTx) (deleteSnapshotResult, error) {
+			locked, err := q.GetClusterSnapshotForUpdate(r.Context(), snapshotID)
+			if err != nil {
+				return deleteSnapshotResult{}, err
+			}
+			if locked.ClusterID != clusterID {
+				return deleteSnapshotResult{}, pgx.ErrNoRows
+			}
+			veleroNamespace := strings.TrimSpace(locked.VeleroNamespace)
+			if veleroNamespace == "" {
+				veleroNamespace = defaultVeleroNamespace
+			}
+			if err := enqueueClusterSnapshotOperation(r.Context(), q, tasks.ClusterSnapshotOperationPayload{
+				Operation: tasks.ClusterSnapshotOperationDelete, SnapshotID: locked.ID.String(),
+				ClusterID: locked.ClusterID.String(), VeleroName: locked.VeleroName,
+				VeleroNamespace: veleroNamespace,
+			}); err != nil {
+				return deleteSnapshotResult{}, err
+			}
+			if err := q.DeleteClusterSnapshot(r.Context(), snapshotID); err != nil {
+				return deleteSnapshotResult{}, err
+			}
+			return deleteSnapshotResult{row: locked}, nil
+		},
+		func() (deleteSnapshotResult, error) {
+			remoteErr := h.postDeleteBackupRequestCRD(r.Context(), clusterID.String(), row)
+			if err := h.queries.DeleteClusterSnapshot(r.Context(), snapshotID); err != nil {
+				return deleteSnapshotResult{}, err
+			}
+			return deleteSnapshotResult{row: row, remoteErr: remoteErr}, nil
+		},
+		func(result deleteSnapshotResult) clusterSnapshotAuditEvent {
+			detail := map[string]any{"cluster_id": clusterID.String(), "velero_name": result.row.VeleroName}
+			if result.remoteErr != nil {
+				detail["remote_submission"] = "failed"
+			}
+			return clusterSnapshotAuditEvent{
+				action: "cluster.snapshot.deleted", resourceType: "cluster_snapshot",
+				resourceID: snapshotID.String(), status: http.StatusNoContent, detail: detail,
+			}
+		})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Snapshot not found")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete snapshot intent")
 		return
 	}
-
-	detail := map[string]any{
-		"cluster_id":  clusterID.String(),
-		"velero_name": row.VeleroName,
-	}
-	if crdErr != nil {
-		detail["crd_error"] = crdErr.Error()
-	}
 	h.publishSnapshotChanged(clusterID, snapshotID, "snapshot")
-	recordAudit(r, h.queries, "cluster.snapshot.deleted", "cluster_snapshot", snapshotID.String(), "", detail)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -584,6 +766,10 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	r = r.WithContext(withOperationIdempotency(r, "cluster-snapshot-restore"))
 	snapshot, err := h.queries.GetClusterSnapshotByID(r.Context(), snapshotID)
 	if err != nil || snapshot.ClusterID != clusterID {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Snapshot not found")
@@ -670,9 +856,13 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 			namespace = defaultVeleroNamespace
 		}
 	}
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "snapshot transaction runner is not configured")
+		return
+	}
 
 	veleroName := newVeleroRestoreName(snapshot.VeleroName)
-	row, err := h.queries.CreateClusterRestore(r.Context(), sqlc.CreateClusterRestoreParams{
+	params := sqlc.CreateClusterRestoreParams{
 		SnapshotID:      snapshotID,
 		TargetClusterID: targetID,
 		VeleroName:      veleroName,
@@ -680,35 +870,78 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 		Spec:            encodeRestoreSpec(req.Spec),
 		Phase:           "New",
 		CreatedBy:       currentUserUUID(r),
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create restore row")
-		return
 	}
-
-	if err := h.postRestoreCRD(r.Context(), targetID.String(), row, req.Spec, snapshot.VeleroName); err != nil {
-		out := restoreToResponse(row)
-		out.LastPollError = err.Error()
-		h.publishSnapshotChanged(row.TargetClusterID, row.ID, "restore")
-		recordAudit(r, h.queries, "cluster.snapshot.restore_requested", "cluster_restore", row.ID.String(), target.Name, map[string]any{
-			"cluster_id":       targetID.String(),
-			"snapshot_id":      snapshotID.String(),
-			"snapshot_cluster": clusterID.String(),
-			"velero_name":      row.VeleroName,
-			"crd_error":        err.Error(),
+	type createRestoreResult struct {
+		row       sqlc.ClusterRestore
+		remoteErr error
+		replay    bool
+	}
+	result, err := executeClusterSnapshotMutation(r, h,
+		func(q ClusterSnapshotMutationTx) (createRestoreResult, error) {
+			existingID, replay, err := claimResourceOperation(r.Context(), q, "cluster_restores")
+			if err != nil {
+				return createRestoreResult{}, err
+			}
+			if replay {
+				row, getErr := q.GetClusterRestoreByID(r.Context(), existingID)
+				if getErr != nil || row.SnapshotID != snapshotID || row.TargetClusterID != targetID || row.VeleroNamespace != namespace || !bytes.Equal(row.Spec, params.Spec) {
+					return createRestoreResult{}, errOperationIdempotencyConflict
+				}
+				return createRestoreResult{row: row, replay: true}, nil
+			}
+			row, err := q.CreateClusterRestore(r.Context(), params)
+			if err != nil {
+				return createRestoreResult{}, err
+			}
+			if err := enqueueClusterSnapshotOperation(r.Context(), q, tasks.ClusterSnapshotOperationPayload{
+				Operation: tasks.ClusterSnapshotOperationRestore, RestoreID: row.ID.String(),
+			}); err != nil {
+				return createRestoreResult{}, err
+			}
+			if err := attachResourceOperation(r.Context(), q, "cluster_restores", row.ID, restoreToResponse(row)); err != nil {
+				return createRestoreResult{}, err
+			}
+			return createRestoreResult{row: row}, nil
+		},
+		func() (createRestoreResult, error) {
+			row, err := h.queries.CreateClusterRestore(r.Context(), params)
+			if err != nil {
+				return createRestoreResult{}, err
+			}
+			return createRestoreResult{row: row, remoteErr: h.postRestoreCRD(r.Context(), targetID.String(), row, req.Spec, snapshot.VeleroName)}, nil
+		},
+		func(result createRestoreResult) clusterSnapshotAuditEvent {
+			if result.replay {
+				return clusterSnapshotAuditEvent{}
+			}
+			detail := map[string]any{
+				"cluster_id": targetID.String(), "snapshot_id": snapshotID.String(),
+				"snapshot_cluster": clusterID.String(), "velero_name": result.row.VeleroName,
+			}
+			if result.remoteErr != nil {
+				detail["remote_submission"] = "failed"
+			}
+			return clusterSnapshotAuditEvent{
+				action: "cluster.snapshot.restore_requested", resourceType: "cluster_restore",
+				resourceID: result.row.ID.String(), resourceName: target.Name,
+				status: http.StatusAccepted, detail: detail,
+			}
 		})
-		RespondJSON(w, http.StatusAccepted, out)
+	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different snapshot restore")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create restore intent")
 		return
 	}
-
-	recordAudit(r, h.queries, "cluster.snapshot.restore_requested", "cluster_restore", row.ID.String(), target.Name, map[string]any{
-		"cluster_id":       targetID.String(),
-		"snapshot_id":      snapshotID.String(),
-		"snapshot_cluster": clusterID.String(),
-		"velero_name":      row.VeleroName,
-	})
-
-	RespondJSON(w, http.StatusAccepted, restoreToResponse(row))
+	row := result.row
+	h.publishSnapshotChanged(row.TargetClusterID, row.ID, "restore")
+	out := restoreToResponse(row)
+	if result.remoteErr != nil {
+		out.LastPollError = result.remoteErr.Error()
+	}
+	RespondAcceptedOperation(w, fmt.Sprintf("/api/v1/clusters/%s/snapshots/%s/", clusterID, snapshotID), out)
 }
 
 // ----------------------------------------------------------------------
@@ -784,26 +1017,37 @@ func (h *ClusterSnapshotsHandler) CreateSchedule(w http.ResponseWriter, r *http.
 		enabled = *req.Enabled
 	}
 
-	row, err := h.queries.CreateClusterSnapshotSchedule(r.Context(), sqlc.CreateClusterSnapshotScheduleParams{
+	params := sqlc.CreateClusterSnapshotScheduleParams{
 		ClusterID:    clusterID,
 		Name:         req.Name,
 		CronSchedule: req.CronSchedule,
 		Spec:         encodeSpec(req.Spec),
 		Enabled:      enabled,
 		CreatedBy:    currentUserUUID(r),
-	})
+	}
+	row, err := executeClusterSnapshotMutation(r, h,
+		func(q ClusterSnapshotMutationTx) (sqlc.ClusterSnapshotSchedule, error) {
+			return q.CreateClusterSnapshotSchedule(r.Context(), params)
+		},
+		func() (sqlc.ClusterSnapshotSchedule, error) {
+			return h.queries.CreateClusterSnapshotSchedule(r.Context(), params)
+		},
+		func(row sqlc.ClusterSnapshotSchedule) clusterSnapshotAuditEvent {
+			return clusterSnapshotAuditEvent{
+				action: "cluster.snapshot.schedule_created", resourceType: "cluster_snapshot_schedule",
+				resourceID: row.ID.String(), resourceName: cluster.Name, status: http.StatusCreated,
+				detail: map[string]any{
+					"cluster_id": clusterID.String(), "name": row.Name,
+					"cron_schedule": row.CronSchedule, "enabled": row.Enabled,
+				},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create schedule (name conflict?)")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create schedule (name conflict?)")
 		return
 	}
 
 	h.publishSnapshotChanged(clusterID, row.ID, "schedule")
-	recordAudit(r, h.queries, "cluster.snapshot.schedule_created", "cluster_snapshot_schedule", row.ID.String(), cluster.Name, map[string]any{
-		"cluster_id":    clusterID.String(),
-		"name":          row.Name,
-		"cron_schedule": row.CronSchedule,
-		"enabled":       row.Enabled,
-	})
 	RespondJSON(w, http.StatusCreated, scheduleToResponse(row))
 }
 
@@ -828,45 +1072,51 @@ func (h *ClusterSnapshotsHandler) UpdateSchedule(w http.ResponseWriter, r *http.
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		name = existing.Name
-	}
-	if !validVeleroResourceName(strings.ToLower(name)) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "name must be a valid DNS subdomain")
+	if _, err := snapshotScheduleUpdateParams(scheduleID, req, existing); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
 		return
 	}
-	cronExpr := strings.TrimSpace(req.CronSchedule)
-	if cronExpr == "" {
-		cronExpr = existing.CronSchedule
-	}
-	if _, err := parseCronExpression(cronExpr); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, fmt.Sprintf("invalid cron_schedule: %v", err))
-		return
-	}
-	enabled := existing.Enabled
-	if req.Enabled != nil {
-		enabled = *req.Enabled
-	}
-
-	row, err := h.queries.UpdateClusterSnapshotSchedule(r.Context(), sqlc.UpdateClusterSnapshotScheduleParams{
-		ID:           scheduleID,
-		Name:         name,
-		CronSchedule: cronExpr,
-		Spec:         encodeSpec(req.Spec),
-		Enabled:      enabled,
-	})
+	row, err := executeClusterSnapshotMutation(r, h,
+		func(q ClusterSnapshotMutationTx) (sqlc.ClusterSnapshotSchedule, error) {
+			locked, err := q.GetClusterSnapshotScheduleForUpdate(r.Context(), scheduleID)
+			if err != nil {
+				return sqlc.ClusterSnapshotSchedule{}, err
+			}
+			if locked.ClusterID != clusterID {
+				return sqlc.ClusterSnapshotSchedule{}, pgx.ErrNoRows
+			}
+			params, err := snapshotScheduleUpdateParams(scheduleID, req, locked)
+			if err != nil {
+				return sqlc.ClusterSnapshotSchedule{}, err
+			}
+			return q.UpdateClusterSnapshotSchedule(r.Context(), params)
+		},
+		func() (sqlc.ClusterSnapshotSchedule, error) {
+			params, err := snapshotScheduleUpdateParams(scheduleID, req, existing)
+			if err != nil {
+				return sqlc.ClusterSnapshotSchedule{}, err
+			}
+			return h.queries.UpdateClusterSnapshotSchedule(r.Context(), params)
+		},
+		func(row sqlc.ClusterSnapshotSchedule) clusterSnapshotAuditEvent {
+			return clusterSnapshotAuditEvent{
+				action: "cluster.snapshot.schedule_updated", resourceType: "cluster_snapshot_schedule",
+				resourceID: row.ID.String(), resourceName: cluster.Name, status: http.StatusOK,
+				detail: map[string]any{
+					"cluster_id": clusterID.String(), "name": row.Name,
+					"cron_schedule": row.CronSchedule, "enabled": row.Enabled,
+				},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update schedule")
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update schedule")
 		return
 	}
 	h.publishSnapshotChanged(clusterID, row.ID, "schedule")
-	recordAudit(r, h.queries, "cluster.snapshot.schedule_updated", "cluster_snapshot_schedule", row.ID.String(), cluster.Name, map[string]any{
-		"cluster_id":    clusterID.String(),
-		"name":          row.Name,
-		"cron_schedule": row.CronSchedule,
-		"enabled":       row.Enabled,
-	})
 	RespondJSON(w, http.StatusOK, scheduleToResponse(row))
 }
 
@@ -880,15 +1130,42 @@ func (h *ClusterSnapshotsHandler) DeleteSchedule(w http.ResponseWriter, r *http.
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
 		return
 	}
-	if err := h.queries.DeleteClusterSnapshotSchedule(r.Context(), scheduleID); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete schedule")
+	_, err = executeClusterSnapshotMutation(r, h,
+		func(q ClusterSnapshotMutationTx) (sqlc.ClusterSnapshotSchedule, error) {
+			locked, err := q.GetClusterSnapshotScheduleForUpdate(r.Context(), scheduleID)
+			if err != nil {
+				return sqlc.ClusterSnapshotSchedule{}, err
+			}
+			if locked.ClusterID != clusterID {
+				return sqlc.ClusterSnapshotSchedule{}, pgx.ErrNoRows
+			}
+			if err := q.DeleteClusterSnapshotSchedule(r.Context(), scheduleID); err != nil {
+				return sqlc.ClusterSnapshotSchedule{}, err
+			}
+			return locked, nil
+		},
+		func() (sqlc.ClusterSnapshotSchedule, error) {
+			if err := h.queries.DeleteClusterSnapshotSchedule(r.Context(), scheduleID); err != nil {
+				return sqlc.ClusterSnapshotSchedule{}, err
+			}
+			return existing, nil
+		},
+		func(row sqlc.ClusterSnapshotSchedule) clusterSnapshotAuditEvent {
+			return clusterSnapshotAuditEvent{
+				action: "cluster.snapshot.schedule_deleted", resourceType: "cluster_snapshot_schedule",
+				resourceID: scheduleID.String(), status: http.StatusNoContent,
+				detail: map[string]any{"cluster_id": clusterID.String(), "name": row.Name},
+			}
+		})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete schedule")
 		return
 	}
 	h.publishSnapshotChanged(clusterID, scheduleID, "schedule")
-	recordAudit(r, h.queries, "cluster.snapshot.schedule_deleted", "cluster_snapshot_schedule", scheduleID.String(), "", map[string]any{
-		"cluster_id": clusterID.String(),
-		"name":       existing.Name,
-	})
 	w.WriteHeader(http.StatusNoContent)
 }
 

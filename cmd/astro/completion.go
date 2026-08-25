@@ -12,8 +12,8 @@ import (
 
 func newCompletionCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:       "completion [bash|zsh|fish|powershell]",
-		Short:     "Generate shell completion script",
+		Use:   "completion [bash|zsh|fish|powershell]",
+		Short: "Generate shell completion script",
 		Long: `Generate a shell completion script for astro.
 
 Load completions into the current shell session:

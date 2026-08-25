@@ -139,6 +139,18 @@ func StripAuthConfigSecrets(raw json.RawMessage) json.RawMessage {
 	return out
 }
 
+// HasAuthConfigSecret reports whether a repository document contains a
+// non-empty credential value. HTTP write paths use it to reject new plaintext
+// credential persistence when no encryptor is configured; legacy unsealed
+// rows remain readable for migration compatibility.
+func HasAuthConfigSecret(raw json.RawMessage) bool {
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil || doc == nil {
+		return false
+	}
+	return hasAuthConfigSecret(doc)
+}
+
 // stripAuthConfigSecretKeys is the decoded-document form credential.Seal takes.
 // It mutates and returns doc, which is safe because Seal owns the map it
 // decoded from the caller's bytes.

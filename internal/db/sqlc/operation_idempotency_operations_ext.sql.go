@@ -9,8 +9,8 @@ import (
 
 const operationIdempotencyClaimCTE = `
 claimed AS (
-    INSERT INTO operation_idempotency_keys (scope, idempotency_key)
-    VALUES ($1, $2)
+    INSERT INTO operation_idempotency_keys (scope, idempotency_key, operation_table, operation_id)
+    VALUES ($1, $2, $9, gen_random_uuid())
     ON CONFLICT (scope, idempotency_key) DO UPDATE
     SET operation_table = CASE WHEN operation_table = '' THEN $9 ELSE operation_table END,
         operation_id = COALESCE(operation_id, gen_random_uuid()),
@@ -49,12 +49,6 @@ inserted AS (
     WHERE operation_table = 'tool_operations'
     ON CONFLICT (id) DO NOTHING
     RETURNING ` + operationCoreColumns + `
-),
-attached AS (
-    UPDATE operation_idempotency_keys
-    SET response = COALESCE((SELECT to_jsonb(inserted) FROM inserted LIMIT 1), response),
-        updated_at = now()
-    WHERE scope = $1 AND idempotency_key = $2
 )
 SELECT ` + operationCoreColumns + ` FROM inserted
 UNION ALL
@@ -66,7 +60,11 @@ LIMIT 1`
 func (q *Queries) CreateToolOperationIdempotent(ctx context.Context, arg CreateToolOperationIdempotentParams) (ToolOperation, error) {
 	row := q.db.QueryRow(ctx, createToolOperationIdempotent,
 		arg.Scope, arg.IdempotencyKey, arg.TargetType, arg.TargetKey, arg.OperationType, arg.Payload, arg.Status, arg.CreatedByID, "tool_operations")
-	return scanToolOperationForIdempotency(row)
+	op, err := scanToolOperationForIdempotency(row)
+	if err == nil {
+		err = q.attachOperationIdempotencyResponse(ctx, arg.Scope, arg.IdempotencyKey, "tool_operations", op.ID, op)
+	}
+	return op, err
 }
 
 const createCatalogOperationIdempotent = `-- name: CreateCatalogOperationIdempotent :one
@@ -78,12 +76,6 @@ inserted AS (
     WHERE operation_table = 'catalog_operations'
     ON CONFLICT (id) DO NOTHING
     RETURNING ` + operationCoreColumns + `
-),
-attached AS (
-    UPDATE operation_idempotency_keys
-    SET response = COALESCE((SELECT to_jsonb(inserted) FROM inserted LIMIT 1), response),
-        updated_at = now()
-    WHERE scope = $1 AND idempotency_key = $2
 )
 SELECT ` + operationCoreColumns + ` FROM inserted
 UNION ALL
@@ -95,7 +87,52 @@ LIMIT 1`
 func (q *Queries) CreateCatalogOperationIdempotent(ctx context.Context, arg CreateCatalogOperationIdempotentParams) (CatalogOperation, error) {
 	row := q.db.QueryRow(ctx, createCatalogOperationIdempotent,
 		arg.Scope, arg.IdempotencyKey, arg.TargetType, arg.TargetKey, arg.OperationType, arg.Payload, arg.Status, arg.CreatedByID, "catalog_operations")
-	return scanCatalogOperationForIdempotency(row)
+	op, err := scanCatalogOperationForIdempotency(row)
+	if err == nil {
+		err = q.attachOperationIdempotencyResponse(ctx, arg.Scope, arg.IdempotencyKey, "catalog_operations", op.ID, op)
+	}
+	return op, err
+}
+
+// CreateCatalogOperationIdempotentWithDisposition is the mutation-service
+// variant of CreateCatalogOperationIdempotent. Handlers that stage domain
+// state before creating the operation must know whether this call inserted the
+// operation or replayed an older one; otherwise a replay can commit newly
+// staged state while returning an already-completed operation.
+type CreateCatalogOperationIdempotentWithDispositionParams CreateCatalogOperationIdempotentParams
+
+type CreateCatalogOperationIdempotentWithDispositionRow struct {
+	CatalogOperation
+	Inserted bool `json:"inserted"`
+}
+
+const createCatalogOperationIdempotentWithDisposition = `-- name: CreateCatalogOperationIdempotentWithDisposition :one
+WITH ` + operationIdempotencyClaimCTE + `,
+inserted AS (
+    INSERT INTO catalog_operations (id, target_type, target_key, operation_type, payload, status, created_by_id)
+    SELECT operation_id, $3, $4, $5, $6, $7, $8
+    FROM claimed
+    WHERE operation_table = 'catalog_operations'
+    ON CONFLICT (id) DO NOTHING
+    RETURNING ` + operationCoreColumns + `
+)
+SELECT ` + operationCoreColumns + `, true AS inserted FROM inserted
+UNION ALL
+SELECT ` + operationCoreColumns + `, false AS inserted FROM catalog_operations
+JOIN claimed ON catalog_operations.id = claimed.operation_id
+WHERE claimed.operation_table = 'catalog_operations'
+LIMIT 1`
+
+func (q *Queries) CreateCatalogOperationIdempotentWithDisposition(ctx context.Context, arg CreateCatalogOperationIdempotentWithDispositionParams) (CreateCatalogOperationIdempotentWithDispositionRow, error) {
+	row := q.db.QueryRow(ctx, createCatalogOperationIdempotentWithDisposition,
+		arg.Scope, arg.IdempotencyKey, arg.TargetType, arg.TargetKey, arg.OperationType, arg.Payload, arg.Status, arg.CreatedByID, "catalog_operations")
+	var result CreateCatalogOperationIdempotentWithDispositionRow
+	i := &result.CatalogOperation
+	err := row.Scan(&i.ID, &i.TargetType, &i.TargetKey, &i.OperationType, &i.Payload, &i.Status, &i.AttemptCount, &i.StartedAt, &i.CompletedAt, &i.ErrorMessage, &i.CreatedByID, &i.CreatedAt, &i.UpdatedAt, &result.Inserted)
+	if err == nil {
+		err = q.attachOperationIdempotencyResponse(ctx, arg.Scope, arg.IdempotencyKey, "catalog_operations", i.ID, *i)
+	}
+	return result, err
 }
 
 const createLoggingOperationIdempotent = `-- name: CreateLoggingOperationIdempotent :one
@@ -107,12 +144,6 @@ inserted AS (
     WHERE operation_table = 'logging_operations'
     ON CONFLICT (id) DO NOTHING
     RETURNING ` + operationCoreColumns + `
-),
-attached AS (
-    UPDATE operation_idempotency_keys
-    SET response = COALESCE((SELECT to_jsonb(inserted) FROM inserted LIMIT 1), response),
-        updated_at = now()
-    WHERE scope = $1 AND idempotency_key = $2
 )
 SELECT ` + operationCoreColumns + ` FROM inserted
 UNION ALL
@@ -124,7 +155,52 @@ LIMIT 1`
 func (q *Queries) CreateLoggingOperationIdempotent(ctx context.Context, arg CreateLoggingOperationIdempotentParams) (LoggingOperation, error) {
 	row := q.db.QueryRow(ctx, createLoggingOperationIdempotent,
 		arg.Scope, arg.IdempotencyKey, arg.TargetType, arg.TargetKey, arg.OperationType, arg.Payload, arg.Status, arg.CreatedByID, "logging_operations")
-	return scanLoggingOperationForIdempotency(row)
+	op, err := scanLoggingOperationForIdempotency(row)
+	if err == nil {
+		err = q.attachOperationIdempotencyResponse(ctx, arg.Scope, arg.IdempotencyKey, "logging_operations", op.ID, op)
+	}
+	return op, err
+}
+
+// CreateLoggingOperationIdempotentWithDisposition is the mutation-service
+// variant of CreateLoggingOperationIdempotent. A logging handler that stages
+// desired configuration in the same transaction must distinguish a newly
+// inserted operation from a replay, or it could commit new configuration that
+// has no corresponding executable operation.
+type CreateLoggingOperationIdempotentWithDispositionParams CreateLoggingOperationIdempotentParams
+
+type CreateLoggingOperationIdempotentWithDispositionRow struct {
+	LoggingOperation
+	Inserted bool `json:"inserted"`
+}
+
+const createLoggingOperationIdempotentWithDisposition = `-- name: CreateLoggingOperationIdempotentWithDisposition :one
+WITH ` + operationIdempotencyClaimCTE + `,
+inserted AS (
+    INSERT INTO logging_operations (id, target_type, target_key, operation_type, payload, status, created_by_id)
+    SELECT operation_id, $3, $4, $5, $6, $7, $8
+    FROM claimed
+    WHERE operation_table = 'logging_operations'
+    ON CONFLICT (id) DO NOTHING
+    RETURNING ` + operationCoreColumns + `
+)
+SELECT ` + operationCoreColumns + `, true AS inserted FROM inserted
+UNION ALL
+SELECT ` + operationCoreColumns + `, false AS inserted FROM logging_operations
+JOIN claimed ON logging_operations.id = claimed.operation_id
+WHERE claimed.operation_table = 'logging_operations'
+LIMIT 1`
+
+func (q *Queries) CreateLoggingOperationIdempotentWithDisposition(ctx context.Context, arg CreateLoggingOperationIdempotentWithDispositionParams) (CreateLoggingOperationIdempotentWithDispositionRow, error) {
+	row := q.db.QueryRow(ctx, createLoggingOperationIdempotentWithDisposition,
+		arg.Scope, arg.IdempotencyKey, arg.TargetType, arg.TargetKey, arg.OperationType, arg.Payload, arg.Status, arg.CreatedByID, "logging_operations")
+	var result CreateLoggingOperationIdempotentWithDispositionRow
+	i := &result.LoggingOperation
+	err := row.Scan(&i.ID, &i.TargetType, &i.TargetKey, &i.OperationType, &i.Payload, &i.Status, &i.AttemptCount, &i.StartedAt, &i.CompletedAt, &i.ErrorMessage, &i.CreatedByID, &i.CreatedAt, &i.UpdatedAt, &result.Inserted)
+	if err == nil {
+		err = q.attachOperationIdempotencyResponse(ctx, arg.Scope, arg.IdempotencyKey, "logging_operations", i.ID, *i)
+	}
+	return result, err
 }
 
 const createWorkloadOperationIdempotent = `-- name: CreateWorkloadOperationIdempotent :one
@@ -136,12 +212,6 @@ inserted AS (
     WHERE operation_table = 'workload_operations'
     ON CONFLICT (id) DO NOTHING
     RETURNING ` + operationCoreColumns + `
-),
-attached AS (
-    UPDATE operation_idempotency_keys
-    SET response = COALESCE((SELECT to_jsonb(inserted) FROM inserted LIMIT 1), response),
-        updated_at = now()
-    WHERE scope = $1 AND idempotency_key = $2
 )
 SELECT ` + operationCoreColumns + ` FROM inserted
 UNION ALL
@@ -153,7 +223,11 @@ LIMIT 1`
 func (q *Queries) CreateWorkloadOperationIdempotent(ctx context.Context, arg CreateWorkloadOperationIdempotentParams) (WorkloadOperation, error) {
 	row := q.db.QueryRow(ctx, createWorkloadOperationIdempotent,
 		arg.Scope, arg.IdempotencyKey, arg.TargetType, arg.TargetKey, arg.OperationType, arg.Payload, arg.Status, arg.CreatedByID, "workload_operations")
-	return scanWorkloadOperationForIdempotency(row)
+	op, err := scanWorkloadOperationForIdempotency(row)
+	if err == nil {
+		err = q.attachOperationIdempotencyResponse(ctx, arg.Scope, arg.IdempotencyKey, "workload_operations", op.ID, op)
+	}
+	return op, err
 }
 
 const createMonitoringOperationIdempotent = `-- name: CreateMonitoringOperationIdempotent :one
@@ -165,12 +239,6 @@ inserted AS (
     WHERE operation_table = 'monitoring_operations'
     ON CONFLICT (id) DO NOTHING
     RETURNING ` + operationCoreColumns + `
-),
-attached AS (
-    UPDATE operation_idempotency_keys
-    SET response = COALESCE((SELECT to_jsonb(inserted) FROM inserted LIMIT 1), response),
-        updated_at = now()
-    WHERE scope = $1 AND idempotency_key = $2
 )
 SELECT ` + operationCoreColumns + ` FROM inserted
 UNION ALL
@@ -182,7 +250,11 @@ LIMIT 1`
 func (q *Queries) CreateMonitoringOperationIdempotent(ctx context.Context, arg CreateMonitoringOperationIdempotentParams) (MonitoringOperation, error) {
 	row := q.db.QueryRow(ctx, createMonitoringOperationIdempotent,
 		arg.Scope, arg.IdempotencyKey, arg.TargetType, arg.TargetKey, arg.OperationType, arg.Payload, arg.Status, arg.CreatedByID, "monitoring_operations")
-	return scanMonitoringOperationForIdempotency(row)
+	op, err := scanMonitoringOperationForIdempotency(row)
+	if err == nil {
+		err = q.attachOperationIdempotencyResponse(ctx, arg.Scope, arg.IdempotencyKey, "monitoring_operations", op.ID, op)
+	}
+	return op, err
 }
 
 type operationScanRow interface {

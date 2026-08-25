@@ -2,8 +2,9 @@
 
 ## Authoritative enterprise verification
 
-`scripts/verify-enterprise.sh` is the single source of truth for the local and
-CI release-integrity gates. The default is the complete gate; dependency
+`scripts/verify-enterprise.sh` is the authoritative cluster-safe static gate
+used locally and in CI. Its default `all` scope is complete only for static,
+generated, unit/race, API, frontend, and Helm verification; dependency
 installation remains an explicit prerequisite so verification never changes a
 lockfile or resolves a different dependency graph:
 
@@ -43,13 +44,23 @@ Logs, test reports, Helm stderr, and rendered manifests are written to
 `${VERIFY_ARTIFACT_DIR}`. The local default is
 `${TMPDIR:-/tmp}/astronomer-verify-enterprise`; CI uploads this directory when a
 gate fails. The script has no quick mode, and CI does not opt out of a failing
-enterprise check.
+static check. Its manifest enumerates every parallel and protected
+qualification still required. Release integrity is decided only by the
+protected promotion approval aggregator after it verifies their exact signed
+artifacts.
 
-Playwright and live-cluster validation are deliberately separate from
-`verify-enterprise`: Playwright runs in the named `frontend-e2e` PR job, while
-`smoke-fresh-cluster.yaml` owns k3d/live-agent validation. Keeping those suites
-named makes their topology and failure artifacts explicit without serializing
-the backend, frontend, and Helm matrix.
+Browser and live-cluster validation are deliberately separate from
+`verify-enterprise`. Required lanes cover Playwright desktop/tablet/mobile,
+visual baselines, and a disposable live browser stack with Trivy enabled;
+`smoke-fresh-cluster.yaml` owns fresh k3d/live-agent adoption. Their named jobs
+and retained artifacts keep topology explicit without serializing the static
+backend, frontend, and Helm matrix.
+
+PostgreSQL failover is likewise an explicit, parallel PR certification job so
+the Docker-based physical-replication drill does not make the default local
+`make verify-enterprise` loop impractically slow. Run the identical lane with
+`make test-postgres-failover-certification`; CI retains its schema-versioned
+RPO/RTO evidence and database logs for 90 days.
 
 ## Active workflows
 
@@ -59,11 +70,14 @@ Runs on every pull request to `main` and on manual dispatch. It covers:
 
 1. `./scripts/verify-enterprise.sh backend`, plus the stateful migration
    roundtrip smoke that intentionally remains a distinct integration step.
-2. `./scripts/verify-enterprise.sh frontend` after `npm ci`.
-3. A named Playwright end-to-end job with its own browser setup and report.
-4. `./scripts/verify-enterprise.sh helm`, including locked dependency build,
+2. The parallel PostgreSQL physical-replication failover certification, with
+   zero-row RPO and 30-second RTO thresholds and retained machine evidence.
+3. `./scripts/verify-enterprise.sh frontend` after `npm ci`.
+4. Required Playwright desktop/tablet/mobile, visual, and disposable live-stack
+   browser lanes, including Trivy, with retained reports.
+5. `./scripts/verify-enterprise.sh helm`, including locked dependency build,
    lint, both renders, and chart contract tests.
-5. The unchanged container supply-chain matrix: build the server, worker,
+6. The unchanged container supply-chain matrix: build the server, worker,
    agent, migrate, shell, and frontend images, scan high/critical fixed
    vulnerabilities, and upload SPDX SBOMs.
 
@@ -99,8 +113,13 @@ That scope verifies:
 7. `go test ./internal/handler/ -run TestApierrorCatalogCoverage -count=1` —
    apierror catalog lint.
 
-`make verify` runs the same focused sequence locally. The broader
-`make verify-enterprise` remains the release-integrity answer.
+`make verify` runs the same focused sequence locally. `make verify-enterprise`
+is the authoritative cluster-safe static verification gate; it emits a closed,
+commit-bound manifest that explicitly lists the protected qualifications it
+cannot execute locally. Release integrity is decided by the protected
+`release.yaml`/`resume-release.yaml` promotion jobs, which download and verify
+the exact signed RC, cloud, scale/audit/sizing, Rancher automated+human, and
+assistive-technology evidence named by the digest-bound release approval.
 
 ### `release.yaml` — qualified immutable release pipeline (T12)
 
@@ -145,7 +164,7 @@ before pulling our images into an internal registry mirror.
 
 Drives the full operator-onboarding flow against a real k3d cluster on
 every PR to `main` and nightly: wizard registration → agent install →
-baseline operators → kubectl shell open → trivy vuln reports flowing.
+catalog-defined Flux baseline → kubectl shell open → API health checks.
 This catches the class of regression that the bitnami/kubectl:1.31
 404, the SQLSTATE 42P08 migration bug, the cert-manager unmarshal
 bug, and the phase-machine stuck-on-`failed` bug all share — nothing
@@ -153,11 +172,16 @@ else in CI exercised the fresh-cluster registration path end-to-end,
 and each sat in `main` for at least a week before a human surfaced
 it manually.
 
-Hard cap: 25 minutes per run. The script's per-step timeouts add up
+Hard cap: 40 minutes per run. The script's per-step timeouts add up
 to ~13 minutes worst case; the slack covers k3d provisioning + image
 pulls. On failure, the workflow uploads kubectl logs from the
 management cluster + the smoke cluster's agent pod as a `smoke-debug-*`
-artifact retained 7 days.
+artifact retained 7 days. Independently, every completed smoke invocation
+atomically emits a sanitized `astronomer-fresh-cluster-smoke/v1` JSON manifest
+bound to the commit, Actions run identity, tested image identities, Kubernetes
+and Flux versions, completed checks, and timestamps. The workflow uploads that
+manifest with `if: always()` and retains it for 90 days; it contains no login,
+registration, agent, or API credentials.
 
 ## Disabled workflows
 

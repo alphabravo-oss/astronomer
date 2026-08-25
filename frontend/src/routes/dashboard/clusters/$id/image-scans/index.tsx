@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * Cluster Image Scans tab — sprint 062.
  *
@@ -17,20 +24,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * rescan nudge (which the backend gates as cluster:read by design).
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { useParams } from '@/lib/navigation';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "@/lib/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 import {
   AlertTriangle,
   Loader2,
   RefreshCw,
   ShieldAlert,
   X,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { queryKeys, useCluster } from '@/lib/hooks';
-import { liveFallback } from '@/lib/live/status-store';
+import { queryKeys, useCluster } from "@/lib/hooks";
+import { liveFallback } from "@/lib/live/status-store";
 import {
   getImageVulnReport,
   getImageVulnReportHistory,
@@ -38,34 +45,56 @@ import {
   getImageVulnHistory,
   getImageVulnDiff,
   getImageVulnProgress,
+  getImageVulnRescanOperation,
   exportImageVulnsCSVPath,
   listVulnerableImages,
   triggerImageVulnRescan,
   type CVESeverity,
   type ImageVulnReport,
   type ImageVulnSummary,
-} from '@/lib/api/cluster-detail';
-import { Download, TrendingDown, TrendingUp, Minus } from 'lucide-react';
+} from "@/lib/api/cluster-detail";
+import { useOperationMutation } from "@/lib/hooks/operation-mutation";
+import { Download, TrendingDown, TrendingUp, Minus } from "lucide-react";
 
-const SEVERITIES: { key: keyof ImageVulnSummary; label: string; tone: string }[] = [
-  { key: 'critical', label: 'Critical', tone: 'bg-status-error/10 text-status-error border-status-error/30' },
-  { key: 'high', label: 'High', tone: 'bg-status-high/10 text-status-high border-status-high/30' },
-  { key: 'medium', label: 'Medium', tone: 'bg-status-warning/10 text-status-warning border-status-warning/30' },
-  { key: 'low', label: 'Low', tone: 'bg-sky-500/10 text-sky-500 border-sky-500/30' },
+const SEVERITIES: {
+  key: keyof ImageVulnSummary;
+  label: string;
+  tone: string;
+}[] = [
+  {
+    key: "critical",
+    label: "Critical",
+    tone: "bg-status-error/10 text-status-error border-status-error/30",
+  },
+  {
+    key: "high",
+    label: "High",
+    tone: "bg-status-high/10 text-status-high border-status-high/30",
+  },
+  {
+    key: "medium",
+    label: "Medium",
+    tone: "bg-status-warning/10 text-status-warning border-status-warning/30",
+  },
+  {
+    key: "low",
+    label: "Low",
+    tone: "bg-sky-500/10 text-sky-500 border-sky-500/30",
+  },
 ];
 
 function cveToneFor(severity: CVESeverity): string {
   switch (severity) {
-    case 'CRITICAL':
-      return 'bg-status-error/10 text-status-error border-status-error/30';
-    case 'HIGH':
-      return 'bg-status-high/10 text-status-high border-status-high/30';
-    case 'MEDIUM':
-      return 'bg-status-warning/10 text-status-warning border-status-warning/30';
-    case 'LOW':
-      return 'bg-sky-500/10 text-sky-500 border-sky-500/30';
+    case "CRITICAL":
+      return "bg-status-error/10 text-status-error border-status-error/30";
+    case "HIGH":
+      return "bg-status-high/10 text-status-high border-status-high/30";
+    case "MEDIUM":
+      return "bg-status-warning/10 text-status-warning border-status-warning/30";
+    case "LOW":
+      return "bg-sky-500/10 text-sky-500 border-sky-500/30";
     default:
-      return 'bg-muted text-muted-foreground border-border';
+      return "bg-muted text-muted-foreground border-border";
   }
 }
 
@@ -75,8 +104,8 @@ function ClusterImageScansPage() {
   const queryClient = useQueryClient();
   const { data: cluster } = useCluster(clusterId);
 
-  const [namespace, setNamespace] = useState<string>('');
-  const [severityFilter, setSeverityFilter] = useState<CVESeverity | ''>('');
+  const [namespace, setNamespace] = useState<string>("");
+  const [severityFilter, setSeverityFilter] = useState<CVESeverity | "">("");
   const [openReport, setOpenReport] = useState<ImageVulnReport | null>(null);
   // Sprint 081: after a manual "Trigger rescan" click we accelerate
   // the progress poll for ~60s and show a "dispatched" banner state.
@@ -97,7 +126,11 @@ function ClusterImageScansPage() {
 
   const images = useQuery({
     queryKey: queryKeys.clusterPages.imageVulnImages(clusterId, namespace),
-    queryFn: () => listVulnerableImages(clusterId, { namespace: namespace || undefined, limit: 20 }),
+    queryFn: () =>
+      listVulnerableImages(clusterId, {
+        namespace: namespace || undefined,
+        limit: 20,
+      }),
     enabled: scansEnabled,
     refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
@@ -105,8 +138,12 @@ function ClusterImageScansPage() {
 
   const reportDetail = useQuery({
     queryKey: openReport
-      ? queryKeys.clusterPages.imageVulnReport(clusterId, openReport.id, severityFilter || '')
-      : ['noop'],
+      ? queryKeys.clusterPages.imageVulnReport(
+          clusterId,
+          openReport.id,
+          severityFilter || "",
+        )
+      : ["noop"],
     queryFn: () =>
       openReport
         ? getImageVulnReport(clusterId, openReport.id, {
@@ -123,7 +160,7 @@ function ClusterImageScansPage() {
   const reportHistory = useQuery({
     queryKey: openReport
       ? queryKeys.clusterPages.imageVulnReportHistory(clusterId, openReport.id)
-      : ['noop-rh'],
+      : ["noop-rh"],
     queryFn: () =>
       openReport
         ? getImageVulnReportHistory(clusterId, openReport.id, { limit: 50 })
@@ -133,25 +170,35 @@ function ClusterImageScansPage() {
     refetchIntervalInBackground: false,
   });
 
-  const rescan = useMutation({
-    mutationFn: () => triggerImageVulnRescan(clusterId),
-    onSuccess: (data) => {
-      if (data.triggered) {
-        toastSuccess('Trivy operator nudged — re-scans will appear shortly');
+  const rescan = useOperationMutation({
+    keyPrefix: "vulnerability-rescan",
+    submit: (_: void, context) => triggerImageVulnRescan(clusterId, context),
+    read: getImageVulnRescanOperation,
+    mutation: {
+      onSuccess: () => {
+        toastSuccess(
+          "Vulnerability rescan completed; fresh reports will appear shortly",
+        );
         // Mark the click time so the progress banner enters
         // "dispatched, waiting for jobs" mode and the progress query
         // polls at 1.5s for the next 60s — long enough to catch the
         // 5-15s scan window most clusters produce.
         setLastRescanAt(Date.now());
-      } else {
-        toastWarning(`Rescan not triggered: ${data.reason ?? 'unknown'}`);
-      }
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.imageVulnSummary(clusterId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.imageVulnHistory(clusterId, 24 * 30) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.imageVulnDiff(clusterId, 24) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.imageVulnProgress(clusterId) });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.clusterPages.imageVulnSummary(clusterId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.clusterPages.imageVulnHistory(clusterId, 24 * 30),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.clusterPages.imageVulnDiff(clusterId, 24),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.clusterPages.imageVulnProgress(clusterId),
+        });
+      },
+      onError: (err) => toastApiError("Rescan failed", err),
     },
-    onError: (err) => toastApiError('Rescan failed', err),
   });
 
   // Sprint 081: scan history sparkline (last 30 days) + diff vs 24h
@@ -159,7 +206,8 @@ function ClusterImageScansPage() {
   // page stays in sync as new Trivy reports flow in.
   const history = useQuery({
     queryKey: queryKeys.clusterPages.imageVulnHistory(clusterId, 24 * 30),
-    queryFn: () => getImageVulnHistory(clusterId, { sinceHours: 24 * 30, limit: 200 }),
+    queryFn: () =>
+      getImageVulnHistory(clusterId, { sinceHours: 24 * 30, limit: 200 }),
     enabled: scansEnabled,
     refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
@@ -209,12 +257,13 @@ function ClusterImageScansPage() {
       <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2 max-w-md mx-auto text-center p-4">
         <ShieldAlert className="h-8 w-8 mb-2" />
         <p className="text-sm font-medium text-foreground">
-          Image scans aren&apos;t available on the management plane&apos;s own cluster.
+          Image scans aren&apos;t available on the management plane&apos;s own
+          cluster.
         </p>
         <p className="text-xs">
           Image scanning depends on trivy-operator running in a remote cluster
-          and reachable over the agent tunnel. Register a managed cluster, install
-          trivy-operator from the Catalog, and scans will appear here.
+          and reachable over the agent tunnel. Register a managed cluster,
+          install trivy-operator from the Catalog, and scans will appear here.
         </p>
       </div>
     );
@@ -223,6 +272,11 @@ function ClusterImageScansPage() {
   return (
     <div className="space-y-6 p-4">
       <header className="flex items-start justify-between gap-4">
+        <p className="sr-only" role="status" aria-live="polite">
+          {rescan.isPending
+            ? `Vulnerability rescan ${rescan.operationState.phase}`
+            : ""}
+        </p>
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             <ShieldAlert className="h-6 w-6" /> Image Scans
@@ -268,31 +322,30 @@ function ClusterImageScansPage() {
       <ScanProgressBanner
         clusterId={clusterId}
         progress={progress.data}
-        dispatchedRecently={!!lastRescanAt && Date.now() - lastRescanAt < 30_000}
+        dispatchedRecently={
+          !!lastRescanAt && Date.now() - lastRescanAt < 30_000
+        }
       />
 
       {/* Severity tiles */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {SEVERITIES.map((s) => (
-          <div
-            key={s.key}
-            className={`border rounded-lg p-4 ${s.tone}`}
-          >
+          <div key={s.key} className={`border rounded-lg p-4 ${s.tone}`}>
             <div className="text-xs uppercase tracking-wide">{s.label}</div>
             <div className="text-3xl font-bold mt-1">
-              {summary.isLoading ? '—' : (summary.data?.[s.key] ?? 0)}
+              {summary.isLoading ? "—" : (summary.data?.[s.key] ?? 0)}
             </div>
           </div>
         ))}
       </section>
 
       <div className="text-xs text-muted-foreground">
-        Last scan:{' '}
+        Last scan:{" "}
         {summary.data?.lastScannedAt
           ? new Date(summary.data.lastScannedAt).toLocaleString()
-          : 'never'}
-        {' · '}reports: {summary.data?.reportCount ?? 0}
-        {' · '}snapshots stored: {history.data?.totalCount ?? 0}
+          : "never"}
+        {" · "}reports: {summary.data?.reportCount ?? 0}
+        {" · "}snapshots stored: {history.data?.totalCount ?? 0}
       </div>
 
       {/* What changed since the last scan (sprint 081). Two cards
@@ -303,7 +356,9 @@ function ClusterImageScansPage() {
         {/* Delta card */}
         <div className="border border-border rounded-lg p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-foreground">What changed in the last 24h</h3>
+            <h3 className="text-sm font-medium text-foreground">
+              What changed in the last 24h
+            </h3>
             {diff.data?.hasComparison && diff.data.prior && (
               <span className="text-xs text-muted-foreground">
                 vs {new Date(diff.data.prior.scannedAt).toLocaleString()}
@@ -312,31 +367,36 @@ function ClusterImageScansPage() {
           </div>
           {!diff.data || !diff.data.hasComparison ? (
             <p className="text-xs text-muted-foreground">
-              Not enough scan history yet — we&apos;ll surface a diff once a second snapshot lands (typically within an hour of trivy-operator&apos;s schedule).
+              Not enough scan history yet — we&apos;ll surface a diff once a
+              second snapshot lands (typically within an hour of
+              trivy-operator&apos;s schedule).
             </p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {(['critical', 'high', 'medium', 'low'] as const).map((sev) => {
+              {(["critical", "high", "medium", "low"] as const).map((sev) => {
                 const d = diff.data.delta?.[sev] ?? 0;
                 const tone =
                   d > 0
-                    ? 'text-status-error border-status-error/30 bg-status-error/5'
+                    ? "text-status-error border-status-error/30 bg-status-error/5"
                     : d < 0
-                      ? 'text-status-success border-status-success/30 bg-status-success/5'
-                      : 'text-muted-foreground border-border';
+                      ? "text-status-success border-status-success/30 bg-status-success/5"
+                      : "text-muted-foreground border-border";
                 const Icon = d > 0 ? TrendingUp : d < 0 ? TrendingDown : Minus;
                 return (
                   <div key={sev} className={`border rounded p-2 ${tone}`}>
-                    <div className="text-[10px] uppercase tracking-wide opacity-80">{sev}</div>
+                    <div className="text-[10px] uppercase tracking-wide opacity-80">
+                      {sev}
+                    </div>
                     <div className="flex items-baseline justify-between mt-1">
                       <div className="text-xl font-semibold tabular-nums">
-                        {d > 0 ? '+' : ''}
+                        {d > 0 ? "+" : ""}
                         {d}
                       </div>
                       <Icon className="h-3.5 w-3.5" />
                     </div>
                     <div className="text-[10px] opacity-70 mt-0.5">
-                      {diff.data.prior?.[sev] ?? 0} → {diff.data.latest?.[sev] ?? 0}
+                      {diff.data.prior?.[sev] ?? 0} →{" "}
+                      {diff.data.latest?.[sev] ?? 0}
                     </div>
                   </div>
                 );
@@ -348,14 +408,17 @@ function ClusterImageScansPage() {
         {/* Sparkline + history list */}
         <div className="border border-border rounded-lg p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-foreground">Scan history (30 days)</h3>
+            <h3 className="text-sm font-medium text-foreground">
+              Scan history (30 days)
+            </h3>
             <span className="text-xs text-muted-foreground">
               {history.data?.totalCount ?? 0} scans
             </span>
           </div>
-          {(!history.data || history.data.snapshots.length === 0) ? (
+          {!history.data || history.data.snapshots.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No history yet — once trivy-operator publishes a second VulnerabilityReport this chart will show the trend.
+              No history yet — once trivy-operator publishes a second
+              VulnerabilityReport this chart will show the trend.
             </p>
           ) : (
             <>
@@ -364,7 +427,9 @@ function ClusterImageScansPage() {
                   y-axis is normalised to the max critical count in
                   the window so a small swing reads as a visible
                   movement instead of a flat line. */}
-              <HistorySparkline points={history.data.snapshots.slice().reverse()} />
+              <HistorySparkline
+                points={history.data.snapshots.slice().reverse()}
+              />
               {/* Recent scans table */}
               <div className="text-xs space-y-1 max-h-32 overflow-y-auto pr-1">
                 {history.data.snapshots.slice(0, 6).map((p) => (
@@ -376,9 +441,15 @@ function ClusterImageScansPage() {
                       {new Date(p.scannedAt).toLocaleString()}
                     </span>
                     <span className="flex items-center gap-1.5 text-foreground">
-                      <span className="text-status-error font-medium tabular-nums">{p.critical}</span>
-                      <span className="text-status-high tabular-nums">{p.high}</span>
-                      <span className="text-status-warning tabular-nums">{p.medium}</span>
+                      <span className="text-status-error font-medium tabular-nums">
+                        {p.critical}
+                      </span>
+                      <span className="text-status-high tabular-nums">
+                        {p.high}
+                      </span>
+                      <span className="text-status-warning tabular-nums">
+                        {p.medium}
+                      </span>
                       <span className="text-sky-500 tabular-nums">{p.low}</span>
                     </span>
                   </div>
@@ -391,8 +462,14 @@ function ClusterImageScansPage() {
 
       {/* Filters */}
       <section className="flex items-center gap-3 flex-wrap">
-        <label className="text-sm text-muted-foreground">Namespace</label>
+        <label
+          className="text-sm text-muted-foreground"
+          htmlFor="field-1a64459b-394"
+        >
+          Namespace
+        </label>
         <select
+          id="field-1a64459b-394"
           className="border border-border bg-background rounded-md px-2 py-1 text-sm"
           value={namespace}
           onChange={(e) => setNamespace(e.target.value)}
@@ -404,11 +481,19 @@ function ClusterImageScansPage() {
             </option>
           ))}
         </select>
-        <label className="text-sm text-muted-foreground ml-4">CVE severity</label>
+        <label
+          className="text-sm text-muted-foreground ml-4"
+          htmlFor="field-1a64459b-407"
+        >
+          CVE severity
+        </label>
         <select
+          id="field-1a64459b-407"
           className="border border-border bg-background rounded-md px-2 py-1 text-sm"
           value={severityFilter}
-          onChange={(e) => setSeverityFilter(e.target.value as CVESeverity | '')}
+          onChange={(e) =>
+            setSeverityFilter(e.target.value as CVESeverity | "")
+          }
         >
           <option value="">All</option>
           <option value="CRITICAL">Critical only</option>
@@ -435,7 +520,10 @@ function ClusterImageScansPage() {
           <TableBody>
             {images.isLoading && (
               <TableRow>
-                <TableCell colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={7}
+                  className="px-3 py-6 text-center text-muted-foreground"
+                >
                   <Loader2 className="inline h-4 w-4 animate-spin mr-2" />
                   Loading…
                 </TableCell>
@@ -446,11 +534,13 @@ function ClusterImageScansPage() {
                 <TableCell colSpan={7} className="px-3 py-8 text-center">
                   <div className="inline-flex flex-col items-center gap-2 text-muted-foreground">
                     <ShieldAlert className="h-6 w-6" />
-                    <div className="font-medium text-foreground">No vulnerability reports yet</div>
+                    <div className="font-medium text-foreground">
+                      No vulnerability reports yet
+                    </div>
                     <p className="text-xs max-w-md">
-                      Install trivy-operator on this cluster and reports will populate within the
-                      first scan window (typically 5–15 min). Already installed? Use the rescan
-                      button above.
+                      Install trivy-operator on this cluster and reports will
+                      populate within the first scan window (typically 5–15
+                      min). Already installed? Use the rescan button above.
                     </p>
                     <div className="flex gap-2 mt-2">
                       <a
@@ -472,7 +562,11 @@ function ClusterImageScansPage() {
             )}
             {images.data?.items.map((r) => {
               const total =
-                r.criticalCount + r.highCount + r.mediumCount + r.lowCount + r.unknownCount;
+                r.criticalCount +
+                r.highCount +
+                r.mediumCount +
+                r.lowCount +
+                r.unknownCount;
               return (
                 <TableRow
                   key={r.id}
@@ -492,7 +586,9 @@ function ClusterImageScansPage() {
                   <TableCell className="px-3 py-2 text-right font-semibold text-status-high">
                     {r.highCount}
                   </TableCell>
-                  <TableCell className="px-3 py-2 text-right">{total}</TableCell>
+                  <TableCell className="px-3 py-2 text-right">
+                    {total}
+                  </TableCell>
                   <TableCell className="px-3 py-2 text-xs text-muted-foreground">
                     {new Date(r.scannedAt).toLocaleString()}
                   </TableCell>
@@ -512,10 +608,11 @@ function ClusterImageScansPage() {
                 {openReport.imageRepo}:{openReport.imageTag}
               </h2>
               <p className="text-xs text-muted-foreground font-mono mt-1">
-                {openReport.imageDigest || '(no digest)'}
+                {openReport.imageDigest || "(no digest)"}
               </p>
               <p className="text-xs text-muted-foreground">
-                {openReport.namespace} · {openReport.workloadKind}/{openReport.workloadName}
+                {openReport.namespace} · {openReport.workloadKind}/
+                {openReport.workloadName}
               </p>
             </div>
             <button
@@ -537,7 +634,7 @@ function ClusterImageScansPage() {
                 </h3>
                 <span className="text-[10px] text-muted-foreground tabular-nums">
                   {reportHistory.data?.totalCount ?? 0} snapshot
-                  {(reportHistory.data?.totalCount ?? 0) === 1 ? '' : 's'}
+                  {(reportHistory.data?.totalCount ?? 0) === 1 ? "" : "s"}
                 </span>
               </div>
               {reportHistory.isLoading && (
@@ -546,36 +643,59 @@ function ClusterImageScansPage() {
                   Loading history…
                 </div>
               )}
-              {reportHistory.data && reportHistory.data.snapshots.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  No snapshots yet — once trivy-operator re-scans this workload its history will appear here.
-                </p>
-              )}
-              {reportHistory.data && reportHistory.data.snapshots.length > 0 && (
-                <>
-                  <HistorySparkline
-                    points={reportHistory.data.snapshots.slice().reverse()}
-                  />
-                  <div className="text-xs space-y-1 max-h-40 overflow-y-auto pr-1">
-                    {reportHistory.data.snapshots.slice(0, 10).map((p) => (
-                      <div
-                        key={p.scannedAt}
-                        className="flex items-center justify-between gap-2 py-0.5"
-                      >
-                        <span className="text-muted-foreground tabular-nums">
-                          {new Date(p.scannedAt).toLocaleString()}
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <span className="text-status-error font-medium tabular-nums" title="Critical">{p.critical}</span>
-                          <span className="text-status-high tabular-nums" title="High">{p.high}</span>
-                          <span className="text-status-warning tabular-nums" title="Medium">{p.medium}</span>
-                          <span className="text-sky-500 tabular-nums" title="Low">{p.low}</span>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
+              {reportHistory.data &&
+                reportHistory.data.snapshots.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No snapshots yet — once trivy-operator re-scans this
+                    workload its history will appear here.
+                  </p>
+                )}
+              {reportHistory.data &&
+                reportHistory.data.snapshots.length > 0 && (
+                  <>
+                    <HistorySparkline
+                      points={reportHistory.data.snapshots.slice().reverse()}
+                    />
+                    <div className="text-xs space-y-1 max-h-40 overflow-y-auto pr-1">
+                      {reportHistory.data.snapshots.slice(0, 10).map((p) => (
+                        <div
+                          key={p.scannedAt}
+                          className="flex items-center justify-between gap-2 py-0.5"
+                        >
+                          <span className="text-muted-foreground tabular-nums">
+                            {new Date(p.scannedAt).toLocaleString()}
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              className="text-status-error font-medium tabular-nums"
+                              title="Critical"
+                            >
+                              {p.critical}
+                            </span>
+                            <span
+                              className="text-status-high tabular-nums"
+                              title="High"
+                            >
+                              {p.high}
+                            </span>
+                            <span
+                              className="text-status-warning tabular-nums"
+                              title="Medium"
+                            >
+                              {p.medium}
+                            </span>
+                            <span
+                              className="text-sky-500 tabular-nums"
+                              title="Low"
+                            >
+                              {p.low}
+                            </span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
             </section>
 
             {reportDetail.isLoading && (
@@ -588,7 +708,8 @@ function ClusterImageScansPage() {
               <>
                 <div className="text-xs text-muted-foreground">
                   {reportDetail.data.vulnerabilityTotal} CVE
-                  {reportDetail.data.vulnerabilityTotal === 1 ? '' : 's'} matching filter
+                  {reportDetail.data.vulnerabilityTotal === 1 ? "" : "s"}{" "}
+                  matching filter
                 </div>
                 <ul className="space-y-2">
                   {reportDetail.data.vulnerabilities.map((c) => (
@@ -598,7 +719,7 @@ function ClusterImageScansPage() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <a
-                          href={c.primaryLink || '#'}
+                          href={c.primaryLink || "#"}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="font-mono text-sm font-semibold underline"
@@ -607,15 +728,14 @@ function ClusterImageScansPage() {
                         </a>
                         <span className="text-xs uppercase tracking-wide">
                           {c.severity}
-                          {c.cvssScore != null && ` · CVSS ${c.cvssScore.toFixed(1)}`}
+                          {c.cvssScore != null &&
+                            ` · CVSS ${c.cvssScore.toFixed(1)}`}
                         </span>
                       </div>
-                      {c.title && (
-                        <div className="mt-1 text-sm">{c.title}</div>
-                      )}
+                      {c.title && <div className="mt-1 text-sm">{c.title}</div>}
                       <div className="mt-1 text-xs text-muted-foreground font-mono">
-                        {c.pkgName} {c.installedVersion} → fixed in{' '}
-                        {c.fixedVersion || '(no fix yet)'}
+                        {c.pkgName} {c.installedVersion} → fixed in{" "}
+                        {c.fixedVersion || "(no fix yet)"}
                       </div>
                     </li>
                   ))}
@@ -670,8 +790,10 @@ function HistorySparkline({
   const xs = (i: number) =>
     padX + (i * innerW) / Math.max(1, points.length - 1);
   const ys = (v: number) => padY + innerH - (v / maxY) * innerH;
-  const path = (key: 'critical' | 'high') =>
-    points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xs(i)} ${ys(p[key])}`).join(' ');
+  const path = (key: "critical" | "high") =>
+    points
+      .map((p, i) => `${i === 0 ? "M" : "L"} ${xs(i)} ${ys(p[key])}`)
+      .join(" ");
 
   return (
     <svg
@@ -691,7 +813,7 @@ function HistorySparkline({
       />
       {/* high (orange) — drawn under so critical is on top */}
       <path
-        d={path('high')}
+        d={path("high")}
         fill="none"
         stroke="#f97316"
         strokeWidth={1.5}
@@ -700,7 +822,7 @@ function HistorySparkline({
       />
       {/* critical (red) */}
       <path
-        d={path('critical')}
+        d={path("critical")}
         fill="none"
         stroke="#dc2626"
         strokeWidth={1.5}
@@ -708,8 +830,18 @@ function HistorySparkline({
         strokeLinejoin="round"
       />
       {/* dots on the latest point so the user knows where "now" is */}
-      <circle cx={xs(points.length - 1)} cy={ys(points[points.length - 1].critical)} r={2.5} fill="#dc2626" />
-      <circle cx={xs(points.length - 1)} cy={ys(points[points.length - 1].high)} r={2.5} fill="#f97316" />
+      <circle
+        cx={xs(points.length - 1)}
+        cy={ys(points[points.length - 1].critical)}
+        r={2.5}
+        fill="#dc2626"
+      />
+      <circle
+        cx={xs(points.length - 1)}
+        cy={ys(points[points.length - 1].high)}
+        r={2.5}
+        fill="#f97316"
+      />
     </svg>
   );
 }
@@ -724,7 +856,7 @@ function ScanProgressBanner({
   dispatchedRecently,
 }: {
   clusterId: string;
-  progress?: import('@/lib/api/cluster-detail').ImageVulnProgress;
+  progress?: import("@/lib/api/cluster-detail").ImageVulnProgress;
   dispatchedRecently?: boolean;
 }) {
   if (!progress) {
@@ -757,13 +889,15 @@ function ScanProgressBanner({
       <div className="rounded-lg border border-sky-500/40 bg-sky-500/5 px-4 py-3 text-sm flex items-start gap-3">
         <ShieldAlert className="h-4 w-4 text-sky-500 flex-shrink-0 mt-0.5" />
         <div className="flex-1">
-          <div className="font-medium text-foreground">Image scanning isn&apos;t enabled on this cluster</div>
+          <div className="font-medium text-foreground">
+            Image scanning isn&apos;t enabled on this cluster
+          </div>
           <div className="text-xs text-muted-foreground mt-0.5">
             Astronomer&apos;s built-in scanning uses the Trivy operator, which
-            isn&apos;t installed here — so there are no vulnerability reports. If
-            you already use a different scanner (e.g. NeuVector), you can ignore
-            this. To turn on Astronomer scanning, install Trivy from the Tools
-            tab; reports appear within the first scan window (~5–15 min).
+            isn&apos;t installed here — so there are no vulnerability reports.
+            If you already use a different scanner (e.g. NeuVector), you can
+            ignore this. To turn on Astronomer scanning, install Trivy from the
+            Tools tab; reports appear within the first scan window (~5–15 min).
           </div>
           <a
             href={`/dashboard/clusters/${clusterId}/tools`}
@@ -776,7 +910,8 @@ function ScanProgressBanner({
     );
   }
   if (progress.scanning) {
-    const total = progress.activeJobs + progress.completedJobs + progress.failedJobs;
+    const total =
+      progress.activeJobs + progress.completedJobs + progress.failedJobs;
     const done = progress.completedJobs + progress.failedJobs;
     const pct = total > 0 ? Math.round((done / total) * 100) : 0;
     return (
@@ -785,25 +920,30 @@ function ScanProgressBanner({
           <div className="flex items-center gap-2 text-foreground">
             <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
             <span className="font-medium">
-              Scanning {progress.activeJobs} workload{progress.activeJobs === 1 ? '' : 's'}…
+              Scanning {progress.activeJobs} workload
+              {progress.activeJobs === 1 ? "" : "s"}…
             </span>
             <span className="text-xs text-muted-foreground tabular-nums">
-              ({done}/{total} complete{progress.failedJobs > 0 ? `, ${progress.failedJobs} failed` : ''})
+              ({done}/{total} complete
+              {progress.failedJobs > 0 ? `, ${progress.failedJobs} failed` : ""}
+              )
             </span>
           </div>
-          <span className="text-xs text-muted-foreground tabular-nums">{pct}%</span>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {pct}%
+          </span>
         </div>
         <div className="h-1.5 w-full rounded-full bg-sky-500/15 overflow-hidden">
           <div
             className="h-full bg-sky-500 transition-all duration-500"
-            style={{ width: total > 0 ? `${Math.max(5, pct)}%` : '50%' }}
+            style={{ width: total > 0 ? `${Math.max(5, pct)}%` : "50%" }}
           />
         </div>
       </div>
     );
   }
   const age = progress.lastScanAgeSeconds;
-  let ageStr = 'never';
+  let ageStr = "never";
   if (age != null) {
     if (age < 60) ageStr = `${age}s ago`;
     else if (age < 3600) ageStr = `${Math.round(age / 60)}m ago`;
@@ -814,12 +954,13 @@ function ScanProgressBanner({
     <div className="rounded-lg border border-status-success/40 bg-status-success/5 px-4 py-2.5 text-sm flex items-center gap-2">
       <ShieldAlert className="h-4 w-4 text-status-success flex-shrink-0" />
       <span className="text-foreground">
-        All scans current — {progress.reportsCount} workload{progress.reportsCount === 1 ? '' : 's'} indexed, last scan {ageStr}.
+        All scans current — {progress.reportsCount} workload
+        {progress.reportsCount === 1 ? "" : "s"} indexed, last scan {ageStr}.
       </span>
     </div>
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/$id/image-scans/')({
+export const Route = createFileRoute("/dashboard/clusters/$id/image-scans/")({
   component: ClusterImageScansPage,
 });

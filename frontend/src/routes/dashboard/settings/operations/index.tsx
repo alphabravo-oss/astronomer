@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * Operations admin tab (T28b) — surface the asynq queue state + DLQ so on-call
  * can answer "why isn't anything reconciling?" from the UI instead of curl /
@@ -13,8 +20,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * DELETE /admin/queues/{q}/dlq/{id}/. Both audited server-side.
  */
 
-import { useState, useMemo } from 'react';
-import { Link } from '@/lib/link';
+import { useState, useMemo } from "react";
+import { Link } from "@/lib/link";
 import {
   ArrowLeft,
   Loader2,
@@ -25,15 +32,16 @@ import {
   AlertTriangle,
   CheckCircle2,
   Database,
-} from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toastApiError, toastSuccess } from '@/lib/toast';
-import { SettingsAuthGate } from '@/components/settings/auth-gate';
-import { queryKeys } from '@/lib/hooks';
-import { liveFallback } from '@/lib/live/status-store';
+} from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { queryKeys } from "@/lib/hooks";
+import { liveFallback } from "@/lib/live/status-store";
 import {
   listQueues,
   listDLQ,
+  getDLQOperation,
   retryDLQTask,
   discardDLQTask,
   listTaskOutbox,
@@ -42,14 +50,15 @@ import {
   type DLQEntry,
   type TaskOutboxEntry,
   type TaskOutboxStatus,
-} from '@/lib/api/admin-operations';
+} from "@/lib/api/admin-operations";
+import { useOperationMutation } from "@/lib/hooks/operation-mutation";
 
 function OperationsBody() {
   const qc = useQueryClient();
 
   const queues = useQuery({
     queryKey: queryKeys.adminOperations.queues,
-    queryFn: listQueues,
+    queryFn: ({ signal }) => listQueues(signal),
     refetchInterval: liveFallback(5_000),
     refetchIntervalInBackground: false,
   });
@@ -57,57 +66,85 @@ function OperationsBody() {
   // Default to the first queue with non-zero archived count, falling back to
   // the first queue overall so the DLQ panel renders something meaningful on
   // first paint without forcing the operator to click around.
-  const queueNames = useMemo(() => (queues.data ?? []).map((q) => q.name), [queues.data]);
+  const queueNames = useMemo(
+    () => (queues.data ?? []).map((q) => q.name),
+    [queues.data],
+  );
   const defaultDLQ = useMemo(() => {
     const withArchived = (queues.data ?? []).find((q) => q.archived > 0);
-    return withArchived?.name ?? queueNames[0] ?? '';
+    return withArchived?.name ?? queueNames[0] ?? "";
   }, [queues.data, queueNames]);
-  const [selectedQueue, setSelectedQueue] = useState<string>('');
+  const [selectedQueue, setSelectedQueue] = useState<string>("");
   const activeQueue = selectedQueue || defaultDLQ;
-  const [outboxStatus, setOutboxStatus] = useState<TaskOutboxStatus | ''>('dead');
+  const [outboxStatus, setOutboxStatus] = useState<TaskOutboxStatus | "">(
+    "dead",
+  );
 
   const dlq = useQuery({
     queryKey: queryKeys.adminOperations.dlq(activeQueue),
-    queryFn: () => listDLQ(activeQueue),
+    queryFn: ({ signal }) => listDLQ(activeQueue, signal),
     enabled: !!activeQueue,
     refetchInterval: liveFallback(10_000),
   });
 
   const outbox = useQuery({
     queryKey: queryKeys.adminOperations.outbox(outboxStatus),
-    queryFn: () => listTaskOutbox(outboxStatus),
+    queryFn: ({ signal }) => listTaskOutbox(outboxStatus, signal),
     refetchInterval: liveFallback(10_000),
   });
 
-  const retry = useMutation({
-    mutationFn: ({ queue, id }: { queue: string; id: string }) => retryDLQTask(queue, id),
-    onSuccess: (_, vars) => {
-      toastSuccess(`Retry dispatched (${vars.id.slice(0, 8)}…)`);
-      qc.invalidateQueries({ queryKey: queryKeys.adminOperations.dlq(vars.queue) });
-      qc.invalidateQueries({ queryKey: queryKeys.adminOperations.queues });
+  const retry = useOperationMutation({
+    keyPrefix: "dlq-retry",
+    submit: ({ queue, id }: { queue: string; id: string }, context) =>
+      retryDLQTask(queue, id, context),
+    read: getDLQOperation,
+    mutation: {
+      onSuccess: (_, vars) => {
+        toastSuccess(`Retry completed (${vars.id.slice(0, 8)}…)`);
+        qc.invalidateQueries({
+          queryKey: queryKeys.adminOperations.dlq(vars.queue),
+        });
+        qc.invalidateQueries({ queryKey: queryKeys.adminOperations.queues });
+      },
+      onError: (e) => toastApiError("Retry failed", e),
     },
-    onError: (e) => toastApiError('Retry failed', e),
   });
-  const discard = useMutation({
-    mutationFn: ({ queue, id }: { queue: string; id: string }) => discardDLQTask(queue, id),
-    onSuccess: (_, vars) => {
-      toastSuccess(`Discarded (${vars.id.slice(0, 8)}…)`);
-      qc.invalidateQueries({ queryKey: queryKeys.adminOperations.dlq(vars.queue) });
-      qc.invalidateQueries({ queryKey: queryKeys.adminOperations.queues });
+  const discard = useOperationMutation({
+    keyPrefix: "dlq-discard",
+    submit: ({ queue, id }: { queue: string; id: string }, context) =>
+      discardDLQTask(queue, id, context),
+    read: getDLQOperation,
+    mutation: {
+      onSuccess: (_, vars) => {
+        toastSuccess(`Discard completed (${vars.id.slice(0, 8)}…)`);
+        qc.invalidateQueries({
+          queryKey: queryKeys.adminOperations.dlq(vars.queue),
+        });
+        qc.invalidateQueries({ queryKey: queryKeys.adminOperations.queues });
+      },
+      onError: (e) => toastApiError("Discard failed", e),
     },
-    onError: (e) => toastApiError('Discard failed', e),
   });
   const retryOutbox = useMutation({
-    mutationFn: retryTaskOutbox,
+    mutationFn: (id: string) => retryTaskOutbox(id),
     onSuccess: (row) => {
       toastSuccess(`Task outbox row queued (${row.id.slice(0, 8)}…)`);
-      qc.invalidateQueries({ queryKey: queryKeys.adminOperations.outbox(outboxStatus) });
+      qc.invalidateQueries({
+        queryKey: queryKeys.adminOperations.outbox(outboxStatus),
+      });
     },
-    onError: (e) => toastApiError('Outbox retry failed', e),
+    onError: (e) => toastApiError("Outbox retry failed", e),
   });
 
   return (
     <div className="space-y-6">
+      <p className="sr-only" role="status" aria-live="polite">
+        {retry.isPending
+          ? `DLQ retry ${retry.operationState.phase}`
+          : discard.isPending
+            ? `DLQ discard ${discard.operationState.phase}`
+            : ""}
+      </p>
       <Link
         href="/dashboard/settings"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -134,7 +171,10 @@ function OperationsBody() {
             className="inline-flex items-center gap-1.5 h-7 px-2 rounded text-xs border border-border hover:bg-accent"
             title="Refresh now"
           >
-            <RefreshCw className={`h-3 w-3 ${queues.isFetching ? 'animate-spin' : ''}`} /> Refresh
+            <RefreshCw
+              className={`h-3 w-3 ${queues.isFetching ? "animate-spin" : ""}`}
+            />{" "}
+            Refresh
           </button>
         </div>
         <QueueTable
@@ -150,7 +190,9 @@ function OperationsBody() {
           <h2 className="text-sm font-medium text-foreground">
             Dead-letter
             {activeQueue && (
-              <span className="ml-2 text-xs text-muted-foreground font-mono">— {activeQueue}</span>
+              <span className="ml-2 text-xs text-muted-foreground font-mono">
+                — {activeQueue}
+              </span>
             )}
           </h2>
           <button
@@ -160,7 +202,10 @@ function OperationsBody() {
             className="inline-flex items-center gap-1.5 h-7 px-2 rounded text-xs border border-border hover:bg-accent disabled:opacity-50"
             title="Refresh DLQ"
           >
-            <RefreshCw className={`h-3 w-3 ${dlq.isFetching ? 'animate-spin' : ''}`} /> Refresh
+            <RefreshCw
+              className={`h-3 w-3 ${dlq.isFetching ? "animate-spin" : ""}`}
+            />{" "}
+            Refresh
           </button>
         </div>
         <DLQTable
@@ -182,13 +227,16 @@ function OperationsBody() {
               Task outbox
             </h2>
             <p className="text-xs text-muted-foreground mt-1">
-              Durable DB task intents waiting for Redis delivery or operator retry.
+              Durable DB task intents waiting for Redis delivery or operator
+              retry.
             </p>
           </div>
           <div className="flex items-center gap-2">
             <select
               value={outboxStatus}
-              onChange={(e) => setOutboxStatus(e.target.value as TaskOutboxStatus | '')}
+              onChange={(e) =>
+                setOutboxStatus(e.target.value as TaskOutboxStatus | "")
+              }
               className="h-8 rounded border border-border bg-background px-2 text-xs"
               title="Filter task outbox rows"
             >
@@ -205,7 +253,10 @@ function OperationsBody() {
               className="inline-flex items-center gap-1.5 h-7 px-2 rounded text-xs border border-border hover:bg-accent"
               title="Refresh task outbox"
             >
-              <RefreshCw className={`h-3 w-3 ${outbox.isFetching ? 'animate-spin' : ''}`} /> Refresh
+              <RefreshCw
+                className={`h-3 w-3 ${outbox.isFetching ? "animate-spin" : ""}`}
+              />{" "}
+              Refresh
             </button>
           </div>
         </div>
@@ -270,18 +321,27 @@ function QueueTable({
                 key={r.name}
                 onClick={() => onSelect(r.name)}
                 className={
-                  'border-t border-border cursor-pointer transition-colors ' +
-                  (isActive ? 'bg-primary/5' : 'hover:bg-muted/40')
+                  "border-t border-border cursor-pointer transition-colors " +
+                  (isActive ? "bg-primary/5" : "hover:bg-muted/40")
                 }
               >
                 <TableCell className="px-3 py-2 font-mono">{r.name}</TableCell>
-                <TableCell className="px-3 py-2 text-right tabular-nums">{r.pending}</TableCell>
-                <TableCell className="px-3 py-2 text-right tabular-nums">{r.active}</TableCell>
-                <TableCell className="px-3 py-2 text-right tabular-nums">{r.scheduled}</TableCell>
-                <TableCell className="px-3 py-2 text-right tabular-nums">{r.retry}</TableCell>
+                <TableCell className="px-3 py-2 text-right tabular-nums">
+                  {r.pending}
+                </TableCell>
+                <TableCell className="px-3 py-2 text-right tabular-nums">
+                  {r.active}
+                </TableCell>
+                <TableCell className="px-3 py-2 text-right tabular-nums">
+                  {r.scheduled}
+                </TableCell>
+                <TableCell className="px-3 py-2 text-right tabular-nums">
+                  {r.retry}
+                </TableCell>
                 <TableCell
                   className={
-                    'px-3 py-2 text-right tabular-nums ' + (isStuck ? 'text-status-error font-medium' : '')
+                    "px-3 py-2 text-right tabular-nums " +
+                    (isStuck ? "text-status-error font-medium" : "")
                   }
                 >
                   {r.archived}
@@ -362,17 +422,29 @@ function DLQTable({
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={row.id} className="border-t border-border hover:bg-muted/40 align-top">
-              <TableCell className="px-3 py-2 font-mono text-xs">{row.type}</TableCell>
-              <TableCell className="px-3 py-2 font-mono text-[11px] text-muted-foreground">
-                {row.id.length > 16 ? row.id.slice(0, 16) + '…' : row.id}
+            <TableRow
+              key={row.id}
+              className="border-t border-border hover:bg-muted/40 align-top"
+            >
+              <TableCell className="px-3 py-2 font-mono text-xs">
+                {row.type}
               </TableCell>
-              <TableCell className="px-3 py-2 text-right tabular-nums">{row.retried}</TableCell>
-              <TableCell className="px-3 py-2 text-xs text-status-error max-w-md truncate" title={row.last_err}>
-                {row.last_err || '—'}
+              <TableCell className="px-3 py-2 font-mono text-[11px] text-muted-foreground">
+                {row.id.length > 16 ? row.id.slice(0, 16) + "…" : row.id}
+              </TableCell>
+              <TableCell className="px-3 py-2 text-right tabular-nums">
+                {row.retried}
+              </TableCell>
+              <TableCell
+                className="px-3 py-2 text-xs text-status-error max-w-md truncate"
+                title={row.last_err}
+              >
+                {row.last_err || "—"}
               </TableCell>
               <TableCell className="px-3 py-2 text-xs text-muted-foreground">
-                {row.last_failed_at ? new Date(row.last_failed_at).toLocaleString() : '—'}
+                {row.last_failed_at
+                  ? new Date(row.last_failed_at).toLocaleString()
+                  : "—"}
               </TableCell>
               <TableCell className="px-3 py-2 text-right">
                 <div className="inline-flex items-center gap-1">
@@ -411,7 +483,7 @@ function TaskOutboxTable({
 }: {
   loading: boolean;
   rows: TaskOutboxEntry[];
-  status: TaskOutboxStatus | '';
+  status: TaskOutboxStatus | "";
   onRetry: (id: string) => void;
   pendingRetry: boolean;
 }) {
@@ -425,7 +497,7 @@ function TaskOutboxTable({
   if (rows.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        No {status || 'matching'} task outbox rows.
+        No {status || "matching"} task outbox rows.
       </div>
     );
   }
@@ -445,32 +517,47 @@ function TaskOutboxTable({
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={row.id} className="border-t border-border hover:bg-muted/40 align-top">
+            <TableRow
+              key={row.id}
+              className="border-t border-border hover:bg-muted/40 align-top"
+            >
               <TableCell className="px-3 py-2">
                 <div className="font-mono text-xs">{row.task_type}</div>
                 {row.dedupe_key && (
-                  <div className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground" title={row.dedupe_key}>
+                  <div
+                    className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground"
+                    title={row.dedupe_key}
+                  >
                     {row.dedupe_key}
                   </div>
                 )}
               </TableCell>
               <TableCell className="px-3 py-2">
-                <span className={taskOutboxStatusClass(row.status)}>{row.status}</span>
+                <span className={taskOutboxStatusClass(row.status)}>
+                  {row.status}
+                </span>
               </TableCell>
-              <TableCell className="px-3 py-2 font-mono text-xs">{row.queue_name}</TableCell>
+              <TableCell className="px-3 py-2 font-mono text-xs">
+                {row.queue_name}
+              </TableCell>
               <TableCell className="px-3 py-2 text-right tabular-nums">
                 {row.attempt_count}/{row.max_delivery_attempts}
               </TableCell>
               <TableCell className="px-3 py-2 text-xs text-muted-foreground">
-                {row.next_attempt_at ? new Date(row.next_attempt_at).toLocaleString() : '—'}
+                {row.next_attempt_at
+                  ? new Date(row.next_attempt_at).toLocaleString()
+                  : "—"}
               </TableCell>
-              <TableCell className="px-3 py-2 max-w-md truncate text-xs text-status-error" title={row.last_error || ''}>
-                {row.last_error || '—'}
+              <TableCell
+                className="px-3 py-2 max-w-md truncate text-xs text-status-error"
+                title={row.last_error || ""}
+              >
+                {row.last_error || "—"}
               </TableCell>
               <TableCell className="px-3 py-2 text-right">
                 <button
                   onClick={() => onRetry(row.id)}
-                  disabled={pendingRetry || row.status === 'delivered'}
+                  disabled={pendingRetry || row.status === "delivered"}
                   className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-border hover:bg-muted disabled:opacity-50"
                   title="Move this task outbox row back to pending"
                 >
@@ -486,15 +573,15 @@ function TaskOutboxTable({
 }
 
 function taskOutboxStatusClass(status: TaskOutboxStatus) {
-  const base = 'inline-flex rounded px-1.5 py-0.5 text-xs font-medium';
+  const base = "inline-flex rounded px-1.5 py-0.5 text-xs font-medium";
   switch (status) {
-    case 'dead':
+    case "dead":
       return `${base} bg-status-error/10 text-status-error`;
-    case 'failed':
+    case "failed":
       return `${base} bg-status-warning/10 text-status-warning`;
-    case 'delivered':
+    case "delivered":
       return `${base} bg-status-success/10 text-status-success`;
-    case 'delivering':
+    case "delivering":
       return `${base} bg-status-info/10 text-status-info`;
     default:
       return `${base} bg-muted text-muted-foreground`;
@@ -511,6 +598,6 @@ function OperationsPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/settings/operations/')({
+export const Route = createFileRoute("/dashboard/settings/operations/")({
   component: OperationsPage,
 });

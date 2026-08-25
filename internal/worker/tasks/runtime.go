@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -23,6 +24,11 @@ import (
 )
 
 const defaultWorkerHTTPTimeout = httpclient.DefaultExternalTimeout
+
+// ErrPeriodicTaskSkipped lets an explicitly disabled optional feature report a
+// truthful skipped reconciliation without making Asynq retry or dead-letter
+// the scheduled tick. Missing dependencies for always-on tasks remain errors.
+var ErrPeriodicTaskSkipped = errors.New("periodic task skipped")
 
 // K8sRequester is the local mirror of handler.K8sRequester used by tasks
 // that need to round-trip CRDs through the tunnel (Phase B2 Velero, Phase
@@ -135,6 +141,7 @@ type RuntimeQuerier interface {
 
 type RuntimeDependencies struct {
 	Queries                 RuntimeQuerier
+	ManagementBackup        ManagementBackupExecutor
 	HTTPClient              *http.Client
 	Log                     *slog.Logger
 	AgentImageRepo          string
@@ -160,6 +167,12 @@ type RuntimeDependencies struct {
 	// tasks degrade gracefully (e.g. mark the row failed with a clear
 	// message).
 	K8s K8sRequester
+	// ResourceDecryptor unwraps encrypted generic Kubernetes manifests only
+	// inside the tunnel worker immediately before server-side apply. It is not
+	// wired in the standalone worker and plaintext is zeroed after use.
+	ResourceDecryptor interface {
+		DecryptBytes(token string) ([]byte, error)
+	}
 	// Enqueuer hands follow-up tasks to the asynq queue — e.g. the alert
 	// evaluator enqueues a notification:send task per fired (rule, channel).
 	// Optional — when nil, tasks that would fan out a follow-up log and skip
@@ -188,6 +201,34 @@ type RuntimeDependencies struct {
 	MonitoringCipher MonitoringCipher
 }
 
+type runtimeDependenciesContextKey struct{}
+
+// CoreRuntime owns the cross-cutting dependencies shared by task families.
+// BindHandler installs an immutable, normalized copy into the invocation
+// context so handler execution never depends on startup mutation ordering.
+type CoreRuntime struct {
+	Deps RuntimeDependencies
+}
+
+func (runtime CoreRuntime) normalized() CoreRuntime {
+	runtime.Deps = normalizeRuntimeDependencies(runtime.Deps)
+	return runtime
+}
+
+func (runtime CoreRuntime) Context(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, runtimeDependenciesContextKey{}, runtime.normalized().Deps)
+}
+
+func (runtime CoreRuntime) BindHandler(handler asynq.HandlerFunc) asynq.HandlerFunc {
+	runtime = runtime.normalized()
+	return func(ctx context.Context, task *asynq.Task) error {
+		return handler(runtime.Context(ctx), task)
+	}
+}
+
 // MonitoringCipher is the narrow both-directions surface the monitoring
 // credential envelope needs. *auth.Encryptor satisfies it.
 type MonitoringCipher interface {
@@ -208,18 +249,18 @@ func MonitoringCipherFor(enc *auth.Encryptor) MonitoringCipher {
 
 // monitoringDecryptor / monitoringEncryptor narrow the configured cipher to
 // one direction, preserving the genuinely-nil interface when none is wired.
-func monitoringDecryptor() imonitoring.Decryptor {
-	if runtimeDeps.MonitoringCipher == nil {
+func monitoringDecryptor(ctx context.Context) imonitoring.Decryptor {
+	if runtimeDependencies(ctx).MonitoringCipher == nil {
 		return nil
 	}
-	return runtimeDeps.MonitoringCipher
+	return runtimeDependencies(ctx).MonitoringCipher
 }
 
-func monitoringEncryptor() imonitoring.Encryptor {
-	if runtimeDeps.MonitoringCipher == nil {
+func monitoringEncryptor(ctx context.Context) imonitoring.Encryptor {
+	if runtimeDependencies(ctx).MonitoringCipher == nil {
 		return nil
 	}
-	return runtimeDeps.MonitoringCipher
+	return runtimeDependencies(ctx).MonitoringCipher
 }
 
 // CatalogDecryptorFor adapts a possibly-nil *auth.Encryptor to the narrow
@@ -244,8 +285,6 @@ type Enqueuer interface {
 	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
 }
 
-var runtimeDeps RuntimeDependencies
-
 var workerLeaderHeld = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Namespace: "astronomer",
@@ -259,53 +298,62 @@ func init() {
 	prometheus.MustRegister(workerLeaderHeld)
 }
 
-func ConfigureRuntime(deps RuntimeDependencies) {
-	runtimeDeps = deps
-	if runtimeDeps.HTTPClient == nil {
-		runtimeDeps.HTTPClient = httpclient.New(defaultWorkerHTTPTimeout)
+func normalizeRuntimeDependencies(deps RuntimeDependencies) RuntimeDependencies {
+	if deps.HTTPClient == nil {
+		deps.HTTPClient = httpclient.New(defaultWorkerHTTPTimeout)
 	}
-	if runtimeDeps.Log == nil {
-		runtimeDeps.Log = slog.Default()
+	if deps.Log == nil {
+		deps.Log = slog.Default()
 	}
-	if runtimeDeps.AgentImageRepo == "" {
-		runtimeDeps.AgentImageRepo = "ghcr.io/alphabravo-oss/astronomer-go-agent"
+	if deps.AgentImageRepo == "" {
+		deps.AgentImageRepo = "ghcr.io/alphabravo-oss/astronomer-go-agent"
 	}
-	if runtimeDeps.AgentImageTag == "" {
-		runtimeDeps.AgentImageTag = "latest"
+	if deps.AgentImageTag == "" {
+		deps.AgentImageTag = "latest"
 	}
-	if runtimeDeps.PlatformName == "" {
-		runtimeDeps.PlatformName = "Astronomer"
+	if deps.PlatformName == "" {
+		deps.PlatformName = "Astronomer"
 	}
-	if runtimeDeps.AuditLogRetentionMonths <= 0 {
-		runtimeDeps.AuditLogRetentionMonths = 13
+	if deps.AuditLogRetentionMonths <= 0 {
+		deps.AuditLogRetentionMonths = 13
 	}
-	if runtimeDeps.ClusterTombstoneRetentionDays <= 0 {
-		runtimeDeps.ClusterTombstoneRetentionDays = defaultClusterTombstoneRetentionDays
+	if deps.ClusterTombstoneRetentionDays <= 0 {
+		deps.ClusterTombstoneRetentionDays = defaultClusterTombstoneRetentionDays
 	}
-	if runtimeDeps.RegistrationTokenTTLHours <= 0 {
-		runtimeDeps.RegistrationTokenTTLHours = 1
+	if deps.RegistrationTokenTTLHours <= 0 {
+		deps.RegistrationTokenTTLHours = 1
 	}
+	return deps
 }
 
-func runtimeHTTPClient() *http.Client {
-	if runtimeDeps.HTTPClient != nil {
-		return runtimeDeps.HTTPClient
+func runtimeDependencies(ctx context.Context) RuntimeDependencies {
+	if ctx != nil {
+		if deps, ok := ctx.Value(runtimeDependenciesContextKey{}).(RuntimeDependencies); ok {
+			return deps
+		}
+	}
+	return RuntimeDependencies{}
+}
+
+func runtimeHTTPClient(ctx context.Context) *http.Client {
+	if client := runtimeDependencies(ctx).HTTPClient; client != nil {
+		return client
 	}
 	return httpclient.DefaultExternal()
 }
 
-func resetRuntime() {
-	runtimeDeps = RuntimeDependencies{}
-}
-
-func runtimeLogger() *slog.Logger {
-	if runtimeDeps.Log != nil {
-		return runtimeDeps.Log
+func runtimeLogger(ctx context.Context) *slog.Logger {
+	if log := runtimeDependencies(ctx).Log; log != nil {
+		return log
 	}
 	return slog.Default()
 }
 
 func runPeriodicTaskWithLeader(ctx context.Context, jobName string, fn func() error) error {
+	return runPeriodicTaskWithLeaderUsing(ctx, runtimeDependencies(ctx).Leader, runtimeLogger(ctx), jobName, fn)
+}
+
+func runPeriodicTaskWithLeaderUsing(ctx context.Context, elector LeaderElector, log *slog.Logger, jobName string, fn func() error) error {
 	// Every periodic task emits reconciler_runs_total
 	// + last_success_timestamp_seconds + duration_seconds. The start time
 	// is captured up front so duration includes the leader-lease acquire
@@ -313,14 +361,17 @@ func runPeriodicTaskWithLeader(ctx context.Context, jobName string, fn func() er
 	// the lane, which is what the stalled-reconciler alert cares about.
 	start := time.Now()
 
-	if runtimeDeps.Leader == nil {
+	if elector == nil {
 		workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(1)
 		defer workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(0)
 		err := fn()
 		observability.RecordReconcilerRun(jobName, reconcilerStatusFor(err), start)
+		if errors.Is(err, ErrPeriodicTaskSkipped) {
+			return nil
+		}
 		return err
 	}
-	release, held, err := runtimeDeps.Leader.TryLeader(ctx, jobName)
+	release, held, err := elector.TryLeader(ctx, jobName)
 	if err != nil {
 		workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(0)
 		observability.RecordReconcilerRun(jobName, observability.ReconcilerStatusErrored, start)
@@ -328,7 +379,10 @@ func runPeriodicTaskWithLeader(ctx context.Context, jobName string, fn func() er
 	}
 	if !held {
 		workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(0)
-		runtimeLogger().DebugContext(ctx, "periodic task skipped on non-leader replica", "job", jobName)
+		if log == nil {
+			log = slog.Default()
+		}
+		log.DebugContext(ctx, "periodic task skipped on non-leader replica", "job", jobName)
 		observability.RecordReconcilerRun(jobName, observability.ReconcilerStatusSkipped, start)
 		return nil
 	}
@@ -337,13 +391,17 @@ func runPeriodicTaskWithLeader(ctx context.Context, jobName string, fn func() er
 	defer release()
 	taskErr := fn()
 	observability.RecordReconcilerRun(jobName, reconcilerStatusFor(taskErr), start)
+	if errors.Is(taskErr, ErrPeriodicTaskSkipped) {
+		return nil
+	}
 	return taskErr
 }
 
-// reconcilerStatusFor maps an fn() return to a metric label. nil error =
-// succeeded; non-nil = failed. The skipped + errored statuses are reserved
-// for the lease-acquisition outcomes and not produced from here.
+// reconcilerStatusFor maps an fn() return to a metric label.
 func reconcilerStatusFor(err error) string {
+	if errors.Is(err, ErrPeriodicTaskSkipped) {
+		return observability.ReconcilerStatusSkipped
+	}
 	if err == nil {
 		return observability.ReconcilerStatusSucceeded
 	}

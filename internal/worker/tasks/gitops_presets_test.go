@@ -41,8 +41,6 @@ func auditDetailFor(q *fakeGitOpsQuerier, action string) []byte {
 // wired, the worker surfaces the declared names via a warn log + audit event
 // so an operator is never misled by a green sync.
 func TestSync_SurfacesDeclaredPresets(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml",
@@ -53,9 +51,9 @@ func TestSync_SurfacesDeclaredPresets(t *testing.T) {
 		t.Fatalf("push: %v", err)
 	}
 	src := setupSource(t, q, bare, "log", "interval")
-	ConfigureGitOps(GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now})
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now}}
 
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("SyncSource: %v", err)
 	}
 	detail := auditDetailFor(q, "gitops.cluster.presets_unreconciled")
@@ -71,8 +69,6 @@ func TestSync_SurfacesDeclaredPresets(t *testing.T) {
 // every sync: a registration with no registries/toolPresets must not emit the
 // unreconciled audit.
 func TestSync_NoPresetsNoSurfaceAudit(t *testing.T) {
-	ResetGitOps()
-	defer ResetGitOps()
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml", clusterRegistrationYAML("prod-east", nil), "add"); err != nil {
@@ -82,9 +78,9 @@ func TestSync_NoPresetsNoSurfaceAudit(t *testing.T) {
 		t.Fatalf("push: %v", err)
 	}
 	src := setupSource(t, q, bare, "log", "interval")
-	ConfigureGitOps(GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now})
+	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now}}
 
-	if err := SyncSource(context.Background(), src.ID); err != nil {
+	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
 		t.Fatalf("SyncSource: %v", err)
 	}
 	if containsAction(q.auditRows, "gitops.cluster.presets_unreconciled") {

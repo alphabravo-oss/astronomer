@@ -480,7 +480,7 @@ func TestRegistry_DeleteUsesTaskOutboxWhenConfigured(t *testing.T) {
 	if !params.DedupeKey.Valid || params.DedupeKey.String != "cluster_registry_unapply:"+row.ID.String() {
 		t.Fatalf("dedupe key = %+v", params.DedupeKey)
 	}
-	if params.TaskType != tasks.ClusterApplyRegistrySecretType || params.QueueName != "default" || params.MaxRetry != 3 || params.MaxDeliveryAttempts != 20 {
+	if params.TaskType != tasks.ClusterApplyRegistrySecretType || params.QueueName != tasks.ClusterTemplateApplyQueueName || params.MaxRetry != 3 || params.MaxDeliveryAttempts != 20 {
 		t.Fatalf("outbox params = %+v", params)
 	}
 	var payload tasks.ClusterApplyRegistrySecretPayload
@@ -630,11 +630,10 @@ func TestApply_CreatesDockerconfigSecret(t *testing.T) {
 			return &tasks.ProjectK8sResponse{StatusCode: 200, Body: []byte(`{}`)}
 		},
 	}
-	tasks.ConfigureClusterRegistryApply(tasks.ClusterRegistryApplyDeps{
+	runtime := tasks.ClusterRegistryRuntime{Deps: tasks.ClusterRegistryApplyDeps{
 		Queries:   q,
 		Requester: requester,
-	})
-	t.Cleanup(func() { tasks.ResetClusterRegistryApply() })
+	}}
 
 	task, err := tasks.NewClusterApplyRegistrySecretTask(tasks.ClusterApplyRegistrySecretPayload{
 		RegistryID: row.ID.String(),
@@ -644,7 +643,7 @@ func TestApply_CreatesDockerconfigSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build apply task: %v", err)
 	}
-	if err := tasks.HandleClusterApplyRegistrySecret(context.Background(), task); err != nil {
+	if err := runtime.HandleClusterApplyRegistrySecret(context.Background(), task); err != nil {
 		t.Fatalf("apply handler failed: %v", err)
 	}
 
@@ -702,18 +701,17 @@ func TestApply_PatchesDefaultServiceAccount(t *testing.T) {
 			return &tasks.ProjectK8sResponse{StatusCode: 200, Body: []byte(`{}`)}
 		},
 	}
-	tasks.ConfigureClusterRegistryApply(tasks.ClusterRegistryApplyDeps{
+	runtime := tasks.ClusterRegistryRuntime{Deps: tasks.ClusterRegistryApplyDeps{
 		Queries:   q,
 		Requester: requester,
-	})
-	t.Cleanup(func() { tasks.ResetClusterRegistryApply() })
+	}}
 
 	task, _ := tasks.NewClusterApplyRegistrySecretTask(tasks.ClusterApplyRegistrySecretPayload{
 		RegistryID: row.ID.String(),
 		ClusterID:  clusterID.String(),
 		Op:         "apply",
 	})
-	if err := tasks.HandleClusterApplyRegistrySecret(context.Background(), task); err != nil {
+	if err := runtime.HandleClusterApplyRegistrySecret(context.Background(), task); err != nil {
 		t.Fatalf("apply handler failed: %v", err)
 	}
 
@@ -749,18 +747,17 @@ func TestApply_OmitsSAPatchWhenDisabled(t *testing.T) {
 	})
 
 	requester := &fakeProjectK8sRequester{}
-	tasks.ConfigureClusterRegistryApply(tasks.ClusterRegistryApplyDeps{
+	runtime := tasks.ClusterRegistryRuntime{Deps: tasks.ClusterRegistryApplyDeps{
 		Queries:   q,
 		Requester: requester,
-	})
-	t.Cleanup(func() { tasks.ResetClusterRegistryApply() })
+	}}
 
 	task, _ := tasks.NewClusterApplyRegistrySecretTask(tasks.ClusterApplyRegistrySecretPayload{
 		RegistryID: row.ID.String(),
 		ClusterID:  clusterID.String(),
 		Op:         "apply",
 	})
-	if err := tasks.HandleClusterApplyRegistrySecret(context.Background(), task); err != nil {
+	if err := runtime.HandleClusterApplyRegistrySecret(context.Background(), task); err != nil {
 		t.Fatalf("apply handler failed: %v", err)
 	}
 
@@ -790,18 +787,17 @@ func TestApply_HandlesNamespaceList(t *testing.T) {
 			return &tasks.ProjectK8sResponse{StatusCode: 200, Body: []byte(`{}`)}
 		},
 	}
-	tasks.ConfigureClusterRegistryApply(tasks.ClusterRegistryApplyDeps{
+	runtime := tasks.ClusterRegistryRuntime{Deps: tasks.ClusterRegistryApplyDeps{
 		Queries:   q,
 		Requester: requester,
-	})
-	t.Cleanup(func() { tasks.ResetClusterRegistryApply() })
+	}}
 
 	task, _ := tasks.NewClusterApplyRegistrySecretTask(tasks.ClusterApplyRegistrySecretPayload{
 		RegistryID: row.ID.String(),
 		ClusterID:  clusterID.String(),
 		Op:         "apply",
 	})
-	if err := tasks.HandleClusterApplyRegistrySecret(context.Background(), task); err != nil {
+	if err := runtime.HandleClusterApplyRegistrySecret(context.Background(), task); err != nil {
 		t.Fatalf("apply handler failed: %v", err)
 	}
 
@@ -845,11 +841,10 @@ func TestDelete_RemovesSecret(t *testing.T) {
 			return &tasks.ProjectK8sResponse{StatusCode: 200, Body: []byte(`{}`)}
 		},
 	}
-	tasks.ConfigureClusterRegistryApply(tasks.ClusterRegistryApplyDeps{
+	runtime := tasks.ClusterRegistryRuntime{Deps: tasks.ClusterRegistryApplyDeps{
 		Queries:   q,
 		Requester: requester,
-	})
-	t.Cleanup(func() { tasks.ResetClusterRegistryApply() })
+	}}
 
 	task, _ := tasks.NewClusterApplyRegistrySecretTask(tasks.ClusterApplyRegistrySecretPayload{
 		RegistryID:        row.ID.String(),
@@ -859,7 +854,7 @@ func TestDelete_RemovesSecret(t *testing.T) {
 		SnapshotNamespace: []string{"app1"},
 		SnapshotInjectSA:  true,
 	})
-	if err := tasks.HandleClusterApplyRegistrySecret(context.Background(), task); err != nil {
+	if err := runtime.HandleClusterApplyRegistrySecret(context.Background(), task); err != nil {
 		t.Fatalf("unapply handler failed: %v", err)
 	}
 

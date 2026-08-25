@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -131,6 +132,9 @@ func (q *installedCatalogAuditQuerier) UpdateInstalledChartValues(_ context.Cont
 		return sqlc.InstalledChart{}, pgx.ErrNoRows
 	}
 	row.ValuesOverride = arg.ValuesOverride
+	if arg.ChartVersionID.Valid {
+		row.ChartVersionID = arg.ChartVersionID
+	}
 	row.Status = arg.Status
 	row.UpdatedAt = time.Now()
 	q.installations[arg.ID] = row
@@ -171,6 +175,7 @@ func TestCatalogInstalledMutationsAreAudited(t *testing.T) {
 		"namespace":        "apps",
 	})
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/catalog/installed/", bytes.NewReader(createBody))
+	createReq.Header.Set("Idempotency-Key", "catalog-create-audit")
 	createRec := httptest.NewRecorder()
 	h.CreateInstalledChart(createRec, createReq)
 	if createRec.Code != http.StatusAccepted {
@@ -186,8 +191,17 @@ func TestCatalogInstalledMutationsAreAudited(t *testing.T) {
 	assertInstalledCatalogAudit(t, q.audits[0], "catalog.installation.create", installation.ID.String(), "nginx")
 	assertAuditDetail(t, q.audits[0].Detail, "cluster_id", clusterID.String())
 
-	upgradeBody, _ := json.Marshal(map[string]any{"values_override": "replicaCount: 3\n"})
+	currentVersion := q.versions[versionID]
+	upgradeVersionID := uuid.New()
+	q.versions[upgradeVersionID] = sqlc.HelmChartVersion{
+		ID: upgradeVersionID, ChartID: currentVersion.ChartID, Version: "1.3.0",
+	}
+	upgradeBody, _ := json.Marshal(map[string]any{
+		"chart_version_id": upgradeVersionID.String(),
+		"values_override":  "replicaCount: 3\n",
+	})
 	upgradeReq := httptest.NewRequest(http.MethodPut, "/api/v1/catalog/installed/"+installation.ID.String()+"/upgrade/", bytes.NewReader(upgradeBody))
+	upgradeReq.Header.Set("Idempotency-Key", "catalog-upgrade-audit")
 	upgradeReq = withChiParams(upgradeReq, map[string]string{"id": installation.ID.String()})
 	upgradeRec := httptest.NewRecorder()
 	h.UpgradeInstalledChart(upgradeRec, upgradeReq)
@@ -196,8 +210,13 @@ func TestCatalogInstalledMutationsAreAudited(t *testing.T) {
 	}
 	assertInstalledCatalogAudit(t, q.audits[1], "catalog.installation.upgrade", installation.ID.String(), "nginx")
 	assertAuditDetail(t, q.audits[1].Detail, "cluster_id", clusterID.String())
+	upgraded := q.installations[installation.ID]
+	if upgraded.ChartVersionID != (pgtype.UUID{Bytes: upgradeVersionID, Valid: true}) {
+		t.Fatalf("chart version after upgrade=%v, want %s", upgraded.ChartVersionID, upgradeVersionID)
+	}
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/v1/catalog/installed/"+installation.ID.String()+"/", nil)
+	deleteReq.Header.Set("Idempotency-Key", "catalog-delete-audit")
 	deleteReq = withChiParams(deleteReq, map[string]string{"id": installation.ID.String()})
 	deleteRec := httptest.NewRecorder()
 	h.DeleteInstalledChart(deleteRec, deleteReq)

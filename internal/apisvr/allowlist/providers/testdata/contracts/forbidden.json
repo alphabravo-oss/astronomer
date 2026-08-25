@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "AuthorizationFailed",
+    "message": "The synthetic caller is not authorized for this operation.",
+    "requestId": "00000000-0000-4000-8000-000000000000"
+  }
+}

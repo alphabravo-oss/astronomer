@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -15,10 +16,27 @@ type fakeCPSQuerier struct {
 	running   []sqlc.ControlPlaneSnapshot
 	succeeded []uuid.UUID
 	failed    map[uuid.UUID]string
+	clusters  map[uuid.UUID]sqlc.Cluster
+	snapshots map[uuid.UUID]sqlc.ControlPlaneSnapshot
+	statuses  []sqlc.MarkControlPlaneSnapshotStatusParams
 }
 
 func (f *fakeCPSQuerier) GetPlatformSetting(context.Context, string) (sqlc.PlatformSetting, error) {
 	return sqlc.PlatformSetting{}, nil
+}
+func (f *fakeCPSQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
+	row, ok := f.clusters[id]
+	if !ok {
+		return sqlc.Cluster{}, pgx.ErrNoRows
+	}
+	return row, nil
+}
+func (f *fakeCPSQuerier) GetControlPlaneSnapshotByID(_ context.Context, id uuid.UUID) (sqlc.ControlPlaneSnapshot, error) {
+	row, ok := f.snapshots[id]
+	if !ok {
+		return sqlc.ControlPlaneSnapshot{}, pgx.ErrNoRows
+	}
+	return row, nil
 }
 func (f *fakeCPSQuerier) ListClusters(context.Context, sqlc.ListClustersParams) ([]sqlc.Cluster, error) {
 	return nil, nil
@@ -29,7 +47,13 @@ func (f *fakeCPSQuerier) GetLatestControlPlaneSnapshotByCluster(context.Context,
 func (f *fakeCPSQuerier) CreateControlPlaneSnapshot(context.Context, sqlc.CreateControlPlaneSnapshotParams) (sqlc.ControlPlaneSnapshot, error) {
 	return sqlc.ControlPlaneSnapshot{}, nil
 }
-func (f *fakeCPSQuerier) MarkControlPlaneSnapshotStatus(context.Context, sqlc.MarkControlPlaneSnapshotStatusParams) error {
+
+func (f *fakeCPSQuerier) MarkControlPlaneSnapshotStatus(_ context.Context, arg sqlc.MarkControlPlaneSnapshotStatusParams) error {
+	f.statuses = append(f.statuses, arg)
+	if row, ok := f.snapshots[arg.ID]; ok {
+		row.Status, row.Error = arg.Status, arg.Error
+		f.snapshots[arg.ID] = row
+	}
 	return nil
 }
 func (f *fakeCPSQuerier) MarkControlPlaneSnapshotSucceeded(_ context.Context, arg sqlc.MarkControlPlaneSnapshotSucceededParams) error {
@@ -48,6 +72,18 @@ func (f *fakeCPSQuerier) ListRunningControlPlaneSnapshots(_ context.Context, arg
 		return nil, nil // single page in tests
 	}
 	return f.running, nil
+}
+func (f *fakeCPSQuerier) ListPendingControlPlaneSnapshots(_ context.Context, limit int32) ([]sqlc.ControlPlaneSnapshot, error) {
+	rows := make([]sqlc.ControlPlaneSnapshot, 0)
+	for _, row := range f.snapshots {
+		if row.Status == "pending" {
+			rows = append(rows, row)
+			if int32(len(rows)) >= limit {
+				break
+			}
+		}
+	}
+	return rows, nil
 }
 func (f *fakeCPSQuerier) PruneControlPlaneSnapshots(context.Context, sqlc.PruneControlPlaneSnapshotsParams) error {
 	return nil
@@ -68,18 +104,17 @@ func TestReconcileControlPlaneSnapshots_PhaseMapping(t *testing.T) {
 		{ID: runningID, ClusterID: uuid.New()},
 	}}
 
-	// Stub the handler-side reader.
-	prev := controlPlaneSnapshotStatusReader
-	defer func() { controlPlaneSnapshotStatusReader = prev }()
-	SetControlPlaneSnapshotStatusReader(func(_ context.Context, _, snapshotID string) (string, string, error) {
+	runtime := ControlPlaneSnapshotRuntime{StatusReader: func(_ context.Context, _, snapshotID string) (string, string, error) {
 		id := uuid.MustParse(snapshotID)
 		if phases[id] == "failed" {
 			return "failed", "boom", nil
 		}
 		return phases[id], "", nil
-	})
+	}}
 
-	reconcileControlPlaneSnapshots(context.Background(), ControlPlaneSnapshotSweepDeps{Queries: q})
+	if err := runtime.reconcileControlPlaneSnapshots(context.Background(), ControlPlaneSnapshotSweepDeps{Queries: q}); err != nil {
+		t.Fatalf("reconcile control-plane snapshots: %v", err)
+	}
 
 	if len(q.succeeded) != 1 || q.succeeded[0] != succeededID {
 		t.Fatalf("expected only %s marked succeeded, got %v", succeededID, q.succeeded)
@@ -158,17 +193,19 @@ func TestReconcileControlPlaneSnapshots_NoOffsetPaginationSkips(t *testing.T) {
 		q.status[id] = "running"
 	}
 
-	prev := controlPlaneSnapshotStatusReader
-	defer func() { controlPlaneSnapshotStatusReader = prev }()
-	SetControlPlaneSnapshotStatusReader(func(_ context.Context, _, _ string) (string, string, error) {
+	runtime := ControlPlaneSnapshotRuntime{StatusReader: func(_ context.Context, _, _ string) (string, string, error) {
 		return "succeeded", "", nil
-	})
+	}}
 
 	deps := ControlPlaneSnapshotSweepDeps{Queries: q}
 
 	// Two ticks: page one, then the remainder.
-	reconcileControlPlaneSnapshots(context.Background(), deps)
-	reconcileControlPlaneSnapshots(context.Background(), deps)
+	if err := runtime.reconcileControlPlaneSnapshots(context.Background(), deps); err != nil {
+		t.Fatalf("reconcile first page: %v", err)
+	}
+	if err := runtime.reconcileControlPlaneSnapshots(context.Background(), deps); err != nil {
+		t.Fatalf("reconcile second page: %v", err)
+	}
 
 	// The mutating set must never be offset-paginated.
 	for _, off := range q.offsetsAsk {

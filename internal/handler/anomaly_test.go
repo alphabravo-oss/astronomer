@@ -67,6 +67,36 @@ func (f *fakeAnomalyQuerierForHandler) CountAnomalyBaselines(_ context.Context) 
 	return int64(len(f.rows)), nil
 }
 
+func (f *fakeAnomalyQuerierForHandler) ListAnomalyBaselinesForScopes(_ context.Context, arg sqlc.ListAnomalyBaselinesForScopesParams) ([]sqlc.AnomalyBaseline, error) {
+	allowed := make(map[uuid.UUID]struct{}, len(arg.ClusterIds))
+	for _, id := range arg.ClusterIds {
+		allowed[id] = struct{}{}
+	}
+	rows := make([]sqlc.AnomalyBaseline, 0, len(f.rows))
+	for _, row := range f.rows {
+		if _, ok := allowed[row.ClusterID]; ok {
+			rows = append(rows, row)
+		}
+	}
+	start := min(int(arg.QueryOffset), len(rows))
+	end := min(start+int(arg.QueryLimit), len(rows))
+	return rows[start:end], f.err
+}
+
+func (f *fakeAnomalyQuerierForHandler) CountAnomalyBaselinesForScopes(_ context.Context, clusterIDs []uuid.UUID) (int64, error) {
+	allowed := make(map[uuid.UUID]struct{}, len(clusterIDs))
+	for _, id := range clusterIDs {
+		allowed[id] = struct{}{}
+	}
+	var count int64
+	for _, row := range f.rows {
+		if _, ok := allowed[row.ClusterID]; ok {
+			count++
+		}
+	}
+	return count, f.err
+}
+
 func sampleBaseline(id, clusterID uuid.UUID, metric string) sqlc.AnomalyBaseline {
 	return sqlc.AnomalyBaseline{
 		ID:            id,

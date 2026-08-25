@@ -275,6 +275,17 @@ type StateSubscriber struct {
 	readyCh chan struct{}
 	once    sync.Once
 
+	// bootstrapSeen records Add callbacks delivered before the initial cache
+	// barrier. bootstrapPending records cache objects whose Add callback was
+	// still queued when WaitForCacheSync returned. client-go marks a store
+	// synced before every processor listener has necessarily drained, so a
+	// ready bool alone has a narrow race that can leak initial-list objects as
+	// live additions. Access to both maps and the ready transition is serialized
+	// by bootstrapMu.
+	bootstrapMu      sync.Mutex
+	bootstrapSeen    map[string]struct{}
+	bootstrapPending map[string]struct{}
+
 	// meta is the metadata-only client for the P4.6 informer expansion
 	// (built-in kinds beyond the typed set, Helm release Secrets, and
 	// discover-if-present CRDs). Optional; nil keeps the pre-P4.6
@@ -321,14 +332,16 @@ func NewStateSubscriber(client kubernetes.Interface, sender stateSender, log *sl
 		log = slog.Default()
 	}
 	return &StateSubscriber{
-		client:       client,
-		sender:       sender,
-		log:          log,
-		limiter:      newStateRateLimiter(getStateSubscriberMinInterval(), getStateSubscriberEvictAfter()),
-		readyCh:      make(chan struct{}),
-		startedAt:    time.Now(),
-		watchSecrets: false,
-		stores:       make(map[string]stateStoreEntry),
+		client:           client,
+		sender:           sender,
+		log:              log,
+		limiter:          newStateRateLimiter(getStateSubscriberMinInterval(), getStateSubscriberEvictAfter()),
+		readyCh:          make(chan struct{}),
+		startedAt:        time.Now(),
+		watchSecrets:     false,
+		stores:           make(map[string]stateStoreEntry),
+		bootstrapSeen:    make(map[string]struct{}),
+		bootstrapPending: make(map[string]struct{}),
 	}
 }
 
@@ -448,7 +461,7 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 			}
 		}
 	}
-	s.ready.Store(true)
+	s.finishBootstrap()
 	s.once.Do(func() { close(s.readyCh) })
 	s.log.Info("state subscriber started", "resync_period", getStateSubscriberResyncPeriod().String())
 
@@ -567,7 +580,7 @@ func (s *StateSubscriber) handlers(kind, apiGroup, apiVersion string) cache.Reso
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			if meta, ok := metaFromObj(obj); ok {
-				if !s.ready.Load() {
+				if s.suppressBootstrapAdd(kind, meta) {
 					s.log.Debug("state subscriber: suppressing bootstrap add", "kind", kind, "namespace", meta.GetNamespace(), "name", meta.GetName())
 					return
 				}
@@ -591,6 +604,63 @@ func (s *StateSubscriber) handlers(kind, apiGroup, apiVersion string) cache.Reso
 			}
 		},
 	}
+}
+
+func bootstrapObjectKey(kind string, meta metav1.Object) string {
+	return fmt.Sprintf("%s|%s|%s|%s", kind, meta.GetNamespace(), meta.GetName(), meta.GetResourceVersion())
+}
+
+// suppressBootstrapAdd closes the gap between informer cache sync and event
+// listener delivery. Before the boundary it records callbacks that already
+// arrived. After the boundary it consumes exactly one delayed initial-list Add
+// matching the cache snapshot; genuinely new objects are not in that snapshot
+// and flow through immediately.
+func (s *StateSubscriber) suppressBootstrapAdd(kind string, meta metav1.Object) bool {
+	key := bootstrapObjectKey(kind, meta)
+	s.bootstrapMu.Lock()
+	defer s.bootstrapMu.Unlock()
+	if !s.ready.Load() {
+		s.bootstrapSeen[key] = struct{}{}
+		return true
+	}
+	if _, pending := s.bootstrapPending[key]; pending {
+		delete(s.bootstrapPending, key)
+		return true
+	}
+	return false
+}
+
+// finishBootstrap snapshots every synced store and atomically opens the live
+// event gate. Any cache object whose Add callback has not already run becomes a
+// one-shot suppression marker for a listener callback that was queued behind
+// WaitForCacheSync.
+func (s *StateSubscriber) finishBootstrap() {
+	s.storeMu.RLock()
+	entries := make([]stateStoreEntry, 0, len(s.stores))
+	for _, entry := range s.stores {
+		entries = append(entries, entry)
+	}
+	s.storeMu.RUnlock()
+
+	s.bootstrapMu.Lock()
+	defer s.bootstrapMu.Unlock()
+	for _, entry := range entries {
+		if entry.hasSynced == nil || !entry.hasSynced() {
+			continue
+		}
+		for _, obj := range entry.store.List() {
+			meta, ok := metaFromObj(obj)
+			if !ok {
+				continue
+			}
+			key := bootstrapObjectKey(entry.kind, meta)
+			if _, delivered := s.bootstrapSeen[key]; !delivered {
+				s.bootstrapPending[key] = struct{}{}
+			}
+		}
+	}
+	clear(s.bootstrapSeen)
+	s.ready.Store(true)
 }
 
 // startHelmSecretInformer runs a metadata informer over Secrets filtered to

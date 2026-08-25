@@ -1,86 +1,185 @@
-/**
- * SIEM forwarder admin API client (F-05).
- *
- * Backend: /api/v1/admin/siem-forwarders/* (List/Create/Get/Update/Delete +
- * test + status). All endpoints are superuser-gated server-side.
- *
- * Conventions mirror the rest of `lib/api.ts`:
- *   - Reads come back camelCased by the shared axios response interceptor, so
- *     the `SIEMForwarder` / `SIEMForwarderStatus` types are camelCase even
- *     though the wire format is snake_case.
- *   - Writes send the snake_case keys the Go `siemForwarderRequest` declares.
- *   - List responds `{ data: { items, total } }`; single objects respond
- *     `{ data: {...} }`; test + status respond unwrapped (camelized).
- *
- * Re-exported from ../api.ts via `export * from './api/siem-forwarders'`.
- */
-import api from '@/lib/api';
-import type { SIEMForwarder, SIEMForwarderStatus } from '@/types';
+import {
+  adminSIEMForwarderDelete,
+  adminSIEMForwarderGet,
+  adminSIEMForwardersCreate,
+  adminSIEMForwardersList,
+  adminSIEMForwarderStatus,
+  adminSIEMForwarderTest,
+  adminSIEMForwarderUpdate,
+} from "@/lib/api/generated/client";
+import { idempotencyHeaderParams } from "@/lib/api/idempotency";
+import type { SIEMForwarder, SIEMForwarderStatus } from "@/types";
+import type {
+  SIEMForwarderRequest,
+  SIEMForwarderResponse,
+  SIEMForwarderStatusResponse,
+  SIEMForwarderTestReceipt,
+} from "@/types/openapi.generated";
 
-// The GET path returns this sentinel instead of the auth ciphertext; echoing
-// it back on PUT means "keep the existing auth blob unchanged".
-export const SIEM_AUTH_SENTINEL = '<encrypted>';
-
-// Write payload — snake_case to match the Go handler's json tags. Every field
-// is optional so PUT can do partial updates; Create validates required fields.
-export interface SIEMForwarderWriteRequest {
-  name?: string;
+export const SIEM_AUTH_SENTINEL = "<encrypted>";
+export type SIEMForwarderWriteRequest = Omit<
+  SIEMForwarderRequest,
+  "transport" | "format"
+> & {
   transport?: string;
-  endpoint?: string;
-  auth?: string;
-  event_filters?: string[];
   format?: string;
-  tls_skip_verify?: boolean;
-  ca_cert_pem?: string;
-  batch_size?: number;
-  flush_interval_ms?: number;
-  timeout_seconds?: number;
-  enabled?: boolean;
-}
+};
 
-export async function listSIEMForwarders(): Promise<SIEMForwarder[]> {
-  const res = await api.get<{ data?: { items?: SIEMForwarder[] } }>('/admin/siem-forwarders/');
-  return res.data.data?.items ?? [];
-}
-
-export async function getSIEMForwarder(id: string): Promise<SIEMForwarder> {
-  const res = await api.get<{ data: SIEMForwarder }>(`/admin/siem-forwarders/${id}/`);
-  return res.data.data;
-}
-
-export async function createSIEMForwarder(
-  body: SIEMForwarderWriteRequest,
-): Promise<SIEMForwarder> {
-  const res = await api.post<{ data: SIEMForwarder }>('/admin/siem-forwarders/', body);
-  return res.data.data;
-}
-
-export async function updateSIEMForwarder(
-  id: string,
-  body: SIEMForwarderWriteRequest,
-): Promise<SIEMForwarder> {
-  const res = await api.put<{ data: SIEMForwarder }>(`/admin/siem-forwarders/${id}/`, body);
-  return res.data.data;
-}
-
-export async function deleteSIEMForwarder(id: string): Promise<void> {
-  await api.delete(`/admin/siem-forwarders/${id}/`);
-}
-
-export interface SIEMTestResult {
+export interface SIEMTestReceiptView {
   queueId: string;
   forwarderId: string;
   queuedAt: string;
   message: string;
 }
 
-export async function testSIEMForwarder(id: string): Promise<SIEMTestResult> {
-  // Unwrapped body (RespondJSONUnwrapped); interceptor camelizes keys.
-  const res = await api.post<SIEMTestResult>(`/admin/siem-forwarders/${id}/test/`);
-  return res.data;
+export interface SIEMRequestOptions {
+  signal?: AbortSignal;
 }
 
-export async function getSIEMForwarderStatus(id: string): Promise<SIEMForwarderStatus> {
-  const res = await api.get<SIEMForwarderStatus>(`/admin/siem-forwarders/${id}/status/`);
-  return res.data;
+function requireData<T>(data: T | undefined, operation: string): T {
+  if (data === undefined) throw new Error(`${operation} response omitted data`);
+  return data;
+}
+
+function mapWriteRequest(
+  body: SIEMForwarderWriteRequest,
+): SIEMForwarderRequest {
+  const transports = [
+    "syslog_udp",
+    "syslog_tcp",
+    "syslog_tls",
+    "splunk_hec",
+    "ndjson_https",
+  ] as const;
+  const formats = ["", "rfc5424", "rfc3164", "cef", "ndjson"] as const;
+  if (
+    body.transport &&
+    !transports.includes(body.transport as (typeof transports)[number])
+  ) {
+    throw new Error(`Unsupported SIEM transport: ${body.transport}`);
+  }
+  if (
+    body.format !== undefined &&
+    !formats.includes(body.format as (typeof formats)[number])
+  ) {
+    throw new Error(`Unsupported SIEM format: ${body.format}`);
+  }
+  return body as SIEMForwarderRequest;
+}
+
+function mapForwarder(wire: SIEMForwarderResponse): SIEMForwarder {
+  return {
+    id: wire.id,
+    name: wire.name,
+    transport: wire.transport,
+    endpoint: wire.endpoint,
+    auth: wire.auth,
+    authConfigured: wire.auth_configured,
+    eventFilters: wire.event_filters,
+    format: wire.format,
+    tlsSkipVerify: wire.tls_skip_verify,
+    caCertConfigured: wire.ca_cert_configured,
+    batchSize: wire.batch_size,
+    flushIntervalMs: wire.flush_interval_ms,
+    timeoutSeconds: wire.timeout_seconds,
+    enabled: wire.enabled,
+    createdBy: wire.created_by,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
+  };
+}
+
+function mapStatus(wire: SIEMForwarderStatusResponse): SIEMForwarderStatus {
+  return {
+    forwarderId: wire.forwarder_id,
+    lastSentAt: wire.last_sent_at,
+    lastError: wire.last_error,
+    queueDepth: wire.queue_depth,
+    droppedTotal: wire.dropped_total,
+    dispatchedTotal: wire.dispatched_total,
+    updatedAt: wire.updated_at,
+  };
+}
+
+function mapTestReceipt(wire: SIEMForwarderTestReceipt): SIEMTestReceiptView {
+  return {
+    queueId: wire.operation_id,
+    forwarderId: wire.forwarder_id,
+    queuedAt: wire.created_at,
+    message: wire.status,
+  };
+}
+
+export async function listSIEMForwarders(
+  options: SIEMRequestOptions = {},
+): Promise<SIEMForwarder[]> {
+  const response = await adminSIEMForwardersList({ signal: options.signal });
+  return requireData(response.data, "List SIEM forwarders").items.map(
+    mapForwarder,
+  );
+}
+
+export async function getSIEMForwarder(
+  id: string,
+  options: SIEMRequestOptions = {},
+): Promise<SIEMForwarder> {
+  const response = await adminSIEMForwarderGet({
+    path: { id },
+    signal: options.signal,
+  });
+  return mapForwarder(requireData(response.data, "Get SIEM forwarder"));
+}
+
+export async function createSIEMForwarder(
+  body: SIEMForwarderWriteRequest,
+  options: SIEMRequestOptions = {},
+): Promise<SIEMForwarder> {
+  const response = await adminSIEMForwardersCreate({
+    body: mapWriteRequest(body),
+    signal: options.signal,
+  });
+  return mapForwarder(requireData(response.data, "Create SIEM forwarder"));
+}
+
+export async function updateSIEMForwarder(
+  id: string,
+  body: SIEMForwarderWriteRequest,
+  options: SIEMRequestOptions = {},
+): Promise<SIEMForwarder> {
+  const response = await adminSIEMForwarderUpdate({
+    path: { id },
+    body: mapWriteRequest(body),
+    signal: options.signal,
+  });
+  return mapForwarder(requireData(response.data, "Update SIEM forwarder"));
+}
+
+export async function deleteSIEMForwarder(
+  id: string,
+  options: SIEMRequestOptions = {},
+): Promise<void> {
+  await adminSIEMForwarderDelete({ path: { id }, signal: options.signal });
+}
+
+export async function testSIEMForwarder(
+  id: string,
+  options: SIEMRequestOptions = {},
+): Promise<SIEMTestReceiptView> {
+  const response = await adminSIEMForwarderTest({
+    path: { id },
+    headerParams: idempotencyHeaderParams(),
+    signal: options.signal,
+  });
+  return mapTestReceipt(requireData(response.data, "Test SIEM forwarder"));
+}
+
+export async function getSIEMForwarderStatus(
+  id: string,
+  options: SIEMRequestOptions = {},
+): Promise<SIEMForwarderStatus> {
+  const response = await adminSIEMForwarderStatus({
+    path: { id },
+    signal: options.signal,
+  });
+  return mapStatus(response);
 }

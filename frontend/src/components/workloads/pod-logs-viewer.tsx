@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { usePodLogs } from '@/lib/hooks';
-import type { Pod, PodLog } from '@/types';
-import { cn } from '@/lib/utils';
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { usePodLogs } from "@/lib/hooks";
+import type { Pod, PodLog } from "@/types";
+import { cn } from "@/lib/utils";
 import {
   Download,
   Search,
@@ -13,7 +13,7 @@ import {
   X,
   Clock,
   Loader2,
-} from 'lucide-react';
+} from "lucide-react";
 
 interface PodLogsViewerProps {
   clusterId: string;
@@ -34,33 +34,33 @@ export function PodLogsViewer({
 }: PodLogsViewerProps) {
   const [follow, setFollow] = useState(true);
   const [showTimestamps, setShowTimestamps] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [tailLines, setTailLines] = useState(500);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const activePod = pods.find((p) => p.name === selectedPod) || pods[0];
-  const podName = activePod?.name || '';
+  const podName = activePod?.name || "";
   const containers = useMemo(() => activePod?.containers ?? [], [activePod]);
-  const [selectedContainer, setSelectedContainer] = useState(containers[0]?.name || '');
+  const [selectedContainer, setSelectedContainer] = useState(
+    containers[0]?.name || "",
+  );
 
   // Update container when pod changes
   useEffect(() => {
-    if (containers.length > 0 && !containers.find((c) => c.name === selectedContainer)) {
+    if (
+      containers.length > 0 &&
+      !containers.find((c) => c.name === selectedContainer)
+    ) {
       setSelectedContainer(containers[0].name);
     }
   }, [containers, selectedContainer]);
 
-  const { data: logs, isLoading } = usePodLogs(
-    clusterId,
-    namespace,
-    podName,
-    {
-      container: selectedContainer,
-      tailLines,
-      follow,
-    }
-  );
+  const { data: logs, isLoading } = usePodLogs(clusterId, namespace, podName, {
+    container: selectedContainer,
+    tailLines,
+    follow,
+  });
 
   // Auto-scroll when following. We pin to the bottom whenever `follow` is
   // true and new lines arrive. The `isAutoScrolling` ref tells the scroll
@@ -95,41 +95,43 @@ export function PodLogsViewer({
         return prev;
       });
     }
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
   // Filter logs by search
   const filteredLogs = useMemo(() => {
     if (!searchQuery.trim() || !logs) return logs || [];
     const q = searchQuery.toLowerCase();
-    return logs.filter((log) => (log.message || '').toLowerCase().includes(q));
+    return logs.filter((log) => (log.message || "").toLowerCase().includes(q));
   }, [logs, searchQuery]);
 
   // Keyboard shortcut for search
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
         e.preventDefault();
         setShowSearch(true);
       }
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         setShowSearch(false);
-        setSearchQuery('');
+        setSearchQuery("");
       }
     }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
   }, []);
 
   const handleDownload = useCallback(() => {
     if (!filteredLogs.length) return;
     const content = filteredLogs
-      .map((log) => `${showTimestamps ? log.timestamp + ' ' : ''}${log.message}`)
-      .join('\n');
-    const blob = new Blob([content], { type: 'text/plain' });
+      .map(
+        (log) => `${showTimestamps ? log.timestamp + " " : ""}${log.message}`,
+      )
+      .join("\n");
+    const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `${podName}-${selectedContainer}-logs.txt`;
     a.click();
@@ -137,14 +139,18 @@ export function PodLogsViewer({
   }, [filteredLogs, podName, selectedContainer, showTimestamps]);
 
   const getLogLineClass = (log: PodLog) => {
-    const msg = (log.message || '').toLowerCase();
-    if (log.level === 'error' || msg.includes('error') || msg.includes('fatal')) {
-      return 'log-error';
+    const msg = (log.message || "").toLowerCase();
+    if (
+      log.level === "error" ||
+      msg.includes("error") ||
+      msg.includes("fatal")
+    ) {
+      return "log-error";
     }
-    if (log.level === 'warn' || msg.includes('warn')) {
-      return 'log-warn';
+    if (log.level === "warn" || msg.includes("warn")) {
+      return "log-warn";
     }
-    return '';
+    return "";
   };
 
   if (!activePod) {
@@ -209,10 +215,10 @@ export function PodLogsViewer({
           <button
             onClick={() => setShowTimestamps(!showTimestamps)}
             className={cn(
-              'inline-flex items-center gap-1 h-7 px-2 rounded text-xs transition-colors',
+              "inline-flex items-center gap-1 h-7 px-2 rounded text-xs transition-colors",
               showTimestamps
-                ? 'bg-accent text-foreground'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent",
             )}
             title="Toggle timestamps"
           >
@@ -223,10 +229,10 @@ export function PodLogsViewer({
           <button
             onClick={() => setShowSearch(!showSearch)}
             className={cn(
-              'inline-flex items-center gap-1 h-7 px-2 rounded text-xs transition-colors',
+              "inline-flex items-center gap-1 h-7 px-2 rounded text-xs transition-colors",
               showSearch
-                ? 'bg-accent text-foreground'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent",
             )}
             title="Search logs"
           >
@@ -237,15 +243,21 @@ export function PodLogsViewer({
           <button
             onClick={() => setFollow(!follow)}
             className={cn(
-              'inline-flex items-center gap-1 h-7 px-2 rounded text-xs transition-colors',
+              "inline-flex items-center gap-1 h-7 px-2 rounded text-xs transition-colors",
               follow
-                ? 'bg-status-success/10 text-status-success'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                ? "bg-status-success/10 text-status-success"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent",
             )}
-            title={follow ? 'Stop following' : 'Follow logs'}
+            title={follow ? "Stop following" : "Follow logs"}
           >
-            {follow ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-            <span className="hidden sm:inline">{follow ? 'Following' : 'Follow'}</span>
+            {follow ? (
+              <Pause className="h-3 w-3" />
+            ) : (
+              <Play className="h-3 w-3" />
+            )}
+            <span className="hidden sm:inline">
+              {follow ? "Following" : "Follow"}
+            </span>
           </button>
 
           {/* Download */}
@@ -271,7 +283,7 @@ export function PodLogsViewer({
             placeholder="Filter logs..."
             className="flex-1 h-6 bg-transparent text-xs text-foreground placeholder:text-muted-foreground
               focus:outline-none"
-            autoFocus
+            data-initial-focus
           />
           {searchQuery && (
             <span className="text-2xs text-muted-foreground">
@@ -281,7 +293,7 @@ export function PodLogsViewer({
           <button
             onClick={() => {
               setShowSearch(false);
-              setSearchQuery('');
+              setSearchQuery("");
             }}
             className="text-muted-foreground hover:text-foreground"
           >
@@ -293,7 +305,10 @@ export function PodLogsViewer({
       {/* Log content */}
       <div
         ref={scrollRef}
-        className={cn("log-viewer overflow-y-auto overflow-x-hidden p-3", className || "h-[500px]")}
+        className={cn(
+          "log-viewer overflow-y-auto overflow-x-hidden p-3",
+          className || "h-[500px]",
+        )}
       >
         {isLoading ? (
           <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -302,17 +317,25 @@ export function PodLogsViewer({
           </div>
         ) : filteredLogs.length === 0 ? (
           <div className="flex items-center justify-center h-full text-zinc-600 text-xs">
-            {searchQuery ? 'No matching log lines' : 'No logs available'}
+            {searchQuery ? "No matching log lines" : "No logs available"}
           </div>
         ) : (
           filteredLogs.map((log, i) => (
-            <div key={i} className={cn('flex gap-2 hover:bg-white/[0.02] px-1 -mx-1 rounded', getLogLineClass(log))}>
+            <div
+              key={i}
+              className={cn(
+                "flex gap-2 hover:bg-white/[0.02] px-1 -mx-1 rounded",
+                getLogLineClass(log),
+              )}
+            >
               {showTimestamps && (
                 <span className="log-timestamp flex-shrink-0 whitespace-nowrap">
                   {new Date(log.timestamp).toLocaleTimeString()}
                 </span>
               )}
-              <span className="break-all whitespace-pre-wrap">{log.message}</span>
+              <span className="break-all whitespace-pre-wrap">
+                {log.message}
+              </span>
             </div>
           ))
         )}

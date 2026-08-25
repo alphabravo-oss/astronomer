@@ -26,7 +26,8 @@ func connectWithToken(t *testing.T, conn *websocket.Conn, ctx context.Context, c
 	t.Helper()
 	connectPayload, _ := json.Marshal(protocol.ConnectPayload{
 		ClusterID: clusterID, AgentID: "agent-rot", AgentVersion: "1.0.0",
-		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Token: token,
+		TunnelProtocolVersion: protocol.TunnelProtocolVersion, HeartbeatSchemaVersion: protocol.HeartbeatSchemaVersion,
+		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Capabilities: protocol.RequiredConnectCapabilities(), Token: token,
 	})
 	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgConnect, Payload: connectPayload}); err != nil {
 		t.Fatalf("write connect: %v", err)
@@ -152,7 +153,8 @@ func TestRevokedTokenDeniesConnect(t *testing.T) {
 	// Either an ack with Accepted=false OR a closed read both prove denial.
 	connectPayload, _ := json.Marshal(protocol.ConnectPayload{
 		ClusterID: clusterID.String(), AgentID: "agent-rot", AgentVersion: "1.0.0",
-		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Token: revokedToken,
+		TunnelProtocolVersion: protocol.TunnelProtocolVersion, HeartbeatSchemaVersion: protocol.HeartbeatSchemaVersion,
+		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Capabilities: protocol.RequiredConnectCapabilities(), Token: revokedToken,
 	})
 	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgConnect, Payload: connectPayload}); err != nil {
 		t.Fatalf("write connect: %v", err)

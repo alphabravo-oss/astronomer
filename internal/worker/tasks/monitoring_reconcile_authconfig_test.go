@@ -74,14 +74,13 @@ func sealedReconcileBackend(t *testing.T, enc *auth.Encryptor, doc string) sqlc.
 // QueryUrl is deliberately empty so the tick takes the "not_configured" path
 // and makes no outbound request; the write is what is under test.
 func TestReconcileMonitoringBackendPreservesCredential(t *testing.T) {
-	defer resetRuntime()
 	enc := newReconcileTestEncryptor(t)
 	backend := sealedReconcileBackend(t, enc,
 		`{"token":"`+monitoringReconcileToken+`","sharedThanos":{"namespace":"monitoring","status":"healthy"}}`)
 	q := &monitoringReconcileQuerier{}
-	ConfigureRuntime(RuntimeDependencies{Queries: q, MonitoringCipher: MonitoringCipherFor(enc)})
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, MonitoringCipher: MonitoringCipherFor(enc)})
 
-	if _, _, _, err := reconcileMonitoringBackend(context.Background(), backend); err != nil {
+	if _, _, _, err := reconcileMonitoringBackend(ctx, backend); err != nil {
 		t.Fatalf("reconcileMonitoringBackend: %v", err)
 	}
 	if len(q.upserts) != 1 {
@@ -127,15 +126,14 @@ func TestReconcileMonitoringBackendPreservesCredential(t *testing.T) {
 // cannot authenticate to is not healthy, however the unauthenticated probe went)
 // and the caller carries on to the cluster fan-out.
 func TestReconcileMonitoringBackendSkipsOnlyTheWriteWhenCredentialCannotBeDecrypted(t *testing.T) {
-	defer resetRuntime()
 	sealingEnc := newReconcileTestEncryptor(t)
 	backend := sealedReconcileBackend(t, sealingEnc,
 		`{"token":"`+monitoringReconcileToken+`","sharedThanos":{"namespace":"monitoring"}}`)
 	q := &monitoringReconcileQuerier{}
 	// A different key: the rotated-too-early case.
-	ConfigureRuntime(RuntimeDependencies{Queries: q, MonitoringCipher: MonitoringCipherFor(newReconcileTestEncryptor(t))})
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, MonitoringCipher: MonitoringCipherFor(newReconcileTestEncryptor(t))})
 
-	got, _, healthy, err := reconcileMonitoringBackend(context.Background(), backend)
+	got, _, healthy, err := reconcileMonitoringBackend(ctx, backend)
 	if err != nil {
 		t.Fatalf("an unreadable credential aborted the whole tick (%v); unrelated per-cluster reconciliation must still run", err)
 	}
@@ -156,7 +154,6 @@ func TestReconcileMonitoringBackendSkipsOnlyTheWriteWhenCredentialCannotBeDecryp
 // per-cluster work must not be gated on the monitoring credential. This pins
 // the blast radius at the level the regression would actually be felt.
 func TestMonitoringReconcileTickReconcilesClustersWhenTheCredentialIsUnreadable(t *testing.T) {
-	defer resetRuntime()
 	sealingEnc := newReconcileTestEncryptor(t)
 	backend := sealedReconcileBackend(t, sealingEnc,
 		`{"token":"`+monitoringReconcileToken+`","sharedThanos":{"namespace":"monitoring"}}`)
@@ -167,9 +164,9 @@ func TestMonitoringReconcileTickReconcilesClustersWhenTheCredentialIsUnreadable(
 		backend:                    backend,
 		clusters:                   []sqlc.Cluster{{ID: uuid.New(), Name: "c1"}},
 	}
-	ConfigureRuntime(RuntimeDependencies{Queries: q, MonitoringCipher: MonitoringCipherFor(newReconcileTestEncryptor(t))})
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, MonitoringCipher: MonitoringCipherFor(newReconcileTestEncryptor(t))})
 
-	_, client, healthy, err := reconcileMonitoringBackend(context.Background(), q.backend)
+	_, client, healthy, err := reconcileMonitoringBackend(ctx, q.backend)
 	if err != nil {
 		t.Fatalf("reconcileMonitoringBackend: %v", err)
 	}
@@ -179,7 +176,7 @@ func TestMonitoringReconcileTickReconcilesClustersWhenTheCredentialIsUnreadable(
 	if healthy {
 		t.Fatal("reported healthy despite an unreadable credential")
 	}
-	if err := reconcileClusterMonitoring(context.Background(), client, q.clusters[0], q.backend, healthy); err != nil {
+	if err := reconcileClusterMonitoring(ctx, client, q.clusters[0], q.backend, healthy); err != nil {
 		t.Fatalf("per-cluster reconcile failed: %v", err)
 	}
 	if len(q.clusterUpserts) != 1 {
@@ -211,17 +208,16 @@ func (q *monitoringReconcileTickQuerier) UpsertClusterMonitoringConfig(_ context
 // A pre-146 row (empty envelope, credential inline) must keep reconciling, and
 // the tick is what seals it going forward.
 func TestReconcileMonitoringBackendSealsAPreMigrationRow(t *testing.T) {
-	defer resetRuntime()
 	enc := newReconcileTestEncryptor(t)
 	q := &monitoringReconcileQuerier{}
-	ConfigureRuntime(RuntimeDependencies{Queries: q, MonitoringCipher: MonitoringCipherFor(enc)})
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, MonitoringCipher: MonitoringCipherFor(enc)})
 
 	backend := sqlc.MonitoringBackend{
 		ID:         uuid.New(),
 		AuthType:   "bearer",
 		AuthConfig: json.RawMessage(`{"token":"` + monitoringReconcileToken + `","sharedThanos":{"namespace":"monitoring"}}`),
 	}
-	if _, _, _, err := reconcileMonitoringBackend(context.Background(), backend); err != nil {
+	if _, _, _, err := reconcileMonitoringBackend(ctx, backend); err != nil {
 		t.Fatalf("reconcileMonitoringBackend: %v", err)
 	}
 	params := q.upserts[0]

@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
-import { useRouter, usePathname } from '@/lib/navigation';
-import { Command } from 'cmdk';
+import { useCallback, useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { useRouter, usePathname } from "@/lib/navigation";
+import { Command } from "cmdk";
 import {
   LayoutDashboard,
   Server,
@@ -24,40 +24,105 @@ import {
   Bell,
   ScrollText,
   Gauge,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { useUIStore } from '@/lib/store';
-import { useClusters, useProjects } from '@/lib/hooks';
-import { type SearchableResourceType } from '@/lib/api';
-import { OverlayShell } from '@/components/ui/overlay-shell';
-import type { Cluster, Project } from '@/types';
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { useUIStore } from "@/lib/store";
+import { useClusters, useProjects } from "@/lib/hooks";
+import { type SearchableResourceType } from "@/lib/api";
+import { OverlayShell } from "@/components/ui/overlay-shell";
+import type { Cluster, Project } from "@/types";
 
 const pages = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Clusters', href: '/dashboard/clusters', icon: Server },
-  { name: 'Projects', href: '/dashboard/projects', icon: Folder },
-  { name: 'Fleet metrics', href: '/dashboard/monitoring', icon: BarChart3 },
-  { name: 'Continuous Delivery', href: '/dashboard/delivery', icon: Rocket },
-  { name: 'RBAC', href: '/dashboard/rbac', icon: Shield },
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Clusters", href: "/dashboard/clusters", icon: Server },
+  { name: "Projects", href: "/dashboard/projects", icon: Folder },
+  { name: "Shared metrics", href: "/dashboard/monitoring", icon: BarChart3 },
+  { name: "Continuous Delivery", href: "/dashboard/delivery", icon: Rocket },
+  { name: "RBAC", href: "/dashboard/rbac", icon: Shield },
+  { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
 // Per-cluster destinations that are otherwise only reachable from the cluster
 // sidebar. Surfaced in the palette when the user is inside a cluster context so
 // keyboard users can jump straight to them.
-const clusterPages: Array<{ name: string; suffix: string; icon: LucideIcon; description: string }> = [
-  { name: 'Apps', suffix: '/apps', icon: Box, description: 'Helm charts, installed apps, and repositories' },
-  { name: 'Registries', suffix: '/registries', icon: Boxes, description: 'Private image-pull credentials' },
-  { name: 'Snapshots', suffix: '/snapshots', icon: Camera, description: 'Velero workload snapshots' },
-  { name: 'Network & Access', suffix: '/network-access', icon: Route, description: 'Apiserver allow-list' },
-  { name: 'Service Mesh', suffix: '/service-mesh', icon: Waypoints, description: 'mTLS + mesh status' },
-  { name: 'Mirrored Resources', suffix: '/resources', icon: Layers, description: 'Read-only CRD mirror' },
-  { name: 'Gatekeeper', suffix: '/gatekeeper', icon: Shield, description: 'OPA constraint authoring' },
-  { name: 'Delivery', suffix: '/delivery', icon: Rocket, description: 'Flux and delivery for this cluster' },
-  { name: 'Metrics', suffix: '/metrics', icon: Gauge, description: 'CPU, memory, and node utilization' },
-  { name: 'Monitoring Stack', suffix: '/monitoring-stack', icon: BarChart3, description: 'kube-prometheus-stack for this cluster' },
-  { name: 'Alerting', suffix: '/alerting', icon: Bell, description: 'Alert rules and firing alerts' },
-  { name: 'Logging', suffix: '/logging', icon: ScrollText, description: 'Log pipelines for this cluster' },
+const clusterPages: Array<{
+  name: string;
+  suffix: string;
+  icon: LucideIcon;
+  description: string;
+}> = [
+  {
+    name: "Apps",
+    suffix: "/apps",
+    icon: Box,
+    description: "Helm charts, installed apps, and repositories",
+  },
+  {
+    name: "Registries",
+    suffix: "/registries",
+    icon: Boxes,
+    description: "Private image-pull credentials",
+  },
+  {
+    name: "Snapshots",
+    suffix: "/snapshots",
+    icon: Camera,
+    description: "Velero workload snapshots",
+  },
+  {
+    name: "Network & Access",
+    suffix: "/network-access",
+    icon: Route,
+    description: "Apiserver allow-list",
+  },
+  {
+    name: "Service Mesh",
+    suffix: "/service-mesh",
+    icon: Waypoints,
+    description: "mTLS + mesh status",
+  },
+  {
+    name: "Mirrored Resources",
+    suffix: "/resources",
+    icon: Layers,
+    description: "Read-only CRD mirror",
+  },
+  {
+    name: "Gatekeeper",
+    suffix: "/gatekeeper",
+    icon: Shield,
+    description: "OPA constraint authoring",
+  },
+  {
+    name: "Delivery",
+    suffix: "/delivery",
+    icon: Rocket,
+    description: "Flux and delivery for this cluster",
+  },
+  {
+    name: "Metrics",
+    suffix: "/metrics",
+    icon: Gauge,
+    description: "CPU, memory, and node utilization",
+  },
+  {
+    name: "Monitoring Stack",
+    suffix: "/monitoring-stack",
+    icon: BarChart3,
+    description: "kube-prometheus-stack for this cluster",
+  },
+  {
+    name: "Alerting",
+    suffix: "/alerting",
+    icon: Bell,
+    description: "Alert rules and firing alerts",
+  },
+  {
+    name: "Logging",
+    suffix: "/logging",
+    icon: ScrollText,
+    description: "Log pipelines for this cluster",
+  },
 ];
 
 // Extract the cluster id from a /dashboard/clusters/<id>/... path, skipping the
@@ -65,43 +130,67 @@ const clusterPages: Array<{ name: string; suffix: string; icon: LucideIcon; desc
 function clusterIdFromPath(pathname: string): string | undefined {
   const match = pathname.match(/^\/dashboard\/clusters\/([^/]+)/);
   const seg = match?.[1];
-  return seg && seg !== 'new' && seg !== 'register' ? seg : undefined;
+  return seg && seg !== "new" && seg !== "register" ? seg : undefined;
 }
 
-const resourceSearches: Array<{ name: string; type: SearchableResourceType; description: string }> = [
-  { name: 'Search pods', type: 'pods', description: 'Across connected clusters' },
-  { name: 'Search workloads', type: 'deployments', description: 'Deployments by name' },
-  { name: 'Search namespaces', type: 'namespaces', description: 'Namespace inventory' },
-  { name: 'Search services', type: 'services', description: 'Service endpoints' },
-  { name: 'Search ingresses', type: 'ingresses', description: 'Ingress routing' },
-  { name: 'Search nodes', type: 'nodes', description: 'Node inventory' },
+const resourceSearches: Array<{
+  name: string;
+  type: SearchableResourceType;
+  description: string;
+}> = [
+  {
+    name: "Search pods",
+    type: "pods",
+    description: "Across connected clusters",
+  },
+  {
+    name: "Search workloads",
+    type: "deployments",
+    description: "Deployments by name",
+  },
+  {
+    name: "Search namespaces",
+    type: "namespaces",
+    description: "Namespace inventory",
+  },
+  {
+    name: "Search services",
+    type: "services",
+    description: "Service endpoints",
+  },
+  {
+    name: "Search ingresses",
+    type: "ingresses",
+    description: "Ingress routing",
+  },
+  { name: "Search nodes", type: "nodes", description: "Node inventory" },
 ];
 
 const runbookLinks = [
   {
-    name: 'Delivery recovery',
-    href: '/dashboard/delivery/deployments?phase=failed',
-    description: 'Reconciliation failures, drift, and rollback status',
+    name: "Delivery recovery",
+    href: "/dashboard/delivery/deployments?phase=failed",
+    description: "Reconciliation failures, drift, and rollback status",
   },
   {
-    name: 'Backup recovery',
-    href: '/dashboard/settings/backup',
-    description: 'Astronomer dump, restore drill, encryption-key wrapping',
+    name: "Backup recovery",
+    href: "/dashboard/settings/backup",
+    description: "Astronomer dump, restore drill, encryption-key wrapping",
   },
   {
-    name: 'Operations queues',
-    href: '/dashboard/settings/operations',
-    description: 'Task outbox, queues, dead letters',
+    name: "Operations queues",
+    href: "/dashboard/settings/operations",
+    description: "Task outbox, queues, dead letters",
   },
   {
-    name: 'Audit investigation',
-    href: '/dashboard/audit',
-    description: 'Who, what, where, and request IDs',
+    name: "Audit investigation",
+    href: "/dashboard/audit",
+    description: "Who, what, where, and request IDs",
   },
 ];
 
 function paletteItemClassName() {
-  return 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground cursor-pointer data-[selected=true]:bg-accent data-[selected=true]:text-foreground';
+  return "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground cursor-pointer data-[selected=true]:bg-accent data-[selected=true]:text-foreground";
 }
 
 function CommandRow({
@@ -129,10 +218,14 @@ function CommandRow({
       <div className="min-w-0 flex-1">
         <p className="truncate">{title}</p>
         {description ? (
-          <p className="truncate text-xs text-muted-foreground">{description}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {description}
+          </p>
         ) : null}
       </div>
-      {right ?? <ArrowRight className="h-3.5 w-3.5 opacity-0 data-[selected=true]:opacity-100" />}
+      {right ?? (
+        <ArrowRight className="h-3.5 w-3.5 opacity-0 data-[selected=true]:opacity-100" />
+      )}
     </Command.Item>
   );
 }
@@ -144,30 +237,30 @@ export function CommandPalette() {
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const { data: projectsData } = useProjects({ pageSize: 25 });
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
 
   // Keyboard shortcut
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setCommandPaletteOpen(!commandPaletteOpen);
       }
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         setCommandPaletteOpen(false);
       }
     }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [commandPaletteOpen, setCommandPaletteOpen]);
 
   const navigate = useCallback(
     (href: string) => {
       router.push(href);
       setCommandPaletteOpen(false);
-      setSearch('');
+      setSearch("");
     },
-    [router, setCommandPaletteOpen]
+    [router, setCommandPaletteOpen],
   );
 
   const selectCluster = useCallback(
@@ -176,16 +269,16 @@ export function CommandPalette() {
       // store — navigating is sufficient.
       router.push(`/dashboard/clusters/${cluster.id}`);
       setCommandPaletteOpen(false);
-      setSearch('');
+      setSearch("");
     },
-    [router, setCommandPaletteOpen]
+    [router, setCommandPaletteOpen],
   );
 
   const selectProject = useCallback(
     (project: Project) => {
       router.push(`/dashboard/projects/${project.id}`);
       setCommandPaletteOpen(false);
-      setSearch('');
+      setSearch("");
     },
     [router, setCommandPaletteOpen],
   );
@@ -194,7 +287,7 @@ export function CommandPalette() {
     (type: SearchableResourceType) => {
       const params = new URLSearchParams({ type });
       const q = search.trim();
-      if (q) params.set('name', q);
+      if (q) params.set("name", q);
       return `/dashboard/search?${params.toString()}`;
     },
     [search],
@@ -218,8 +311,10 @@ export function CommandPalette() {
               className="flex-1 h-12 px-3 bg-transparent text-sm text-foreground placeholder:text-muted-foreground
                 focus:outline-none"
             />
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border
-              border-border bg-muted text-[10px] font-mono text-muted-foreground">
+            <kbd
+              className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border
+              border-border bg-muted text-[10px] font-mono text-muted-foreground"
+            >
               ESC
             </kbd>
           </div>
@@ -230,7 +325,10 @@ export function CommandPalette() {
             </Command.Empty>
 
             {/* Navigation */}
-            <Command.Group heading="Pages" className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5">
+            <Command.Group
+              heading="Pages"
+              className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5"
+            >
               {pages.map((page) => {
                 return (
                   <CommandRow
@@ -245,7 +343,10 @@ export function CommandPalette() {
             </Command.Group>
 
             {currentClusterId && (
-              <Command.Group heading="Cluster Pages" className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2">
+              <Command.Group
+                heading="Cluster Pages"
+                className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2"
+              >
                 {clusterPages.map((page) => (
                   <CommandRow
                     key={page.suffix}
@@ -253,13 +354,20 @@ export function CommandPalette() {
                     icon={page.icon}
                     title={page.name}
                     description={page.description}
-                    onSelect={() => navigate(`/dashboard/clusters/${currentClusterId}${page.suffix}`)}
+                    onSelect={() =>
+                      navigate(
+                        `/dashboard/clusters/${currentClusterId}${page.suffix}`,
+                      )
+                    }
                   />
                 ))}
               </Command.Group>
             )}
 
-            <Command.Group heading="Resource Search" className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2">
+            <Command.Group
+              heading="Resource Search"
+              className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2"
+            >
               {resourceSearches.map((item) => (
                 <CommandRow
                   key={item.type}
@@ -274,7 +382,10 @@ export function CommandPalette() {
 
             {/* Clusters */}
             {clustersData?.data && clustersData.data.length > 0 && (
-              <Command.Group heading="Clusters" className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2">
+              <Command.Group
+                heading="Clusters"
+                className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2"
+              >
                 {clustersData.data.map((cluster) => (
                   <CommandRow
                     key={cluster.id}
@@ -285,13 +396,13 @@ export function CommandPalette() {
                     right={
                       <span
                         className={`inline-flex h-2 w-2 rounded-full ${
-                          cluster.status === 'active'
-                            ? 'bg-status-success'
-                            : cluster.status === 'warning'
-                              ? 'bg-status-warning'
-                              : cluster.status === 'error'
-                                ? 'bg-status-error'
-                                : 'bg-status-neutral'
+                          cluster.status === "active"
+                            ? "bg-status-success"
+                            : cluster.status === "warning"
+                              ? "bg-status-warning"
+                              : cluster.status === "error"
+                                ? "bg-status-error"
+                                : "bg-status-neutral"
                         }`}
                       />
                     }
@@ -302,11 +413,14 @@ export function CommandPalette() {
             )}
 
             {projectsData?.data && projectsData.data.length > 0 && (
-              <Command.Group heading="Projects" className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2">
+              <Command.Group
+                heading="Projects"
+                className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2"
+              >
                 {projectsData.data.map((project) => (
                   <CommandRow
                     key={project.id}
-                    value={`${project.name} ${project.displayName} project namespaces ${project.namespaces?.join(' ') ?? ''}`}
+                    value={`${project.name} ${project.displayName} project namespaces ${project.namespaces?.join(" ") ?? ""}`}
                     icon={Folder}
                     title={project.displayName || project.name}
                     description={`${project.namespaces?.length ?? 0} namespaces`}
@@ -316,7 +430,10 @@ export function CommandPalette() {
               </Command.Group>
             )}
 
-            <Command.Group heading="Runbooks" className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2">
+            <Command.Group
+              heading="Runbooks"
+              className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2"
+            >
               {runbookLinks.map((item) => (
                 <CommandRow
                   key={item.href}
@@ -330,12 +447,15 @@ export function CommandPalette() {
             </Command.Group>
 
             {/* Quick Actions */}
-            <Command.Group heading="Actions" className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2">
+            <Command.Group
+              heading="Actions"
+              className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2"
+            >
               <CommandRow
                 value="Register new cluster"
                 icon={Server}
                 title="Register New Cluster"
-                onSelect={() => navigate('/dashboard/clusters/register')}
+                onSelect={() => navigate("/dashboard/clusters/register")}
               />
             </Command.Group>
           </Command.List>

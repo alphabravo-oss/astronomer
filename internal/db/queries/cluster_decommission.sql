@@ -183,41 +183,10 @@ DELETE FROM agent_lifecycle_operations WHERE cluster_id = $1;
 
 -- Audit archive operations.
 --
--- ArchiveAuditLogsForCluster is the bulk INSERT … SELECT used during the
--- archive_audit phase. The cluster id is looked up in two places: resource_id
--- (when the row was emitted with resource_type='cluster') and the
--- detail->>'cluster_id' field (when an unrelated resource row tagged itself
--- with the cluster). The detail extraction uses ->> so it's a text comparison
--- against the cluster_id as a string.
-
--- name: ArchiveAuditLogsForCluster :execrows
-INSERT INTO audit_archive (
-    id, created_at, schema_version, user_id, actor_auth_method,
-    action, resource_type, resource_id, resource_name,
-    http_method, path, status_code, duration_ms, request_id,
-    ip_address, user_agent, detail, source, correlation_id,
-    archived_cluster_id, archived_cluster_name
-)
-SELECT
-    id, created_at, schema_version, user_id, actor_auth_method,
-    action, resource_type, resource_id, resource_name,
-    http_method, path, status_code, duration_ms, request_id,
-    ip_address, user_agent, detail, source, correlation_id,
-    sqlc.arg(cluster_id)::uuid,
-    COALESCE((SELECT COALESCE(NULLIF(c.display_name, ''), c.name) FROM clusters c WHERE c.id = sqlc.arg(cluster_id)::uuid), '')
-FROM audit_log
-WHERE
-    (resource_type = 'cluster' AND resource_id = sqlc.arg(cluster_id_text)::text)
-    OR (detail ->> 'cluster_id') = sqlc.arg(cluster_id_text)::text
-ON CONFLICT (id, created_at) DO NOTHING;
-
--- name: DeleteAuditLogsForCluster :execrows
--- Run AFTER ArchiveAuditLogsForCluster; removes the now-archived rows from
--- the live audit_log partition tree.
-DELETE FROM audit_log
-WHERE
-    (resource_type = 'cluster' AND resource_id = sqlc.arg(cluster_id_text)::text)
-    OR (detail ->> 'cluster_id') = sqlc.arg(cluster_id_text)::text;
+-- The archive_audit phase uses only the atomic archive-and-purge statement
+-- below. The former split INSERT/DELETE queries were removed because exposing
+-- either half made it possible to delete a different snapshot than the one
+-- copied into the archive.
 
 -- name: ArchiveAndPurgeAuditLogsForCluster :execrows
 -- Atomic archive-then-delete used by the decommission archive_audit phase.

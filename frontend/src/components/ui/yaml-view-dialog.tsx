@@ -1,13 +1,39 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { useK8sGetYaml, useK8sApplyYaml, useK8sDryRunYaml } from '@/lib/hooks';
-import { YamlEditor } from '@/components/ui/yaml-editor';
-import { ModalShell } from '@/components/ui/modal-shell';
-import { Loader2, Pencil, Eye, GitCompare, AlertTriangle } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import * as apiClient from '@/lib/api';
-import { toastWarning } from '@/lib/toast';
+import { useState, useEffect, useRef } from "react";
+import {
+  useK8sGetYaml,
+  useK8sApplyYaml,
+  useK8sDryRunYaml,
+  useResourceSchema,
+} from "@/lib/hooks";
+import { YamlEditor } from "@/components/ui/yaml-editor";
+import { ModalShell } from "@/components/ui/modal-shell";
+import {
+  GuidedResourceForm,
+  type KubernetesManifest,
+} from "@/components/resources/guided-resource-form";
+import { Loader2, Pencil, Eye, AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import * as apiClient from "@/lib/api";
+import type { ResourceType } from "@/lib/api/resources";
+import type { PermissionDecision } from "@/lib/permissions";
+import { toastWarning } from "@/lib/toast";
+import { ErrorState } from "@/components/ui/empty-state";
+import {
+  buildYamlDiff,
+  classifyResourceApplyFailure,
+  yamlTextMatches,
+  YamlDiffPreview,
+  type YamlApplyPreviewModel,
+} from "@/components/ui/yaml-apply-preview";
+
+export { classifyResourceApplyFailure } from "@/components/ui/yaml-apply-preview";
+
+type ForceConflictPermission = Pick<
+  PermissionDecision,
+  "allowed" | "permission" | "reason" | "disabledReason"
+>;
 
 interface YamlViewDialogProps {
   open: boolean;
@@ -21,6 +47,8 @@ interface YamlViewDialogProps {
   editMode?: boolean;
   /** If false, hide the edit toggle */
   allowEdit?: boolean;
+  /** Exact cluster-scoped manage decision required for forced ownership. */
+  forceConflictPermission?: ForceConflictPermission;
 }
 
 export function YamlViewDialog({
@@ -31,6 +59,7 @@ export function YamlViewDialog({
   title,
   editMode: initialEditMode = false,
   allowEdit = true,
+  forceConflictPermission,
 }: YamlViewDialogProps) {
   if (!open) return null;
 
@@ -47,6 +76,7 @@ export function YamlViewDialog({
         clusterId={clusterId}
         k8sPath={k8sPath}
         allowEdit={allowEdit}
+        forceConflictPermission={forceConflictPermission}
         editMode={initialEditMode}
         active={open}
       />
@@ -62,8 +92,38 @@ interface YamlPanelProps {
   allowEdit?: boolean;
   /** Start in edit mode */
   editMode?: boolean;
+  /** Exact cluster-scoped manage decision required for forced ownership. */
+  forceConflictPermission?: ForceConflictPermission;
   /** When false, fetching is paused (used by the dialog when closed). Defaults true. */
   active?: boolean;
+}
+
+const K8S_PLURAL_RESOURCE_TYPE: Record<string, ResourceType> = {
+  deployments: "deployments",
+  statefulsets: "statefulsets",
+  daemonsets: "daemonsets",
+  jobs: "jobs",
+  cronjobs: "cronjobs",
+  services: "services",
+  ingresses: "ingresses",
+  gateways: "gateways",
+  configmaps: "configmaps",
+  secrets: "secrets",
+  persistentvolumeclaims: "persistentvolumeclaims",
+  namespaces: "namespaces",
+  serviceaccounts: "serviceaccounts",
+  roles: "k8s-roles",
+  rolebindings: "k8s-rolebindings",
+  networkpolicies: "networkpolicies",
+  horizontalpodautoscalers: "hpa",
+  poddisruptionbudgets: "poddisruptionbudgets",
+};
+
+export function resourceTypeFromK8sPath(
+  path: string,
+): ResourceType | undefined {
+  const segments = path.split("/").filter(Boolean);
+  return K8S_PLURAL_RESOURCE_TYPE[segments.at(-2) ?? ""];
 }
 
 /**
@@ -75,13 +135,28 @@ export function YamlPanel({
   k8sPath,
   allowEdit = true,
   editMode: initialEditMode = false,
+  forceConflictPermission,
   active = true,
 }: YamlPanelProps) {
   const [editMode, setEditMode] = useState(initialEditMode);
-  const [editedYaml, setEditedYaml] = useState('');
-  const [preview, setPreview] = useState<YamlApplyPreview | null>(null);
+  const [editorMode, setEditorMode] = useState<"guided" | "yaml">("yaml");
+  const [editedYaml, setEditedYaml] = useState("");
+  const [guidedManifest, setGuidedManifest] = useState<KubernetesManifest>({});
+  const [guidedValid, setGuidedValid] = useState(false);
+  const [preview, setPreview] = useState<YamlApplyPreviewModel | null>(null);
+  const resourceType = resourceTypeFromK8sPath(k8sPath);
+  const schemaQuery = useResourceSchema(
+    clusterId,
+    resourceType ?? "deployments",
+    active && !!resourceType,
+  );
 
-  const { data: yaml, isLoading, error, refetch } = useK8sGetYaml(clusterId, k8sPath, active);
+  const {
+    data: yaml,
+    isLoading,
+    error,
+    refetch,
+  } = useK8sGetYaml(clusterId, k8sPath, active);
   const applyYaml = useK8sApplyYaml();
   const dryRunYaml = useK8sDryRunYaml();
 
@@ -98,6 +173,12 @@ export function YamlPanel({
     if (yaml && !editModeRef.current) {
       setEditedYaml(yaml);
       setPreview(null);
+      void import("js-yaml").then((yamlModule) => {
+        const parsed = yamlModule.load(yaml);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          setGuidedManifest(parsed as KubernetesManifest);
+        }
+      });
     }
   }, [yaml]);
 
@@ -105,6 +186,7 @@ export function YamlPanel({
   useEffect(() => {
     if (active) {
       setEditMode(initialEditMode);
+      setEditorMode("yaml");
       setPreview(null);
       refetch();
     }
@@ -112,38 +194,103 @@ export function YamlPanel({
 
   const handleSave = (yamlStr: string) => {
     if (!preview || preview.previewFor !== yamlStr) {
-      toastWarning('Run dry run and review the diff before saving.');
+      toastWarning("Run dry run and review the diff before saving.");
       void handleDryRun(yamlStr);
       return;
     }
     applyYaml.mutate(
       { clusterId, path: k8sPath, yaml: yamlStr },
-      {
-        onSuccess: () => {
-          refetch();
-          setEditMode(false);
-          setPreview(null);
-        },
-      }
+      { onSuccess: finishApply },
     );
   };
+
+  const finishApply = () => {
+    refetch();
+    setEditMode(false);
+    setPreview(null);
+  };
+
+  const forceApply = () => {
+    applyYaml.mutate(
+      { clusterId, path: k8sPath, yaml: editedYaml, force: true },
+      { onSuccess: finishApply },
+    );
+  };
+
+  const retryApply = () => {
+    applyYaml.mutate(
+      { clusterId, path: k8sPath, yaml: editedYaml },
+      { onSuccess: finishApply },
+    );
+  };
+
+  const manifestYaml = async () => {
+    const yamlModule = await import("js-yaml");
+    const next = yamlModule.dump(guidedManifest, {
+      lineWidth: 100,
+      noRefs: true,
+      noCompatMode: true,
+    });
+    setEditedYaml(next);
+    return next;
+  };
+
+  const changeEditorMode = async (next: "guided" | "yaml") => {
+    if (next === editorMode) return;
+    const yamlModule = await import("js-yaml");
+    if (next === "guided") {
+      try {
+        const parsed = yamlModule.load(editedYaml || yaml || "");
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("YAML must contain one Kubernetes object.");
+        }
+        setGuidedManifest(parsed as KubernetesManifest);
+      } catch {
+        toastWarning("Fix the YAML syntax before switching to guided editing.");
+        return;
+      }
+    } else {
+      await manifestYaml();
+    }
+    setPreview(null);
+    setEditorMode(next);
+  };
+
+  const dryRunGuided = async () => {
+    const next = await manifestYaml();
+    await handleDryRun(next);
+  };
+
+  const saveGuided = async () => {
+    const next = await manifestYaml();
+    handleSave(next);
+  };
+
+  const applyFailure = applyYaml.isError
+    ? classifyResourceApplyFailure(applyYaml.error)
+    : null;
 
   const handleDryRun = async (yamlStr: string) => {
     setPreview(null);
     try {
       const [yamlModule, latestYaml, normalizedObject] = await Promise.all([
-        import('js-yaml'),
+        import("js-yaml"),
         apiClient.k8sGetYaml(clusterId, k8sPath),
         dryRunYaml.mutateAsync({ clusterId, path: k8sPath, yaml: yamlStr }),
       ]);
-      const normalizedYaml = yamlModule.dump(normalizedObject, { lineWidth: -1, noRefs: true });
+      const normalizedYaml = yamlModule.dump(normalizedObject, {
+        lineWidth: -1,
+        noRefs: true,
+      });
       const warnings: string[] = [];
-      if (yaml && normalizeText(latestYaml) !== normalizeText(yaml)) {
-        warnings.push('The live object changed after this editor opened. Review the diff carefully before applying.');
+      if (yaml && !yamlTextMatches(latestYaml, yaml)) {
+        warnings.push(
+          "The live object changed after this editor opened. Review the diff carefully before applying.",
+        );
       }
       setPreview({
         previewFor: yamlStr,
-        changed: normalizeText(latestYaml) !== normalizeText(normalizedYaml),
+        changed: !yamlTextMatches(latestYaml, normalizedYaml),
         diff: buildYamlDiff(latestYaml, normalizedYaml),
         warnings,
       });
@@ -155,13 +302,19 @@ export function YamlPanel({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {allowEdit && (
-        <div className="flex shrink-0 items-center justify-end border-b border-border px-3 py-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-3 py-2">
+          <p className="text-xs text-muted-foreground">
+            Managed fields are omitted from YAML. Normal apply preserves other
+            field managers and reports ownership conflicts.
+          </p>
           <div className="flex items-center bg-muted rounded p-0.5">
             <button
               onClick={() => setEditMode(false)}
               className={cn(
-                'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
-                !editMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                "inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
+                !editMode
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Eye className="h-3 w-3" /> View
@@ -169,13 +322,47 @@ export function YamlPanel({
             <button
               onClick={() => setEditMode(true)}
               className={cn(
-                'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
-                editMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                "inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
+                editMode
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Pencil className="h-3 w-3" /> Edit
             </button>
           </div>
+        </div>
+      )}
+      {editMode && resourceType && (
+        <div
+          className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-1.5"
+          role="tablist"
+          aria-label="Resource edit mode"
+        >
+          {(["guided", "yaml"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              role="tab"
+              aria-selected={editorMode === item}
+              onClick={() => void changeEditorMode(item)}
+              className={cn(
+                "rounded px-2.5 py-1 text-xs font-medium capitalize",
+                editorMode === item
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {item}
+            </button>
+          ))}
+          <span className="ml-auto text-xs text-muted-foreground">
+            {schemaQuery.isLoading
+              ? "Loading live schema…"
+              : schemaQuery.data?.schemaAvailable
+                ? `Schema: ${schemaQuery.data.schemaName || schemaQuery.data.resource.kind}`
+                : "Template validation active"}
+          </span>
         </div>
       )}
       <div className="flex-1 min-h-0">
@@ -184,131 +371,151 @@ export function YamlPanel({
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : error ? (
-          <div className="flex items-center justify-center h-full text-sm text-status-error">
-            Failed to load YAML: {(error as Error).message}
-          </div>
+          <ErrorState
+            title="Failed to load YAML"
+            description={(error as Error).message}
+            onRetry={() => void refetch()}
+            className="h-full py-12"
+          />
         ) : (
           <div className="flex h-full flex-col">
             <div className="min-h-0 flex-1">
-              <YamlEditor
-                value={editMode ? editedYaml : (yaml || '')}
-                onChange={editMode ? (next) => {
-                  setEditedYaml(next);
-                  if (preview?.previewFor !== next) setPreview(null);
-                } : undefined}
-                readOnly={!editMode}
-                onDryRun={editMode ? handleDryRun : undefined}
-                onSave={editMode ? handleSave : undefined}
-                saving={applyYaml.isPending}
-                dryRunning={dryRunYaml.isPending}
-                saveBlocked={editMode && (!preview || preview.previewFor !== editedYaml)}
-                className="h-full"
-              />
+              {editMode && editorMode === "guided" && resourceType ? (
+                <div className="flex h-full min-h-0 flex-col">
+                  <div className="min-h-0 flex-1 overflow-y-auto">
+                    <GuidedResourceForm
+                      value={guidedManifest}
+                      onChange={(next) => {
+                        setGuidedManifest(next);
+                        setPreview(null);
+                      }}
+                      schema={schemaQuery.data?.schema ?? {}}
+                      definitions={schemaQuery.data?.definitions ?? {}}
+                      onValidationChange={setGuidedValid}
+                      identityReadOnly
+                    />
+                  </div>
+                  <div className="flex shrink-0 justify-end gap-2 border-t border-border px-4 py-2">
+                    <button
+                      type="button"
+                      onClick={() => void dryRunGuided()}
+                      disabled={!guidedValid || dryRunYaml.isPending}
+                      className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+                    >
+                      {dryRunYaml.isPending
+                        ? "Previewing…"
+                        : "Dry run & preview"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void saveGuided()}
+                      disabled={
+                        !guidedValid ||
+                        applyYaml.isPending ||
+                        !preview ||
+                        preview.previewFor !== editedYaml
+                      }
+                      className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {applyYaml.isPending ? "Applying…" : "Apply"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <YamlEditor
+                  value={editMode ? editedYaml : yaml || ""}
+                  onChange={
+                    editMode
+                      ? (next) => {
+                          setEditedYaml(next);
+                          if (preview?.previewFor !== next) setPreview(null);
+                        }
+                      : undefined
+                  }
+                  readOnly={!editMode}
+                  onDryRun={editMode ? handleDryRun : undefined}
+                  onSave={editMode ? handleSave : undefined}
+                  saving={applyYaml.isPending}
+                  dryRunning={dryRunYaml.isPending}
+                  saveBlocked={
+                    editMode && (!preview || preview.previewFor !== editedYaml)
+                  }
+                  className="h-full"
+                />
+              )}
             </div>
             {editMode && preview && <YamlDiffPreview preview={preview} />}
+            {editMode && applyFailure === "conflict" ? (
+              <div
+                role="alert"
+                className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-status-warning/30 bg-status-warning/10 px-4 py-3"
+              >
+                <div className="flex items-start gap-2 text-xs text-status-warning">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    Another field manager owns part of this object. Taking
+                    ownership requires the resource <code>manage</code>
+                    permission and is audited.
+                    {!forceConflictPermission?.allowed && (
+                      <span className="mt-1 block text-muted-foreground">
+                        {forceConflictPermission?.disabledReason ??
+                          forceConflictPermission?.reason ??
+                          "You do not have permission to take ownership. Ask a cluster administrator to resolve the conflict."}
+                      </span>
+                    )}
+                  </span>
+                  </div>
+                {forceConflictPermission?.allowed && (
+                  <button
+                    type="button"
+                    onClick={forceApply}
+                    disabled={applyYaml.isPending}
+                    className="rounded-md border border-status-warning/40 px-3 py-1.5 text-xs font-medium text-status-warning hover:bg-status-warning/10 disabled:opacity-50"
+                  >
+                    Take ownership and apply
+                  </button>
+                )}
+              </div>
+            ) : editMode && applyFailure === "forbidden" ? (
+              <div
+                role="alert"
+                className="shrink-0 border-t border-status-error/30 bg-status-error/10 px-4 py-3 text-xs text-status-error"
+              >
+                Permission required. Your edits are preserved, but this account
+                cannot apply the resource. Request the required cluster access
+                before trying again.
+              </div>
+            ) : editMode && applyFailure === "retryable" ? (
+              <div
+                role="alert"
+                className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-status-warning/30 bg-status-warning/10 px-4 py-3"
+              >
+                <span className="text-xs text-status-warning">
+                  The resource could not be applied because the cluster or API
+                  was temporarily unavailable. Your edits and reviewed preview
+                  are preserved.
+                </span>
+                <button
+                  type="button"
+                  onClick={retryApply}
+                  disabled={applyYaml.isPending}
+                  className="rounded-md border border-status-warning/40 px-3 py-1.5 text-xs font-medium text-status-warning hover:bg-status-warning/10 disabled:opacity-50"
+                >
+                  Retry apply
+                </button>
+              </div>
+            ) : editMode && applyFailure === "terminal" ? (
+              <div
+                role="alert"
+                className="shrink-0 border-t border-status-error/30 bg-status-error/10 px-4 py-3 text-xs text-status-error"
+              >
+                Apply failed. Your edits are preserved. Review the API error,
+                update the resource, and run the dry-run preview again.
+              </div>
+            ) : null}
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-interface YamlApplyPreview {
-  previewFor: string;
-  changed: boolean;
-  diff: YamlDiff;
-  warnings: string[];
-}
-
-interface YamlDiff {
-  added: number;
-  removed: number;
-  lines: Array<{ type: 'context' | 'add' | 'remove'; text: string; key: string }>;
-}
-
-function normalizeText(value: string): string {
-  return value.replace(/\r\n/g, '\n').trimEnd();
-}
-
-function buildYamlDiff(before: string, after: string): YamlDiff {
-  const beforeLines = normalizeText(before).split('\n');
-  const afterLines = normalizeText(after).split('\n');
-  let start = 0;
-  while (start < beforeLines.length && start < afterLines.length && beforeLines[start] === afterLines[start]) {
-    start++;
-  }
-  let endBefore = beforeLines.length - 1;
-  let endAfter = afterLines.length - 1;
-  while (endBefore >= start && endAfter >= start && beforeLines[endBefore] === afterLines[endAfter]) {
-    endBefore--;
-    endAfter--;
-  }
-  const contextStart = Math.max(0, start - 3);
-  const contextEndBefore = Math.min(beforeLines.length - 1, endBefore + 3);
-  const contextEndAfter = Math.min(afterLines.length - 1, endAfter + 3);
-  const lines: YamlDiff['lines'] = [];
-  for (let i = contextStart; i < start; i++) {
-    lines.push({ type: 'context', text: beforeLines[i] ?? '', key: `c-pre-${i}` });
-  }
-  for (let i = start; i <= endBefore; i++) {
-    lines.push({ type: 'remove', text: beforeLines[i] ?? '', key: `r-${i}` });
-  }
-  for (let i = start; i <= endAfter; i++) {
-    lines.push({ type: 'add', text: afterLines[i] ?? '', key: `a-${i}` });
-  }
-  const contextAfterStart = Math.max(start, endBefore + 1);
-  const contextAfterEnd = Math.max(contextEndBefore, contextEndAfter);
-  for (let i = contextAfterStart; i <= contextAfterEnd && i < beforeLines.length; i++) {
-    if (i < start || i <= endBefore) continue;
-    lines.push({ type: 'context', text: beforeLines[i] ?? '', key: `c-post-${i}` });
-  }
-  return {
-    added: Math.max(0, endAfter - start + 1),
-    removed: Math.max(0, endBefore - start + 1),
-    lines: lines.length > 0 ? lines.slice(0, 240) : [{ type: 'context', text: 'No changes after server-side normalization.', key: 'none' }],
-  };
-}
-
-function YamlDiffPreview({ preview }: { preview: YamlApplyPreview }) {
-  return (
-    <div className="max-h-[34%] border-t border-border bg-background">
-      <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <GitCompare className="h-4 w-4" />
-          Apply preview
-        </div>
-        <div className="text-xs tabular-nums text-muted-foreground">
-          +{preview.diff.added} / -{preview.diff.removed}
-        </div>
-      </div>
-      {preview.warnings.length > 0 && (
-        <div className="space-y-1 border-b border-status-warning/20 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
-          {preview.warnings.map((warning) => (
-            <div key={warning} className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{warning}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <pre className="max-h-48 overflow-auto px-3 py-2 text-xs leading-5">
-        {preview.diff.lines.map((line) => (
-          <div
-            key={line.key}
-            className={cn(
-              'min-w-max font-mono',
-              line.type === 'add' && 'bg-status-success/10 text-status-success',
-              line.type === 'remove' && 'bg-status-error/10 text-status-error',
-              line.type === 'context' && 'text-muted-foreground',
-            )}
-          >
-            <span className="inline-block w-4 select-none">
-              {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}
-            </span>
-            {line.text}
-          </div>
-        ))}
-      </pre>
     </div>
   );
 }

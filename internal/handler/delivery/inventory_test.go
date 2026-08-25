@@ -15,7 +15,7 @@ import (
 )
 
 type inventoryQueryFake struct {
-	fleetFn    func(context.Context) ([]sqlc.ListDeliveryFleetClustersRow, error)
+	estateFn   func(context.Context) ([]sqlc.ListDeliveryEstateClustersRow, error)
 	rolloutsFn func(context.Context) (int64, error)
 }
 
@@ -37,11 +37,11 @@ func (f *inventoryQueryFake) GetCurrentDeliverySystemRollout(context.Context) (s
 func (f *inventoryQueryFake) ListDeliverySystemReleases(context.Context, sqlc.ListDeliverySystemReleasesParams) ([]sqlc.ListDeliverySystemReleasesRow, error) {
 	panic("unexpected ListDeliverySystemReleases")
 }
-func (f *inventoryQueryFake) ListDeliveryFleetClusters(ctx context.Context) ([]sqlc.ListDeliveryFleetClustersRow, error) {
-	if f.fleetFn == nil {
-		panic("unexpected ListDeliveryFleetClusters")
+func (f *inventoryQueryFake) ListDeliveryEstateClusters(ctx context.Context) ([]sqlc.ListDeliveryEstateClustersRow, error) {
+	if f.estateFn == nil {
+		panic("unexpected ListDeliveryEstateClusters")
 	}
-	return f.fleetFn(ctx)
+	return f.estateFn(ctx)
 }
 func (f *inventoryQueryFake) CountActiveDeliveryRollouts(ctx context.Context) (int64, error) {
 	if f.rolloutsFn == nil {
@@ -56,8 +56,8 @@ func TestFleetExcludesLocalFromTilesAndSurfacesAdoptedAttention(t *testing.T) {
 	readyID := uuid.MustParse("f86508b9-586e-4499-a353-e1d0f630e501")
 	brokenID := uuid.MustParse("f051ae19-0455-4ea9-a90f-af5a58a91007")
 	handler := NewInventoryHandler(&inventoryQueryFake{
-		fleetFn: func(context.Context) ([]sqlc.ListDeliveryFleetClustersRow, error) {
-			return []sqlc.ListDeliveryFleetClustersRow{
+		estateFn: func(context.Context) ([]sqlc.ListDeliveryEstateClustersRow, error) {
+			return []sqlc.ListDeliveryEstateClustersRow{
 				{
 					ID: localID, Name: "local", DisplayName: "Management", IsLocal: true,
 					Connected: true, CompatibilityStatus: "unknown",
@@ -87,19 +87,19 @@ func TestFleetExcludesLocalFromTilesAndSurfacesAdoptedAttention(t *testing.T) {
 	handler.now = func() time.Time { return now }
 
 	recorder := httptest.NewRecorder()
-	handler.Fleet(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/delivery/fleet/", nil))
+	handler.Estate(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/delivery/estate/", nil))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 
 	var envelope struct {
-		Data DeliveryFleet `json:"data"`
+		Data DeliveryEstate `json:"data"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	got := envelope.Data
-	if got.Summary != (DeliveryFleetSummary{
+	if got.Summary != (DeliveryEstateSummary{
 		AdoptedClusters: 2, FluxReady: 1, Incompatible: 1, Disconnected: 1,
 		Assignments: 4, Drifted: 1, Failed: 1, ActiveRollouts: 1,
 	}) {
@@ -111,8 +111,8 @@ func TestFleetExcludesLocalFromTilesAndSurfacesAdoptedAttention(t *testing.T) {
 	if len(got.Attention) != 1 || got.Attention[0].ClusterID != brokenID || got.Attention[0].Reason != "disconnected" {
 		t.Fatalf("attention=%#v", got.Attention)
 	}
-	if !hasFleetCount(got.Distributions.Compatibility, "compatible", 1) ||
-		!hasFleetCount(got.Distributions.Privilege, "admin", 2) {
+	if !hasEstateCount(got.Distributions.Compatibility, "compatible", 1) ||
+		!hasEstateCount(got.Distributions.Privilege, "admin", 2) {
 		t.Fatalf("distributions=%#v", got.Distributions)
 	}
 }
@@ -120,23 +120,23 @@ func TestFleetExcludesLocalFromTilesAndSurfacesAdoptedAttention(t *testing.T) {
 func TestFleetMarksConnectedAdoptedClusterStaleAfterFiveMinutes(t *testing.T) {
 	now := time.Date(2026, 8, 17, 15, 0, 0, 0, time.UTC)
 	id := uuid.New()
-	fleet := buildDeliveryFleet([]sqlc.ListDeliveryFleetClustersRow{{
+	estate := buildDeliveryEstate([]sqlc.ListDeliveryEstateClustersRow{{
 		ID: id, Name: "adopt-a", DisplayName: "Adopt A",
 		Connected: true, CompatibilityStatus: "compatible", InventoryReady: true,
 		LastHeartbeat: ts(now.Add(-6 * time.Minute)),
 		Annotations:   json.RawMessage(`{}`),
 	}}, 0, now)
-	if fleet.Summary.Stale != 1 || !fleet.Clusters[0].Stale {
-		t.Fatalf("expected stale cluster: %#v", fleet)
+	if estate.Summary.Stale != 1 || !estate.Clusters[0].Stale {
+		t.Fatalf("expected stale cluster: %#v", estate)
 	}
-	if len(fleet.Attention) != 1 || fleet.Attention[0].Reason != "stale" {
-		t.Fatalf("attention=%#v", fleet.Attention)
+	if len(estate.Attention) != 1 || estate.Attention[0].Reason != "stale" {
+		t.Fatalf("attention=%#v", estate.Attention)
 	}
 }
 
 func TestFleetUnavailableWithoutQueries(t *testing.T) {
 	recorder := httptest.NewRecorder()
-	NewInventoryHandler(nil).Fleet(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/delivery/fleet/", nil))
+	NewInventoryHandler(nil).Estate(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/delivery/estate/", nil))
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -146,7 +146,7 @@ func ts(value time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: value, Valid: true}
 }
 
-func hasFleetCount(items []DeliveryFleetCount, key string, count int64) bool {
+func hasEstateCount(items []DeliveryEstateCount, key string, count int64) bool {
 	for _, item := range items {
 		if item.Key == key && item.Count == count {
 			return true

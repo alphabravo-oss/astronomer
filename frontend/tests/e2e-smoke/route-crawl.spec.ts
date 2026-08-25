@@ -7,51 +7,89 @@
  * asserted against a checked-in expected count inside the generator, so a
  * dropped route fails this suite loudly instead of shrinking it.
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { expect, test } from '@playwright/test';
-import { seedAuth } from '../e2e/helpers/auth';
-import { adminStoreUser } from './stub-overrides';
-import { collectErrors, filterAllowed, installStubs } from './stubs';
+import fs from "node:fs";
+import path from "node:path";
+import { expect, test } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import { seedAuth } from "../e2e/helpers/auth";
+import { adminStoreUser } from "./stub-overrides";
+import { collectErrors, filterAllowed, installStubs } from "./stubs";
 
-type ManifestEntry = { routeId: string; url: string; kind: 'app' | 'auth' };
+type ManifestEntry = { routeId: string; url: string; kind: "app" | "auth" };
 
 const manifest = JSON.parse(
-  fs.readFileSync(path.join(__dirname, 'route-manifest.generated.json'), 'utf8'),
+  fs.readFileSync(
+    path.join(__dirname, "route-manifest.generated.json"),
+    "utf8",
+  ),
 ) as ManifestEntry[];
 
 // P7.3 screenshot gallery (non-blocking): with SMOKE_GALLERY=1 the crawl also
 // writes one full-page screenshot per route to frontend/gallery/ for the
 // one-time reviewer eyeball on the migration PR. No pixel-diff gate, and a
 // capture failure never fails the smoke tier.
-const galleryDir = path.join(__dirname, '..', '..', 'gallery');
-const galleryEnabled = process.env.SMOKE_GALLERY === '1';
+const galleryDir = path.join(__dirname, "..", "..", "gallery");
+const galleryEnabled = process.env.SMOKE_GALLERY === "1";
 if (galleryEnabled) {
   fs.mkdirSync(galleryDir, { recursive: true });
 }
 
 function galleryPath(entry: ManifestEntry): string {
-  const name = entry.url.replace(/^\//, '').replace(/[^a-zA-Z0-9._-]+/g, '_') || 'root';
+  const name =
+    entry.url.replace(/^\//, "").replace(/[^a-zA-Z0-9._-]+/g, "_") || "root";
   return path.join(galleryDir, `${name}.png`);
+}
+
+async function stabilizeForAccessibility(page: import("@playwright/test").Page) {
+  // Axe must inspect the settled color values, not a partially transparent
+  // frame from page-entry/pulse animations. Reduced-motion is also a
+  // supported product state, so this is a real static rendering contract.
+  await page.addStyleTag({
+    content: `
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        caret-color: transparent !important;
+      }
+    `,
+  });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
 }
 
 for (const entry of manifest) {
   test(`renders ${entry.url}`, async ({ page, context }) => {
     const errors = collectErrors(page);
-    if (entry.kind === 'app') {
+    if (entry.kind === "app") {
       await seedAuth(context, page, adminStoreUser);
     }
     await installStubs(page);
     await page.goto(entry.url);
 
-    if (entry.kind === 'auth') {
+    if (entry.kind === "auth") {
       // Auth pages run without a seeded session: their form must render.
-      await expect(page.locator('form').first()).toBeVisible();
+      await expect(page.locator("form").first()).toBeVisible();
     } else {
-      await expect(page.getByTestId('app-shell')).toBeVisible();
+      await expect(page.getByTestId("app-shell")).toBeVisible();
     }
-    await expect(page.getByTestId('route-error-boundary')).toHaveCount(0);
-    await expect(page.getByTestId('route-not-found')).toHaveCount(0);
+    await expect(page.getByTestId("route-error-boundary")).toHaveCount(0);
+    await expect(page.getByTestId("route-not-found")).toHaveCount(0);
+    await stabilizeForAccessibility(page);
+    const accessibility = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+      .analyze();
+    const blockingViolations = accessibility.violations.filter(
+      (violation) =>
+        violation.impact === "critical" || violation.impact === "serious",
+    );
+    expect(
+      blockingViolations,
+      `serious/critical axe violations on ${entry.url}`,
+    ).toEqual([]);
     if (galleryEnabled) {
       try {
         await page.screenshot({ path: galleryPath(entry), fullPage: true });

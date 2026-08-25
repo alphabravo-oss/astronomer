@@ -1,5 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 /**
  * Project · Cloud Credentials tab — list view.
  *
@@ -12,8 +19,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * since the operator usually wants the full error string when an AWS / GCP
  * key gets rejected.
  */
-import { useState } from 'react';
-import { useParams, useRouter } from '@/lib/navigation';
+import { useState } from "react";
+import { useParams, useRouter } from "@/lib/navigation";
 import {
   Plus,
   Loader2,
@@ -22,18 +29,21 @@ import {
   Check,
   X,
   AlertCircle,
-} from 'lucide-react';
+} from "lucide-react";
 import {
   useProjectCloudCredentials,
   useDeleteCloudCredential,
   useTestCloudCredential,
   canEditProject,
-} from '@/components/projects/hooks';
-import { useCurrentUser } from '@/lib/hooks';
-import { ProviderBadge } from '@/components/projects/cloud-credentials/provider-badge';
-import { ActionButton } from '@/components/ui/action-button';
-import type { CloudCredential, CloudCredentialTestResult } from '@/lib/api/project-detail';
-import { cn, formatRelativeTime } from '@/lib/utils';
+} from "@/components/projects/hooks";
+import { useCurrentUser } from "@/lib/hooks";
+import { ProviderBadge } from "@/components/projects/cloud-credentials/provider-badge";
+import { ActionButton } from "@/components/ui/action-button";
+import type {
+  CloudCredential,
+  CloudCredentialTestResult,
+} from "@/lib/api/project-detail";
+import { cn, formatRelativeTime } from "@/lib/utils";
 
 function CloudCredentialsListPage() {
   const params = useParams();
@@ -42,13 +52,16 @@ function CloudCredentialsListPage() {
   const { data: user } = useCurrentUser();
   const canEdit = canEditProject(user);
 
-  const { data: credentials = [], isLoading } = useProjectCloudCredentials(projectId);
+  const { data: credentials = [], isLoading } =
+    useProjectCloudCredentials(projectId);
   const deleteMutation = useDeleteCloudCredential(projectId);
   const testMutation = useTestCloudCredential(projectId);
 
   // Per-row test result. We keep this local to the page so the cache key
   // stays clean (the test mutation isn't a query — its output is ephemeral).
-  const [testResults, setTestResults] = useState<Record<string, CloudCredentialTestResult>>({});
+  const [testResults, setTestResults] = useState<
+    Record<string, CloudCredentialTestResult>
+  >({});
   const [testingId, setTestingId] = useState<string | null>(null);
 
   const handleTest = async (cred: CloudCredential) => {
@@ -57,15 +70,23 @@ function CloudCredentialsListPage() {
       const result = await testMutation.mutateAsync(cred.id);
       setTestResults((prev) => ({ ...prev, [cred.id]: result }));
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Test failed';
-      setTestResults((prev) => ({ ...prev, [cred.id]: { ok: false, message } }));
+      const message = err instanceof Error ? err.message : "Test failed";
+      setTestResults((prev) => ({
+        ...prev,
+        [cred.id]: { ok: false, message },
+      }));
     } finally {
       setTestingId(null);
     }
   };
 
   const handleDelete = (cred: CloudCredential) => {
-    if (!confirm(`Delete cloud credential "${cred.name}"? This action cannot be undone.`)) return;
+    if (
+      !confirm(
+        `Delete cloud credential "${cred.name}"? This action cannot be undone.`,
+      )
+    )
+      return;
     deleteMutation.mutate(cred.id);
   };
 
@@ -73,13 +94,18 @@ function CloudCredentialsListPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Cloud-provider credentials materialized into the listed clusters as Secrets.
+          Cloud-provider credentials materialized into the listed clusters as
+          Secrets.
         </p>
         {canEdit && (
           <ActionButton
             intent="primary"
             icon={<Plus className="h-4 w-4" />}
-            onClick={() => router.push(`/dashboard/projects/${projectId}/cloud-credentials/new`)}
+            onClick={() =>
+              router.push(
+                `/dashboard/projects/${projectId}/cloud-credentials/new`,
+              )
+            }
           >
             New credential
           </ActionButton>
@@ -102,12 +128,24 @@ function CloudCredentialsListPage() {
           <Table className="w-full text-sm">
             <TableHeader>
               <TableRow className="text-xs text-muted-foreground border-b border-border bg-muted/30">
-                <TableHead className="text-left font-medium py-2 px-3">Name</TableHead>
-                <TableHead className="text-left font-medium py-2 px-3">Provider</TableHead>
-                <TableHead className="text-left font-medium py-2 px-3">Targets</TableHead>
-                <TableHead className="text-left font-medium py-2 px-3">Created by</TableHead>
-                <TableHead className="text-left font-medium py-2 px-3">Test</TableHead>
-                <TableHead className="text-right font-medium py-2 px-3 pr-4">Actions</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Name
+                </TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Provider
+                </TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Targets
+                </TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Created by
+                </TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Test
+                </TableHead>
+                <TableHead className="text-right font-medium py-2 px-3 pr-4">
+                  Actions
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -115,10 +153,15 @@ function CloudCredentialsListPage() {
                 const result = testResults[cred.id];
                 const testing = testingId === cred.id;
                 return (
-                  <TableRow key={cred.id} className="border-b border-border last:border-0 hover:bg-accent/20">
+                  <TableRow
+                    key={cred.id}
+                    className="border-b border-border last:border-0 hover:bg-accent/20"
+                  >
                     <TableCell className="py-2 px-3">
                       <div>
-                        <p className="text-sm font-medium text-foreground">{cred.name}</p>
+                        <p className="text-sm font-medium text-foreground">
+                          {cred.name}
+                        </p>
                         {cred.description && (
                           <p className="text-xs text-muted-foreground truncate max-w-[260px]">
                             {cred.description}
@@ -132,14 +175,16 @@ function CloudCredentialsListPage() {
                     <TableCell className="py-2 px-3">
                       <span className="text-xs text-muted-foreground tabular-nums">
                         {cred.targetRefs.length} cluster
-                        {cred.targetRefs.length === 1 ? '' : 's'}
+                        {cred.targetRefs.length === 1 ? "" : "s"}
                       </span>
                     </TableCell>
                     <TableCell className="py-2 px-3">
                       <span className="text-xs text-muted-foreground">
-                        {cred.createdBy || '—'}
+                        {cred.createdBy || "—"}
                         <br />
-                        <span className="text-2xs">{formatRelativeTime(cred.createdAt)}</span>
+                        <span className="text-2xs">
+                          {formatRelativeTime(cred.createdAt)}
+                        </span>
                       </span>
                     </TableCell>
                     <TableCell className="py-2 px-3">
@@ -163,14 +208,16 @@ function CloudCredentialsListPage() {
                       {result && (
                         <p
                           className={cn(
-                            'text-2xs mt-0.5 max-w-[200px] truncate',
-                            result.ok ? 'text-status-success' : 'text-status-error',
+                            "text-2xs mt-0.5 max-w-[200px] truncate",
+                            result.ok
+                              ? "text-status-success"
+                              : "text-status-error",
                           )}
                           title={result.message || result.detail}
                         >
                           {result.ok
-                            ? result.message || 'Credential valid'
-                            : result.message || 'Test failed'}
+                            ? result.message || "Credential valid"
+                            : result.message || "Test failed"}
                         </p>
                       )}
                     </TableCell>
@@ -213,6 +260,8 @@ function CloudCredentialsListPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/projects/$id/cloud-credentials/')({
+export const Route = createFileRoute(
+  "/dashboard/projects/$id/cloud-credentials/",
+)({
   component: CloudCredentialsListPage,
 });

@@ -271,10 +271,13 @@ func reconcilerObject(assignment protocol.DeliveryAssignmentV2, names ObjectName
 		"targetNamespace":    config.TargetNamespace,
 		"serviceAccountName": names.Applier,
 		"suspend":            assignment.Action == protocol.DeliveryActionSuspend,
-		"install":            map[string]any{"remediation": map[string]any{"retries": int64(config.InstallRetries)}},
-		"upgrade":            map[string]any{"remediation": map[string]any{"retries": int64(config.UpgradeRetries), "strategy": config.UpgradeRemediation}},
-		"test":               map[string]any{"enable": config.EnableTests},
-		"driftDetection":     map[string]any{"mode": config.DriftMode},
+		"install": map[string]any{
+			"createNamespace": true,
+			"remediation":     map[string]any{"retries": int64(config.InstallRetries)},
+		},
+		"upgrade":        map[string]any{"remediation": map[string]any{"retries": int64(config.UpgradeRetries), "strategy": config.UpgradeRemediation}},
+		"test":           map[string]any{"enable": config.EnableTests},
+		"driftDetection": map[string]any{"mode": config.DriftMode},
 	}
 	if assignment.Source.Kind == protocol.DeliverySourceHelmOCI {
 		spec["chartRef"] = map[string]any{"kind": "OCIRepository", "name": names.Source}

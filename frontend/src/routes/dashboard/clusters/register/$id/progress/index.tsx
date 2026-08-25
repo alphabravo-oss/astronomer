@@ -1,19 +1,19 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 // Wizard page 3 - live progress timeline. Subscribes to the wizard's
 // per-cluster SSE stream and renders one row per step via the shared
 // RegistrationTimeline component (sprint 23). When the cluster reaches
 // `ready`, the "Take me to the cluster" CTA appears.
 
-import { useState } from 'react';
-import { useParams, useRouter } from '@/lib/navigation';
-import { Check, Server } from 'lucide-react';
-import { RegistrationTimeline } from '@/components/clusters/registration-timeline';
-import { ActionButton } from '@/components/ui/action-button';
+import { useState } from "react";
+import { useParams, useRouter } from "@/lib/navigation";
+import { Check, Server } from "lucide-react";
+import { RegistrationTimeline } from "@/components/clusters/registration-timeline";
+import { ActionButton } from "@/components/ui/action-button";
 
 function ProgressStepPage() {
   const router = useRouter();
   const params = useParams();
-  const clusterId = String(params?.id ?? '');
+  const clusterId = String(params?.id ?? "");
   const [isReady, setIsReady] = useState(false);
 
   return (
@@ -23,14 +23,20 @@ function ProgressStepPage() {
           <Server className="h-5 w-5 text-muted-foreground" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Adoption progress</h1>
+          <h1 className="text-2xl font-semibold text-foreground">
+            Adoption progress
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Step 3 of 3 - Watch the existing cluster connect and apply its baseline
+            Step 3 of 3 - Watch the existing cluster connect and apply its
+            baseline
           </p>
         </div>
       </div>
 
-      <RegistrationTimeline clusterId={clusterId} onReady={() => setIsReady(true)} />
+      <RegistrationTimeline
+        clusterId={clusterId}
+        onReady={() => setIsReady(true)}
+      />
 
       {isReady && (
         <div className="mt-6 flex items-center justify-between p-4 rounded-lg border border-status-success/30 bg-status-success/5">
@@ -50,6 +56,8 @@ function ProgressStepPage() {
   );
 }
 
-export const Route = createFileRoute('/dashboard/clusters/register/$id/progress/')({
+export const Route = createFileRoute(
+  "/dashboard/clusters/register/$id/progress/",
+)({
   component: ProgressStepPage,
 });

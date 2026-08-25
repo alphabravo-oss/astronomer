@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astronomer.io/schemas/cloud-acceptance-evidence-v1.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "result", "target_version", "source_commit", "source_run_id", "base_url_sha256", "test_cidr_sha256", "started_at", "completed_at", "targets"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "result": {"enum": ["passed", "failed"]},
+    "target_version": {"type": "string", "pattern": "^v1\\.[0-9]+\\.[0-9]+$"},
+    "source_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "source_run_id": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+    "base_url_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "test_cidr_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "targets": {"type": "array", "minItems": 0, "maxItems": 4, "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["provider", "cluster_id_sha256", "credential_id_sha256", "original_policy_sha256", "credential_tested", "converged", "idempotent_replay", "reconcile_receipt_sha256", "restored"],
+      "properties": {
+        "provider": {"enum": ["eks", "gke", "aks", "doks"]},
+        "cluster_id_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "credential_id_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "original_policy_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "reconcile_receipt_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "credential_tested": {"type": "boolean"}, "converged": {"type": "boolean"},
+        "idempotent_replay": {"type": "boolean"}, "restored": {"type": "boolean"}
+      }
+    }}
+  },
+  "allOf": [{"if": {"properties": {"result": {"const": "passed"}}}, "then": {"properties": {"targets": {"minItems": 4, "maxItems": 4}}}}]
+}

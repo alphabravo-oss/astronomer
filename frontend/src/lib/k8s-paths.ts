@@ -11,61 +11,165 @@ interface K8sResourceDef {
 
 const resourceDefs: Record<string, K8sResourceDef> = {
   // Core (api/v1)
-  pods:                    { apiBase: 'api/v1', namespaced: true,  plural: 'pods' },
-  services:                { apiBase: 'api/v1', namespaced: true,  plural: 'services' },
-  configmaps:              { apiBase: 'api/v1', namespaced: true,  plural: 'configmaps' },
-  secrets:                 { apiBase: 'api/v1', namespaced: true,  plural: 'secrets' },
-  namespaces:              { apiBase: 'api/v1', namespaced: false, plural: 'namespaces' },
-  nodes:                   { apiBase: 'api/v1', namespaced: false, plural: 'nodes' },
-  persistentvolumes:       { apiBase: 'api/v1', namespaced: false, plural: 'persistentvolumes' },
-  persistentvolumeclaims:  { apiBase: 'api/v1', namespaced: true,  plural: 'persistentvolumeclaims' },
-  serviceaccounts:         { apiBase: 'api/v1', namespaced: true,  plural: 'serviceaccounts' },
-  resourcequotas:          { apiBase: 'api/v1', namespaced: true,  plural: 'resourcequotas' },
-  limitranges:             { apiBase: 'api/v1', namespaced: true,  plural: 'limitranges' },
-  endpoints:               { apiBase: 'api/v1', namespaced: true,  plural: 'endpoints' },
-  events:                  { apiBase: 'api/v1', namespaced: true,  plural: 'events' },
+  pods: { apiBase: "api/v1", namespaced: true, plural: "pods" },
+  services: { apiBase: "api/v1", namespaced: true, plural: "services" },
+  configmaps: { apiBase: "api/v1", namespaced: true, plural: "configmaps" },
+  secrets: { apiBase: "api/v1", namespaced: true, plural: "secrets" },
+  namespaces: { apiBase: "api/v1", namespaced: false, plural: "namespaces" },
+  nodes: { apiBase: "api/v1", namespaced: false, plural: "nodes" },
+  persistentvolumes: {
+    apiBase: "api/v1",
+    namespaced: false,
+    plural: "persistentvolumes",
+  },
+  persistentvolumeclaims: {
+    apiBase: "api/v1",
+    namespaced: true,
+    plural: "persistentvolumeclaims",
+  },
+  serviceaccounts: {
+    apiBase: "api/v1",
+    namespaced: true,
+    plural: "serviceaccounts",
+  },
+  resourcequotas: {
+    apiBase: "api/v1",
+    namespaced: true,
+    plural: "resourcequotas",
+  },
+  limitranges: { apiBase: "api/v1", namespaced: true, plural: "limitranges" },
+  endpoints: { apiBase: "api/v1", namespaced: true, plural: "endpoints" },
+  events: { apiBase: "api/v1", namespaced: true, plural: "events" },
 
   // Apps (apis/apps/v1)
-  deployments:             { apiBase: 'apis/apps/v1', namespaced: true, plural: 'deployments' },
-  statefulsets:             { apiBase: 'apis/apps/v1', namespaced: true, plural: 'statefulsets' },
-  daemonsets:               { apiBase: 'apis/apps/v1', namespaced: true, plural: 'daemonsets' },
-  replicasets:              { apiBase: 'apis/apps/v1', namespaced: true, plural: 'replicasets' },
+  deployments: {
+    apiBase: "apis/apps/v1",
+    namespaced: true,
+    plural: "deployments",
+  },
+  statefulsets: {
+    apiBase: "apis/apps/v1",
+    namespaced: true,
+    plural: "statefulsets",
+  },
+  daemonsets: {
+    apiBase: "apis/apps/v1",
+    namespaced: true,
+    plural: "daemonsets",
+  },
+  replicasets: {
+    apiBase: "apis/apps/v1",
+    namespaced: true,
+    plural: "replicasets",
+  },
 
   // Batch (apis/batch/v1)
-  jobs:                    { apiBase: 'apis/batch/v1', namespaced: true, plural: 'jobs' },
-  cronjobs:                { apiBase: 'apis/batch/v1', namespaced: true, plural: 'cronjobs' },
+  jobs: { apiBase: "apis/batch/v1", namespaced: true, plural: "jobs" },
+  cronjobs: { apiBase: "apis/batch/v1", namespaced: true, plural: "cronjobs" },
 
   // Networking (apis/networking.k8s.io/v1)
-  ingresses:               { apiBase: 'apis/networking.k8s.io/v1', namespaced: true, plural: 'ingresses' },
-  networkpolicies:         { apiBase: 'apis/networking.k8s.io/v1', namespaced: true, plural: 'networkpolicies' },
+  ingresses: {
+    apiBase: "apis/networking.k8s.io/v1",
+    namespaced: true,
+    plural: "ingresses",
+  },
+  networkpolicies: {
+    apiBase: "apis/networking.k8s.io/v1",
+    namespaced: true,
+    plural: "networkpolicies",
+  },
 
   // Policy (apis/policy/v1)
-  poddisruptionbudgets:    { apiBase: 'apis/policy/v1', namespaced: true, plural: 'poddisruptionbudgets' },
+  poddisruptionbudgets: {
+    apiBase: "apis/policy/v1",
+    namespaced: true,
+    plural: "poddisruptionbudgets",
+  },
 
   // Autoscaling (apis/autoscaling/v2)
-  hpa:                     { apiBase: 'apis/autoscaling/v2', namespaced: true, plural: 'horizontalpodautoscalers' },
+  hpa: {
+    apiBase: "apis/autoscaling/v2",
+    namespaced: true,
+    plural: "horizontalpodautoscalers",
+  },
 
   // RBAC (apis/rbac.authorization.k8s.io/v1)
-  'k8s-clusterroles':         { apiBase: 'apis/rbac.authorization.k8s.io/v1', namespaced: false, plural: 'clusterroles' },
-  'k8s-clusterrolebindings':  { apiBase: 'apis/rbac.authorization.k8s.io/v1', namespaced: false, plural: 'clusterrolebindings' },
-  'k8s-roles':                { apiBase: 'apis/rbac.authorization.k8s.io/v1', namespaced: true,  plural: 'roles' },
-  'k8s-rolebindings':         { apiBase: 'apis/rbac.authorization.k8s.io/v1', namespaced: true,  plural: 'rolebindings' },
+  "k8s-clusterroles": {
+    apiBase: "apis/rbac.authorization.k8s.io/v1",
+    namespaced: false,
+    plural: "clusterroles",
+  },
+  "k8s-clusterrolebindings": {
+    apiBase: "apis/rbac.authorization.k8s.io/v1",
+    namespaced: false,
+    plural: "clusterrolebindings",
+  },
+  "k8s-roles": {
+    apiBase: "apis/rbac.authorization.k8s.io/v1",
+    namespaced: true,
+    plural: "roles",
+  },
+  "k8s-rolebindings": {
+    apiBase: "apis/rbac.authorization.k8s.io/v1",
+    namespaced: true,
+    plural: "rolebindings",
+  },
 
   // Storage (apis/storage.k8s.io/v1)
-  storageclasses:          { apiBase: 'apis/storage.k8s.io/v1', namespaced: false, plural: 'storageclasses' },
+  storageclasses: {
+    apiBase: "apis/storage.k8s.io/v1",
+    namespaced: false,
+    plural: "storageclasses",
+  },
 
   // CRDs
-  crds:                    { apiBase: 'apis/apiextensions.k8s.io/v1', namespaced: false, plural: 'customresourcedefinitions' },
+  crds: {
+    apiBase: "apis/apiextensions.k8s.io/v1",
+    namespaced: false,
+    plural: "customresourcedefinitions",
+  },
 
   // Gateway API. Keep apiBase in sync with internal/handler/resources.go.
-  gateways:        { apiBase: 'apis/gateway.networking.k8s.io/v1',       namespaced: true,  plural: 'gateways' },
-  httproutes:      { apiBase: 'apis/gateway.networking.k8s.io/v1',       namespaced: true,  plural: 'httproutes' },
-  gatewayclasses:  { apiBase: 'apis/gateway.networking.k8s.io/v1',       namespaced: false, plural: 'gatewayclasses' },
-  grpcroutes:      { apiBase: 'apis/gateway.networking.k8s.io/v1',       namespaced: true,  plural: 'grpcroutes' },
-  tlsroutes:       { apiBase: 'apis/gateway.networking.k8s.io/v1',       namespaced: true,  plural: 'tlsroutes' },
-  referencegrants: { apiBase: 'apis/gateway.networking.k8s.io/v1',       namespaced: true,  plural: 'referencegrants' },
-  tcproutes:       { apiBase: 'apis/gateway.networking.k8s.io/v1alpha2', namespaced: true,  plural: 'tcproutes' },
-  udproutes:       { apiBase: 'apis/gateway.networking.k8s.io/v1alpha2', namespaced: true,  plural: 'udproutes' },
+  gateways: {
+    apiBase: "apis/gateway.networking.k8s.io/v1",
+    namespaced: true,
+    plural: "gateways",
+  },
+  httproutes: {
+    apiBase: "apis/gateway.networking.k8s.io/v1",
+    namespaced: true,
+    plural: "httproutes",
+  },
+  gatewayclasses: {
+    apiBase: "apis/gateway.networking.k8s.io/v1",
+    namespaced: false,
+    plural: "gatewayclasses",
+  },
+  grpcroutes: {
+    apiBase: "apis/gateway.networking.k8s.io/v1",
+    namespaced: true,
+    plural: "grpcroutes",
+  },
+  tlsroutes: {
+    apiBase: "apis/gateway.networking.k8s.io/v1",
+    namespaced: true,
+    plural: "tlsroutes",
+  },
+  referencegrants: {
+    apiBase: "apis/gateway.networking.k8s.io/v1",
+    namespaced: true,
+    plural: "referencegrants",
+  },
+  tcproutes: {
+    apiBase: "apis/gateway.networking.k8s.io/v1alpha2",
+    namespaced: true,
+    plural: "tcproutes",
+  },
+  udproutes: {
+    apiBase: "apis/gateway.networking.k8s.io/v1alpha2",
+    namespaced: true,
+    plural: "udproutes",
+  },
 };
 
 /**
@@ -84,7 +188,11 @@ export function k8sListPath(resourceType: string, namespace?: string): string {
 /**
  * Get the K8s API path for a specific named resource.
  */
-export function k8sResourcePath(resourceType: string, name: string, namespace?: string): string {
+export function k8sResourcePath(
+  resourceType: string,
+  name: string,
+  namespace?: string,
+): string {
   const def = resourceDefs[resourceType];
   if (!def) throw new Error(`Unknown resource type: ${resourceType}`);
 
@@ -105,7 +213,10 @@ export function isNamespaced(resourceType: string): boolean {
  * Resolve (namespace, name) from a catch-all detail route slug.
  * Namespaced kinds -> [namespace, name]; cluster-scoped -> [name].
  */
-export function resolveDetailSlug(resourceType: string, slug: string[]): { namespace?: string; name?: string } {
+export function resolveDetailSlug(
+  resourceType: string,
+  slug: string[],
+): { namespace?: string; name?: string } {
   if (isNamespaced(resourceType)) {
     return { namespace: slug[0], name: slug[1] };
   }
@@ -116,7 +227,12 @@ export function resolveDetailSlug(resourceType: string, slug: string[]): { names
  * Build the in-app URL for a resource's detail page.
  * Namespaced -> .../[resource]/<ns>/<name>; cluster-scoped -> .../[resource]/<name>.
  */
-export function detailHref(clusterId: string, resourceType: string, namespace: string | undefined, name: string): string {
+export function detailHref(
+  clusterId: string,
+  resourceType: string,
+  namespace: string | undefined,
+  name: string,
+): string {
   const base = `/dashboard/clusters/${clusterId}/${resourceType}`;
   return isNamespaced(resourceType) && namespace
     ? `${base}/${namespace}/${name}`
@@ -126,7 +242,9 @@ export function detailHref(clusterId: string, resourceType: string, namespace: s
 /**
  * Get the resource definition for a type.
  */
-export function getResourceDef(resourceType: string): K8sResourceDef | undefined {
+export function getResourceDef(
+  resourceType: string,
+): K8sResourceDef | undefined {
   return resourceDefs[resourceType];
 }
 
@@ -136,21 +254,21 @@ export function getResourceDef(resourceType: string): K8sResourceDef | undefined
  * the detail/list/actions surfaces. Unknown kinds fall back to a naive plural.
  */
 export const KIND_TO_RESOURCE_TYPE: Record<string, string> = {
-  Pod: 'pods',
-  Service: 'services',
-  ConfigMap: 'configmaps',
-  Secret: 'secrets',
-  Deployment: 'deployments',
-  StatefulSet: 'statefulsets',
-  DaemonSet: 'daemonsets',
-  ReplicaSet: 'replicasets',
-  Job: 'jobs',
-  CronJob: 'cronjobs',
-  Ingress: 'ingresses',
-  PersistentVolume: 'persistentvolumes',
-  PersistentVolumeClaim: 'persistentvolumeclaims',
-  Node: 'nodes',
-  Namespace: 'namespaces',
+  Pod: "pods",
+  Service: "services",
+  ConfigMap: "configmaps",
+  Secret: "secrets",
+  Deployment: "deployments",
+  StatefulSet: "statefulsets",
+  DaemonSet: "daemonsets",
+  ReplicaSet: "replicasets",
+  Job: "jobs",
+  CronJob: "cronjobs",
+  Ingress: "ingresses",
+  PersistentVolume: "persistentvolumes",
+  PersistentVolumeClaim: "persistentvolumeclaims",
+  Node: "nodes",
+  Namespace: "namespaces",
 };
 
 export function kindToResourceType(kind: string): string {
@@ -158,9 +276,17 @@ export function kindToResourceType(kind: string): string {
 }
 
 /** Workload kinds whose replica count can be scaled via the scale subresource. */
-export const WORKLOAD_SCALABLE_KINDS = ['Deployment', 'StatefulSet', 'ReplicaSet'];
+export const WORKLOAD_SCALABLE_KINDS = [
+  "Deployment",
+  "StatefulSet",
+  "ReplicaSet",
+];
 /** Workload kinds that support a rollout restart (pod-template annotation bump). */
-export const WORKLOAD_RESTARTABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
+export const WORKLOAD_RESTARTABLE_KINDS = [
+  "Deployment",
+  "StatefulSet",
+  "DaemonSet",
+];
 
 // ── Custom resource (CRD instance) helpers (GATE C) ──
 //
@@ -170,7 +296,11 @@ export const WORKLOAD_RESTARTABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonS
 // are rare but possible) → fall back to a bare apis path.
 
 /** K8s API path for listing a CRD's instances cluster-wide (namespaced CRs return all namespaces). */
-export function crListPath(group: string, version: string, plural: string): string {
+export function crListPath(
+  group: string,
+  version: string,
+  plural: string,
+): string {
   const apiBase = group ? `apis/${group}/${version}` : `api/${version}`;
   return `${apiBase}/${plural}`;
 }
@@ -195,8 +325,13 @@ export function crdListHref(clusterId: string): string {
 }
 
 /** In-app URL for a CRD's instance list. */
-export function crListHref(clusterId: string, group: string, version: string, plural: string): string {
-  return `/dashboard/clusters/${clusterId}/custom-resources/${group || '_'}/${version}/${plural}`;
+export function crListHref(
+  clusterId: string,
+  group: string,
+  version: string,
+  plural: string,
+): string {
+  return `/dashboard/clusters/${clusterId}/custom-resources/${group || "_"}/${version}/${plural}`;
 }
 
 /** In-app URL for a single CR instance detail. Namespaced → .../ns/name; cluster-scoped → .../name. */

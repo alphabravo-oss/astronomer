@@ -2,18 +2,6 @@
 -- Aggregates the per-cluster anomaly_baselines means across clusters
 -- and records which clusters are outliers vs. the fleet.
 
--- name: ListXClusterAnomalyBaselines :many
-SELECT id, metric_name, window_seconds, cluster_count, population_mean, population_stddev,
-       population_min, population_max, stddev_mult, outlier_cluster_ids, updated_at
-FROM xcluster_anomaly_baselines
-ORDER BY metric_name ASC;
-
--- name: GetXClusterAnomalyBaseline :one
-SELECT id, metric_name, window_seconds, cluster_count, population_mean, population_stddev,
-       population_min, population_max, stddev_mult, outlier_cluster_ids, updated_at
-FROM xcluster_anomaly_baselines
-WHERE metric_name = $1 AND window_seconds = $2;
-
 -- name: UpsertXClusterAnomalyBaseline :one
 INSERT INTO xcluster_anomaly_baselines (
     metric_name, window_seconds, cluster_count, population_mean, population_stddev,

@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { normalizeToolStatus } from '@/lib/tool-status';
-import { StatusBadge } from '@/components/ui/status-badge';
-import type { ClusterTool, ClusterToolStatus, ToolStatus } from '@/types';
+import { normalizeToolStatus } from "@/lib/tool-status";
+import { StatusBadge } from "@/components/ui/status-badge";
+import type { ClusterTool, ClusterToolStatus, ToolStatus } from "@/types";
 import {
   Activity,
   ScrollText,
@@ -13,26 +13,26 @@ import {
   Wrench,
   Loader2,
   AlertTriangle,
-} from 'lucide-react';
+} from "lucide-react";
 
 const toolIcons: Record<string, typeof Wrench> = {
   monitoring: Activity,
   logging: ScrollText,
-  'security-trivy': ShieldCheck,
-  'security-falco': ShieldAlert,
+  "security-trivy": ShieldCheck,
+  "security-falco": ShieldAlert,
   backup: Archive,
-  'service-mesh': Network,
+  "service-mesh": Network,
 };
 
 const statusToBadge: Record<ToolStatus, { status: string; label: string }> = {
-  installed: { status: 'active', label: 'Installed' },
-  installing: { status: 'provisioning', label: 'Installing' },
-  upgrading: { status: 'provisioning', label: 'Upgrading' },
-  uninstalling: { status: 'provisioning', label: 'Uninstalling' },
-  failed: { status: 'error', label: 'Failed' },
-  not_installed: { status: 'disconnected', label: 'Not Installed' },
-  installed_unmanaged: { status: 'warning', label: 'Unmanaged' },
-  unknown: { status: 'warning', label: 'Unknown' },
+  installed: { status: "active", label: "Installed" },
+  installing: { status: "provisioning", label: "Installing" },
+  upgrading: { status: "provisioning", label: "Upgrading" },
+  uninstalling: { status: "provisioning", label: "Uninstalling" },
+  failed: { status: "error", label: "Failed" },
+  not_installed: { status: "disconnected", label: "Not Installed" },
+  installed_unmanaged: { status: "warning", label: "Unmanaged" },
+  unknown: { status: "warning", label: "Unknown" },
 };
 
 interface ToolCardProps {
@@ -65,12 +65,20 @@ export function ToolCard({
   const status = normalizeToolStatus(toolStatus?.status);
   const badge = statusToBadge[status] || statusToBadge.unknown;
   const Icon = toolIcons[tool.slug] || Wrench;
-  const isInProgress = status === 'installing' || status === 'upgrading' || status === 'uninstalling';
-  const clusterDisconnectedReason = clusterDisconnected ? 'Cluster is disconnected' : undefined;
-  const enableDisabledReason = clusterDisconnectedReason || installDisabledReason;
-  const retryDisabledReason = clusterDisconnectedReason || installDisabledReason;
+  const isInProgress =
+    status === "installing" ||
+    status === "upgrading" ||
+    status === "uninstalling";
+  const clusterDisconnectedReason = clusterDisconnected
+    ? "Cluster is disconnected"
+    : undefined;
+  const enableDisabledReason =
+    clusterDisconnectedReason || installDisabledReason;
+  const retryDisabledReason =
+    clusterDisconnectedReason || installDisabledReason;
   const adoptBlockedReason = clusterDisconnectedReason || adoptDisabledReason;
-  const uninstallBlockedReason = clusterDisconnectedReason || uninstallDisabledReason;
+  const uninstallBlockedReason =
+    clusterDisconnectedReason || uninstallDisabledReason;
 
   return (
     <div className="rounded-lg border border-border p-5 space-y-4">
@@ -82,7 +90,9 @@ export function ToolCard({
           </div>
           <div>
             <p className="font-medium text-foreground text-sm">{tool.name}</p>
-            <p className="text-xs text-muted-foreground capitalize">{tool.category}</p>
+            <p className="text-xs text-muted-foreground capitalize">
+              {tool.category}
+            </p>
           </div>
         </div>
         <StatusBadge
@@ -93,19 +103,23 @@ export function ToolCard({
       </div>
 
       {/* Description */}
-      <p className="text-xs text-muted-foreground line-clamp-2">{tool.description}</p>
+      <p className="text-xs text-muted-foreground line-clamp-2">
+        {tool.description}
+      </p>
 
       {/* Error message */}
-      {status === 'failed' && toolStatus?.error && (
+      {status === "failed" && toolStatus?.error && (
         <div className="flex items-start gap-2 p-2.5 rounded-md bg-status-error/5 border border-status-error/20">
           <AlertTriangle className="h-3.5 w-3.5 text-status-error flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-status-error line-clamp-2">{toolStatus.error}</p>
+          <p className="text-xs text-status-error line-clamp-2">
+            {toolStatus.error}
+          </p>
         </div>
       )}
 
       {/* Actions */}
       <div className="pt-1">
-        {status === 'not_installed' && (
+        {status === "not_installed" && (
           <div className="flex items-center gap-2">
             <button
               onClick={() => onInstall(tool.slug)}
@@ -120,18 +134,19 @@ export function ToolCard({
           </div>
         )}
 
-        {status === 'unknown' && (
+        {status === "unknown" && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <AlertTriangle className="h-3.5 w-3.5 text-status-warning" />
             <span>Cluster disconnected — status unknown</span>
           </div>
         )}
 
-        {status === 'installed' && (
+        {status === "installed" && (
           <div className="flex items-center justify-between">
-            {toolStatus?.preset_used && (
+            {toolStatus?.presetUsed && (
               <span className="text-xs text-muted-foreground">
-                Preset: <span className="capitalize">{toolStatus.preset_used}</span>
+                Preset:{" "}
+                <span className="capitalize">{toolStatus.presetUsed}</span>
               </span>
             )}
             <button
@@ -148,15 +163,16 @@ export function ToolCard({
           </div>
         )}
 
-        {status === 'installed_unmanaged' && (
+        {status === "installed_unmanaged" && (
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
-              Release: <span className="font-mono">{toolStatus?.release_name}</span>
+              Release:{" "}
+              <span className="font-mono">{toolStatus?.releaseName}</span>
             </span>
             <button
               onClick={() => {
-                if (toolStatus?.release_name) {
-                  onAdopt(tool.slug, toolStatus.release_name);
+                if (toolStatus?.releaseName) {
+                  onAdopt(tool.slug, toolStatus.releaseName);
                 }
               }}
               disabled={!!adoptBlockedReason}
@@ -172,11 +188,11 @@ export function ToolCard({
         {isInProgress && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span className="capitalize">{status.replace('_', ' ')}...</span>
+            <span className="capitalize">{status.replace("_", " ")}...</span>
           </div>
         )}
 
-        {status === 'failed' && (
+        {status === "failed" && (
           <div className="flex items-center gap-2">
             <button
               onClick={() => onInstall(tool.slug)}

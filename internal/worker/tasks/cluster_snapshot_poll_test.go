@@ -137,6 +137,16 @@ func (f *fakePollQuerier) GetClusterSnapshotByID(_ context.Context, id uuid.UUID
 	return row, nil
 }
 
+func (f *fakePollQuerier) GetClusterRestoreByID(_ context.Context, id uuid.UUID) (sqlc.ClusterRestore, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	row, ok := f.restores[id]
+	if !ok {
+		return sqlc.ClusterRestore{}, pgx.ErrNoRows
+	}
+	return row, nil
+}
+
 func (f *fakePollQuerier) ListEnabledSnapshotSchedules(_ context.Context) ([]sqlc.ClusterSnapshotSchedule, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -221,10 +231,27 @@ func (d *fakeDriver) GetRestore(_ context.Context, _, _, name string) (VeleroRes
 	return VeleroRestoreStatusSnapshot{NotFound: true}, nil
 }
 
-func (d *fakeDriver) PostBackup(_ context.Context, _ string, body map[string]any) error {
+func (d *fakeDriver) CreateSnapshot(_ context.Context, row sqlc.ClusterSnapshot) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.posted = append(d.posted, body)
+	d.posted = append(d.posted, map[string]any{"operation": "create_snapshot", "id": row.ID.String()})
+	return d.postErr
+}
+
+func (d *fakeDriver) CreateRestore(_ context.Context, row sqlc.ClusterRestore, _ sqlc.ClusterSnapshot) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.posted = append(d.posted, map[string]any{"operation": "create_restore", "id": row.ID.String()})
+	return d.postErr
+}
+
+func (d *fakeDriver) DeleteSnapshot(_ context.Context, clusterID, namespace, backupName, operationID string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.posted = append(d.posted, map[string]any{
+		"operation": "delete_snapshot", "cluster_id": clusterID, "namespace": namespace,
+		"backup_name": backupName, "id": operationID,
+	})
 	return d.postErr
 }
 
@@ -252,13 +279,12 @@ func TestPoller_UpdatesPhase(t *testing.T) {
 		CompletionTime: time.Now(),
 	}
 
-	ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{Queries: q, Driver: d})
-	defer ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{})
+	runtime := ClusterSnapshotRuntime{Deps: ClusterSnapshotDeps{Queries: q, Driver: d}}
 
 	var outcomes []string
 	SetSnapshotOutcomeRecorder(func(cid, oc string) { outcomes = append(outcomes, cid+":"+oc) })
 
-	if err := HandleClusterSnapshotPoll(context.Background(), nil); err != nil {
+	if err := runtime.HandleClusterSnapshotPoll(context.Background(), nil); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 
@@ -283,16 +309,41 @@ func TestPoller_MissingCRDMarksDeleted(t *testing.T) {
 		Phase:      "InProgress",
 	})
 
-	ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{Queries: q, Driver: d})
-	defer ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{})
+	runtime := ClusterSnapshotRuntime{Deps: ClusterSnapshotDeps{Queries: q, Driver: d}}
 	SetSnapshotOutcomeRecorder(func(_, _ string) {})
 
-	if err := HandleClusterSnapshotPoll(context.Background(), nil); err != nil {
+	if err := runtime.HandleClusterSnapshotPoll(context.Background(), nil); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 	updated, _ := q.GetClusterSnapshotByID(context.Background(), row.ID)
 	if updated.Phase != "Deleted" {
 		t.Fatalf("expected phase=Deleted when CRD missing, got %q", updated.Phase)
+	}
+}
+
+func TestPoller_RepairsNewSnapshotAndRestoreMissingExternalCR(t *testing.T) {
+	q := newFakePollQuerier()
+	d := newFakeDriver()
+	clusterID := uuid.New()
+	snapshot, _ := q.CreateClusterSnapshot(context.Background(), sqlc.CreateClusterSnapshotParams{
+		ClusterID: clusterID, VeleroName: "new-snapshot", VeleroNamespace: "velero", Phase: "New",
+	})
+	restoreID := uuid.New()
+	q.restores[restoreID] = sqlc.ClusterRestore{
+		ID: restoreID, SnapshotID: snapshot.ID, TargetClusterID: clusterID,
+		VeleroName: "new-restore", VeleroNamespace: "velero", Phase: "New",
+	}
+	runtime := ClusterSnapshotRuntime{Deps: ClusterSnapshotDeps{Queries: q, Driver: d}}
+	SetSnapshotOutcomeRecorder(func(_, _ string) {})
+
+	if err := runtime.HandleClusterSnapshotPoll(context.Background(), nil); err != nil {
+		t.Fatalf("repair poll: %v", err)
+	}
+	if len(d.posted) != 2 || d.posted[0]["operation"] != "create_snapshot" || d.posted[1]["operation"] != "create_restore" {
+		t.Fatalf("repair operations=%+v", d.posted)
+	}
+	if q.snapshots[snapshot.ID].Phase != "New" || q.restores[restoreID].Phase != "New" {
+		t.Fatalf("repair prematurely advanced desired state: snapshot=%q restore=%q", q.snapshots[snapshot.ID].Phase, q.restores[restoreID].Phase)
 	}
 }
 
@@ -316,10 +367,9 @@ func TestScheduledDispatcher_FiresOnCron(t *testing.T) {
 	}
 	q.schedules[sched.ID] = sched
 
-	ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{Queries: q, Driver: d})
-	defer ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{})
+	runtime := ClusterSnapshotRuntime{Deps: ClusterSnapshotDeps{Queries: q, Driver: d}}
 
-	if err := HandleClusterSnapshotDispatchScheduled(context.Background(), nil); err != nil {
+	if err := runtime.HandleClusterSnapshotDispatchScheduled(context.Background(), nil); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 	if len(d.posted) != 1 {
@@ -354,10 +404,9 @@ func TestScheduledDispatcher_SkipsWhenNotDue(t *testing.T) {
 	}
 	q.schedules[sched.ID] = sched
 
-	ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{Queries: q, Driver: d})
-	defer ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{})
+	runtime := ClusterSnapshotRuntime{Deps: ClusterSnapshotDeps{Queries: q, Driver: d}}
 
-	if err := HandleClusterSnapshotDispatchScheduled(context.Background(), nil); err != nil {
+	if err := runtime.HandleClusterSnapshotDispatchScheduled(context.Background(), nil); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 	if len(d.posted) != 0 {
@@ -389,10 +438,9 @@ func TestCleanupExpired_DropsTerminalRows(t *testing.T) {
 	q.snapshots[future.ID] = future
 	q.snapshots[inflight.ID] = inflight
 
-	ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{Queries: q})
-	defer ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{})
+	runtime := ClusterSnapshotRuntime{Deps: ClusterSnapshotDeps{Queries: q}}
 
-	if err := HandleClusterSnapshotCleanupExpired(context.Background(), nil); err != nil {
+	if err := runtime.HandleClusterSnapshotCleanupExpired(context.Background(), nil); err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
 	if _, ok := q.snapshots[expired.ID]; ok {
@@ -434,21 +482,17 @@ func TestScheduleIsDue_RejectsMalformedExpr(t *testing.T) {
 	}
 }
 
-func TestPoller_NilDepsIsNoOp(t *testing.T) {
-	// Reset deps so we can verify the no-op path. Save+restore so other
-	// tests aren't affected.
-	prev := getClusterSnapshotDeps()
-	ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{})
-	defer ConfigureClusterSnapshotTasks(prev)
+func TestPoller_NilDepsFailsClosed(t *testing.T) {
+	runtime := ClusterSnapshotRuntime{}
 
-	if err := HandleClusterSnapshotPoll(context.Background(), nil); err != nil {
-		t.Fatalf("poll unwired path errored: %v", err)
+	if err := runtime.HandleClusterSnapshotPoll(context.Background(), nil); err == nil {
+		t.Fatal("poll returned nil without runtime dependencies")
 	}
-	if err := HandleClusterSnapshotDispatchScheduled(context.Background(), nil); err != nil {
-		t.Fatalf("dispatch unwired path errored: %v", err)
+	if err := runtime.HandleClusterSnapshotDispatchScheduled(context.Background(), nil); err == nil {
+		t.Fatal("dispatch returned nil without runtime dependencies")
 	}
-	if err := HandleClusterSnapshotCleanupExpired(context.Background(), nil); err != nil {
-		t.Fatalf("cleanup unwired path errored: %v", err)
+	if err := runtime.HandleClusterSnapshotCleanupExpired(context.Background(), nil); err == nil {
+		t.Fatal("cleanup returned nil without runtime dependencies")
 	}
 }
 
@@ -460,8 +504,7 @@ func TestPoller_NilDepsIsNoOp(t *testing.T) {
 // If the leader wrapper is removed from any handler, the corresponding
 // assertion fails.
 func TestClusterSnapshotHandlers_GatedByLeader(t *testing.T) {
-	defer resetRuntime()
-	ConfigureRuntime(RuntimeDependencies{Leader: &fakeLeader{held: false}})
+	ctx := testRuntimeContext(RuntimeDependencies{Leader: &fakeLeader{held: false}})
 
 	q := newFakePollQuerier()
 	d := newFakeDriver()
@@ -496,17 +539,16 @@ func TestClusterSnapshotHandlers_GatedByLeader(t *testing.T) {
 	}
 	q.snapshots[expired.ID] = expired
 
-	ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{Queries: q, Driver: d})
-	defer ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{})
+	runtime := ClusterSnapshotRuntime{Deps: ClusterSnapshotDeps{Queries: q, Driver: d}}
 	SetSnapshotOutcomeRecorder(func(_, _ string) {})
 
-	if err := HandleClusterSnapshotPoll(context.Background(), nil); err != nil {
+	if err := runtime.HandleClusterSnapshotPoll(ctx, nil); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
-	if err := HandleClusterSnapshotDispatchScheduled(context.Background(), nil); err != nil {
+	if err := runtime.HandleClusterSnapshotDispatchScheduled(ctx, nil); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
-	if err := HandleClusterSnapshotCleanupExpired(context.Background(), nil); err != nil {
+	if err := runtime.HandleClusterSnapshotCleanupExpired(ctx, nil); err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
 
@@ -533,13 +575,6 @@ func TestScheduleSnapshotName_Sanitized(t *testing.T) {
 	got := scheduleSnapshotName(long, "stamp")
 	if len(got) > 253 {
 		t.Fatalf("name not truncated to 253: %d chars", len(got))
-	}
-}
-
-func TestParseScheduleLabelSelector(t *testing.T) {
-	got := parseScheduleLabelSelector(" tier = prod ,env=west, , badtoken , also=")
-	if len(got) != 2 || got["tier"] != "prod" || got["env"] != "west" {
-		t.Fatalf("unexpected: %+v", got)
 	}
 }
 

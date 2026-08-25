@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
@@ -20,17 +19,18 @@ type AgentManifestPayload struct {
 	PrivilegeProfile string `json:"privilege_profile,omitempty"`
 }
 
-// NewAgentManifestTask creates a new agent manifest generation task.
+// NewAgentManifestTask rejects the retired queue-based renderer. Registration
+// manifests contain credentials and must be returned synchronously by the API,
+// never placed in Redis without a durable result sink.
 func NewAgentManifestTask(payload AgentManifestPayload) (*asynq.Task, error) {
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal agent manifest payload: %w", err)
-	}
-	return asynq.NewTask("agent:generate_manifest", data), nil
+	_ = payload
+	return nil, fmt.Errorf("agent:generate_manifest is retired; use the synchronous registration manifest API")
 }
 
-// HandleAgentManifest generates a Kubernetes deployment manifest for the agent.
-func HandleAgentManifest(ctx context.Context, t *asynq.Task) error {
+// HandleAgentManifest rejects legacy queue entries. The old handler rendered a
+// manifest and discarded it, falsely acknowledging work while leaving a token
+// in the queue payload.
+func HandleAgentManifest(_ context.Context, t *asynq.Task) error {
 	var p AgentManifestPayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
 		return fmt.Errorf("unmarshal agent manifest payload: %w", err)
@@ -39,39 +39,7 @@ func HandleAgentManifest(ctx context.Context, t *asynq.Task) error {
 	if p.ClusterID == "" {
 		return fmt.Errorf("cluster_id is required")
 	}
-
-	slog.InfoContext(ctx, "generating agent manifest",
-		"cluster_id", p.ClusterID,
-		"image_repository", p.ImageRepository,
-		"image_tag", p.ImageTag,
-		"privilege_profile", agenttemplate.NormalizePrivilegeProfile(p.PrivilegeProfile),
-	)
-
-	data := struct {
-		ClusterID        string
-		AgentToken       string
-		ImageRepository  string
-		ImageTag         string
-		ServerURL        string
-		PrivilegeProfile string
-	}{
-		ClusterID:        p.ClusterID,
-		AgentToken:       p.AgentToken,
-		ImageRepository:  p.ImageRepository,
-		ImageTag:         p.ImageTag,
-		ServerURL:        runtimeDeps.ServerURL,
-		PrivilegeProfile: p.PrivilegeProfile,
-	}
-	if data.ImageRepository == "" {
-		data.ImageRepository = runtimeDeps.AgentImageRepo
-	}
-	if data.ImageTag == "" {
-		data.ImageTag = runtimeDeps.AgentImageTag
-	}
-	rendered := renderAgentManifest(ctx, data.ClusterID, data.AgentToken, data.ServerURL, data.ImageRepository, data.ImageTag, data.PrivilegeProfile)
-
-	slog.InfoContext(ctx, "agent manifest generated", "cluster_id", p.ClusterID, "manifest_bytes", len(rendered))
-	return nil
+	return fmt.Errorf("agent:generate_manifest is retired; use the synchronous registration manifest API: %w", asynq.SkipRetry)
 }
 
 func renderAgentManifest(ctx context.Context, clusterID, agentToken, serverURL, imageRepository, imageTag string, privilegeProfile ...string) string {
@@ -92,10 +60,10 @@ func renderAgentManifest(ctx context.Context, clusterID, agentToken, serverURL, 
 		CAChecksum:           agenttemplate.CAChecksumFromPEM(caPEM),
 		AgentImage:           agentImageReference(imageRepository, imageTag),
 		PrivilegeProfile:     profile,
-		SystemArtifactURL:    runtimeDeps.SystemArtifactURL,
-		SystemArtifactDigest: runtimeDeps.SystemArtifactDigest,
-		SystemOIDCIssuer:     runtimeDeps.SystemOIDCIssuer,
-		SystemOIDCIdentity:   runtimeDeps.SystemOIDCIdentity,
+		SystemArtifactURL:    runtimeDependencies(ctx).SystemArtifactURL,
+		SystemArtifactDigest: runtimeDependencies(ctx).SystemArtifactDigest,
+		SystemOIDCIssuer:     runtimeDependencies(ctx).SystemOIDCIssuer,
+		SystemOIDCIdentity:   runtimeDependencies(ctx).SystemOIDCIdentity,
 	})
 }
 
@@ -112,10 +80,10 @@ func agentImageReference(repository, tag string) string {
 // via the worker runtime queries. Returns "" when queries are unwired or no CA
 // is configured.
 func registrationCABundleForTask(ctx context.Context) string {
-	if runtimeDeps.Queries == nil {
+	if runtimeDependencies(ctx).Queries == nil {
 		return ""
 	}
-	row, err := runtimeDeps.Queries.GetPlatformSetting(ctx, "registration.ca_bundle")
+	row, err := runtimeDependencies(ctx).Queries.GetPlatformSetting(ctx, "registration.ca_bundle")
 	if err != nil || len(row.Value) == 0 {
 		return ""
 	}

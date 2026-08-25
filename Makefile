@@ -1,4 +1,4 @@
-.PHONY: help build test lint fmt vet run verify verify-enterprise check-build-capacity release-contract-check airgap-plan sqlc sqlc-generate sqlc-check sdk error-codes error-codes-check charlie-contract-generate charlie-contract-check \
+.PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet run verify verify-enterprise check-build-capacity release-contract-check airgap-plan sqlc sqlc-generate sqlc-check sdk sdk-check error-codes error-codes-check charlie-contract-generate charlie-contract-check \
         docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-import-all k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
@@ -89,11 +89,39 @@ build: ## Build all binaries to bin/
 test: ## Run tests with race detector
 	go test -race -count=1 ./...
 
+test-postgres-integration: ## Execute every PostgreSQL-gated integration contract; unexpected skips fail
+	./scripts/test-postgres-integration.sh
+
+test-worker-runtime-integration: ## Exercise worker ownership and crash recovery with disposable PostgreSQL and Redis
+	./scripts/test-worker-runtime-integration.sh
+
+test-redis-outage-recovery: ## Prove durable task/audit recovery across a disposable Redis outage
+	./scripts/test-redis-outage-recovery.sh
+
+test-process-restart-qualification: ## Prove server/worker restart convergence with disposable PostgreSQL and Redis
+	./scripts/test-process-restart-qualification.sh
+
+test-postgres-outage-qualification: ## Prove high-risk mutations fail closed during a disposable PostgreSQL outage
+	./scripts/test-postgres-outage-qualification.sh
+
+test-postgres-failover-certification: ## Measure PostgreSQL streaming failover RPO/RTO with retained evidence
+	./scripts/test-postgres-failover-certification.sh
+
+test-postgres-failover-static: ## Validate the PostgreSQL failover certification runner contract
+	./scripts/tests/postgres-failover-runner-test.sh
+
+test-live-browser: ## Run live Playwright against disposable PostgreSQL, Redis, server, worker, and preview
+	./scripts/test-live-browser.sh
+
+test-live-browser-static: ## Validate the disposable live-browser runner without starting dependencies
+	./scripts/tests/live-browser-runner-test.sh
+
 lint: ## Run the pinned golangci-lint — the same gate scripts/verify-enterprise.sh backend runs
 	GOLANGCI_LINT_VERSION=$(GOLANGCI_LINT_VERSION) ./scripts/check-go-lint.sh
 
-check-migrations: ## Lint *.up.sql migrations for unsafe ADD COLUMN NOT NULL patterns (T30)
+check-migrations: ## Lint migrations for blocking DDL and expand/migrate/contract policy
 	./scripts/check-migrations.sh
+	./scripts/check-migrations-test.sh
 
 images.txt: ## Regenerate deploy/chart/images.txt — list of every image the chart pulls (T23)
 	./scripts/extract-images.sh > deploy/chart/images.txt
@@ -109,12 +137,31 @@ vet: ## Vet Go source files
 openapi-embed: ## Sync the served spec asset from the source-of-truth docs/openapi.yaml
 	cp docs/openapi.yaml internal/handler/assets/openapi.yaml
 
+openapi-generate: ## Deterministically sync routes, frontend operations/types, embedded spec, and Go SDK
+	node scripts/sync-openapi-routes.mjs --write
+	node scripts/openapi-quality.mjs
+	node scripts/generate-openapi-types.mjs --write
+	node scripts/generate-openapi-client.mjs --write
+	$(MAKE) openapi-embed
+	$(MAKE) sdk
+
+openapi-compatibility: ## Lint OpenAPI and compare it with OPENAPI_BASELINE (default HEAD)
+	node scripts/openapi-spectral.mjs
+	./scripts/openapi-breaking-change.sh
+
 verify: ## Run the focused API contract gate used by CI
 	./scripts/verify-enterprise.sh api-contract
 
 VERIFY_SCOPE ?= all
 verify-enterprise: ## Run enterprise verification (VERIFY_SCOPE=all|backend|frontend|helm)
 	./scripts/verify-enterprise.sh $(VERIFY_SCOPE)
+
+docs-check: ## Validate current documentation links, classification, and terminology
+	node scripts/check-docs.mjs
+	node scripts/check-complexity-budget.mjs
+	node scripts/check-dependency-boundaries.mjs
+	node scripts/test-flake-report.mjs --validate
+	node scripts/security-wave-review.mjs
 
 check-build-capacity: ## Refuse build/release work when filesystem headroom is unsafe
 	./scripts/check-build-capacity.sh --path .
@@ -155,17 +202,14 @@ sqlc-check: ## Regenerate sqlc and fail if generated files are stale
 sdk: ## Generate the typed Go SDK (pkg/astroclient) from docs/openapi.yaml via oapi-codegen
 	$(OAPI_CODEGEN) -config oapi-codegen.yaml docs/openapi.yaml
 
+sdk-check: ## Regenerate the Go SDK in a temporary directory and fail on drift
+	OAPI_CODEGEN_VERSION=$(OAPI_CODEGEN_VERSION) ./scripts/check-go-sdk-generated.sh
+
 charlie-contract-generate: ## Generate the pinned local Product Bridge client
 	cd internal/charlie/contract && go generate ./...
 
 charlie-contract-check: ## Verify Charlie pins and fail on generated-client drift
-	@cd internal/charlie/contract && sha256sum -c checksums.sha256
-	@before=$$(mktemp -d); \
-	trap 'rm -rf "$$before"' EXIT; \
-	cp -R internal/charlie/contract/internal/wire internal/charlie/contract/internal/schema "$$before"/; \
-	$(MAKE) charlie-contract-generate; \
-	diff -ru "$$before/wire" internal/charlie/contract/internal/wire && \
-	diff -ru "$$before/schema" internal/charlie/contract/internal/schema
+	./scripts/check-charlie-contract-generated.sh
 
 migrate-up: ## Run all migrations up
 	migrate -database "$(DATABASE_URL)" -path internal/db/migrations up
@@ -216,6 +260,10 @@ k3d-bootstrap: ## Bootstrap a local k3d cluster + apply manifests (CLUSTER=$(CLU
 
 validate-live-b6: ## Validate live cluster.k8s_changed SSE flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
 	./scripts/validate-live-b6.sh
+
+validate-live-cloud-acceptance: ## Protected EKS/GKE/AKS/DOKS adopted-cluster allow-list rehearsal
+	@test -n "$(CLOUD_ACCEPTANCE_TARGETS)" || { echo 'CLOUD_ACCEPTANCE_TARGETS is required' >&2; exit 2; }
+	./scripts/validate-cloud-acceptance.py
 
 validate-live-delivery: ## Run Plan 007 W11-04 live delivery matrix (DELIVERY_MATRIX required)
 	@test -n "$(DELIVERY_MATRIX)" || { echo 'DELIVERY_MATRIX is required' >&2; exit 2; }

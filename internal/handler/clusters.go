@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -53,6 +55,13 @@ const maxSignedManifestTTL = 30 * time.Minute
 type clusterScopeQuerier interface {
 	ListClustersForScopes(ctx context.Context, arg sqlc.ListClustersForScopesParams) ([]sqlc.Cluster, error)
 	CountClustersForScopes(ctx context.Context, clusterIds []uuid.UUID) (int64, error)
+}
+
+type clusterFilteredQuerier interface {
+	ListClustersFiltered(ctx context.Context, arg sqlc.ListClustersFilteredParams) ([]sqlc.Cluster, error)
+	CountClustersFiltered(ctx context.Context, arg sqlc.CountClustersFilteredParams) (int64, error)
+	ListClustersFilteredForScopes(ctx context.Context, arg sqlc.ListClustersFilteredForScopesParams) ([]sqlc.Cluster, error)
+	CountClustersFilteredForScopes(ctx context.Context, arg sqlc.CountClustersFilteredForScopesParams) (int64, error)
 }
 
 // ClusterQuerier abstracts the cluster-related database queries needed by ClusterHandler.
@@ -123,11 +132,61 @@ type clusterOwnershipTransferQuerier interface {
 	SetClusterOwnership(ctx context.Context, arg sqlc.SetClusterOwnershipParams) (sqlc.FleetOwnership, error)
 }
 
+// sqlc generates distinct row types for Get/Set/List even though the columns
+// are identical. Keep the legacy FleetOwnership-shaped seam for narrow fakes,
+// and adapt the generated production surface explicitly.
+type clusterOwnershipSQLQuerier interface {
+	GetClusterOwnership(context.Context, uuid.UUID) (sqlc.GetClusterOwnershipRow, error)
+	SetClusterOwnership(context.Context, sqlc.SetClusterOwnershipParams) (sqlc.SetClusterOwnershipRow, error)
+}
+
 type clusterDecommissionTaskOutboxQuerier interface {
 	CreateClusterDecommissionWithTaskOutbox(ctx context.Context, arg sqlc.CreateClusterDecommissionWithTaskOutboxParams) (sqlc.ClusterDecommission, error)
 }
 
-var errClusterOwnershipTransferUnsupported = errors.New("cluster ownership can only be transferred from crd to api")
+// ClusterMutationTx is the transaction-bound write surface for cluster
+// administration. Production passes sqlc.New(tx), so the domain mutation,
+// any durable task intent, and the sanitized audit intent share one commit
+// decision.
+type ClusterMutationTx interface {
+	audit.OutboxQuerier
+	CreateCluster(context.Context, sqlc.CreateClusterParams) (sqlc.Cluster, error)
+	GetClusterByIDForUpdate(context.Context, uuid.UUID) (sqlc.Cluster, error)
+	UpdateCluster(context.Context, sqlc.UpdateClusterParams) (sqlc.Cluster, error)
+	CreateAPIToken(context.Context, sqlc.CreateAPITokenParams) (sqlc.ApiToken, error)
+	GetClusterOwnership(context.Context, uuid.UUID) (sqlc.GetClusterOwnershipRow, error)
+	SetClusterOwnership(context.Context, sqlc.SetClusterOwnershipParams) (sqlc.SetClusterOwnershipRow, error)
+	CreateClusterDecommission(context.Context, sqlc.CreateClusterDecommissionParams) (sqlc.ClusterDecommission, error)
+	CreateClusterDecommissionWithTaskOutbox(context.Context, sqlc.CreateClusterDecommissionWithTaskOutboxParams) (sqlc.ClusterDecommission, error)
+	SetClusterDecommissionForce(context.Context, uuid.UUID) (sqlc.ClusterDecommission, error)
+	CreateClusterRegistrationToken(context.Context, sqlc.CreateClusterRegistrationTokenParams) (sqlc.ClusterRegistrationToken, error)
+	SetClusterAgentTokenRotationPending(context.Context, uuid.UUID) (int64, error)
+	RevokeClusterAgentToken(context.Context, uuid.UUID) (int64, error)
+	UpsertClusterRegistryConfig(context.Context, sqlc.UpsertClusterRegistryConfigParams) (sqlc.ClusterRegistryConfig, error)
+	DeleteClusterRegistryConfig(context.Context, uuid.UUID) error
+}
+
+type clusterRunTxFunc func(context.Context, func(ClusterMutationTx) error) error
+
+type clusterAuditEvent struct {
+	action       string
+	resourceType string
+	resourceID   string
+	resourceName string
+	status       int
+	detail       map[string]any
+}
+
+type clusterDecommissionMutationResult struct {
+	row      sqlc.ClusterDecommission
+	enqueued bool
+}
+
+var (
+	errClusterOwnershipTransferUnsupported = errors.New("cluster ownership can only be transferred from crd to api")
+	errAgentTokenRotationIneligible        = errors.New("no agent token is eligible for rotation")
+	errAgentTokenNotActive                 = errors.New("cluster has no active agent token")
+)
 
 // ClusterDecommissionEnqueuer abstracts the asynq client surface the Delete
 // handler needs. *asynq.Client satisfies this interface natively; tests can
@@ -141,6 +200,11 @@ type ClusterDecommissionEnqueuer interface {
 // ClusterHandler handles cluster endpoints.
 type ClusterHandler struct {
 	queries ClusterQuerier
+	runTx   clusterRunTxFunc
+	// directRequester is used only for the exact TokenRequest subresource of
+	// astronomer-direct-reader. It is kept separate from metrics wiring so a
+	// partially-wired server fails direct credential issuance closed.
+	directRequester K8sRequester
 	// metrics is an optional, lazily-wired aggregator that enriches list/get
 	// responses with CPU%, memory%, and pod_count. When nil (or before
 	// SetMetrics* is called) the handler returns zeros for those fields —
@@ -171,7 +235,7 @@ type ClusterHandler struct {
 	systemArtifactDigest string
 	systemOIDCIssuer     string
 	systemOIDCIdentity   string
-	// enforcer gates Create against the fleet-wide cluster cap
+	// enforcer gates Create against the estate-wide cluster cap
 	// configured by the 'global' quota plan (migration 051).
 	// Optional; nil disables the check (test fakes, pre-migration).
 	enforcer *quota.Enforcer
@@ -227,6 +291,57 @@ func NewClusterHandler(queries ClusterQuerier) *ClusterHandler {
 		agentImage:           "ghcr.io/alphabravo-oss/astronomer-go-agent:latest",
 		registrationTokenTTL: time.Hour,
 	}
+}
+
+// SetRunTx enables the fail-closed cluster mutation + audit-outbox path.
+func (h *ClusterHandler) SetRunTx(runTx clusterRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *ClusterHandler) TransactionalAuditWired() bool {
+	return h != nil && h.runTx != nil
+}
+
+// executeClusterMutation preserves narrow fake compatibility while ensuring
+// that production never commits a cluster-management change without its
+// corresponding durable audit intent.
+func executeClusterMutation[T any](
+	r *http.Request,
+	h *ClusterHandler,
+	mutate func(ClusterMutationTx) (T, error),
+	fallback func() (T, error),
+	describe func(T) clusterAuditEvent,
+) (T, error) {
+	var zero T
+	if h == nil {
+		return zero, fmt.Errorf("cluster handler is nil")
+	}
+	if h.runTx != nil {
+		var result T
+		err := h.runTx(r.Context(), func(q ClusterMutationTx) error {
+			var mutationErr error
+			result, mutationErr = mutate(q)
+			if mutationErr != nil {
+				return mutationErr
+			}
+			event := describe(result)
+			if event.action == "" {
+				return nil
+			}
+			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
+		})
+		return result, err
+	}
+
+	result, err := fallback()
+	if err != nil {
+		return zero, err
+	}
+	event := describe(result)
+	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
+	return result, nil
 }
 
 // SetRegistrationTokenTTL overrides the registration-token TTL (task A3).
@@ -364,6 +479,15 @@ func (h *ClusterHandler) SetMetricsRequester(r K8sRequester) {
 	h.metrics.SetRemoteRequester(metricsRequesterAdapter{r: r})
 }
 
+// SetDirectKubeconfigRequester wires the tunnel used for the dedicated
+// read-only ServiceAccount TokenRequest. No direct credential can be issued
+// while this dependency is absent.
+func (h *ClusterHandler) SetDirectKubeconfigRequester(r K8sRequester) {
+	if h != nil {
+		h.directRequester = r
+	}
+}
+
 // MetricsProvider returns the clustermetrics provider this handler uses.
 // Exposed so the metrics publisher (which fans CPU/mem snapshots out to
 // SSE subscribers) can share the same cache the dashboard list endpoint
@@ -436,7 +560,7 @@ func (h *ClusterHandler) SetRegistrationService(s *registration.Service) {
 }
 
 // SetQuotaEnforcer wires the per-tenant quota enforcer that gates Create
-// against the fleet-wide cluster cap (migration 051). Optional; nil
+// against the estate-wide cluster cap (migration 051). Optional; nil
 // disables the check so tests can construct the handler without it.
 func (h *ClusterHandler) SetQuotaEnforcer(e *quota.Enforcer) {
 	if h == nil {
@@ -555,8 +679,6 @@ func (h *ClusterHandler) enrichClusterFresh(ctx context.Context, c sqlc.Cluster)
 
 // CreateClusterRequest represents the request body for creating a cluster.
 // openapi:request CreateClusterRequest
-// openapi:request-allow labels  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
-// openapi:request-allow annotations  DEBT: accepted and persisted (carries astronomer.io/agent-privilege-profile at adoption); undocumented
 type CreateClusterRequest struct {
 	Name         string          `json:"name" validate:"required,rfc1123"`
 	DisplayName  string          `json:"display_name"`
@@ -569,17 +691,48 @@ type CreateClusterRequest struct {
 	// Annotations carry agent settings at adoption time, notably
 	// astronomer.io/agent-privilege-profile (viewer|admin) from the wizard.
 	Annotations json.RawMessage `json:"annotations"`
+	// ApiServerUrl and CaCertificate are optional direct-access coordinates.
+	// They never contain a credential. The download endpoint validates HTTPS,
+	// TLS identity and reachability again before minting a short-lived token.
+	ApiServerUrl  string `json:"api_server_url"`
+	CaCertificate string `json:"ca_certificate"`
 }
 
 // UpdateClusterRequest represents the request body for updating a cluster.
 // openapi:request UpdateClusterRequest
 type UpdateClusterRequest struct {
-	DisplayName string          `json:"display_name"`
-	Description string          `json:"description"`
-	Environment string          `json:"environment"`
-	Region      string          `json:"region"`
-	Labels      json.RawMessage `json:"labels"`
-	Annotations json.RawMessage `json:"annotations"`
+	DisplayName   *string          `json:"display_name,omitempty"`
+	Description   *string          `json:"description,omitempty"`
+	Environment   *string          `json:"environment,omitempty"`
+	Region        *string          `json:"region,omitempty"`
+	Labels        *json.RawMessage `json:"labels,omitempty"`
+	Annotations   *json.RawMessage `json:"annotations,omitempty"`
+	ApiServerUrl  *string          `json:"api_server_url,omitempty"`
+	CaCertificate *string          `json:"ca_certificate,omitempty"`
+}
+
+// UnmarshalJSON retains an explicitly supplied JSON null for free-form JSONB
+// fields. A pointer alone cannot distinguish null from omission, but the API's
+// partial-update contract must preserve omission while retaining the existing
+// accepted explicit-null behavior.
+func (r *UpdateClusterRequest) UnmarshalJSON(data []byte) error {
+	type updateClusterRequestAlias UpdateClusterRequest
+	var decoded updateClusterRequestAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if raw, ok := fields["labels"]; ok {
+		decoded.Labels = &raw
+	}
+	if raw, ok := fields["annotations"]; ok {
+		decoded.Annotations = &raw
+	}
+	*r = UpdateClusterRequest(decoded)
+	return nil
 }
 
 // UpdateRegistryConfigRequest represents the request body for upserting registry config.
@@ -602,6 +755,20 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 	limitInt, offsetInt := queryLimitOffset(r, 20)
 	limit := int32(limitInt)
 	offset := int32(offsetInt)
+	filterStatus := strings.TrimSpace(r.URL.Query().Get("status"))
+	filterProvider := strings.TrimSpace(r.URL.Query().Get("provider"))
+	filterEnvironment := strings.TrimSpace(r.URL.Query().Get("environment"))
+	filterSearch := strings.TrimSpace(r.URL.Query().Get("search"))
+	for name, value := range map[string]string{
+		"status": filterStatus, "provider": filterProvider,
+		"environment": filterEnvironment, "search": filterSearch,
+	} {
+		if len(value) > 128 {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, name+" must be at most 128 bytes")
+			return
+		}
+	}
+	hasFilters := filterStatus != "" || filterProvider != "" || filterEnvironment != "" || filterSearch != ""
 
 	// Scope filter. The collection gate (RequireCollectionPermission) admits a
 	// caller whose only grant is a cluster_role_bindings row, so the page must
@@ -616,7 +783,28 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	var clusters []sqlc.Cluster
 	var total int64
-	if all {
+	if all && hasFilters {
+		filtered, ok := h.queries.(clusterFilteredQuerier)
+		if !ok {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Filtered cluster listing is not available")
+			return
+		}
+		clusters, err = filtered.ListClustersFiltered(r.Context(), sqlc.ListClustersFilteredParams{
+			FilterStatus: filterStatus, FilterProvider: filterProvider,
+			FilterEnvironment: filterEnvironment, FilterSearch: filterSearch,
+			QueryLimit: limit, QueryOffset: offset,
+		})
+		if err == nil {
+			total, err = filtered.CountClustersFiltered(r.Context(), sqlc.CountClustersFilteredParams{
+				FilterStatus: filterStatus, FilterProvider: filterProvider,
+				FilterEnvironment: filterEnvironment, FilterSearch: filterSearch,
+			})
+		}
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list filtered clusters")
+			return
+		}
+	} else if all {
 		clusters, err = h.queries.ListClusters(r.Context(), sqlc.ListClustersParams{
 			Limit:  limit,
 			Offset: offset,
@@ -628,6 +816,27 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		total, err = h.queries.CountClusters(r.Context())
 		if err != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
+			return
+		}
+	} else if hasFilters {
+		filtered, ok := h.queries.(clusterFilteredQuerier)
+		if !ok {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Scoped filtered cluster listing is not available")
+			return
+		}
+		clusters, err = filtered.ListClustersFilteredForScopes(r.Context(), sqlc.ListClustersFilteredForScopesParams{
+			ClusterIds: clusterIDs, FilterStatus: filterStatus, FilterProvider: filterProvider,
+			FilterEnvironment: filterEnvironment, FilterSearch: filterSearch,
+			QueryLimit: limit, QueryOffset: offset,
+		})
+		if err == nil {
+			total, err = filtered.CountClustersFilteredForScopes(r.Context(), sqlc.CountClustersFilteredForScopesParams{
+				ClusterIds: clusterIDs, FilterStatus: filterStatus, FilterProvider: filterProvider,
+				FilterEnvironment: filterEnvironment, FilterSearch: filterSearch,
+			})
+		}
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list scoped filtered clusters")
 			return
 		}
 	} else {
@@ -664,7 +873,7 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		pageIDs[i] = c.ID
 	}
 	// `total` is scope-dependent now, so it can no longer serve as the fetch
-	// bound: ListPendingClusterDecommissions is a fleet-wide query, and a
+	// bound: ListPendingClusterDecommissions is a estate-wide query, and a
 	// caller scoped to one cluster would fetch limit=1 and miss their own row
 	// whenever another tenant's decommission sorts first. Bound it by the
 	// unfiltered cluster count instead — that is the count the invariant in
@@ -695,7 +904,7 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 // never exceed it. The old fixed 500 cap silently rendered clusters past the
 // cap as Decommissioning=false once the fleet had >500 concurrent
 // decommissions. Do NOT pass a scope-filtered count here — the underlying
-// query is fleet-wide, so a smaller bound can truncate away this page's rows.
+// query is estate-wide, so a smaller bound can truncate away this page's rows.
 // The already-fetched rows are then filtered to this page's IDs in Go.
 func (h *ClusterHandler) inFlightDecommissionSet(ctx context.Context, ids []uuid.UUID, fleetTotal int64) map[uuid.UUID]bool {
 	set := map[uuid.UUID]bool{}
@@ -732,7 +941,7 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fleet-wide cap (migration 051). The 'global' quota plan's
+	// Estate-wide cap (migration 051). The 'global' quota plan's
 	// max_total_clusters caps how many clusters the platform will
 	// hold. Soft enforcement is logged + metric'd; hard returns a 429.
 	if h.enforcer != nil {
@@ -754,6 +963,10 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if annotations == nil {
 		annotations = json.RawMessage(`{}`)
 	}
+	if err := validateDirectAccessConfig(req.ApiServerUrl, req.CaCertificate); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		return
+	}
 	// Downstream-impersonation mode: superuser-only, validated, default off.
 	// uuid.Nil as the cluster id is correct here — the row does not exist yet,
 	// so there is nothing stored to preserve and no agent that could have
@@ -763,24 +976,39 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	cluster, err := h.queries.CreateCluster(r.Context(), sqlc.CreateClusterParams{
-		Name:         req.Name,
-		DisplayName:  req.DisplayName,
-		Description:  req.Description,
-		Environment:  req.Environment,
-		Region:       req.Region,
-		Provider:     req.Provider,
-		Distribution: req.Distribution,
-		Labels:       labels,
-		Annotations:  annotations,
-		CreatedByID:  currentUserUUID(r),
-	})
+	params := sqlc.CreateClusterParams{
+		Name:          req.Name,
+		DisplayName:   req.DisplayName,
+		Description:   req.Description,
+		Environment:   req.Environment,
+		Region:        req.Region,
+		Provider:      req.Provider,
+		Distribution:  req.Distribution,
+		Labels:        labels,
+		Annotations:   annotations,
+		ApiServerUrl:  strings.TrimSpace(req.ApiServerUrl),
+		CaCertificate: strings.TrimSpace(req.CaCertificate),
+		CreatedByID:   currentUserUUID(r),
+	}
+	cluster, err := executeClusterMutation(r, h,
+		func(q ClusterMutationTx) (sqlc.Cluster, error) { return q.CreateCluster(r.Context(), params) },
+		func() (sqlc.Cluster, error) { return h.queries.CreateCluster(r.Context(), params) },
+		func(cluster sqlc.Cluster) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.create", resourceType: "cluster", resourceID: cluster.ID.String(), resourceName: cluster.Name,
+				status: http.StatusCreated,
+				detail: map[string]any{
+					"environment": req.Environment, "region": req.Region,
+					"provider": req.Provider, "distribution": req.Distribution,
+				},
+			}
+		})
 	if err != nil {
 		if isUniqueViolation(err) {
 			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, fmt.Sprintf("A cluster named %q already exists", req.Name))
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster")
 		return
 	}
 
@@ -808,13 +1036,6 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 			Status:   "success",
 		})
 	}
-
-	recordAudit(r, h.queries, "cluster.create", "cluster", cluster.ID.String(), cluster.Name, map[string]any{
-		"environment":  req.Environment,
-		"region":       req.Region,
-		"provider":     req.Provider,
-		"distribution": req.Distribution,
-	})
 
 	h.triggerGrafanaFolders()
 
@@ -856,15 +1077,6 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	labels := req.Labels
-	if labels == nil {
-		labels = json.RawMessage(`{}`)
-	}
-	annotations := req.Annotations
-	if annotations == nil {
-		annotations = json.RawMessage(`{}`)
-	}
-
 	if blocked, err := clusterUpdateBlockedByOwnership(r.Context(), h.queries, id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
@@ -877,42 +1089,67 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Downstream-impersonation mode: superuser-only, validated, capability-
-	// gated for `enforce`, and PRESERVED when the caller's annotation blob
-	// simply omits the key (so a normal edit cannot silently clear it).
-	//
-	// The pre-read is FAIL-CLOSED. An earlier shape ran the guard only when the
-	// read succeeded, which turned any transient DB fault into permission to
-	// write the annotation blob ungated — a non-superuser could set `enforce`
-	// by racing a pool exhaustion. The cluster's existence is already
-	// established by the ownership check above, so a non-nil error here is an
-	// infrastructure fault, not a 404.
-	existing, gerr := h.queries.GetClusterByID(r.Context(), id)
-	if gerr != nil {
-		if errors.Is(gerr, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+	cluster, err := executeClusterMutation(r, h,
+		func(q ClusterMutationTx) (sqlc.Cluster, error) {
+			// Lock before merging so two concurrent partial updates cannot restore
+			// stale values for fields the second request omitted.
+			existing, lockErr := q.GetClusterByIDForUpdate(r.Context(), id)
+			if lockErr != nil {
+				return sqlc.Cluster{}, lockErr
+			}
+			params, mergeErr := mergeClusterUpdate(id, existing, req)
+			if mergeErr != nil {
+				return sqlc.Cluster{}, mergeErr
+			}
+			annotations, ok := guardDownstreamImpersonationAnnotation(w, r, q, id, existing.Annotations, params.Annotations)
+			if !ok {
+				return sqlc.Cluster{}, errClusterUpdateResponseWritten
+			}
+			params.Annotations = annotations
+			return q.UpdateCluster(r.Context(), params)
+		},
+		func() (sqlc.Cluster, error) {
+			existing, loadErr := h.queries.GetClusterByID(r.Context(), id)
+			if loadErr != nil {
+				return sqlc.Cluster{}, loadErr
+			}
+			params, mergeErr := mergeClusterUpdate(id, existing, req)
+			if mergeErr != nil {
+				return sqlc.Cluster{}, mergeErr
+			}
+			annotations, ok := guardDownstreamImpersonationAnnotation(w, r, h.queries, id, existing.Annotations, params.Annotations)
+			if !ok {
+				return sqlc.Cluster{}, errClusterUpdateResponseWritten
+			}
+			params.Annotations = annotations
+			return h.queries.UpdateCluster(r.Context(), params)
+		},
+		func(cluster sqlc.Cluster) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.update", resourceType: "cluster", resourceID: cluster.ID.String(), resourceName: cluster.Name,
+				status: http.StatusOK,
+				detail: map[string]any{
+					"display_name": cluster.DisplayName, "description": cluster.Description,
+					"environment": cluster.Environment, "region": cluster.Region,
+				},
+			}
+		})
+	if err != nil {
+		if errors.Is(err, errClusterUpdateResponseWritten) {
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load cluster")
-		return
-	}
-	var annotationsOK bool
-	annotations, annotationsOK = guardDownstreamImpersonationAnnotation(w, r, h.queries, id, existing.Annotations, annotations)
-	if !annotationsOK {
-		return
-	}
-
-	cluster, err := h.queries.UpdateCluster(r.Context(), sqlc.UpdateClusterParams{
-		ID:          id,
-		DisplayName: req.DisplayName,
-		Description: req.Description,
-		Environment: req.Environment,
-		Region:      req.Region,
-		Labels:      labels,
-		Annotations: annotations,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		var validationErr *clusterUpdateValidationError
+		if errors.As(err, &validationErr) {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, validationErr.Error())
+			return
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		} else if errors.Is(err, audit.ErrOutboxUnavailable) {
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to update cluster")
+		} else {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to update cluster")
+		}
 		return
 	}
 
@@ -923,23 +1160,67 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 		"status":       cluster.Status,
 	})
 
-	recordAudit(r, h.queries, "cluster.update", "cluster", cluster.ID.String(), cluster.Name, map[string]any{
-		"display_name": req.DisplayName,
-		"description":  req.Description,
-		"environment":  req.Environment,
-		"region":       req.Region,
-	})
-
 	h.triggerGrafanaFolders()
 	RespondJSON(w, http.StatusOK, clusterToResponse(cluster))
 }
 
+var errClusterUpdateResponseWritten = errors.New("cluster update response already written")
+
+type clusterUpdateValidationError struct{ err error }
+
+func (e *clusterUpdateValidationError) Error() string { return e.err.Error() }
+func (e *clusterUpdateValidationError) Unwrap() error { return e.err }
+
+// mergeClusterUpdate implements lossless PATCH semantics over the generated
+// request shape. Explicit empty values clear a field; omitted values preserve
+// the row locked by the caller.
+func mergeClusterUpdate(id uuid.UUID, existing sqlc.Cluster, req UpdateClusterRequest) (sqlc.UpdateClusterParams, error) {
+	displayName, description := existing.DisplayName, existing.Description
+	environment, region := existing.Environment, existing.Region
+	labels, annotations := existing.Labels, existing.Annotations
+	if req.DisplayName != nil {
+		displayName = *req.DisplayName
+	}
+	if req.Description != nil {
+		description = *req.Description
+	}
+	if req.Environment != nil {
+		environment = *req.Environment
+	}
+	if req.Region != nil {
+		region = *req.Region
+	}
+	if req.Labels != nil {
+		labels = *req.Labels
+	}
+	if req.Annotations != nil {
+		annotations = *req.Annotations
+	}
+	directURL, directCA := existing.ApiServerUrl, existing.CaCertificate
+	if req.ApiServerUrl != nil {
+		directURL = strings.TrimSpace(*req.ApiServerUrl)
+	}
+	if req.CaCertificate != nil {
+		directCA = strings.TrimSpace(*req.CaCertificate)
+	}
+	if req.ApiServerUrl != nil || req.CaCertificate != nil {
+		if err := validateDirectAccessConfig(directURL, directCA); err != nil {
+			return sqlc.UpdateClusterParams{}, &clusterUpdateValidationError{err: err}
+		}
+	}
+	return sqlc.UpdateClusterParams{
+		ID: id, DisplayName: displayName, Description: description,
+		Environment: environment, Region: region, Labels: labels, Annotations: annotations,
+		ApiServerUrl:  pgtype.Text{String: directURL, Valid: true},
+		CaCertificate: pgtype.Text{String: directCA, Valid: true},
+	}, nil
+}
+
 func clusterUpdateBlockedByOwnership(ctx context.Context, q any, id uuid.UUID) (string, error) {
-	ownershipQ, ok := q.(clusterOwnershipQuerier)
+	ownership, ok, err := readClusterOwnership(ctx, q, id)
 	if !ok {
 		return "", nil
 	}
-	ownership, err := ownershipQ.GetClusterOwnership(ctx, id)
 	if err != nil {
 		return "", err
 	}
@@ -952,6 +1233,38 @@ func clusterUpdateBlockedByOwnership(ctx context.Context, q any, id uuid.UUID) (
 		ownership.ExternalRefNamespace,
 		ownership.ExternalRefName,
 	), nil
+}
+
+func fleetOwnershipFromClusterGet(row sqlc.GetClusterOwnershipRow) sqlc.FleetOwnership {
+	return sqlc.FleetOwnership(row)
+}
+
+func fleetOwnershipFromClusterSet(row sqlc.SetClusterOwnershipRow) sqlc.FleetOwnership {
+	return sqlc.FleetOwnership(row)
+}
+
+func readClusterOwnership(ctx context.Context, q any, id uuid.UUID) (sqlc.FleetOwnership, bool, error) {
+	if legacy, ok := q.(clusterOwnershipQuerier); ok {
+		row, err := legacy.GetClusterOwnership(ctx, id)
+		return row, true, err
+	}
+	if generated, ok := q.(clusterOwnershipSQLQuerier); ok {
+		row, err := generated.GetClusterOwnership(ctx, id)
+		return fleetOwnershipFromClusterGet(row), true, err
+	}
+	return sqlc.FleetOwnership{}, false, nil
+}
+
+func writeClusterOwnership(ctx context.Context, q any, arg sqlc.SetClusterOwnershipParams) (sqlc.FleetOwnership, bool, error) {
+	if legacy, ok := q.(clusterOwnershipTransferQuerier); ok {
+		row, err := legacy.SetClusterOwnership(ctx, arg)
+		return row, true, err
+	}
+	if generated, ok := q.(clusterOwnershipSQLQuerier); ok {
+		row, err := generated.SetClusterOwnership(ctx, arg)
+		return fleetOwnershipFromClusterSet(row), true, err
+	}
+	return sqlc.FleetOwnership{}, false, nil
 }
 
 // TakeoverOwnership handles POST /api/v1/clusters/{id}/ownership/takeover/.
@@ -970,7 +1283,35 @@ func (h *ClusterHandler) TakeoverOwnership(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
-	previous, updated, transferred, err := transferClusterOwnershipToAPI(r.Context(), h.queries, id)
+	type takeoverResult struct {
+		previous    sqlc.FleetOwnership
+		updated     sqlc.FleetOwnership
+		transferred bool
+	}
+	takeover, err := executeClusterMutation(r, h,
+		func(q ClusterMutationTx) (takeoverResult, error) {
+			previous, updated, transferred, mutationErr := transferClusterOwnershipToAPI(r.Context(), q, id)
+			return takeoverResult{previous: previous, updated: updated, transferred: transferred}, mutationErr
+		},
+		func() (takeoverResult, error) {
+			previous, updated, transferred, mutationErr := transferClusterOwnershipToAPI(r.Context(), h.queries, id)
+			return takeoverResult{previous: previous, updated: updated, transferred: transferred}, mutationErr
+		},
+		func(result takeoverResult) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.ownership.takeover", resourceType: "cluster", resourceID: id.String(), resourceName: cluster.Name,
+				status: http.StatusOK,
+				detail: map[string]any{
+					"previous_managed_by": result.previous.ManagedBy,
+					"previous_ref": map[string]string{
+						"api_version": result.previous.ExternalRefApiVersion,
+						"kind":        result.previous.ExternalRefKind, "namespace": result.previous.ExternalRefNamespace,
+						"name": result.previous.ExternalRefName,
+					},
+					"transferred": result.transferred,
+				},
+			}
+		})
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -978,42 +1319,34 @@ func (h *ClusterHandler) TakeoverOwnership(w http.ResponseWriter, r *http.Reques
 		case errors.Is(err, errClusterOwnershipTransferUnsupported):
 			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Only CRD-owned clusters can be transferred through this endpoint")
 		default:
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to transfer cluster ownership")
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to transfer cluster ownership")
 		}
 		return
 	}
-	recordAudit(r, h.queries, "cluster.ownership.takeover", "cluster", id.String(), cluster.Name, map[string]any{
-		"previous_managed_by": previous.ManagedBy,
-		"previous_ref": map[string]string{
-			"api_version": previous.ExternalRefApiVersion,
-			"kind":        previous.ExternalRefKind,
-			"namespace":   previous.ExternalRefNamespace,
-			"name":        previous.ExternalRefName,
-		},
-		"transferred": transferred,
-	})
 	RespondJSON(w, http.StatusOK, map[string]any{
-		"id":          updated.ID.String(),
-		"managed_by":  updated.ManagedBy,
-		"transferred": transferred,
+		"id":          takeover.updated.ID.String(),
+		"managed_by":  takeover.updated.ManagedBy,
+		"transferred": takeover.transferred,
 	})
 }
 
 func transferClusterOwnershipToAPI(ctx context.Context, q any, id uuid.UUID) (sqlc.FleetOwnership, sqlc.FleetOwnership, bool, error) {
-	ownershipQ, ok := q.(clusterOwnershipTransferQuerier)
+	previous, ok, err := readClusterOwnership(ctx, q, id)
 	if !ok {
 		return sqlc.FleetOwnership{}, sqlc.FleetOwnership{}, false, fmt.Errorf("cluster ownership transfer query support is not configured")
 	}
-	previous, err := ownershipQ.GetClusterOwnership(ctx, id)
 	if err != nil {
 		return sqlc.FleetOwnership{}, sqlc.FleetOwnership{}, false, err
 	}
 	switch previous.ManagedBy {
 	case "crd":
-		updated, err := ownershipQ.SetClusterOwnership(ctx, sqlc.SetClusterOwnershipParams{
+		updated, supported, err := writeClusterOwnership(ctx, q, sqlc.SetClusterOwnershipParams{
 			ID:        id,
 			ManagedBy: "api",
 		})
+		if !supported {
+			return previous, sqlc.FleetOwnership{}, false, fmt.Errorf("cluster ownership transfer query support is not configured")
+		}
 		return previous, updated, true, err
 	case "api", "ui":
 		return previous, previous, false, nil
@@ -1176,13 +1509,25 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			// (so a normal delete that's stuck waiting out the grace can be
 			// forced through) and nudges the worker to re-run now.
 			if force && !existing.Force && existing.Status != tasks.PhaseStatusSucceeded {
-				if escalated, ferr := h.queries.SetClusterDecommissionForce(r.Context(), existing.ID); ferr == nil {
-					existing = escalated
-					h.enqueueClusterDecommission(r.Context(), existing.ID)
-					recordAudit(r, h.queries, "cluster.decommission.forced", "cluster", id.String(), cluster.Name, map[string]any{
-						"decommission_id": existing.ID.String(),
+				escalated, forceErr := executeClusterMutation(r, h,
+					func(q ClusterMutationTx) (sqlc.ClusterDecommission, error) {
+						return q.SetClusterDecommissionForce(r.Context(), existing.ID)
+					},
+					func() (sqlc.ClusterDecommission, error) {
+						return h.queries.SetClusterDecommissionForce(r.Context(), existing.ID)
+					},
+					func(row sqlc.ClusterDecommission) clusterAuditEvent {
+						return clusterAuditEvent{
+							action: "cluster.decommission.forced", resourceType: "cluster", resourceID: id.String(), resourceName: cluster.Name,
+							status: http.StatusAccepted, detail: map[string]any{"decommission_id": row.ID.String()},
+						}
 					})
+				if forceErr != nil {
+					respondTransactionalMutationError(w, r, forceErr, http.StatusInternalServerError, apierror.UpdateError, "Failed to force cluster decommission")
+					return
 				}
+				existing = escalated
+				h.enqueueClusterDecommission(r.Context(), existing.ID)
 			}
 			statusURL := fmt.Sprintf("/api/v1/clusters/%s/decommission/", id.String())
 			RespondJSON(w, http.StatusAccepted, renderDecommission(existing, statusURL))
@@ -1197,16 +1542,32 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		requestedBy = userID
 	}
 
-	row, enqueued, err := h.createClusterDecommission(r.Context(), sqlc.CreateClusterDecommissionParams{
+	params := sqlc.CreateClusterDecommissionParams{
 		ClusterID:     id,
 		RequestedByID: requestedBy,
 		ClusterName:   cluster.Name,
 		Force:         force,
-	})
+	}
+	created, err := executeClusterMutation(r, h,
+		func(q ClusterMutationTx) (clusterDecommissionMutationResult, error) {
+			row, enqueued, mutationErr := h.createClusterDecommission(r.Context(), q, params)
+			return clusterDecommissionMutationResult{row: row, enqueued: enqueued}, mutationErr
+		},
+		func() (clusterDecommissionMutationResult, error) {
+			row, enqueued, mutationErr := h.createClusterDecommission(r.Context(), h.queries, params)
+			return clusterDecommissionMutationResult{row: row, enqueued: enqueued}, mutationErr
+		},
+		func(result clusterDecommissionMutationResult) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.decommission.requested", resourceType: "cluster", resourceID: id.String(), resourceName: cluster.Name,
+				status: http.StatusAccepted, detail: map[string]any{"decommission_id": result.row.ID.String()},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateDecommissionFailed, "Failed to enqueue cluster decommission")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateDecommissionFailed, "Failed to enqueue cluster decommission")
 		return
 	}
+	row, enqueued := created.row, created.enqueued
 
 	if !enqueued {
 		h.enqueueClusterDecommission(r.Context(), row.ID)
@@ -1214,10 +1575,6 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	h.publishEvent("cluster.decommission_enqueued", map[string]any{
 		"cluster_id":      id.String(),
-		"decommission_id": row.ID.String(),
-	})
-
-	recordAudit(r, h.queries, "cluster.decommission.requested", "cluster", id.String(), cluster.Name, map[string]any{
 		"decommission_id": row.ID.String(),
 	})
 
@@ -1232,8 +1589,8 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 // used by the registration apply path.
 const tunnelQueueName = "tunnel"
 
-func (h *ClusterHandler) createClusterDecommission(ctx context.Context, arg sqlc.CreateClusterDecommissionParams) (sqlc.ClusterDecommission, bool, error) {
-	atomicQ, ok := any(h.queries).(clusterDecommissionTaskOutboxQuerier)
+func (h *ClusterHandler) createClusterDecommission(ctx context.Context, q any, arg sqlc.CreateClusterDecommissionParams) (sqlc.ClusterDecommission, bool, error) {
+	atomicQ, ok := q.(clusterDecommissionTaskOutboxQuerier)
 	if ok && h.taskOutbox != nil {
 		decommissionID := uuid.New()
 		task, err := tasks.NewClusterDecommissionTask(decommissionID)
@@ -1260,7 +1617,13 @@ func (h *ClusterHandler) createClusterDecommission(ctx context.Context, arg sqlc
 		})
 		return row, true, err
 	}
-	row, err := h.queries.CreateClusterDecommission(ctx, arg)
+	creator, ok := q.(interface {
+		CreateClusterDecommission(context.Context, sqlc.CreateClusterDecommissionParams) (sqlc.ClusterDecommission, error)
+	})
+	if !ok {
+		return sqlc.ClusterDecommission{}, false, fmt.Errorf("cluster decommission query support is not configured")
+	}
+	row, err := creator.CreateClusterDecommission(ctx, arg)
 	return row, false, err
 }
 
@@ -1360,7 +1723,7 @@ func (h *ClusterHandler) ListConditions(w http.ResponseWriter, r *http.Request) 
 			LastProbeTime:      c.LastProbeTime.UTC().Format(time.RFC3339),
 		})
 	}
-	// TODO(total): no COUNT query for cluster conditions; use page length.
+	// The query returns the complete condition set for this cluster.
 	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
 }
 
@@ -1386,21 +1749,30 @@ func (h *ClusterHandler) GenerateRegistrationToken(w http.ResponseWriter, r *htt
 	}
 	tokenStr := base64.URLEncoding.EncodeToString(b)
 
-	token, err := h.queries.CreateClusterRegistrationToken(r.Context(), sqlc.CreateClusterRegistrationTokenParams{
+	params := sqlc.CreateClusterRegistrationTokenParams{
 		ClusterID: id,
 		TokenHash: auth.HashOpaqueToken(tokenStr),
 		ExpiresAt: time.Now().Add(h.registrationTokenTTL),
-	})
+	}
+	token, err := executeClusterMutation(r, h,
+		func(q ClusterMutationTx) (sqlc.ClusterRegistrationToken, error) {
+			return q.CreateClusterRegistrationToken(r.Context(), params)
+		},
+		func() (sqlc.ClusterRegistrationToken, error) {
+			return h.queries.CreateClusterRegistrationToken(r.Context(), params)
+		},
+		func(token sqlc.ClusterRegistrationToken) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.register_token", resourceType: "cluster", resourceID: id.String(),
+				status: http.StatusCreated,
+				detail: map[string]any{"token_id": token.ID.String(), "expires_at": token.ExpiresAt.UTC().Format(time.RFC3339)},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
 		return
 	}
 	token.Token = tokenStr
-
-	recordAudit(r, h.queries, "cluster.register_token", "cluster", id.String(), "", map[string]any{
-		"token_id":   token.ID.String(),
-		"expires_at": token.ExpiresAt.UTC().Format(time.RFC3339),
-	})
 
 	RespondJSON(w, http.StatusCreated, token)
 }
@@ -1412,6 +1784,9 @@ func (h *ClusterHandler) GenerateRegistrationToken(w http.ResponseWriter, r *htt
 // there is no mid-rotation lockout: the agent keeps using its held token until
 // it adopts the freshly-minted one.
 func (h *ClusterHandler) RotateAgentToken(w http.ResponseWriter, r *http.Request) {
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
@@ -1422,29 +1797,67 @@ func (h *ClusterHandler) RotateAgentToken(w http.ResponseWriter, r *http.Request
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
-	rows, err := h.queries.SetClusterAgentTokenRotationPending(r.Context(), id)
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "cluster mutation transaction runner is not configured")
+		return
+	}
+	r = r.WithContext(withOperationIdempotency(r, "agent_token_rotation"))
+	digest, err := canonicalOperationRequestDigest(struct {
+		ClusterID string `json:"cluster_id"`
+	}{ClusterID: id.String()})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to request agent token rotation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode token rotation request")
 		return
 	}
-	if rows == 0 {
-		// Gated by SetClusterAgentTokenRotationPending: 0 rows means either no
-		// active token exists, or a rotation is already in flight (pending, or
-		// the agent hasn't yet adopted the last new token). Conflict either way —
-		// re-triggering would risk demoting the in-use previous hash and locking
-		// the agent out.
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "No agent token eligible for rotation: none is active or a rotation is already in flight")
+	receipt := AgentTokenRotationReceipt{ClusterID: id.String(), RotationPending: true, Message: "rotation will complete on the agent's next connect"}
+	receipt, err = executeClusterMutation(r, h, func(q ClusterMutationTx) (AgentTokenRotationReceipt, error) {
+		idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+		if !ok {
+			return AgentTokenRotationReceipt{}, errors.New("cluster token rotation idempotency store is not configured")
+		}
+		_, stored, replay, claimErr := claimOperationReceipt[AgentTokenRotationReceipt](r.Context(), idemQ, "cluster_agent_token_rotations", digest)
+		if claimErr != nil {
+			return AgentTokenRotationReceipt{}, claimErr
+		}
+		if replay {
+			return stored, nil
+		}
+		rows, mutationErr := q.SetClusterAgentTokenRotationPending(r.Context(), id)
+		if mutationErr != nil {
+			return AgentTokenRotationReceipt{}, mutationErr
+		}
+		if rows == 0 {
+			return AgentTokenRotationReceipt{}, errAgentTokenRotationIneligible
+		}
+		if auditErr := recordAuditOutbox(r, q, "agent.token.rotate.requested", "cluster", id.String(), cluster.Name, http.StatusAccepted, map[string]any{"cluster_id": id.String(), "trigger": "admin_api", "rows_affected": rows}); auditErr != nil {
+			return AgentTokenRotationReceipt{}, auditErr
+		}
+		if attachErr := attachOperationReceipt(r.Context(), idemQ, "cluster_agent_token_rotations", id, digest, receipt); attachErr != nil {
+			return AgentTokenRotationReceipt{}, attachErr
+		}
+		return receipt, nil
+	}, func() (AgentTokenRotationReceipt, error) {
+		return AgentTokenRotationReceipt{}, errors.New("cluster token rotation transaction runner is not configured")
+	}, func(AgentTokenRotationReceipt) clusterAuditEvent { return clusterAuditEvent{} })
+	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different token rotation")
+			return
+		}
+		if errors.Is(err, errAgentTokenRotationIneligible) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "No agent token eligible for rotation: none is active or a rotation is already in flight")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to request agent token rotation")
 		return
 	}
-	recordAudit(r, h.queries, "agent.token.rotate.requested", "cluster", id.String(), cluster.Name, map[string]any{
-		"cluster_id": id.String(),
-		"trigger":    "admin_api",
-	})
-	RespondJSON(w, http.StatusAccepted, map[string]any{
-		"cluster_id":       id.String(),
-		"rotation_pending": true,
-		"message":          "rotation will complete on the agent's next connect",
-	})
+	RespondAcceptedOperation(w, "/api/v1/clusters/"+id.String()+"/", receipt)
+}
+
+type AgentTokenRotationReceipt struct {
+	ClusterID       string `json:"cluster_id"`
+	RotationPending bool   `json:"rotation_pending"`
+	Message         string `json:"message"`
 }
 
 // RevokeAgentToken handles POST /api/v1/clusters/{id}/agent-token/revoke/.
@@ -1463,13 +1876,33 @@ func (h *ClusterHandler) RevokeAgentToken(w http.ResponseWriter, r *http.Request
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
-	rows, err := h.queries.RevokeClusterAgentToken(r.Context(), id)
+	_, err = executeClusterMutation(r, h,
+		func(q ClusterMutationTx) (int64, error) {
+			rows, mutationErr := q.RevokeClusterAgentToken(r.Context(), id)
+			if mutationErr == nil && rows == 0 {
+				mutationErr = errAgentTokenNotActive
+			}
+			return rows, mutationErr
+		},
+		func() (int64, error) {
+			rows, mutationErr := h.queries.RevokeClusterAgentToken(r.Context(), id)
+			if mutationErr == nil && rows == 0 {
+				mutationErr = errAgentTokenNotActive
+			}
+			return rows, mutationErr
+		},
+		func(rows int64) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "agent.token.revoked", resourceType: "cluster", resourceID: id.String(), resourceName: cluster.Name,
+				status: http.StatusOK, detail: map[string]any{"cluster_id": id.String(), "trigger": "admin_api", "rows_affected": rows},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to revoke agent token")
-		return
-	}
-	if rows == 0 {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster has no active agent token to revoke")
+		if errors.Is(err, errAgentTokenNotActive) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster has no active agent token to revoke")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to revoke agent token")
 		return
 	}
 	// Sever the live tunnel NOW so a compromised/rogue agent loses access
@@ -1480,11 +1913,6 @@ func (h *ClusterHandler) RevokeAgentToken(w http.ResponseWriter, r *http.Request
 	if h.agentDisconnector != nil {
 		disconnected = h.agentDisconnector.Disconnect(id.String())
 	}
-	recordAudit(r, h.queries, "agent.token.revoked", "cluster", id.String(), cluster.Name, map[string]any{
-		"cluster_id":      id.String(),
-		"trigger":         "admin_api",
-		"session_severed": disconnected,
-	})
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"cluster_id":      id.String(),
 		"revoked":         true,
@@ -1540,22 +1968,33 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tokenStr := base64.URLEncoding.EncodeToString(b)
-	token, err := h.queries.CreateClusterRegistrationToken(r.Context(), sqlc.CreateClusterRegistrationTokenParams{
+	params := sqlc.CreateClusterRegistrationTokenParams{
 		ClusterID: id,
 		TokenHash: auth.HashOpaqueToken(tokenStr),
 		ExpiresAt: time.Now().Add(h.registrationTokenTTL),
-	})
+	}
+	token, err := executeClusterMutation(r, h,
+		func(q ClusterMutationTx) (sqlc.ClusterRegistrationToken, error) {
+			return q.CreateClusterRegistrationToken(r.Context(), params)
+		},
+		func() (sqlc.ClusterRegistrationToken, error) {
+			return h.queries.CreateClusterRegistrationToken(r.Context(), params)
+		},
+		func(token sqlc.ClusterRegistrationToken) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.register_token", resourceType: "cluster", resourceID: id.String(), resourceName: cluster.Name,
+				status: http.StatusOK,
+				detail: map[string]any{
+					"token_id": token.ID.String(), "source": "manifest_download",
+					"expires_at": token.ExpiresAt.UTC().Format(time.RFC3339),
+				},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
 		return
 	}
 	token.Token = tokenStr
-
-	recordAudit(r, h.queries, "cluster.register_token", "cluster", id.String(), cluster.Name, map[string]any{
-		"token_id":   token.ID.String(),
-		"source":     "manifest_download",
-		"expires_at": token.ExpiresAt.UTC().Format(time.RFC3339),
-	})
 
 	manifest := h.renderAgentInstallManifest(cluster, tokenStr, agentServerURLFor(r.Context(), h.queries, r))
 
@@ -1631,7 +2070,7 @@ func (h *ClusterHandler) ListConditionRemediation(w http.ResponseWriter, r *http
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list remediation attempts")
 		return
 	}
-	// TODO(total): no COUNT query for remediation attempts; use page length.
+	// The endpoint returns the complete bounded remediation history.
 	RespondList(w, rows, NewPagination(len(rows), len(rows), 0, len(rows)))
 }
 
@@ -1744,30 +2183,10 @@ type registrationCAQuerier interface {
 	GetPlatformSetting(ctx context.Context, key string) (sqlc.PlatformSetting, error)
 }
 
-// GetKubeconfig handles GET /api/v1/clusters/{id}/kubeconfig/.
-// Generates a kubeconfig snippet for direct API access using stored CA + URL.
-func (h *ClusterHandler) GetKubeconfig(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
-		return
-	}
-	cluster, err := h.queries.GetClusterByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
-		return
-	}
-	if cluster.ApiServerUrl == "" {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster API server URL is not yet available")
-		return
-	}
-	userEmail := authenticatedEmail(r)
-	kubeconfig := buildDirectKubeconfig(cluster, userEmail)
-	RespondJSON(w, http.StatusOK, kubeconfig)
-}
-
 // GenerateKubeconfig handles POST /api/v1/clusters/{id}/generate-kubeconfig/.
-// Returns a kubeconfig that routes through the Astronomer proxy.
+// Returns a short-lived, read-only kubeconfig routed through Astronomer. This
+// audited proxy path complements the separately supported hardened direct
+// kubeconfig capability for clusters whose API endpoint is explicitly set.
 func (h *ClusterHandler) GenerateKubeconfig(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -1781,10 +2200,16 @@ func (h *ClusterHandler) GenerateKubeconfig(w http.ResponseWriter, r *http.Reque
 	}
 	serverURL := agentServerURLFor(r.Context(), h.queries, r)
 	userEmail := authenticatedEmail(r)
-	// Mint a short-lived, caller-scoped token so the downloaded file works
-	// with `kubectl` immediately instead of shipping a REPLACE_WITH_API_TOKEN
-	// placeholder the user has to hand-edit.
-	token := h.mintKubeconfigToken(r, cluster)
+	token, expiresAt, err := h.mintKubeconfigToken(r, cluster)
+	if err != nil {
+		slog.Default().ErrorContext(r.Context(), "mint proxy kubeconfig credential", "cluster_id", cluster.ID.String(), "error", err)
+		if errors.Is(err, audit.ErrOutboxUnavailable) {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable; the proxy credential was not issued")
+		} else {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "A short-lived proxy credential could not be issued")
+		}
+		return
+	}
 	kubeconfig := buildProxyKubeconfig(cluster, userEmail, serverURL, token)
 	yamlBytes, err := yaml.Marshal(kubeconfig)
 	if err != nil {
@@ -1792,7 +2217,10 @@ func (h *ClusterHandler) GenerateKubeconfig(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	w.Header().Set("Content-Type", "application/x-yaml")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="kubeconfig-%s.yaml"`, cluster.Name))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-proxy-kubeconfig.yaml"`, cluster.Name))
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Astronomer-Kubeconfig-Mode", "proxy")
+	w.Header().Set("X-Astronomer-Credential-Expires-At", expiresAt.Format(time.RFC3339))
 	_, _ = w.Write(yamlBytes)
 }
 
@@ -1900,43 +2328,6 @@ func (h *ClusterHandler) GetMetricsSummary(w http.ResponseWriter, r *http.Reques
 	RespondJSON(w, http.StatusOK, summary)
 }
 
-func buildDirectKubeconfig(cluster sqlc.Cluster, userEmail string) map[string]any {
-	if userEmail == "" {
-		userEmail = "user"
-	}
-	return map[string]any{
-		"apiVersion": "v1",
-		"kind":       "Config",
-		"clusters": []map[string]any{
-			{
-				"cluster": map[string]any{
-					"server":                     cluster.ApiServerUrl,
-					"certificate-authority-data": cluster.CaCertificate,
-				},
-				"name": cluster.Name,
-			},
-		},
-		"contexts": []map[string]any{
-			{
-				"context": map[string]any{
-					"cluster": cluster.Name,
-					"user":    userEmail,
-				},
-				"name": cluster.Name + "-context",
-			},
-		},
-		"current-context": cluster.Name + "-context",
-		"users": []map[string]any{
-			{
-				"name": userEmail,
-				"user": map[string]any{
-					"token": "REPLACE_WITH_TOKEN",
-				},
-			},
-		},
-	}
-}
-
 func buildProxyKubeconfig(cluster sqlc.Cluster, userEmail, serverURL, token string) map[string]any {
 	if userEmail == "" {
 		userEmail = "user"
@@ -1982,52 +2373,44 @@ func buildProxyKubeconfig(cluster sqlc.Cluster, userEmail, serverURL, token stri
 	}
 }
 
-// kubeconfigTokenMinter is the optional store surface used to mint the
-// short-lived API token embedded in a downloaded kubeconfig. Optional
-// interface (not folded into ClusterQuerier) so the existing ClusterQuerier
-// fakes keep compiling; production *sqlc.Queries satisfies it.
-type kubeconfigTokenMinter interface {
-	CreateAPIToken(ctx context.Context, arg sqlc.CreateAPITokenParams) (sqlc.ApiToken, error)
-}
+const kubeconfigTokenTTL = time.Hour
 
-// kubeconfigTokenTTL bounds the lifetime of the token minted for a downloaded
-// kubeconfig. Short by design: the file is for immediate `kubectl` use, and a
-// leaked download shouldn't grant long-lived access.
-const kubeconfigTokenTTL = 12 * time.Hour
-
-// mintKubeconfigToken creates a short-lived, caller-scoped API token so the
-// downloaded kubeconfig authenticates out of the box. Best-effort: returns ""
-// when there's no authenticated user, the store can't mint tokens, or the
-// insert fails — the caller then renders the hand-edit placeholder instead of
-// failing the download.
-func (h *ClusterHandler) mintKubeconfigToken(r *http.Request, cluster sqlc.Cluster) string {
-	if h == nil || h.queries == nil {
-		return ""
-	}
-	minter, ok := h.queries.(kubeconfigTokenMinter)
-	if !ok {
-		return ""
+// mintKubeconfigToken creates a short-lived, caller-owned, read-only API token.
+// The token row and sanitized audit intent share one commit decision, so an
+// auditable credential is the only credential that can become usable.
+func (h *ClusterHandler) mintKubeconfigToken(r *http.Request, cluster sqlc.Cluster) (string, time.Time, error) {
+	if h == nil || h.runTx == nil {
+		return "", time.Time{}, audit.ErrOutboxUnavailable
 	}
 	userID := currentUserUUID(r)
 	if !userID.Valid {
-		return ""
+		return "", time.Time{}, errors.New("authenticated user identity is unavailable")
 	}
 	plaintext, hash, prefix, err := generateAPIToken()
 	if err != nil {
-		return ""
+		return "", time.Time{}, fmt.Errorf("generate credential: %w", err)
 	}
-	if _, err := minter.CreateAPIToken(r.Context(), sqlc.CreateAPITokenParams{
-		UserID:       uuid.UUID(userID.Bytes),
-		Name:         fmt.Sprintf("kubeconfig-%s", cluster.Name),
-		TokenHash:    hash,
-		Prefix:       prefix,
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(kubeconfigTokenTTL), Valid: true},
-		Scopes:       json.RawMessage(`[]`),
-		AllowedCidrs: "",
-	}); err != nil {
-		return ""
+	expiresAt := time.Now().UTC().Add(kubeconfigTokenTTL)
+	err = h.runTx(r.Context(), func(q ClusterMutationTx) error {
+		if _, createErr := q.CreateAPIToken(r.Context(), sqlc.CreateAPITokenParams{
+			UserID:       uuid.UUID(userID.Bytes),
+			Name:         fmt.Sprintf("kubeconfig-%s", cluster.Name),
+			TokenHash:    hash,
+			Prefix:       prefix,
+			ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
+			Scopes:       json.RawMessage(`["read"]`),
+			AllowedCidrs: "",
+		}); createErr != nil {
+			return fmt.Errorf("persist credential: %w", createErr)
+		}
+		return recordAuditOutbox(r, q, "cluster.proxy_kubeconfig.issued", "cluster", cluster.ID.String(), cluster.Name, http.StatusOK, map[string]any{
+			"mode": "proxy", "access": "read_only", "expires_at": expiresAt.Format(time.RFC3339),
+		})
+	})
+	if err != nil {
+		return "", time.Time{}, err
 	}
-	return plaintext
+	return plaintext, expiresAt, nil
 }
 
 func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token, serverURL string) string {
@@ -2147,7 +2530,7 @@ func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	config, err := h.queries.UpsertClusterRegistryConfig(r.Context(), sqlc.UpsertClusterRegistryConfigParams{
+	params := sqlc.UpsertClusterRegistryConfigParams{
 		ClusterID:                 id,
 		PrivateRegistryUrl:        req.PrivateRegistryUrl,
 		RegistryUsername:          req.RegistryUsername,
@@ -2155,19 +2538,28 @@ func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Req
 		RegistryPasswordEncrypted: registryPasswordEncrypted,
 		Insecure:                  req.Insecure,
 		CaBundle:                  req.CaBundle,
-	})
+	}
+	config, err := executeClusterMutation(r, h,
+		func(q ClusterMutationTx) (sqlc.ClusterRegistryConfig, error) {
+			return q.UpsertClusterRegistryConfig(r.Context(), params)
+		},
+		func() (sqlc.ClusterRegistryConfig, error) {
+			return h.queries.UpsertClusterRegistryConfig(r.Context(), params)
+		},
+		func(config sqlc.ClusterRegistryConfig) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.registry.updated", resourceType: "cluster", resourceID: id.String(),
+				status: http.StatusOK,
+				detail: map[string]any{
+					"registry_id": config.ID.String(), "private_registry_url": req.PrivateRegistryUrl,
+					"registry_username": req.RegistryUsername, "insecure": req.Insecure,
+				},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update registry config")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update registry config")
 		return
 	}
-
-	// Don't surface the password / CA in the audit detail; recordAudit will
-	// redact the well-known keys but we keep the explicit map narrow anyway.
-	recordAudit(r, h.queries, "cluster.registry.updated", "cluster", id.String(), "", map[string]any{
-		"private_registry_url": req.PrivateRegistryUrl,
-		"registry_username":    req.RegistryUsername,
-		"insecure":             req.Insecure,
-	})
 
 	// Redact the secret before echoing back — the raw sqlc row carries both
 	// registry_password and registry_password_encrypted, which must never be
@@ -2183,11 +2575,22 @@ func (h *ClusterHandler) DeleteRegistryConfig(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := h.queries.DeleteClusterRegistryConfig(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete registry config")
+	_, err = executeClusterMutation(r, h,
+		func(q ClusterMutationTx) (struct{}, error) {
+			return struct{}{}, q.DeleteClusterRegistryConfig(r.Context(), id)
+		},
+		func() (struct{}, error) {
+			return struct{}{}, h.queries.DeleteClusterRegistryConfig(r.Context(), id)
+		},
+		func(struct{}) clusterAuditEvent {
+			return clusterAuditEvent{
+				action: "cluster.registry.deleted", resourceType: "cluster", resourceID: id.String(),
+				status: http.StatusNoContent,
+			}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete registry config")
 		return
 	}
-
-	recordAudit(r, h.queries, "cluster.registry.deleted", "cluster", id.String(), "", nil)
 	w.WriteHeader(http.StatusNoContent)
 }

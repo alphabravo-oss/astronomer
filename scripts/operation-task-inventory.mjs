@@ -142,7 +142,7 @@ function resolveTaskExpr(constants, expr) {
   if (literal) return { value: literal[1], resolved: true, expr: normalized };
   const constant = constants.get(normalized) ?? constants.get(normalized.replace(/^tasks\./, ''));
   if (constant) return { value: constant.value, resolved: true, expr: normalized };
-  if (/^(e|row|task)\./.test(normalized) || normalized.endsWith('.Type()')) {
+  if (/^(e|row|spec|task)\./.test(normalized) || normalized.endsWith('.Type()')) {
     return { value: normalized, resolved: false, dynamic: true, expr: normalized };
   }
   return { value: normalized, resolved: false, expr: normalized };
@@ -158,16 +158,18 @@ function currentFunctionForLine(lines, index) {
 
 function registeredHandlers(workerFiles, constants) {
   return lineRows(workerFiles, (line, file, index, lines) => {
-    const match = /mux\.HandleFunc\(([^,]+),\s*instrumentTask\([^,]+,\s*(?:tasks\.)?([A-Za-z0-9_]+)\)\)/.exec(line);
-    if (!match) return null;
+    const direct = /mux\.HandleFunc\(([^,]+),\s*instrumentTask\([^,]+,\s*(?:tasks\.)?([A-Za-z0-9_]+)\)\)/.exec(line);
+    const descriptor = /descriptor\((TaskOwnerWorker|TaskOwnerTunnel),\s*([^,]+),\s*(?:tasks\.)?([A-Za-z0-9_]+)/.exec(line);
+    if (!direct && !descriptor) return null;
     const fn = currentFunctionForLine(lines, index);
-    const type = resolveTaskExpr(constants, match[1]);
+    const type = resolveTaskExpr(constants, direct ? direct[1] : descriptor[2]);
+    const owner = descriptor?.[1];
     return {
       taskType: type.value,
       resolved: type.resolved,
       expr: type.expr,
-      handler: match[2],
-      queue: fn === 'RegisterTunnelHandlers' ? 'tunnel' : 'worker',
+      handler: direct ? direct[2] : descriptor[3],
+      queue: owner ? (owner === 'TaskOwnerTunnel' ? 'tunnel' : 'worker') : (fn === 'RegisterTunnelHandlers' ? 'tunnel' : 'worker'),
       file: rel(file),
       line: index + 1,
     };
@@ -176,6 +178,7 @@ function registeredHandlers(workerFiles, constants) {
 
 function scheduledTasks(constants) {
   const schedulerFile = path.join(repoRoot, 'internal/worker/scheduler.go');
+	const registryFile = path.join(repoRoot, 'internal/worker/task_registry.go');
   const rows = [];
   const lines = read(schedulerFile).split(/\r?\n/);
   let pendingTask = null;
@@ -198,6 +201,7 @@ function scheduledTasks(constants) {
 
     const newTask = /task\s*:=\s*asynq\.NewTask\(([^,]+),/.exec(line);
     if (newTask) {
+		if (normalizeExpr(newTask[1]) === 'spec.TaskType') return;
       pendingTask = resolveTaskExpr(constants, newTask[1]);
       return;
     }
@@ -216,6 +220,22 @@ function scheduledTasks(constants) {
       pendingTask = null;
     }
   });
+	const registryLines = read(registryFile).split(/\r?\n/);
+	registryLines.forEach((line, index) => {
+		const match = /scheduled\((TaskOwnerWorker|TaskOwnerTunnel),\s*([^,]+),\s*"([^"]+)",\s*"([^"]+)"\)/.exec(line);
+		if (!match) return;
+		const type = resolveTaskExpr(constants, match[2]);
+		rows.push({
+			taskType: type.value,
+			resolved: type.resolved,
+			expr: type.expr,
+			cron: match[3],
+			queue: match[1] === 'TaskOwnerTunnel' ? 'tunnel' : 'default',
+			description: match[4],
+			file: rel(registryFile),
+			line: index + 1,
+		});
+	});
   return rows.sort((a, b) => a.taskType.localeCompare(b.taskType) || a.cron.localeCompare(b.cron));
 }
 

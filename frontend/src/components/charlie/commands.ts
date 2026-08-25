@@ -19,12 +19,13 @@ export function commandSuggestions(
   if (!input.trimStart().startsWith("/")) return [];
   const query = commandName(input);
   return commands
-    .filter((command) =>
-      !query ||
-      command.name.startsWith(query) ||
-      command.aliases?.some((alias) => alias.startsWith(query)) ||
-      command.label.toLowerCase().includes(query) ||
-      command.description.toLowerCase().includes(query),
+    .filter(
+      (command) =>
+        !query ||
+        command.name.startsWith(query) ||
+        command.aliases?.some((alias) => alias.startsWith(query)) ||
+        command.label.toLowerCase().includes(query) ||
+        command.description.toLowerCase().includes(query),
     )
     .slice(0, 8);
 }
@@ -45,7 +46,8 @@ export function parseCharlieCommand(
   );
   if (!descriptor) return undefined;
   const firstWhitespace = visible.search(/\s/);
-  const argument = firstWhitespace < 0 ? "" : visible.slice(firstWhitespace).trim();
+  const argument =
+    firstWhitespace < 0 ? "" : visible.slice(firstWhitespace).trim();
   const args: Record<string, string> = {};
   if (descriptor.argument) {
     if (descriptor.argument.required && !argument) return undefined;
@@ -55,14 +57,19 @@ export function parseCharlieCommand(
         const code = character.codePointAt(0) ?? 0;
         return code < 32 && code !== 9 && code !== 10 && code !== 13;
       })
-    ) return undefined;
+    )
+      return undefined;
     if (argument) args[descriptor.argument.name] = argument;
   } else if (argument) {
     return undefined;
   }
   return {
     descriptor,
-    request: { id: descriptor.id, version: descriptor.version, arguments: args },
+    request: {
+      id: descriptor.id,
+      version: descriptor.version,
+      arguments: args,
+    },
   };
 }
 

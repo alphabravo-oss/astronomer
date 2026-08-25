@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -16,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // Test-naming convention: every TestHandler_* MUST be prefixed
@@ -276,188 +274,149 @@ func TestImageVulnHandler_PerReportCVEs_CrossTenantBlocked(t *testing.T) {
 	}
 }
 
-// recordingK8s captures every call so the rescan tests can assert the
-// LIST + per-VR DELETE flow the rewritten nudgeTrivyOperator now uses.
-// `responder` is the per-call routing hook: tests register it to return
-// different payloads depending on method+path. The previous one-shot
-// `resp` field stays as a fallback for tests that only need a uniform
-// response.
-type recordingK8s struct {
-	calls []struct {
-		Method, Path string
-		Body         []byte
-	}
-	resp      *protocol.K8sResponsePayload
-	err       error
-	responder func(method, path string) (*protocol.K8sResponsePayload, error)
+type imageVulnMutationFake struct {
+	cluster    sqlc.Cluster
+	operations []sqlc.WorkloadOperation
+	tasks      []sqlc.UpsertTaskOutboxParams
+	audits     []sqlc.UpsertAuditOutboxParams
+	taskErr    error
+	auditErr   error
 }
 
-func (r *recordingK8s) Do(_ context.Context, _ string, method, path string, body []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
-	r.calls = append(r.calls, struct {
-		Method, Path string
-		Body         []byte
-	}{Method: method, Path: path, Body: body})
-	if r.responder != nil {
-		return r.responder(method, path)
+func (f *imageVulnMutationFake) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
+	if f.cluster.ID != id {
+		return sqlc.Cluster{}, errors.New("cluster missing")
 	}
-	return r.resp, r.err
+	return f.cluster, nil
 }
 
-// vrListBody encodes a VulnerabilityReportList with the given items
-// into the base64-wrapped shape the tunnel proxy delivers. Keeps the
-// test free of inline base64.
-func vrListBody(items []struct{ Namespace, Name string }) string {
-	type meta struct {
-		Name      string `json:"name"`
-		Namespace string `json:"namespace"`
-	}
-	type item struct {
-		Metadata meta `json:"metadata"`
-	}
-	out := struct {
-		Items []item `json:"items"`
-	}{}
-	for _, it := range items {
-		out.Items = append(out.Items, item{Metadata: meta{Name: it.Name, Namespace: it.Namespace}})
-	}
-	raw, _ := json.Marshal(out)
-	return base64.StdEncoding.EncodeToString(raw)
+func (f *imageVulnMutationFake) CreateWorkloadOperation(_ context.Context, arg sqlc.CreateWorkloadOperationParams) (sqlc.WorkloadOperation, error) {
+	row := sqlc.WorkloadOperation{ID: uuid.New(), TargetType: arg.TargetType, TargetKey: arg.TargetKey,
+		OperationType: arg.OperationType, Payload: arg.Payload, Status: arg.Status, CreatedByID: arg.CreatedByID,
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	f.operations = append(f.operations, row)
+	return row, nil
 }
 
-// TestImageVulnHandler_RescanNudgesOperator exercises the rewritten
-// nudge: a LIST of VulnerabilityReports across the cluster followed
-// by a DELETE per row. The earlier PATCH-on-Service approach was a
-// no-op pretending to be a rescan; this asserts the real delete flow.
-func TestImageVulnHandler_RescanNudgesOperator(t *testing.T) {
-	h := NewImageVulnHandler(newStubVulnQuerier())
-	vrs := []struct{ Namespace, Name string }{
-		{"default", "vr-nginx"},
-		{"kube-system", "vr-coredns"},
-	}
-	rk := &recordingK8s{
-		responder: func(method, path string) (*protocol.K8sResponsePayload, error) {
-			if method == http.MethodGet && strings.HasSuffix(path, "/vulnerabilityreports") {
-				return &protocol.K8sResponsePayload{StatusCode: 200, Body: vrListBody(vrs)}, nil
-			}
-			// DELETE on each /namespaces/<ns>/vulnerabilityreports/<name>.
-			return &protocol.K8sResponsePayload{StatusCode: 200}, nil
-		},
-	}
-	h.SetK8sRequester(rk)
+func (f *imageVulnMutationFake) CreateWorkloadOperationIdempotent(ctx context.Context, arg sqlc.CreateWorkloadOperationIdempotentParams) (sqlc.WorkloadOperation, error) {
+	return f.CreateWorkloadOperation(ctx, sqlc.CreateWorkloadOperationParams{
+		TargetType: arg.TargetType, TargetKey: arg.TargetKey, OperationType: arg.OperationType,
+		Payload: arg.Payload, Status: arg.Status, CreatedByID: arg.CreatedByID,
+	})
+}
 
+func (f *imageVulnMutationFake) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	if f.taskErr != nil {
+		return sqlc.TaskOutbox{}, f.taskErr
+	}
+	f.tasks = append(f.tasks, arg)
+	return sqlc.TaskOutbox{ID: uuid.New(), TaskType: arg.TaskType, Payload: arg.Payload}, nil
+}
+
+func (f *imageVulnMutationFake) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	if f.auditErr != nil {
+		return sqlc.AuditOutbox{}, f.auditErr
+	}
+	f.audits = append(f.audits, arg)
+	return sqlc.AuditOutbox{ID: uuid.New()}, nil
+}
+
+func imageVulnTestRunTx(fake *imageVulnMutationFake) imageVulnRunTxFunc {
+	return func(_ context.Context, fn func(ImageVulnMutationTx) error) error {
+		operations := append([]sqlc.WorkloadOperation(nil), fake.operations...)
+		taskRows := append([]sqlc.UpsertTaskOutboxParams(nil), fake.tasks...)
+		auditRows := append([]sqlc.UpsertAuditOutboxParams(nil), fake.audits...)
+		if err := fn(fake); err != nil {
+			fake.operations, fake.tasks, fake.audits = operations, taskRows, auditRows
+			return err
+		}
+		return nil
+	}
+}
+
+func TestImageVulnHandler_RescanCommitsOperationTaskAndAudit(t *testing.T) {
 	clusterID := uuid.New()
+	fake := &imageVulnMutationFake{cluster: sqlc.Cluster{ID: clusterID, Name: "prod"}}
+	h := NewImageVulnHandler(newStubVulnQuerier())
+	h.SetRunTx(imageVulnTestRunTx(fake))
 	req := requestWith(http.MethodPost, "/", map[string]string{"cluster_id": clusterID.String()})
 	rec := httptest.NewRecorder()
 	h.ClusterRescan(rec, req)
-
-	if rec.Code != http.StatusOK {
+	if rec.Code != http.StatusAccepted {
 		t.Fatalf("got %d, body=%s", rec.Code, rec.Body.String())
 	}
-	body := decodeJSON(t, rec)
-	data := body["data"].(map[string]any)
-	if data["triggered"].(bool) != true {
-		t.Fatalf("expected triggered=true, body=%s", rec.Body.String())
+	if len(fake.operations) != 1 || len(fake.tasks) != 1 || len(fake.audits) != 1 {
+		t.Fatalf("operation/task/audit=%d/%d/%d", len(fake.operations), len(fake.tasks), len(fake.audits))
 	}
-	// 1 LIST + N DELETEs.
-	if len(rk.calls) != 1+len(vrs) {
-		t.Fatalf("expected %d k8s calls (1 list + %d deletes), got %d", 1+len(vrs), len(vrs), len(rk.calls))
-	}
-	if rk.calls[0].Method != http.MethodGet {
-		t.Fatalf("first call must be GET (list), got %s", rk.calls[0].Method)
-	}
-	if !strings.HasSuffix(rk.calls[0].Path, "/vulnerabilityreports") {
-		t.Fatalf("list path = %q, want suffix /vulnerabilityreports", rk.calls[0].Path)
-	}
-	// Each delete path must include the VR name + namespace from the list.
-	seen := map[string]bool{}
-	for _, c := range rk.calls[1:] {
-		if c.Method != http.MethodDelete {
-			t.Fatalf("non-list call should be DELETE, got %s on %s", c.Method, c.Path)
-		}
-		for _, vr := range vrs {
-			needle := "/namespaces/" + vr.Namespace + "/vulnerabilityreports/" + vr.Name
-			if strings.HasSuffix(c.Path, needle) {
-				seen[vr.Name] = true
-			}
-		}
-	}
-	for _, vr := range vrs {
-		if !seen[vr.Name] {
-			t.Fatalf("DELETE for VR %s/%s was not issued; calls=%+v", vr.Namespace, vr.Name, rk.calls)
-		}
-	}
-}
-
-// TestImageVulnHandler_RescanSoftSucceedsOnEmptyList exercises the
-// "no VRs yet" branch: trivy hasn't produced any reports (cold-boot
-// cluster) so the LIST returns an empty items array. The handler
-// must still report triggered=true and skip the DELETE loop.
-func TestImageVulnHandler_RescanSoftSucceedsOnEmptyList(t *testing.T) {
-	h := NewImageVulnHandler(newStubVulnQuerier())
-	rk := &recordingK8s{
-		responder: func(method, path string) (*protocol.K8sResponsePayload, error) {
-			return &protocol.K8sResponsePayload{StatusCode: 200, Body: vrListBody(nil)}, nil
-		},
-	}
-	h.SetK8sRequester(rk)
-
-	clusterID := uuid.New()
-	req := requestWith(http.MethodPost, "/", map[string]string{"cluster_id": clusterID.String()})
-	rec := httptest.NewRecorder()
-	h.ClusterRescan(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("got %d, body=%s", rec.Code, rec.Body.String())
+	if fake.tasks[0].TaskType != "vulnerability:rescan" || strings.Contains(string(fake.tasks[0].Payload), clusterID.String()) {
+		t.Fatalf("task must be identifier-only: type=%q payload=%s", fake.tasks[0].TaskType, fake.tasks[0].Payload)
 	}
 	data := decodeJSON(t, rec)["data"].(map[string]any)
-	if data["triggered"].(bool) != true {
-		t.Fatalf("expected triggered=true on empty list, body=%s", rec.Body.String())
+	if data["operation_id"] != fake.operations[0].ID.String() || data["status"] != "pending" {
+		t.Fatalf("unexpected receipt: %v", data)
 	}
-	if len(rk.calls) != 1 {
-		t.Fatalf("expected 1 k8s call (LIST only, no deletes), got %d", len(rk.calls))
-	}
-}
-
-func TestRescan_NilSafeWhenOperatorMissing(t *testing.T) {
-	h := NewImageVulnHandler(newStubVulnQuerier())
-	// k8s requester left nil intentionally.
-	clusterID := uuid.New()
-	req := requestWith(http.MethodPost, "/", map[string]string{"cluster_id": clusterID.String()})
-	rec := httptest.NewRecorder()
-	h.ClusterRescan(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected nil-safe 200, got %d", rec.Code)
-	}
-	body := decodeJSON(t, rec)
-	data := body["data"].(map[string]any)
-	if data["triggered"].(bool) != false {
-		t.Fatalf("expected triggered=false when operator unwired")
-	}
-	if data["reason"].(string) != "operator_not_wired" {
-		t.Fatalf("expected reason=operator_not_wired, got %v", data["reason"])
+	wantLocation := "/api/v1/workloads/operations/" + fake.operations[0].ID.String() + "/"
+	if rec.Header().Get("Location") != wantLocation || rec.Header().Get("Retry-After") != "2" {
+		t.Fatalf("Location=%q Retry-After=%q", rec.Header().Get("Location"), rec.Header().Get("Retry-After"))
 	}
 }
 
-func TestImageVulnHandler_Rescan_ServiceMissingReportsCleanly(t *testing.T) {
-	h := NewImageVulnHandler(newStubVulnQuerier())
-	rk := &recordingK8s{resp: &protocol.K8sResponsePayload{
-		StatusCode: 404,
-		Body:       base64.StdEncoding.EncodeToString([]byte(`{"kind":"Status","status":"Failure"}`)),
-	}}
-	h.SetK8sRequester(rk)
+func TestImageVulnHandler_RescanAuditFailureRollsBack(t *testing.T) {
 	clusterID := uuid.New()
+	fake := &imageVulnMutationFake{cluster: sqlc.Cluster{ID: clusterID, Name: "prod"}, auditErr: errors.New("audit unavailable")}
+	h := NewImageVulnHandler(newStubVulnQuerier())
+	h.SetRunTx(imageVulnTestRunTx(fake))
 	req := requestWith(http.MethodPost, "/", map[string]string{"cluster_id": clusterID.String()})
 	rec := httptest.NewRecorder()
 	h.ClusterRescan(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("got %d, body=%s", rec.Code, rec.Body.String())
 	}
-	body := decodeJSON(t, rec)
-	data := body["data"].(map[string]any)
-	if data["triggered"].(bool) != false {
-		t.Fatalf("expected triggered=false on 404")
+	if len(fake.operations) != 0 || len(fake.tasks) != 0 || len(fake.audits) != 0 {
+		t.Fatalf("rolled-back operation/task/audit=%d/%d/%d", len(fake.operations), len(fake.tasks), len(fake.audits))
+	}
+}
+
+func TestImageVulnHandler_RescanTaskFailureRollsBackBeforeAudit(t *testing.T) {
+	clusterID := uuid.New()
+	fake := &imageVulnMutationFake{cluster: sqlc.Cluster{ID: clusterID, Name: "prod"}, taskErr: errors.New("task unavailable")}
+	h := NewImageVulnHandler(newStubVulnQuerier())
+	h.SetRunTx(imageVulnTestRunTx(fake))
+	req := requestWith(http.MethodPost, "/", map[string]string{"cluster_id": clusterID.String()})
+	rec := httptest.NewRecorder()
+	h.ClusterRescan(rec, req)
+	if rec.Code != http.StatusInternalServerError || len(fake.operations) != 0 || len(fake.tasks) != 0 || len(fake.audits) != 0 {
+		t.Fatalf("status=%d operation/task/audit=%d/%d/%d body=%s", rec.Code, len(fake.operations), len(fake.tasks), len(fake.audits), rec.Body.String())
+	}
+}
+
+func TestImageVulnOperationReceiptResolvesThroughGenericOperationAPI(t *testing.T) {
+	clusterID := uuid.New()
+	payload, _ := json.Marshal(map[string]string{"clusterId": clusterID.String()})
+	resolved, err := workloadOperationClusterID(sqlc.WorkloadOperation{Payload: payload})
+	if err != nil || resolved != clusterID {
+		t.Fatalf("resolved=%s err=%v payload=%s", resolved, err, payload)
+	}
+}
+
+func TestImageVulnHandler_RescanFailsClosedWithoutTransaction(t *testing.T) {
+	h := NewImageVulnHandler(newStubVulnQuerier())
+	req := requestWith(http.MethodPost, "/", map[string]string{"cluster_id": uuid.NewString()})
+	rec := httptest.NewRecorder()
+	h.ClusterRescan(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("got %d, body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestImageVulnHandler_RescanRejectsInvalidIdempotencyKey(t *testing.T) {
+	h := NewImageVulnHandler(newStubVulnQuerier())
+	req := requestWith(http.MethodPost, "/", map[string]string{"cluster_id": uuid.NewString()})
+	req.Header.Set("Idempotency-Key", strings.Repeat("x", 129))
+	rec := httptest.NewRecorder()
+	h.ClusterRescan(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("got %d, body=%s", rec.Code, rec.Body.String())
 	}
 }
 
