@@ -3,11 +3,13 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/google/uuid"
 )
 
 // RespondJSON writes a JSON response wrapped in {"data": payload}.
@@ -26,28 +28,53 @@ func RespondJSONUnwrapped(w http.ResponseWriter, status int, payload any) {
 
 // RespondError writes a JSON error response matching DRF format.
 func RespondError(w http.ResponseWriter, status int, code, message string) {
-	resp := map[string]any{
-		"error": map[string]string{
-			"code":    code,
-			"message": message,
-		},
+	requestID := ""
+	if status >= http.StatusInternalServerError {
+		requestID = uuid.NewString()
+		slog.Error("request failed", "request_id", requestID, "status", status, "code", code, "internal_detail", message)
+		message = publicServerErrorMessage(status)
 	}
+	errObj := map[string]string{"code": code, "message": message}
+	if requestID != "" {
+		errObj["request_id"] = requestID
+	}
+	resp := map[string]any{"error": errObj}
 	writeJSON(w, status, resp)
 }
 
 // RespondRequestError writes a JSON error response that includes the request
 // correlation identifier when RequestID middleware has populated one.
 func RespondRequestError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	requestID := ""
+	if r != nil {
+		requestID = middleware.GetRequestID(r.Context())
+	}
+	if status >= http.StatusInternalServerError {
+		if requestID == "" {
+			requestID = uuid.NewString()
+		}
+		slog.Error("request failed", "request_id", requestID, "status", status, "code", code, "internal_detail", message)
+		message = publicServerErrorMessage(status)
+	}
 	errObj := map[string]string{
 		"code":    code,
 		"message": message,
 	}
-	if r != nil {
-		if requestID := middleware.GetRequestID(r.Context()); requestID != "" {
-			errObj["request_id"] = requestID
-		}
+	if requestID != "" {
+		errObj["request_id"] = requestID
 	}
 	writeJSON(w, status, map[string]any{"error": errObj})
+}
+
+func publicServerErrorMessage(status int) string {
+	switch status {
+	case http.StatusBadGateway:
+		return "An upstream service could not complete the request"
+	case http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return "The service is temporarily unavailable"
+	default:
+		return "The request could not be completed"
+	}
 }
 
 // RespondAcceptedOperation writes a durable-operation receipt and the standard

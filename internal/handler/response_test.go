@@ -113,6 +113,28 @@ func TestRespondRequestErrorIncludesRequestID(t *testing.T) {
 	}
 }
 
+func TestRespondRequestErrorRedactsInternalDetails(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "password=secret host=internal-db:5432")
+
+	var body struct {
+		Error map[string]string `json:"error"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Error["message"] != "The request could not be completed" {
+		t.Fatalf("public message = %q", body.Error["message"])
+	}
+	if body.Error["request_id"] == "" {
+		t.Fatal("internal error did not include an opaque request_id")
+	}
+	if body.Error["message"] == "password=secret host=internal-db:5432" {
+		t.Fatal("internal error detail leaked into the response")
+	}
+}
+
 func TestRespondPaginated(t *testing.T) {
 	t.Run("middle page has next and previous", func(t *testing.T) {
 		w := httptest.NewRecorder()
