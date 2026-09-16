@@ -366,8 +366,8 @@ func fedRAMPModerate() Baseline {
 			PlatformSettings: map[string]string{
 				// AC-7 — lock after 3 failed logins.
 				"auth.lockout_threshold": "3",
-				// AC-11 — session lock at 20 minutes (FedRAMP Moderate).
-				"session.timeout_minutes": "20",
+				// AC-11 — session lock at 15 minutes (FedRAMP Moderate).
+				"session.timeout_minutes": "15",
 				"banner.global_text":      `"FedRAMP-Moderate — US government workload"`,
 				"banner.global_color":     `"info"`,
 			},
