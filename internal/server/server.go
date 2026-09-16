@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -348,6 +349,24 @@ type Server struct {
 	// product operation.
 	charlieRuntime *charlieLifecycleGroup
 	charlieBridge  *charlie.ManagedBridge
+	// shutdownHooks drain durable buffers and telemetry before the resource
+	// pools they depend on are closed. Hooks are registered during startup and
+	// run in registration order after ingress has stopped.
+	shutdownHooks []shutdownHook
+}
+
+type shutdownHook struct {
+	name string
+	fn   func(context.Context) error
+}
+
+// AddShutdownHook registers a bounded drain that must complete before Redis
+// and Postgres are closed. It is intended for startup-time wiring only.
+func (s *Server) AddShutdownHook(name string, fn func(context.Context) error) {
+	if s == nil || fn == nil {
+		return
+	}
+	s.shutdownHooks = append(s.shutdownHooks, shutdownHook{name: name, fn: fn})
 }
 
 // DB returns the primary application database wrapper when this server was
@@ -455,15 +474,21 @@ func (s *Server) Start(addr string) error {
 	if err != nil {
 		return err
 	}
+	errCh := make(chan error, 2)
 	if s.tunnelWorker != nil {
 		go func() {
 			if err := s.tunnelWorker.Start(); err != nil {
-				s.logger.Error("tunnel-queue asynq server exited", "error", err)
+				errCh <- fmt.Errorf("tunnel-queue worker: %w", err)
 			}
 		}()
 	}
 	s.logger.Info("server listening", "addr", addr)
-	return s.httpServer.Serve(ln)
+	go func() { errCh <- s.httpServer.Serve(ln) }()
+	err = <-errCh
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
 }
 
 // Shutdown gracefully shuts down the server with a deadline.
@@ -480,8 +505,10 @@ func (s *Server) Start(addr string) error {
 //     New connections are rejected immediately; long-running requests
 //     get the deadline.
 //  3. cancel the reconcile context (in-process workers, publishers).
-//  4. close DB pool + asynq client.
+//  4. drain registered buffers and telemetry.
+//  5. close DB pool + asynq client.
 func (s *Server) Shutdown(ctx context.Context) error {
+	var shutdownErrs []error
 	if s.hub != nil {
 		drained := s.hub.Drain()
 		s.logger.Info("tunnel hub drained", "agents_disconnected", drained)
@@ -497,9 +524,17 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.charlieBridge != nil {
 		s.charlieBridge.Close()
 	}
-	err := s.httpServer.Shutdown(ctx)
+	if err := s.httpServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		shutdownErrs = append(shutdownErrs, fmt.Errorf("http server: %w", err))
+	}
 	if s.cancel != nil {
 		s.cancel()
+	}
+	for _, hook := range s.shutdownHooks {
+		if err := hook.fn(ctx); err != nil {
+			s.logger.Warn("shutdown drain failed", "component", hook.name, "error", err)
+			shutdownErrs = append(shutdownErrs, fmt.Errorf("%s: %w", hook.name, err))
+		}
 	}
 	if s.db != nil {
 		s.db.Close()
@@ -507,7 +542,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.queue != nil {
 		_ = s.queue.Close()
 	}
-	return err
+	return errors.Join(shutdownErrs...)
 }
 
 // ServeHTTP implements http.Handler, useful for testing.

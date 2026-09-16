@@ -158,6 +158,17 @@ func main() {
 		auditWriter = audit.NewWriter(queries, logger)
 		auditWriter.Start(context.Background())
 		audit.SetWriter(auditWriter)
+		srv.AddShutdownHook("audit writer", func(ctx context.Context) error {
+			defer audit.SetWriter(nil)
+			err := auditWriter.Shutdown(ctx)
+			if err != nil {
+				observability.WithEvent(logger, "server_audit_shutdown_error").Warn("audit writer shutdown error",
+					"dropped_total", auditWriter.DropCount(),
+					"error", err,
+				)
+			}
+			return err
+		})
 		// Rancher-style: if no users exist, create the admin with either
 		// $ASTRONOMER_BOOTSTRAP_PASSWORD or a random password (logged once)
 		// and flag must_change_password so the dashboard forces a rotation
@@ -177,25 +188,42 @@ func main() {
 	// Graceful shutdown on SIGINT / SIGTERM.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	srv.AddShutdownHook("otel pipeline", func(ctx context.Context) error {
+		err := otelShutdown(ctx)
+		if err != nil {
+			observability.WithEvent(logger, "server_otel_shutdown_error").Warn("otel shutdown error", "error", err)
+		}
+		return err
+	})
 
 	if srv.DB() != nil {
 		db.StartMetricsReporter(ctx, srv.DB().Pool(), logger)
 	}
 
-	go func() {
-		if err := srv.Start(":8000"); err != nil {
-			observability.WithEvent(logger, "server_runtime_error").Error("server error", "error", err)
-			os.Exit(1)
+	type runtimeResult struct {
+		component string
+		err       error
+	}
+	runtimeResults := make(chan runtimeResult, 2)
+	go func() { runtimeResults <- runtimeResult{component: "server", err: srv.Start(":8000")} }()
+	if cfg.ServerMetricsAddr != "" {
+		go func() {
+			runtimeResults <- runtimeResult{component: "metrics listener", err: server.StartMetricsServer(ctx, cfg.ServerMetricsAddr, logger)}
+		}()
+	}
+	runtimeFailed := false
+	select {
+	case <-ctx.Done():
+	case result := <-runtimeResults:
+		if ctx.Err() == nil {
+			runtimeFailed = true
+			if result.err == nil {
+				result.err = fmt.Errorf("%s exited unexpectedly", result.component)
+			}
+			observability.WithEvent(logger, "server_runtime_error").Error("runtime component exited", "component", result.component, "error", result.err)
 		}
-	}()
-	go func() {
-		if err := server.StartMetricsServer(ctx, cfg.ServerMetricsAddr, logger); err != nil {
-			observability.WithEvent(logger, "server_metrics_listener_error").Error("server metrics listener error", "error", err)
-			os.Exit(1)
-		}
-	}()
-
-	<-ctx.Done()
+		stop()
+	}
 	observability.WithEvent(logger, "server_stopping").Info("shutting down server")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -203,31 +231,11 @@ func main() {
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		observability.WithEvent(logger, "server_shutdown_error").Error("shutdown error", "error", err)
-		os.Exit(1)
-	}
-
-	// Drain the audit writer's pending events before we let the DB
-	// pool close. The writer's Shutdown blocks until either the final
-	// batch flushes or the shared 10s shutdownCtx deadline fires —
-	// anything still buffered after the deadline is the same kind of
-	// loss as a hard crash and is counted in the dropped metric.
-	if auditWriter != nil {
-		if err := auditWriter.Shutdown(shutdownCtx); err != nil {
-			observability.WithEvent(logger, "server_audit_shutdown_error").Warn("audit writer shutdown error",
-				"dropped_total", auditWriter.DropCount(),
-				"error", err,
-			)
-		}
-		audit.SetWriter(nil)
-	}
-
-	// Flush + close the OTel pipeline before exit so the last batch of
-	// spans isn't dropped. Bounded by the same 10s window as the HTTP
-	// shutdown — anything still buffered after that loses to graceful
-	// exit pressure.
-	if err := otelShutdown(shutdownCtx); err != nil {
-		observability.WithEvent(logger, "server_otel_shutdown_error").Warn("otel shutdown error", "error", err)
+		runtimeFailed = true
 	}
 
 	observability.WithEvent(logger, "server_stopped").Info("server stopped")
+	if runtimeFailed {
+		os.Exit(1)
+	}
 }
