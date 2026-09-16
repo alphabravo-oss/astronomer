@@ -83,7 +83,7 @@ export function indexMounts(
 export function useEnabledExtensions() {
   const flags = useQuery({
     queryKey: queryKeys.featureFlags,
-    queryFn: getFeatureFlags,
+    queryFn: ({ signal }) => getFeatureFlags(signal),
     staleTime: 30_000,
   });
   const enabled = flags.data?.["feature.extensions"] === true;
