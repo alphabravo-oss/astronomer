@@ -158,7 +158,7 @@ func TestValidateToken_NoCheckerLeavesValidationUntouched(t *testing.T) {
 	}
 }
 
-func TestValidateTokenRevocationDBErrorFailsClosedOnlyWhenCoordinatorUnhealthy(t *testing.T) {
+func TestValidateTokenRevocationDBErrorAlwaysFailsClosed(t *testing.T) {
 	for _, failure := range []string{"jti", "user_cutoff"} {
 		t.Run(failure, func(t *testing.T) {
 			mgr := MustNewJWTManager("test-secret", 60)
@@ -172,13 +172,13 @@ func TestValidateTokenRevocationDBErrorFailsClosedOnlyWhenCoordinatorUnhealthy(t
 			coordinator := &fakeCacheCoordinator{healthy: true}
 			mgr.SetCacheInvalidationCoordinator(coordinator)
 			token, _ := mgr.GenerateAccessToken(uuid.New())
-			if _, err := mgr.ValidateToken(token); err != nil {
-				t.Fatalf("healthy coordinator changed existing fail-open behavior: %v", err)
+			if _, err := mgr.ValidateToken(token); !errors.Is(err, ErrRevocationUnavailable) {
+				t.Fatalf("healthy coordinator revocation error = %v, want dependency failure", err)
 			}
 
 			coordinator.healthy = false
-			if _, err := mgr.ValidateToken(token); err == nil {
-				t.Fatal("unhealthy coordinator plus DB error must reject")
+			if _, err := mgr.ValidateToken(token); !errors.Is(err, ErrRevocationUnavailable) {
+				t.Fatalf("unhealthy coordinator revocation error = %v, want dependency failure", err)
 			}
 		})
 	}

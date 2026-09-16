@@ -76,6 +76,11 @@ type RevocationChecker interface {
 	UserTokensInvalidatedAt(ctx context.Context, userID uuid.UUID) (time.Time, bool, error)
 }
 
+// ErrRevocationUnavailable identifies an authentication dependency failure.
+// Callers must fail closed and may surface a retryable 503, but must not treat
+// the token as authenticated while revocation state is unknown.
+var ErrRevocationUnavailable = errors.New("token revocation state unavailable")
+
 // JWTManager handles JWT token generation and validation. It supports
 // multi-key rotation: the primary key signs new tokens; all configured
 // keys can validate existing tokens. The single-string form keeps
@@ -183,6 +188,18 @@ func (m *JWTManager) SetRevocationChecker(c RevocationChecker) {
 	m.revMu.Lock()
 	m.revocations = c
 	m.revMu.Unlock()
+}
+
+// HasRevocationChecker reports whether session validation has a durable
+// revocation dependency. Production composition uses it to reject partial
+// authentication wiring before serving requests.
+func (m *JWTManager) HasRevocationChecker() bool {
+	if m == nil {
+		return false
+	}
+	m.revMu.RLock()
+	defer m.revMu.RUnlock()
+	return m.revocations != nil
 }
 
 // SetValidationCacheTTL overrides the positive-result cache TTL. Pass 0
@@ -392,7 +409,7 @@ func (m *JWTManager) ValidateTokenContext(ctx context.Context, tokenString strin
 	for _, key := range m.secretKeys {
 		claims := &Claims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			if token.Method != jwt.SigningMethodHS256 {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
 			return key, nil
@@ -445,20 +462,7 @@ func (m *JWTManager) checkRevocations(ctx context.Context, claims *Claims) error
 	if jti != "" {
 		revoked, err := checker.IsJWTRevoked(ctx, jti)
 		if err != nil {
-			// Failing closed (rejecting) on a DB error would lock
-			// the entire fleet out the moment Postgres hiccups.
-			// Failing open is the conventional auth-middleware
-			// choice — the bcrypt/JWT signature gate already
-			// guarantees the token was issued by us; the revoke
-			// list is an additional layer that's acceptable to
-			// briefly bypass.
-			//
-			// We do NOT cache this outcome — the next request will
-			// retry.
-			if m.securityCacheUnhealthy() {
-				return fmt.Errorf("invalid token: revocation state unavailable")
-			}
-			return nil
+			return fmt.Errorf("%w: token lookup", ErrRevocationUnavailable)
 		}
 		if revoked {
 			return fmt.Errorf("invalid token: token revoked")
@@ -467,11 +471,7 @@ func (m *JWTManager) checkRevocations(ctx context.Context, claims *Claims) error
 
 	cutoff, set, err := checker.UserTokensInvalidatedAt(ctx, claims.UserID)
 	if err != nil {
-		// Same fail-open rationale as above.
-		if m.securityCacheUnhealthy() {
-			return fmt.Errorf("invalid token: user revocation state unavailable")
-		}
-		return nil
+		return fmt.Errorf("%w: user cutoff lookup", ErrRevocationUnavailable)
 	}
 	if set && claims.IssuedAt != nil && !claims.IssuedAt.IsZero() {
 		// iat predates the cutoff -> reject. Use !After so a token

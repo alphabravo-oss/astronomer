@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -197,7 +198,7 @@ func TestJWTManager(t *testing.T) {
 			},
 		},
 		{
-			name: "default access lifetime is 60 minutes when zero provided",
+			name: "default access lifetime is 15 minutes when zero provided",
 			run: func(t *testing.T) {
 				mgr := MustNewJWTManager(secretKey, 0)
 
@@ -211,8 +212,8 @@ func TestJWTManager(t *testing.T) {
 					t.Fatalf("ValidateToken() error = %v", err)
 				}
 
-				// Expiry should be approximately 60 minutes from now
-				expectedExpiry := time.Now().Add(60 * time.Minute)
+				// Expiry should be approximately 15 minutes from now.
+				expectedExpiry := time.Now().Add(15 * time.Minute)
 				diff := claims.ExpiresAt.Sub(expectedExpiry)
 				if diff < -5*time.Second || diff > 5*time.Second {
 					t.Errorf("expiry %v not within 5s of expected %v", claims.ExpiresAt.Time, expectedExpiry)
@@ -234,7 +235,7 @@ func TestJWTManager(t *testing.T) {
 					t.Fatalf("ValidateToken() error = %v", err)
 				}
 
-				expectedExpiry := time.Now().Add(60 * time.Minute)
+				expectedExpiry := time.Now().Add(15 * time.Minute)
 				diff := claims.ExpiresAt.Sub(expectedExpiry)
 				if diff < -5*time.Second || diff > 5*time.Second {
 					t.Errorf("expiry %v not within 5s of expected %v", claims.ExpiresAt.Time, expectedExpiry)
@@ -251,7 +252,7 @@ func TestJWTManager(t *testing.T) {
 // AUTH-R02: session.timeout_minutes provider is applied at access-token mint
 // without requiring each caller to SetAccessTokenTTL first.
 func TestAccessTokenTTLProviderAppliedAtMint(t *testing.T) {
-	mgr := MustNewJWTManager("ttl-provider-secret", 60) // boot default 60m
+	mgr := MustNewJWTManager("ttl-provider-secret", 15)
 	mgr.SetAccessTokenTTLProvider(func(context.Context) time.Duration {
 		return 15 * time.Minute
 	})
@@ -270,8 +271,8 @@ func TestAccessTokenTTLProviderAppliedAtMint(t *testing.T) {
 		t.Errorf("expiry %v not within 5s of provider TTL %v (diff %v)", claims.ExpiresAt.Time, expected, diff)
 	}
 	// Boot TTL unchanged; provider only affects mint.
-	if mgr.AccessTokenTTL() != 60*time.Minute {
-		t.Errorf("AccessTokenTTL() = %v, want 60m base", mgr.AccessTokenTTL())
+	if mgr.AccessTokenTTL() != 15*time.Minute {
+		t.Errorf("AccessTokenTTL() = %v, want 15m base", mgr.AccessTokenTTL())
 	}
 }
 
@@ -281,6 +282,27 @@ func TestNewJWTManagerBoundsBootSessionTimeout(t *testing.T) {
 		if got := mgr.AccessTokenTTL(); got != sessionpolicy.DefaultMinutes*time.Minute {
 			t.Errorf("MustNewJWTManager(_, %d) TTL = %s, want %s", minutes, got, sessionpolicy.DefaultMinutes*time.Minute)
 		}
+	}
+}
+
+func TestValidateTokenRejectsDifferentHMACAlgorithm(t *testing.T) {
+	const secret = "exact-algorithm-test-secret"
+	mgr := MustNewJWTManager(secret, sessionpolicy.DefaultMinutes)
+	token, err := mgr.GenerateAccessToken(uuid.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, _, err := jwt.NewParser().ParseUnverified(token, &Claims{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forged := jwt.NewWithClaims(jwt.SigningMethodHS384, parsed.Claims)
+	wrongAlgorithmToken, err := forged.SignedString([]byte(secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.ValidateToken(wrongAlgorithmToken); err == nil || !strings.Contains(err.Error(), "signing method") {
+		t.Fatalf("ValidateToken(HS384) error = %v, want exact-algorithm rejection", err)
 	}
 }
 
