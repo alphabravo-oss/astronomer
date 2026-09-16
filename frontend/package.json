@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "predev": "mkdir -p public && cp node_modules/@wterm/core/wasm/wterm.wasm public/wterm.wasm",
-    "build": "vite build",
+    "build": "npm run type-check && vite build",
     "bundle:check": "node scripts/check-bundle-budget.mjs",
     "prebuild": "mkdir -p public && cp node_modules/@wterm/core/wasm/wterm.wasm public/wterm.wasm",
     "preview": "vite preview",
