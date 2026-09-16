@@ -567,6 +567,7 @@ func (runtime ClusterTemplateRuntime) HandleClusterTemplateDriftCheck(ctx contex
 			}
 		}
 		runtimeLogger(ctx).InfoContext(ctx, "cluster template drift sweep", "evaluated", len(apps), "drift", drift)
+		var recoveryErrs []error
 		// Stuck-row recovery. A `failed` cluster_template_applications
 		// row should NOT need a manual reapply click — the operator has
 		// already opted in via install_baseline=true, and the failure is
@@ -597,6 +598,7 @@ func (runtime ClusterTemplateRuntime) HandleClusterTemplateDriftCheck(ctx contex
 				// before the next attempt.
 				skipped := 0
 				enqueued := 0
+				failedEnqueue := 0
 				for _, app := range failed {
 					if time.Since(app.UpdatedAt) < failedApplyMinBackoff {
 						skipped++
@@ -606,13 +608,23 @@ func (runtime ClusterTemplateRuntime) HandleClusterTemplateDriftCheck(ctx contex
 					if terr != nil {
 						continue
 					}
-					_, _ = enqueuer.Enqueue(task, asynq.Queue(ClusterTemplateApplyQueueName))
+					_, enqueueErr := enqueuer.Enqueue(task,
+						asynq.Queue(ClusterTemplateApplyQueueName),
+						asynq.Unique(failedApplyMinBackoff),
+					)
+					if enqueueErr != nil && !errors.Is(enqueueErr, asynq.ErrDuplicateTask) {
+						failedEnqueue++
+						recoveryErrs = append(recoveryErrs, fmt.Errorf("re-enqueue failed cluster template %s: %w", app.ClusterID, enqueueErr))
+						continue
+					}
 					enqueued++
 				}
-				if enqueued > 0 || skipped > 0 {
+				if enqueued > 0 || skipped > 0 || failedEnqueue > 0 {
 					runtimeLogger(ctx).InfoContext(ctx, "cluster template recovery sweep",
-						"re_enqueued", enqueued, "skipped_backoff", skipped)
+						"re_enqueued", enqueued, "skipped_backoff", skipped, "enqueue_failed", failedEnqueue)
 				}
+			} else {
+				recoveryErrs = append(recoveryErrs, fmt.Errorf("list failed cluster template applications: %w", ferr))
 			}
 		}
 
@@ -630,6 +642,7 @@ func (runtime ClusterTemplateRuntime) HandleClusterTemplateDriftCheck(ctx contex
 			})
 			if perr == nil {
 				requeued := 0
+				failedEnqueue := 0
 				for _, app := range pending {
 					if time.Since(app.UpdatedAt) < failedApplyMinBackoff {
 						continue
@@ -638,12 +651,22 @@ func (runtime ClusterTemplateRuntime) HandleClusterTemplateDriftCheck(ctx contex
 					if terr != nil {
 						continue
 					}
-					_, _ = enqueuer.Enqueue(task, asynq.Queue(ClusterTemplateApplyQueueName))
+					_, enqueueErr := enqueuer.Enqueue(task,
+						asynq.Queue(ClusterTemplateApplyQueueName),
+						asynq.Unique(failedApplyMinBackoff),
+					)
+					if enqueueErr != nil && !errors.Is(enqueueErr, asynq.ErrDuplicateTask) {
+						failedEnqueue++
+						recoveryErrs = append(recoveryErrs, fmt.Errorf("re-enqueue pending cluster template %s: %w", app.ClusterID, enqueueErr))
+						continue
+					}
 					requeued++
 				}
-				if requeued > 0 {
-					runtimeLogger(ctx).InfoContext(ctx, "cluster template stranded-pending recovery", "re_enqueued", requeued)
+				if requeued > 0 || failedEnqueue > 0 {
+					runtimeLogger(ctx).InfoContext(ctx, "cluster template stranded-pending recovery", "re_enqueued", requeued, "enqueue_failed", failedEnqueue)
 				}
+			} else {
+				recoveryErrs = append(recoveryErrs, fmt.Errorf("list pending cluster template applications: %w", perr))
 			}
 		}
 
@@ -686,7 +709,7 @@ func (runtime ClusterTemplateRuntime) HandleClusterTemplateDriftCheck(ctx contex
 				runtimeLogger(ctx).InfoContext(ctx, "cluster template stuck-applying sweep", "marked", stuck)
 			}
 		}
-		return nil
+		return errors.Join(recoveryErrs...)
 	})
 }
 
