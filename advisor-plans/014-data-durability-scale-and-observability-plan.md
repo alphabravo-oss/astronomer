@@ -4,7 +4,7 @@
 
 **Planned at:** `32100314e081e635e89f43fcf14673a25449ef63` on 2026-09-16, against the current dirty working tree
 
-**Branch:** `advisor/014-data-scale-observability`
+**Branch:** `advisor/011-015-hardening`
 
 **Depends on:** Plan 011 green/lifecycle foundation; coordinate error and crypto boundaries with Plan 012
 

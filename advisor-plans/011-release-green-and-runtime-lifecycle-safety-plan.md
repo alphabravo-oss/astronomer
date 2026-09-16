@@ -4,7 +4,7 @@
 
 **Planned at:** `32100314e081e635e89f43fcf14673a25449ef63` on 2026-09-16, against the current dirty working tree
 
-**Branch:** `advisor/011-release-green-lifecycle`
+**Branch:** `advisor/011-015-hardening`
 
 **Scope boundary:** adopted clusters only; Flux is the only delivery engine; do not add Fleet, cluster provisioning, Cluster API, or Crossplane.
 
@@ -17,8 +17,11 @@
 - Made connection-pool saturation state instance-local, bound idempotency keys
   to canonical request digests, excluded tombstoned clusters from active reads,
   and replaced persisted cluster JSON panics with bounded controlled errors.
-- Remaining lifecycle/readiness work and the complete release gate are still
-  required before this plan can be marked complete.
+- The ordinary Go and frontend gates are green. The verified images were
+  applied atomically to local k3s as Helm revision 23; server `/health/` and
+  `/readyz` both return 200 with database, Redis, schema, and tunnel checks OK.
+- Remaining critical-loop readiness work is still required before this plan
+  can be marked complete.
 
 ## Objective
 

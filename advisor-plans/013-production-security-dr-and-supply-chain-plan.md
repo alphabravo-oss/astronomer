@@ -4,7 +4,7 @@
 
 **Planned at:** `32100314e081e635e89f43fcf14673a25449ef63` on 2026-09-16, against the current dirty working tree
 
-**Branch:** `advisor/013-production-security-dr`
+**Branch:** `advisor/011-015-hardening`
 
 **Depends on:** Plan 011 green baseline; coordinate envelope choices with Plan 012
 
